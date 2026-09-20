@@ -2,3 +2,8 @@ src/**
 tsconfig.json
 node_modules/**
 **/*.map
+# .atl/ is external agent tooling state written by unrelated tooling; never ship it to users.
+.atl/**
+.gitignore
+**/*.vsix
+package-lock.json
