@@ -79,10 +79,58 @@ Commit: _pending_
 
 - [x] One Conventional Commit per task, on `feat/picode-foundation`
 
+## Verified fact map (pi / gentle-pi)
+
+Produced by a read-only reconnaissance pass over the installed packages. These
+facts were verified against files on this machine and constrain the design.
+
+### pi (`@earendil-works/pi-coding-agent` 0.86.1)
+
+- `engines.node >= 22.19.0`. PiCode's own requirement should match, not the
+  looser 20+ currently stated in the root README.
+- `exports`: `.`, `./rpc-entry`, `./client`, `./experimental/plugin`.
+- A typed `RpcClient` is **exported** from the package, alongside `runRpcMode`.
+  The extension deliberately hand-rolls its own client to stay dependency-free
+  (an extension cannot cheaply depend on pi's own modules); the exported client
+  is the reference implementation to compare against if the framing ever drifts.
+- Confirmed **absent**: ACP / agent-client-protocol, a built-in MCP server, and
+  any LSP server in the core. `docs/usage.md` states pi intentionally ships no
+  built-in MCP. This confirms that RPC is the only editor-integration surface,
+  which validates ADR-003.
+- Confirmed **absent**: any existing pi extension that integrates an editor, and
+  any `vscode` reference in the pi or gentle-pi sources. PiCode would be first.
+- Flag parser: `dist/cli/args.js`; extensions may register additional flags.
+
+### gentle-pi (3.3.0) and the `gentle-ai` binary
+
+- gentle-pi is a **Pi package**, not a CLI: its behaviour lives in
+  `gentle-pi/extensions/*.ts` loaded through the package's `pi` manifest.
+- The CLI is the Go binary `gentle-ai.exe`, version **3.4.0**, and it is
+  **bundled inside the gentle-pi npm package** at `.gentle-ai/v3.4.0/gentle-ai.exe`
+  (the installer pins `INSTALLER_VERSION = "3.4.0"`). A second copy currently
+  sits on `PATH` at `C:\Users\tapla\go\bin\gentle-ai.exe`.
+  **Implication for distribution**: PiCode can depend on the gentle-pi package and
+  ship the binary itself, instead of requiring users to install Go tooling.
+- Command space: `gentle-ai sync`, `gentle-ai review mode status|enable|disable`,
+  `gentle-ai review assess|reclaim|recover|capture-unachievable`,
+  `gentle-ai telemetry ...`, `gentle-ai canon`, `gentle-ai runtime`.
+- Slash commands registered by its extensions: `/gentle:status`, `/gentle:doctor`,
+  `/gentle:review-mode`, `/gentle:models`, `/gentle:profiles`, `/gentle:persona`,
+  `/gentle:telemetry`, `/gentle:background-subagents`, `/gentle:install-*`,
+  `/gentle:sdd-preflight`.
+
+**Implication for the panel**: the RPC `get_commands` call already returned 118
+commands in live testing, which includes these slash commands. The panel can
+offer them as first-class actions without learning anything about gentle-pi
+specifically — the discovery path is generic.
+
 ## Open questions
 
 - Which pi provider/model should PiCode default to on first run?
 - Should the pi panel ship enabled by default, or opt-in on first launch?
 - Distribution: build from VSCodium source in CI, or maintain a patched-fork repo?
+- Should PiCode pin a specific `pi` version, or always target whatever is on
+  `PATH`? Process isolation buys version independence, but a pinned version is
+  more reproducible.
 - Not yet verified at runtime: the webview layer (CSP, panel singleton, disposal)
   was not exercised in an Extension Development Host, only compiled and reviewed.

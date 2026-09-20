@@ -48,7 +48,8 @@ No protocol is invented here: see `docs/rpc.md` in the pi package.
 
 ## Requirements
 
-- **Node.js** 20+ (developed against 24.x)
+- **Node.js** 22.19+ — this is pi's own requirement, not a preference
+  (developed against 24.x)
 - **pi** on `PATH` (`npm install -g @earendil-works/pi-coding-agent`)
 - **VS Code** 1.90+ or VSCodium for development; PiCode itself will bundle the editor
 
