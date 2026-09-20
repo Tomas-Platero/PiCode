@@ -5,7 +5,9 @@ chosen strategy, the mechanism each layer relies on, the limits of that
 mechanism, and how a human verifies that the branding actually applied.
 
 Status: MVP strategy for the Windows-first foundation (ADR-004). Nothing here
-requires compiling the editor.
+requires compiling the editor. The branding layer was executed and observed
+against a running VSCodium on 2026-09-20; sections 4.3, 4.4, 4.5 and 10 carry
+that result.
 
 Conventions used below:
 
@@ -13,6 +15,8 @@ Conventions used below:
   upstream file, or a read-only probe of this machine.
 - **Inference** — a reasoned conclusion from verified evidence that was not
   directly exercised.
+- **Measured** — confirmed by executing the operation on this machine and
+  observing the result (runtime pass of 2026-09-20).
 
 ## 1. Goal and constraints
 
@@ -77,6 +81,13 @@ nothing to compile and nothing to keep in sync with upstream source.
   duplicate by moving to a fork build (section 9). The working figure used for
   this decision was on the order of 50 patches per upstream release; this pass
   did not independently count them.
+- **Measured version lag (2026-09-20).** `winget install -e --id
+  VSCodium.VSCodium --accept-package-agreements --accept-source-agreements
+  --disable-interactivity` returned exit 0 and installed VSCodium **1.126.04524**
+  at `C:\Users\tapla\AppData\Local\Programs\VSCodium` (CLI at `bin\codium.cmd`).
+  That is well behind the `1.135.06055` release tag reported above, so the winget
+  catalog lags the upstream release feed; `winget upgrade` may offer a newer
+  build.
 
 ## 4. Layer 2 — branding via user-level `product.json`
 
@@ -211,10 +222,15 @@ because they are honored by `doGetUserDataPath()`:
 | `VSCODE_DEV` set | forces product name `code-oss-dev` | `<...>\code-oss-dev\product.json` |
 | default (Windows) | `%APPDATA%\VSCodium` | `%APPDATA%\VSCodium\product.json` |
 
-**Residual uncertainty.** The derivation is verified against the VSCodium patch
-and build scripts at the released tag `1.135.06055`, but it has **not** been
-exercised against a running VSCodium install on this machine, because VSCodium is
-not installed here. Section 10 is the check that closes that gap.
+**Measured (2026-09-20).** The derivation was exercised against a real install.
+`winget install -e --id VSCodium.VSCodium` installed VSCodium **1.126.04524**,
+and `%APPDATA%\VSCodium` did not exist beforehand. Running
+`distribution/bootstrap.ps1` in preview created nothing (exit 0); running it with
+`-Apply` created that directory and wrote the overlay to exactly the derived
+path, `%APPDATA%\VSCodium\product.json`. The observed location corroborates the
+`nameShort` derivation: the overlay landed under `%APPDATA%\VSCodium`, not under
+`%APPDATA%\PiCode`, even though the overlay sets `nameShort` to `"PiCode"`.
+Section 10 carries the per-check result.
 
 ### 4.4 What this layer CAN rebrand
 
@@ -233,6 +249,16 @@ values win per key. It is the same Open VSX configuration VSCodium already ships
 restating it makes PiCode's intent explicit and independent of VSCodium's build
 defaults.
 
+**Measured (2026-09-20).** With the overlay in place, `codium --help` prints
+`PiCode — Agentic Code Editor 1.126.04524` as its first line. That first token is
+the overlay's `nameLong`, so the deep-merge is confirmed inside a real VSCodium
+process, not only in the patch source. The on-disk overlay contains exactly
+`nameShort` = `"PiCode"`, `nameLong` = `"PiCode — Agentic Code Editor"`,
+`urlProtocol` = `"picode"`, and the Open VSX `extensionsGallery` block (its
+`serviceUrl`, `itemUrl`, `latestUrlTemplate` and `controlUrl`). Presence of
+`urlProtocol` in the file is not the same as the OS handler being registered; see
+section 4.5.
+
 **Deliberately omitted keys, with reasons:**
 
 - `applicationName`, `win32*` identifiers, `darwinBundleIdentifier` — not
@@ -248,7 +274,10 @@ defaults.
 Stated plainly, because these are the limits the no-compile path accepts:
 
 - **The executable and binary identity.** The process is still `VSCodium.exe` and
-  the CLI is still `codium`.
+  the CLI is still `codium`. **Measured (2026-09-20):** the same `codium --help`
+  invocation whose first line carries the overlay's `nameLong` still prints
+  `Usage: codium.exe [options] [paths...]`, so the executable name did not change
+  even though the product-long-name string did.
 - **Windows OS-level identity as installed.** The installer is branded at build
   time: `prepare_vscode.sh` rewrites the Inno Setup script
   (`build/win32/code.iss`) with VSCodium's vendor name and URLs. A user-level
@@ -267,7 +296,15 @@ Stated plainly, because these are the limits the no-compile path accepts:
   `setAsDefaultProtocolClient` call or `urlProtocol` reference — verified by
   fetching the file. So `picode://` deep links from the OS are **not** guaranteed
   by this layer; the OS still opens `vscodium://`. This is listed in section 10
-  as something a human should confirm on a real install.
+  as something a human should confirm on a real install. **Measured state
+  (2026-09-20):** the overlay does carry `urlProtocol: "picode"`, but `reg query`
+  for `HKCU\Software\Classes\picode`, `HKCU\Software\Classes\vscodium` and
+  `HKCU\Software\Classes\codium` all return "not found", including for
+  VSCodium's own scheme. This is **inconclusive**, not a confirmed failure:
+  VSCodium has never been launched on this machine and protocol registration
+  plausibly happens on first run. Re-check after the editor has been started once.
+  Until then `picode://` must not be documented as working, nor as definitively
+  absent.
 - **Anything read before the merge.** Keys consumed before the overlay loads
   cannot be influenced, by definition.
 
@@ -331,9 +368,14 @@ commands, including `picode.piChat.open`. Nothing activates or opens a panel at
 startup: the panel is created only when the user runs an explicit command. This
 is a verified property of the shipped manifest, so ADR-009 needs no new code.
 
-**Uncertainty.** The VSIX packaging command was **not executed** during this pass
-(`vsce` is a network download and was out of scope), so the produced artifact is
-unverified. `bootstrap.ps1` handles the absent-VSIX case by design.
+**Measured (2026-09-20).** `extensions/picode-pi-chat/picode-pi-chat-0.1.0.vsix`
+exists, `bootstrap.ps1 -Apply` installed it, and codium reported "Extension
+'picode-pi-chat-0.1.0.vsix' was successfully installed." `codium
+--list-extensions` then returned exactly `picode.picode-pi-chat`. The manifest's
+declared `engines.vscode ^1.90.0` is satisfied by the installed 1.126.04524. The
+`vsce package` invocation itself was not part of this measurement pass, and
+activation inside the editor (the panel) remains unexercised — see section 10,
+item 4. `bootstrap.ps1` still handles the absent-VSIX case by design.
 
 ## 7. Layer 5 — defaults without overwriting user choices
 
@@ -424,44 +466,67 @@ the no-compile path is the right default until a trigger above fires.
 ## 10. Verification plan
 
 This is how a human confirms the branding actually applied after VSCodium is
-installed. None of these were executable in this pass, because VSCodium is not
-installed on this machine.
+installed. The plan was first executed on 2026-09-20 against VSCodium
+**1.126.04524**; the per-step result is recorded inline. Steps that need the GUI
+still remain open.
 
-1. **Overlay present and valid.**
+1. **Overlay present and valid. — DONE (2026-09-20).**
    ```powershell
    Get-Content "$env:APPDATA\VSCodium\product.json" | ConvertFrom-Json
    ```
-   Expected: the PiCode keys. If this throws, the file is not strict JSON and the
-   editor will silently ignore it — the patch catches load errors and continues
-   with the built-in product.
-2. **Overlay actually merged.** Launch VSCodium, open **Help > About**.
-   Expected: `nameShort`/`nameLong` show PiCode. If it still shows VSCodium, check
-   in this order: `VSCODE_PORTABLE`/`VSCODE_APPDATA` are diverting the path (both
-   are printed by `bootstrap.ps1`); the file is under `%APPDATA%\VSCodium` and not
+   Result: the file exists at the derived path and contains exactly the PiCode
+   keys — `nameShort` `"PiCode"`, `nameLong` `"PiCode — Agentic Code Editor"`,
+   `urlProtocol` `"picode"`, and the Open VSX `extensionsGallery` block. That it
+   parsed as strict JSON is proven by step 2: the file is loaded with `require()`,
+   and the patch catches load errors and continues with the built-in product, so
+   the PiCode `nameLong` could not have appeared if the file were malformed.
+2. **Overlay actually merged. — DONE (2026-09-20).** The planned check was to
+   launch VSCodium and open **Help > About**; the equivalent check used the CLI:
+   `codium --help` prints `PiCode — Agentic Code Editor 1.126.04524` as its first
+   line, which is the overlay's `nameLong`. The deep-merge is therefore confirmed
+   in a real VSCodium process. If it had still shown VSCodium, check in this
+   order: `VSCODE_PORTABLE`/`VSCODE_APPDATA` are diverting the path (both are
+   printed by `bootstrap.ps1`); the file is under `%APPDATA%\VSCodium` and not
    under a `PiCode` folder; the JSON parses.
-3. **Gallery.** Open the Extensions view and search a known Open VSX-only
+3. **Gallery. — OPEN.** Open the Extensions view and search a known Open VSX-only
    extension. Expected: results, which proves the `extensionsGallery` override is
-   live.
-4. **Extension.** Confirm `picode-pi-chat` appears in the Extensions view as
-   installed, then run **PiCode: Open pi Chat** from the Command Palette.
-   Expected: a panel appears. Confirm that no panel appears on a fresh startup
-   with no command run (ADR-009).
-5. **Agent runtime.** In a terminal inside the editor, run `pi --version` and
-   `pi list`. Expected: `0.86.1`, and `gentle-pi` in the list. Confirm
+   live. The overlay carries the Open VSX block, but the gallery was not queried
+   in this pass; extension delivery used the VSIX route (step 4), which does not
+   exercise the gallery.
+4. **Extension. — PARTIAL.** `bootstrap.ps1 -Apply` installed
+   `extensions/picode-pi-chat/picode-pi-chat-0.1.0.vsix` and codium reported
+   "Extension 'picode-pi-chat-0.1.0.vsix' was successfully installed.";
+   `codium --list-extensions` returns exactly `picode.picode-pi-chat`, and
+   `engines.vscode ^1.90.0` is satisfied by 1.126.04524. **Still open:** the panel
+   itself. Run **PiCode: Open pi Chat** from the Command Palette and confirm a
+   panel appears, then confirm that no panel appears on a fresh startup with no
+   command run (ADR-009). The webview layer remains unexercised.
+5. **Agent runtime. — OPEN.** In a terminal inside the editor, run `pi --version`
+   and `pi list`. Expected: `0.86.1`, and `gentle-pi` in the list. Confirm
    `gentle-ai --version`-style subcommands resolve through the bundled Go binary
-   without a Go install.
+   without a Go install. `bootstrap.ps1 -Apply` reported pi `0.86.1` and gentle-pi
+   `3.3.0` as already installed and skipped them, which corroborates presence but
+   is not the in-editor check.
 6. **Expected limits (negative check).** Confirm the no-compile boundary honestly:
-   - `codium --version` still reports VSCodium.
-   - Windows Start Menu and Add/Remove Programs still say VSCodium.
-   - `vscodium://` is still the registered protocol; whether `picode://` resolves
-     is the open question flagged in section 4.5.
+   - **DONE:** `codium --help` still prints `Usage: codium.exe [options]
+     [paths...]`, so the executable name is unchanged, while `codium --version`
+     reports `1.126.04524` / `4c0b0c6cc561d2d3636d1ec250935431876ce4dc` / `x64`.
+   - **OPEN:** the Windows Start Menu entry and the Add/Remove Programs entry
+     still say VSCodium (not inspected in this pass).
+   - **INCONCLUSIVE:** `vscodium://` versus `picode://` as the registered
+     protocol. `reg query` for `HKCU\Software\Classes\picode`,
+     `HKCU\Software\Classes\vscodium` and `HKCU\Software\Classes\codium` all
+     return "not found". VSCodium has never been launched, and registration
+     plausibly happens on first run, so this must be re-checked after the first
+     launch (section 4.5).
    These are not defects; they are the documented cost of the chosen path.
-7. **Revert check.** Move `product.json` aside, restart, and confirm the editor
-   returns to VSCodium branding without touching any other layer.
+7. **Revert check. — OPEN.** Move `product.json` aside, restart, and confirm the
+   editor returns to VSCodium branding without touching any other layer.
 
 ## Sources
 
-Fetched and read during this pass.
+Fetched and read during the research pass, plus runtime observations from the
+2026-09-20 verification pass (final row).
 
 | Claim | Source |
 | --- | --- |
@@ -484,6 +549,7 @@ Fetched and read during this pass.
 | Marketplace Terms of Use | `https://aka.ms/vsmarketplace-ToU` |
 | Open VSX registry | `https://open-vsx.org` |
 | pi install commands and versioned npm specs | `@earendil-works/pi-coding-agent` `docs/packages.md` (local install) |
+| Runtime branding, version, and installed extension | `codium --help`, `codium --version`, `codium --list-extensions`, and the overlay files on this machine (VSCodium `1.126.04524`, measured 2026-09-20) |
 
 ## Verified facts versus inferences
 
@@ -495,8 +561,14 @@ numbers; pi's Node requirement; gentle-pi's install form; the bundled gentle-ai
 Go binary and its version; the extension manifest's `activationEvents` and
 commands; and every toolchain probe in section 9, including the MSVC correction.
 
-**Inference, not exercised:** that the overlay path resolves to
-`%APPDATA%\VSCodium\product.json` on a running install; that `picode://` will not
-replace the installer-registered `vscodium://` handler; and that the VSIX built
-by `vsce` installs and activates cleanly. Section 10 is the plan that closes
-those three.
+**Measured at runtime (2026-09-20):** VSCodium `1.126.04524` installed through
+winget; `bootstrap.ps1 -Apply` wrote the overlay to the derived path and installed
+`picode-pi-chat` from the VSIX; and the overlay's `nameLong` appears as the first
+line of `codium --help`. The overlay path and the deep-merge are no longer
+inferences.
+
+**Still inference, or open:** whether `picode://` replaces the
+installer-registered `vscodium://` handler (the registry check was inconclusive
+because VSCodium has never been launched); that the Open VSX gallery override is
+live in the Extensions view; and that the extension activates and renders its
+panel from the VSIX inside the editor. Section 10 records the remaining checks.

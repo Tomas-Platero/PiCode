@@ -84,9 +84,42 @@ SDK. The parent had inferred their presence from directory names alone.
 ### 5. Compile and verify the extension
 
 - [x] `npm install` + TypeScript compile clean (`tsc -p ./` exit 0, zero errors)
-- [ ] Extension packaging verified (`vsce package` or equivalent)
+- [x] Extension packaging verified (`vsce package` or equivalent)
 
-### 6. Work-unit commits
+Packaging was executed with `npx --yes @vscode/vsce package`, producing
+`extensions/picode-pi-chat/picode-pi-chat-0.1.0.vsix`. The first run exposed a
+real defect — the VSIX was shipping `.atl/`, an internal tooling cache unrelated
+to the extension, plus `.gitignore` and `package-lock.json`. After fixing
+`.vscodeignore` and adding the repository field and a package-level MIT LICENSE,
+the archive was inspected independently and now holds 11 entries with none of
+those files. Both `vsce` warnings are gone.
+
+### 6. Install VSCodium and apply the PiCode branding (runtime verification)
+
+Executed on this machine, 2026-09-20. The evidence is runtime observation, so no
+commit is attributed to this task.
+
+- [x] VSCodium installed via winget, exit 0: `winget install -e --id
+      VSCodium.VSCodium --accept-package-agreements --accept-source-agreements
+      --disable-interactivity` → version `1.126.04524`, installed at
+      `C:\Users\tapla\AppData\Local\Programs\VSCodium` (CLI at `bin\codium.cmd`)
+- [x] `distribution/bootstrap.ps1` preview run → exit 0, created nothing
+- [x] `distribution/bootstrap.ps1 -Apply` → exit 0; created `%APPDATA%\VSCodium`
+      (it did not exist before) and wrote the branding overlay to
+      `%APPDATA%\VSCodium\product.json`
+- [x] Extension installed from `extensions/picode-pi-chat/picode-pi-chat-0.1.0.vsix`
+      (codium: "Extension 'picode-pi-chat-0.1.0.vsix' was successfully
+      installed."); `codium --list-extensions` returns exactly
+      `picode.picode-pi-chat`
+- [x] Default settings written to `%APPDATA%\VSCodium\User\settings.json`
+- [x] pi `0.86.1` and gentle-pi `3.3.0` reported as already installed and skipped
+- [x] **Branding confirmed at runtime:** `codium --help` prints
+      `PiCode — Agentic Code Editor 1.126.04524` as its first line, which is the
+      overlay's `nameLong`; the same output's usage line still reads
+      `Usage: codium.exe [options] [paths...]`, so the executable name is
+      unchanged.
+
+### 7. Work-unit commits
 
 - [x] One Conventional Commit per task, on `feat/picode-foundation`
 
@@ -140,18 +173,27 @@ specifically — the discovery path is generic.
 Resolved by the human in this session: the panel is opt-in; pi is pinned and
 shipped; the distribution layers on VSCodium without compiling.
 
+Resolved by measurement (2026-09-20, task 6): the branding overlay **was**
+observed at runtime against VSCodium `1.126.04524` — `codium --help` prints
+`PiCode — Agentic Code Editor 1.126.04524` as its first line — so the overlay
+path and the deep-merge are no longer derived-only. The same pass installed the
+extension from the VSIX, so the deferred-install route is proven as far as
+installation goes.
+
 Still open:
 
-- Which pi provider/model should PiCode default to on first run?
+- Which pi provider/model should PiCode default to on first run? The bootstrap
+  wrote `picode.pi.defaultModel` empty, so the default is still undecided.
 - Not yet verified at runtime: the webview layer (CSP, panel singleton, disposal)
   was not exercised in an Extension Development Host, only compiled and reviewed.
-- Not yet verified at runtime: the branding overlay. VSCodium is not installed on
-  this machine, so `%APPDATA%\VSCodium\product.json` and the deep-merge behaviour
-  are derived from the patch source and the migration docs, not observed.
-- `picode://` as a URL protocol probably does not replace `vscodium://`, because
-  the OS handler is installer-registered rather than set in `main.ts`. Needs a
-  human check once VSCodium is installed.
-- The bootstrap script's `-Apply` path (backup, copy, npm install, `pi install`,
-  VSIX install) has only ever been exercised in preview mode.
-- The extension has never been packaged as a VSIX, so the deferred-install route
-  is unproven end to end.
+  The panel UI has never been opened in the editor.
+- `picode://` is not registered. `reg query` for `HKCU\Software\Classes\picode`,
+  `HKCU\Software\Classes\vscodium` and `HKCU\Software\Classes\codium` all
+  return "not found". This is inconclusive rather than a failure, because VSCodium
+  has never been launched and protocol registration plausibly happens on first
+  run. Re-check after the first launch.
+- The bootstrap script's `-Apply` path has now been executed once successfully on
+  this machine (overlay written, VSIX installed, default settings copied). It has
+  not been re-run, so idempotency against an already-configured machine is still
+  unexercised.
+- The Open VSX gallery override has not been queried from the Extensions view.
