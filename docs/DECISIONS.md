@@ -168,3 +168,101 @@ provider explicitly always avoids this.
 
 This decision is important because it is a concrete case of a plan being
 corrected by evidence rather than by assumption.
+
+## ADR-008 — Layer on VSCodium without compiling a fork
+
+**Status:** accepted.
+
+**Context:** VSCodium's user-product patch makes product-level rebranding
+possible without a build: it loads a user-level `product.json` and deep-merges it
+into the product configuration at startup. The alternative, a fork build, was
+costed and measured. VSCodium trails upstream — the newest release tag was
+`1.135.06055` against VS Code `1.138.0`, three minor versions behind — and it
+rebases a patch series against upstream for every release. The build
+toolchain is also absent on this machine: Python 3.11 is missing (only 3.14.7 is
+present), `rustup` and `jq` are missing, the local Node is `24.19.0` against
+VSCodium's pinned `24.18.0`, and the MSVC build tools are effectively absent
+despite empty installer directories. A fork build also needs tens of gigabytes
+and a 30-90 minute cycle per iteration, which contradicts the lightweight
+objective.
+
+**Decision:** PiCode layers branding, configuration, the agent runtime and the
+editor extension on top of a stock VSCodium install. It does not compile a fork
+and it does not carry a copy of the editor core.
+
+The fork path is **deferred, not rejected**. It becomes worth revisiting when any
+of these trigger conditions holds:
+
+- a required product key is read before the overlay merge, or otherwise lies
+  outside `product.json`'s runtime reach;
+- the product must ship with PiCode OS-level identity (installer, Start Menu,
+  protocol handler, file associations);
+- VSCodium drops or regresses the user-product patch the strategy depends on;
+- the version lag against upstream becomes product-blocking.
+
+**Consequences:** Iteration stays fast and needs no build toolchain, and upgrades
+arrive as VSCodium releases instead of a merge of two diverging trees. The
+trade-offs accepted: the binary and OS-level identity remain VSCodium's, so
+PiCode is a configuration and integration brand rather than a binary brand; and
+the strategy depends on a patch that exists in VSCodium but not in stock VS Code.
+If that patch disappears, the branding layer disappears with it, and the fork
+path stops being an escape hatch and becomes the only option.
+
+## ADR-009 — The pi panel is opt-in, never auto-opened
+
+**Status:** accepted.
+
+**Context:** PiCode is agent-first, but it is still an editor, and an editor's
+primary surface is the file being edited. A panel that opens itself on startup
+steals focus, consumes layout, and makes the first interaction of every session
+something the user did not ask for. It also makes launch behaviour unpredictable:
+the editor would look different depending on whether the agent was reachable.
+
+The extension already satisfies this. Its manifest declares
+`activationEvents: []` and contributes commands, so nothing activates the
+extension at startup; the panel is created only when the user runs an explicit
+command, such as **PiCode: Open pi Chat**. This is a verified property of the
+shipped manifest, not a plan.
+
+**Decision:** The pi panel is opt-in. It opens only in response to an explicit
+user command and is never auto-opened on startup.
+
+**Consequences:** Startup is predictable and non-intrusive, and the agent cannot
+hijack the editor's first moments. The trade-off accepted: the panel is less
+discoverable, and a user who does not know the command exists may not find the
+feature. A first-run invitation — a one-time, dismissible prompt that points at
+the command without opening the panel — is recorded as future work; it is not
+part of this decision and is not implemented.
+
+## ADR-010 — Pin and ship pi and gentle-pi rather than using the user's PATH
+
+**Status:** accepted.
+
+**Context:** If PiCode ran whatever `pi` it found on `PATH`, every user would run
+a different agent version, with a different RPC surface, a different model
+catalog and different tool behaviour. That is not reproducible, and it makes
+support and verification impossible: a bug report would describe PiCode plus an
+unknown agent version. The project has already seen the RPC surface change
+between pi releases (ADR-007 records a corrected assumption that came directly
+from the agent's own schema). Reusing the user's installation also means PiCode
+silently inherits whatever extensions and settings that user has accumulated.
+
+PiCode therefore pins the runtime it is verified against: pi `0.86.1` and
+gentle-pi `3.3.0`. Neither pin requires toolchains the user does not have — pi
+requires Node `22.19.0` or newer, and the `gentle-ai` CLI is a Go binary bundled
+inside the gentle-pi package, so no Go installation is needed.
+
+**Decision:** PiCode pins and ships its own pi and gentle-pi, and installs them
+through their own supported mechanisms (`npm install -g` for pi, `pi install` for
+gentle-pi), instead of resolving them from the user's `PATH`.
+
+The pin is not a lock-in: the extension setting `picode.pi.executablePath` lets a
+user point PiCode at a different pi binary.
+
+**Consequences:** Every PiCode install behaves the same way, verification is
+meaningful because the agent version is known, and PiCode's extension and pi
+cannot drift apart silently. The trade-off accepted: PiCode now owns pi's release
+tracking. A new pi release can break the integration, so PiCode must test and
+bump the pin deliberately rather than inheriting updates. On the other side, a
+user who wants a newer pi is not blocked, because the executable path is a
+setting.
