@@ -1,0 +1,70 @@
+{
+  "name": "picode-pi-chat",
+  "displayName": "PiCode: pi Agent",
+  "description": "PiCode agent layer: spawns the pi coding agent in RPC mode and renders a streaming chat panel.",
+  "publisher": "picode",
+  "version": "0.1.0",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "picode.piChat.open",
+        "title": "PiCode: Open pi Chat"
+      },
+      {
+        "command": "picode.piChat.newSession",
+        "title": "PiCode: New pi Session"
+      },
+      {
+        "command": "picode.piChat.abort",
+        "title": "PiCode: Abort pi Run"
+      },
+      {
+        "command": "picode.piChat.restart",
+        "title": "PiCode: Restart pi Process"
+      }
+    ],
+    "configuration": {
+      "title": "PiCode",
+      "properties": {
+        "picode.pi.executablePath": {
+          "type": "string",
+          "default": "pi",
+          "description": "Path to the pi CLI executable. A bare name is resolved on PATH; on Windows a `.cmd` shim is launched through the system shell."
+        },
+        "picode.pi.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model applied to new sessions, as `provider/model-id`. Empty keeps the model pi already has configured."
+        },
+        "picode.pi.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional arguments appended to `pi --mode rpc`."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0"
+  }
+}
