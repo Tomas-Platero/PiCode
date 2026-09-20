@@ -14,6 +14,9 @@ Establish the foundation of PiCode: a lightweight, rebranded VS Code distributio
 | Upstream base | VSCodium | MIT-licensed community build, no telemetry or Microsoft branding; redistributable under our own "PiCode" brand |
 | pi integration (MVP) | A PiCode extension with a pi panel that drives the pi CLI | This is the differentiating core; `pi --mode rpc` already exposes an IDE-embedding protocol |
 | Platform (MVP) | Windows | Matches the development machine; allows local iteration and validation before multi-OS CI |
+| Distribution depth | Layer on VSCodium **without compiling** (ADR-008) | A fork build needs Python 3.11, rustup, jq and MSVC Build Tools — none present — plus ~40-60 GB and 30-90 min builds and patch rebasing per upstream release. The fork path is deferred, not rejected |
+| Panel behaviour | Opt-in, never auto-opened (ADR-009) | Predictability and non-intrusiveness; an agent-first editor still has to be a good editor |
+| pi version | Pin and ship pi and gentle-pi (ADR-010) | Reproducibility across users, with a setting to override |
 
 ## Verified integration surface
 
@@ -65,10 +68,18 @@ client-side, `stop()` idempotent and post-stop sends rejected.
 
 ### 4. Document the VSCodium distribution strategy
 
-- [ ] `docs/DISTRIBUTION.md`: branding via `product.json`, built-in extensions,
+- [x] `docs/DISTRIBUTION.md`: branding via `product.json`, built-in extensions,
       Open VSX gallery, licensing constraints, and the Windows build pipeline
+- [x] `distribution/` scaffold: branding overlay, default settings, idempotent
+      preview-by-default bootstrap script, operator runbook
 
-Commit: _pending_
+Commit: `2f8b856`
+
+Two measurement corrections came out of this task, both to the parent's own
+earlier claims: the VSCodium user data path derives from `nameShort` (not
+`dataFolderName`), and the MSVC Build Tools are **absent** on this machine — the
+`2022` directories are empty, there is no `vswhere.exe`, no `cl` and no Windows
+SDK. The parent had inferred their presence from directory names alone.
 
 ### 5. Compile and verify the extension
 
@@ -126,11 +137,21 @@ specifically — the discovery path is generic.
 
 ## Open questions
 
+Resolved by the human in this session: the panel is opt-in; pi is pinned and
+shipped; the distribution layers on VSCodium without compiling.
+
+Still open:
+
 - Which pi provider/model should PiCode default to on first run?
-- Should the pi panel ship enabled by default, or opt-in on first launch?
-- Distribution: build from VSCodium source in CI, or maintain a patched-fork repo?
-- Should PiCode pin a specific `pi` version, or always target whatever is on
-  `PATH`? Process isolation buys version independence, but a pinned version is
-  more reproducible.
 - Not yet verified at runtime: the webview layer (CSP, panel singleton, disposal)
   was not exercised in an Extension Development Host, only compiled and reviewed.
+- Not yet verified at runtime: the branding overlay. VSCodium is not installed on
+  this machine, so `%APPDATA%\VSCodium\product.json` and the deep-merge behaviour
+  are derived from the patch source and the migration docs, not observed.
+- `picode://` as a URL protocol probably does not replace `vscodium://`, because
+  the OS handler is installer-registered rather than set in `main.ts`. Needs a
+  human check once VSCodium is installed.
+- The bootstrap script's `-Apply` path (backup, copy, npm install, `pi install`,
+  VSIX install) has only ever been exercised in preview mode.
+- The extension has never been packaged as a VSIX, so the deferred-install route
+  is unproven end to end.
