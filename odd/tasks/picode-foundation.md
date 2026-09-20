@@ -38,25 +38,30 @@ These facts were verified directly against the local installation
 
 - [x] ODD feature document created at `odd/tasks/picode-foundation.md`
 - [x] Feature branch `feat/picode-foundation` created (default branch is `Master`)
-- [ ] Root `README.md`, `docs/`, `extensions/` skeleton
+- [x] Root `README.md`, `docs/`, `extensions/` skeleton
 
-Commit: _pending_
+Commit: `993faab`
 
 ### 2. Define architecture and decisions
 
-- [ ] `docs/ARCHITECTURE.md` with the layered model, the RPC contract and rationale
-- [ ] `docs/DECISIONS.md` recording the four locked decisions and their trade-offs
+- [x] `docs/ARCHITECTURE.md` with the layered model, the RPC contract and rationale
+- [x] `docs/DECISIONS.md` recording the seven decisions (ADR-001..ADR-007) and their trade-offs
 
-Commit: _pending_
+Commit: `7d7df23`
 
 ### 3. Implement extension `picode-pi-chat` (pi RPC client)
 
-- [ ] Extension manifest, TypeScript config and build script
-- [ ] `PiRpcClient`: spawns `pi --mode rpc`, strict LF-only JSONL framing
-- [ ] Chat webview panel streaming text/thinking deltas and tool execution
-- [ ] Session control commands wired to the RPC commands
+- [x] Extension manifest, TypeScript config and build script
+- [x] `PiRpcClient`: spawns `pi --mode rpc`, strict LF-only JSONL framing
+- [x] Chat webview panel streaming text/thinking deltas and tool execution
+- [x] Session control commands wired to the RPC commands
 
-Commit: _pending_
+Commit: `6a73d71`
+
+Verification (independent, against pi 0.86.1): `get_state` returned the live model
+(`deepseek/deepseek-v4-pro`), 163 available models, 118 commands, concurrent id
+correlation correct, invalid model rejected by the agent, bare model id rejected
+client-side, `stop()` idempotent and post-stop sends rejected.
 
 ### 4. Document the VSCodium distribution strategy
 
@@ -67,17 +72,17 @@ Commit: _pending_
 
 ### 5. Compile and verify the extension
 
-- [ ] `npm install` + TypeScript compile clean
+- [x] `npm install` + TypeScript compile clean (`tsc -p ./` exit 0, zero errors)
 - [ ] Extension packaging verified (`vsce package` or equivalent)
-
-Commit: _pending_
 
 ### 6. Work-unit commits
 
-- [ ] One Conventional Commit per task, on `feat/picode-foundation`
+- [x] One Conventional Commit per task, on `feat/picode-foundation`
 
 ## Open questions
 
 - Which pi provider/model should PiCode default to on first run?
 - Should the pi panel ship enabled by default, or opt-in on first launch?
 - Distribution: build from VSCodium source in CI, or maintain a patched-fork repo?
+- Not yet verified at runtime: the webview layer (CSP, panel singleton, disposal)
+  was not exercised in an Extension Development Host, only compiled and reviewed.
