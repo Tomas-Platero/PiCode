@@ -114,9 +114,20 @@ check(
   "",
 );
 check(
-  "the extensions category offers list, search and update",
-  actions(buildCategorySettings("extensiones", full)) === "back,installed,search,update",
+  "the extensions category offers list, search, update and the two extra sources",
+  actions(buildCategorySettings("extensiones", full)) ===
+    "back,installed,search,update,installSource,installLocal",
   actions(buildCategorySettings("extensiones", full)),
+);
+check(
+  "the sources the catalogue cannot cover are named as such",
+  buildCategorySettings("extensiones", full)
+    .find((row) => row.action === "installLocal")
+    .detail.includes("repos git y rutas del disco") &&
+    buildCategorySettings("extensiones", full)
+      .find((row) => row.action === "installSource")
+      .detail.includes("git:github.com/usuario/repo@v1"),
+  buildCategorySettings("extensiones", full).find((row) => row.action === "installLocal").detail,
 );
 check(
   "the installed count is in the label",

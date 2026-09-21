@@ -135,6 +135,8 @@ export type PiSettingAction =
   | "thinking"
   | "installed"
   | "search"
+  | "installSource"
+  | "installLocal"
   | "update"
   | "runtime"
   | "reinstallRuntime"
@@ -241,6 +243,19 @@ export function buildCategorySettings(
           action: "update",
           label: "Actualizar extensiones",
           detail: "Ejecuta pi update --extensions",
+        },
+        { kind: "separator", label: "Desde otra fuente" },
+        {
+          kind: "item",
+          action: "installSource",
+          label: "Instalar desde una fuente…",
+          detail: "Una especificación de pi: npm:paquete, git:github.com/usuario/repo@v1, o una URL de git",
+        },
+        {
+          kind: "item",
+          action: "installLocal",
+          label: "Instalar desde una carpeta local…",
+          detail: "El catálogo es solo npm; esto cubre repos git y rutas del disco",
         },
       ];
 
@@ -565,6 +580,12 @@ async function runSetting(
     case "search":
       await showCatalogSearch(deps);
       return category === "extensiones";
+    case "installSource":
+      await installFromInput(deps);
+      return category === "extensiones";
+    case "installLocal":
+      await installFromFolder(deps);
+      return category === "extensiones";
     case "update":
       await updateExtensions(deps);
       return category === "extensiones";
@@ -785,19 +806,67 @@ function toCatalogItem(pkg: CatalogPackage): CatalogItem {
 }
 
 /**
- * Installs a package, after naming the exact command.
+ * Installs a catalogue entry, by its npm name.
  *
- * pi's own documentation is explicit that packages run with full access to the
- * system, so this is a modal rather than a single selection in a list.
+ * The catalog is npm only, which is why the two source rows exist next to it: pi also
+ * accepts git refs and local paths, and those are what the catalogue cannot cover.
  */
 async function installPackage(deps: PiMenuDeps, pkg: CatalogPackage): Promise<void> {
+  await installSource(deps, `npm:${pkg.name}`);
+}
+
+/** Asks for a source spec, the way pi documents them. */
+async function installFromInput(deps: PiMenuDeps): Promise<void> {
+  const source = await vscode.window.showInputBox({
+    title: "PiCode: instalar una extensión de pi",
+    prompt: "Una fuente de pi: npm:paquete, git:github.com/usuario/repo@v1, o una URL de git.",
+    placeHolder: "git:github.com/usuario/repo@v1",
+    ignoreFocusOut: true,
+  });
+  if (source === undefined) {
+    return;
+  }
+  await installSource(deps, source.trim());
+}
+
+/**
+ * Installs from a folder on disk.
+ *
+ * A picker rather than a text field, because a path typed by hand is a path typed
+ * wrong, and this is the source no catalogue can offer.
+ */
+async function installFromFolder(deps: PiMenuDeps): Promise<void> {
+  const chosen = await vscode.window.showOpenDialog({
+    title: "PiCode: instalar una extensión desde una carpeta local",
+    openLabel: "Instalar esta carpeta",
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+  });
+  const folder = chosen?.[0];
+  if (!folder) {
+    return;
+  }
+  await installSource(deps, folder.fsPath);
+}
+
+/**
+ * Installs a package from any source pi accepts.
+ *
+ * pi's documentation is explicit that packages run with full access to the system, so
+ * the confirmation names the exact command and shows the source as written rather than
+ * paraphrased: what the owner is about to run should be readable in the dialog.
+ */
+async function installSource(deps: PiMenuDeps, source: string): Promise<void> {
+  if (source.length === 0) {
+    return;
+  }
+
   const answer = await vscode.window.showWarningMessage(
-    `¿Instalar ${pkg.name} en pi?`,
+    `¿Instalar ${source} en pi?`,
     {
       modal: true,
-      detail:
-        "Los paquetes de pi ejecutan código con acceso completo al sistema. " +
-        `Se instalará con "pi install npm:${pkg.name}" y se añadirá a tu configuración de pi.`,
+      detail: `Los paquetes de pi ejecutan código con acceso completo al sistema. Se instalará con "pi install ${source}".`,
     },
     "Instalar",
   );
@@ -806,8 +875,8 @@ async function installPackage(deps: PiMenuDeps, pkg: CatalogPackage): Promise<vo
   }
 
   const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${pkg.name}` },
-    () => runPiCli(deps.runtime(), ["install", `npm:${pkg.name}`], undefined, deps.log),
+    { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${source}` },
+    () => runPiCli(deps.runtime(), ["install", source], undefined, deps.log),
   );
   if (!result.ok) {
     void vscode.window.showErrorMessage(
@@ -815,7 +884,7 @@ async function installPackage(deps: PiMenuDeps, pkg: CatalogPackage): Promise<vo
     );
     return;
   }
-  deps.offerRestart(`${pkg.name} quedó instalado`);
+  deps.offerRestart(`${source} quedó instalado`);
 }
 
 async function removePackage(deps: PiMenuDeps, source: string): Promise<void> {
