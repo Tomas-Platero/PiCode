@@ -68,7 +68,9 @@ const CHAT_BODY = `    <header class="toolbar">
         rows="3"
         placeholder="Pídele algo a pi. Enter envía; Shift+Enter añade una línea."
       ></textarea>
+      <div id="attachments" class="attachments" hidden></div>
       <div class="composer-actions">
+        <button id="attach" type="button" class="icon-button" title="Adjuntar una imagen" aria-label="Adjuntar"><span class="codicon codicon-device-camera"></span></button>
         <button
           id="model"
           type="button"
@@ -136,6 +138,17 @@ export class ChatView implements vscode.WebviewViewProvider {
    */
   private attachContext =
     vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", false);
+  /**
+   * The images the owner has attached to the message being written.
+   *
+   * Bytes cross the webview boundary exactly once, when the image is added, and
+   * the webview only learns an id and a thumbnailable data URL. Submitting sends
+   * ids, so a webview can forge an id but not invent bytes, and pi's helpers run
+   * once per image instead of once per add plus once per send.
+   */
+  private readonly attachments = new Map<string, PreparedImage>();
+  /** Makes every id unique within a session, so an old id cannot resolve to a new image. */
+  private attachmentSerial = 0;
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -204,6 +217,9 @@ export class ChatView implements vscode.WebviewViewProvider {
   public notifySessionReset(): void {
     this.totals = emptyUsage();
     this.contextWindow = undefined;
+    // An id belongs to the session that minted it: a chip the webview still holds
+    // after a reset must not resolve to an image the new session never saw.
+    this.clearAttachments();
     this.post({ type: "clear" });
   }
 
@@ -232,10 +248,6 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.disposed = true;
     this.releaseView();
   }
-
-  /* ---------------------------------------------------------------- *
-   * Attachment
-   * ---------------------------------------------------------------- */
 
   private async bindClient(): Promise<void> {
     const client = await this.host.ensureClient();
@@ -268,6 +280,10 @@ export class ChatView implements vscode.WebviewViewProvider {
   private releaseView(): void {
     this.eventSubscription?.dispose();
     this.eventSubscription = undefined;
+    // The prepared bytes belong to the webview that held their ids; once it is
+    // gone nothing can refer to them, and keeping them alive keeps memory nothing
+    // can use.
+    this.clearAttachments();
 
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
@@ -383,42 +399,131 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Prepares the attachments a prompt carried, reporting each refusal.
+   * Prepares the bytes that just arrived and answers the webview once.
    *
-   * A refusal is not a reason to drop the message: the owner still wants the text
-   * to arrive, and they need to know which image was left behind and why. Only the
-   * count limit is fatal, because it is a decision about the whole message.
+   * Both entry points — bytes the webview already holds and files the host read
+   * from a dialog — end here, because everything after "here are some bytes" is
+   * the same: the count gate, pi's helpers, the store, and one reply that says what
+   * was added and what was refused.
+   *
+   * `refusals` carries the failures that happened before the bytes existed (a file
+   * the dialog offered but the disk would not read), so one request gets one answer
+   * instead of a reply per file.
    */
-  private async prepareAttachments(
+  private async acceptAttachments(
     candidates: readonly PrepareImageInput[],
-  ): Promise<PreparedImage[]> {
-    if (candidates.length === 0) {
-      return [];
+    refusals: readonly AttachmentRefusal[] = [],
+  ): Promise<void> {
+    // Nothing arrived and nothing failed: there is nobody to answer. A cancelled
+    // dialog lands here, and answering it would read as a refusal.
+    if (candidates.length === 0 && refusals.length === 0) {
+      return;
     }
 
-    const tools = await this.host.imageTools?.();
-    if (!tools) {
-      // Reported rather than silently dropped: an image that disappears without a
-      // word is worse than one the panel says it could not prepare.
-      this.post({
-        type: "error",
-        message:
-          "No se pueden adjuntar imágenes: pi no publica las funciones que las " +
-          "preparan. El mensaje se envía solo con el texto.",
-      });
-      return [];
+    const refused: AttachmentRefusal[] = [...refusals];
+
+    if (this.attachments.size + candidates.length > ATTACHMENT_LIMITS.maxCount) {
+      // The whole batch is refused rather than the overflow: which images fit is
+      // the owner's decision, not the panel's.
+      const overLimit =
+        `Ya hay ${this.attachments.size} imágenes adjuntas y el máximo por mensaje es ` +
+        `${ATTACHMENT_LIMITS.maxCount}; no se añadió ninguna de las ` +
+        `${candidates.length} que llegaron.`;
+      for (const candidate of candidates) {
+        refused.push({ name: candidateName(candidate), reason: overLimit });
+      }
+      this.post({ type: "attachments", added: [], refused });
+      return;
     }
 
-    const prepared: PreparedImage[] = [];
-    for (const candidate of candidates) {
-      const outcome = await prepareImage(tools, candidate, ATTACHMENT_LIMITS);
-      if (outcome.ok) {
-        prepared.push(outcome.image);
-      } else {
-        this.post({ type: "error", message: outcome.reason });
+    const added: WebviewAttachment[] = [];
+
+    if (candidates.length > 0) {
+      const tools = await this.host.imageTools?.();
+      if (!tools) {
+        // One refusal for the batch: the failure is a fact about this pi, not about
+        // any one file. Reported rather than silently dropped, because an image that
+        // disappears without a word is worse than one the panel says it cannot send.
+        refused.push({
+          name:
+            candidates.length === 1
+              ? candidateName(candidates[0])
+              : `${candidates.length} imágenes`,
+          reason:
+            "No se pueden adjuntar imágenes: este pi no publica las funciones que las " +
+            "preparan. Actualiza pi para adjuntarlas, o envía el mensaje solo con el texto.",
+        });
+        this.post({ type: "attachments", added, refused });
+        return;
+      }
+
+      for (const candidate of candidates) {
+        const outcome = await prepareImage(tools, candidate, ATTACHMENT_LIMITS);
+        if (!outcome.ok) {
+          refused.push({ name: candidateName(candidate), reason: outcome.reason });
+          continue;
+        }
+        const id = this.nextAttachmentId();
+        this.attachments.set(id, outcome.image);
+        added.push({
+          id,
+          mimeType: outcome.image.mimeType,
+          width: outcome.image.width,
+          height: outcome.image.height,
+          resized: outcome.image.resized,
+          // The webview draws the thumbnail from this URL and never holds the raw
+          // base64, so what it could send back stays what it already had.
+          dataUrl: `data:${outcome.image.mimeType};base64,${outcome.image.data}`,
+        });
       }
     }
-    return prepared;
+
+    this.post({ type: "attachments", added, refused });
+  }
+
+  /**
+   * Resolves the ids a prompt submitted against the store.
+   *
+   * The count of ids that no longer resolve is returned rather than thrown away,
+   * because a chip the panel is still drawing over nothing has to be noticed.
+   */
+  private resolveAttachments(value: unknown): { images: PreparedImage[]; missing: number } {
+    const images: PreparedImage[] = [];
+    let missing = 0;
+    if (!Array.isArray(value)) {
+      return { images, missing };
+    }
+
+    for (const id of value) {
+      // The payload crosses the webview boundary, so nothing about it is trusted:
+      // an entry that is not a string is not an id.
+      if (typeof id !== "string") {
+        continue;
+      }
+      const image = this.attachments.get(id);
+      if (image === undefined) {
+        missing += 1;
+        continue;
+      }
+      images.push(image);
+    }
+    return { images, missing };
+  }
+
+  /** The next id, unique within the session that mints it. */
+  private nextAttachmentId(): string {
+    this.attachmentSerial += 1;
+    return `attachment-${this.attachmentSerial}`;
+  }
+
+  /**
+   * Drops every prepared image.
+   *
+   * Called when the message has been sent, when the session changes, and when the
+   * view goes away: an id only means something inside the session that minted it.
+   */
+  private clearAttachments(): void {
+    this.attachments.clear();
   }
 
   private post(message: unknown): void {
@@ -466,25 +571,85 @@ export class ChatView implements vscode.WebviewViewProvider {
         await this.pushState();
         break;
       }
+      case "attachBytes": {
+        // The bytes the webview already holds, from a paste or a drop. Nothing is
+        // prepared here that the store will not own: the count gate and pi's format
+        // detection run now, while the owner is still looking at the image.
+        await this.acceptAttachments(readImageCandidates(message.images));
+        break;
+      }
+      case "pickImages": {
+        // The webview cannot open a file dialog, so the choosing happens here and
+        // the bytes never reach the webview in a form it could send back.
+        const chosen = await vscode.window.showOpenDialog({
+          title: "PiCode: adjuntar imágenes",
+          openLabel: "Adjuntar",
+          canSelectMany: true,
+          filters: { Imágenes: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] },
+        });
+        // A cancelled dialog answers with nothing at all: an empty `attachments`
+        // message would read as a refusal of something the owner never chose.
+        if (chosen === undefined || chosen.length === 0) {
+          break;
+        }
+
+        const candidates: PrepareImageInput[] = [];
+        const refusals: AttachmentRefusal[] = [];
+        for (const uri of chosen) {
+          const name = uriName(uri);
+          try {
+            const candidate: PrepareImageInput = { bytes: await vscode.workspace.fs.readFile(uri) };
+            if (name !== undefined) {
+              candidate.name = name;
+            }
+            candidates.push(candidate);
+          } catch (error) {
+            // A chosen file the disk will not give up is one refusal, not a failed
+            // batch: the other files still deserve to be attached.
+            refusals.push({
+              name: name ?? "imagen",
+              reason:
+                "No se pudo adjuntar la imagen. No se pudo leer el archivo: " +
+                toErrorMessage(error),
+            });
+          }
+        }
+        await this.acceptAttachments(candidates, refusals);
+        break;
+      }
+      case "detachAttachment": {
+        // An unknown id is not an error: the webview may drop a chip the store has
+        // already forgotten, and there is nothing to say about that.
+        if (typeof message.id === "string") {
+          this.attachments.delete(message.id);
+        }
+        break;
+      }
+      case "clearAttachments": {
+        this.clearAttachments();
+        break;
+      }
       case "prompt": {
         const text = typeof message.text === "string" ? message.text.trim() : "";
         if (text.length === 0 || !this.client) {
           return;
         }
 
-        const candidates = readImageCandidates(message.images);
-        if (candidates.length > ATTACHMENT_LIMITS.maxCount) {
-          this.postStatus("error");
+        // The bytes were prepared when the image was added, so submitting only
+        // carries ids. An id that no longer resolves is a chip the panel is still
+        // drawing over nothing, and it is said once rather than lost silently.
+        const { images, missing } = this.resolveAttachments(message.attachmentIds);
+        if (missing > 0) {
           this.post({
             type: "error",
             message:
-              `Se pueden adjuntar como máximo ${ATTACHMENT_LIMITS.maxCount} imágenes por ` +
-              `mensaje, y llegaron ${candidates.length}. El mensaje no se envió.`,
+              missing === 1
+                ? "Una imagen adjunta ya no está disponible y no se envió; vuelve a adjuntarla si la querías incluir."
+                : `${missing} imágenes adjuntas ya no están disponibles y no se enviaron; ` +
+                  "vuelve a adjuntarlas si las querías incluir.",
           });
-          return;
         }
 
-        const images = await this.prepareAttachments(candidates);
         // The note goes before the owner's words, like the editor-context block:
         // whatever PiCode adds is a preamble, and the message itself comes last.
         const note = formatAttachmentNote(images);
@@ -502,7 +667,14 @@ export class ChatView implements vscode.WebviewViewProvider {
         } catch (error) {
           this.postStatus("error");
           this.post({ type: "error", message: toErrorMessage(error) });
+          // The attachments stay: sending failed, and retrying should not mean
+          // attaching again.
+          break;
         }
+        // Sent: the panel is composing a different message now, and the ids of the
+        // last one must not resolve into it.
+        this.clearAttachments();
+        this.post({ type: "attachmentsCleared" });
         break;
       }
       case "abort": {
@@ -621,13 +793,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/** One attachment the panel may draw, as the webview receives it. */
+interface WebviewAttachment {
+  id: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+  resized: boolean;
+  /** The bytes as a URL the webview renders and cannot send back whole. */
+  dataUrl: string;
+}
+
+/** One attachment that did not make it, and why, for the panel to show. */
+interface AttachmentRefusal {
+  name: string;
+  reason: string;
+}
+
+/** The label a refusal uses for a candidate the webview never named. */
+function candidateName(candidate: PrepareImageInput): string {
+  return typeof candidate.name === "string" && candidate.name.length > 0
+    ? candidate.name
+    : "imagen";
+}
+
+/** The file's own name, from the URI a dialog returned. */
+function uriName(uri: vscode.Uri): string | undefined {
+  const name = uri.fsPath.split(/[\\/]/).pop();
+  return name !== undefined && name.length > 0 ? name : undefined;
+}
+
 /**
  * Reads the attachments a webview message carried.
  *
  * The payload crosses the webview boundary, so nothing about it is trusted: an
- * entry that is not an object with a non-empty `data` string and a `mimeType`
- * string is skipped rather than sent anywhere. The claimed type is only passed
- * along as a label for the refusal message; the detector decides the real one.
+ * entry that is not an object with a non-empty `data` string is skipped rather than
+ * sent anywhere. The claimed type is only passed along as a label for the refusal
+ * message — pi's detector decides the real one, so a webview that lies about it
+ * changes nothing.
  */
 function readImageCandidates(value: unknown): PrepareImageInput[] {
   if (!Array.isArray(value)) {
@@ -642,14 +845,14 @@ function readImageCandidates(value: unknown): PrepareImageInput[] {
     if (typeof entry.data !== "string" || entry.data.length === 0) {
       continue;
     }
-    if (typeof entry.mimeType !== "string") {
-      continue;
+    const candidate: PrepareImageInput = { base64: entry.data };
+    if (typeof entry.mimeType === "string" && entry.mimeType.length > 0) {
+      candidate.claimedMimeType = entry.mimeType;
     }
-    candidates.push({
-      base64: entry.data,
-      claimedMimeType: entry.mimeType,
-      ...(typeof entry.name === "string" && entry.name.length > 0 ? { name: entry.name } : {}),
-    });
+    if (typeof entry.name === "string" && entry.name.length > 0) {
+      candidate.name = entry.name;
+    }
+    candidates.push(candidate);
   }
   return candidates;
 }
