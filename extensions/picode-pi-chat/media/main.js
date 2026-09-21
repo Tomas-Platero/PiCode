@@ -47,8 +47,12 @@
 
   // The panel is Spanish. The states stay English internally because they come
   // from the protocol and from the host's own status messages.
+  //
+  // `idle` has no label on purpose. Nothing running is the absence of a badge, the
+  // way the editor's own surfaces report it, so there is no word meaning "idle" to
+  // translate — a label here only invited the question of what it meant. The two
+  // details below are suffixes on a state that is already showing.
   var STATUS_LABELS = {
-    idle: "en reposo",
     running: "trabajando",
     settled: "listo",
     error: "error",
@@ -77,10 +81,19 @@
   }
 
   function setStatus(status, detail) {
+    // Nothing running shows no badge at all: the absence is the signal, and a
+    // state badge that reads "fine, nothing is happening" is noise in a sidebar.
+    if (status === "idle") {
+      elements.status.hidden = true;
+      elements.abort.disabled = true;
+      return;
+    }
+
     var label = STATUS_LABELS[status] || status;
     if (detail) {
       label += " \u2014 " + (DETAIL_LABELS[detail] || String(detail).replace(/^retry /, "reintento "));
     }
+    elements.status.hidden = false;
     elements.status.textContent = label;
     elements.status.className = "status status-" + status;
     elements.abort.disabled = status !== "running";

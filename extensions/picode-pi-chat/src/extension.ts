@@ -49,7 +49,6 @@ let client: PiClient | undefined;
 let view: ChatView | undefined;
 /** The directory the agent runs in, which is also the project its sessions belong to. */
 let agentCwd: string | undefined;
-let statusItem: vscode.StatusBarItem | undefined;
 let ajustesView: AjustesView | undefined;
 /** When this session activated, used to tell a restored panel from a real click. */
 let activatedAt = 0;
@@ -106,15 +105,6 @@ export function activate(context: vscode.ExtensionContext): void {
     autoOpenMenu: () => autoOpenMenuFromPanel(menu),
   });
   ajustesView = ajustes;
-
-  // Left-aligned, which is where the owner expected to find it, and the same place
-  // VS Code puts its own agent's status entry point.
-  statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
-  statusItem.text = "$(hubot) pi";
-  statusItem.tooltip = "PiCode: configuración de pi";
-  statusItem.command = "picode.piChat.menu";
-  statusItem.show();
-  context.subscriptions.push(statusItem);
 
   context.subscriptions.push(
     // `retainContextWhenHidden` keeps the webview alive while the sidebar is

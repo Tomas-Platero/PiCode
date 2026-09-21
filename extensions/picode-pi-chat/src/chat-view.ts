@@ -33,7 +33,7 @@ export interface ChatViewHost {
 }
 
 const CHAT_BODY = `    <header class="toolbar">
-      <span id="status" class="status status-idle">en reposo</span>
+      <span id="status" class="status" hidden></span>
       <span id="session" class="session"></span>
       <button id="new-session" type="button" class="icon-button" title="Empezar una sesión nueva de pi" aria-label="Nueva sesión"><span class="codicon codicon-comment-discussion"></span></button>
       <button id="abort" type="button" class="icon-button" disabled title="Detener la ejecución actual" aria-label="Detener"><span class="codicon codicon-debug-stop"></span></button>
