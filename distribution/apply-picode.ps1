@@ -425,6 +425,77 @@ foreach ($fix in $nameFixes) {
 }
 
 # ---------------------------------------------------------------------------
+# Step 6 - the icons inside the application
+# ---------------------------------------------------------------------------
+Write-Section "Step 6 - iconos dentro de la aplicación"
+
+# The executable's own icon is set separately, because it needs a PE resource tool; see
+# docs/DISTRIBUTION.md section 9. This step is the other half: VS Code ships its own logo
+# files, and those are what the interface draws. They are deliberately not covered by the
+# product checksums, which is what makes replacing them safe.
+$markSource = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode-icon.svg"
+$markPng    = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode-icon.png"
+
+if (-not (Test-Path -LiteralPath $markSource)) {
+    Write-Warn "No mark found at $markSource; the icons inside the application were left alone."
+} else {
+    # The owner's asset carries a C2PA provenance manifest: some 8 kB of base64 in the middle
+    # of the SVG, describing which tool produced the file. That belongs in the repository
+    # history, not inside every shipped copy of the icon.
+    $mark = (Get-Content -LiteralPath $markSource -Raw) -replace '(?s)<metadata>.*?</metadata>', '' -replace '\s+xmlns:c2pa="[^"]*"', ''
+
+    foreach ($name in @("code-icon.svg", "vscode-icon.svg")) {
+        $target = Join-Path $RepoRoot "resources\app\out\media\$name"
+        if (-not (Test-Path -LiteralPath $target)) {
+            Write-Skip "$name is not there"
+            continue
+        }
+        Write-Act "Draw $name with the PiCode mark"
+        if (-not $isPreview) {
+            Set-Content -LiteralPath $target -Value $mark -NoNewline
+            $Done.Add("replaced out\media\$name")
+        }
+    }
+
+    $icoTarget = Join-Path $RepoRoot "resources\app\resources\win32\code.ico"
+    $icoSource = Join-Path $PSScriptRoot "picode.ico"
+    if ((Test-Path -LiteralPath $icoTarget) -and (Test-Path -LiteralPath $icoSource)) {
+        Write-Act "Replace resources\win32\code.ico"
+        if (-not $isPreview) {
+            Copy-Item -LiteralPath $icoSource -Destination $icoTarget -Force
+            $Done.Add("replaced resources\\win32\\code.ico")
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $markPng)) {
+        Write-Skip "no PNG available to rebuild the Start Menu tiles"
+    } else {
+        foreach ($tile in @(@{ Name = "code_150x150.png"; Size = 150 }, @{ Name = "code_70x70.png"; Size = 70 })) {
+            $target = Join-Path $RepoRoot "resources\app\resources\win32\$($tile.Name)"
+            if (-not (Test-Path -LiteralPath $target)) {
+                Write-Skip "$($tile.Name) is not there"
+                continue
+            }
+            Write-Act "Redraw $($tile.Name) at $($tile.Size) px"
+            if (-not $isPreview) {
+                Add-Type -AssemblyName System.Drawing
+                $image = [System.Drawing.Image]::FromFile($markPng)
+                $bitmap = New-Object System.Drawing.Bitmap($tile.Size, $tile.Size)
+                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $graphics.Clear([System.Drawing.Color]::Transparent)
+                $graphics.DrawImage($image, 0, 0, $tile.Size, $tile.Size)
+                $graphics.Dispose()
+                $bitmap.Save($target, [System.Drawing.Imaging.ImageFormat]::Png)
+                $bitmap.Dispose()
+                $image.Dispose()
+                $Done.Add("redrew resources\\win32\\$($tile.Name)")
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Section "Summary"
