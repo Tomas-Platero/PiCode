@@ -31,6 +31,8 @@ const full = {
   reasoning: "max",
   runtime: "pi del PATH 0.86.1",
   runtimeAvailable: true,
+  transport: "RPC (proceso aparte)",
+  embeddedAvailable: true,
   managedInstalled: false,
   installedCount: 10,
   messageCount: 42,
@@ -48,7 +50,7 @@ check(
   "each category shows its current value next to the name",
   categories[0].description === "DeepSeek V4 Pro" &&
     categories[1].description === "10 instaladas" &&
-    categories[2].description === "pi del PATH 0.86.1" &&
+    categories[2].description === "pi del PATH 0.86.1 · RPC (proceso aparte)" &&
     categories[3].description === "3 con modelos" &&
     categories[4].description === "leyendo…" &&
     categories[5].description === "en reposo",
@@ -85,6 +87,8 @@ check(
 const unknown = buildCategories({
   runtime: "pi del PATH",
   runtimeAvailable: true,
+  transport: "RPC (proceso aparte)",
+  embeddedAvailable: false,
   managedInstalled: false,
   streaming: false,
 });
@@ -137,16 +141,45 @@ check(
 check(
   "the runtime category names what is in use and offers the managed install",
   buildCategorySettings("runtime", full)[2].label === "En uso: pi del PATH 0.86.1" &&
-    buildCategorySettings("runtime", full)[3].action === "reinstallRuntime" &&
-    buildCategorySettings("runtime", full)[3].label.startsWith("Instalar"),
+    buildCategorySettings("runtime", full)[4].action === "reinstallRuntime" &&
+    buildCategorySettings("runtime", full)[4].label.startsWith("Instalar"),
   "",
 );
 check(
   "an already installed managed runtime offers a reinstall",
-  buildCategorySettings("runtime", { ...full, managedInstalled: true })[3].label.startsWith(
+  buildCategorySettings("runtime", { ...full, managedInstalled: true })[4].label.startsWith(
     "Reinstalar",
   ),
   "",
+);
+check(
+  "the runtime category names the transport and offers its row",
+  buildCategorySettings("runtime", full)[3].label === "Transporte: RPC (proceso aparte)" &&
+    buildCategorySettings("runtime", full)[3].action === "transport",
+  buildCategorySettings("runtime", full)[3].label,
+);
+check(
+  "the transport row says both transports are possible when the embedded one is available",
+  buildCategorySettings("runtime", { ...full, embeddedAvailable: true })
+    .find((row) => row.action === "transport")
+    .detail.includes("el embebido lo carga dentro del editor"),
+  buildCategorySettings("runtime", full).find((row) => row.action === "transport").detail,
+);
+check(
+  "the transport row says only RPC can run when the embedded one is unavailable",
+  buildCategorySettings("runtime", { ...full, embeddedAvailable: false })
+    .find((row) => row.action === "transport")
+    .detail === "El pi activo no publica una entrada del SDK, así que solo RPC puede ejecutarse",
+  buildCategorySettings("runtime", { ...full, embeddedAvailable: false }).find(
+    (row) => row.action === "transport",
+  ).detail,
+);
+check(
+  "the transport action is wired so the popup knows which host call to make",
+  buildCategorySettings("runtime", full)
+    .filter((row) => row.label.startsWith("Transporte:"))
+    .every((row) => row.kind === "item" && row.action === "transport"),
+  JSON.stringify(buildCategorySettings("runtime", full).map((row) => row.action)),
 );
 check(
   "the session category offers usage, new, sessions, abort, the command list and restart",

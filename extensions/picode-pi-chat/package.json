@@ -82,6 +82,11 @@
         "category": "PiCode"
       },
       {
+        "command": "picode.piChat.selectTransport",
+        "title": "PiCode: Elegir cómo habla con pi",
+        "category": "PiCode"
+      },
+      {
         "command": "picode.piChat.selectModel",
         "title": "PiCode: Elegir modelo",
         "category": "PiCode"

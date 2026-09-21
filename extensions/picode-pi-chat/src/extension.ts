@@ -40,6 +40,7 @@ import {
   installManagedRuntime,
   readTransport,
   resolveRuntime,
+  type PiTransport,
   type RuntimeDescriptor,
   type RuntimeMode,
 } from "./runtime";
@@ -79,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
     selectModel: () => withLiveClient(selectModel),
     selectThinkingLevel: () => withLiveClient(selectThinkingLevel),
     selectRuntime: () => selectRuntime(context),
+    selectTransport: () => selectTransport(context),
     installManagedRuntime: () => installManagedFromMenu(context),
     sendCommand: (name) => sendSlashCommand(name),
     sessions: () => listProjectSessions(),
@@ -129,6 +131,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("picode.piChat.selectRuntime", async () => {
       await selectRuntime(context);
+    }),
+    vscode.commands.registerCommand("picode.piChat.selectTransport", async () => {
+      await selectTransport(context);
     }),
     vscode.commands.registerCommand("picode.piChat.selectModel", async () => {
       await withLiveClient(selectModel);
@@ -249,6 +254,8 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
   return {
     runtime: label,
     runtimeAvailable: runtime.available,
+    transport: summarizeTransport(),
+    embeddedAvailable: runtime.embeddedAvailable,
     managedInstalled: runtime.managedInstalled,
     streaming: state?.isStreaming === true,
     ...(state?.model ? { model: state.model.name ?? state.model.id } : {}),
@@ -492,6 +499,70 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
   await resetClient();
   outputChannel?.appendLine(`[runtime] mode is now "${picked.mode}".`);
   void vscode.window.showInformationMessage(`PiCode: usando ${RUNTIME_LABELS[picked.mode]}.`);
+}
+
+/**
+ * Lets the owner choose how PiCode talks to pi.
+ *
+ * Its own question, not a fourth entry in the runtime picker: the runtime says
+ * which pi, this says how PiCode reaches it, and the two are independent. The
+ * embedded choice is only offered when the active pi publishes an entry to
+ * import, because an option that cannot run reads as a bug in the setting.
+ */
+async function selectTransport(context: vscode.ExtensionContext): Promise<void> {
+  const current = await describeRuntime(context.extensionUri);
+  const active = readTransport();
+
+  interface TransportChoice extends vscode.QuickPickItem {
+    transport: PiTransport;
+  }
+
+  const choices: TransportChoice[] = [
+    {
+      transport: "rpc",
+      label: "$(terminal) RPC: pi como proceso aparte",
+      description: active === "rpc" ? "activo ahora" : "",
+      detail:
+        "Arranca `pi --mode rpc` y habla con él por JSON en stdio. Es lo que PiCode ha usado siempre.",
+    },
+    {
+      transport: "embedded",
+      label: "$(vm) Embebido: pi dentro del editor",
+      description:
+        active === "embedded"
+          ? "activo ahora"
+          : current.embeddedAvailable
+            ? ""
+            : "no disponible",
+      detail: current.embeddedAvailable
+        ? "Carga el mismo pi con su SDK, sin proceso hijo. Las extensiones de pi pueden dibujar su propia interfaz. `picode.pi.extraArgs` no se aplica."
+        : `El pi activo (${current.display}) no publica una entrada que el SDK pueda importar.`,
+    },
+  ];
+
+  const picked = await vscode.window.showQuickPick(choices, {
+    title: "PiCode: ¿cómo debe hablar con pi?",
+    placeHolder: active === "embedded" ? "Ahora: embebido" : "Ahora: RPC",
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.transport === "embedded" && !current.embeddedAvailable) {
+    void vscode.window.showInformationMessage(
+      `PiCode: el transporte embebido no puede ejecutarse porque ${current.display} no publica una entrada del SDK.`,
+    );
+    return;
+  }
+
+  await vscode.workspace
+    .getConfiguration("picode.pi")
+    .update("transport", picked.transport, vscode.ConfigurationTarget.Global);
+  await resetClient();
+  outputChannel?.appendLine(`[pi] transport is now "${picked.transport}".`);
+  void vscode.window.showInformationMessage(
+    `PiCode: hablando con pi por ${picked.transport === "rpc" ? "RPC" : "transporte embebido"}.`,
+  );
 }
 
 /** How each runtime mode is named in the interface. */
@@ -885,6 +956,11 @@ function summarizeRuntime(runtime: RuntimeDescriptor): string {
     return `Ejecutable propio${version}: ${runtime.display}`;
   }
   return `pi del PATH${version}${runtime.available ? "" : " (no encontrado)"}`;
+}
+
+/** One line describing the transport, for the popup and the sidebar panel. */
+function summarizeTransport(): string {
+  return readTransport() === "embedded" ? "embebido (en el editor)" : "RPC (proceso aparte)";
 }
 
 /**

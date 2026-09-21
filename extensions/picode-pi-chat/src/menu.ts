@@ -56,6 +56,10 @@ export interface PiMenuSnapshot {
   reasoning?: string;
   runtime: string;
   runtimeAvailable: boolean;
+  /** How PiCode talks to pi, already phrased for display. */
+  transport: string;
+  /** False when the active pi publishes no SDK entry, so only RPC can run. */
+  embeddedAvailable: boolean;
   managedInstalled: boolean;
   installedCount?: number;
   messageCount?: number;
@@ -105,7 +109,7 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
         return {
           id,
           label: CATEGORY_LABELS.runtime,
-          description: snapshot.runtime,
+          description: `${snapshot.runtime} · ${snapshot.transport}`,
           detail: snapshot.runtimeAvailable ? "Disponible" : "No encontrado",
         };
       case "proveedores":
@@ -143,6 +147,7 @@ export type PiSettingAction =
   | "installLocal"
   | "update"
   | "runtime"
+  | "transport"
   | "reinstallRuntime"
   | "provider"
   | "gentleStatus"
@@ -272,6 +277,14 @@ export function buildCategorySettings(
           action: "runtime",
           label: `En uso: ${snapshot.runtime}`,
           detail: "Elegir entre el pi de tu PATH, el de PiCode o uno concreto",
+        },
+        {
+          kind: "item",
+          action: "transport",
+          label: `Transporte: ${snapshot.transport}`,
+          detail: snapshot.embeddedAvailable
+            ? "RPC arranca pi como proceso aparte; el embebido lo carga dentro del editor"
+            : "El pi activo no publica una entrada del SDK, así que solo RPC puede ejecutarse",
         },
         {
           kind: "item",
@@ -468,6 +481,7 @@ export interface PiMenuDeps {
   selectModel(): Promise<void>;
   selectThinkingLevel(): Promise<void>;
   selectRuntime(): Promise<void>;
+  selectTransport(): Promise<void>;
   installManagedRuntime(): Promise<void>;
   /**
    * Sends a slash command to the running session as a message.
@@ -601,6 +615,9 @@ async function runSetting(
       return true;
     case "runtime":
       await deps.selectRuntime();
+      return true;
+    case "transport":
+      await deps.selectTransport();
       return true;
     case "reinstallRuntime":
       await deps.installManagedRuntime();
