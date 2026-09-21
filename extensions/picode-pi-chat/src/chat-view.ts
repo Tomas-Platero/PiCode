@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { collectReferences, composePrompt } from "./context";
-import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
+import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiSessionState, type PiUsage } from "./protocol";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { buildWebviewHtml } from "./webview-html";
@@ -13,7 +13,7 @@ type ViewStatus = "idle" | "running" | "settled" | "error";
  */
 export interface ChatViewHost {
   /** A started client for the active runtime, or undefined when pi cannot start. */
-  ensureClient(): Promise<PiRpcClient | undefined>;
+  ensureClient(): Promise<PiClient | undefined>;
   /** Applies a model chosen in the panel's own dropdown. */
   applyModel(modelId: string, provider?: string): Promise<void>;
   /** Applies a reasoning level chosen in the panel's own dropdown. */
@@ -90,11 +90,11 @@ export class ChatView implements vscode.WebviewViewProvider {
   public static readonly containerId = "picode";
 
   private view: vscode.WebviewView | undefined;
-  private client: PiRpcClient | undefined;
+  private client: PiClient | undefined;
   private eventSubscription: PiSubscription | undefined;
   private readonly disposables: vscode.Disposable[] = [];
   private disposed = false;
-  private boundClient: PiRpcClient | undefined;
+  private boundClient: PiClient | undefined;
   /** What this session has cost, added up from the messages pi reports. */
   private totals: UsageTotals = emptyUsage();
   private contextWindow: number | undefined;
@@ -122,7 +122,7 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /** The client the webview is currently bound to, if any. */
-  public get bound(): PiRpcClient | undefined {
+  public get bound(): PiClient | undefined {
     return this.boundClient;
   }
 

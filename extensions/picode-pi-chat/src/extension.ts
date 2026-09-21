@@ -31,7 +31,8 @@ import {
   type GentleState,
 } from "./gentle";
 import { PiRpcClient } from "./pi-rpc-client";
-import type { PiModel, PiThinkingLevel } from "./protocol";
+import type { PiClient } from "./pi-client";
+import type { PiModel, PiSlashCommand, PiThinkingLevel } from "./protocol";
 import {
   describeRuntime,
   installManagedRuntime,
@@ -40,7 +41,7 @@ import {
   type RuntimeMode,
 } from "./runtime";
 
-let client: PiRpcClient | undefined;
+let client: PiClient | undefined;
 let view: ChatView | undefined;
 /** The directory the agent runs in, which is also the project its sessions belong to. */
 let agentCwd: string | undefined;
@@ -167,7 +168,7 @@ async function revealChatView(): Promise<void> {
  * view when it resolves, so the process exists exactly while there is a surface
  * asking for it.
  */
-async function ensureClient(extensionUri: vscode.Uri): Promise<PiRpcClient | undefined> {
+async function ensureClient(extensionUri: vscode.Uri): Promise<PiClient | undefined> {
   const rpc = getClient(extensionUri);
   return (await ensureStarted(rpc)) ? rpc : undefined;
 }
@@ -233,7 +234,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
   const installed = await countInstalled(extensionUri);
 
   let providerCount: number | undefined;
-  let commands: Awaited<ReturnType<PiRpcClient["getCommands"]>> = [];
+  let commands: PiSlashCommand[] = [];
   if (client) {
     providerCount = await client
       .getAvailableModels()
@@ -711,7 +712,7 @@ async function resumeSession(session: SessionSummary): Promise<void> {
  * on configuration, so there is nothing to offer until pi is up.
  */
 async function withLiveClient(
-  action: (rpc: PiRpcClient) => Promise<void>,
+  action: (rpc: PiClient) => Promise<void>,
   what = "cambiar los ajustes de la sesión",
 ): Promise<void> {
   const rpc = view?.bound;
@@ -734,7 +735,7 @@ async function withLiveClient(
  * unambiguous for every provider observed but loses information if a model id
  * itself contains a slash.
  */
-async function selectModel(rpc: PiRpcClient): Promise<void> {
+async function selectModel(rpc: PiClient): Promise<void> {
   const [models, state] = await Promise.all([rpc.getAvailableModels(), rpc.getState()]);
   if (models.length === 0) {
     void vscode.window.showInformationMessage("PiCode: pi no informó de ningún modelo configurado.");
@@ -797,7 +798,7 @@ async function selectModel(rpc: PiRpcClient): Promise<void> {
  * enum, because pi rejects a level the current model does not support: `xhigh`
  * and `max` only exist for some models.
  */
-async function selectThinkingLevel(rpc: PiRpcClient): Promise<void> {
+async function selectThinkingLevel(rpc: PiClient): Promise<void> {
   const [levels, state] = await Promise.all([
     rpc.getAvailableThinkingLevels(),
     rpc.getState(),
@@ -837,7 +838,7 @@ async function selectThinkingLevel(rpc: PiRpcClient): Promise<void> {
  * Applies a model to the live session. Shared by the panel's dropdown and the
  * palette command, so both paths report and log identically.
  */
-async function applyModel(rpc: PiRpcClient, modelId: string, provider?: string): Promise<void> {
+async function applyModel(rpc: PiClient, modelId: string, provider?: string): Promise<void> {
   const applied = await rpc.setModel(modelId, provider);
   outputChannel?.appendLine(`[pi] model is now ${applied.provider ?? "?"}/${applied.id}.`);
 }
@@ -863,7 +864,7 @@ function isThinkingLevel(value: string): value is PiThinkingLevel {
 }
 
 /** Applies a reasoning level to the live session. */
-async function applyThinkingLevel(rpc: PiRpcClient, level: string): Promise<void> {
+async function applyThinkingLevel(rpc: PiClient, level: string): Promise<void> {
   if (!isThinkingLevel(level)) {
     throw new Error(`"${level}" no es un nivel de razonamiento que pi acepte.`);
   }
@@ -887,7 +888,7 @@ function summarizeRuntime(runtime: RuntimeDescriptor): string {
  * Creates the client on first use so activation stays cheap; configuration is
  * read here, not at activation time.
  */
-function getClient(extensionUri: vscode.Uri): PiRpcClient {
+function getClient(extensionUri: vscode.Uri): PiClient {
   if (client) {
     return client;
   }
@@ -911,7 +912,7 @@ function getClient(extensionUri: vscode.Uri): PiRpcClient {
   return client;
 }
 
-async function ensureStarted(rpc: PiRpcClient): Promise<boolean> {
+async function ensureStarted(rpc: PiClient): Promise<boolean> {
   try {
     await rpc.start();
   } catch (error) {
@@ -938,7 +939,7 @@ async function ensureStarted(rpc: PiRpcClient): Promise<boolean> {
  * Applies `picode.pi.defaultModel` once per client. A model failure is not fatal
  * (pi already has a configured default), so it is reported as a warning.
  */
-async function applyDefaultModel(rpc: PiRpcClient): Promise<void> {
+async function applyDefaultModel(rpc: PiClient): Promise<void> {
   if (defaultModelApplied) {
     return;
   }

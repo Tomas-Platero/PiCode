@@ -17,11 +17,9 @@ import type {
   PiSwitchSessionData,
   PiWireCommand,
 } from "./protocol";
+import { type PiClient, type PiSubscription } from "./pi-client";
 
-/** Minimal subscription handle; structurally compatible with `vscode.Disposable`. */
-export interface PiSubscription {
-  dispose(): void;
-}
+export type { PiSubscription } from "./pi-client";
 
 export interface PiRpcClientOptions {
   /** Executable to spawn. A bare name is resolved on PATH. */
@@ -48,7 +46,7 @@ interface PendingRequest {
  * Client for `pi --mode rpc`: spawns the agent, frames stdout as strict LF
  * JSONL, correlates responses by id and fans events out to listeners.
  */
-export class PiRpcClient {
+export class PiRpcClient implements PiClient {
   private readonly options: PiRpcClientOptions;
   private readonly listeners = new Set<(event: PiEvent) => void>();
   private readonly pending = new Map<string, PendingRequest>();
