@@ -240,6 +240,8 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
     ...(state?.messageCount === undefined ? {} : { messageCount: state.messageCount }),
     ...(installed === undefined ? {} : { installedCount: installed }),
     ...(providerCount === undefined ? {} : { providerCount }),
+    ...(view ? { usage: view.usage } : {}),
+    ...(view?.modelContextWindow === undefined ? {} : { contextWindow: view.modelContextWindow }),
     gentle: await gentleState(extensionUri),
   };
 }

@@ -138,9 +138,55 @@ check(
   "",
 );
 check(
-  "the session category offers new, abort and restart",
-  actions(buildCategorySettings("sesion", full)) === "back,newSession,abort,restart",
+  "the session category offers usage, new, abort and restart",
+  actions(buildCategorySettings("sesion", full)) === "back,usage,newSession,abort,restart",
   actions(buildCategorySettings("sesion", full)),
+);
+
+const withUsage = buildCategorySettings("sesion", {
+  ...full,
+  usage: {
+    input: 3000,
+    output: 600,
+    cacheRead: 500,
+    cacheWrite: 0,
+    reasoning: 0,
+    contextTokens: 2400,
+    cost: 0.0223,
+    assistantMessages: 2,
+    toolCalls: 1,
+  },
+  contextWindow: 200_000,
+});
+check(
+  "the usage row shows the same line as the panel",
+  withUsage.find((row) => row.action === "usage").description ===
+    "3,6k tokens · 500 en caché · 0,0223 $ · contexto 1% de 200k",
+  withUsage.find((row) => row.action === "usage").description,
+);
+check(
+  "a session with no replies says so instead of showing zeros",
+  buildCategorySettings("sesion", {
+    ...full,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      reasoning: 0,
+      contextTokens: 0,
+      cost: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+    },
+  }).find((row) => row.action === "usage").description === "sin respuestas todavía",
+  "",
+);
+check(
+  "without usage data the row admits it rather than inventing a figure",
+  buildCategorySettings("sesion", full).find((row) => row.action === "usage").description ===
+    "sin datos",
+  "",
 );
 
 const gentleActive = {

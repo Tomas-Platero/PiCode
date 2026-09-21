@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
-import { isPanelEvent, type PiEvent, type PiSessionState } from "./protocol";
+import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiSessionState, type PiUsage } from "./protocol";
 import type { RuntimeDescriptor } from "./runtime";
+import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { buildWebviewHtml } from "./webview-html";
 
 type ViewStatus = "idle" | "running" | "settled" | "error";
@@ -106,6 +107,9 @@ export class ChatView implements vscode.WebviewViewProvider {
   private readonly disposables: vscode.Disposable[] = [];
   private disposed = false;
   private boundClient: PiRpcClient | undefined;
+  /** What this session has cost, added up from the messages pi reports. */
+  private totals: UsageTotals = emptyUsage();
+  private contextWindow: number | undefined;
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -124,6 +128,16 @@ export class ChatView implements vscode.WebviewViewProvider {
   /** The client the webview is currently bound to, if any. */
   public get bound(): PiRpcClient | undefined {
     return this.boundClient;
+  }
+
+  /** The session's running total, for the panel and for the popup's report. */
+  public get usage(): UsageTotals {
+    return this.totals;
+  }
+
+  /** The current model's context window, when pi reports one. */
+  public get modelContextWindow(): number | undefined {
+    return this.contextWindow;
   }
 
   public async resolveWebviewView(view: vscode.WebviewView): Promise<void> {
@@ -170,6 +184,8 @@ export class ChatView implements vscode.WebviewViewProvider {
 
   /** Notifies the webview that a new session started and the transcript is gone. */
   public notifySessionReset(): void {
+    this.totals = emptyUsage();
+    this.contextWindow = undefined;
     this.post({ type: "clear" });
   }
 
@@ -248,6 +264,12 @@ export class ChatView implements vscode.WebviewViewProvider {
       this.post({ type: "piEvent", event });
     }
 
+    // Only `message_end` is counted: it carries the authoritative message, while the
+    // streaming updates and the start event do not state a final usage.
+    if (event.type === "message_end") {
+      this.absorbUsage(event.message);
+    }
+
     // `message_end` is authoritative and `agent_settled` closes a run, so both
     // are good moments to resync the cheap state summary shown in the view.
     if (event.type === "message_end" || event.type === "agent_settled") {
@@ -261,12 +283,39 @@ export class ChatView implements vscode.WebviewViewProvider {
     }
     try {
       const state = await this.client.getState();
-      this.post({ type: "state", state: toWebviewState(state) });
+      this.contextWindow = state.model?.contextWindow;
+      this.post({
+        type: "state",
+        state: toWebviewState(state),
+        // Formatted here, where the totals live, so the renderer stays presentation.
+        usage: summarizeUsage(this.totals, this.contextWindow),
+      });
     } catch (error) {
       // State is a convenience; a stopped process is reported by its own error.
       this.postStatus("error");
       this.post({ type: "error", message: toErrorMessage(error) });
     }
+  }
+
+  /**
+   * Adds one assistant reply to the session's running total.
+   *
+   * Takes an unknown because the event payload is untrusted JSON until its role is
+   * checked, and this is the boundary where that check happens.
+   */
+  private absorbUsage(message: unknown): void {
+    if (typeof message !== "object" || message === null) {
+      return;
+    }
+    const record = message as {
+      role?: unknown;
+      usage?: PiUsage;
+      content?: PiAssistantContent[];
+    };
+    if (record.role !== "assistant") {
+      return;
+    }
+    this.totals = addMessageUsage(this.totals, record.usage, record.content);
   }
 
   private postStatus(status: ViewStatus): void {

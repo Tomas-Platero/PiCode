@@ -379,7 +379,7 @@
         setStatus(message.status);
         break;
       case "state":
-        renderState(message.state);
+        renderState(message.state, message.usage);
         break;
       case "runtime":
         renderRuntime(message.runtime);
@@ -413,7 +413,7 @@
     }
   }
 
-  function renderState(state) {
+  function renderState(state, usageLine) {
     if (!state || typeof state !== "object") {
       return;
     }
@@ -446,6 +446,10 @@
     }
     if (state.sessionName) {
       parts.push(state.sessionName);
+    }
+    // The cost line is formatted by the host, which owns the totals.
+    if (usageLine) {
+      parts.push(usageLine);
     }
     elements.session.textContent = parts.join(" · ");
   }

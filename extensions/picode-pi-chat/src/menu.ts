@@ -7,6 +7,7 @@ import {
   type InstalledPackage,
 } from "./pi-cli";
 import type { ResolvedRuntime } from "./runtime";
+import { emptyUsage, describeUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
 
 /**
@@ -59,6 +60,9 @@ export interface PiMenuSnapshot {
   streaming: boolean;
   providerCount?: number;
   gentle?: GentleState;
+  /** What the session has cost, when a session has said anything yet. */
+  usage?: UsageTotals;
+  contextWindow?: number;
 }
 
 export interface PiCategoryRow {
@@ -142,6 +146,7 @@ export type PiSettingAction =
   | "gentleDoctor"
   | "gentleInstall"
   | "gentleCommand"
+  | "usage"
   | "newSession"
   | "abort"
   | "restart";
@@ -361,6 +366,14 @@ export function buildCategorySettings(
     default:
       return [
         back,
+        { kind: "separator", label: "Uso" },
+        {
+          kind: "item",
+          action: "usage",
+          label: "Uso y coste",
+          description: usageSummary(snapshot),
+          detail: "Tokens, coste acumulado y cuánto contexto queda",
+        },
         { kind: "separator", label: "Conversación" },
         { kind: "item", action: "newSession", label: "Nueva sesión", detail: "Empieza de cero" },
         {
@@ -378,6 +391,22 @@ export function buildCategorySettings(
         },
       ];
   }
+}
+
+/** The usage row's value: the same line the chat panel shows under its toolbar. */
+function usageSummary(snapshot: PiMenuSnapshot): string {
+  if (!snapshot.usage) {
+    return "sin datos";
+  }
+  return summarizeUsage(snapshot.usage, snapshot.contextWindow) || "sin respuestas todavía";
+}
+
+/** The session's cost, broken down, in a report rather than a row. */
+function showUsage(snapshot: PiMenuSnapshot): void {
+  void vscode.window.showInformationMessage("PiCode: uso y coste de la sesión", {
+    modal: true,
+    detail: describeUsage(snapshot.usage ?? emptyUsage(), snapshot.contextWindow).join("\n"),
+  });
 }
 
 /** One line for what `pi auth check` answered, without pretending to interpret it. */
@@ -444,7 +473,7 @@ export async function showPiMenu(deps: PiMenuDeps, startAt?: PiCategoryId): Prom
 
     // A category stays open after a change, the way the Settings editor does, so
     // several settings can be adjusted without walking back through the levels.
-    const keepGoing = await runSetting(deps, category, chosen);
+    const keepGoing = await runSetting(deps, category, chosen, snapshot);
     if (!keepGoing) {
       return;
     }
@@ -502,8 +531,13 @@ async function runSetting(
   deps: PiMenuDeps,
   category: PiCategoryId,
   row: PiSettingRow,
+  snapshot: PiMenuSnapshot,
 ): Promise<boolean> {
   switch (row.action) {
+    case "usage":
+      // The snapshot is already in hand, so the report does not re-read the state.
+      showUsage(snapshot);
+      return true;
     case "model":
       await deps.selectModel();
       return true;
