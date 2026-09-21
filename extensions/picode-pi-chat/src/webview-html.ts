@@ -21,6 +21,17 @@ export function buildWebviewHtml(options: {
     "default-src 'none'",
     `style-src ${options.webview.cspSource}`,
     `font-src ${options.webview.cspSource}`,
+    // `default-src 'none'` covers `img-src` too, so without this line every image
+    // in the panel is blocked — and the failure is silent: the element is there,
+    // the transcript keeps its layout, and only the picture is missing. The panel
+    // rendered nothing but text until attachments arrived, which is why this was
+    // absent and why nothing caught it: an omission from a restrictive policy looks
+    // exactly like a working policy until something needs the permission.
+    //
+    // `data:` is what the thumbnails are, since the host hands the webview a data
+    // URL rather than bytes it could send back. `cspSource` is kept for any image
+    // that eventually comes from the extension's own media directory.
+    `img-src ${options.webview.cspSource} data:`,
     `script-src 'nonce-${nonce}'`,
   ].join("; ");
 
