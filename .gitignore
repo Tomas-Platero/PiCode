@@ -22,14 +22,17 @@
 /data/
 
 # Electron / Chromium runtime artifacts at the distribution root.
-/VSCodium.exe
+# Matched by extension, not by name: Step 5 renames the executable and its Start Menu
+# manifest, and an ignore rule written with the VSCodium names left 222 MB exposed after
+# the rename.
+/*.exe
 /*.dll
 /*.pak
 /*.dat
 /*.bin
 /vk_swiftshader_icd.json
 /LICENSES.chromium.html
-/VSCodium.VisualElementsManifest.xml
+/*.VisualElementsManifest.xml
 
 # Runtime directories owned by the VSCodium archive.
 /bin/
