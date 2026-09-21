@@ -3,6 +3,7 @@
     "nameShort": "PiCode",
     "nameLong": "PiCode — Agentic Code Editor",
     "urlProtocol": "picode",
+    "applicationName": "picode",
     "extensionsGallery": {
       "serviceUrl": "https://open-vsx.org/vscode/gallery",
       "itemUrl": "https://open-vsx.org/vscode/item",

@@ -12,7 +12,7 @@ at the repository root — and applies a product delta to it.
 | --- | --- |
 | `product-delta.json` | The product change **as data**: `set`, `unset`, `unsetNested`, `unsetArrayEntries`. This is the file to edit when the product configuration must change. |
 | `apply-product-delta.mjs` | Applies the delta to a target `product.json`. Node rather than PowerShell, because 5.1 caps `ConvertTo-Json` depth at 2 and escapes non-ASCII. Exit `0` already current, `1` needs update, `2` error. |
-| `apply-picode.ps1` | The orchestrator: product delta, portable profile, first-run defaults, and staging the panel as a built-in extension. Preview by default; `-Apply` writes. |
+| `apply-picode.ps1` | The orchestrator: product delta, portable profile, first-run defaults, the visible names, and staging the panel as a built-in extension. Preview by default; `-Apply` writes. |
 | `settings.json` | First-run defaults. Copied only when the user has no settings file of their own. |
 
 The pinned pi version lives in `extensions/picode-pi-chat/runtime.json` rather than
@@ -34,6 +34,8 @@ It is idempotent, refuses to run outside a VSCodium root, and backs up
 - `resources/app/extensions/picode-pi-chat/` — the panel, staged as a built-in extension
 - `data/user-data/`, `data/extensions/`, `data/tmp/` — the portable profile
 - `data/user-data/User/settings.json` — only created if it does not exist
+- `PiCode.exe`, `bin/picode.cmd`, `bin/picode`, `PiCode.VisualElementsManifest.xml` — renamed
+  from VSCodium's names, and the two shims and the manifest have their text updated to match
 
 ## Changing the product
 

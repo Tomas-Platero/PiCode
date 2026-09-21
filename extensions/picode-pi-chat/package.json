@@ -28,7 +28,7 @@
         {
           "id": "picode-ajustes",
           "title": "PiCode",
-          "icon": "$(hubot)"
+          "icon": "media/picode.svg"
         }
       ],
       "secondarySidebar": [

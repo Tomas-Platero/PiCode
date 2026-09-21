@@ -66,6 +66,9 @@ $RepoRoot       = Split-Path -Parent $PSScriptRoot
 if (-not $RepoRoot) { $RepoRoot = (Get-Location).Path }
 
 $Executable     = Join-Path $RepoRoot "VSCodium.exe"
+# Step 5 renames the executable, so a second run of this script has to accept either
+# name as proof that this is a VSCodium root.
+$RenamedExe     = Join-Path $RepoRoot "PiCode.exe"
 $ProductJson    = Join-Path $RepoRoot "resources\app\product.json"
 $DataRoot       = Join-Path $RepoRoot "data"
 $UserDataDir    = Join-Path $DataRoot "user-data"
@@ -140,8 +143,8 @@ Write-Host "Distribution root: $RepoRoot"
 # ---------------------------------------------------------------------------
 Write-Section "Preconditions"
 
-if (-not (Test-Path -LiteralPath $Executable)) {
-    throw "VSCodium.exe was not found at $Executable. PiCode expects the VSCodium archive extracted at the repository root; extract it there and re-run."
+if (-not (Test-Path -LiteralPath $Executable) -and -not (Test-Path -LiteralPath $RenamedExe)) {
+    throw "No editor executable was found at $Executable or $RenamedExe. PiCode expects the VSCodium archive extracted at the repository root; extract it there and re-run."
 }
 if (-not (Test-Path -LiteralPath $ProductJson)) {
     throw "The product file was not found at $ProductJson. The tree does not look like a VSCodium install."
@@ -202,7 +205,7 @@ if ($checkExit -eq $ApplierUpToDate) {
 # ---------------------------------------------------------------------------
 Write-Section "Step 2 - portable profile in data/"
 
-Write-Note "A data/ folder next to VSCodium.exe switches the build to portable mode,"
+Write-Note "A data/ folder next to the executable switches the build to portable mode,"
 Write-Note "so settings, extensions and session state stay inside this distribution."
 
 foreach ($dir in @($UserDataDir, $ExtensionsDir, $TempDir)) {
@@ -350,6 +353,74 @@ if (-not $extensionReady) {
             }
             $Done.Add("staged the agent panel into $ExtensionTarget")
         }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 5 - the names Windows shows
+# ---------------------------------------------------------------------------
+Write-Section "Step 5 - nombre visible del binario"
+
+# The product keys handled in Step 1 cover the window title and the About dialog. What
+# is left is the file names: the executable itself, the two CLI shims that name it in
+# their own text, and the Start Menu tile manifest. The executable's name is what Task
+# Manager, the process list and the file you double-click show.
+#
+# The icon inside the executable is deliberately left alone: replacing it means editing
+# the PE resources, which is a build-time job rather than a file rename.
+function Rename-IfNeeded([string]$From, [string]$To) {
+    if (Test-Path -LiteralPath $From) {
+        Write-Act "Rename $(Split-Path -Leaf $From) to $(Split-Path -Leaf $To)"
+        if (-not $isPreview) {
+            Move-Item -LiteralPath $From -Destination $To -Force
+            $Done.Add("renamed $(Split-Path -Leaf $From) to $(Split-Path -Leaf $To)")
+        }
+        return
+    }
+    if (Test-Path -LiteralPath $To) {
+        Write-Skip "already named $(Split-Path -Leaf $To)"
+        return
+    }
+    Write-Warn "Neither $(Split-Path -Leaf $From) nor $(Split-Path -Leaf $To) exists"
+}
+
+[void](Rename-IfNeeded (Join-Path $RepoRoot "VSCodium.exe") (Join-Path $RepoRoot "PiCode.exe"))
+[void](Rename-IfNeeded (Join-Path $RepoRoot "bin\codium.cmd") (Join-Path $RepoRoot "bin\picode.cmd"))
+[void](Rename-IfNeeded (Join-Path $RepoRoot "bin\codium") (Join-Path $RepoRoot "bin\picode"))
+[void](Rename-IfNeeded (Join-Path $RepoRoot "VSCodium.VisualElementsManifest.xml") (Join-Path $RepoRoot "PiCode.VisualElementsManifest.xml"))
+
+# The shims name the executable inside their text, so a rename is not enough for them.
+# Each entry carries both names: in preview mode the rename above did not happen, so the
+# file to edit is still the old one, and a preview that silently skips this step would be
+# reporting less than it does.
+$nameFixes = @(
+    @{ New = "bin\picode.cmd"; Old = "bin\codium.cmd"; Find = "VSCodium.exe"; Replace = "PiCode.exe" },
+    @{ New = "bin\picode"; Old = "bin\codium"; Find = 'NAME="VSCodium"'; Replace = 'NAME="PiCode"' },
+    @{ New = "PiCode.VisualElementsManifest.xml"; Old = "VSCodium.VisualElementsManifest.xml"; Find = 'ShortDisplayName="VSCodium"'; Replace = 'ShortDisplayName="PiCode"' }
+)
+
+foreach ($fix in $nameFixes) {
+    $target = Join-Path $RepoRoot $fix.New
+    $source = Join-Path $RepoRoot $fix.Old
+
+    if (-not (Test-Path -LiteralPath $target)) {
+        if ($isPreview -and (Test-Path -LiteralPath $source)) {
+            Write-Act "Point $($fix.New) at $($fix.Replace)"
+        } else {
+            Write-Skip "$($fix.New) is not there"
+        }
+        continue
+    }
+
+    $text = Get-Content -LiteralPath $target -Raw
+    if ($text -notlike "*$($fix.Find)*") {
+        Write-Skip "$($fix.New) no longer names VSCodium"
+        continue
+    }
+    Write-Act "Point $($fix.New) at $($fix.Replace)"
+    if (-not $isPreview) {
+        Set-Content -LiteralPath $target -Value ($text.Replace($fix.Find, $fix.Replace)) -NoNewline
+        $Done.Add("updated $($fix.New)")
     }
 }
 

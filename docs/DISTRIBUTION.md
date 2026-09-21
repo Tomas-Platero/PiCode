@@ -17,7 +17,9 @@ root, which is what makes the following true:
   only overridden;
 - `resources/app/extensions/` is the built-in extension scan path, so the panel ships
   as a built-in extension with no install step;
-- a `data/` folder beside the executable switches the build to portable mode.
+- a `data/` folder beside the executable switches the build to portable mode;
+- the **file names** can be changed, so the visible identity is PiCode's: `PiCode.exe`,
+  `bin/picode*`, and the Start Menu tile manifest.
 
 No compiler, no fork, no patch rebasing against upstream. The 700 MB payload is
 ignored by git; the repository version tracks the modification layer.
@@ -133,7 +135,8 @@ Machine-checkable, in the order that catches the most:
 
 | What | How |
 | --- | --- |
-| Branding | `bin/codium.cmd --help` prints `PiCode — Agentic Code Editor <version>` |
+| Branding | `bin/picode.cmd --help` prints `PiCode — Agentic Code Editor <version>` and a usage line reading `picode.exe` |
+| Icons | the window and task bar show the PiCode mark, and the left bar shows `media/picode.svg` |
 | Portable profile | the newest log directory is under `data/user-data/logs/`, and `%APPDATA%` is untouched |
 | Extension activated | `_doActivateExtension picode.picode-pi-chat` in `window1/exthost/exthost.log` |
 | Runtime in use | the PiCode output channel prints `[pi] starting from <mode> runtime: <path>` |
@@ -149,11 +152,49 @@ layout can be steered to leave the chat in front.
 
 ## 9. What this path does not give you
 
-Unchanged, and still true: **the binary is VSCodium**, and the OS-level identity — Start
-Menu entry, Add/Remove Programs entry, protocol handler, registry keys, installer
-GUIDs — was written at install time and is not reachable from a user-level
-`product.json`. What you get is a VSCodium tree that presents as PiCode inside the
-editor, with the panel, the runtime choice and the defaults.
+The **names** are PiCode's. The executable is `PiCode.exe`, the CLI shims are
+`bin/picode*`, the window title, the About dialog and even the CLI's own usage line say
+PiCode, and the Start Menu tile manifest was renamed with them. Renaming files is part of
+Step 5 of the apply script, so extracting a newer VSCodium archive does not bring the old
+name back.
+
+What is still not PiCode's:
+
+- **the OS-level identity of an installed VSCodium** — Start Menu entry, Add/Remove
+  Programs entry, registered protocol handler, registry keys, installer GUIDs — because
+  PiCode runs from a folder rather than being installed;
+- **the VS Code lineage**, which stays visible in the licence files and the `out/`
+  bundle. Those are also the places where the name VSCodium must keep appearing, because
+  it is the upstream base and documentation saying otherwise would simply be false.
+
+### The icon in the executable
+
+The previous version of this document listed the executable's icon as out of reach. It is
+not: the icon is a PE resource, and `rcedit` — the tool Electron itself uses when
+packaging — rewrites it with one command. What made it safe here is that `PiCode.exe` is
+**unsigned** (`Get-AuthenticodeSignature` reports `NotSigned`), so there is no signature
+to invalidate. Had it been signed, a single changed byte would have broken it.
+
+```powershell
+rcedit PiCode.exe --set-icon distribution/picode.ico
+```
+
+The `.ico` is a repository artefact built from the 1024 px mark in seven sizes (16 to
+256), so it reads in the task bar and in a large icon view alike. This step is documented
+rather than automated because it needs a third-party binary that the distribution should
+not start carrying; re-run it after extracting a newer VSCodium archive. Explorer caches
+icons, so it may keep showing the old one until the cache refreshes — that is not a
+failed change.
+
+### Two traps in using a 1024 px mark in an editor
+
+- VS Code **masks** an activity bar icon: it uses the shape as a stencil and paints it
+  with the theme's colour. A mark whose background is an opaque square therefore renders
+  as a solid square. The sidebar variant is the same mark with the background removed.
+- A mark drawn for 1024 px does not survive 16-24 px: on this one the antenna and the
+  eyes measure about half a pixel. The sidebar variant thickens the strokes and enlarges
+  the dots, keeping the shape and changing only what had to change. The full-colour mark
+  is kept beside it, untouched, for every use that has room for it.
 
 ## 10. The escape hatch
 
