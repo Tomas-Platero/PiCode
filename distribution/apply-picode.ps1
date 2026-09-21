@@ -41,6 +41,7 @@
     Paths this script touches when -Apply is passed:
 
       - resources/app/product.json                 the product delta (backed up first)
+      - resources/app/extensions/picode-pi-chat/    the agent panel, shipped as a built-in extension
       - data/user-data/                            portable user data
       - data/extensions/                           portable extension directory
       - data/tmp/                                  portable temp, used by the editor
@@ -74,6 +75,12 @@ $SettingsTarget = Join-Path $UserDataDir "User\settings.json"
 $DeltaPath      = Join-Path $PSScriptRoot "product-delta.json"
 $ApplierPath    = Join-Path $PSScriptRoot "apply-product-delta.mjs"
 $SettingsSource = Join-Path $PSScriptRoot "settings.json"
+
+# The agent panel is delivered as a built-in extension: because PiCode owns the
+# VSCodium tree, the editor scans resources/app/extensions at startup, so no
+# install step and no compiled-in extension list are needed.
+$ExtensionSource = Join-Path $RepoRoot "extensions\picode-pi-chat"
+$ExtensionTarget = Join-Path $RepoRoot "resources\app\extensions\picode-pi-chat"
 
 # Exit codes of apply-product-delta.mjs, mirrored here because Windows
 # PowerShell 5.1 does not throw on a non-zero native exit code.
@@ -238,6 +245,110 @@ if (Test-Path -LiteralPath $SettingsTarget) {
         }
         Copy-Item -LiteralPath $SettingsSource -Destination $SettingsTarget -Force
         $Done.Add("wrote default settings to $SettingsTarget")
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 4 - the agent panel as a built-in extension
+# ---------------------------------------------------------------------------
+Write-Section "Step 4 - built-in extension resources/app/extensions/picode-pi-chat"
+
+# What ships is the built package, mirrored from .vscodeignore: sources, the
+# toolchain, maps and packaging state never reach the editor tree.
+$excludedPatterns = @(
+    '^(src|node_modules|\.atl|\.vscode)[\\/]',
+    '\.map$',
+    '\.vsix$'
+)
+$excludedNames = @('.gitignore', '.vscodeignore', 'package-lock.json', 'tsconfig.json')
+
+function Get-RelativePath([string]$Root, [string]$Full) {
+    return $Full.Substring($Root.Length).TrimStart('\', '/')
+}
+
+function Get-StageableFiles([string]$Root) {
+    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    if (-not (Test-Path -LiteralPath $Root)) { return $files }
+
+    foreach ($file in (Get-ChildItem -LiteralPath $Root -Recurse -File)) {
+        $relative = Get-RelativePath $Root $file.FullName
+        if ($excludedNames -contains $file.Name) { continue }
+
+        $skip = $false
+        foreach ($pattern in $excludedPatterns) {
+            if ($relative -match $pattern) { $skip = $true; break }
+        }
+        if (-not $skip) { $files.Add($file) }
+    }
+    return $files
+}
+
+$extensionReady = (Test-Path -LiteralPath (Join-Path $ExtensionSource "package.json")) -and
+                  (Test-Path -LiteralPath (Join-Path $ExtensionSource "out\extension.js"))
+
+if (-not $extensionReady) {
+    Write-Warn "The panel is not built: expected package.json and out/extension.js under $ExtensionSource"
+    Write-Note "Build it with:"
+    Write-Note "  cd extensions/picode-pi-chat; npm install; npm run compile"
+    $Skipped.Add("built-in extension not staged (build missing)")
+    $Next.Add("Build the panel, then re-run this script to stage it as a built-in extension")
+} else {
+    $sourceFiles = Get-StageableFiles $ExtensionSource
+    $changed = [System.Collections.Generic.List[string]]::new()
+    $stale = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($file in $sourceFiles) {
+        $relative = Get-RelativePath $ExtensionSource $file.FullName
+        $destination = Join-Path $ExtensionTarget $relative
+
+        if (-not (Test-Path -LiteralPath $destination)) {
+            $changed.Add($relative)
+            continue
+        }
+        $sourceHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        if ($sourceHash -ne $destinationHash) { $changed.Add($relative) }
+    }
+
+    # A renamed module would otherwise leave its old build output behind, and the
+    # editor would keep loading it.
+    if (Test-Path -LiteralPath $ExtensionTarget) {
+        foreach ($file in (Get-ChildItem -LiteralPath $ExtensionTarget -Recurse -File)) {
+            $relative = Get-RelativePath $ExtensionTarget $file.FullName
+            $stillShipped = $false
+            foreach ($source in $sourceFiles) {
+                if ((Get-RelativePath $ExtensionSource $source.FullName) -eq $relative) {
+                    $stillShipped = $true
+                    break
+                }
+            }
+            if (-not $stillShipped) { $stale.Add($relative) }
+        }
+    }
+
+    if ($changed.Count -eq 0 -and $stale.Count -eq 0) {
+        Write-Skip "the built-in extension is already current ($($sourceFiles.Count) files)"
+    } else {
+        Write-Note "$($sourceFiles.Count) files ship; $($changed.Count) need writing, $($stale.Count) are stale"
+        Write-Act "Stage the agent panel into $ExtensionTarget"
+
+        if ($isPreview) {
+            Write-Note "Preview: nothing was copied."
+        } else {
+            foreach ($relative in $stale) {
+                Remove-Item -LiteralPath (Join-Path $ExtensionTarget $relative) -Force
+            }
+            foreach ($file in $sourceFiles) {
+                $relative = Get-RelativePath $ExtensionSource $file.FullName
+                $destination = Join-Path $ExtensionTarget $relative
+                $parent = Split-Path -Parent $destination
+                if (-not (Test-Path -LiteralPath $parent)) {
+                    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+                }
+                Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+            }
+            $Done.Add("staged the agent panel into $ExtensionTarget")
+        }
     }
 }
 
