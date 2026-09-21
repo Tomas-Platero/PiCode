@@ -20,6 +20,11 @@
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
     runtime: document.getElementById("runtime"),
+    model: document.getElementById("model"),
+    thinking: document.getElementById("thinking"),
+    dropdown: document.getElementById("dropdown"),
+    dropdownFilter: document.getElementById("dropdown-filter"),
+    dropdownOptions: document.getElementById("dropdown-options"),
   };
 
   // Live assistant message being assembled from deltas. `message_update` is
@@ -28,6 +33,26 @@
   var stream = null;
   // Locally echoed user message, replaced by pi's own message_start if it comes.
   var userEcho = null;
+  // Last session state the host pushed, used to mark the current model and level.
+  var lastState = null;
+  // Catalogue pushed by the host, and the reasoning levels of the current model.
+  var models = [];
+  var thinkingLevels = [];
+  // Which dropdown is open, the visible options, and the highlighted one.
+  var openDropdown = null;
+  var filteredOptions = [];
+  var highlightedIndex = 0;
+
+  // The panel is Spanish. The states stay English internally because they come
+  // from the protocol and from the host's own status messages.
+  var STATUS_LABELS = {
+    idle: "en reposo",
+    running: "trabajando",
+    settled: "listo",
+    error: "error",
+  };
+  var DETAIL_LABELS = { queued: "en cola", compacting: "compactando" };
+  var ROLE_LABELS = { user: "tú", assistant: "pi", system: "sistema", error: "error" };
   // toolCallId -> { item, output }
   var toolItems = new Map();
 
@@ -36,7 +61,11 @@
   }
 
   function setStatus(status, detail) {
-    elements.status.textContent = detail ? status + " — " + detail : status;
+    var label = STATUS_LABELS[status] || status;
+    if (detail) {
+      label += " \u2014 " + (DETAIL_LABELS[detail] || String(detail).replace(/^retry /, "reintento "));
+    }
+    elements.status.textContent = label;
     elements.status.className = "status status-" + status;
     elements.abort.disabled = status !== "running";
   }
@@ -58,7 +87,7 @@
 
   function addMessage(role) {
     var article = createElement("article", "message message-" + role);
-    article.appendChild(createElement("header", "message-role", role));
+    article.appendChild(createElement("header", "message-role", ROLE_LABELS[role] || role));
     var body = createElement("div", "message-body");
     article.appendChild(body);
     elements.messages.appendChild(article);
@@ -69,7 +98,7 @@
   function appendBlock(container, kind, text) {
     var block = createElement("div", "block block-" + kind);
     if (kind === "thinking") {
-      block.appendChild(createElement("div", "block-label", "thinking"));
+      block.appendChild(createElement("div", "block-label", "razonamiento"));
     }
     block.appendChild(createElement("div", "block-text", text));
     container.appendChild(block);
@@ -104,7 +133,9 @@
     var args = "";
     try {
       args = JSON.stringify(toolCall.arguments || {});
-    } catch (error) {
+    } catch {
+      // Tool arguments are shown for context, so a value that cannot be
+      // serialised is reported as empty rather than failing the render.
       args = "";
     }
     return name + " " + args;
@@ -173,11 +204,13 @@
     var item = toolItems.get(event.toolCallId);
     if (!item) {
       var listItem = createElement("li", "tool tool-running");
-      listItem.appendChild(createElement("div", "tool-name", event.toolName || "tool"));
+      listItem.appendChild(createElement("div", "tool-name", event.toolName || "herramienta"));
       var args = "";
       try {
         args = JSON.stringify(event.args || {});
-      } catch (error) {
+      } catch {
+        // Same reasoning as formatToolCall: never let display serialisation
+        // take down the tool timeline.
         args = "";
       }
       listItem.appendChild(createElement("div", "tool-args", args));
@@ -327,7 +360,7 @@
         }
         break;
       case "extension_error":
-        showError("Extension error: " + event.error);
+        showError("Error de una extensión de pi: " + event.error);
         break;
       default:
         break;
@@ -351,6 +384,18 @@
       case "runtime":
         renderRuntime(message.runtime);
         break;
+      case "models":
+        models = Array.isArray(message.models) ? message.models : [];
+        if (openDropdown === "model") {
+          renderOptions();
+        }
+        break;
+      case "thinkingLevels":
+        thinkingLevels = Array.isArray(message.levels) ? message.levels : [];
+        if (openDropdown === "thinking") {
+          renderOptions();
+        }
+        break;
       case "error":
         showError(message.message);
         break;
@@ -372,15 +417,35 @@
     if (!state || typeof state !== "object") {
       return;
     }
-    var parts = [];
+    lastState = state;
+
+    // The model and the reasoning level get their own chips, so the session line
+    // carries only what those chips cannot say.
+    elements.model.textContent = "Modelo: " + (state.modelName || state.model || "sin modelo");
+    var modelDetail = [];
     if (state.model) {
-      parts.push(state.model);
+      modelDetail.push(state.model);
     }
+    if (state.provider) {
+      modelDetail.push("proveedor: " + state.provider);
+    }
+    modelDetail.push("");
+    modelDetail.push("Pulsa para elegir el modelo.");
+    elements.model.title = modelDetail.join("\n");
+
+    elements.thinking.textContent = "razonamiento: " + (state.thinkingLevel || "no disponible");
+    elements.thinking.title =
+      "Nivel de razonamiento del modelo actual.\nPulsa para cambiarlo; algunos niveles solo existen para algunos modelos.";
+
+    var parts = [];
     if (typeof state.messageCount === "number") {
-      parts.push(state.messageCount + " messages");
+      parts.push(state.messageCount + " mensajes");
     }
-    if (state.thinkingLevel) {
-      parts.push("thinking: " + state.thinkingLevel);
+    if (typeof state.pendingMessageCount === "number" && state.pendingMessageCount > 0) {
+      parts.push(state.pendingMessageCount + " en cola");
+    }
+    if (state.sessionName) {
+      parts.push(state.sessionName);
     }
     elements.session.textContent = parts.join(" · ");
   }
@@ -394,17 +459,17 @@
 
     var label;
     if (runtime.mode === "managed") {
-      label = "PiCode's own pi";
+      label = "pi propio de PiCode";
     } else if (runtime.mode === "custom") {
-      label = "custom pi";
+      label = "pi personalizado";
     } else {
-      label = "PATH pi";
+      label = "pi del sistema";
     }
     if (runtime.version) {
       label += " " + runtime.version;
     }
     if (!runtime.available) {
-      label += " (not found)";
+      label += " (no encontrado)";
     }
 
     elements.runtime.textContent = label;
@@ -415,11 +480,185 @@
       detail.push(runtime.display);
     }
     if (runtime.pin && runtime.pin.version) {
-      detail.push("pinned " + runtime.pin.package + "@" + runtime.pin.version);
+      detail.push("fijado " + runtime.pin.package + "@" + runtime.pin.version);
     }
     detail.push("");
-    detail.push("Click to choose which pi runs.");
+    detail.push("Pulsa para elegir qué pi se ejecuta.");
     elements.runtime.title = detail.join("\n");
+  }
+
+  // --- model and reasoning dropdowns --------------------------------------
+  //
+  // These two controls belong to the panel, so each gets its own dropdown
+  // instead of the editor-wide quick pick the palette commands use: the session
+  // settings live next to the composer, and a popup at the top of the window
+  // separates the list from the control that opened it.
+  //
+  // The model list runs to hundreds of entries, so it carries a filter box. The
+  // reasoning list is seven items, where a filter would be noise.
+
+  function closeDropdown() {
+    if (!openDropdown) {
+      return;
+    }
+    var previous = elements[openDropdown];
+    openDropdown = null;
+    elements.dropdown.hidden = true;
+    elements.dropdownFilter.value = "";
+    elements.dropdownOptions.textContent = "";
+    if (previous) {
+      previous.classList.remove("dropdown-open");
+    }
+  }
+
+  function buildOptions() {
+    var options = [];
+    if (openDropdown === "model") {
+      for (var index = 0; index < models.length; index += 1) {
+        var model = models[index];
+        var traits = [];
+        if (model.provider) {
+          traits.push(model.provider);
+        }
+        if (model.reasoning) {
+          traits.push("razonamiento");
+        }
+        options.push({
+          label: model.name || model.id,
+          hint: model.id + (traits.length ? "  " + traits.join(" " + String.fromCharCode(183) + " ") : ""),
+          current: Boolean(lastState && model.id === lastState.model),
+          message: { type: "setModel", modelId: model.id, provider: model.provider },
+        });
+      }
+      return options;
+    }
+
+    if (openDropdown === "thinking") {
+      for (var level = 0; level < thinkingLevels.length; level += 1) {
+        var value = thinkingLevels[level];
+        options.push({
+          label: value,
+          hint: lastState && value === lastState.thinkingLevel ? "actual" : "",
+          current: Boolean(lastState && value === lastState.thinkingLevel),
+          message: { type: "setThinkingLevel", level: value },
+        });
+      }
+    }
+    return options;
+  }
+
+  function visibleOptions() {
+    var all = buildOptions();
+    var needle = elements.dropdownFilter.value.trim().toLowerCase();
+    if (!needle) {
+      return all;
+    }
+    var matches = [];
+    for (var index = 0; index < all.length; index += 1) {
+      var haystack = (all[index].label + " " + all[index].hint).toLowerCase();
+      if (haystack.indexOf(needle) >= 0) {
+        matches.push(all[index]);
+      }
+    }
+    return matches;
+  }
+
+  function renderOptions() {
+    var options = visibleOptions();
+    filteredOptions = options;
+    if (highlightedIndex >= options.length) {
+      highlightedIndex = 0;
+    }
+
+    elements.dropdownOptions.textContent = "";
+    if (options.length === 0) {
+      elements.dropdownOptions.appendChild(
+        createElement("li", "dropdown-empty", 'nada coincide con "' + elements.dropdownFilter.value + '"'),
+      );
+      return;
+    }
+
+    for (var index = 0; index < options.length; index += 1) {
+      var option = options[index];
+      var className = "dropdown-option";
+      if (index === highlightedIndex) {
+        className += " highlighted";
+      }
+      if (option.current) {
+        className += " current";
+      }
+
+      var item = createElement("li", className);
+      item.appendChild(createElement("span", "dropdown-option-label", option.label));
+      if (option.hint) {
+        item.appendChild(createElement("span", "dropdown-option-hint", option.hint));
+      }
+      item.addEventListener("click", chooseOptionFor(option));
+      elements.dropdownOptions.appendChild(item);
+    }
+
+    var highlighted = elements.dropdownOptions.children[highlightedIndex];
+    if (highlighted && highlighted.scrollIntoView) {
+      highlighted.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function chooseOptionFor(option) {
+    return function () {
+      send(option.message);
+      closeDropdown();
+    };
+  }
+
+  function openDropdownFor(kind) {
+    if (openDropdown === kind) {
+      closeDropdown();
+      return;
+    }
+    closeDropdown();
+
+    openDropdown = kind;
+    highlightedIndex = 0;
+    elements.dropdownFilter.hidden = kind !== "model";
+    elements.dropdown.hidden = false;
+    elements[kind].classList.add("dropdown-open");
+    renderOptions();
+
+    if (kind === "model") {
+      elements.dropdownFilter.focus();
+    } else {
+      elements.dropdownOptions.focus();
+    }
+  }
+
+  function moveHighlight(delta) {
+    if (!openDropdown || filteredOptions.length === 0) {
+      return;
+    }
+    highlightedIndex =
+      (highlightedIndex + delta + filteredOptions.length) % filteredOptions.length;
+    renderOptions();
+  }
+
+  function onDropdownKeydown(event) {
+    if (!openDropdown) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDropdown();
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveHighlight(1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveHighlight(-1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (filteredOptions[highlightedIndex]) {
+        chooseOptionFor(filteredOptions[highlightedIndex])();
+      }
+    }
   }
 
   function submitPrompt() {
@@ -461,6 +700,21 @@
     elements.runtime.addEventListener("click", function () {
       send({ type: "selectRuntime" });
     });
+
+    elements.model.addEventListener("click", function () {
+      openDropdownFor("model");
+    });
+
+    elements.thinking.addEventListener("click", function () {
+      openDropdownFor("thinking");
+    });
+
+    elements.dropdownFilter.addEventListener("input", function () {
+      highlightedIndex = 0;
+      renderOptions();
+    });
+    elements.dropdownFilter.addEventListener("keydown", onDropdownKeydown);
+    elements.dropdownOptions.addEventListener("keydown", onDropdownKeydown);
 
     window.addEventListener("message", function (event) {
       handleHostMessage(event.data);

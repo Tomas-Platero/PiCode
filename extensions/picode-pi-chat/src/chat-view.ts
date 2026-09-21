@@ -16,6 +16,10 @@ export interface ChatViewHost {
   describeRuntime(): Promise<RuntimeDescriptor>;
   /** Opens the runtime picker and applies the choice. */
   selectRuntime(): Promise<void>;
+  /** Applies a model chosen in the panel's own dropdown. */
+  applyModel(modelId: string, provider?: string): Promise<void>;
+  /** Applies a reasoning level chosen in the panel's own dropdown. */
+  applyThinkingLevel(level: string): Promise<void>;
 }
 
 /**
@@ -141,7 +145,7 @@ export class ChatView implements vscode.WebviewViewProvider {
       this.post({
         type: "error",
         message:
-          "pi could not be started. Check picode.pi.executablePath and the PiCode output channel.",
+          "No se pudo arrancar pi. Revisa picode.pi.executablePath y el canal de salida PiCode.",
       });
       return;
     }
@@ -155,6 +159,8 @@ export class ChatView implements vscode.WebviewViewProvider {
 
     await this.pushState();
     await this.pushRuntime();
+    await this.pushModels();
+    await this.pushThinkingLevels();
   }
 
   private releaseView(): void {
@@ -211,6 +217,36 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Sends the model catalogue the panel's dropdown filters over. Pushed once per
+   * bind rather than per interaction: switching model does not change it.
+   */
+  private async pushModels(): Promise<void> {
+    if (this.view === undefined || !this.client) {
+      return;
+    }
+    try {
+      this.post({ type: "models", models: await this.client.getAvailableModels() });
+    } catch (error) {
+      this.post({ type: "error", message: toErrorMessage(error) });
+    }
+  }
+
+  /** Sends the reasoning levels the current model supports. */
+  private async pushThinkingLevels(): Promise<void> {
+    if (this.view === undefined || !this.client) {
+      return;
+    }
+    try {
+      this.post({
+        type: "thinkingLevels",
+        levels: await this.client.getAvailableThinkingLevels(),
+      });
+    } catch (error) {
+      this.post({ type: "error", message: toErrorMessage(error) });
+    }
+  }
+
+  /**
    * Reports which pi the session is running. The control is informational first:
    * a switcher that does not say what is active invites the owner to guess.
    */
@@ -224,7 +260,7 @@ export class ChatView implements vscode.WebviewViewProvider {
     } catch (error) {
       this.post({
         type: "error",
-        message: `Could not read the pi runtime: ${toErrorMessage(error)}`,
+        message: `No se pudo leer el runtime de pi: ${toErrorMessage(error)}`,
       });
     }
   }
@@ -249,6 +285,8 @@ export class ChatView implements vscode.WebviewViewProvider {
       case "ready": {
         await this.pushState();
         await this.pushRuntime();
+        await this.pushModels();
+        await this.pushThinkingLevels();
         break;
       }
       case "selectRuntime": {
@@ -258,6 +296,28 @@ export class ChatView implements vscode.WebviewViewProvider {
       }
       case "refreshRuntime": {
         await this.pushRuntime();
+        break;
+      }
+      case "setModel": {
+        const modelId = typeof message.modelId === "string" ? message.modelId : "";
+        if (modelId.length === 0) {
+          break;
+        }
+        const provider = typeof message.provider === "string" ? message.provider : undefined;
+        await this.host.applyModel(modelId, provider);
+        // A different model supports different reasoning levels, so both the
+        // state and the level list are refreshed together.
+        await this.pushState();
+        await this.pushThinkingLevels();
+        break;
+      }
+      case "setThinkingLevel": {
+        const level = typeof message.level === "string" ? message.level : "";
+        if (level.length === 0) {
+          break;
+        }
+        await this.host.applyThinkingLevel(level);
+        await this.pushState();
         break;
       }
       case "prompt": {
@@ -326,32 +386,32 @@ export class ChatView implements vscode.WebviewViewProvider {
     ].join("; ");
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="${styleUri}" rel="stylesheet" />
-    <title>PiCode: pi agent</title>
+    <title>PiCode: agente pi</title>
   </head>
   <body>
     <header class="toolbar">
-      <span id="status" class="status status-idle">idle</span>
+      <span id="status" class="status status-idle">en reposo</span>
       <span id="session" class="session"></span>
-      <button id="new-session" type="button" class="secondary" title="Start a new pi session">New</button>
-      <button id="abort" type="button" class="secondary" disabled title="Stop the current run">Stop</button>
+      <button id="new-session" type="button" class="secondary" title="Empezar una sesión nueva de pi">Nueva</button>
+      <button id="abort" type="button" class="secondary" disabled title="Detener la ejecución actual">Detener</button>
     </header>
     <div class="runtime-strip">
       <button
         id="runtime"
         type="button"
         class="runtime-chip"
-        title="Choose which pi PiCode runs"
-      >checking pi\u2026</button>
+        title="Elegir qué pi ejecuta PiCode"
+      >comprobando pi\u2026</button>
     </div>
     <main id="messages" class="messages" aria-live="polite"></main>
     <section id="tool-section" class="tool-section" hidden>
-      <h2 class="tool-heading">Tool activity</h2>
+      <h2 class="tool-heading">Actividad de herramientas</h2>
       <ul id="tools" class="tools"></ul>
     </section>
     <form id="composer" class="composer">
@@ -359,10 +419,37 @@ export class ChatView implements vscode.WebviewViewProvider {
         id="prompt"
         class="prompt"
         rows="3"
-        placeholder="Ask pi to do something. Enter sends, Shift+Enter adds a line."
+        placeholder="Pídele algo a pi. Enter envía; Shift+Enter añade una línea."
       ></textarea>
-      <button id="send" type="submit" class="primary">Send</button>
+      <div class="composer-actions">
+        <button
+          id="model"
+          type="button"
+          class="dropdown-toggle model-chip"
+          title="Elegir el modelo"
+          aria-haspopup="listbox"
+        >Modelo\u2026</button>
+        <button
+          id="thinking"
+          type="button"
+          class="dropdown-toggle thinking-chip"
+          title="Elegir el nivel de razonamiento"
+          aria-haspopup="listbox"
+        >Razonamiento\u2026</button>
+        <button id="send" type="submit" class="primary">Enviar</button>
+      </div>
     </form>
+    <div id="dropdown" class="dropdown" hidden>
+      <input
+        id="dropdown-filter"
+        class="dropdown-filter"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Buscar\u2026"
+      />
+      <ul id="dropdown-options" class="dropdown-options" tabindex="-1" role="listbox"></ul>
+    </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`;
@@ -372,6 +459,8 @@ export class ChatView implements vscode.WebviewViewProvider {
 /** Projection of the session state the webview is allowed to see. */
 interface WebviewSessionState {
   model?: string;
+  modelName?: string;
+  provider?: string;
   sessionName?: string;
   sessionId?: string;
   messageCount?: number;
@@ -383,6 +472,8 @@ function toWebviewState(state: PiSessionState): WebviewSessionState {
   const model = state.model;
   return {
     model: typeof model?.id === "string" ? model.id : undefined,
+    modelName: typeof model?.name === "string" ? model.name : undefined,
+    provider: typeof model?.provider === "string" ? model.provider : undefined,
     sessionName: state.sessionName,
     sessionId: state.sessionId,
     messageCount: state.messageCount,

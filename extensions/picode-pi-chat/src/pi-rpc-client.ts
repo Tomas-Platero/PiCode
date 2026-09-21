@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type * as vscode from "vscode";
 import type {
   PiCommand,
+  PiCycleModelData,
+  PiCycleThinkingLevelData,
   PiEvent,
   PiGetAvailableModelsData,
   PiGetCommandsData,
@@ -10,6 +12,8 @@ import type {
   PiResponse,
   PiSessionState,
   PiSlashCommand,
+  PiThinkingLevel,
+  PiThinkingLevelsData,
   PiWireCommand,
 } from "./protocol";
 
@@ -224,6 +228,38 @@ export class PiRpcClient {
       provider: reference.provider,
       modelId: reference.modelId,
     });
+  }
+
+  /**
+   * Cycles to the next available model. pi answers with `null` data when only one
+   * model is configured, which is not an error.
+   */
+  async cycleModel(): Promise<PiCycleModelData | null> {
+    const data = await this.request<PiCycleModelData | null>({ type: "cycle_model" });
+    return data ?? null;
+  }
+
+  /** Lists the reasoning levels the current model supports; `["off"]` when it has none. */
+  async getAvailableThinkingLevels(): Promise<PiThinkingLevel[]> {
+    const data = await this.request<PiThinkingLevelsData>({
+      type: "get_available_thinking_levels",
+    });
+    return data.levels ?? [];
+  }
+
+  /**
+   * Sets the reasoning level. pi rejects a level the current model does not
+   * support, so callers should offer only what `getAvailableThinkingLevels`
+   * returned rather than the full enum.
+   */
+  async setThinkingLevel(level: PiThinkingLevel): Promise<void> {
+    await this.request<unknown>({ type: "set_thinking_level", level });
+  }
+
+  /** Cycles the reasoning level; `null` when the model has no reasoning support. */
+  async cycleThinkingLevel(): Promise<PiThinkingLevel | null> {
+    const data = await this.request<PiCycleThinkingLevelData>({ type: "cycle_thinking_level" });
+    return data.level ?? null;
   }
 
   /** Discover extension commands, prompt templates and skills. */

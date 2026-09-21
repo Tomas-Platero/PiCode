@@ -35,7 +35,7 @@
       "picode": [
         {
           "id": "picode.piChat",
-          "name": "pi agent",
+          "name": "agente pi",
           "type": "webview"
         }
       ]
@@ -43,27 +43,37 @@
     "commands": [
       {
         "command": "picode.piChat.open",
-        "title": "PiCode: Open pi Chat",
+        "title": "PiCode: Abrir el chat de pi",
         "category": "PiCode"
       },
       {
         "command": "picode.piChat.newSession",
-        "title": "PiCode: New pi Session",
+        "title": "PiCode: Nueva sesión de pi",
         "category": "PiCode"
       },
       {
         "command": "picode.piChat.abort",
-        "title": "PiCode: Abort pi Run",
+        "title": "PiCode: Detener la ejecución",
         "category": "PiCode"
       },
       {
         "command": "picode.piChat.restart",
-        "title": "PiCode: Restart pi Process",
+        "title": "PiCode: Reiniciar el proceso de pi",
         "category": "PiCode"
       },
       {
         "command": "picode.piChat.selectRuntime",
-        "title": "PiCode: Select pi Runtime",
+        "title": "PiCode: Elegir qué pi se ejecuta",
+        "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.selectModel",
+        "title": "PiCode: Elegir modelo",
+        "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.selectThinkingLevel",
+        "title": "PiCode: Elegir nivel de razonamiento",
         "category": "PiCode"
       }
     ],
@@ -78,24 +88,24 @@
             "custom"
           ],
           "enumDescriptions": [
-            "Run the pi found on PATH: your own installation.",
-            "Run PiCode's own pinned pi, installed inside the distribution and isolated from your global one.",
-            "Run the executable given by picode.pi.executablePath exactly as written."
+            "Ejecuta el pi que encuentre en el PATH: tu instalación propia.",
+            "Ejecuta el pi propio de PiCode, con versión fijada, instalado dentro de la distribución y aislado del global.",
+            "Ejecuta el fichero indicado en picode.pi.executablePath tal cual."
           ],
           "default": "path",
-          "markdownDescription": "Which pi PiCode runs. Change it from the panel's runtime control or with the **PiCode: Select pi Runtime** command.",
+          "markdownDescription": "Qué pi ejecuta PiCode. Se cambia desde el control de runtime del panel o con el comando **PiCode: Elegir qué pi se ejecuta**.",
           "scope": "window"
         },
         "picode.pi.executablePath": {
           "type": "string",
           "default": "pi",
-          "description": "Executable used when picode.pi.runtime is `path` or `custom`. A bare name is resolved on PATH; on Windows a `.cmd` shim is launched through the system shell.",
+          "description": "Ejecutable usado cuando picode.pi.runtime es `path` o `custom`. Un nombre suelto se resuelve en el PATH; en Windows un shim `.cmd` se lanza a través del shell del sistema.",
           "scope": "window"
         },
         "picode.pi.defaultModel": {
           "type": "string",
           "default": "",
-          "description": "Model applied to new sessions, as `provider/model-id`. Empty keeps the model pi already has configured."
+          "description": "Modelo aplicado a las sesiones nuevas, como `proveedor/modelo`. Vacío mantiene el modelo que pi ya tenga configurado."
         },
         "picode.pi.extraArgs": {
           "type": "array",
@@ -103,7 +113,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Additional arguments appended to `pi --mode rpc`."
+          "description": "Argumentos adicionales añadidos a `pi --mode rpc`."
         }
       }
     }
@@ -111,7 +121,8 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node test/runtime.test.js",
+    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js",
+    "test:live": "node test/rpc.live.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

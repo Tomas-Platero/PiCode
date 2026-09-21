@@ -135,6 +135,137 @@ button.secondary:hover:not(:disabled) {
   border-color: var(--vscode-errorForeground);
 }
 
+/* --- model and reasoning ------------------------------------------------ */
+
+.model-strip {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px 8px;
+}
+
+.model-chip,
+.thinking-chip {
+  padding: 2px 6px;
+  font-size: 0.85em;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Small blocks in the composer's action row, to the left of Send: they describe
+ * how the next message will be handled, so they belong with the thing that sends
+ * it. The model name is long and the reasoning level is short, so only the model
+ * is allowed to grow, and neither may push Send out of the row.
+ */
+.model-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  text-align: left;
+}
+
+.thinking-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.model-chip:hover,
+.thinking-chip:hover {
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-focusBorder);
+}
+
+.dropdown-toggle.dropdown-open {
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-focusBorder);
+}
+
+/* --- dropdowns ---------------------------------------------------------- */
+
+/*
+ * The list opens in the flow, directly above the control that opened it, so the
+ * panel's own layout decides the space instead of an absolutely positioned popup
+ * guessing at the composer's height.
+ */
+.dropdown {
+  display: flex;
+  flex-direction: column;
+  max-height: 45vh;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-dropdown-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+}
+
+.dropdown-filter {
+  margin: 6px 8px 4px 8px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 2px;
+}
+
+.dropdown-filter:focus,
+.dropdown-options:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.dropdown-options {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px 0;
+  overflow-y: auto;
+}
+
+.dropdown-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.dropdown-option-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-option-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  text-align: right;
+}
+
+.dropdown-option.highlighted {
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-list-activeSelectionForeground, inherit);
+}
+
+.dropdown-option.current .dropdown-option-label {
+  font-weight: 600;
+}
+
+.dropdown-empty {
+  padding: 6px 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
 /* --- messages ----------------------------------------------------------- */
 
 .messages {
@@ -280,7 +411,6 @@ button.secondary:hover:not(:disabled) {
   padding: 8px;
   border-top: 1px solid var(--vscode-panel-border);
 }
-
 .prompt {
   width: 100%;
   box-sizing: border-box;
@@ -295,8 +425,16 @@ button.secondary:hover:not(:disabled) {
   border-radius: 2px;
 }
 
-.composer button.primary {
-  align-self: flex-end;
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Send keeps to the right, so the two chips never push it around. */
+.composer-actions button.primary {
+  margin-left: auto;
 }
 
 .prompt:focus {

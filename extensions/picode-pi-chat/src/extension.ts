@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ChatView, type ChatViewHost } from "./chat-view";
 import { PiRpcClient } from "./pi-rpc-client";
+import type { PiModel, PiThinkingLevel } from "./protocol";
 import {
   describeRuntime,
   installManagedRuntime,
@@ -22,6 +23,9 @@ export function activate(context: vscode.ExtensionContext): void {
     ensureClient: () => ensureClient(context.extensionUri),
     describeRuntime: () => describeRuntime(context.extensionUri),
     selectRuntime: () => selectRuntime(context),
+    applyModel: (modelId, provider) =>
+      withLiveClient((rpc) => applyModel(rpc, modelId, provider)),
+    applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
   } satisfies ChatViewHost);
 
   context.subscriptions.push(
@@ -36,6 +40,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("picode.piChat.selectRuntime", async () => {
       await selectRuntime(context);
     }),
+    vscode.commands.registerCommand("picode.piChat.selectModel", async () => {
+      await withLiveClient(selectModel);
+    }),
+    vscode.commands.registerCommand("picode.piChat.selectThinkingLevel", async () => {
+      await withLiveClient(selectThinkingLevel);
+    }),
     vscode.commands.registerCommand("picode.piChat.newSession", async () => {
       const rpc = view?.bound;
       if (!rpc) {
@@ -47,18 +57,20 @@ export function activate(context: vscode.ExtensionContext): void {
         view?.notifySessionReset();
         await view?.refreshState();
       } catch (error) {
-        reportCommandFailure("start a new session", error);
+        reportCommandFailure("iniciar una sesión nueva", error);
       }
     }),
     vscode.commands.registerCommand("picode.piChat.abort", async () => {
       if (!client?.isRunning) {
-        void vscode.window.showInformationMessage("PiCode: no pi process is running.");
+        void vscode.window.showInformationMessage(
+          "PiCode: no hay ningún proceso de pi en ejecución.",
+        );
         return;
       }
       try {
         await client.abort();
       } catch (error) {
-        reportCommandFailure("abort the current run", error);
+        reportCommandFailure("detener la ejecución actual", error);
       }
     }),
     vscode.commands.registerCommand("picode.piChat.restart", async () => {
@@ -127,7 +139,7 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
     current = await describeRuntime(context.extensionUri);
   } catch (error) {
     void vscode.window.showErrorMessage(
-      `PiCode: could not read the pi runtime. ${toErrorMessage(error)}`,
+      `PiCode: no se pudo leer el runtime de pi. ${toErrorMessage(error)}`,
     );
     return;
   }
@@ -135,7 +147,7 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
   const configuration = vscode.workspace.getConfiguration("picode.pi");
   const customPath = configuration.get<string>("executablePath", "pi");
   const active = (version: string | undefined): string =>
-    version ? `active now \u00b7 ${version}` : "active now";
+    version ? `activo ahora \u00b7 ${version}` : "activo ahora";
 
   interface RuntimeChoice extends vscode.QuickPickItem {
     mode: RuntimeMode;
@@ -144,29 +156,29 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
   const choices: RuntimeChoice[] = [
     {
       mode: "path",
-      label: "$(terminal) The pi on your PATH",
+      label: "$(terminal) El pi de tu PATH",
       description: current.mode === "path" ? active(current.version) : "",
-      detail: "Your own installation. It changes whenever you update pi.",
+      detail: "Tu instalación propia. Cambia cuando actualices pi.",
     },
     {
       mode: "managed",
-      label: "$(package) PiCode's own pi",
+      label: "$(package) El pi propio de PiCode",
       description:
-        current.mode === "managed" ? active(current.version) : `pinned ${current.pin.version}`,
+        current.mode === "managed" ? active(current.version) : `fijado ${current.pin.version}`,
       detail: current.managedInstalled
-        ? `Installed in ${current.managedRoot}, isolated from your global pi.`
-        : "Installs into PiCode's own folder when selected, so the version is reproducible and your global pi is left untouched.",
+        ? `Instalado en ${current.managedRoot}, aislado de tu pi global.`
+        : "Se instala en la carpeta de PiCode al elegirlo, así la versión es reproducible y tu pi global no se toca.",
     },
     {
       mode: "custom",
-      label: "$(file-directory) A specific executable",
+      label: "$(file-directory) Un ejecutable concreto",
       description: current.mode === "custom" ? customPath : "",
-      detail: "Uses picode.pi.executablePath exactly as written.",
+      detail: "Usa picode.pi.executablePath tal cual está escrito.",
     },
   ];
 
   const picked = await vscode.window.showQuickPick(choices, {
-    title: "PiCode: which pi should run?",
+    title: "PiCode: ¿qué pi debe ejecutarse?",
     placeHolder: summarizeRuntime(current),
   });
   if (!picked) {
@@ -175,9 +187,9 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
 
   if (picked.mode === "custom") {
     const entered = await vscode.window.showInputBox({
-      title: "PiCode: path to the pi executable",
+      title: "PiCode: ruta del ejecutable de pi",
       value: customPath,
-      prompt: "An absolute path, or a name resolved on PATH.",
+      prompt: "Una ruta absoluta, o un nombre que se resuelva en el PATH.",
     });
     if (entered === undefined) {
       return;
@@ -191,12 +203,12 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
 
   if (picked.mode === "managed" && !current.managedInstalled) {
     const answer = await vscode.window.showWarningMessage(
-      `PiCode will install ${current.pin.package}@${current.pin.version} into ${current.managedRoot}. ` +
-        "That downloads a few hundred megabytes. Your global pi is not touched.",
+      `PiCode va a instalar ${current.pin.package}@${current.pin.version} en ${current.managedRoot}. ` +
+        "Descarga unos cientos de megabytes. Tu pi global no se toca.",
       { modal: true },
-      "Install",
+      "Instalar",
     );
-    if (answer !== "Install") {
+    if (answer !== "Instalar") {
       return;
     }
 
@@ -204,7 +216,7 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
     const result = await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `PiCode: installing pi ${current.pin.version}`,
+        title: `PiCode: instalando pi ${current.pin.version}`,
       },
       () =>
         installManagedRuntime(context.extensionUri, (line) =>
@@ -221,21 +233,189 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
   await configuration.update("runtime", picked.mode, vscode.ConfigurationTarget.Global);
   await resetClient();
   outputChannel?.appendLine(`[runtime] mode is now "${picked.mode}".`);
-  void vscode.window.showInformationMessage(
-    `PiCode: using ${picked.mode === "path" ? "the pi on your PATH" : picked.mode === "managed" ? "PiCode's own pi" : "a custom executable"}.`,
-  );
+  void vscode.window.showInformationMessage(`PiCode: usando ${RUNTIME_LABELS[picked.mode]}.`);
+}
+
+/** How each runtime mode is named in the interface. */
+const RUNTIME_LABELS: Record<RuntimeMode, string> = {
+  path: "el pi de tu PATH",
+  managed: "el pi propio de PiCode",
+  custom: "un ejecutable concreto",
+};
+
+/**
+ * Runs an interaction against the live client, revealing the view first when no
+ * session is running yet: the model and reasoning pickers act on a session, not
+ * on configuration, so there is nothing to offer until pi is up.
+ */
+async function withLiveClient(action: (rpc: PiRpcClient) => Promise<void>): Promise<void> {
+  const rpc = view?.bound;
+  if (!rpc) {
+    await revealChatView();
+    return;
+  }
+  try {
+    await action(rpc);
+  } catch (error) {
+    reportCommandFailure("cambiar los ajustes de la sesión", error);
+  }
+}
+
+/**
+ * Model picker over `get_available_models`, grouped by provider.
+ *
+ * The provider is passed explicitly instead of the `provider/model-id` string the
+ * client also accepts: it splits that form at the first slash, which is
+ * unambiguous for every provider observed but loses information if a model id
+ * itself contains a slash.
+ */
+async function selectModel(rpc: PiRpcClient): Promise<void> {
+  const [models, state] = await Promise.all([rpc.getAvailableModels(), rpc.getState()]);
+  if (models.length === 0) {
+    void vscode.window.showInformationMessage("PiCode: pi no informó de ningún modelo configurado.");
+    return;
+  }
+
+  interface ModelItem extends vscode.QuickPickItem {
+    model: PiModel;
+  }
+
+  const current = state.model;
+  const sorted = [...models].sort((left, right) => {
+    const byProvider = (left.provider ?? "").localeCompare(right.provider ?? "");
+    return byProvider !== 0
+      ? byProvider
+      : (left.name ?? left.id).localeCompare(right.name ?? right.id);
+  });
+
+  const items: Array<ModelItem | vscode.QuickPickItem> = [];
+  let provider: string | undefined;
+  for (const model of sorted) {
+    if (model.provider !== provider) {
+      provider = model.provider;
+      items.push({ label: provider ?? "otros", kind: vscode.QuickPickItemKind.Separator });
+    }
+
+    const traits = [
+      model.reasoning ? "razonamiento" : undefined,
+      typeof model.contextWindow === "number"
+        ? `${Math.round(model.contextWindow / 1000)}k de contexto`
+        : undefined,
+    ].filter((trait): trait is string => trait !== undefined);
+
+    items.push({
+      model,
+      label: model.name ?? model.id,
+      description: traits.join(" \u00b7 "),
+      detail: model.id,
+      picked: current?.id === model.id,
+    });
+  }
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: "PiCode: modelo",
+    placeHolder: current ? `Actual: ${current.id}` : "Elige un modelo",
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  if (!picked || !("model" in picked)) {
+    return;
+  }
+
+  await applyModel(rpc, picked.model.id, picked.model.provider);
+}
+
+/**
+ * Reasoning-level picker.
+ *
+ * The choices come from `get_available_thinking_levels` and not from the full
+ * enum, because pi rejects a level the current model does not support: `xhigh`
+ * and `max` only exist for some models.
+ */
+async function selectThinkingLevel(rpc: PiRpcClient): Promise<void> {
+  const [levels, state] = await Promise.all([
+    rpc.getAvailableThinkingLevels(),
+    rpc.getState(),
+  ]);
+
+  if (levels.length === 0) {
+    void vscode.window.showInformationMessage(
+      "PiCode: pi no informó de niveles de razonamiento para el modelo actual.",
+    );
+    return;
+  }
+
+  interface LevelItem extends vscode.QuickPickItem {
+    level: PiThinkingLevel;
+  }
+
+  const current = state.thinkingLevel;
+  const items: LevelItem[] = levels.map((level) => ({
+    level,
+    label: level,
+    description: level === current ? "actual" : "",
+    picked: level === current,
+  }));
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: "PiCode: nivel de razonamiento",
+    placeHolder: current ? `Actual: ${current}` : "Elige un nivel de razonamiento",
+  });
+  if (!picked) {
+    return;
+  }
+
+  await applyThinkingLevel(rpc, picked.level);
+}
+
+/**
+ * Applies a model to the live session. Shared by the panel's dropdown and the
+ * palette command, so both paths report and log identically.
+ */
+async function applyModel(rpc: PiRpcClient, modelId: string, provider?: string): Promise<void> {
+  const applied = await rpc.setModel(modelId, provider);
+  outputChannel?.appendLine(`[pi] model is now ${applied.provider ?? "?"}/${applied.id}.`);
+}
+
+const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly PiThinkingLevel[];
+
+/**
+ * Guards the level before it reaches the protocol. The value crosses the webview
+ * boundary as a string, and pi rejects a level the current model does not support,
+ * so an unvalidated value would surface as a protocol failure instead of a bug
+ * here.
+ */
+function isThinkingLevel(value: string): value is PiThinkingLevel {
+  return (THINKING_LEVELS as readonly string[]).includes(value);
+}
+
+/** Applies a reasoning level to the live session. */
+async function applyThinkingLevel(rpc: PiRpcClient, level: string): Promise<void> {
+  if (!isThinkingLevel(level)) {
+    throw new Error(`"${level}" no es un nivel de razonamiento que pi acepte.`);
+  }
+  await rpc.setThinkingLevel(level);
+  outputChannel?.appendLine(`[pi] reasoning level is now ${level}.`);
 }
 
 /** One line describing the active runtime, for pickers and messages. */
 function summarizeRuntime(runtime: RuntimeDescriptor): string {
   const version = runtime.version ? ` ${runtime.version}` : "";
   if (runtime.mode === "managed") {
-    return `PiCode's own pi${version}${runtime.available ? "" : " (not installed)"}`;
+    return `pi propio de PiCode${version}${runtime.available ? "" : " (sin instalar)"}`;
   }
   if (runtime.mode === "custom") {
-    return `Custom executable${version}: ${runtime.display}`;
+    return `Ejecutable propio${version}: ${runtime.display}`;
   }
-  return `PATH pi${version}${runtime.available ? "" : " (not found)"}`;
+  return `pi del PATH${version}${runtime.available ? "" : " (no encontrado)"}`;
 }
 
 /**
@@ -270,9 +450,9 @@ async function ensureStarted(rpc: PiRpcClient): Promise<boolean> {
     const message = toErrorMessage(error);
     outputChannel?.appendLine(`[pi] ${message}`);
     void vscode.window
-      .showErrorMessage(`PiCode: ${message}`, "Open Settings")
+      .showErrorMessage(`PiCode: ${message}`, "Abrir la configuración")
       .then((choice) => {
-        if (choice === "Open Settings") {
+        if (choice === "Abrir la configuración") {
           void vscode.commands.executeCommand(
             "workbench.action.openSettings",
             "picode.pi.executablePath",
@@ -318,7 +498,7 @@ async function applyDefaultModel(rpc: PiRpcClient): Promise<void> {
 function reportCommandFailure(action: string, error: unknown): void {
   const message = toErrorMessage(error);
   outputChannel?.appendLine(`[pi] failed to ${action}: ${message}`);
-  void vscode.window.showErrorMessage(`PiCode: could not ${action}. ${message}`);
+  void vscode.window.showErrorMessage(`PiCode: no se pudo ${action}. ${message}`);
 }
 
 function toErrorMessage(error: unknown): string {

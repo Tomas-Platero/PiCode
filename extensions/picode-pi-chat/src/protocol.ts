@@ -188,6 +188,10 @@ export type PiCommand =
    * `provider/model-id` string that the client splits).
    */
   | { type: "set_model"; provider: string; modelId: string }
+  | { type: "cycle_model" }
+  | { type: "get_available_thinking_levels" }
+  | { type: "set_thinking_level"; level: PiThinkingLevel }
+  | { type: "cycle_thinking_level" }
   | { type: "get_commands" };
 
 export type PiCommandType = PiCommand["type"];
@@ -216,6 +220,20 @@ export interface PiResponseError {
 }
 
 export type PiResponse = PiResponseOk | PiResponseError;
+
+export interface PiCycleModelData {
+  model: PiModel | null;
+  thinkingLevel?: PiThinkingLevel;
+  isScoped?: boolean;
+}
+
+export interface PiThinkingLevelsData {
+  levels: PiThinkingLevel[];
+}
+
+export interface PiCycleThinkingLevelData {
+  level: PiThinkingLevel | null;
+}
 
 export interface PiGetAvailableModelsData {
   models: PiModel[];
