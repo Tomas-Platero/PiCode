@@ -23,10 +23,17 @@ const PAIRS = [
     required: ["model", "thinking", "dropdown", "dropdown-filter", "runtime", "send", "prompt"],
   },
   {
-    name: "extensiones",
-    script: "media/extensions.js",
-    markup: "out/extensions-view.js",
-    required: ["tab-installed", "tab-catalog", "installed", "catalog", "search-input", "log"],
+    name: "ajustes",
+    script: "media/ajustes.js",
+    markup: "out/ajustes-view.js",
+    required: [
+      "card-runtime",
+      "card-model",
+      "card-thinking",
+      "card-extensions",
+      "menu",
+      "categories",
+    ],
   },
 ];
 

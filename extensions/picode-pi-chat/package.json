@@ -20,10 +20,17 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onView:picode.piChat",
-    "onView:picode.extensions"
+    "onView:picode.ajustes"
   ],
   "contributes": {
     "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "picode-ajustes",
+          "title": "PiCode",
+          "icon": "$(hubot)"
+        }
+      ],
       "secondarySidebar": [
         {
           "id": "picode",
@@ -38,10 +45,12 @@
           "id": "picode.piChat",
           "name": "agente pi",
           "type": "webview"
-        },
+        }
+      ],
+      "picode-ajustes": [
         {
-          "id": "picode.extensions",
-          "name": "Extensiones",
+          "id": "picode.ajustes",
+          "name": "Ajustes de pi",
           "type": "webview"
         }
       ]
@@ -81,8 +90,38 @@
         "command": "picode.piChat.selectThinkingLevel",
         "title": "PiCode: Elegir nivel de razonamiento",
         "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.menu",
+        "title": "PiCode: Abrir el menú de pi",
+        "category": "PiCode",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "picode.piChat.menu.installed",
+        "title": "PiCode: Extensiones instaladas",
+        "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.menu.search",
+        "title": "PiCode: Buscar e instalar extensiones",
+        "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.menu.update",
+        "title": "PiCode: Actualizar extensiones",
+        "category": "PiCode"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "picode.piChat.menu",
+          "group": "navigation@1",
+          "when": "view == picode.piChat"
+        }
+      ]
+    },
     "configuration": {
       "title": "PiCode",
       "properties": {
@@ -127,7 +166,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js",
+    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js",
     "test:live": "node test/rpc.live.js",
     "vscode:prepublish": "npm run compile"
   },

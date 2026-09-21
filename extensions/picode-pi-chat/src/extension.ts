@@ -1,6 +1,17 @@
 import * as vscode from "vscode";
+import { AjustesView } from "./ajustes-view";
 import { ChatView, type ChatViewHost } from "./chat-view";
-import { ExtensionsView } from "./extensions-view";
+import {
+  showCatalogSearch,
+  showInstalledPackages,
+  showPiMenu,
+  updateExtensions,
+  type PiCategoryId,
+  type PiMenuDeps,
+  type PiMenuSnapshot,
+  type ProviderSummary,
+} from "./menu";
+import { parseInstalledPackages, runPiCli } from "./pi-cli";
 import { PiRpcClient } from "./pi-rpc-client";
 import type { PiModel, PiThinkingLevel } from "./protocol";
 import {
@@ -13,11 +24,16 @@ import {
 
 let client: PiRpcClient | undefined;
 let view: ChatView | undefined;
-let extensionsView: ExtensionsView | undefined;
+let statusItem: vscode.StatusBarItem | undefined;
+let ajustesView: AjustesView | undefined;
+/** When this session activated, used to tell a restored panel from a real click. */
+let activatedAt = 0;
+let startupResolveSkipped = false;
 let outputChannel: vscode.OutputChannel | undefined;
 let defaultModelApplied = false;
 
 export function activate(context: vscode.ExtensionContext): void {
+  activatedAt = Date.now();
   outputChannel = vscode.window.createOutputChannel("PiCode");
   context.subscriptions.push(outputChannel);
 
@@ -30,14 +46,42 @@ export function activate(context: vscode.ExtensionContext): void {
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
   } satisfies ChatViewHost);
 
-  // Package management is the one surface that talks to the pi CLI rather than to
-  // the RPC protocol, and it always talks to the active runtime's CLI.
-  const extensions = ExtensionsView.create(context.extensionUri, {
+  // pi's configuration lives in popup menus, reached from the status bar icon and
+  // from a button on the chat view's title. Package management is the one surface
+  // that talks to the pi CLI rather than to the RPC protocol, and it always talks
+  // to the active runtime's CLI.
+  const menu: PiMenuDeps = {
     runtime: () => resolveRuntime(context.extensionUri),
+    snapshot: () => menuSnapshot(context.extensionUri),
+    providers: () => listProviders(),
+    selectModel: () => withLiveClient(selectModel),
+    selectThinkingLevel: () => withLiveClient(selectThinkingLevel),
+    selectRuntime: () => selectRuntime(context),
+    installManagedRuntime: () => installManagedFromMenu(context),
+    newSession: () => startNewSession(),
+    abort: () => abortRun(),
+    restart: () => resetClient(),
     log: (line) => outputChannel?.appendLine(`[pi] ${line}`),
     offerRestart: (what) => offerRestart(what),
+  };
+
+  // The icon on the left opens this panel, because the editor decides that a
+  // container shows a sidebar. The popup itself is one click away from here.
+  const ajustes = AjustesView.create(context.extensionUri, {
+    snapshot: () => menuSnapshot(context.extensionUri),
+    openMenu: (category?: PiCategoryId) => showPiMenu(menu, category),
+    autoOpenMenu: () => autoOpenMenuFromPanel(menu),
   });
-  extensionsView = extensions;
+  ajustesView = ajustes;
+
+  // Left-aligned, which is where the owner expected to find it, and the same place
+  // VS Code puts its own agent's status entry point.
+  statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
+  statusItem.text = "$(hubot) pi";
+  statusItem.tooltip = "PiCode: configuración de pi";
+  statusItem.command = "picode.piChat.menu";
+  statusItem.show();
+  context.subscriptions.push(statusItem);
 
   context.subscriptions.push(
     // `retainContextWhenHidden` keeps the webview alive while the sidebar is
@@ -45,9 +89,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ChatView.viewId, view, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.window.registerWebviewViewProvider(ExtensionsView.viewId, extensions, {
+    vscode.window.registerWebviewViewProvider(AjustesView.viewId, ajustes, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
+    vscode.commands.registerCommand("picode.piChat.menu", () => showPiMenu(menu)),
+    vscode.commands.registerCommand("picode.piChat.menu.installed", () =>
+      showInstalledPackages(menu),
+    ),
+    vscode.commands.registerCommand("picode.piChat.menu.search", () => showCatalogSearch(menu)),
+    vscode.commands.registerCommand("picode.piChat.menu.update", () => updateExtensions(menu)),
     vscode.commands.registerCommand("picode.piChat.open", async () => {
       await revealChatView();
     }),
@@ -60,33 +110,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("picode.piChat.selectThinkingLevel", async () => {
       await withLiveClient(selectThinkingLevel);
     }),
-    vscode.commands.registerCommand("picode.piChat.newSession", async () => {
-      const rpc = view?.bound;
-      if (!rpc) {
-        await revealChatView();
-        return;
-      }
-      try {
-        await rpc.newSession();
-        view?.notifySessionReset();
-        await view?.refreshState();
-      } catch (error) {
-        reportCommandFailure("iniciar una sesión nueva", error);
-      }
-    }),
-    vscode.commands.registerCommand("picode.piChat.abort", async () => {
-      if (!client?.isRunning) {
-        void vscode.window.showInformationMessage(
-          "PiCode: no hay ningún proceso de pi en ejecución.",
-        );
-        return;
-      }
-      try {
-        await client.abort();
-      } catch (error) {
-        reportCommandFailure("detener la ejecución actual", error);
-      }
-    }),
+    vscode.commands.registerCommand("picode.piChat.newSession", () => startNewSession()),
+    vscode.commands.registerCommand("picode.piChat.abort", () => abortRun()),
     vscode.commands.registerCommand("picode.piChat.restart", async () => {
       await resetClient();
     }),
@@ -96,8 +121,8 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   view?.dispose();
   view = undefined;
-  extensionsView?.dispose();
-  extensionsView = undefined;
+  ajustesView?.dispose();
+  ajustesView = undefined;
   client?.stop();
   client = undefined;
 }
@@ -140,12 +165,200 @@ async function resetClient(): Promise<void> {
   if (view?.isVisible) {
     await view.rebind();
   }
+}
 
-  // The installed list belongs to the runtime, so it is re-read when the runtime
-  // changes. A hidden view would run the CLI for nobody.
-  if (extensionsView?.isVisible) {
-    await extensionsView.refresh();
+const STARTUP_GRACE_MS = 20_000;
+
+/**
+ * Opens the popup because the sidebar panel was shown, which is what clicking the
+ * left icon does.
+ *
+ * One resolve per session is skipped: at startup the editor restores whichever views
+ * were open, and that resolve is not a click, so popping a menu nobody asked for is
+ * worse than leaving the panel's own button to do it. Every resolve after that one
+ * is a real click.
+ */
+async function autoOpenMenuFromPanel(menu: PiMenuDeps): Promise<void> {
+  const sinceActivation = Date.now() - activatedAt;
+  if (!startupResolveSkipped && sinceActivation < STARTUP_GRACE_MS) {
+    startupResolveSkipped = true;
+    outputChannel?.appendLine("[pi] panel restaurado al arrancar: el menú no se abre solo");
+    return;
   }
+  await showPiMenu(menu);
+}
+
+/**
+ * The values the popup and the sidebar panel show.
+ *
+ * Every one is best-effort: both surfaces are useful with no session running and
+ * nothing installed, and a value that cannot be read says so rather than lying.
+ * The package count comes from the CLI, so it is cached briefly instead of
+ * spawning a process for every navigation step inside the menu.
+ */
+async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
+  const runtime = await describeRuntime(extensionUri);
+  const version = runtime.version ? ` ${runtime.version}` : "";
+  const label =
+    runtime.mode === "managed"
+      ? `pi propio de PiCode${version}`
+      : runtime.mode === "custom"
+        ? `ejecutable propio${version}`
+        : `pi del PATH${version}`;
+
+  const client = view?.bound;
+  const state = client ? await client.getState().catch(() => undefined) : undefined;
+  const installed = await countInstalled(extensionUri);
+
+  let providerCount: number | undefined;
+  if (client) {
+    providerCount = await client
+      .getAvailableModels()
+      .then(countProviders)
+      .catch(() => undefined);
+  }
+
+  return {
+    runtime: label,
+    runtimeAvailable: runtime.available,
+    managedInstalled: runtime.managedInstalled,
+    streaming: state?.isStreaming === true,
+    ...(state?.model ? { model: state.model.name ?? state.model.id } : {}),
+    ...(state?.thinkingLevel ? { reasoning: state.thinkingLevel } : {}),
+    ...(state?.messageCount === undefined ? {} : { messageCount: state.messageCount }),
+    ...(installed === undefined ? {} : { installedCount: installed }),
+    ...(providerCount === undefined ? {} : { providerCount }),
+  };
+}
+
+function countProviders(models: readonly { provider?: string }[]): number {
+  const names = new Set<string>();
+  for (const model of models) {
+    if (model.provider) {
+      names.add(model.provider);
+    }
+  }
+  return names.size;
+}
+
+const INSTALLED_COUNT_TTL_MS = 15_000;
+let installedCountCache: { value: number | undefined; at: number } | undefined;
+
+/** Called after a change, so the next read reflects it. */
+function invalidateInstalledCount(): void {
+  installedCountCache = undefined;
+}
+
+/** How many packages pi reports, or undefined when the CLI cannot answer. */
+async function countInstalled(extensionUri: vscode.Uri): Promise<number | undefined> {
+  const now = Date.now();
+  if (installedCountCache && now - installedCountCache.at < INSTALLED_COUNT_TTL_MS) {
+    return installedCountCache.value;
+  }
+
+  let value: number | undefined;
+  try {
+    const result = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, () => {});
+    value = parseInstalledPackages(result.text).length;
+  } catch {
+    value = undefined;
+  }
+  installedCountCache = { value, at: now };
+  return value;
+}
+
+/** The providers that have models configured, read from the live session. */
+async function listProviders(): Promise<ProviderSummary[]> {
+  const client = view?.bound;
+  if (!client) {
+    return [];
+  }
+
+  const models = await client.getAvailableModels().catch(() => []);
+  const counts = new Map<string, number>();
+  for (const model of models) {
+    const name = model.provider ?? "otros";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, models: count }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** Starts a fresh conversation, opening the panel first if pi is not running. */
+async function startNewSession(): Promise<void> {
+  await withLiveClient(async (rpc) => {
+    await rpc.newSession();
+    view?.notifySessionReset();
+    await view?.refreshState();
+  }, "iniciar una sesión nueva");
+}
+
+async function abortRun(): Promise<void> {
+  if (!client?.isRunning) {
+    void vscode.window.showInformationMessage(
+      "PiCode: no hay ningún proceso de pi en ejecución.",
+    );
+    return;
+  }
+  try {
+    await client.abort();
+  } catch (error) {
+    reportCommandFailure("detener la ejecución actual", error);
+  }
+}
+
+/**
+ * Installs the pinned runtime into the distribution.
+ *
+ * Shared by the runtime picker and by the popup's Runtime category, so the
+ * confirmation and the progress reporting exist once.
+ */
+async function installManaged(
+  context: vscode.ExtensionContext,
+  current: RuntimeDescriptor,
+): Promise<boolean> {
+  const answer = await vscode.window.showWarningMessage(
+    `PiCode va a instalar ${current.pin.package}@${current.pin.version} en ${current.managedRoot}. ` +
+      "Descarga unos cientos de megabytes. Tu pi global no se toca.",
+    { modal: true },
+    "Instalar",
+  );
+  if (answer !== "Instalar") {
+    return false;
+  }
+
+  outputChannel?.show(true);
+  const result = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `PiCode: instalando pi ${current.pin.version}`,
+    },
+    () =>
+      installManagedRuntime(context.extensionUri, (line) =>
+        outputChannel?.appendLine(`[runtime] ${line}`),
+      ),
+  );
+  if (!result.ok) {
+    void vscode.window.showErrorMessage(`PiCode: ${result.message}`);
+    return false;
+  }
+  outputChannel?.appendLine(`[runtime] ${result.message}`);
+  return true;
+}
+
+/** The Runtime category's install row: installs PiCode's own pi and switches to it. */
+async function installManagedFromMenu(context: vscode.ExtensionContext): Promise<void> {
+  const current = await describeRuntime(context.extensionUri);
+  const installed = await installManaged(context, current);
+  if (!installed) {
+    return;
+  }
+  await vscode.workspace
+    .getConfiguration("picode.pi")
+    .update("runtime", "managed", vscode.ConfigurationTarget.Global);
+  await resetClient();
 }
 
 /**
@@ -154,6 +367,7 @@ async function resetClient(): Promise<void> {
  * is why this asks instead of restarting on its own.
  */
 async function offerRestart(what: string): Promise<void> {
+  invalidateInstalledCount();
   const choice = await vscode.window.showInformationMessage(
     `PiCode: ${what}. pi carga las extensiones al arrancar, así que hay que reiniciarlo para que surta efecto.`,
     "Reiniciar ahora",
@@ -239,32 +453,7 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
   }
 
   if (picked.mode === "managed" && !current.managedInstalled) {
-    const answer = await vscode.window.showWarningMessage(
-      `PiCode va a instalar ${current.pin.package}@${current.pin.version} en ${current.managedRoot}. ` +
-        "Descarga unos cientos de megabytes. Tu pi global no se toca.",
-      { modal: true },
-      "Instalar",
-    );
-    if (answer !== "Instalar") {
-      return;
-    }
-
-    outputChannel?.show(true);
-    const result = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `PiCode: instalando pi ${current.pin.version}`,
-      },
-      () =>
-        installManagedRuntime(context.extensionUri, (line) =>
-          outputChannel?.appendLine(`[runtime] ${line}`),
-        ),
-    );
-    if (!result.ok) {
-      void vscode.window.showErrorMessage(`PiCode: ${result.message}`);
-      return;
-    }
-    outputChannel?.appendLine(`[runtime] ${result.message}`);
+    await installManaged(context, current);
   }
 
   await configuration.update("runtime", picked.mode, vscode.ConfigurationTarget.Global);
@@ -285,7 +474,10 @@ const RUNTIME_LABELS: Record<RuntimeMode, string> = {
  * session is running yet: the model and reasoning pickers act on a session, not
  * on configuration, so there is nothing to offer until pi is up.
  */
-async function withLiveClient(action: (rpc: PiRpcClient) => Promise<void>): Promise<void> {
+async function withLiveClient(
+  action: (rpc: PiRpcClient) => Promise<void>,
+  what = "cambiar los ajustes de la sesión",
+): Promise<void> {
   const rpc = view?.bound;
   if (!rpc) {
     await revealChatView();
@@ -294,7 +486,7 @@ async function withLiveClient(action: (rpc: PiRpcClient) => Promise<void>): Prom
   try {
     await action(rpc);
   } catch (error) {
-    reportCommandFailure("cambiar los ajustes de la sesión", error);
+    reportCommandFailure(what, error);
   }
 }
 
