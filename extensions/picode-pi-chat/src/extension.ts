@@ -110,9 +110,6 @@ function getClient(): PiRpcClient {
     ...(cwd ? { cwd } : {}),
     ...(outputChannel ? { output: outputChannel } : {}),
   });
-  // The view holds its own client reference; a replacement client must be
-  // re-bound or the webview would keep listening to a stopped process.
-  void view?.rebind();
   return client;
 }
 

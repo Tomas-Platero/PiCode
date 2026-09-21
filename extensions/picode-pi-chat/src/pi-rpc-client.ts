@@ -50,6 +50,8 @@ export class PiRpcClient {
   private nextRequestId = 0;
   private started = false;
   private streaming = false;
+  /** In-flight launch, so concurrent `start()` callers share one spawn. */
+  private starting: Promise<void> | undefined;
 
   constructor(options: PiRpcClientOptions) {
     this.options = options;
@@ -76,13 +78,34 @@ export class PiRpcClient {
 
   /**
    * Spawns the agent in RPC mode. Idempotent: a second call while the process
-   * is alive resolves immediately. Throws with an actionable message when the
-   * executable cannot be started.
+   * is alive resolves immediately, and concurrent callers share one launch.
+   * Throws with an actionable message when the executable cannot be started.
+   *
+   * The in-flight promise is what makes the second property true. `isRunning`
+   * only becomes true once the process is attached, which happens after an
+   * await, so the check alone is a check-then-act: two callers arriving before
+   * that point both pass it and each spawns an agent. Two agents in one
+   * workspace means two processes writing files, which is worse than a slow
+   * start.
    */
   async start(): Promise<void> {
     if (this.isRunning) {
       return;
     }
+    if (this.starting) {
+      return this.starting;
+    }
+
+    const attempt = this.launchAndAttach();
+    this.starting = attempt;
+    try {
+      await attempt;
+    } finally {
+      this.starting = undefined;
+    }
+  }
+
+  private async launchAndAttach(): Promise<void> {
     this.started = false;
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
