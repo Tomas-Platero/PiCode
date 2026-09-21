@@ -1,2 +1,38 @@
 # Local Pi runtime state
 .atl/
+
+# ---------------------------------------------------------------------------
+# VSCodium runtime tree
+#
+# The repository root doubles as the PiCode distribution root: VSCodium is
+# extracted in place so a `data/` folder next to the executable enables portable
+# mode. The 700 MB payload is NOT versioned. What is versioned is the
+# modification layer that turns a stock VSCodium archive into PiCode:
+#
+#   distribution/apply-picode.ps1     applies the delta
+#   distribution/product-delta.json   the delta itself, as data
+#   distribution/settings.json        first-run defaults
+#   extensions/picode-pi-chat/        the agent panel
+#
+# Reproduce the payload with a stock VSCodium archive, then run the apply script.
+# ---------------------------------------------------------------------------
+
+# Portable profile: user settings, installed extensions, session state, cache.
+# Disposable by design - deleting it yields a clean PiCode.
+/data/
+
+# Electron / Chromium runtime artifacts at the distribution root.
+/VSCodium.exe
+/*.dll
+/*.pak
+/*.dat
+/*.bin
+/vk_swiftshader_icd.json
+/LICENSES.chromium.html
+/VSCodium.VisualElementsManifest.xml
+
+# Runtime directories owned by the VSCodium archive.
+/bin/
+/locales/
+/policies/
+/resources/
