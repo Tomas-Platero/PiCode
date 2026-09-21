@@ -1,0 +1,54 @@
+{
+  "set": {
+    "nameShort": "PiCode",
+    "nameLong": "PiCode — Agentic Code Editor",
+    "urlProtocol": "picode",
+    "extensionsGallery": {
+      "serviceUrl": "https://open-vsx.org/vscode/gallery",
+      "itemUrl": "https://open-vsx.org/vscode/item",
+      "latestUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest",
+      "controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
+    },
+    "documentationUrl": "https://github.com/TomasPlatero/PiCode#readme",
+    "releaseNotesUrl": "https://github.com/TomasPlatero/PiCode/releases",
+    "requestFeatureUrl": "https://github.com/TomasPlatero/PiCode/issues/new",
+    "reportIssueUrl": "https://github.com/TomasPlatero/PiCode/issues/new",
+    "downloadUrl": "https://github.com/TomasPlatero/PiCode/releases",
+    "updateUrl": ""
+  },
+  "unset": [
+    "defaultChatAgent",
+    "trustedExtensionAuthAccess",
+    "builtInExtensionsEnabledWithAutoUpdates",
+    "agentsTelemetryAppName",
+    "voiceWsUrl",
+    "webviewContentExternalBaseUrlTemplate",
+    "checksumFailMoreInfoUrl",
+    "twitterUrl",
+    "tipsAndTricksUrl",
+    "introductoryVideosUrl",
+    "keyboardShortcutsUrlWin",
+    "keyboardShortcutsUrlMac",
+    "keyboardShortcutsUrlLinux"
+  ],
+  "unsetExtensionApiProposals": [
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "GitHub.copilot-nightly",
+    "ms-vscode.vscode-websearchforcopilot",
+    "ms-vscode.vscode-copilot-vision",
+    "ms-vscode.vscode-chat-customizations-evaluations",
+    "ms-azuretools.vscode-azure-github-copilot",
+    "ms-toolsai.vscode-ai",
+    "ms-toolsai.vscode-ai-remote",
+    "TeamsDevApp.vscode-ai-foundry",
+    "ms-windows-ai-studio.vscode-foundry-training",
+    "FoundryLocal.foundry-local-chat",
+    "Microsoft.foundry-local-chat",
+    "openai.chatgpt"
+  ],
+  "unsetExtensionsEnabledWithApiProposalVersion": [
+    "GitHub.copilot-chat",
+    "ms-vscode.vscode-copilot-vision"
+  ]
+}
