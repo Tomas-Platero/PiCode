@@ -59,8 +59,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),
-    describeRuntime: () => describeRuntime(context.extensionUri),
-    selectRuntime: () => selectRuntime(context),
     applyModel: (modelId, provider) =>
       withLiveClient((rpc) => applyModel(rpc, modelId, provider)),
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
