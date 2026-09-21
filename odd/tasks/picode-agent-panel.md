@@ -54,20 +54,58 @@ rather than for a demonstration.
 
 ## Task list
 
-### 1. Move the panel into the secondary side bar
+### 1. Move the panel into the secondary side bar — DONE
 
-The first implementation opened a `WebviewPanel` in an editor tab. Replace it with a
-`WebviewViewProvider` in a container declared in `secondarySidebar`, keeping the
-existing message protocol so the renderer is unchanged.
+The first implementation opened a `WebviewPanel` in an editor tab. It is now a
+`WebviewViewProvider` in a container declared in `secondarySidebar`, and the
+message protocol is unchanged, so the renderer needed no edit at all.
 
-- [ ] Manifest declares a `secondarySidebar` container and a `webview` view in it
-- [ ] `ChatView` implements `WebviewViewProvider`, with context retained while hidden
-- [ ] The view starts pi only when the view resolves, so nothing starts at startup
-- [ ] The `open` command reveals the view (`<viewId>.focus`, with the container
+- [x] Manifest declares a `secondarySidebar` container and a `webview` view in it
+- [x] `ChatView` implements `WebviewViewProvider`, with context retained while hidden
+- [x] The view starts pi only when the view resolves, so nothing starts at startup
+- [x] The `open` command reveals the view (`<viewId>.focus`, with the container
       command as a fallback)
-- [ ] Styling adapted to a narrow sidebar and to the sidebar background variable
-- [ ] Session commands still reach the view when it is not visible
-- [ ] Compiled, staged into the built-in extension, and started with no console error
+- [x] Styling adapted to a narrow sidebar and to the sidebar background variable
+- [x] Session commands still reach the view when it is not visible
+- [x] Compiled, staged into the built-in extension, and started with no console error
+
+Commits: `9c707ce` (the view), `556b41f` (start exactly once)
+
+**The location is declarative, and that was verified before relying on it.**
+`viewsContainers` accepts `activitybar`, `panel` and `secondarySidebar`, and the
+registry assigns each a distinct container location, so the container is born in
+the right sidebar instead of depending on a user dragging it there, which would
+depend on per-workspace UI state.
+
+**Verified end to end, without asking the owner to click anything.** The editor
+has no command-line way to open a view, and `onView` activation means nothing
+observable happens until one is shown, so a temporary built-in extension focused
+the view on startup and logged the result outside the extension host log. With
+that helper:
+
+- `ExtensionService#_doActivateExtension picode.picode-pi-chat, startup: false,
+  activationEvent: 'onView:picode.piChat'` — the view resolved, it activated the
+  extension, and nothing activated it at startup.
+- exactly one `pi --mode rpc` process tree, using the shim path the client
+documents: `cmd.exe /d /s /c "pi --mode rpc"` wrapping
+  `node …\pi-coding-agent\dist\bundle\cli.js --mode rpc`.
+- zero `Uncaught` and zero `TypeError` in the console log, and an empty
+  `window1/views.log`.
+
+The helper was then removed, and a normal launch still activated the view from
+the restored layout, which is the state the editor is left in for the owner.
+
+**Defect found by running it: two agents per open.** The first run spawned two
+`pi --mode rpc` process trees. Two causes, both fixed in `556b41f`: `getClient()`
+re-entered `bindClient()` through `view.rebind()`, and `start()` was a
+check-then-act that two concurrent callers both passed because the started flag
+is only set after an await. The second is the interesting one: it predates this
+task and would have fired for any concurrent caller, and two agents in one
+workspace means two processes writing files.
+
+**A note for future process cleanup.** A script that matches pi processes by the
+package name alone also matches the interactive pi session that is running it —
+which killed the session mid-command during this task. Filter on `--mode rpc`.
 
 Commit: pending
 
@@ -117,5 +155,7 @@ Commit: pending
 - How much of the transcript should be persisted in the webview versus replayed
   from `get_messages` on reopen?
 - Which context providers need a token estimate before pi can report one?
-- Whether the panel replaces the VSCodium chat view container in the activity bar
-  or lives in its own container.
+- Resolved: the chat lives in its own container (`picode`) in the secondary side
+  bar, not in the VSCodium chat container, which this product empties.
+- The view has no title-bar actions yet. The toolbar inside the webview carries
+  New and Stop, so a `view/title` menu is a refinement rather than a gap.
