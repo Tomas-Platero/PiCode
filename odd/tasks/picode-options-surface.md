@@ -4,7 +4,8 @@
 
 Replace the chain of quick picks that today stands in for settings with a real
 options surface: an editor tab laid out like the editor's own Settings, with a
-search box, a category rail, and one row per setting carrying its own control.
+search box, a list of category names down the left, and one row per setting
+carrying its own control.
 
 Product direction (locked by the product owner, 2026-09-21):
 
@@ -15,9 +16,15 @@ Product direction (locked by the product owner, 2026-09-21):
 Decoded:
 
 1. **An editor tab**, not a floating dialog and not the sidebar: the owner picked
-   the editor tab when asked, which is what VS Code's Settings does.
-2. **Categorized, with room to breathe.** A rail of categories on the left, the
-   rows of the selected category on the right, search at the top.
+   the editor tab when asked, which is what VS Code's Settings does. The worry
+   about "jumping between windows" turned out to be about the quick pick, which
+   appears detached at the top of the screen and replaces itself at every level —
+   not about leaving the chat.
+2. **Categorized, with room to breathe.** A list of readable category **names**
+   down the left, always visible; the rows of the selected category on the right;
+   search at the top. The owner confirmed this against a mock-up and rejected the
+   alternative reading on purpose: an icon-only rail is *not* what was asked for,
+   and neither is every category stacked into one long page.
 3. **It manages pi's settings, not only PiCode's.** The owner chose the widest
    scope when asked, so pi's own settings are part of it.
 
@@ -66,7 +73,7 @@ against a running pi (`withLock`).
 | Decision | Choice | Rationale |
 | --- | --- | --- |
 | Surface | A `WebviewPanel` editor tab | What the editor does for Settings; keeps the chat panel free, and has the width a settings UI needs |
-| Layout | Search bar, category rail on the left, rows on the right | The owner asked for VS Code's own arrangement |
+| Layout | Search bar, a list of category **names** down the left, the selected category's rows on the right | The owner asked for VS Code's own arrangement: categories on the left, their options on the right. Explicitly **not** a thin icon rail — the names are readable and always visible, and the right pane changes with the selection |
 | Scope | A Global / Proyecto selector, with unavailable scopes stated | pi's model is two-scoped; showing only the scope that exists is the honest version |
 | Writes | `SettingsManager` setters only | The file belongs to pi; the typed API is pi's own write path |
 | Styling | Only `--vscode-*` variables, the codicon set already vendored | Same rule as the chat panel: any theme works, no palette of our own |
