@@ -15,6 +15,9 @@ module.exports = {
         if (key === "executablePath") {
           return process.env.TEST_EXECUTABLE_PATH ?? fallback;
         }
+        if (key === "transport") {
+          return process.env.TEST_TRANSPORT ?? fallback;
+        }
         return fallback;
       },
     }),

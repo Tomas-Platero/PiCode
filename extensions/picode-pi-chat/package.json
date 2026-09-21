@@ -160,6 +160,17 @@
           "default": [],
           "description": "Argumentos adicionales añadidos a `pi --mode rpc`."
         },
+        "picode.pi.transport": {
+          "type": "string",
+          "enum": ["rpc", "embedded"],
+          "enumDescriptions": [
+            "Ejecuta `pi --mode rpc` como proceso aparte y se comunica por JSON en stdio.",
+            "Carga el mismo pi dentro de la extensión con su SDK: sin proceso hijo, y las extensiones de pi pueden dibujar su propia interfaz."
+          ],
+          "default": "rpc",
+          "description": "Cómo se comunica PiCode con pi. El transporte embebido usa la misma instalación que el de RPC.",
+          "scope": "window"
+        },
         "picode.context.attach": {
           "type": "boolean",
           "default": false,

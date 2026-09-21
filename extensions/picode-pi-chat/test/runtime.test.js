@@ -15,6 +15,7 @@
  */
 const path = require("node:path");
 const fs = require("node:fs");
+const os = require("node:os");
 const Module = require("node:module");
 const { pathToFileURL } = require("node:url");
 
@@ -134,6 +135,74 @@ check(
       /^\d+\.\d+\.\d+$/.test(described.version ?? ""),
     JSON.stringify(described),
   );
+  check(
+    "embedded availability follows the resolved entry",
+    (described.embeddedAvailable === true) === (described.sdkEntry !== undefined),
+    JSON.stringify({ embeddedAvailable: described.embeddedAvailable, sdkEntry: described.sdkEntry }),
+  );
+
+  // --- embedded entry --------------------------------------------------------
+
+  // Two shapes are probed: an npm global prefix, where the shim sits beside
+  // `node_modules`, and a path inside the package itself.
+  const prefix = fs.mkdtempSync(path.join(os.tmpdir(), "picode-sdk-prefix-"));
+  const packageDir = path.join(prefix, "node_modules", "@earendil-works", "pi-coding-agent");
+  fs.mkdirSync(path.join(packageDir, "dist", "bundle"), { recursive: true });
+  fs.writeFileSync(path.join(packageDir, "dist", "index.js"), "");
+
+  const fromPrefix = runtime.findSdkEntry(prefix);
+  check(
+    "the ESM entry is found from an npm prefix, beside node_modules",
+    fromPrefix === path.join(packageDir, "dist", "index.js"),
+    String(fromPrefix),
+  );
+
+  const fromInside = runtime.findSdkEntry(path.join(packageDir, "dist", "bundle"));
+  check(
+    "the ESM entry is found from inside the package's own bundle directory",
+    fromInside === path.join(packageDir, "dist", "index.js"),
+    String(fromInside),
+  );
+
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "picode-sdk-empty-"));
+  check(
+    "a tree without the package reports no entry rather than guessing",
+    runtime.findSdkEntry(empty) === undefined,
+    String(runtime.findSdkEntry(empty)),
+  );
+
+  fs.rmSync(prefix, { recursive: true, force: true });
+  fs.rmSync(empty, { recursive: true, force: true });
+
+  check(
+    "the transport defaults to rpc",
+    runtime.readTransport() === "rpc",
+    runtime.readTransport(),
+  );
+
+  process.env.TEST_TRANSPORT = "embedded";
+  check(
+    "the configured transport is read back",
+    runtime.readTransport() === "embedded",
+    runtime.readTransport(),
+  );
+  process.env.TEST_TRANSPORT = "nonsense";
+  check(
+    "an unrecognised transport falls back to rpc",
+    runtime.readTransport() === "rpc",
+    runtime.readTransport(),
+  );
+  delete process.env.TEST_TRANSPORT;
+
+  process.env.TEST_RUNTIME_MODE = "custom";
+  process.env.TEST_EXECUTABLE_PATH = "definitely-not-installed-xyz";
+  const noEntry = await runtime.describeRuntime(extensionUri);
+  check(
+    "a missing runtime offers no embedded entry",
+    noEntry.embeddedAvailable === false && noEntry.sdkEntry === undefined,
+    JSON.stringify({ embeddedAvailable: noEntry.embeddedAvailable, sdkEntry: noEntry.sdkEntry }),
+  );
+  delete process.env.TEST_EXECUTABLE_PATH;
 
 process.env.TEST_RUNTIME_MODE = "managed";
 const managedDescriptor = await runtime.describeRuntime(extensionUri);

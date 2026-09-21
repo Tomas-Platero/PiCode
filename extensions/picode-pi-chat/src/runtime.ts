@@ -17,6 +17,23 @@ import * as vscode from "vscode";
  */
 export type RuntimeMode = "path" | "managed" | "custom";
 
+/**
+ * How PiCode talks to pi.
+ *
+ * - `rpc`      — spawn `pi --mode rpc` and speak JSON lines over stdio. The
+ *                default, and the transport PiCode has always used.
+ * - `embedded` — import the same pi inside the extension through its SDK. No child
+ *                process, and pi's extensions get a UI context they can render.
+ *
+ * The transport is deliberately separate from the runtime: the embedded backend
+ * has to load the *same* pi the owner already uses, so choosing a transport never
+ * chooses an installation.
+ */
+export type PiTransport = "rpc" | "embedded";
+
+/** The published package both backends are built on. */
+export const PI_PACKAGE = "@earendil-works/pi-coding-agent";
+
 export interface RuntimePin {
   package: string;
   version: string;
@@ -45,6 +62,10 @@ export interface RuntimeDescriptor {
   managedInstalled: boolean;
   /** The pinned package and version PiCode would install. */
   pin: RuntimePin;
+  /** The embedded backend's entry point, when the active pi publishes one. */
+  sdkEntry?: string;
+  /** True when the embedded transport can run against the active pi. */
+  embeddedAvailable: boolean;
 }
 
 const PIN_FILE = "runtime.json";
@@ -82,6 +103,63 @@ export function readMode(): RuntimeMode {
     .getConfiguration("picode.pi")
     .get<string>("runtime", "path");
   return configured === "managed" || configured === "custom" ? configured : "path";
+}
+
+/** Reads the configured transport. Anything unrecognised means RPC. */
+export function readTransport(): PiTransport {
+  const configured = vscode.workspace
+    .getConfiguration("picode.pi")
+    .get<string>("transport", "rpc");
+  return configured === "embedded" ? "embedded" : "rpc";
+}
+
+/**
+ * Finds the pi package's ESM entry by walking up from a directory.
+ *
+ * Probing is necessary rather than incidental: the package publishes `dist/index.js`
+ * under an `import` condition only, so a CommonJS `require.resolve` rejects it, and
+ * the module system has no supported way to ask where an ESM-only package lives.
+ * Walking up covers both shapes PiCode meets — an npm global shim, which sits
+ * beside `node_modules`, and a direct path into `dist/bundle/` — without knowing
+ * anything about npm's layout beyond that.
+ *
+ * The depth bound is not arbitrary: from `dist/bundle/` inside the package, the
+ * entry it is looking for is four levels up.
+ */
+export function findSdkEntry(start: string): string | undefined {
+  const nested = path.join("node_modules", ...PI_PACKAGE.split("/"), "dist", "index.js");
+  const inside = path.join(...PI_PACKAGE.split("/"), "dist", "index.js");
+
+  let current = start;
+  for (let depth = 0; depth < 10; depth += 1) {
+    for (const candidate of [path.join(current, nested), path.join(current, inside)]) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  return undefined;
+}
+
+/**
+ * The ESM entry of the pi the active runtime points at, or undefined when it is
+ * not on disk. The embedded transport imports exactly this file, which is what
+ * makes it load the owner's own pi rather than a second copy.
+ */
+export function resolveSdkEntry(extensionUri: vscode.Uri): string | undefined {
+  const resolved = resolveRuntime(extensionUri);
+
+  if (resolved.mode === "managed") {
+    const bundle = resolved.argsPrefix[0];
+    return bundle === undefined ? undefined : findSdkEntry(path.dirname(bundle));
+  }
+
+  return findSdkEntry(path.dirname(resolveOnPath(resolved.executable) ?? resolved.executable));
 }
 
 /**
@@ -227,6 +305,7 @@ export async function describeRuntime(extensionUri: vscode.Uri): Promise<Runtime
 
   const available = resolved.mode === "managed" ? installed : located !== undefined;
   const version = available ? await probeVersion(target, resolved.argsPrefix) : undefined;
+  const sdkEntry = resolveSdkEntry(extensionUri);
 
   return {
     mode: resolved.mode,
@@ -237,6 +316,8 @@ export async function describeRuntime(extensionUri: vscode.Uri): Promise<Runtime
     managedRoot: root,
     managedInstalled: installed,
     pin,
+    ...(sdkEntry ? { sdkEntry } : {}),
+    embeddedAvailable: sdkEntry !== undefined,
   };
 }
 
