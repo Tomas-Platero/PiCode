@@ -1,8 +1,9 @@
 // PiCode chat webview renderer.
 //
 // Presentation only: the extension host owns the pi process and posts the
-// protocol records here. Every piece of agent or user text is inserted with
-// textContent, never innerHTML, so model output cannot inject markup.
+// protocol records here. Agent text is rendered through `PiCodeMarkdown`, which
+// escapes before it formats, so model output reaches the DOM as markup only when
+// the renderer wrote it. Reasoning and every other string stay textContent.
 (function () {
   "use strict";
 
@@ -19,6 +20,8 @@
     send: document.getElementById("send"),
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
+    restart: document.getElementById("restart"),
+    menu: document.getElementById("menu"),
     model: document.getElementById("model"),
     thinking: document.getElementById("thinking"),
     dropdown: document.getElementById("dropdown"),
@@ -52,6 +55,20 @@
   };
   var DETAIL_LABELS = { queued: "en cola", compacting: "compactando" };
   var ROLE_LABELS = { user: "tú", assistant: "pi", system: "sistema", error: "error" };
+  // The icon that identifies each speaker, from the editor's own codicon set.
+  var ROLE_ICONS = { user: "account", assistant: "hubot", system: "info", error: "error" };
+  // How each tool outcome reads at a glance, and whether its glyph turns.
+  var TOOL_OUTCOMES = {
+    running: { glyph: "loading", spinning: true },
+    end: { glyph: "check", spinning: false },
+    error: { glyph: "error", spinning: false },
+  };
+  // The openers offered while the transcript is empty, in the panel's language.
+  var SUGGESTIONS = [
+    "Expl\u00edcame qu\u00e9 hace este proyecto",
+    "Busca errores en el archivo abierto",
+    "A\u00f1ade pruebas a lo \u00faltimo que cambi\u00e9",
+  ];
   // toolCallId -> { item, output }
   var toolItems = new Map();
 
@@ -84,9 +101,24 @@
     return element;
   }
 
+  // The codicon class pair is written in one place so a rename cannot leave a
+  // half-named glyph behind.
+  function codicon(name) {
+    return createElement("span", "codicon codicon-" + name);
+  }
+
   function addMessage(role) {
+    // The explanation of the panel is only true while there is nothing else here.
+    var empty = elements.messages.querySelector(".empty");
+    if (empty) {
+      elements.messages.removeChild(empty);
+    }
+
     var article = createElement("article", "message message-" + role);
-    article.appendChild(createElement("header", "message-role", ROLE_LABELS[role] || role));
+    var header = createElement("header", "message-role");
+    header.appendChild(codicon(ROLE_ICONS[role] || "comment-discussion"));
+    header.appendChild(createElement("span", "message-role-name", ROLE_LABELS[role] || role));
+    article.appendChild(header);
     var body = createElement("div", "message-body");
     article.appendChild(body);
     elements.messages.appendChild(article);
@@ -97,7 +129,10 @@
   function appendBlock(container, kind, text) {
     var block = createElement("div", "block block-" + kind);
     if (kind === "thinking") {
-      block.appendChild(createElement("div", "block-label", "razonamiento"));
+      var label = createElement("div", "block-label");
+      label.appendChild(codicon("lightbulb"));
+      label.appendChild(createElement("span", null, "razonamiento"));
+      block.appendChild(label);
     }
     block.appendChild(createElement("div", "block-text", text));
     container.appendChild(block);
@@ -140,6 +175,26 @@
     return name + " " + args;
   }
 
+  /**
+   * Puts the renderer's output into a block.
+   *
+   * The string is parsed detached and its nodes are moved in, rather than assigned
+   * to `innerHTML`. `renderMarkdown` escapes every character of the reply before
+   * it writes a tag, so the fragment contains only markup this repository wrote;
+   * parsing it detached means nothing can run on the way in either, which is what
+   * the assignment form cannot promise to a reader.
+   */
+  function insertMarkdown(container, text) {
+    var parsed = new DOMParser().parseFromString(
+      globalThis.PiCodeMarkdown.renderMarkdown(text),
+      "text/html",
+    );
+    container.textContent = "";
+    while (parsed.body.firstChild) {
+      container.appendChild(parsed.body.firstChild);
+    }
+  }
+
   function renderContent(container, content) {
     container.textContent = "";
     if (!Array.isArray(content)) {
@@ -152,7 +207,11 @@
         continue;
       }
       if (block.type === "text") {
-        appendBlock(container, "text", block.text || "");
+        // Agent replies are markdown by convention, so the text block is filled by
+        // the renderer. Reasoning stays plain text: it is not markdown, and
+        // formatting it would misrepresent it.
+        var textBlock = appendBlock(container, "text", block.text || "");
+        insertMarkdown(textBlock.querySelector(".block-text"), block.text || "");
       } else if (block.type === "thinking") {
         appendBlock(container, "thinking", block.thinking || "");
       } else if (block.type === "toolCall") {
@@ -199,10 +258,32 @@
     return parts.join("\n");
   }
 
+  /**
+   * Gives a tool row the glyph of its outcome without hand-writing the class pair.
+   *
+   * The icon node is replaced rather than renamed, because the class pair is built
+   * in one place (`codicon`) and a second place that writes it is a second place to
+   * forget. Only a glyph change replaces the node, so an in-flight tool keeps the
+   * same spinning icon instead of restarting its animation on every update.
+   */
+  function setToolStatus(item, name, spinning) {
+    var icon = codicon(name);
+    icon.classList.add("tool-status");
+    if (spinning) {
+      icon.classList.add("codicon-modifier-spin");
+    }
+    item.item.replaceChild(icon, item.status);
+    item.status = icon;
+    item.glyph = name;
+  }
+
   function upsertTool(event, phase) {
     var item = toolItems.get(event.toolCallId);
     if (!item) {
       var listItem = createElement("li", "tool tool-running");
+      var status = codicon("loading");
+      status.classList.add("tool-status", "codicon-modifier-spin");
+      listItem.appendChild(status);
       listItem.appendChild(createElement("div", "tool-name", event.toolName || "herramienta"));
       var args = "";
       try {
@@ -213,7 +294,12 @@
         args = "";
       }
       listItem.appendChild(createElement("div", "tool-args", args));
-      item = { item: listItem, output: createElement("pre", "tool-output", "") };
+      item = {
+        item: listItem,
+        status: status,
+        glyph: "loading",
+        output: createElement("pre", "tool-output", ""),
+      };
       listItem.appendChild(item.output);
       elements.tools.appendChild(listItem);
       toolItems.set(event.toolCallId, item);
@@ -227,9 +313,66 @@
       }
     }
 
-    item.item.className = "tool tool-" + (phase === "end" && event.isError ? "error" : phase);
+    // The row says what happened in one glyph and one class: spinning while it
+    // runs, a check when it finished, an error mark when it failed.
+    var outcome = phase === "end" ? (event.isError ? "error" : "end") : "running";
+    item.item.className = "tool tool-" + outcome;
+    if (item.glyph !== TOOL_OUTCOMES[outcome].glyph) {
+      setToolStatus(item, TOOL_OUTCOMES[outcome].glyph, TOOL_OUTCOMES[outcome].spinning);
+    }
     scrollToBottom();
     return item;
+  }
+
+  /**
+   * Fills an icon+text chip without disturbing the icon that shares the button.
+   *
+   * The label lives in its own span, so writing the button's textContent would
+   * delete the codicon the markup put there.
+   */
+  function setChipText(button, text) {
+    var label = button.querySelector(".chip-text");
+    if (label) {
+      label.textContent = text;
+    }
+  }
+
+  /**
+   * Explains the panel while the transcript has no messages.
+   *
+   * It is an ordinary element of the transcript, so `addMessage` removes it and
+   * `clear` puts it back: a new session starts the way a fresh panel does. The
+   * buttons fill the composer and stop there, because the owner should be able to
+   * edit an opener before spending a turn on it.
+   */
+  function renderEmptyState() {
+    var empty = createElement("article", "empty");
+    empty.appendChild(codicon("hubot"));
+    empty.appendChild(createElement("h2", null, "P\u00eddele algo a pi"));
+    empty.appendChild(
+      createElement(
+        "p",
+        null,
+        "Escribe abajo y pi trabaja en este proyecto: lee archivos, ejecuta comandos y edita c\u00f3digo. Los botones solo rellenan el texto.",
+      ),
+    );
+
+    for (var index = 0; index < SUGGESTIONS.length; index += 1) {
+      var suggestion = SUGGESTIONS[index];
+      var button = createElement("button", "suggestion", suggestion);
+      button.type = "button";
+      button.addEventListener("click", fillPrompt(suggestion));
+      empty.appendChild(button);
+    }
+
+    elements.messages.appendChild(empty);
+  }
+
+  function fillPrompt(text) {
+    return function () {
+      elements.prompt.value = text;
+      elements.prompt.focus();
+    };
   }
 
   function showError(message) {
@@ -420,6 +563,7 @@
         stream = null;
         userEcho = null;
         setStatus("idle");
+        renderEmptyState();
         break;
       case "note": {
         // A line from PiCode itself, not from the agent, so it is labelled as such.
@@ -440,7 +584,7 @@
 
     // The model and the reasoning level get their own chips, so the session line
     // carries only what those chips cannot say.
-    elements.model.textContent = "Modelo: " + (state.modelName || state.model || "sin modelo");
+    setChipText(elements.model, "Modelo: " + (state.modelName || state.model || "sin modelo"));
     var modelDetail = [];
     if (state.model) {
       modelDetail.push(state.model);
@@ -452,7 +596,7 @@
     modelDetail.push("Pulsa para elegir el modelo.");
     elements.model.title = modelDetail.join("\n");
 
-    elements.thinking.textContent = "razonamiento: " + (state.thinkingLevel || "no disponible");
+    setChipText(elements.thinking, "razonamiento: " + (state.thinkingLevel || "no disponible"));
     elements.thinking.title =
       "Nivel de razonamiento del modelo actual.\nPulsa para cambiarlo; algunos niveles solo existen para algunos modelos.";
 
@@ -648,6 +792,53 @@
     }
   }
 
+  /**
+   * One click listener for the whole transcript.
+   *
+   * The blocks are created as replies stream in and are replaced on every
+   * authoritative message, so a per-button listener would have to be re-attached
+   * on each replacement. Delegating to the container survives that.
+   */
+  function onMessagesClick(event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== "function") {
+      return;
+    }
+
+    var copyButton = target.closest(".code-block-copy");
+    if (copyButton) {
+      var block = copyButton.closest(".code-block");
+      var pre = block ? block.querySelector(".code-block-body") : null;
+      if (!pre || !navigator.clipboard) {
+        return;
+      }
+      // The rejection handler is passed to `then` rather than left to a trailing
+      // `catch`, so a denied clipboard permission can never surface as an
+      // unhandled rejection in the host.
+      navigator.clipboard.writeText(pre.textContent || "").then(
+        function () {
+          copyButton.className = "code-block-copy codicon codicon-check";
+          window.setTimeout(function () {
+            copyButton.className = "code-block-copy codicon codicon-copy";
+          }, 1500);
+        },
+        function (error) {
+          showError("No se pudo copiar el código: " + (error && error.message ? error.message : error));
+        },
+      );
+      return;
+    }
+
+    var link = target.closest(".md-link");
+    if (link) {
+      event.preventDefault();
+      var href = link.getAttribute("data-href");
+      if (href) {
+        send({ type: "openLink", href: href });
+      }
+    }
+  }
+
   function submitPrompt() {
     var text = elements.prompt.value;
     if (!text.trim()) {
@@ -684,6 +875,14 @@
       send({ type: "newSession" });
     });
 
+    elements.restart.addEventListener("click", function () {
+      send({ type: "restart" });
+    });
+
+    elements.menu.addEventListener("click", function () {
+      send({ type: "openMenu" });
+    });
+
     elements.model.addEventListener("click", function () {
       openDropdownFor("model");
     });
@@ -699,6 +898,8 @@
     elements.dropdownFilter.addEventListener("keydown", onDropdownKeydown);
     elements.dropdownOptions.addEventListener("keydown", onDropdownKeydown);
 
+    elements.messages.addEventListener("click", onMessagesClick);
+
     window.addEventListener("message", function (event) {
       handleHostMessage(event.data);
     });
@@ -707,4 +908,7 @@
   registerEvents();
   setStatus("idle");
   send({ type: "ready" });
+  if (!elements.messages.firstChild) {
+    renderEmptyState();
+  }
 })();

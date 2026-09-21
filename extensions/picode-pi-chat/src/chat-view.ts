@@ -18,13 +18,27 @@ export interface ChatViewHost {
   applyModel(modelId: string, provider?: string): Promise<void>;
   /** Applies a reasoning level chosen in the panel's own dropdown. */
   applyThinkingLevel(level: string): Promise<void>;
+  /** Opens the pi configuration popup. */
+  openMenu(): Promise<void>;
+  /** Restarts the agent backend, keeping the panel where it is. */
+  restart(): Promise<void>;
+  /**
+   * Where host-side failures that must not interrupt the transcript are written.
+   *
+   * The shared channel belongs to the extension entry point, so the view receives
+   * it instead of creating a second channel with the same name. Optional: a view
+   * that is never given one still works, and link failures fall back to the log.
+   */
+  output?: vscode.OutputChannel;
 }
 
 const CHAT_BODY = `    <header class="toolbar">
       <span id="status" class="status status-idle">en reposo</span>
       <span id="session" class="session"></span>
-      <button id="new-session" type="button" class="secondary" title="Empezar una sesión nueva de pi">Nueva</button>
-      <button id="abort" type="button" class="secondary" disabled title="Detener la ejecución actual">Detener</button>
+      <button id="new-session" type="button" class="icon-button" title="Empezar una sesión nueva de pi" aria-label="Nueva sesión"><span class="codicon codicon-comment-discussion"></span></button>
+      <button id="abort" type="button" class="icon-button" disabled title="Detener la ejecución actual" aria-label="Detener"><span class="codicon codicon-debug-stop"></span></button>
+      <button id="restart" type="button" class="icon-button" title="Reiniciar el proceso de pi" aria-label="Reiniciar"><span class="codicon codicon-refresh"></span></button>
+      <button id="menu" type="button" class="icon-button" title="Configuración de pi" aria-label="Configuración"><span class="codicon codicon-settings-gear"></span></button>
     </header>
     <main id="messages" class="messages" aria-live="polite"></main>
     <section id="tool-section" class="tool-section" hidden>
@@ -45,15 +59,15 @@ const CHAT_BODY = `    <header class="toolbar">
           class="dropdown-toggle model-chip"
           title="Elegir el modelo"
           aria-haspopup="listbox"
-        >Modelo\u2026</button>
+        ><span class="codicon codicon-sparkle"></span><span class="chip-text">Modelo\u2026</span></button>
         <button
           id="thinking"
           type="button"
           class="dropdown-toggle thinking-chip"
           title="Elegir el nivel de razonamiento"
           aria-haspopup="listbox"
-        >Razonamiento\u2026</button>
-        <button id="send" type="submit" class="primary">Enviar</button>
+        ><span class="codicon codicon-lightbulb"></span><span class="chip-text">Razonamiento\u2026</span></button>
+        <button id="send" type="submit" class="primary icon-button" title="Enviar (Enter)" aria-label="Enviar"><span class="codicon codicon-send"></span></button>
       </div>
     </form>
     <div id="dropdown" class="dropdown" hidden>
@@ -441,6 +455,44 @@ export class ChatView implements vscode.WebviewViewProvider {
         }
         break;
       }
+      case "openMenu": {
+        await this.host.openMenu();
+        break;
+      }
+      case "restart": {
+        await this.host.restart();
+        break;
+      }
+      case "openLink": {
+        const href = typeof message.href === "string" ? message.href : "";
+        if (href.length === 0) {
+          break;
+        }
+        // The renderer already refuses anything but http, https and mailto. The
+        // host repeats the check because the webview boundary is where trust ends
+        // and the renderer is one message away from being replaced.
+        const lowered = href.toLowerCase();
+        if (
+          !lowered.startsWith("http://") &&
+          !lowered.startsWith("https://") &&
+          !lowered.startsWith("mailto:")
+        ) {
+          break;
+        }
+        try {
+          await vscode.env.openExternal(vscode.Uri.parse(href));
+        } catch (error) {
+          const line = `[pi] could not open the link: ${toErrorMessage(error)}`;
+          if (this.host.output) {
+            this.host.output.appendLine(line);
+          } else {
+            // No shared channel was passed in; the failure still reaches the
+            // developer log rather than disappearing.
+            console.error(line);
+          }
+        }
+        break;
+      }
       default:
         break;
     }
@@ -456,8 +508,8 @@ export class ChatView implements vscode.WebviewViewProvider {
       extensionUri: this.extensionUri,
       title: "PiCode: agente pi",
       body: CHAT_BODY,
-      scripts: ["main.js"],
-      styles: ["main.css"],
+      scripts: ["markdown.js", "main.js"],
+      styles: ["codicon.css", "main.css"],
     });
   }
 }

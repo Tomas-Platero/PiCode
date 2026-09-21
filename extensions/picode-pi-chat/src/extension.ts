@@ -67,6 +67,11 @@ export function activate(context: vscode.ExtensionContext): void {
     applyModel: (modelId, provider) =>
       withLiveClient((rpc) => applyModel(rpc, modelId, provider)),
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
+    openMenu: () => showPiMenu(menu),
+    restart: () => resetClient(),
+    // The view reports host-side failures that must not interrupt the transcript;
+    // the shared channel already exists here, so one is not created for it.
+    ...(outputChannel ? { output: outputChannel } : {}),
   } satisfies ChatViewHost);
 
   // pi's configuration lives in popup menus, reached from the status bar icon and

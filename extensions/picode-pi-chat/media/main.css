@@ -30,8 +30,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 2px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--vscode-panel-border);
 }
 
@@ -42,28 +42,29 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--vscode-descriptionForeground);
-  font-size: 0.9em;
+  font-size: 0.85em;
 }
 
+/*
+ * The state wears the editor's badge instead of a bordered box, so the toolbar
+ * reads as one row of controls with a single piece of status in it. Only the
+ * colour changes per state, so idle, running, settled and error share one shape.
+ */
 .status {
-  padding: 1px 6px;
-  border-radius: 3px;
-  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 0.85em;
   text-transform: lowercase;
 }
 
 .status-running {
-  color: var(--vscode-charts-blue, var(--vscode-foreground));
-}
-
-.status-settled,
-.status-idle {
-  color: var(--vscode-descriptionForeground);
+  color: var(--vscode-charts-blue, var(--vscode-badge-foreground));
 }
 
 .status-error {
   color: var(--vscode-errorForeground);
-  border-color: var(--vscode-errorForeground);
 }
 
 /* --- buttons ------------------------------------------------------------ */
@@ -100,6 +101,49 @@ button.secondary:hover:not(:disabled) {
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
+/*
+ * An icon button carries its label in `title` and `aria-label`, so the glyph is
+ * the whole visible control and the surface only appears when it is wanted.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  font: inherit;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* The one icon button that keeps the editor's primary surface: Send. */
+.icon-button.primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-radius: 4px;
+}
+
+.icon-button.primary:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+
 /* --- model and reasoning ------------------------------------------------ */
 
 .model-strip {
@@ -108,17 +152,29 @@ button.secondary:hover:not(:disabled) {
   padding: 0 8px 8px 8px;
 }
 
-.model-chip,
-.thinking-chip {
-  padding: 2px 6px;
-  font-size: 0.85em;
+/*
+ * The model and reasoning controls are quiet: they describe how the next message
+ * will be handled, and two bordered boxes there compete with the composer for
+ * attention. The surface appears on hover and while the list is open.
+ */
+.dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 6px;
   color: var(--vscode-descriptionForeground);
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: pointer;
+  font: inherit;
+  max-width: 60%;
+}
+
+.dropdown-toggle:hover,
+.dropdown-toggle.dropdown-open {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
 
 /*
@@ -130,13 +186,24 @@ button.secondary:hover:not(:disabled) {
 .model-chip {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 55%;
   text-align: left;
 }
 
 .thinking-chip {
   flex: 0 1 auto;
   min-width: 0;
+}
+
+/*
+ * The label is the part that shrinks: the icon stays whole while a long model
+ * name is truncated to whatever the row can spare. `min-width: 0` is what lets a
+ * flex item shrink below its text, which is what the ellipsis needs to appear.
+ */
+.chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /*
@@ -151,17 +218,6 @@ button.secondary:hover:not(:disabled) {
 .context-chip.context-on {
   color: var(--vscode-foreground);
   border-color: var(--vscode-charts-green, var(--vscode-panel-border));
-}
-
-.model-chip:hover,
-.thinking-chip:hover {
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-focusBorder);
-}
-
-.dropdown-toggle.dropdown-open {
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-focusBorder);
 }
 
 /* --- dropdowns ---------------------------------------------------------- */
@@ -247,70 +303,237 @@ button.secondary:hover:not(:disabled) {
 
 /* --- messages ----------------------------------------------------------- */
 
+/*
+ * The transcript follows the editor's own visual language instead of drawing a
+ * card per message: an icon column and a content column, the way a comment thread
+ * or an output entry is laid out. The role no longer needs a border or a colour
+ * to be legible, which is why the coloured left borders and the uppercase label
+ * are gone.
+ */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
+/*
+ * Two columns: the codicon sits in the 20px gutter and both the role row and the
+ * body start in the content column, so the icon lines up with the first line of
+ * text without a per-message wrapper.
+ */
 .message {
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 3px;
-  padding: 6px 8px;
-  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-}
-
-.message-user {
-  border-left: 3px solid var(--vscode-charts-green, var(--vscode-panel-border));
-}
-
-.message-assistant {
-  border-left: 3px solid var(--vscode-charts-blue, var(--vscode-panel-border));
-}
-
-.message-error {
-  border-left: 3px solid var(--vscode-errorForeground);
-  color: var(--vscode-errorForeground);
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
 }
 
 .message-role {
-  margin: 0 0 4px 0;
-  font-size: 0.8em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 0.85em;
   color: var(--vscode-descriptionForeground);
 }
 
 .message-body {
-  white-space: pre-wrap;
+  grid-column: 2;
+  min-width: 0;
+  /* The renderer owns the structure now, so text is no longer preformatted here. */
+  white-space: normal;
   word-break: break-word;
+}
+
+/* The user's own words get a surface, because they are the one quoted thing here. */
+.message-user .message-body {
+  background: var(--vscode-input-background);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.message-error {
+  background: var(--vscode-inputValidation-errorBackground, transparent);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  color: var(--vscode-errorForeground);
+  border-radius: 4px;
+  padding: 6px 8px;
 }
 
 .block {
   margin: 4px 0;
 }
 
+/*
+ * Reasoning reads as an editor quote: no italics and no opacity, because both are
+ * unreadable in themes that render the sidebar with low contrast.
+ */
 .block-thinking {
-  border-left: 2px solid var(--vscode-panel-border);
-  padding-left: 8px;
-  opacity: 0.75;
-  font-style: italic;
+  background: var(--vscode-textBlockQuote-background);
+  border-left: 3px solid var(--vscode-textBlockQuote-border);
+  border-radius: 0 4px 4px 0;
+  padding: 6px 8px;
 }
 
 .block-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.75em;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--vscode-descriptionForeground);
 }
 
+/* A tool call is code, so it wears the editor's inline-code treatment. */
 .block-toolcall {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 0.9em;
+  background: var(--vscode-textPreformat-background, var(--vscode-textCodeBlock-background));
+  padding: 1px 4px;
+  border-radius: 3px;
   color: var(--vscode-descriptionForeground);
+}
+
+.block-text {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* --- markdown (renderer output) ----------------------------------------- */
+
+.md-p {
+  margin: 0 0 8px 0;
+}
+
+.md-p:last-child {
+  margin-bottom: 0;
+}
+
+.md-code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.92em;
+  background: var(--vscode-textPreformat-background, var(--vscode-textCodeBlock-background));
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.code-block {
+  margin: 8px 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vscode-textCodeBlock-background);
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 2px 8px;
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-textCodeBlock-background));
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.code-block-language {
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.code-block-copy {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+
+.code-block-copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+.code-block-body {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  line-height: 1.4;
+}
+
+/* The block already sets the code font, so the inner element adds nothing. */
+.code-block-body code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+}
+
+.md-link {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.md-link:hover {
+  text-decoration: underline;
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+}
+
+.md-quote {
+  margin: 8px 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--vscode-textBlockQuote-border);
+  background: var(--vscode-textBlockQuote-background);
+}
+
+.md-list {
+  margin: 0 0 8px 0;
+  padding-left: 20px;
+}
+
+.md-rule {
+  border: none;
+  border-top: 1px solid var(--vscode-panel-border);
+  margin: 10px 0;
+}
+
+.md-h1 {
+  font-size: 1.1em;
+}
+
+.md-h2 {
+  font-size: 1em;
+}
+
+.md-h3 {
+  font-size: 0.95em;
+}
+
+.md-h1,
+.md-h2,
+.md-h3 {
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+  line-height: 1.3;
+}
+
+/*
+ * The spin used by the in-progress glyph. It animates the same way the editor's
+ * own codicon-modifier-spin does, so a spinner here looks like a spinner there.
+ */
+.codicon-modifier-spin {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- tool activity ------------------------------------------------------ */
@@ -319,7 +542,7 @@ button.secondary:hover:not(:disabled) {
   border-top: 1px solid var(--vscode-panel-border);
   max-height: 25vh;
   overflow-y: auto;
-  padding: 6px 8px;
+  padding: 8px;
 }
 
 .tool-heading {
@@ -339,26 +562,46 @@ button.secondary:hover:not(:disabled) {
   gap: 6px;
 }
 
+/*
+ * One tool per list entry: a status glyph in the gutter and the detail beside it.
+ * The row is not a card any more, because a run of cards turns a short activity
+ * list into a wall of borders.
+ */
 .tool {
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 3px;
-  padding: 4px 6px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px;
+  padding: 2px 0;
+  align-items: start;
 }
 
-.tool-running {
-  border-left: 3px solid var(--vscode-charts-blue, var(--vscode-panel-border));
+/* The state is carried by the glyph's colour, and by nothing else. */
+.tool > .tool-status {
+  grid-column: 1;
+  grid-row: 1;
 }
 
-.tool-end {
-  border-left: 3px solid var(--vscode-charts-green, var(--vscode-panel-border));
+.tool-running > .tool-status {
+  color: var(--vscode-descriptionForeground);
 }
 
-.tool-error {
-  border-left: 3px solid var(--vscode-errorForeground);
+.tool-end > .tool-status {
+  color: var(--vscode-charts-green, var(--vscode-foreground));
+}
+
+.tool-error > .tool-status {
+  color: var(--vscode-errorForeground);
+}
+
+.tool-name,
+.tool-args,
+.tool-output {
+  grid-column: 2;
 }
 
 .tool-name {
   font-weight: 600;
+  font-size: 0.9em;
 }
 
 .tool-args,
@@ -372,9 +615,63 @@ button.secondary:hover:not(:disabled) {
 }
 
 .tool-output {
+  background: var(--vscode-textCodeBlock-background);
+  padding: 6px 8px;
+  border-radius: 4px;
   max-height: 12em;
-  overflow-y: auto;
+  overflow: auto;
+}
+
+/* --- empty state -------------------------------------------------------- */
+
+/*
+ * While there is nothing to read, the panel explains itself instead of being a
+ * blank column, and offers three openers that only fill the composer. The block
+ * lives in the transcript's flow, so the first message takes its place.
+ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.empty .codicon {
+  font-size: 32px;
+  opacity: 0.6;
+}
+
+.empty h2 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
   color: var(--vscode-foreground);
+}
+
+.empty p {
+  font-size: 0.9em;
+}
+
+.suggestion {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 0.9em;
+}
+
+.suggestion:hover {
+  background: var(--vscode-list-hoverBackground);
+  border-color: var(--vscode-focusBorder);
 }
 
 /* --- composer ----------------------------------------------------------- */
@@ -394,14 +691,14 @@ button.secondary:hover:not(:disabled) {
   width: 100%;
   box-sizing: border-box;
   resize: vertical;
-  min-height: 2.5em;
+  min-height: 3em;
   padding: 6px;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: var(--vscode-editor-font-size, var(--vscode-font-size));
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
 .composer-actions {
