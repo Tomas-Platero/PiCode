@@ -213,12 +213,47 @@ Still open from the plan: usage (tokens and cost) in the panel, which is P3.
 
 Commit: pending
 
-### C3. Extensions
+### C3. Extensions — DONE
 
-- [ ] Installed packages listed from `pi list` of the active runtime
-- [ ] Catalog search over the npm registry (`keywords:pi-package`)
-- [ ] Install, remove and update actions with streamed output
-- [ ] Installed packages marked in the catalog results
+- [x] Installed packages listed from `pi list` of the active runtime
+- [x] Catalog search over the npm registry (`keywords:pi-package`)
+- [x] Install, remove and update actions with streamed output
+- [x] Installed packages marked in the catalog results
+
+Commit: `2747ddf`
+
+**Why this one is not RPC.** pi manages its packages through its own CLI and the
+RPC protocol does not expose them, so this is PiCode's first non-protocol
+integration. Everything runs the CLI of the **active** runtime, so a package is
+managed by the pi that will actually load it.
+
+**Two views, not one.** The container now holds chat and extensions. That is how
+VS Code groups related surfaces, and it keeps a package browser out of a chat
+column a few hundred pixels wide.
+
+**The confirmation is a modal, and that is deliberate.** pi's own documentation
+states that packages run with full system access, so installing one should not be
+one misclick away in a webview; the dialog names the exact command. After a
+change, pi is *offered* a restart rather than restarted silently: it loads packages
+at startup, and the owner's conversation lives in that process.
+
+**The parser is tolerant and the view keeps the raw text.** The `pi list` layout is
+not a documented contract, and an unparseable listing now shows what pi actually
+printed instead of an empty list that reads as "nothing is installed".
+
+**Also extracted**: the webview document builder is shared by both views, so the
+content security policy and the script nonce exist once. A webview whose script tag
+misses the nonce renders its markup and then does nothing, silently.
+
+**Verified**: 38 checks pass (11 resolver, 17 markup across both views, 10 parser)
+plus 7 live checks against a real agent and a real CLI. End to end, with a
+temporary helper that opened the extensions view, the output channel recorded the
+view's own CLI run — `[pi] pi list`, `[pi] User packages:`, `[pi]   npm:pi-lens` —
+with zero console errors and an empty `views.log`.
+
+Still open from the plan: provider credentials (writing `auth.json` is a
+real secret-handling decision), and a manual source field for git refs and local
+paths, which the catalog does not cover.
 
 Commit: pending
 
