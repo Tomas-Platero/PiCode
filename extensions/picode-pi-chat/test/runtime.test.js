@@ -132,18 +132,25 @@ async function main() {
     JSON.stringify(described),
   );
 
-  process.env.TEST_RUNTIME_MODE = "managed";
-  const managedDescriptor = await runtime.describeRuntime(extensionUri);
-  check(
-    "describing managed mode before installation reports it as not installed",
+process.env.TEST_RUNTIME_MODE = "managed";
+const managedDescriptor = await runtime.describeRuntime(extensionUri);
+// Deliberately not asserting a particular machine state: whether PiCode's own pi is
+// installed here is a fact about this disk, not about the code. What must hold either
+// way is that the report is internally consistent, and that a version appears exactly
+// when the runtime is installed.
+check(
+    "describing managed mode is consistent with whether it is installed",
     managedDescriptor.mode === "managed" &&
-      managedDescriptor.available === false &&
-      managedDescriptor.managedInstalled === false,
+      managedDescriptor.available === managedDescriptor.managedInstalled &&
+      (managedDescriptor.managedInstalled
+            ? /^\d+\.\d+\.\d+$/.test(managedDescriptor.version ?? "")
+            : managedDescriptor.version === undefined),
     JSON.stringify({
-      available: managedDescriptor.available,
       installed: managedDescriptor.managedInstalled,
+      available: managedDescriptor.available,
+      version: managedDescriptor.version,
     }),
-  );
+);
 
   // --- report ----------------------------------------------------------------
 
