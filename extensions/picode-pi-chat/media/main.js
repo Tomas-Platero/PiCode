@@ -19,6 +19,7 @@
     send: document.getElementById("send"),
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
+    runtime: document.getElementById("runtime"),
   };
 
   // Live assistant message being assembled from deltas. `message_update` is
@@ -347,6 +348,9 @@
       case "state":
         renderState(message.state);
         break;
+      case "runtime":
+        renderRuntime(message.runtime);
+        break;
       case "error":
         showError(message.message);
         break;
@@ -379,6 +383,43 @@
       parts.push("thinking: " + state.thinkingLevel);
     }
     elements.session.textContent = parts.join(" · ");
+  }
+
+  // Which pi is running is the one thing the panel cannot infer: the runtime can
+  // be the user's own install, PiCode's pinned copy, or an arbitrary executable.
+  function renderRuntime(runtime) {
+    if (!runtime || typeof runtime !== "object") {
+      return;
+    }
+
+    var label;
+    if (runtime.mode === "managed") {
+      label = "PiCode's own pi";
+    } else if (runtime.mode === "custom") {
+      label = "custom pi";
+    } else {
+      label = "PATH pi";
+    }
+    if (runtime.version) {
+      label += " " + runtime.version;
+    }
+    if (!runtime.available) {
+      label += " (not found)";
+    }
+
+    elements.runtime.textContent = label;
+    elements.runtime.className = "runtime-chip" + (runtime.available ? "" : " runtime-chip-missing");
+
+    var detail = [label];
+    if (runtime.display) {
+      detail.push(runtime.display);
+    }
+    if (runtime.pin && runtime.pin.version) {
+      detail.push("pinned " + runtime.pin.package + "@" + runtime.pin.version);
+    }
+    detail.push("");
+    detail.push("Click to choose which pi runs.");
+    elements.runtime.title = detail.join("\n");
   }
 
   function submitPrompt() {
@@ -415,6 +456,10 @@
 
     elements.newSession.addEventListener("click", function () {
       send({ type: "newSession" });
+    });
+
+    elements.runtime.addEventListener("click", function () {
+      send({ type: "selectRuntime" });
     });
 
     window.addEventListener("message", function (event) {

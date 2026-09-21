@@ -256,7 +256,7 @@ Write-Section "Step 4 - built-in extension resources/app/extensions/picode-pi-ch
 # What ships is the built package, mirrored from .vscodeignore: sources, the
 # toolchain, maps and packaging state never reach the editor tree.
 $excludedPatterns = @(
-    '^(src|node_modules|\.atl|\.vscode)[\\/]',
+    '^(src|test|node_modules|\.atl|\.vscode)[\\/]',
     '\.map$',
     '\.vsix$'
 )

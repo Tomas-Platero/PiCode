@@ -1,8 +1,22 @@
 import * as vscode from "vscode";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
 import { isPanelEvent, type PiEvent, type PiSessionState } from "./protocol";
+import type { RuntimeDescriptor } from "./runtime";
 
 type ViewStatus = "idle" | "running" | "settled" | "error";
+
+/**
+ * What the view needs from the extension host. Keeping this explicit means the
+ * view never reaches for configuration or the process itself.
+ */
+export interface ChatViewHost {
+  /** A started client for the active runtime, or undefined when pi cannot start. */
+  ensureClient(): Promise<PiRpcClient | undefined>;
+  /** Describes the active runtime for the panel's runtime control. */
+  describeRuntime(): Promise<RuntimeDescriptor>;
+  /** Opens the runtime picker and applies the choice. */
+  selectRuntime(): Promise<void>;
+}
 
 /**
  * Hosts the pi chat as a native view in the secondary side bar.
@@ -34,14 +48,11 @@ export class ChatView implements vscode.WebviewViewProvider {
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly ensureClient: () => Promise<PiRpcClient | undefined>,
+    private readonly host: ChatViewHost,
   ) {}
 
-  public static create(
-    extensionUri: vscode.Uri,
-    ensureClient: () => Promise<PiRpcClient | undefined>,
-  ): ChatView {
-    return new ChatView(extensionUri, ensureClient);
+  public static create(extensionUri: vscode.Uri, host: ChatViewHost): ChatView {
+    return new ChatView(extensionUri, host);
   }
 
   /** True when the container is open and the webview is attached. */
@@ -88,6 +99,14 @@ export class ChatView implements vscode.WebviewViewProvider {
     await this.pushState();
   }
 
+  /**
+   * Refreshes the runtime control. Called after a runtime switch so the panel
+   * never shows a runtime the process is not actually running.
+   */
+  public async refreshRuntime(): Promise<void> {
+    await this.pushRuntime();
+  }
+
   /** Notifies the webview that a new session started and the transcript is gone. */
   public notifySessionReset(): void {
     this.post({ type: "clear" });
@@ -112,7 +131,7 @@ export class ChatView implements vscode.WebviewViewProvider {
    * ---------------------------------------------------------------- */
 
   private async bindClient(): Promise<void> {
-    const client = await this.ensureClient();
+    const client = await this.host.ensureClient();
 
     if (this.disposed) {
       return;
@@ -135,6 +154,7 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.eventSubscription = client.onEvent((event) => this.handleEvent(event));
 
     await this.pushState();
+    await this.pushRuntime();
   }
 
   private releaseView(): void {
@@ -190,6 +210,25 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.post({ type: "status", status });
   }
 
+  /**
+   * Reports which pi the session is running. The control is informational first:
+   * a switcher that does not say what is active invites the owner to guess.
+   */
+  private async pushRuntime(): Promise<void> {
+    if (this.view === undefined) {
+      return;
+    }
+    try {
+      const runtime = await this.host.describeRuntime();
+      this.post({ type: "runtime", runtime });
+    } catch (error) {
+      this.post({
+        type: "error",
+        message: `Could not read the pi runtime: ${toErrorMessage(error)}`,
+      });
+    }
+  }
+
   private post(message: unknown): void {
     if (this.view === undefined || this.disposed) {
       return;
@@ -209,6 +248,16 @@ export class ChatView implements vscode.WebviewViewProvider {
     switch (message.type) {
       case "ready": {
         await this.pushState();
+        await this.pushRuntime();
+        break;
+      }
+      case "selectRuntime": {
+        await this.host.selectRuntime();
+        await this.pushRuntime();
+        break;
+      }
+      case "refreshRuntime": {
+        await this.pushRuntime();
         break;
       }
       case "prompt": {
@@ -292,6 +341,14 @@ export class ChatView implements vscode.WebviewViewProvider {
       <button id="new-session" type="button" class="secondary" title="Start a new pi session">New</button>
       <button id="abort" type="button" class="secondary" disabled title="Stop the current run">Stop</button>
     </header>
+    <div class="runtime-strip">
+      <button
+        id="runtime"
+        type="button"
+        class="runtime-chip"
+        title="Choose which pi PiCode runs"
+      >checking pi\u2026</button>
+    </div>
     <main id="messages" class="messages" aria-live="polite"></main>
     <section id="tool-section" class="tool-section" hidden>
       <h2 class="tool-heading">Tool activity</h2>

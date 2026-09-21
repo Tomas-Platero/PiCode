@@ -60,15 +60,37 @@
         "command": "picode.piChat.restart",
         "title": "PiCode: Restart pi Process",
         "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.selectRuntime",
+        "title": "PiCode: Select pi Runtime",
+        "category": "PiCode"
       }
     ],
     "configuration": {
       "title": "PiCode",
       "properties": {
+        "picode.pi.runtime": {
+          "type": "string",
+          "enum": [
+            "path",
+            "managed",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Run the pi found on PATH: your own installation.",
+            "Run PiCode's own pinned pi, installed inside the distribution and isolated from your global one.",
+            "Run the executable given by picode.pi.executablePath exactly as written."
+          ],
+          "default": "path",
+          "markdownDescription": "Which pi PiCode runs. Change it from the panel's runtime control or with the **PiCode: Select pi Runtime** command.",
+          "scope": "window"
+        },
         "picode.pi.executablePath": {
           "type": "string",
           "default": "pi",
-          "description": "Path to the pi CLI executable. A bare name is resolved on PATH; on Windows a `.cmd` shim is launched through the system shell."
+          "description": "Executable used when picode.pi.runtime is `path` or `custom`. A bare name is resolved on PATH; on Windows a `.cmd` shim is launched through the system shell.",
+          "scope": "window"
         },
         "picode.pi.defaultModel": {
           "type": "string",
@@ -89,6 +111,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node test/runtime.test.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

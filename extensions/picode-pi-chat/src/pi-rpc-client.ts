@@ -21,6 +21,11 @@ export interface PiSubscription {
 export interface PiRpcClientOptions {
   /** Executable to spawn. A bare name is resolved on PATH. */
   executablePath: string;
+  /**
+   * Arguments placed before the client's own. Used by the managed runtime, which
+   * is launched as `node <bundle>/cli.js` rather than through the npm shim.
+   */
+  argsPrefix?: readonly string[];
   /** Extra arguments appended after `--mode rpc`. */
   extraArgs: readonly string[];
   /** Working directory for the agent; defaults to `process.cwd()`. */
@@ -111,7 +116,7 @@ export class PiRpcClient {
     this.stderrBuffer = "";
     this.stderrTail = "";
 
-    const args = ["--mode", "rpc", ...this.options.extraArgs];
+    const args = [...(this.options.argsPrefix ?? []), "--mode", "rpc", ...this.options.extraArgs];
     let child: ChildProcess;
     try {
       child = await this.launch(args, false);
