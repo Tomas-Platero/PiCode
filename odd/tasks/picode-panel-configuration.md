@@ -169,14 +169,47 @@ it shows a modal confirmation and streams npm output to the PiCode channel.
 
 Commit: pending
 
-### C2. Models and thinking
+### C2. Models and thinking — DONE
 
-- [ ] `set_thinking_level`, `cycle_thinking_level` and
-      `get_available_thinking_levels` added to the RPC client
-- [ ] Model picker over `get_available_models` with search, grouped by provider
-- [ ] Thinking-level picker over the levels the current model supports
-- [ ] Current model, thinking level and usage visible in the panel
-- [ ] Switching a model updates the panel without restarting the process
+- [x] `set_thinking_level`, `cycle_thinking_level` and
+      `get_available_thinking_levels` added to the RPC client (with `cycle_model`)
+- [x] Model picker over `get_available_models`, grouped by provider, with a
+      filter box because the catalogue runs to hundreds of entries
+- [x] Reasoning-level picker over what the current model actually supports
+- [x] Current model and reasoning level visible in the panel, each in its own
+      control with its own dropdown
+- [x] Switching a model updates the panel without restarting the process
+
+Commit: `211717f`
+
+**Two surfaces, one implementation.** The panel's controls open their own
+dropdown inside the panel, in flow above the control so the panel's layout decides
+the space; the palette commands keep the editor-wide quick pick, which is the
+right surface when someone is typing rather than pointing. Both call the same
+apply functions, so they log and report identically.
+
+**The reasoning list comes from pi, not from the enum.** `set_thinking_level`
+rejects a level the current model does not support, and `xhigh` / `max` exist only
+for some models, so the picker offers `get_available_thinking_levels`. A live check
+against the agent confirms `max` is accepted and sticks on this machine.
+
+**Verified**: 18 checks pass (11 resolver, 7 markup); compile clean; a live agent
+session answers all four commands; the editor starts with zero console errors; and
+the output channel still reports the runtime the agent started from.
+
+**Added beyond the plan**: `test/panel-dom.test.js`, which checks that every id the
+panel script looks up exists in the markup. Renaming one in a single place gives a
+null reference at load that turns the panel inert, and neither the compiler nor a
+file-level review can see it because both files are individually valid.
+
+**Spanish, by request.** All user-facing copy — panel, quick picks, notifications,
+command titles and setting descriptions — is Spanish. Code, comments, commit
+messages and the `[pi]` diagnostic log stay English, because the log is a
+developer surface and mixing languages inside it would be worse than either
+choice alone. The typos linter flags `comando` and `Argumentos` as misspellings of
+English words; they are Spanish and correct.
+
+Still open from the plan: usage (tokens and cost) in the panel, which is P3.
 
 Commit: pending
 
