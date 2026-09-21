@@ -18,7 +18,6 @@
     "builtInExtensionsEnabledWithAutoUpdates": []
   },
   "unset": [
-    "defaultChatAgent",
     "trustedExtensionAuthAccess",
     "agentsTelemetryAppName",
     "voiceWsUrl",
@@ -31,24 +30,44 @@
     "keyboardShortcutsUrlMac",
     "keyboardShortcutsUrlLinux"
   ],
-  "unsetExtensionApiProposals": [
-    "GitHub.copilot",
-    "GitHub.copilot-chat",
-    "GitHub.copilot-nightly",
-    "ms-vscode.vscode-websearchforcopilot",
-    "ms-vscode.vscode-copilot-vision",
-    "ms-vscode.vscode-chat-customizations-evaluations",
-    "ms-azuretools.vscode-azure-github-copilot",
-    "ms-toolsai.vscode-ai",
-    "ms-toolsai.vscode-ai-remote",
-    "TeamsDevApp.vscode-ai-foundry",
-    "ms-windows-ai-studio.vscode-foundry-training",
-    "FoundryLocal.foundry-local-chat",
-    "Microsoft.foundry-local-chat",
-    "openai.chatgpt"
-  ],
-  "unsetExtensionsEnabledWithApiProposalVersion": [
-    "GitHub.copilot-chat",
-    "ms-vscode.vscode-copilot-vision"
-  ]
+  "unsetNested": {
+    "defaultChatAgent": [
+      "documentationUrl",
+      "termsStatementUrl",
+      "privacyStatementUrl",
+      "skusDocumentationUrl",
+      "optimizeUsageDocumentationUrl",
+      "publicCodeMatchesUrl",
+      "managePlanUrl",
+      "upgradePlanUrl",
+      "signUpUrl",
+      "entitlementUrl",
+      "entitlementSignupLimitedUrl",
+      "tokenEntitlementUrl",
+      "mcpRegistryDataUrl",
+      "managedSettingsUrl"
+    ],
+    "extensionEnabledApiProposals": [
+      "GitHub.copilot",
+      "GitHub.copilot-chat",
+      "GitHub.copilot-nightly",
+      "ms-vscode.vscode-websearchforcopilot",
+      "ms-vscode.vscode-copilot-vision",
+      "ms-vscode.vscode-chat-customizations-evaluations",
+      "ms-azuretools.vscode-azure-github-copilot",
+      "ms-toolsai.vscode-ai",
+      "ms-toolsai.vscode-ai-remote",
+      "TeamsDevApp.vscode-ai-foundry",
+      "ms-windows-ai-studio.vscode-foundry-training",
+      "FoundryLocal.foundry-local-chat",
+      "Microsoft.foundry-local-chat",
+      "openai.chatgpt"
+    ]
+  },
+  "unsetArrayEntries": {
+    "extensionsEnabledWithApiProposalVersion": [
+      "GitHub.copilot-chat",
+      "ms-vscode.vscode-copilot-vision"
+    ]
+  }
 }

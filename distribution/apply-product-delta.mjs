@@ -111,6 +111,8 @@ function validateDelta(delta) {
     value !== null && typeof value === 'object' && !Array.isArray(value);
   const isStringArray = (value) =>
     Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+  const isStringArrayMap = (value) =>
+    isPlainObject(value) && Object.values(value).every(isStringArray);
 
   if (!isPlainObject(delta)) {
     throw new Error('the delta must be a JSON object');
@@ -118,22 +120,17 @@ function validateDelta(delta) {
   if (delta.set !== undefined && !isPlainObject(delta.set)) {
     problems.push('"set" must be an object');
   }
-  for (const key of [
-    'unset',
-    'unsetExtensionApiProposals',
-    'unsetExtensionsEnabledWithApiProposalVersion',
-  ]) {
-    if (delta[key] !== undefined && !isStringArray(delta[key])) {
-      problems.push(`"${key}" must be an array of strings`);
-    }
+  if (delta.unset !== undefined && !isStringArray(delta.unset)) {
+    problems.push('"unset" must be an array of strings');
+  }
+  if (delta.unsetNested !== undefined && !isStringArrayMap(delta.unsetNested)) {
+    problems.push('"unsetNested" must map object keys to arrays of strings');
+  }
+  if (delta.unsetArrayEntries !== undefined && !isStringArrayMap(delta.unsetArrayEntries)) {
+    problems.push('"unsetArrayEntries" must map array keys to arrays of strings');
   }
 
-  const known = new Set([
-    'set',
-    'unset',
-    'unsetExtensionApiProposals',
-    'unsetExtensionsEnabledWithApiProposalVersion',
-  ]);
+  const known = new Set(['set', 'unset', 'unsetNested', 'unsetArrayEntries']);
   for (const key of Object.keys(delta)) {
     if (!known.has(key)) {
       throw new Error(`unknown delta section "${key}"; expected one of ${[...known].join(', ')}`);
@@ -147,9 +144,8 @@ function validateDelta(delta) {
   return {
     set: delta.set ?? {},
     unset: delta.unset ?? [],
-    unsetExtensionApiProposals: delta.unsetExtensionApiProposals ?? [],
-    unsetExtensionsEnabledWithApiProposalVersion:
-      delta.unsetExtensionsEnabledWithApiProposalVersion ?? [],
+    unsetNested: delta.unsetNested ?? {},
+    unsetArrayEntries: delta.unsetArrayEntries ?? {},
   };
 }
 
@@ -157,10 +153,14 @@ function validateDelta(delta) {
  * Builds the desired product from the current one.
  *
  * Key order is preserved by walking the existing keys first and appending only
- * genuinely new `set` keys afterwards, so the change reads in place. Nested
+ * genuinely new `set` keys afterwards, so the change reads in place. Container
  * objects the delta prunes are rebuilt as copies: the input object is never
  * mutated, which is what lets the caller compare "desired" against "current"
  * structurally.
+ *
+ * `unsetNested` exists because removing a container key is not the same as
+ * emptying it. VS Code reads some product objects as a shape, so a key that must
+ * stay present can still have its individual entries removed.
  */
 function buildDesiredProduct(current, delta) {
   const desired = {};
@@ -173,31 +173,25 @@ function buildDesiredProduct(current, delta) {
       desired[key] = delta.set[key];
       continue;
     }
-    if (
-      key === 'extensionEnabledApiProposals' &&
-      delta.unsetExtensionApiProposals.length > 0 &&
-      value !== null &&
-      typeof value === 'object'
-    ) {
+
+    const nestedKeys = delta.unsetNested[key];
+    if (nestedKeys && value !== null && typeof value === 'object' && !Array.isArray(value)) {
       const pruned = {};
-      for (const [entryKey, entryValue] of Object.entries(value)) {
-        if (!delta.unsetExtensionApiProposals.includes(entryKey)) {
-          pruned[entryKey] = entryValue;
+      for (const [subKey, subValue] of Object.entries(value)) {
+        if (!nestedKeys.includes(subKey)) {
+          pruned[subKey] = subValue;
         }
       }
       desired[key] = pruned;
       continue;
     }
-    if (
-      key === 'extensionsEnabledWithApiProposalVersion' &&
-      delta.unsetExtensionsEnabledWithApiProposalVersion.length > 0 &&
-      Array.isArray(value)
-    ) {
-      desired[key] = value.filter(
-        (entry) => !delta.unsetExtensionsEnabledWithApiProposalVersion.includes(entry),
-      );
+
+    const entries = delta.unsetArrayEntries[key];
+    if (entries && Array.isArray(value)) {
+      desired[key] = value.filter((entry) => !entries.includes(entry));
       continue;
     }
+
     desired[key] = value;
   }
 
@@ -261,27 +255,27 @@ function report(current, delta, desired) {
     lines.push(`  unset ${key} (${Object.prototype.hasOwnProperty.call(current, key) ? 'removed' : 'already absent'})`);
   }
 
-  const proposals = current.extensionEnabledApiProposals;
-  if (delta.unsetExtensionApiProposals.length > 0 && proposals && typeof proposals === 'object') {
-    const removed = delta.unsetExtensionApiProposals.filter((key) =>
-      Object.prototype.hasOwnProperty.call(proposals, key),
-    ).length;
-    lines.push(
-      `  extensionEnabledApiProposals: ${removed} of ${delta.unsetExtensionApiProposals.length} entries removed`,
-    );
+  // A container the delta prunes but which is absent or of the wrong type is
+  // drift against upstream, not a silent no-op: report it so a renamed key does
+  // not read as a successful removal.
+  for (const [key, subKeys] of Object.entries(delta.unsetNested)) {
+    const container = current[key];
+    if (container === null || typeof container !== 'object' || Array.isArray(container)) {
+      lines.push(`  unsetNested ${key}: ! no such object in the target, 0 of ${subKeys.length} entries removed`);
+      continue;
+    }
+    const removed = subKeys.filter((subKey) => Object.prototype.hasOwnProperty.call(container, subKey)).length;
+    lines.push(`  unsetNested ${key}: ${removed} of ${subKeys.length} entries removed`);
   }
 
-  const versioned = current.extensionsEnabledWithApiProposalVersion;
-  if (
-    delta.unsetExtensionsEnabledWithApiProposalVersion.length > 0 &&
-    Array.isArray(versioned)
-  ) {
-    const removed = delta.unsetExtensionsEnabledWithApiProposalVersion.filter((entry) =>
-      versioned.includes(entry),
-    ).length;
-    lines.push(
-      `  extensionsEnabledWithApiProposalVersion: ${removed} of ${delta.unsetExtensionsEnabledWithApiProposalVersion.length} entries removed`,
-    );
+  for (const [key, entriesToRemove] of Object.entries(delta.unsetArrayEntries)) {
+    const container = current[key];
+    if (!Array.isArray(container)) {
+      lines.push(`  unsetArrayEntries ${key}: ! no such array in the target, 0 of ${entriesToRemove.length} entries removed`);
+      continue;
+    }
+    const removed = entriesToRemove.filter((entry) => container.includes(entry)).length;
+    lines.push(`  unsetArrayEntries ${key}: ${removed} of ${entriesToRemove.length} entries removed`);
   }
 
   lines.push(`  verdict: ${deepEqual(desired, current) ? 'already current' : 'needs update'}`);
