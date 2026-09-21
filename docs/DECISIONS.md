@@ -171,7 +171,8 @@ corrected by evidence rather than by assumption.
 
 ## ADR-008 — Layer on VSCodium without compiling a fork
 
-**Status:** accepted.
+**Status:** accepted; **partially superseded by ADR-011** (the prohibition on
+touching VSCodium's files no longer holds now that PiCode owns the tree).
 
 **Context:** VSCodium's user-product patch makes product-level rebranding
 possible without a build: it loads a user-level `product.json` and deep-merges it
@@ -266,3 +267,71 @@ tracking. A new pi release can break the integration, so PiCode must test and
 bump the pin deliberately rather than inheriting updates. On the other side, a
 user who wants a newer pi is not blocked, because the executable path is a
 setting.
+
+## ADR-011 — Own the editor tree and remove product keys instead of overriding them
+
+**Status:** accepted. Supersedes ADR-008 in part.
+
+**Context:** ADR-008 chose the no-compile path: brand a separately installed
+VSCodium through a user-level `%APPDATA%\VSCodium\product.json` overlay. That
+path has a ceiling, and the foundation's own `DISTRIBUTION.md` documented it: the
+overlay is merged as `merge(product, userProduct)`, which can overwrite a key but
+never delete one. Copilot was therefore inextirpable by that route; it could only
+be restated. The same document recorded the limitation in one line — "An overlay
+also cannot *delete* a built-in key: it can only override it. There is no \"unset\"
+operation in this merge."
+
+The VSCodium archive is now extracted at the repository root, so PiCode owns the
+tree: `resources/app/product.json` is editable, `resources/app/extensions` is the
+built-in extension scan path, and a `data/` folder beside the executable switches
+the build to portable mode.
+
+**Decision:** PiCode owns its editor tree. The product is modified in place
+through a data delta (`distribution/product-delta.json`) applied by a Node
+program, and the agent panel ships as a built-in extension. The distribution
+remains uncompiled: no fork, no yarn and Electron build, no patch rebasing
+against upstream.
+
+**Consequences:**
+
+- Keys can be deleted, not merely overridden, which is what makes the Copilot
+  removal real rather than cosmetic.
+- The tree is a build artefact and is not versioned. What is versioned is the
+  delta, the applier, the defaults and the extension; `.gitignore` fences the
+  700 MB payload.
+- Upgrading becomes "extract a new archive, re-run the apply script" rather than
+  an in-place update. `updateUrl` is emptied for that reason: the in-product
+  updater pointed at VSCodium releases and would have replaced the patched tree
+  and silently dropped the brand. Observed in the running editor as
+  `update#ctor - updates are disabled as there is no update URL`.
+- The edit surface is product configuration and the shipped file set. Anything
+  compiled into the bundle stays untouchable.
+
+**Two limits are now explicit rather than assumed:**
+
+1. **A residual Copilot default survives in minified core.** The bundle carries a
+   hardcoded base product (the `code-oss` defaults) that still declares
+   `defaultChatAgent: { extensionId: "GitHub.copilot", chatExtensionId:
+   "GitHub.copilot-chat" }`. Deleting the product key removes the fourteen
+   configured `api.github.com` and `aka.ms` endpoints, but not that fallback.
+   `chat.disableAIFeatures` is the effective switch for the surface.
+2. **Key shape is part of the contract.** `builtInExtensionsEnabledWithAutoUpdates`
+   is iterated without a guard by the extension service, so it must be an empty
+   array rather than absent. This was not visible in review: the delta was valid
+   JSON, and only running the built tree produced
+   `t.builtInExtensionsEnabledWithAutoUpdates is not iterable`.
+
+**Rejected alternatives:**
+
+- Replacing `defaultChatAgent` with a PiCode-shaped object — the entitlement,
+  quota and provider machinery assumes Copilot's flow, so a substituted object
+  would be invented wiring that never connects to anything.
+- Patching the minified bundle to remove the chat contribution entirely — this is
+  the fork path's cost arriving through the back door, and the foundation already
+  costed it (missing Python 3.11, rustup and `jq`, plus an MSVC toolchain that is
+  effectively absent).
+
+**Reversal trigger:** this decision stops paying for itself if VSCodium's archive
+layout moves the product file or the built-in extension scan path, or if a
+required change falls inside minified core. At that point ADR-008's deferred fork
+build becomes the only route, and its toolchain blockers must be revisited.

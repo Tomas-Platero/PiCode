@@ -1,11 +1,32 @@
 # PiCode distribution strategy (Windows)
 
+> **Status: superseded in part by ADR-011. Read this box before following any
+> section below.**
+>
+> The strategy described in this document layers branding on a separately
+> installed VSCodium through a user-level overlay. That is no longer how PiCode is
+> built. The VSCodium archive now lives at the repository root, PiCode owns the
+> tree, and the product is modified in place through `distribution/product-delta.json`,
+> applied by `distribution/apply-picode.ps1`. The panel ships as a built-in
+> extension instead of a VSIX install.
+>
+> The reason is in section 4.2 of this document, which is still accurate and is
+> worth keeping: the overlay merge can override a key but never delete one, so
+> Copilot and the telemetry keys could not be removed through it. Owning the tree
+> removes that ceiling without reintroducing a compiled fork.
+>
+> Sections that remain useful: 1 (goal and constraints), 2 (why VSCodium is the
+> base), 4.2 (merge semantics and the array trap), 8 (the honest limits of a
+> rebranded distribution) and 9 (when a fork build becomes worth it). Sections
+> 3, 4.3 to 4.5, 5, 6, 7 and 10 describe the superseded path and the operator
+> runbook that replaces them has not been rewritten yet; treat their commands as
+> historical until it is.
+
 This document describes how PiCode is distributed on Windows. It records the
 chosen strategy, the mechanism each layer relies on, the limits of that
 mechanism, and how a human verifies that the branding actually applied.
 
-Status: MVP strategy for the Windows-first foundation (ADR-004). Nothing here
-requires compiling the editor. The branding layer was executed and observed
+Status: historical record of the overlay path. The branding layer was executed and observed
 against a running VSCodium on 2026-09-20; sections 4.3, 4.4, 4.5 and 10 carry
 that result.
 
