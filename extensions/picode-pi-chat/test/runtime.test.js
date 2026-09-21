@@ -224,6 +224,73 @@ check(
     }),
 );
 
+  // --- backend choice --------------------------------------------------------
+
+  // The environment is restored at the end of this section, so every TEST_* value
+  // this one touches is put back as the sections above left it.
+  process.env.TEST_RUNTIME_MODE = "path";
+  delete process.env.TEST_EXECUTABLE_PATH;
+  delete process.env.TEST_TRANSPORT;
+
+  const defaultChoice = runtime.chooseBackend(extensionUri);
+  check(
+    "an unset transport chooses rpc and says nothing about the other backend",
+    defaultChoice.transport === "rpc" &&
+      defaultChoice.unavailable === undefined &&
+      defaultChoice.sdkEntry === undefined,
+    JSON.stringify(defaultChoice),
+  );
+
+  process.env.TEST_TRANSPORT = "embedded";
+  process.env.TEST_RUNTIME_MODE = "custom";
+  process.env.TEST_EXECUTABLE_PATH = "definitely-not-installed-xyz";
+  const unimportable = runtime.chooseBackend(extensionUri);
+  check(
+    "an embedded request over a pi with no entry falls back to rpc and reports why",
+    unimportable.transport === "rpc" &&
+      unimportable.sdkEntry === undefined &&
+      typeof unimportable.unavailable === "string" &&
+      unimportable.unavailable.length > 0,
+    JSON.stringify(unimportable),
+  );
+
+  process.env.TEST_RUNTIME_MODE = "path";
+  delete process.env.TEST_EXECUTABLE_PATH;
+  // Machine-dependent by design, like the --version probe above: whether a pi is
+  // installed here is a fact about this disk, so the guard decides what is measurable
+  // and the assertion only runs against a real entry.
+  const realEntry = runtime.resolveSdkEntry(extensionUri);
+  if (realEntry === undefined) {
+    check(
+      "the embedded transport is not measurable on this machine: no importable pi on PATH",
+      true,
+      "guard: resolveSdkEntry found nothing to import",
+    );
+  } else {
+    const embedded = runtime.chooseBackend(extensionUri);
+    check(
+      "an embedded request hands over the active pi's entry, which exists on disk",
+      embedded.transport === "embedded" &&
+        embedded.sdkEntry === realEntry &&
+        embedded.unavailable === undefined &&
+        fs.existsSync(embedded.sdkEntry),
+      JSON.stringify(embedded),
+    );
+  }
+
+  process.env.TEST_TRANSPORT = "nonsense";
+  const nonsense = runtime.chooseBackend(extensionUri);
+  check(
+    "an unrecognised transport chooses rpc without claiming the other one failed",
+    nonsense.transport === "rpc" &&
+      nonsense.unavailable === undefined &&
+      nonsense.sdkEntry === undefined,
+    JSON.stringify(nonsense),
+  );
+
+  delete process.env.TEST_TRANSPORT;
+  process.env.TEST_RUNTIME_MODE = "managed";
+
   // --- report ----------------------------------------------------------------
 
   let failed = 0;

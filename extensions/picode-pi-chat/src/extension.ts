@@ -31,11 +31,14 @@ import {
   type GentleState,
 } from "./gentle";
 import { PiRpcClient } from "./pi-rpc-client";
+import { PiSdkClient } from "./pi-sdk-client";
 import type { PiClient } from "./pi-client";
 import type { PiModel, PiSlashCommand, PiThinkingLevel } from "./protocol";
 import {
+  chooseBackend,
   describeRuntime,
   installManagedRuntime,
+  readTransport,
   resolveRuntime,
   type RuntimeDescriptor,
   type RuntimeMode,
@@ -886,7 +889,8 @@ function summarizeRuntime(runtime: RuntimeDescriptor): string {
 
 /**
  * Creates the client on first use so activation stays cheap; configuration is
- * read here, not at activation time.
+ * read here, not at activation time. The transport decides which backend runs;
+ * the runtime decides which pi that backend loads.
  */
 function getClient(extensionUri: vscode.Uri): PiClient {
   if (client) {
@@ -898,6 +902,38 @@ function getClient(extensionUri: vscode.Uri): PiClient {
   // Recorded because the session files are filed under the agent's working directory, and
   // listing another one would report "no sessions" for a project that has them.
   agentCwd = cwd ?? process.cwd();
+
+  const choice = chooseBackend(extensionUri);
+  if (choice.unavailable !== undefined) {
+    outputChannel?.appendLine(`[pi] transporte embebido no disponible: ${choice.unavailable}`);
+    void vscode.window.showWarningMessage(
+      `PiCode: no se puede usar el transporte embebido. ${choice.unavailable} Se usará RPC.`,
+    );
+  }
+
+  if (choice.transport === "embedded" && choice.sdkEntry !== undefined) {
+    // The embedded backend reads pi's own flags from configuration; a command-line
+    // argument has no meaning without a command line, so ignoring it silently would
+    // leave the owner believing a setting took effect.
+    const extraArgs = configuration.get<string[]>("extraArgs", []);
+    if (extraArgs.length > 0) {
+      outputChannel?.appendLine(
+        `[pi] picode.pi.extraArgs se ignora con el transporte embebido: ${extraArgs.join(" ")}`,
+      );
+      void vscode.window.showWarningMessage(
+        `PiCode: picode.pi.extraArgs no se aplica al transporte embebido (${extraArgs.join(" ")}).`,
+      );
+    }
+
+    client = new PiSdkClient({
+      entry: choice.sdkEntry,
+      ...(cwd ? { cwd } : {}),
+      ...(outputChannel ? { output: outputChannel } : {}),
+    });
+    outputChannel?.appendLine(`[pi] starting embedded session from ${choice.sdkEntry}`);
+    return client;
+  }
+
   const runtime = resolveRuntime(extensionUri);
   client = new PiRpcClient({
     executablePath: runtime.executable,
@@ -922,10 +958,13 @@ async function ensureStarted(rpc: PiClient): Promise<boolean> {
       .showErrorMessage(`PiCode: ${message}`, "Abrir la configuración")
       .then((choice) => {
         if (choice === "Abrir la configuración") {
-          void vscode.commands.executeCommand(
-            "workbench.action.openSettings",
-            "picode.pi.executablePath",
-          );
+          // The setting that explains a failure is the one that chose the backend,
+          // so an embedded transport opens its own control instead of the runtime's.
+          const setting =
+            readTransport() === "embedded"
+              ? "picode.pi.transport"
+              : "picode.pi.executablePath";
+          void vscode.commands.executeCommand("workbench.action.openSettings", setting);
         }
       });
     return false;

@@ -162,6 +162,41 @@ export function resolveSdkEntry(extensionUri: vscode.Uri): string | undefined {
   return findSdkEntry(path.dirname(resolveOnPath(resolved.executable) ?? resolved.executable));
 }
 
+/** Which backend runs, and why not the other one when it was asked for. */
+export interface BackendChoice {
+  transport: PiTransport;
+  /** The SDK entry the embedded backend imports. Present only when it runs. */
+  sdkEntry?: string;
+  /** Why the configured transport cannot run, when it cannot. */
+  unavailable?: string;
+}
+
+/**
+ * Decides which backend runs.
+ *
+ * A missing SDK entry is the only case where the configured transport is
+ * overridden: the owner asked for the embedded one, but the active pi publishes
+ * nothing to import. Falling back to RPC keeps the panel working, and the reason
+ * travels back in `unavailable` so the caller reports it rather than switching
+ * in silence — a transport setting that appears to do nothing is worse than a
+ * fallback that says so.
+ */
+export function chooseBackend(extensionUri: vscode.Uri): BackendChoice {
+  if (readTransport() !== "embedded") {
+    return { transport: "rpc" };
+  }
+
+  const sdkEntry = resolveSdkEntry(extensionUri);
+  if (sdkEntry === undefined) {
+    return {
+      transport: "rpc",
+      unavailable: `el pi activo (${resolveRuntime(extensionUri).display}) no publica una entrada que el transporte embebido pueda importar`,
+    };
+  }
+
+  return { transport: "embedded", sdkEntry };
+}
+
 /**
  * Resolves the executable for the active mode.
  *
