@@ -43,6 +43,10 @@
   // Catalogue pushed by the host, and the reasoning levels of the current model.
   var models = [];
   var thinkingLevels = [];
+  // Previous conversations the host offered, newest first, as the empty panel draws
+  // them. Kept even while the transcript has messages: they are what the next empty
+  // panel offers, and the list is not re-requested just because a message arrived.
+  var recentSessions = [];
   // Which dropdown is open, the visible options, and the highlighted one.
   var openDropdown = null;
   var filteredOptions = [];
@@ -542,7 +546,63 @@
       empty.appendChild(button);
     }
 
+    renderRecentSessions(empty);
     elements.messages.appendChild(empty);
+  }
+
+  /**
+   * Offers the previous conversations under the openers.
+   *
+   * An empty panel is a place to continue from, not only a place to start. Each row
+   * carries only the file it stands for: the host matches that against the list it sent,
+   * so a row this script invented would resolve to nothing.
+   */
+  function renderRecentSessions(empty) {
+    if (recentSessions.length === 0) {
+      // Nothing to offer is nothing to draw: a heading over an empty list reads as a
+      // section that failed to load, not as a project without history.
+      return;
+    }
+
+    var section = createElement("section", "empty-sessions");
+    section.appendChild(createElement("h3", null, "Sesiones anteriores"));
+    for (var index = 0; index < recentSessions.length; index += 1) {
+      var session = recentSessions[index];
+      var row = createElement("button", "session-item");
+      row.type = "button";
+      // The file travels on the button so the one delegated listener can read it back.
+      row.setAttribute("data-session-file", String(session.file));
+      row.appendChild(createElement("span", "session-label", String(session.label)));
+      row.appendChild(createElement("span", "session-when", String(session.when)));
+      section.appendChild(row);
+    }
+    // One listener for the section rather than one closure per row: the rows are redrawn
+    // whenever the host pushes a new list, and a listener on the section survives that.
+    section.addEventListener("click", onSessionsClick);
+    empty.appendChild(section);
+  }
+
+  /**
+   * One click listener for the whole section of previous conversations.
+   *
+   * The row says which conversation it stands for; the host decides whether that file is
+   * one it offered, because the webview is not where that trust lives.
+   */
+  function onSessionsClick(event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== "function") {
+      return;
+    }
+
+    var row = target.closest(".session-item");
+    if (!row) {
+      return;
+    }
+    var file = row.getAttribute("data-session-file");
+    if (!file) {
+      return;
+    }
+    send({ type: "resumeSession", file: file });
   }
 
   function fillPrompt(text) {
@@ -774,6 +834,19 @@
         attachments = [];
         renderAttachments();
         break;
+      case "recentSessions": {
+        recentSessions = Array.isArray(message.sessions) ? message.sessions : [];
+        // Redrawn only while the empty state is the thing on screen, so the sessions
+        // appear without the owner having to do anything. When the transcript has
+        // messages they are just stored: `addMessage` removed the empty state, and
+        // drawing it now would resurrect it under a conversation.
+        var empty = elements.messages.querySelector(".empty");
+        if (empty) {
+          elements.messages.removeChild(empty);
+          renderEmptyState();
+        }
+        break;
+      }
       case "clear":
         elements.messages.textContent = "";
         toolItems.clear();

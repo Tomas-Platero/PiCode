@@ -11,6 +11,7 @@ import {
 import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
+import type { SessionSummary } from "./sessions";
 import {
   TRANSCRIPTION_LIMITS,
   formatTranscriptBlock,
@@ -56,6 +57,15 @@ export interface ChatViewHost {
   openMenu(): Promise<void>;
   /** Restarts the agent backend, keeping the panel where it is. */
   restart(): Promise<void>;
+  /**
+   * This project's previous conversations, newest first, for the empty panel.
+   *
+   * The view offers them because an empty sidebar is a place to continue from, not only
+   * a place to start; listing them is a filesystem job, so the host does it.
+   */
+  recentSessions(): Promise<SessionSummary[]>;
+  /** Loads a chosen previous conversation into the running agent. */
+  resumeSession(session: SessionSummary): Promise<void>;
   /**
    * pi's own image helpers, or undefined when they could not be loaded.
    *
@@ -198,6 +208,14 @@ export class ChatView implements vscode.WebviewViewProvider {
   private readonly transcripts = new Map<string, string>();
   /** Makes every id unique within a session, so an old id cannot resolve to a new image. */
   private attachmentSerial = 0;
+  /**
+   * The previous conversations most recently sent to the webview.
+   *
+   * Kept because resuming one is a request that arrives from the webview, and the only
+   * paths it may name are the ones the host itself offered: the panel sends a file back,
+   * and this is the list that says whether it is one of ours.
+   */
+  private offeredSessions: SessionSummary[] = [];
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -430,6 +448,45 @@ export class ChatView implements vscode.WebviewViewProvider {
       this.post({ type: "models", models: await this.client.getAvailableModels() });
     } catch (error) {
       this.post({ type: "error", message: toErrorMessage(error) });
+    }
+  }
+
+  /**
+   * Sends the previous conversations the empty panel offers to continue from.
+   *
+   * Only `RECENT_SESSION_LIMIT` are sent, and only what the panel draws: a sidebar is not
+   * a session browser, and the popup already is one. A failure to list is not a panel
+   * failure — an empty panel is still a working panel — so it is logged and answered with
+   * an empty list instead of an error the transcript would have to explain.
+   */
+  private async pushRecentSessions(): Promise<void> {
+    if (this.view === undefined || this.disposed) {
+      return;
+    }
+    try {
+      const offered = (await this.host.recentSessions()).slice(0, RECENT_SESSION_LIMIT);
+      this.offeredSessions = offered;
+      this.post({
+        type: "recentSessions",
+        sessions: offered.map((session) => ({
+          file: session.file,
+          // The same preference the popup uses for the same decision, so one
+          // conversation is not named twice differently in two places.
+          label: session.name ?? session.title ?? session.stamp,
+          when: formatRelativeWhen(session.modified),
+        })),
+      });
+    } catch (error) {
+      this.offeredSessions = [];
+      const line = `[pi] no se pudieron listar las sesiones anteriores: ${toErrorMessage(error)}`;
+      if (this.host.output) {
+        this.host.output.appendLine(line);
+      } else {
+        // No shared channel was passed in; the failure still reaches the developer
+        // log rather than disappearing.
+        console.error(line);
+      }
+      this.post({ type: "recentSessions", sessions: [] });
     }
   }
 
@@ -909,6 +966,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         await this.pushState();
         await this.pushModels();
         await this.pushThinkingLevels();
+        await this.pushRecentSessions();
         break;
       }
       case "setModel": {
@@ -1057,9 +1115,25 @@ export class ChatView implements vscode.WebviewViewProvider {
           await this.client.newSession();
           this.notifySessionReset();
           await this.pushState();
+          // A new conversation changes what "previous" means: the one just left is
+          // now the newest candidate, and the list the panel holds is stale.
+          await this.pushRecentSessions();
         } catch (error) {
           this.postStatus("error");
           this.post({ type: "error", message: toErrorMessage(error) });
+        }
+        break;
+      }
+      case "resumeSession": {
+        // The file comes from the webview, so it is matched against what the host last
+        // offered rather than trusted: a webview can forge a path, and only the paths it
+        // was actually given may be loaded. An unknown file is ignored, not an error.
+        const file = typeof message.file === "string" ? message.file : "";
+        const session = this.offeredSessions.find((entry) => entry.file === file);
+        if (session) {
+          // The host's own `resumeSession` clears the panel and posts the explanation of
+          // why the history is not replayed, so nothing is duplicated here.
+          await this.host.resumeSession(session);
         }
         break;
       }
@@ -1120,6 +1194,45 @@ export class ChatView implements vscode.WebviewViewProvider {
       styles: ["codicon.css", "main.css"],
     });
   }
+}
+
+/**
+ * How many previous conversations the empty panel offers.
+ *
+ * A sidebar is not a session browser: the popup already is one, with the whole list, and
+ * a longer column here would push the composer that matters off screen.
+ */
+const RECENT_SESSION_LIMIT = 5;
+
+/**
+ * How long ago a conversation was touched, in the panel's own words.
+ *
+ * Short on purpose: the row already carries the conversation's name, and "hace 2 h" is
+ * what a reader needs to choose between two of them — an exact timestamp is not. Past a
+ * week the date itself says more than a count of days would.
+ */
+function formatRelativeWhen(modified: number): string {
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const elapsed = Date.now() - modified;
+
+  if (!Number.isFinite(modified) || elapsed < minute) {
+    return "ahora mismo";
+  }
+  if (elapsed < hour) {
+    return `hace ${Math.floor(elapsed / minute)} min`;
+  }
+  if (elapsed < day) {
+    return `hace ${Math.floor(elapsed / hour)} h`;
+  }
+  if (elapsed < 2 * day) {
+    return "ayer";
+  }
+  if (elapsed < 7 * day) {
+    return `hace ${Math.floor(elapsed / day)} días`;
+  }
+  return new Date(modified).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
 
 /** Projection of the session state the webview is allowed to see. */

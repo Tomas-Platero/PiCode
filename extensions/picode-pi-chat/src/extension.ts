@@ -73,6 +73,10 @@ export function activate(context: vscode.ExtensionContext): void {
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
     openMenu: () => showPiMenu(menu),
     restart: () => resetClient(),
+    // The same two the popup's session picker uses: the panel's empty state offers the
+    // project's previous conversations, so both surfaces read and load one list.
+    recentSessions: () => listProjectSessions(),
+    resumeSession: (session) => resumeSession(session),
     imageTools: () => attachmentTools(context.extensionUri),
     // The view reports host-side failures that must not interrupt the transcript;
     // the shared channel already exists here, so one is not created for it.
