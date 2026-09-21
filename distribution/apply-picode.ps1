@@ -17,9 +17,10 @@
       - the portable profile: `data/` plus first-run defaults copied into it
         only when the user has no settings file of their own.
 
-    It supersedes `bootstrap.ps1`, which branded a separately installed VSCodium
+    It replaces an earlier approach that branded a separately installed VSCodium
     through a user-level overlay. That path could override product keys but never
-    delete them, which is why Copilot could not be removed from it.
+    delete them, which is why Copilot could not be removed from it; ADR-011 records
+    the change, and the retired script is in git history.
 
     This script is IDEMPOTENT and NON-DESTRUCTIVE:
 

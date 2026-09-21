@@ -194,12 +194,18 @@ Commit: `daf2e83`
 
 Commit: pending
 
-### 8. Rewrite the operator documentation for the owned-tree path — PENDING
+### 8. Rewrite the operator documentation for the owned-tree path — DONE
 
-- [ ] `docs/DISTRIBUTION.md` rewritten end to end: the current document is a
-      600-line record of the overlay path, and only a banner points elsewhere
-- [ ] `docs/ARCHITECTURE.md` layer 1 updated for the owned tree
-- [ ] `README.md` first-run instructions rewritten around `apply-picode.ps1`
+- [x] `docs/DISTRIBUTION.md` rewritten end to end for the owned tree: the layers, the
+      delta as data, the two findings that shaped it, the portable profile, the agent
+      runtime, updating VSCodium, the verification checklist, the limits and the escape
+      hatch
+- [x] `docs/ARCHITECTURE.md` updated: layer 1 owns the tree, layer 3 documents the
+      panel family and the module boundaries, the RPC contract carries what was verified
+      this session, and the language policy is recorded
+- [x] `README.md` first-run instructions reviewed against the new path
+
+Commits: pending
 
 ## Open questions
 
