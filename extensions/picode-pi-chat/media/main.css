@@ -757,6 +757,45 @@ button.secondary:hover:not(:disabled) {
   cursor: zoom-in;
 }
 
+/*
+ * An audio chip stands for a transcript rather than a picture, so the glyph, the
+ * file's name and the host's line fill the place the thumbnail fills. It keeps the
+ * image chip's footprint so a row that holds both does not jump, and it takes no
+ * `zoom-in` cursor because there is no full-size view behind it.
+ */
+.attachment.attachment-audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 96px;
+  min-height: 72px;
+  box-sizing: border-box;
+  padding: 4px;
+  cursor: default;
+}
+
+.attachment.attachment-audio .codicon {
+  font-size: 24px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/*
+ * A long file name is clamped to two lines instead of stretching the chip: the
+ * row is a fixed row of chips, and one name must not decide its width.
+ */
+.attachment.attachment-audio .attachment-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 0.7em;
+  text-align: center;
+  color: var(--vscode-foreground);
+}
+
 .attachment figcaption {
   font-size: 0.7em;
   padding: 2px 4px;
@@ -801,6 +840,35 @@ button.secondary:hover:not(:disabled) {
   border-radius: 4px;
   object-fit: contain;
   cursor: zoom-in;
+}
+
+/*
+ * The echo's stand-in for an audio attachment. It carries no image and no click
+ * target — the overlay only opens from `.message-image img` — so it reads as a
+ * label rather than as something to zoom, and `cursor: default` says so.
+ */
+.message-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  cursor: default;
+}
+
+.message-audio .codicon {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* One line whatever the name is: the indicator is a label, not a wrapping block. */
+.message-audio-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 26ch;
 }
 
 /*

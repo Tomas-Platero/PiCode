@@ -11,6 +11,17 @@ import {
 import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
+import {
+  TRANSCRIPTION_LIMITS,
+  formatTranscriptBlock,
+  nodeFetch,
+  readNanApiKey,
+  resolveAgentDir,
+  transcribeWithNan,
+  type AudioSource,
+  type TranscriptResult,
+  type TranscriptionBackend,
+} from "./transcription";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import {
   VIDEO_LIMITS,
@@ -82,7 +93,7 @@ const CHAT_BODY = `    <header class="toolbar">
       ></textarea>
       <div id="attachments" class="attachments" hidden></div>
       <div class="composer-actions">
-        <button id="attach" type="button" class="icon-button" title="Adjuntar una imagen o un vídeo" aria-label="Adjuntar"><span class="codicon codicon-device-camera"></span></button>
+        <button id="attach" type="button" class="icon-button" title="Adjuntar una imagen, un vídeo o un audio" aria-label="Adjuntar"><span class="codicon codicon-device-camera"></span></button>
         <button
           id="model"
           type="button"
@@ -168,6 +179,15 @@ export class ChatView implements vscode.WebviewViewProvider {
    * only the last one.
    */
   private readonly videoNotes = new Map<string, string>();
+  /**
+   * The finished transcript blocks, one per audio file the owner attached.
+   *
+   * A transcript is text, so it is kept as text rather than as an image: there is
+   * nothing to prepare and nothing to send alongside the prompt. It lives under the
+   * id the panel holds, right next to the image store and cleared with it, because
+   * an id only means something in the session that minted it.
+   */
+  private readonly transcripts = new Map<string, string>();
   /** Makes every id unique within a session, so an old id cannot resolve to a new image. */
   private attachmentSerial = 0;
 
@@ -435,19 +455,28 @@ export class ChatView implements vscode.WebviewViewProvider {
    * video, the line that says so. It is the only thing that tells the model these
    * images are frames of a moving picture, so it is stored with them rather than
    * sent to the webview.
+   *
+   * `transcriptChips` are attachments that another path already prepared and stored
+   * — today, audio files, whose transcript is text rather than a picture. They travel
+   * in the same answer so one dialog gets one reply, and they count towards neither
+   * the image gate nor the image store below: that cap is about how many pictures go
+   * on the wire, and a transcript is not one.
    */
   private async acceptAttachments(
     candidates: readonly PrepareImageInput[],
     refusals: readonly AttachmentRefusal[] = [],
     notes?: readonly (string | undefined)[],
+    transcriptChips: readonly WebviewAttachment[] = [],
   ): Promise<void> {
     // Nothing arrived and nothing failed: there is nobody to answer. A cancelled
     // dialog lands here, and answering it would read as a refusal.
-    if (candidates.length === 0 && refusals.length === 0) {
+    if (candidates.length === 0 && refusals.length === 0 && transcriptChips.length === 0) {
       return;
     }
 
     const refused: AttachmentRefusal[] = [...refusals];
+    // The transcripts are already stored; they enter the answer exactly as they are.
+    const added: WebviewAttachment[] = [...transcriptChips];
 
     if (this.attachments.size + candidates.length > ATTACHMENT_LIMITS.maxCount) {
       // The whole batch is refused rather than the overflow: which images fit is
@@ -459,11 +488,9 @@ export class ChatView implements vscode.WebviewViewProvider {
       for (const candidate of candidates) {
         refused.push({ name: candidateName(candidate), reason: overLimit });
       }
-      this.post({ type: "attachments", added: [], refused });
+      this.post({ type: "attachments", added, refused });
       return;
     }
-
-    const added: WebviewAttachment[] = [];
 
     if (candidates.length > 0) {
       const tools = await this.host.imageTools?.();
@@ -501,6 +528,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         }
         added.push({
           id,
+          kind: "image",
           mimeType: outcome.image.mimeType,
           width: outcome.image.width,
           height: outcome.image.height,
@@ -523,6 +551,10 @@ export class ChatView implements vscode.WebviewViewProvider {
    * the answer to the webview do not change: a video is a small batch of images that
    * arrived through a different door. The owner sees each still as its own chip and
    * can drop the ones that do not belong.
+   *
+   * An audio file takes a third door: it is transcribed to text, which is the only
+   * form pi can receive, so it never enters the image pipeline and never becomes a
+   * picture the panel has to draw.
    */
   private async acceptPickedFiles(chosen: readonly vscode.Uri[]): Promise<void> {
     const candidates: PrepareImageInput[] = [];
@@ -530,11 +562,17 @@ export class ChatView implements vscode.WebviewViewProvider {
     const notes: (string | undefined)[] = [];
     const refusals: AttachmentRefusal[] = [];
     const videos: PickedVideo[] = [];
+    const audios: PickedAudio[] = [];
 
     for (const uri of chosen) {
       const name = uriName(uri);
-      if (name !== undefined && VIDEO_EXTENSIONS.includes(extensionOf(name))) {
+      const extension = name === undefined ? "" : extensionOf(name);
+      if (name !== undefined && VIDEO_EXTENSIONS.includes(extension)) {
         videos.push({ uri, name });
+        continue;
+      }
+      if (name !== undefined && AUDIO_EXTENSIONS.includes(extension)) {
+        audios.push({ uri, name });
         continue;
       }
       try {
@@ -586,7 +624,144 @@ export class ChatView implements vscode.WebviewViewProvider {
       }
     }
 
-    await this.acceptAttachments(candidates, refusals, notes);
+    // Audio is done here rather than in `acceptAttachments` because a transcript is
+    // not an image and must not be prepared or stored as one. Its chip joins the
+    // answer the images produce, so a dialog that mixed both is answered once.
+    const transcriptChips: WebviewAttachment[] = [];
+    for (const audio of audios) {
+      const outcome = await this.readTranscript(audio);
+      if (outcome.ok) {
+        transcriptChips.push(outcome.chip);
+      } else {
+        refusals.push({ name: audio.name, reason: outcome.reason });
+      }
+    }
+
+    await this.acceptAttachments(candidates, refusals, notes, transcriptChips);
+  }
+
+  /**
+   * Transcribes one audio file, or says why it cannot.
+   *
+   * The refusals come in the order the decision becomes possible, and each one names
+   * what would have to change: the file's size, the setting, the key, or the runtime.
+   * Everything that can be decided from metadata is decided before the bytes are
+   * read, because refusing a 200 MB recording should cost a stat rather than a read.
+   *
+   * The duration is never measured here: the service reports it with the transcript,
+   * and running ffmpeg over an audio file to learn something whisper already sends
+   * back would be work with no answer behind it.
+   */
+  private async readTranscript(
+    audio: PickedAudio,
+  ): Promise<{ ok: true; id: string; chip: WebviewAttachment } | { ok: false; reason: string }> {
+    let size: number;
+    try {
+      const stats = await vscode.workspace.fs.stat(audio.uri);
+      size = stats.size;
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. No se pudo leer el archivo: " + toErrorMessage(error),
+      };
+    }
+    if (size > TRANSCRIPTION_LIMITS.maxBytes) {
+      return {
+        ok: false,
+        reason:
+          `No se pudo adjuntar el audio. Pesa ${formatBytes(size)} y el máximo por archivo ` +
+          `es ${formatBytes(TRANSCRIPTION_LIMITS.maxBytes)}. Recórtalo antes de adjuntarlo.`,
+      };
+    }
+
+    const backend = readTranscriptionBackend();
+    if (backend === "off") {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. La transcripción está desactivada; actívala en " +
+          "picode.media.transcription.",
+      };
+    }
+    if (backend === "local") {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. El backend local está declarado pero todavía no está " +
+          "implementado; el backend \u00abnan\u00bb es el que funciona hoy en picode.media.transcription.",
+      };
+    }
+
+    const key = readNanApiKey(resolveAgentDir());
+    if (key === undefined) {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. No hay clave de NaN en auth.json, que es el archivo " +
+          "donde vive; una membresía de NaN es lo que la proporciona.",
+      };
+    }
+
+    const fetchImpl = nodeFetch();
+    if (fetchImpl === undefined) {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. Este entorno no puede subir archivos: no hay una " +
+          "función fetch global.",
+      };
+    }
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await vscode.workspace.fs.readFile(audio.uri);
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          "No se pudo adjuntar el audio. No se pudo leer el archivo: " + toErrorMessage(error),
+      };
+    }
+
+    const source: AudioSource = {
+      bytes,
+      name: audio.name,
+      mimeType: AUDIO_MIME_TYPES[extensionOf(audio.name)] ?? "application/octet-stream",
+    };
+
+    let outcome;
+    try {
+      outcome = await transcribeWithNan(fetchImpl, { key, source });
+    } catch (error) {
+      // `transcribeWithNan` answers with a reason instead of throwing, so this is a
+      // guard rather than the expected path: an unexpected failure still has to read
+      // as a refusal, not as a chip that never appears.
+      return {
+        ok: false,
+        reason: "No se pudo adjuntar el audio. " + toErrorMessage(error),
+      };
+    }
+    if (!outcome.ok) {
+      return { ok: false, reason: `No se pudo adjuntar el audio. ${outcome.reason}` };
+    }
+
+    const id = this.nextAttachmentId();
+    this.transcripts.set(id, formatTranscriptBlock(source, outcome.result));
+    return {
+      ok: true,
+      id,
+      chip: {
+        id,
+        kind: "audio",
+        mimeType: source.mimeType,
+        // Nothing was resized and nothing was converted: the bytes that left the
+        // machine are the bytes the file held.
+        resized: false,
+        name: audio.name,
+        detail: transcriptDetail(outcome.result),
+      },
+    };
   }
 
   /**
@@ -641,24 +816,34 @@ export class ChatView implements vscode.WebviewViewProvider {
    * The count of ids that no longer resolve is returned rather than thrown away,
    * because a chip the panel is still drawing over nothing has to be noticed. The
    * video notes travel back with the images, deduplicated, so one video is described
-   * once however many of its stills are attached.
+   * once however many of its stills are attached. So do the transcripts, in the order
+   * they were submitted: each is text the prompt will carry, not a picture it sends.
    */
   private resolveAttachments(value: unknown): {
     images: PreparedImage[];
     notes: string[];
+    transcripts: string[];
     missing: number;
   } {
     const images: PreparedImage[] = [];
     const notes: string[] = [];
+    const transcripts: string[] = [];
     let missing = 0;
     if (!Array.isArray(value)) {
-      return { images, notes, missing };
+      return { images, notes, transcripts, missing };
     }
 
     for (const id of value) {
       // The payload crosses the webview boundary, so nothing about it is trusted:
       // an entry that is not a string is not an id.
       if (typeof id !== "string") {
+        continue;
+      }
+      // An id belongs to exactly one store: the audio path and the image path never
+      // share one, because a transcript is not an image and is never prepared as one.
+      const transcript = this.transcripts.get(id);
+      if (transcript !== undefined) {
+        transcripts.push(transcript);
         continue;
       }
       const image = this.attachments.get(id);
@@ -672,7 +857,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         notes.push(note);
       }
     }
-    return { images, notes, missing };
+    return { images, notes, transcripts, missing };
   }
 
   /** The next id, unique within the session that mints it. */
@@ -682,15 +867,16 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Drops every prepared image and the note that explained it.
+   * Drops every prepared image and the note that explained it, and every transcript.
    *
    * Called when the message has been sent, when the session changes, and when the
-   * view goes away: an id only means something inside the session that minted it,
-   * and a note names stills that no longer exist.
+   * view goes away: an id only means something inside the session that minted it, so
+   * a transcript must not outlive the session that heard it.
    */
   private clearAttachments(): void {
     this.attachments.clear();
     this.videoNotes.clear();
+    this.transcripts.clear();
   }
 
   private post(message: unknown): void {
@@ -755,6 +941,7 @@ export class ChatView implements vscode.WebviewViewProvider {
           filters: {
             Imágenes: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
             Vídeos: [...VIDEO_EXTENSIONS],
+            Audios: [...AUDIO_EXTENSIONS],
           },
         });
         // A cancelled dialog answers with nothing at all: an empty `attachments`
@@ -774,6 +961,9 @@ export class ChatView implements vscode.WebviewViewProvider {
           // Its note goes with it: a line describing stills that are no longer
           // attached would tell the model about images it will never receive.
           this.videoNotes.delete(message.id);
+          // An audio transcript goes the same way: the chip is gone, so the text it
+          // stood for must not reach the next prompt.
+          this.transcripts.delete(message.id);
         }
         break;
       }
@@ -790,23 +980,25 @@ export class ChatView implements vscode.WebviewViewProvider {
         // The bytes were prepared when the image was added, so submitting only
         // carries ids. An id that no longer resolves is a chip the panel is still
         // drawing over nothing, and it is said once rather than lost silently.
-        const { images, notes, missing } = this.resolveAttachments(message.attachmentIds);
+        const { images, notes, transcripts, missing } = this.resolveAttachments(message.attachmentIds);
         if (missing > 0) {
           this.post({
             type: "error",
             message:
               missing === 1
-                ? "Una imagen adjunta ya no está disponible y no se envió; vuelve a adjuntarla si la querías incluir."
-                : `${missing} imágenes adjuntas ya no están disponibles y no se enviaron; ` +
-                  "vuelve a adjuntarlas si las querías incluir.",
+                ? "Un archivo adjunto ya no está disponible y no se envió; vuelve a adjuntarlo si lo querías incluir."
+                : `${missing} archivos adjuntos ya no están disponibles y no se enviaron; ` +
+                  "vuelve a adjuntarlos si los querías incluir.",
           });
         }
 
-        // The notes go before the owner's words, like the editor-context block: what
-        // PiCode adds is a preamble, and the message itself comes last. The video note
-        // comes first because it says what the images are before the image note says
-        // how big they are.
-        const preamble = [...notes];
+        // The preamble goes before the owner's words, like the editor-context block:
+        // what PiCode adds is a preamble, and the message itself comes last. The
+        // transcript comes first because it is the largest and the most content-like
+        // thing PiCode puts there, and it reads best before the short lines that only
+        // say what the images are and how big they got. The video note still comes
+        // before the image note.
+        const preamble = [...transcripts, ...notes];
         const note = formatAttachmentNote(images);
         if (note !== undefined) {
           preamble.push(note);
@@ -954,12 +1146,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** One attachment the panel may draw, as the webview receives it. */
 interface WebviewAttachment {
   id: string;
+  /**
+   * Which of the two things the panel is drawing.
+   *
+   * An image is a thumbnail; an audio attachment is a finished transcript, so it has
+   * no bytes to draw and carries the file name and a short line instead. The field
+   * exists so the panel can tell them apart before it is taught to.
+   */
+  kind: "image" | "audio";
   mimeType: string;
   width?: number;
   height?: number;
   resized: boolean;
-  /** The bytes as a URL the webview renders and cannot send back whole. */
-  dataUrl: string;
+  /**
+   * The bytes as a URL the webview renders and cannot send back whole.
+   *
+   * Images only: a transcript has no thumbnail, so the field is absent rather than
+   * an empty string the panel would try to load.
+   */
+  dataUrl?: string;
+  /** The file's own name, for a chip that has no thumbnail to label it. Audio only. */
+  name?: string;
+  /** One short line for the chip: the duration and what happened. Audio only. */
+  detail?: string;
 }
 
 /** One attachment that did not make it, and why, for the panel to show. */
@@ -987,6 +1196,12 @@ interface PickedVideo {
   name: string;
 }
 
+/** A chosen audio file, whose only destination is a transcript. */
+interface PickedAudio {
+  uri: vscode.Uri;
+  name: string;
+}
+
 /**
  * The video containers the picker offers, which is also how a chosen file is routed.
  *
@@ -995,6 +1210,31 @@ interface PickedVideo {
  * a better answer than a guess made here.
  */
 const VIDEO_EXTENSIONS: readonly string[] = ["mp4", "mov", "m4v", "webm", "mkv", "avi"];
+
+/**
+ * The audio containers the picker offers, which is also how a chosen file is routed.
+ *
+ * Extension alone decides, before anything is read, exactly as it does for video. A
+ * container the service cannot decode is refused later with the service's own words,
+ * which is a better answer than a guess made here.
+ */
+const AUDIO_EXTENSIONS: readonly string[] = ["mp3", "wav", "m4a", "ogg", "opus", "flac", "aac"];
+
+/**
+ * The type each audio extension is uploaded under.
+ *
+ * The container decides it, as it does everywhere outside a browser: the cluster
+ * sniffs the bytes anyway, and a wrong label would only make the refusal confusing.
+ */
+const AUDIO_MIME_TYPES: Readonly<Record<string, string>> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+  opus: "audio/opus",
+  flac: "audio/flac",
+  aac: "audio/aac",
+};
 
 /** The lowercase extension of a file name, without the dot. */
 function extensionOf(name: string): string {
@@ -1008,6 +1248,29 @@ function readFfmpegPath(): string {
     .getConfiguration("picode.media")
     .get<string>("ffmpegPath", "");
   return typeof configured === "string" ? configured : "";
+}
+
+/**
+ * Which backend transcribes, normalized to the three the setting declares.
+ *
+ * Anything that is not one of the other two is the working default, so a settings
+ * file written by an older or newer build cannot turn the feature off by accident.
+ */
+function readTranscriptionBackend(): TranscriptionBackend {
+  const configured = vscode.workspace
+    .getConfiguration("picode.media")
+    .get<string>("transcription", "nan");
+  return configured === "local" || configured === "off" ? configured : "nan";
+}
+
+/** The audio chip's one line: how long the recording was, and that it is ready. */
+function transcriptDetail(result: TranscriptResult): string {
+  if (result.durationSeconds === undefined) {
+    return "transcripción lista";
+  }
+  // The comma is the Spanish decimal separator, and the unit follows it the way
+  // `formatTranscriptBlock` writes the same duration into the prompt.
+  return `${result.durationSeconds.toFixed(1).replace(".", ",")} s · transcripción lista`;
 }
 
 /**

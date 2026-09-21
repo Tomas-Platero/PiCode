@@ -187,6 +187,18 @@
           "default": "",
           "description": "Ruta de la ffmpeg con la que PiCode saca fotogramas fijos de un vídeo. Vacío la busca en el PATH. PiCode no incluye ffmpeg: instálala con el comando que indica el panel (por ejemplo `winget install Gyan.FFmpeg` en Windows o `brew install ffmpeg` en macOS).",
           "scope": "window"
+        },
+        "picode.media.transcription": {
+          "type": "string",
+          "enum": ["nan", "local", "off"],
+          "enumDescriptions": [
+            "Transcribe con el clúster de NaN: **el audio sale de tu máquina**, porque se sube al clúster para convertirlo en texto.",
+            "Backend local declarado pero todavía no implementado: elegirlo hace que PiCode rechace el audio en vez de transcribirlo.",
+            "Desactiva la transcripción: los archivos de audio se rechazan sin llegar a leerse."
+          ],
+          "default": "nan",
+          "description": "Cómo convierte PiCode en texto un audio adjunto. `nan` usa el clúster de NaN —la clave la proporciona una membresía de NaN y el audio sale de tu máquina—; `local` está declarado pero todavía no está implementado; `off` desactiva la transcripción.",
+          "scope": "window"
         }
       }
     }

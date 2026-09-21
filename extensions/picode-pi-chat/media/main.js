@@ -239,6 +239,24 @@
     return figure;
   }
 
+  /**
+   * The echo's stand-in for an audio attachment.
+   *
+   * An audio attachment reaches pi as its transcript, so there are no bytes to
+   * draw; the glyph and the file's name are the whole record of what was sent. The
+   * figure is deliberately not `.message-image`: the one click handler that opens
+   * the overlay keys on `.message-image img`, so staying out of that class is what
+   * keeps this indicator from opening a view it has nothing to fill.
+   */
+  function messageAudio(block) {
+    var figure = createElement("figure", "message-audio");
+    figure.appendChild(codicon("music"));
+    figure.appendChild(
+      createElement("span", "message-audio-name", block.name || "audio adjunto"),
+    );
+    return figure;
+  }
+
   function renderContent(container, content) {
     container.textContent = "";
     if (!Array.isArray(content)) {
@@ -262,6 +280,8 @@
         appendBlock(container, "toolcall", formatToolCall(block));
       } else if (block.type === "image") {
         container.appendChild(messageImage(block));
+      } else if (block.type === "audio") {
+        container.appendChild(messageAudio(block));
       }
     }
   }
@@ -1045,20 +1065,35 @@
     return image.width + "\u00d7" + image.height + (image.resized ? " \u00b7 reducida" : "");
   }
 
+  /**
+   * One chip per attachment, drawn by kind.
+   *
+   * An image chip is the thumbnail the host drew plus the size line it always
+   * carried. An audio chip stands for a finished transcript, so it has no bytes to
+   * draw and no size to report: the glyph, the file's name and the host's own line
+   * take the thumbnail's place. Nothing here reads `dataUrl` for audio, and the
+   * modifier class is what keeps that chip from looking clickable.
+   */
   function renderAttachments() {
     elements.attachments.textContent = "";
     elements.attachments.hidden = attachments.length === 0;
 
     for (var index = 0; index < attachments.length; index += 1) {
-      var image = attachments[index];
-      var chip = createElement("figure", "attachment");
+      var added = attachments[index];
+      var isAudio = added.kind === "audio";
+      var chip = createElement("figure", isAudio ? "attachment attachment-audio" : "attachment");
 
-      var preview = createElement("img");
-      preview.src = image.dataUrl;
-      preview.alt = "";
-      chip.appendChild(preview);
-
-      chip.appendChild(createElement("figcaption", null, describeAttachment(image)));
+      if (isAudio) {
+        chip.appendChild(codicon("music"));
+        chip.appendChild(createElement("span", "attachment-name", added.name || "audio"));
+        chip.appendChild(createElement("figcaption", null, added.detail || ""));
+      } else {
+        var preview = createElement("img");
+        preview.src = added.dataUrl;
+        preview.alt = "";
+        chip.appendChild(preview);
+        chip.appendChild(createElement("figcaption", null, describeAttachment(added)));
+      }
 
       var remove = createElement("button", "attachment-remove codicon codicon-close");
       remove.type = "button";
@@ -1066,7 +1101,7 @@
       remove.setAttribute("aria-label", "Quitar");
       // The id travels on the button so the one delegated listener can read it
       // back without a closure per chip.
-      remove.setAttribute("data-attachment-id", image.id);
+      remove.setAttribute("data-attachment-id", added.id);
       chip.appendChild(remove);
 
       elements.attachments.appendChild(chip);
@@ -1088,6 +1123,14 @@
     var remove = target.closest(".attachment-remove");
     if (remove) {
       send({ type: "detachAttachment", id: remove.getAttribute("data-attachment-id") });
+      return;
+    }
+
+    // Only an image chip has a full-size view to open. An audio chip is never
+    // sent down this path: the overlay without an image in it would be worse than
+    // the click doing nothing at all.
+    var chip = target.closest(".attachment");
+    if (!chip || chip.classList.contains("attachment-audio")) {
       return;
     }
 
@@ -1150,14 +1193,23 @@
   }
 
   /**
-   * The image block the echo and pi's own message share.
+   * The block the echo and pi's own message share, drawn by kind.
    *
-   * The webview holds the thumbnail's data URL rather than the bytes, so the echo
-   * carries the URL and the type; `imageSource` turns either shape into the same
-   * source, which keeps the echo and the authoritative message identical.
+   * The webview holds the thumbnail's data URL rather than the bytes, so an image
+   * echo carries the URL and the type; `imageSource` turns either shape into the
+   * same source, which keeps the echo and the authoritative message identical. An
+   * audio attachment has no `dataUrl` at all — the host sent its transcript, and
+   * pi's own message carries that text rather than the file — so it must never
+   * become an image block: the echoed bubble would ask the browser for
+   * `data:audio/...;base64,undefined`, and since pi's authoritative message holds
+   * no image, nothing would ever replace it. It becomes a name-only block that
+   * `renderContent` draws as a non-image indicator instead.
    */
-  function attachmentBlock(image) {
-    return { type: "image", mimeType: image.mimeType, dataUrl: image.dataUrl };
+  function attachmentBlock(attachment) {
+    if (attachment.kind === "audio") {
+      return { type: "audio", name: attachment.name };
+    }
+    return { type: "image", mimeType: attachment.mimeType, dataUrl: attachment.dataUrl };
   }
 
   function submitPrompt() {

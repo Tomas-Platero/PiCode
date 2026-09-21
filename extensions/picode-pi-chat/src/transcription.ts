@@ -103,6 +103,25 @@ export function hasUploadSupport(): boolean {
 }
 
 /**
+ * The global `fetch`, when this runtime has one.
+ *
+ * The host hands this to whoever needs to transcribe instead of every caller
+ * reaching for `globalThis` itself: under `lib: ["ES2022"]` there is no declared
+ * `fetch`, so reaching for it is an unchecked cast, and a cast is better made in
+ * the one module that already had to make it than repeated at each call site.
+ *
+ * Undefined means the runtime cannot make a request at all, which the caller
+ * reports in words rather than letting a `TypeError` say it. The other two members
+ * of {@link UploadRuntime} are not checked here: `transcribeWithNan` checks the
+ * whole set before it builds a request, so a fetch without `FormData` still fails
+ * as a readable refusal rather than as a crash.
+ */
+export function nodeFetch(): FetchLike | undefined {
+  const runtime = uploadRuntime();
+  return typeof runtime.fetch === "function" ? runtime.fetch : undefined;
+}
+
+/**
  * Where pi keeps its configuration.
  *
  * Read from the environment rather than by loading pi: the env var is documented
@@ -236,9 +255,17 @@ export async function transcribeWithNan(
     form.append("language", options.language);
   }
 
+  // A base URL that already ends in a slash would build `…/v1//audio/transcriptions`.
+  // That matters more than it looks: the doubled slash is a path the cluster does not
+  // serve, so the request is redirected, and a redirected POST is re-sent as a GET
+  // with its multipart body silently dropped. The cluster would then transcribe
+  // nothing and answer with an empty-file error, which reads as a broken recording
+  // rather than as a URL that was one character wrong.
+  const baseUrl = (options.baseUrl ?? NAN_BASE_URL).replace(/\/+$/, "");
+
   let response: Awaited<ReturnType<FetchLike>>;
   try {
-    response = await fetchImpl(`${options.baseUrl ?? NAN_BASE_URL}/audio/transcriptions`, {
+    response = await fetchImpl(`${baseUrl}/audio/transcriptions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${options.key}` },
       body: form,
