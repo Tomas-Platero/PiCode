@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ChatView, type ChatViewHost } from "./chat-view";
+import { ExtensionsView } from "./extensions-view";
 import { PiRpcClient } from "./pi-rpc-client";
 import type { PiModel, PiThinkingLevel } from "./protocol";
 import {
@@ -12,6 +13,7 @@ import {
 
 let client: PiRpcClient | undefined;
 let view: ChatView | undefined;
+let extensionsView: ExtensionsView | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let defaultModelApplied = false;
 
@@ -28,10 +30,22 @@ export function activate(context: vscode.ExtensionContext): void {
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
   } satisfies ChatViewHost);
 
+  // Package management is the one surface that talks to the pi CLI rather than to
+  // the RPC protocol, and it always talks to the active runtime's CLI.
+  const extensions = ExtensionsView.create(context.extensionUri, {
+    runtime: () => resolveRuntime(context.extensionUri),
+    log: (line) => outputChannel?.appendLine(`[pi] ${line}`),
+    offerRestart: (what) => offerRestart(what),
+  });
+  extensionsView = extensions;
+
   context.subscriptions.push(
     // `retainContextWhenHidden` keeps the webview alive while the sidebar is
     // collapsed, so a visible transcript is not thrown away by hiding it.
     vscode.window.registerWebviewViewProvider(ChatView.viewId, view, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.window.registerWebviewViewProvider(ExtensionsView.viewId, extensions, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("picode.piChat.open", async () => {
@@ -82,6 +96,8 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   view?.dispose();
   view = undefined;
+  extensionsView?.dispose();
+  extensionsView = undefined;
   client?.stop();
   client = undefined;
 }
@@ -123,6 +139,27 @@ async function resetClient(): Promise<void> {
   // of opening the container, never of a stray command.
   if (view?.isVisible) {
     await view.rebind();
+  }
+
+  // The installed list belongs to the runtime, so it is re-read when the runtime
+  // changes. A hidden view would run the CLI for nobody.
+  if (extensionsView?.isVisible) {
+    await extensionsView.refresh();
+  }
+}
+
+/**
+ * pi loads its packages when it starts, so an install or a removal only takes
+ * effect after a restart. The owner's conversation lives in that process, which
+ * is why this asks instead of restarting on its own.
+ */
+async function offerRestart(what: string): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    `PiCode: ${what}. pi carga las extensiones al arrancar, así que hay que reiniciarlo para que surta efecto.`,
+    "Reiniciar ahora",
+  );
+  if (choice === "Reiniciar ahora") {
+    await resetClient();
   }
 }
 

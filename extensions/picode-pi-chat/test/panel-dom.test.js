@@ -1,11 +1,11 @@
 /*
- * Checks that the panel's script and its markup agree.
+ * Checks that each panel script and its markup agree.
  *
- * main.js looks elements up by id, and the markup is a template literal inside the
- * compiled chat-view.js. Renaming an id in one place and not the other produces a
- * null reference at load, which turns the whole panel inert — and that failure is
- * invisible to the compiler and to a file-level review, because both files are
- * individually valid.
+ * The scripts look elements up by id, and the markup lives in template literals
+ * inside the compiled view modules. Renaming an id in one place and not the other
+ * produces a null reference at load, which turns that whole view inert — and the
+ * failure is invisible to the compiler and to a file-level review, because both
+ * files are individually valid.
  *
  * Run with: npm test
  */
@@ -13,8 +13,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const EXTENSION_ROOT = path.resolve(__dirname, "..");
-const SCRIPT = path.join(EXTENSION_ROOT, "media", "main.js");
-const MARKUP_SOURCE = path.join(EXTENSION_ROOT, "out", "chat-view.js");
+
+const PAIRS = [
+  {
+    name: "chat",
+    script: "media/main.js",
+    markup: "out/chat-view.js",
+    // The controls the panel is built around, by name.
+    required: ["model", "thinking", "dropdown", "dropdown-filter", "runtime", "send", "prompt"],
+  },
+  {
+    name: "extensiones",
+    script: "media/extensions.js",
+    markup: "out/extensions-view.js",
+    required: ["tab-installed", "tab-catalog", "installed", "catalog", "search-input", "log"],
+  },
+];
 
 function idsUsedByScript(source) {
   const ids = new Set();
@@ -34,34 +48,44 @@ function idsProvidedByMarkup(source) {
 }
 
 function main() {
-  if (!fs.existsSync(MARKUP_SOURCE)) {
-    console.error(`Missing ${MARKUP_SOURCE}. Run "npm run compile" first.`);
-    process.exit(2);
-  }
-
-  const used = idsUsedByScript(fs.readFileSync(SCRIPT, "utf8"));
-  const provided = idsProvidedByMarkup(fs.readFileSync(MARKUP_SOURCE, "utf8"));
-
   const results = [];
   const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
 
-  check("the script looks up at least the controls the panel is built around", used.size >= 8, `${used.size} ids`);
+  for (const pair of PAIRS) {
+    const scriptPath = path.join(EXTENSION_ROOT, pair.script);
+    const markupPath = path.join(EXTENSION_ROOT, pair.markup);
 
-  const missing = [...used].filter((id) => !provided.has(id));
-  check(
-    "every element the script looks up exists in the markup",
-    missing.length === 0,
-    missing.length === 0 ? "" : `missing: ${missing.join(", ")}`,
-  );
+    if (!fs.existsSync(markupPath) || !fs.existsSync(scriptPath)) {
+      check(`${pair.name}: both files exist`, false, `${pair.script} / ${pair.markup}`);
+      continue;
+    }
 
-  // The controls the owner asked for specifically, by name.
-  for (const id of ["model", "thinking", "dropdown", "dropdown-filter", "runtime"]) {
-    check(`the markup provides #${id}`, provided.has(id), "");
-  }
+    const used = idsUsedByScript(fs.readFileSync(scriptPath, "utf8"));
+    const provided = idsProvidedByMarkup(fs.readFileSync(markupPath, "utf8"));
 
-  const unused = [...provided].filter((id) => !used.has(id));
-  if (unused.length > 0) {
-    console.log(`note: markup ids the script never looks up: ${unused.join(", ")}`);
+    check(
+      `${pair.name}: the script looks up its controls`,
+      used.size >= 5,
+      `${used.size} ids`,
+    );
+
+    const missing = [...used].filter((id) => !provided.has(id));
+    check(
+      `${pair.name}: every element the script looks up exists in the markup`,
+      missing.length === 0,
+      missing.length === 0 ? "" : `missing: ${missing.join(", ")}`,
+    );
+
+    for (const id of pair.required) {
+      check(`${pair.name}: the markup provides #${id}`, provided.has(id), "");
+    }
+
+    // A markup id the script never looks up is dead weight; a script id with no
+    // markup is a broken view. Only the second is a failure.
+    const unused = [...provided].filter((id) => !used.has(id));
+    if (unused.length > 0) {
+      console.log(`note: ${pair.name}: markup ids the script never looks up: ${unused.join(", ")}`);
+    }
   }
 
   let failed = 0;

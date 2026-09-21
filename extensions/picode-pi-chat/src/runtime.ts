@@ -141,6 +141,32 @@ export function resolveOnPath(name: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Resolves a runtime into something `spawn` can actually execute.
+ *
+ * The RPC client does the same resolution internally for the agent process; this
+ * is the shared version for the other CLI work the panel does. Node cannot run a
+ * `.cmd` without a shell since the CVE-2024-27980 hardening, and a bare name only
+ * resolves through PATHEXT, so both cases are handled here rather than at each
+ * call site.
+ */
+export function spawnTarget(runtime: ResolvedRuntime): {
+  command: string;
+  argsPrefix: string[];
+  shell: boolean;
+} {
+  if (runtime.mode === "managed") {
+    return { command: runtime.executable, argsPrefix: [...runtime.argsPrefix], shell: false };
+  }
+
+  const located = resolveOnPath(runtime.executable) ?? runtime.executable;
+  return {
+    command: located,
+    argsPrefix: [...runtime.argsPrefix],
+    shell: /\.(cmd|bat)$/i.test(located),
+  };
+}
+
 /** Reads the version of a resolved executable, or undefined when it does not answer. */
 export function probeVersion(executable: string, argsPrefix: string[] = []): Promise<string | undefined> {
   return new Promise((resolve) => {

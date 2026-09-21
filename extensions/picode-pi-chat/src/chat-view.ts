@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
 import { isPanelEvent, type PiEvent, type PiSessionState } from "./protocol";
 import type { RuntimeDescriptor } from "./runtime";
+import { buildWebviewHtml } from "./webview-html";
 
 type ViewStatus = "idle" | "running" | "settled" | "error";
 
@@ -22,9 +23,65 @@ export interface ChatViewHost {
   applyThinkingLevel(level: string): Promise<void>;
 }
 
+const CHAT_BODY = `    <header class="toolbar">
+      <span id="status" class="status status-idle">en reposo</span>
+      <span id="session" class="session"></span>
+      <button id="new-session" type="button" class="secondary" title="Empezar una sesión nueva de pi">Nueva</button>
+      <button id="abort" type="button" class="secondary" disabled title="Detener la ejecución actual">Detener</button>
+    </header>
+    <div class="runtime-strip">
+      <button
+        id="runtime"
+        type="button"
+        class="runtime-chip"
+        title="Elegir qué pi ejecuta PiCode"
+      >comprobando pi\u2026</button>
+    </div>
+    <main id="messages" class="messages" aria-live="polite"></main>
+    <section id="tool-section" class="tool-section" hidden>
+      <h2 class="tool-heading">Actividad de herramientas</h2>
+      <ul id="tools" class="tools"></ul>
+    </section>
+    <form id="composer" class="composer">
+      <textarea
+        id="prompt"
+        class="prompt"
+        rows="3"
+        placeholder="Pídele algo a pi. Enter envía; Shift+Enter añade una línea."
+      ></textarea>
+      <div class="composer-actions">
+        <button
+          id="model"
+          type="button"
+          class="dropdown-toggle model-chip"
+          title="Elegir el modelo"
+          aria-haspopup="listbox"
+        >Modelo\u2026</button>
+        <button
+          id="thinking"
+          type="button"
+          class="dropdown-toggle thinking-chip"
+          title="Elegir el nivel de razonamiento"
+          aria-haspopup="listbox"
+        >Razonamiento\u2026</button>
+        <button id="send" type="submit" class="primary">Enviar</button>
+      </div>
+    </form>
+    <div id="dropdown" class="dropdown" hidden>
+      <input
+        id="dropdown-filter"
+        class="dropdown-filter"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Buscar\u2026"
+      />
+      <ul id="dropdown-options" class="dropdown-options" tabindex="-1" role="listbox"></ul>
+    </div>`;
+
 /**
  * Hosts the pi chat as a native view in the secondary side bar.
- *
+ * *
  * The editor owns a view's lifecycle: it resolves this provider when the
  * container becomes visible and disposes the view when the container is closed.
  * The class therefore attaches to whatever view it is handed instead of owning
@@ -371,88 +428,14 @@ export class ChatView implements vscode.WebviewViewProvider {
    * ---------------------------------------------------------------- */
 
   private buildHtml(webview: vscode.Webview): string {
-    const nonce = createNonce();
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "main.js"),
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "main.css"),
-    );
-    const csp = [
-      "default-src 'none'",
-      `style-src ${webview.cspSource}`,
-      `font-src ${webview.cspSource}`,
-      `script-src 'nonce-${nonce}'`,
-    ].join("; ");
-
-    return `<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="${csp}" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link href="${styleUri}" rel="stylesheet" />
-    <title>PiCode: agente pi</title>
-  </head>
-  <body>
-    <header class="toolbar">
-      <span id="status" class="status status-idle">en reposo</span>
-      <span id="session" class="session"></span>
-      <button id="new-session" type="button" class="secondary" title="Empezar una sesión nueva de pi">Nueva</button>
-      <button id="abort" type="button" class="secondary" disabled title="Detener la ejecución actual">Detener</button>
-    </header>
-    <div class="runtime-strip">
-      <button
-        id="runtime"
-        type="button"
-        class="runtime-chip"
-        title="Elegir qué pi ejecuta PiCode"
-      >comprobando pi\u2026</button>
-    </div>
-    <main id="messages" class="messages" aria-live="polite"></main>
-    <section id="tool-section" class="tool-section" hidden>
-      <h2 class="tool-heading">Actividad de herramientas</h2>
-      <ul id="tools" class="tools"></ul>
-    </section>
-    <form id="composer" class="composer">
-      <textarea
-        id="prompt"
-        class="prompt"
-        rows="3"
-        placeholder="Pídele algo a pi. Enter envía; Shift+Enter añade una línea."
-      ></textarea>
-      <div class="composer-actions">
-        <button
-          id="model"
-          type="button"
-          class="dropdown-toggle model-chip"
-          title="Elegir el modelo"
-          aria-haspopup="listbox"
-        >Modelo\u2026</button>
-        <button
-          id="thinking"
-          type="button"
-          class="dropdown-toggle thinking-chip"
-          title="Elegir el nivel de razonamiento"
-          aria-haspopup="listbox"
-        >Razonamiento\u2026</button>
-        <button id="send" type="submit" class="primary">Enviar</button>
-      </div>
-    </form>
-    <div id="dropdown" class="dropdown" hidden>
-      <input
-        id="dropdown-filter"
-        class="dropdown-filter"
-        type="text"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="Buscar\u2026"
-      />
-      <ul id="dropdown-options" class="dropdown-options" tabindex="-1" role="listbox"></ul>
-    </div>
-    <script nonce="${nonce}" src="${scriptUri}"></script>
-  </body>
-</html>`;
+    return buildWebviewHtml({
+      webview,
+      extensionUri: this.extensionUri,
+      title: "PiCode: agente pi",
+      body: CHAT_BODY,
+      scripts: ["main.js"],
+      styles: ["main.css"],
+    });
   }
 }
 
@@ -488,13 +471,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function createNonce(): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let nonce = "";
-  for (let index = 0; index < 32; index += 1) {
-    nonce += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-  }
-  return nonce;
 }

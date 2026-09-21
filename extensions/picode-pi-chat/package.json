@@ -19,7 +19,8 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onView:picode.piChat"
+    "onView:picode.piChat",
+    "onView:picode.extensions"
   ],
   "contributes": {
     "viewsContainers": {
@@ -36,6 +37,11 @@
         {
           "id": "picode.piChat",
           "name": "agente pi",
+          "type": "webview"
+        },
+        {
+          "id": "picode.extensions",
+          "name": "Extensiones",
           "type": "webview"
         }
       ]
@@ -121,7 +127,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js",
+    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js",
     "test:live": "node test/rpc.live.js",
     "vscode:prepublish": "npm run compile"
   },

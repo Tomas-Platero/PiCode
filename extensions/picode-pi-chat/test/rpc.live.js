@@ -1,5 +1,6 @@
 /*
- * Live check of the RPC commands the panel's model and reasoning controls use.
+ * Live check of the pi surface PiCode depends on: the RPC commands the panel's
+ * model and reasoning controls use, and the CLI that manages packages.
  *
  * This is not part of `npm test`: it needs a working `pi` on PATH and it talks to
  * a real agent process. It exists because the panel's commands are only as good
@@ -14,6 +15,38 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const EXTENSION_ROOT = path.resolve(__dirname, "..");
+
+// pi-cli.ts reaches runtime.ts, which imports `vscode`. The stub keeps the CLI
+// parser usable outside an editor.
+const Module = require("node:module");
+const originalResolve = Module._resolveFilename;
+Module._resolveFilename = function resolve(request, ...rest) {
+  if (request === "vscode") {
+    return path.join(__dirname, "vscode-stub.js");
+  }
+  return originalResolve.call(this, request, ...rest);
+};
+
+const { parseInstalledPackages } = require(path.join(EXTENSION_ROOT, "out", "pi-cli.js"));
+
+/** Runs the pi CLI, which is not its RPC mode, and collects what it printed. */
+function runCli(args) {
+  return new Promise((resolve) => {
+    const child = spawn("pi", args, {
+      shell: process.platform === "win32",
+      windowsHide: true,
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    let text = "";
+    const collect = (chunk) => {
+      text += chunk.toString("utf8");
+    };
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    child.on("error", () => resolve({ ok: false, code: null, text }));
+    child.on("close", (code) => resolve({ ok: code === 0, code, text }));
+  });
+}
 
 function startAgent() {
   // The Windows npm shim is a `.cmd`, which Node refuses to execute without a
@@ -121,6 +154,15 @@ async function main() {
       cycledThinking.success === true &&
         (cycledThinking.data === null || typeof cycledThinking.data?.level === "string"),
       JSON.stringify(cycledThinking.data),
+    );
+
+    // The one surface that is not RPC: package management goes through the CLI.
+    const cliList = await runCli(["list"]);
+    const packages = parseInstalledPackages(cliList.text);
+    check(
+      "pi list runs and parses into packages the view can render",
+      cliList.ok === true && packages.length > 0 && packages.every((entry) => entry.source.length > 0),
+      `${packages.length} paquetes, primero: ${packages[0]?.source ?? "ninguno"}`,
     );
   } finally {
     child.kill();
