@@ -149,9 +149,31 @@ check(
   "",
 );
 check(
-  "the session category offers usage, new, abort and restart",
-  actions(buildCategorySettings("sesion", full)) === "back,usage,newSession,abort,restart",
+  "the session category offers usage, new, abort, the command list and restart",
+  actions(buildCategorySettings("sesion", full)) ===
+    "back,usage,newSession,abort,piCommands,restart",
   actions(buildCategorySettings("sesion", full)),
+);
+check(
+  "the command row counts what the session loaded",
+  buildCategorySettings("sesion", {
+    ...full,
+    commands: [
+      { name: "compact", source: "extension" },
+      { name: "review", source: "prompt" },
+    ],
+  })
+    .find((row) => row.action === "piCommands")
+    .label === "Comandos de pi (2)…",
+  buildCategorySettings("sesion", { ...full, commands: [] })
+    .find((row) => row.action === "piCommands")
+    .label,
+);
+check(
+  "without a session the command row does not claim a count",
+  buildCategorySettings("sesion", full).find((row) => row.action === "piCommands").label ===
+    "Comandos de pi…",
+  buildCategorySettings("sesion", full).find((row) => row.action === "piCommands").label,
 );
 
 const withUsage = buildCategorySettings("sesion", {

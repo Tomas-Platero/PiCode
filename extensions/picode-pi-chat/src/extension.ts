@@ -69,6 +69,7 @@ export function activate(context: vscode.ExtensionContext): void {
     selectThinkingLevel: () => withLiveClient(selectThinkingLevel),
     selectRuntime: () => selectRuntime(context),
     installManagedRuntime: () => installManagedFromMenu(context),
+    sendCommand: (name) => sendSlashCommand(name),
     gentle: gentleActions(context),
     newSession: () => startNewSession(),
     abort: () => abortRun(),
@@ -223,11 +224,13 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
   const installed = await countInstalled(extensionUri);
 
   let providerCount: number | undefined;
+  let commands: Awaited<ReturnType<PiRpcClient["getCommands"]>> = [];
   if (client) {
     providerCount = await client
       .getAvailableModels()
       .then(countProviders)
       .catch(() => undefined);
+    commands = await client.getCommands().catch(() => []);
   }
 
   return {
@@ -240,6 +243,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
     ...(state?.messageCount === undefined ? {} : { messageCount: state.messageCount }),
     ...(installed === undefined ? {} : { installedCount: installed }),
     ...(providerCount === undefined ? {} : { providerCount }),
+    ...(commands.length > 0 ? { commands } : {}),
     ...(view ? { usage: view.usage } : {}),
     ...(view?.modelContextWindow === undefined ? {} : { contextWindow: view.modelContextWindow }),
     gentle: await gentleState(extensionUri),
@@ -637,13 +641,20 @@ function gentleActions(context: vscode.ExtensionContext): GentleActions {
       invalidateGentle();
       offerRestart(`${GENTLE_PACKAGE} quedó instalado`);
     },
-
-    sendCommand: async (name: string) => {
-      await withLiveClient(async (rpc) => {
-        await rpc.prompt(name, rpc.isStreaming ? "steer" : undefined);
-      }, `enviar ${name}`);
-    },
   };
+}
+
+/**
+ * Sends a slash command to the running session.
+ *
+ * pi runs a command when it receives a message that starts with it, so this is a prompt
+ * rather than a separate protocol call: there is no "invoke command" command, and
+ * inventing one would be a second, divergent path for the same thing.
+ */
+async function sendSlashCommand(name: string): Promise<void> {
+  await withLiveClient(async (rpc) => {
+    await rpc.prompt(name, rpc.isStreaming ? "steer" : undefined);
+  }, `enviar ${name}`);
 }
 
 /**

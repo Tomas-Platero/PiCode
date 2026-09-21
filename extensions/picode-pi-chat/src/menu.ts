@@ -7,6 +7,7 @@ import {
   type InstalledPackage,
 } from "./pi-cli";
 import type { ResolvedRuntime } from "./runtime";
+import type { PiSlashCommand } from "./protocol";
 import { emptyUsage, describeUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
 
@@ -63,6 +64,8 @@ export interface PiMenuSnapshot {
   /** What the session has cost, when a session has said anything yet. */
   usage?: UsageTotals;
   contextWindow?: number;
+  /** Everything the session has loaded: commands, prompt templates and skills. */
+  commands?: readonly PiSlashCommand[];
 }
 
 export interface PiCategoryRow {
@@ -149,6 +152,7 @@ export type PiSettingAction =
   | "gentleInstall"
   | "gentleCommand"
   | "usage"
+  | "piCommands"
   | "newSession"
   | "abort"
   | "restart";
@@ -178,8 +182,6 @@ export interface GentleActions {
   setReview(on: boolean): Promise<void>;
   telemetry(action: "enable" | "disable" | "preview"): Promise<void>;
   install(): Promise<void>;
-  /** Sends a gentle slash command to the running session. */
-  sendCommand(name: string): Promise<void>;
 }
 
 /**
@@ -397,6 +399,18 @@ export function buildCategorySettings(
           label: "Detener la ejecución",
           detail: snapshot.streaming ? "Hay una ejecución en curso" : "No hay nada en curso",
         },
+        { kind: "separator", label: "Comandos" },
+        {
+          kind: "item",
+          action: "piCommands",
+          label:
+            snapshot.commands === undefined
+              ? "Comandos de pi…"
+              : `Comandos de pi (${snapshot.commands.length})…`,
+          // Everything the session loaded, not only what PiCode happened to know about:
+          // extensions, prompt templates and skills all register here.
+          detail: "Los que la sesión tiene cargados: extensiones, plantillas y skills",
+        },
         { kind: "separator", label: "Proceso" },
         {
           kind: "item",
@@ -445,6 +459,12 @@ export interface PiMenuDeps {
   selectThinkingLevel(): Promise<void>;
   selectRuntime(): Promise<void>;
   installManagedRuntime(): Promise<void>;
+  /**
+   * Sends a slash command to the running session as a message.
+   *
+   * General rather than gentle-specific: a command is a command, whoever registered it.
+   */
+  sendCommand(name: string): Promise<void>;
   gentle: GentleActions;
   newSession(): Promise<void>;
   abort(): Promise<void>;
@@ -553,6 +573,9 @@ async function runSetting(
       // The snapshot is already in hand, so the report does not re-read the state.
       showUsage(snapshot);
       return true;
+    case "piCommands":
+      await showPiCommands(deps, snapshot);
+      return true;
     case "model":
       await deps.selectModel();
       return true;
@@ -616,12 +639,54 @@ async function runSetting(
       return false;
     case "gentleCommand":
       if (row.command) {
-        await deps.gentle.sendCommand(row.command);
+        await deps.sendCommand(row.command);
       }
       return false;
     default:
       return true;
   }
+}
+
+/**
+ * Everything the session has loaded, as one searchable list.
+ *
+ * pi registers extensions, prompt templates and skills in the same place, so this is
+ * the complete surface rather than the slice PiCode happens to understand. Picking one
+ * sends it to the agent, which is how a slash command is invoked here.
+ */
+async function showPiCommands(deps: PiMenuDeps, snapshot: PiMenuSnapshot): Promise<void> {
+  const commands = snapshot.commands ?? [];
+  if (commands.length === 0) {
+    void vscode.window.showInformationMessage(
+      "PiCode: pi no informó de ningún comando para esta sesión.",
+    );
+    return;
+  }
+
+  interface CommandItem extends vscode.QuickPickItem {
+    command: string;
+  }
+
+  const items: CommandItem[] = commands.map((command) => {
+    const name = command.name.startsWith("/") ? command.name : `/${command.name}`;
+    return {
+      command: name,
+      label: name,
+      description: command.source,
+      ...(command.description ? { detail: command.description } : {}),
+    };
+  });
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: `PiCode: comandos de pi (${items.length})`,
+    placeHolder: "Elige uno: se envía al agente como mensaje",
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  if (!picked) {
+    return;
+  }
+  await deps.sendCommand(picked.command);
 }
 
 /** Everything PiCode knows about Gentle AI, in a report rather than a row. */
