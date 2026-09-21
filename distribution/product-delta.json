@@ -14,12 +14,12 @@
     "requestFeatureUrl": "https://github.com/TomasPlatero/PiCode/issues/new",
     "reportIssueUrl": "https://github.com/TomasPlatero/PiCode/issues/new",
     "downloadUrl": "https://github.com/TomasPlatero/PiCode/releases",
-    "updateUrl": ""
+    "updateUrl": "",
+    "builtInExtensionsEnabledWithAutoUpdates": []
   },
   "unset": [
     "defaultChatAgent",
     "trustedExtensionAuthAccess",
-    "builtInExtensionsEnabledWithAutoUpdates",
     "agentsTelemetryAppName",
     "voiceWsUrl",
     "webviewContentExternalBaseUrlTemplate",
