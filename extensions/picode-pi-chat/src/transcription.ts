@@ -82,6 +82,13 @@ interface UploadRuntime {
 }
 
 function uploadRuntime(): UploadRuntime {
+  // SAFETY: Node provides `fetch`, `FormData` and `Blob` as globals, so `globalThis`
+  // is where the three functions actually live at runtime. The double assertion is
+  // unavoidable: nothing declares those members merged with `globalThis` under
+  // `lib: ["ES2022"]`, so there is no single cast that proves `UploadRuntime`.
+  // `hasUploadSupport()` checks all three with `typeof` before anything is
+  // constructed, and every caller gates on it, which is what makes this safe rather
+  // than merely convenient.
   return globalThis as unknown as UploadRuntime;
 }
 

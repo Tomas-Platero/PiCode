@@ -194,7 +194,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js && node test/pi-sdk-protocol.test.js && node test/markdown.test.js && node test/pi-settings.test.js && node test/attachments.test.js && node test/video.test.js",
+    "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js && node test/pi-sdk-protocol.test.js && node test/markdown.test.js && node test/pi-settings.test.js && node test/attachments.test.js && node test/video.test.js && node test/transcription.test.js",
     "test:live": "node test/rpc.live.js",
     "test:sdk": "npm run compile && node test/sdk.live.js",
     "vscode:prepublish": "npm run compile",
