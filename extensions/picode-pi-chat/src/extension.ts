@@ -10,8 +10,19 @@ import {
   type PiMenuDeps,
   type PiMenuSnapshot,
   type ProviderSummary,
+  type GentleActions,
 } from "./menu";
-import { parseInstalledPackages, runPiCli } from "./pi-cli";
+import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
+import {
+  firstMeaningfulLine,
+  gentleCommands,
+  parseReviewMode,
+  resolveGentleBinary,
+  summarizeGentle,
+  unknownGentleState,
+  GENTLE_PACKAGE,
+  type GentleState,
+} from "./gentle";
 import { PiRpcClient } from "./pi-rpc-client";
 import type { PiModel, PiThinkingLevel } from "./protocol";
 import {
@@ -58,6 +69,7 @@ export function activate(context: vscode.ExtensionContext): void {
     selectThinkingLevel: () => withLiveClient(selectThinkingLevel),
     selectRuntime: () => selectRuntime(context),
     installManagedRuntime: () => installManagedFromMenu(context),
+    gentle: gentleActions(context),
     newSession: () => startNewSession(),
     abort: () => abortRun(),
     restart: () => resetClient(),
@@ -228,6 +240,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
     ...(state?.messageCount === undefined ? {} : { messageCount: state.messageCount }),
     ...(installed === undefined ? {} : { installedCount: installed }),
     ...(providerCount === undefined ? {} : { providerCount }),
+    gentle: await gentleState(extensionUri),
   };
 }
 
@@ -468,6 +481,168 @@ const RUNTIME_LABELS: Record<RuntimeMode, string> = {
   managed: "el pi propio de PiCode",
   custom: "un ejecutable concreto",
 };
+
+const GENTLE_TTL_MS = 20_000;
+let gentleCache: { value: GentleState; at: number } | undefined;
+
+function invalidateGentle(): void {
+  gentleCache = undefined;
+}
+
+/**
+ * What PiCode can tell about Gentle AI.
+ *
+ * There is no API that says whether it is active, but there is something better than
+ * a guess: the running session's own command list. Only a loaded gentle-pi registers
+ * its commands, so a package that is installed and not loaded is a different state,
+ * and it is reported as one instead of being shown as working.
+ *
+ * Cached because it costs several processes to answer.
+ */
+async function gentleState(extensionUri: vscode.Uri): Promise<GentleState> {
+  const now = Date.now();
+  if (gentleCache && now - gentleCache.at < GENTLE_TTL_MS) {
+    return gentleCache.value;
+  }
+
+  const state = unknownGentleState();
+  const silent = (): void => {};
+
+  try {
+    const listed = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, silent);
+    const entry = parseInstalledPackages(listed.text).find(
+      (item) => item.source === `npm:${GENTLE_PACKAGE}`,
+    );
+    state.installed = entry !== undefined;
+    if (entry?.path) {
+      state.packageRoot = entry.path;
+    }
+    state.binary = resolveGentleBinary(entry?.path);
+  } catch {
+    // A listing that cannot be read leaves the state unknown, which the label says.
+  }
+
+  const client = view?.bound;
+  if (client) {
+    const commands = await client.getCommands().catch(() => []);
+    const gentle = gentleCommands(commands);
+    state.commandCount = gentle.length;
+    state.commands = gentle.map((command) =>
+      command.name.startsWith("/") ? command.name : `/${command.name}`,
+    );
+    state.active = gentle.length > 0;
+  }
+
+  if (state.binary) {
+    const version = await runExecutable(state.binary, ["version"], {
+      shell: false,
+      onOutput: silent,
+    });
+    state.version = firstMeaningfulLine(version.text, "");
+
+    const review = await runExecutable(state.binary, ["review", "mode", "status"], {
+      shell: false,
+      onOutput: silent,
+    });
+    state.review = parseReviewMode(review.text);
+
+    const telemetry = await runExecutable(state.binary, ["telemetry", "status"], {
+      shell: false,
+      onOutput: silent,
+    });
+    state.telemetry = firstMeaningfulLine(telemetry.text, "desconocido");
+  }
+
+  gentleCache = { value: state, at: now };
+  // The channel is where a diagnostic belongs, and it is also the only observable
+  // trace that PiCode read Gentle AI's real state rather than guessing.
+  outputChannel?.appendLine(`[gentle] ${summarizeGentle(state)}`);
+  return state;
+}
+
+/** Everything the popup needs to act on Gentle AI. */
+function gentleActions(context: vscode.ExtensionContext): GentleActions {
+  const log = (line: string): void => outputChannel?.appendLine(`[gentle] ${line}`);
+
+  /** Runs a gentle-ai subcommand and reports what it said. */
+  const run = async (args: readonly string[], title: string): Promise<string> => {
+    const current = await gentleState(context.extensionUri);
+    if (!current.binary) {
+      void vscode.window.showErrorMessage(
+        "PiCode: no se encontró el binario gentle-ai. Instala gentle-pi o ponlo en el PATH.",
+      );
+      return "";
+    }
+
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title },
+      () =>
+        runExecutable(current.binary as string, args, {
+          shell: false,
+          onOutput: log,
+        }),
+    );
+
+    void vscode.window.showInformationMessage(title, {
+      modal: true,
+      detail: result.text.trim() || "gentle-ai no devolvió nada.",
+    });
+    invalidateGentle();
+    return result.text;
+  };
+
+  return {
+    state: () => gentleState(context.extensionUri),
+    run,
+
+    setReview: async (on: boolean) => {
+      await run(["review", "mode", on ? "enable" : "disable"], "PiCode: revisión por candidato");
+    },
+
+    telemetry: async (action: "enable" | "disable" | "preview") => {
+      await run(["telemetry", action], "PiCode: telemetría de Gentle AI");
+    },
+
+    install: async () => {
+      const answer = await vscode.window.showWarningMessage(
+        `¿Instalar ${GENTLE_PACKAGE} en pi?`,
+        {
+          modal: true,
+          detail: `Se instalará con "pi install npm:${GENTLE_PACKAGE}". Los paquetes de pi ejecutan código con acceso completo al sistema.`,
+        },
+        "Instalar",
+      );
+      if (answer !== "Instalar") {
+        return;
+      }
+
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${GENTLE_PACKAGE}` },
+        () =>
+          runPiCli(
+            resolveRuntime(context.extensionUri),
+            ["install", `npm:${GENTLE_PACKAGE}`],
+            undefined,
+            log,
+          ),
+      );
+      if (!result.ok) {
+        void vscode.window.showErrorMessage(
+          `PiCode: pi install terminó con código ${result.code ?? "desconocido"}.`,
+        );
+        return;
+      }
+      invalidateGentle();
+      offerRestart(`${GENTLE_PACKAGE} quedó instalado`);
+    },
+
+    sendCommand: async (name: string) => {
+      await withLiveClient(async (rpc) => {
+        await rpc.prompt(name, rpc.isStreaming ? "steer" : undefined);
+      }, `enviar ${name}`);
+    },
+  };
+}
 
 /**
  * Runs an interaction against the live client, revealing the view first when no

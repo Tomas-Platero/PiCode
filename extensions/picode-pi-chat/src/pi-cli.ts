@@ -25,12 +25,31 @@ export function runPiCli(
   onOutput: (line: string) => void,
 ): Promise<PiCliResult> {
   const target = spawnTarget(runtime);
-  const command = [...target.argsPrefix, ...args];
   onOutput(`pi ${args.join(" ")}`);
+  return runExecutable(target.command, [...target.argsPrefix, ...args], {
+    shell: target.shell,
+    onOutput,
+    ...(cwd ? { cwd } : {}),
+  });
+}
+
+/**
+ * Runs any external tool and collects what it printed.
+ *
+ * Split out from `runPiCli` because PiCode shells out to more than pi: the Gentle AI
+ * binary is its own executable, and both need the same line forwarding and the same
+ * ignore-the-exit-code-until-the-end behaviour.
+ */
+export function runExecutable(
+  command: string,
+  args: readonly string[],
+  options: { shell: boolean; cwd?: string; onOutput: (line: string) => void },
+): Promise<PiCliResult> {
+  const { shell, cwd, onOutput } = options;
 
   return new Promise((resolve) => {
-    const child = spawn(target.command, command, {
-      shell: target.shell,
+    const child = spawn(command, args, {
+      shell,
       windowsHide: true,
       ...(cwd ? { cwd } : {}),
       env: { ...process.env, NO_COLOR: "1" },

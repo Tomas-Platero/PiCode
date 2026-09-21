@@ -43,15 +43,43 @@ const actions = (rows) => rows.filter((row) => row.kind === "item").map((row) =>
 // --- first level -----------------------------------------------------------
 
 const categories = buildCategories(full);
-check("there is one category per area", categories.length === 5, `${categories.length}`);
+check("there is one category per area", categories.length === 6, `${categories.length}`);
 check(
   "each category shows its current value next to the name",
   categories[0].description === "DeepSeek V4 Pro" &&
     categories[1].description === "10 instaladas" &&
     categories[2].description === "pi del PATH 0.86.1" &&
     categories[3].description === "3 con modelos" &&
-    categories[4].description === "en reposo",
+    categories[4].description === "leyendo…" &&
+    categories[5].description === "en reposo",
   JSON.stringify(categories.map((row) => row.description)),
+);
+check(
+  "a loaded gentle is reported with its version and review switch",
+  buildCategories({
+    ...full,
+    gentle: {
+      installed: true,
+      active: true,
+      commandCount: 12,
+      commands: ["/gentle:status"],
+      version: "3.4.0",
+      review: { rdd: "off", global: "off", cloneLocal: "unset" },
+      telemetry: "enabled",
+    },
+  })[4].description === "activo · v3.4.0 · revisión off",
+  buildCategories({
+    ...full,
+    gentle: {
+      installed: true,
+      active: true,
+      commandCount: 12,
+      commands: [],
+      version: "3.4.0",
+      review: { rdd: "off", global: "off", cloneLocal: "unset" },
+      telemetry: "enabled",
+    },
+  })[4].description,
 );
 
 const unknown = buildCategories({
@@ -67,12 +95,12 @@ check(
 );
 check(
   "a missing session says so rather than showing zero messages",
-  unknown[4].description === "en reposo" && unknown[4].detail === "sin sesión",
-  unknown[4].detail,
+  unknown[5].description === "en reposo" && unknown[5].detail === "sin sesión",
+  unknown[5].detail,
 );
 check(
   "a running agent shows as working",
-  buildCategories({ ...full, streaming: true })[4].description === "trabajando",
+  buildCategories({ ...full, streaming: true })[5].description === "trabajando",
   "",
 );
 
@@ -113,6 +141,57 @@ check(
   "the session category offers new, abort and restart",
   actions(buildCategorySettings("sesion", full)) === "back,newSession,abort,restart",
   actions(buildCategorySettings("sesion", full)),
+);
+
+const gentleActive = {
+  installed: true,
+  active: true,
+  commandCount: 2,
+  commands: ["/gentle:status", "/gentle:doctor"],
+  version: "3.4.0",
+  review: { rdd: "off", global: "off", cloneLocal: "unset" },
+  telemetry: "enabled",
+};
+
+const gentleRows = buildCategorySettings("gentle", { ...full, gentle: gentleActive });
+check(
+  "the gentle category offers status, the two switches, sdd and doctor",
+  gentleRows.some((row) => row.action === "gentleStatus") &&
+    gentleRows.some((row) => row.action === "gentleReview") &&
+    gentleRows.some((row) => row.action === "gentleTelemetry") &&
+    gentleRows.some((row) => row.action === "gentleSdd") &&
+    gentleRows.some((row) => row.action === "gentleDoctor"),
+  JSON.stringify(gentleRows.map((row) => row.action)),
+);
+check(
+  "the review row says what picking it will do",
+  gentleRows.find((row) => row.action === "gentleReview").label === "Revisión por candidato: off" &&
+    gentleRows.find((row) => row.action === "gentleReview").detail.startsWith("Pulsa para activarla"),
+  gentleRows.find((row) => row.action === "gentleReview").detail,
+);
+check(
+  "with the review already on the row offers to turn it off",
+  buildCategorySettings("gentle", {
+    ...full,
+    gentle: { ...gentleActive, review: { rdd: "on", global: "on", cloneLocal: "unset" } },
+  })
+    .find((row) => row.action === "gentleReview")
+    .detail.startsWith("Pulsa para desactivarla"),
+  "",
+);
+check(
+  "the loaded commands become rows that send themselves",
+  gentleRows
+    .filter((row) => row.action === "gentleCommand")
+    .map((row) => row.command)
+    .join(",") === "/gentle:status,/gentle:doctor",
+  JSON.stringify(gentleRows.filter((row) => row.action === "gentleCommand").map((row) => row.command)),
+);
+check(
+  "an uninstalled gentle offers to install it and nothing else",
+  buildCategorySettings("gentle", full).some((row) => row.action === "gentleInstall") &&
+    buildCategorySettings("gentle", full).every((row) => row.action !== "gentleReview"),
+  JSON.stringify(buildCategorySettings("gentle", full).map((row) => row.action)),
 );
 
 const providers = buildCategorySettings("proveedores", full, [

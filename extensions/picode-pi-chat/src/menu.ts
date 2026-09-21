@@ -7,6 +7,7 @@ import {
   type InstalledPackage,
 } from "./pi-cli";
 import type { ResolvedRuntime } from "./runtime";
+import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
 
 /**
  * pi's configuration, as a categorized popup.
@@ -21,13 +22,20 @@ import type { ResolvedRuntime } from "./runtime";
  * is testable without an editor.
  */
 
-export type PiCategoryId = "modelo" | "extensiones" | "runtime" | "proveedores" | "sesion";
+export type PiCategoryId =
+  | "modelo"
+  | "extensiones"
+  | "runtime"
+  | "proveedores"
+  | "gentle"
+  | "sesion";
 
 export const CATEGORY_LABELS: Record<PiCategoryId, string> = {
   modelo: "Modelo y razonamiento",
   extensiones: "Extensiones de pi",
   runtime: "Qué pi se ejecuta",
   proveedores: "Proveedores y credenciales",
+  gentle: "Gentle AI",
   sesion: "Sesión de pi",
 };
 
@@ -36,6 +44,7 @@ const CATEGORY_ORDER: readonly PiCategoryId[] = [
   "extensiones",
   "runtime",
   "proveedores",
+  "gentle",
   "sesion",
 ];
 
@@ -49,6 +58,7 @@ export interface PiMenuSnapshot {
   messageCount?: number;
   streaming: boolean;
   providerCount?: number;
+  gentle?: GentleState;
 }
 
 export interface PiCategoryRow {
@@ -97,6 +107,13 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
           description: providers,
           detail: "Comprobar si un proveedor tiene credenciales",
         };
+      case "gentle":
+        return {
+          id,
+          label: CATEGORY_LABELS.gentle,
+          description: summarizeGentle(snapshot.gentle),
+          detail: "Estado, revisión, telemetría y sus comandos",
+        };
       default:
         return {
           id: "sesion",
@@ -118,6 +135,13 @@ export type PiSettingAction =
   | "runtime"
   | "reinstallRuntime"
   | "provider"
+  | "gentleStatus"
+  | "gentleReview"
+  | "gentleTelemetry"
+  | "gentleSdd"
+  | "gentleDoctor"
+  | "gentleInstall"
+  | "gentleCommand"
   | "newSession"
   | "abort"
   | "restart";
@@ -130,11 +154,25 @@ export interface PiSettingRow {
   action?: PiSettingAction;
   /** Set for the provider rows, so the action knows which one was chosen. */
   provider?: string;
+  /** Set for the gentle rows, which send the command as a prompt. */
+  command?: string;
 }
 
 export interface ProviderSummary {
   name: string;
   models: number;
+}
+
+/** What the popup needs from Gentle AI, in one place. */
+export interface GentleActions {
+  state(): Promise<GentleState>;
+  /** Runs a gentle-ai subcommand and returns its output, for the report popup. */
+  run(args: readonly string[], title: string): Promise<string>;
+  setReview(on: boolean): Promise<void>;
+  telemetry(action: "enable" | "disable" | "preview"): Promise<void>;
+  install(): Promise<void>;
+  /** Sends a gentle slash command to the running session. */
+  sendCommand(name: string): Promise<void>;
 }
 
 /**
@@ -245,6 +283,81 @@ export function buildCategorySettings(
       ];
     }
 
+    case "gentle": {
+      const gentle = snapshot.gentle;
+      const rows: PiSettingRow[] = [back, { kind: "separator", label: "Estado" }];
+
+      rows.push({
+        kind: "item",
+        action: "gentleStatus",
+        label: `Gentle AI: ${summarizeGentle(gentle)}`,
+        detail: "Paquete, binario, versión y si está cargado en esta sesión",
+      });
+
+      if (gentle === undefined || !gentle.installed) {
+        rows.push({
+          kind: "item",
+          action: "gentleInstall",
+          label: "Instalar gentle-pi",
+          detail: "Se instalará con pi install npm:gentle-pi",
+        });
+        return rows;
+      }
+
+      const rdd = gentle.review.rdd;
+      rows.push(
+        {
+          kind: "item",
+          action: "gentleReview",
+          label: `Revisión por candidato: ${rdd === "unknown" ? "desconocida" : rdd}`,
+          detail:
+            rdd === "on"
+              ? "Pulsa para desactivarla (global " +
+                gentle.review.global +
+                ", clon " +
+                gentle.review.cloneLocal +
+                ")"
+              : "Pulsa para activarla",
+        },
+        {
+          kind: "item",
+          action: "gentleTelemetry",
+          label: `Telemetría anónima: ${gentle.telemetry}`,
+          detail: "Activar, desactivar o ver exactamente qué se enviaría",
+        },
+        {
+          kind: "item",
+          action: "gentleSdd",
+          label: "SDD: fase del cambio activo",
+          detail: "Ejecuta gentle-ai sdd-status",
+        },
+        {
+          kind: "item",
+          action: "gentleDoctor",
+          label: "Diagnóstico del ecosistema",
+          detail: "Ejecuta gentle-ai doctor",
+        },
+      );
+
+      if (gentle.commands.length > 0) {
+        rows.push({
+          kind: "separator",
+          label: gentle.active ? "Comandos cargados" : "Comandos (requieren reiniciar pi)",
+        });
+        for (const command of gentle.commands) {
+          rows.push({
+            kind: "item",
+            action: "gentleCommand",
+            command,
+            label: command,
+            detail: "Se envía al agente como un mensaje",
+          });
+        }
+      }
+
+      return rows;
+    }
+
     default:
       return [
         back,
@@ -288,6 +401,7 @@ export interface PiMenuDeps {
   selectThinkingLevel(): Promise<void>;
   selectRuntime(): Promise<void>;
   installManagedRuntime(): Promise<void>;
+  gentle: GentleActions;
   newSession(): Promise<void>;
   abort(): Promise<void>;
   restart(): Promise<void>;
@@ -425,8 +539,67 @@ async function runSetting(
         await checkProvider(deps, row.provider);
       }
       return true;
+    case "gentleStatus":
+      await showGentleStatus(deps);
+      return true;
+    case "gentleReview": {
+      const state = await deps.gentle.state();
+      await deps.gentle.setReview(state.review.rdd !== "on");
+      return true;
+    }
+    case "gentleTelemetry":
+      await showGentleTelemetry(deps);
+      return true;
+    case "gentleSdd":
+      await deps.gentle.run(["sdd-status"], "PiCode: SDD");
+      return true;
+    case "gentleDoctor":
+      await deps.gentle.run(["doctor"], "PiCode: diagnóstico de Gentle AI");
+      return true;
+    case "gentleInstall":
+      await deps.gentle.install();
+      return false;
+    case "gentleCommand":
+      if (row.command) {
+        await deps.gentle.sendCommand(row.command);
+      }
+      return false;
     default:
       return true;
+  }
+}
+
+/** Everything PiCode knows about Gentle AI, in a report rather than a row. */
+async function showGentleStatus(deps: PiMenuDeps): Promise<void> {
+  const state = await deps.gentle.state();
+  void vscode.window.showInformationMessage(`PiCode: Gentle AI`, {
+    modal: true,
+    detail: describeGentle(state).join("\n"),
+  });
+}
+
+/**
+ * The telemetry opt-out, with the payload on offer.
+ *
+ * gentle-ai can print exactly what it would send, which turns a vague privacy
+ * question into a checkable one, so that option is in the same dialog as the switch.
+ */
+async function showGentleTelemetry(deps: PiMenuDeps): Promise<void> {
+  const state = await deps.gentle.state();
+  const answer = await vscode.window.showInformationMessage(
+    `PiCode: telemetría de Gentle AI — ${state.telemetry}`,
+    { modal: true, detail: "Es anónima y opcional. Puedes ver el contenido exacto antes de decidir." },
+    "Ver qué se enviaría",
+    "Activar",
+    "Desactivar",
+  );
+
+  if (answer === "Ver qué se enviaría") {
+    await deps.gentle.telemetry("preview");
+  } else if (answer === "Activar") {
+    await deps.gentle.telemetry("enable");
+  } else if (answer === "Desactivar") {
+    await deps.gentle.telemetry("disable");
   }
 }
 
