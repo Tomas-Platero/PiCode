@@ -21,7 +21,6 @@
     newSession: document.getElementById("new-session"),
     model: document.getElementById("model"),
     thinking: document.getElementById("thinking"),
-    context: document.getElementById("context"),
     dropdown: document.getElementById("dropdown"),
     dropdownFilter: document.getElementById("dropdown-filter"),
     dropdownOptions: document.getElementById("dropdown-options"),
@@ -239,14 +238,17 @@
     view.body.textContent = message;
   }
 
-  function handleMessageEvent(message) {
+  function handleMessageEvent(message, phase) {
     var role = message && typeof message.role === "string" ? message.role : "assistant";
 
     if (role === "user") {
+      // The user's message is echoed locally. `message_start` replaces the echo
+      // with what was actually sent, and `message_end` describes that same
+      // message again, so it must not add a second bubble.
       if (userEcho) {
         userEcho.body.textContent = textFromContent(message.content);
         userEcho = null;
-      } else {
+      } else if (phase === "start") {
         var echo = addMessage("user");
         echo.body.textContent = textFromContent(message.content);
       }
@@ -254,13 +256,27 @@
     }
 
     if (role === "assistant") {
+      // `message_start` opens the live stream; the deltas fill it and
+      // `message_end` replaces it with the authoritative content. Closing the
+      // stream here would leave an empty bubble behind and make every delta
+      // open a second one.
+      if (phase === "start") {
+        ensureStream();
+        return;
+      }
       var view = ensureStream().view;
       renderContent(view.body, message.content);
       endStream();
       return;
     }
 
-    // Tool results and any other role: keep the raw text out of the way.
+    // pi opens every turn with an empty internal `system` message; it is not
+    // user-facing, so it is never rendered. The host's own session notes are a
+    // separate path and stay. Any other role (toolResult, ...) arrives as a
+    // start/end pair and renders once, on the authoritative end.
+    if (phase === "start" || role === "system") {
+      return;
+    }
     var other = addMessage(role);
     other.body.textContent = textFromContent(message.content);
   }
@@ -328,10 +344,10 @@
         setStatus("running");
         break;
       case "message_start":
-        handleMessageEvent(event.message);
+        handleMessageEvent(event.message, "start");
         break;
       case "message_end":
-        handleMessageEvent(event.message);
+        handleMessageEvent(event.message, "end");
         break;
       case "message_update":
         applyDelta(event.assistantMessageEvent);
@@ -455,15 +471,6 @@
       parts.push(usageLine);
     }
 
-    // What a message will carry is the one thing the owner should never have to
-    // guess, so the chip states it and clicking it changes it.
-    var attached = state.contextAttached !== false;
-    elements.context.textContent = "Contexto: " + (attached ? "sí" : "no");
-    elements.context.className =
-      "dropdown-toggle context-chip" + (attached ? " context-on" : "");
-    elements.context.title = attached
-      ? "Cada mensaje lleva la carpeta, el archivo activo, la selección y los problemas. Pulsa para no adjuntarlos."
-      : "No se adjunta contexto del editor. Pulsa para volver a adjuntarlo.";
     elements.session.textContent = parts.join(" · ");
   }
 
@@ -683,10 +690,6 @@
 
     elements.thinking.addEventListener("click", function () {
       openDropdownFor("thinking");
-    });
-
-    elements.context.addEventListener("click", function () {
-      send({ type: "toggleContext" });
     });
 
     elements.dropdownFilter.addEventListener("input", function () {

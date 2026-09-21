@@ -40,12 +40,6 @@ const CHAT_BODY = `    <header class="toolbar">
       ></textarea>
       <div class="composer-actions">
         <button
-          id="context"
-          type="button"
-          class="dropdown-toggle context-chip"
-          title="Adjuntar el contexto del editor"
-        >Contexto: sí</button>
-        <button
           id="model"
           type="button"
           class="dropdown-toggle model-chip"
@@ -111,7 +105,7 @@ export class ChatView implements vscode.WebviewViewProvider {
    * every toggle writing to their settings file.
    */
   private attachContext =
-    vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", true);
+    vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", false);
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -400,11 +394,6 @@ export class ChatView implements vscode.WebviewViewProvider {
           break;
         }
         await this.host.applyThinkingLevel(level);
-        await this.pushState();
-        break;
-      }
-      case "toggleContext": {
-        this.attachContext = !this.attachContext;
         await this.pushState();
         break;
       }

@@ -162,7 +162,7 @@
         },
         "picode.context.attach": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Adjuntar el contexto del editor (carpeta abierta, archivo activo, selección y problemas) a cada mensaje. El panel lo puede cambiar por sesión con el chip Contexto.",
           "scope": "window"
         }
