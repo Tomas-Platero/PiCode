@@ -83,10 +83,14 @@ export function ffmpegInstallHint(platform: string = process.platform): string {
 export function resolveFfmpeg(configured: string): string | undefined {
   const trimmed = configured.trim();
   if (trimmed.length > 0) {
-    // A configured path is taken as given when it exists; when it does not, the
-    // search falls through to PATH rather than failing, because a stale setting
-    // should not be worse than having no setting.
-    return resolveOnPath(trimmed) ?? undefined;
+    // A configured path wins when it resolves. When it does not, the search still
+    // falls through to PATH: a stale setting must not make the panel claim ffmpeg
+    // is absent while a working one is sitting on the PATH, and "it is missing,
+    // here is how to install it" would then be a lie the owner cannot see through.
+    const found = resolveOnPath(trimmed);
+    if (found !== undefined) {
+      return found;
+    }
   }
   return resolveOnPath("ffmpeg");
 }

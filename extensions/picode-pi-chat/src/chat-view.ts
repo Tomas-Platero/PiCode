@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import * as vscode from "vscode";
 import {
   ATTACHMENT_LIMITS,
@@ -11,6 +12,17 @@ import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
+import {
+  VIDEO_LIMITS,
+  extractFrames,
+  ffmpegInstallHint,
+  formatVideoNote,
+  probeVideo,
+  resolveFfmpeg,
+  type CommandRunner,
+  type VideoFrame,
+  type VideoProbe,
+} from "./video";
 import { buildWebviewHtml } from "./webview-html";
 
 type ViewStatus = "idle" | "running" | "settled" | "error";
@@ -70,7 +82,7 @@ const CHAT_BODY = `    <header class="toolbar">
       ></textarea>
       <div id="attachments" class="attachments" hidden></div>
       <div class="composer-actions">
-        <button id="attach" type="button" class="icon-button" title="Adjuntar una imagen" aria-label="Adjuntar"><span class="codicon codicon-device-camera"></span></button>
+        <button id="attach" type="button" class="icon-button" title="Adjuntar una imagen o un vídeo" aria-label="Adjuntar"><span class="codicon codicon-device-camera"></span></button>
         <button
           id="model"
           type="button"
@@ -147,6 +159,15 @@ export class ChatView implements vscode.WebviewViewProvider {
    * once per image instead of once per add plus once per send.
    */
   private readonly attachments = new Map<string, PreparedImage>();
+  /**
+   * The line that tells the model the stills in the message came from a video.
+   *
+   * Kept under the id of each still, next to the image itself, so it lives and dies
+   * with the store: an id that no longer resolves cannot smuggle a stale sentence
+   * into the prompt, and two videos in one message are both described instead of
+   * only the last one.
+   */
+  private readonly videoNotes = new Map<string, string>();
   /** Makes every id unique within a session, so an old id cannot resolve to a new image. */
   private attachmentSerial = 0;
 
@@ -409,10 +430,16 @@ export class ChatView implements vscode.WebviewViewProvider {
    * `refusals` carries the failures that happened before the bytes existed (a file
    * the dialog offered but the disk would not read), so one request gets one answer
    * instead of a reply per file.
+   *
+   * `notes` runs parallel to `candidates` and carries, for a still taken from a
+   * video, the line that says so. It is the only thing that tells the model these
+   * images are frames of a moving picture, so it is stored with them rather than
+   * sent to the webview.
    */
   private async acceptAttachments(
     candidates: readonly PrepareImageInput[],
     refusals: readonly AttachmentRefusal[] = [],
+    notes?: readonly (string | undefined)[],
   ): Promise<void> {
     // Nothing arrived and nothing failed: there is nobody to answer. A cancelled
     // dialog lands here, and answering it would read as a refusal.
@@ -457,7 +484,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         return;
       }
 
-      for (const candidate of candidates) {
+      for (const [index, candidate] of candidates.entries()) {
         const outcome = await prepareImage(tools, candidate, ATTACHMENT_LIMITS);
         if (!outcome.ok) {
           refused.push({ name: candidateName(candidate), reason: outcome.reason });
@@ -465,6 +492,13 @@ export class ChatView implements vscode.WebviewViewProvider {
         }
         const id = this.nextAttachmentId();
         this.attachments.set(id, outcome.image);
+        // A still taken from a video carries the line that says so. Storing it under
+        // the id means the prompt repeats it for exactly as long as one of that
+        // video's stills is still attached, and never after.
+        const note = notes?.[index];
+        if (note !== undefined) {
+          this.videoNotes.set(id, note);
+        }
         added.push({
           id,
           mimeType: outcome.image.mimeType,
@@ -482,16 +516,143 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Reads the files a dialog returned and prepares each one for the wire.
+   *
+   * An image is read and handed to the image pipeline. A video is sampled with
+   * ffmpeg and every still takes that same route, so the count gate, the store and
+   * the answer to the webview do not change: a video is a small batch of images that
+   * arrived through a different door. The owner sees each still as its own chip and
+   * can drop the ones that do not belong.
+   */
+  private async acceptPickedFiles(chosen: readonly vscode.Uri[]): Promise<void> {
+    const candidates: PrepareImageInput[] = [];
+    /** Parallel to `candidates`: the video note a still carries, when it is one. */
+    const notes: (string | undefined)[] = [];
+    const refusals: AttachmentRefusal[] = [];
+    const videos: PickedVideo[] = [];
+
+    for (const uri of chosen) {
+      const name = uriName(uri);
+      if (name !== undefined && VIDEO_EXTENSIONS.includes(extensionOf(name))) {
+        videos.push({ uri, name });
+        continue;
+      }
+      try {
+        const candidate: PrepareImageInput = { bytes: await vscode.workspace.fs.readFile(uri) };
+        if (name !== undefined) {
+          candidate.name = name;
+        }
+        candidates.push(candidate);
+        notes.push(undefined);
+      } catch (error) {
+        // A chosen file the disk will not give up is one refusal, not a failed
+        // batch: the other files still deserve to be attached.
+        refusals.push({
+          name: name ?? "imagen",
+          reason:
+            "No se pudo adjuntar la imagen. No se pudo leer el archivo: " + toErrorMessage(error),
+        });
+      }
+    }
+
+    if (videos.length > 0) {
+      // Resolved once for the whole run: four stills must not mean four searches of
+      // the PATH, and one missing ffmpeg is one fact about this machine rather than
+      // one per file.
+      const ffmpeg = resolveFfmpeg(readFfmpegPath());
+      for (const video of videos) {
+        if (ffmpeg === undefined) {
+          refusals.push({
+            name: video.name,
+            reason:
+              "No se pudo adjuntar el vídeo. No se encontró ffmpeg, que es el programa que " +
+              `extrae sus fotogramas: instálalo con \`${ffmpegInstallHint()}\` o indica su ` +
+              "ruta en picode.media.ffmpegPath. PiCode no incluye ffmpeg.",
+          });
+          continue;
+        }
+        const stills = await this.readVideoStills(video, ffmpeg);
+        if ("reason" in stills) {
+          refusals.push({ name: video.name, reason: stills.reason });
+          continue;
+        }
+        const note = formatVideoNote(stills.frames, stills.probe, video.name);
+        for (const frame of stills.frames) {
+          candidates.push({ bytes: frame.bytes, name: video.name });
+          // Every still of one video carries the same line; the prompt says it once.
+          // Two videos carry two different lines, so both are described.
+          notes.push(note);
+        }
+      }
+    }
+
+    await this.acceptAttachments(candidates, refusals, notes);
+  }
+
+  /**
+   * Samples a video into stills, or says why it cannot.
+   *
+   * The size is checked first and against the file's own metadata: refusing a 2 GB
+   * recording has to cost a stat rather than a read, and ffmpeg must not run over a
+   * file PiCode already knows it will not send.
+   */
+  private async readVideoStills(
+    video: PickedVideo,
+    ffmpeg: string,
+  ): Promise<{ frames: VideoFrame[]; probe: VideoProbe } | { reason: string }> {
+    let size: number;
+    try {
+      const stats = await vscode.workspace.fs.stat(video.uri);
+      size = stats.size;
+    } catch (error) {
+      return {
+        reason:
+          "No se pudo adjuntar el vídeo. No se pudo leer el archivo: " + toErrorMessage(error),
+      };
+    }
+    if (size > VIDEO_LIMITS.maxBytes) {
+      return {
+        reason:
+          `No se pudo adjuntar el vídeo. Pesa ${formatBytes(size)} y el límite por archivo ` +
+          `es ${formatBytes(VIDEO_LIMITS.maxBytes)}. Recórtalo antes de adjuntarlo.`,
+      };
+    }
+
+    const file = video.uri.fsPath;
+    const outcome = await probeVideo(runFfmpeg, ffmpeg, file);
+    if (!outcome.ok) {
+      return { reason: `No se pudo adjuntar el vídeo. ${outcome.reason}` };
+    }
+    const frames = await extractFrames(runFfmpeg, ffmpeg, file, outcome.probe);
+    if (frames.length === 0) {
+      return {
+        reason:
+          `No se pudo adjuntar el vídeo. ffmpeg no devolvió ningún fotograma legible de ` +
+          `${video.name}; comprueba que el archivo se reproduzca y que ffmpeg sea una ` +
+          "versión completa.",
+      };
+    }
+    return { frames, probe: outcome.probe };
+  }
+
+  /**
    * Resolves the ids a prompt submitted against the store.
    *
    * The count of ids that no longer resolve is returned rather than thrown away,
-   * because a chip the panel is still drawing over nothing has to be noticed.
+   * because a chip the panel is still drawing over nothing has to be noticed. The
+   * video notes travel back with the images, deduplicated, so one video is described
+   * once however many of its stills are attached.
    */
-  private resolveAttachments(value: unknown): { images: PreparedImage[]; missing: number } {
+  private resolveAttachments(value: unknown): {
+    images: PreparedImage[];
+    notes: string[];
+    missing: number;
+  } {
     const images: PreparedImage[] = [];
+    const notes: string[] = [];
     let missing = 0;
     if (!Array.isArray(value)) {
-      return { images, missing };
+      return { images, notes, missing };
     }
 
     for (const id of value) {
@@ -506,8 +667,12 @@ export class ChatView implements vscode.WebviewViewProvider {
         continue;
       }
       images.push(image);
+      const note = this.videoNotes.get(id);
+      if (note !== undefined && !notes.includes(note)) {
+        notes.push(note);
+      }
     }
-    return { images, missing };
+    return { images, notes, missing };
   }
 
   /** The next id, unique within the session that mints it. */
@@ -517,13 +682,15 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Drops every prepared image.
+   * Drops every prepared image and the note that explained it.
    *
    * Called when the message has been sent, when the session changes, and when the
-   * view goes away: an id only means something inside the session that minted it.
+   * view goes away: an id only means something inside the session that minted it,
+   * and a note names stills that no longer exist.
    */
   private clearAttachments(): void {
     this.attachments.clear();
+    this.videoNotes.clear();
   }
 
   private post(message: unknown): void {
@@ -582,10 +749,13 @@ export class ChatView implements vscode.WebviewViewProvider {
         // The webview cannot open a file dialog, so the choosing happens here and
         // the bytes never reach the webview in a form it could send back.
         const chosen = await vscode.window.showOpenDialog({
-          title: "PiCode: adjuntar imágenes",
+          title: "PiCode: adjuntar archivos",
           openLabel: "Adjuntar",
           canSelectMany: true,
-          filters: { Imágenes: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] },
+          filters: {
+            Imágenes: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+            Vídeos: [...VIDEO_EXTENSIONS],
+          },
         });
         // A cancelled dialog answers with nothing at all: an empty `attachments`
         // message would read as a refusal of something the owner never chose.
@@ -593,28 +763,7 @@ export class ChatView implements vscode.WebviewViewProvider {
           break;
         }
 
-        const candidates: PrepareImageInput[] = [];
-        const refusals: AttachmentRefusal[] = [];
-        for (const uri of chosen) {
-          const name = uriName(uri);
-          try {
-            const candidate: PrepareImageInput = { bytes: await vscode.workspace.fs.readFile(uri) };
-            if (name !== undefined) {
-              candidate.name = name;
-            }
-            candidates.push(candidate);
-          } catch (error) {
-            // A chosen file the disk will not give up is one refusal, not a failed
-            // batch: the other files still deserve to be attached.
-            refusals.push({
-              name: name ?? "imagen",
-              reason:
-                "No se pudo adjuntar la imagen. No se pudo leer el archivo: " +
-                toErrorMessage(error),
-            });
-          }
-        }
-        await this.acceptAttachments(candidates, refusals);
+        await this.acceptPickedFiles(chosen);
         break;
       }
       case "detachAttachment": {
@@ -622,6 +771,9 @@ export class ChatView implements vscode.WebviewViewProvider {
         // already forgotten, and there is nothing to say about that.
         if (typeof message.id === "string") {
           this.attachments.delete(message.id);
+          // Its note goes with it: a line describing stills that are no longer
+          // attached would tell the model about images it will never receive.
+          this.videoNotes.delete(message.id);
         }
         break;
       }
@@ -638,7 +790,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         // The bytes were prepared when the image was added, so submitting only
         // carries ids. An id that no longer resolves is a chip the panel is still
         // drawing over nothing, and it is said once rather than lost silently.
-        const { images, missing } = this.resolveAttachments(message.attachmentIds);
+        const { images, notes, missing } = this.resolveAttachments(message.attachmentIds);
         if (missing > 0) {
           this.post({
             type: "error",
@@ -650,13 +802,19 @@ export class ChatView implements vscode.WebviewViewProvider {
           });
         }
 
-        // The note goes before the owner's words, like the editor-context block:
-        // whatever PiCode adds is a preamble, and the message itself comes last.
+        // The notes go before the owner's words, like the editor-context block: what
+        // PiCode adds is a preamble, and the message itself comes last. The video note
+        // comes first because it says what the images are before the image note says
+        // how big they are.
+        const preamble = [...notes];
         const note = formatAttachmentNote(images);
+        if (note !== undefined) {
+          preamble.push(note);
+        }
         // Collected at send time, not when the panel opened, so it describes the
         // editor as it is when the message is actually sent.
         const body = composePrompt(text, this.attachContext ? collectReferences() : []);
-        const outgoing = note === undefined ? body : `${note}\n\n${body}`;
+        const outgoing = preamble.length === 0 ? body : `${preamble.join("\n")}\n\n${body}`;
 
         this.postStatus("running");
         try {
@@ -821,6 +979,90 @@ function candidateName(candidate: PrepareImageInput): string {
 function uriName(uri: vscode.Uri): string | undefined {
   const name = uri.fsPath.split(/[\\/]/).pop();
   return name !== undefined && name.length > 0 ? name : undefined;
+}
+
+/** A chosen file that has to be sampled with ffmpeg. */
+interface PickedVideo {
+  uri: vscode.Uri;
+  name: string;
+}
+
+/**
+ * The video containers the picker offers, which is also how a chosen file is routed.
+ *
+ * Membership is decided by extension alone, because the file has not been read yet:
+ * a container ffmpeg cannot open is refused later with ffmpeg's own words, which is
+ * a better answer than a guess made here.
+ */
+const VIDEO_EXTENSIONS: readonly string[] = ["mp4", "mov", "m4v", "webm", "mkv", "avi"];
+
+/** The lowercase extension of a file name, without the dot. */
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot < 0 ? "" : name.slice(dot + 1).toLowerCase();
+}
+
+/** The configured ffmpeg, exactly as the setting holds it. */
+function readFfmpegPath(): string {
+  const configured = vscode.workspace
+    .getConfiguration("picode.media")
+    .get<string>("ffmpegPath", "");
+  return typeof configured === "string" ? configured : "";
+}
+
+/**
+ * Runs ffmpeg as a child process.
+ *
+ * `video.ts` takes a `CommandRunner` rather than spawning anything itself, which is
+ * what lets its logic be tested without ffmpeg installed. This is the real one, and
+ * it is the only place the video path touches the machine: nothing is written to
+ * disk, because both the probe and each frame come back on a stream.
+ */
+const runFfmpeg: CommandRunner = {
+  run(command, args) {
+    return new Promise((resolve) => {
+      const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+      let child;
+      try {
+        child = spawn(command, [...args], {
+          shell: needsShell,
+          windowsHide: true,
+          env: { ...process.env, NO_COLOR: "1" },
+        });
+      } catch (error) {
+        resolve({ code: null, stdout: new Uint8Array(0), stderr: toErrorMessage(error) });
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let stderr = "";
+      child.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString("utf8");
+      });
+      // A binary that cannot be started, or that a permission denies, reports on
+      // `error` instead of closing with a code; either way ffmpeg said nothing, and
+      // the probe turns that into a refusal naming the install command.
+      child.on("error", (error) => {
+        resolve({ code: null, stdout: new Uint8Array(0), stderr: `${stderr}${error.message}` });
+      });
+      child.on("close", (code) => {
+        resolve({ code, stdout: Uint8Array.from(Buffer.concat(chunks)), stderr });
+      });
+    });
+  },
+};
+
+/** A byte count the way the refusal message reads it. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) {
+    return `${Math.round(kilobytes)} KB`;
+  }
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 }
 
 /**
