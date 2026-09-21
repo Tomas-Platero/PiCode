@@ -13,8 +13,6 @@
     status: document.getElementById("status"),
     session: document.getElementById("session"),
     messages: document.getElementById("messages"),
-    toolSection: document.getElementById("tool-section"),
-    tools: document.getElementById("tools"),
     form: document.getElementById("composer"),
     prompt: document.getElementById("prompt"),
     send: document.getElementById("send"),
@@ -452,11 +450,15 @@
   function upsertTool(event, phase) {
     var item = toolItems.get(event.toolCallId);
     if (!item) {
-      var listItem = createElement("li", "tool tool-running");
+      // The row is a transcript entry, not a second list: it wears the message
+      // grid so its glyph sits in the same gutter as the speaker icons, and one
+      // toolCallId maps to one row for as long as the run lasts.
+      var row = createElement("div", "tool tool-running");
       var status = codicon("loading");
       status.classList.add("tool-status", "codicon-modifier-spin");
-      listItem.appendChild(status);
-      listItem.appendChild(createElement("div", "tool-name", event.toolName || "herramienta"));
+      row.appendChild(status);
+      var head = createElement("div", "tool-head");
+      head.appendChild(createElement("span", "tool-name", event.toolName || "herramienta"));
       var args = "";
       try {
         args = JSON.stringify(event.args || {});
@@ -465,17 +467,20 @@
         // take down the tool timeline.
         args = "";
       }
-      listItem.appendChild(createElement("div", "tool-args", args));
+      head.appendChild(createElement("span", "tool-args", args));
+      row.appendChild(head);
       item = {
-        item: listItem,
+        item: row,
         status: status,
         glyph: "loading",
         output: createElement("pre", "tool-output", ""),
       };
-      listItem.appendChild(item.output);
-      elements.tools.appendChild(listItem);
+      row.appendChild(item.output);
+      // Appended where it happened: pi emits the execution after the assistant
+      // message that asked for it, so the row lands after that message and in
+      // front of whatever comes next.
+      elements.messages.appendChild(row);
       toolItems.set(event.toolCallId, item);
-      elements.toolSection.hidden = false;
     }
 
     if (phase !== "start") {
@@ -771,8 +776,6 @@
         break;
       case "clear":
         elements.messages.textContent = "";
-        elements.tools.textContent = "";
-        elements.toolSection.hidden = true;
         toolItems.clear();
         stream = null;
         userEcho = null;

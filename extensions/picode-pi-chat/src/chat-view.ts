@@ -83,10 +83,6 @@ const CHAT_BODY = `    <header class="toolbar">
       <button id="menu" type="button" class="icon-button" title="Configuración de pi" aria-label="Configuración"><span class="codicon codicon-settings-gear"></span></button>
     </header>
     <main id="messages" class="messages" aria-live="polite"></main>
-    <section id="tool-section" class="tool-section" hidden>
-      <h2 class="tool-heading">Actividad de herramientas</h2>
-      <ul id="tools" class="tools"></ul>
-    </section>
     <form id="composer" class="composer">
       <textarea
         id="prompt"

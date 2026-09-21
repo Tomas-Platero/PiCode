@@ -563,43 +563,21 @@ button.secondary:hover:not(:disabled) {
   }
 }
 
-/* --- tool activity ------------------------------------------------------ */
-
-.tool-section {
-  border-top: 1px solid var(--vscode-panel-border);
-  max-height: 25vh;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.tool-heading {
-  margin: 0 0 4px 0;
-  font-size: 0.8em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--vscode-descriptionForeground);
-}
-
-.tools {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* --- tool activity in the transcript ------------------------------------ */
 
 /*
- * One tool per list entry: a status glyph in the gutter and the detail beside it.
- * The row is not a card any more, because a run of cards turns a short activity
- * list into a wall of borders.
+ * A tool run is an entry in the conversation, so it reuses the message grid — the
+ * glyph in the same 20px gutter, the content in the same column beside it — and
+ * lines up with the messages around it instead of starting at its own left edge.
+ * It stays quieter than a message on purpose: the tool work is the context of the
+ * answer, not the answer.
  */
 .tool {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 6px;
-  padding: 2px 0;
+  grid-template-columns: 20px 1fr;
+  gap: 2px 8px;
   align-items: start;
+  color: var(--vscode-descriptionForeground);
 }
 
 /* The state is carried by the glyph's colour, and by nothing else. */
@@ -620,33 +598,56 @@ button.secondary:hover:not(:disabled) {
   color: var(--vscode-errorForeground);
 }
 
-.tool-name,
-.tool-args,
-.tool-output {
+/* The glyph and the name share the first line, the way a message header does. */
+.tool-head {
   grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
 .tool-name {
+  flex: 0 0 auto;
   font-weight: 600;
   font-size: 0.9em;
 }
 
-.tool-args,
-.tool-output {
+/* The arguments are one line of context; the output is the block that holds the rest. */
+.tool-args {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: var(--vscode-editor-font-size, 0.9em);
-  color: var(--vscode-descriptionForeground);
-  margin: 2px 0 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
+/*
+ * The output sits under the name, in the content column, so it reads as part of
+ * the same entry rather than as a second panel. Nothing is drawn until there is
+ * something to read: an empty block under every running tool would be a box of
+ * background with no answer in it.
+ */
 .tool-output {
-  background: var(--vscode-textCodeBlock-background);
+  grid-column: 2;
+  grid-row: 2;
+  margin: 2px 0 0 0;
   padding: 6px 8px;
   border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--vscode-editor-font-size, 0.9em);
+  white-space: pre-wrap;
+  word-break: break-word;
   max-height: 12em;
   overflow: auto;
+}
+
+.tool-output:empty {
+  display: none;
 }
 
 /* --- empty state -------------------------------------------------------- */
