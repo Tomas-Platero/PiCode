@@ -310,6 +310,17 @@ button.secondary:hover:not(:disabled) {
  * to be legible, which is why the coloured left borders and the uppercase label
  * are gone.
  */
+/*
+ * The transcript and its stats column share one row. `min-height: 0` is what lets
+ * the transcript scroll: without it the flex item refuses to shrink below its
+ * content, grows past the panel and pushes the composer off screen.
+ */
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -317,6 +328,88 @@ button.secondary:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* --- stats -------------------------------------------------------------- */
+
+/*
+ * The narrow column beside the transcript: context, cost and tokens, the three
+ * figures that change with every reply. `display: flex` beats the `hidden`
+ * attribute, so hiding it when every figure is missing is spelled out below.
+ */
+.stats {
+  flex: 0 0 auto;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 4px;
+  border-right: 1px solid var(--vscode-panel-border);
+  overflow: hidden;
+}
+
+.stats[hidden] {
+  display: none;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.7em;
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/*
+ * Tabular figures so the column does not jitter while the numbers grow, and an
+ * ellipsis so a long value is clipped inside 52px instead of widening it.
+ */
+.stat-value {
+  font-size: 0.8em;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The full-width strip under the composer: where the agent runs. The ` · `
+ * between segments is drawn here, so the host never sends punctuation.
+ */
+.stats-strip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-top: 1px solid var(--vscode-panel-border);
+  font-size: 0.75em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.stats-strip[hidden] {
+  display: none;
+}
+
+.stat-segment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.stats-strip .stat-segment + .stat-segment::before {
+  content: " · ";
 }
 
 /*
@@ -725,6 +818,19 @@ button.secondary:hover:not(:disabled) {
   font-size: 0.85em;
   font-weight: 600;
   color: var(--vscode-descriptionForeground);
+}
+
+/*
+ * The quiet line the section shows while the host has not answered yet. The glyph
+ * inherits this colour, the way the rest of the view's glyphs inherit theirs.
+ */
+.empty-sessions-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
 }
 
 .session-item {

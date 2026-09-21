@@ -132,12 +132,26 @@ export function formatCost(cost: number): string {
   return `${cost.toFixed(decimals).replace(".", ",")} $`;
 }
 
-/** How full the context window was on the last turn, or undefined without a window. */
-export function contextPressure(totals: UsageTotals, contextWindow: number | undefined): string | undefined {
+/**
+ * How full the context window was on the last turn, as a bare 0-100 percentage.
+ *
+ * The guard is the one `contextPressure` used to own: without a usable window or a
+ * context size there is no number to report, so both readings go through here and
+ * cannot drift apart.
+ */
+export function contextPercent(totals: UsageTotals, contextWindow: number | undefined): number | undefined {
   if (!contextWindow || contextWindow <= 0 || totals.contextTokens <= 0) {
     return undefined;
   }
-  const percent = Math.min(100, Math.round((totals.contextTokens / contextWindow) * 100));
+  return Math.min(100, Math.round((totals.contextTokens / contextWindow) * 100));
+}
+
+/** How full the context window was on the last turn, or undefined without a window. */
+export function contextPressure(totals: UsageTotals, contextWindow: number | undefined): string | undefined {
+  const percent = contextPercent(totals, contextWindow);
+  if (percent === undefined || !contextWindow) {
+    return undefined;
+  }
   return `${percent}% de ${formatTokens(contextWindow)}`;
 }
 

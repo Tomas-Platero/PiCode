@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { AjustesView } from "./ajustes-view";
 import { loadImageTools, type ImageTools } from "./attachments";
@@ -40,12 +41,20 @@ import {
   describeRuntime,
   installManagedRuntime,
   readTransport,
+  resolveOnPath,
   resolveRuntime,
   resolveSdkEntry,
   type PiTransport,
   type RuntimeDescriptor,
   type RuntimeMode,
 } from "./runtime";
+import {
+  countMcpServers,
+  describeEnvironment,
+  parseBranch,
+  type EnvironmentStats,
+} from "./stats";
+import { resolveAgentDir } from "./transcription";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -77,6 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // project's previous conversations, so both surfaces read and load one list.
     recentSessions: () => listProjectSessions(),
     resumeSession: (session) => resumeSession(session),
+    environment: () => readEnvironment(),
     imageTools: () => attachmentTools(context.extensionUri),
     // The view reports host-side failures that must not interrupt the transcript;
     // the shared channel already exists here, so one is not created for it.
@@ -791,6 +801,63 @@ async function listProjectSessions(): Promise<SessionSummary[]> {
     .get<string[]>("extraArgs", []);
   const directory = projectSessionsDir(agentCwd ?? process.cwd(), sessionsRoot(extraArgs));
   return directory === undefined ? [] : listSessions(directory);
+}
+
+/**
+ * The figures that describe where the agent runs, for the panel's bottom strip.
+ *
+ * Best-effort by design: a missing config file, a folder outside a repository or a
+ * git that is not installed each mean one figure is unknown, never that the panel
+ * fails. The file read and the subprocess are not free, so the view caches the
+ * result for the life of a bind instead of calling this on every reply.
+ */
+async function readEnvironment(): Promise<EnvironmentStats> {
+  const cwd = agentCwd ?? process.cwd();
+
+  // The MCP config lives next to pi's other configuration, and where that is is
+  // already known in one place; reading it here keeps that knowledge there.
+  let mcps: number | undefined;
+  try {
+    const bytes = await vscode.workspace.fs.readFile(
+      vscode.Uri.file(path.join(resolveAgentDir(), "mcp.json")),
+    );
+    mcps = countMcpServers(Buffer.from(bytes).toString("utf8"));
+  } catch {
+    mcps = undefined;
+  }
+
+  return describeEnvironment({
+    ...(mcps === undefined ? {} : { mcps }),
+    sessions: (await listProjectSessions()).length,
+    project: path.basename(cwd),
+    ...(await currentBranch(cwd)),
+  });
+}
+
+/**
+ * The current git branch, or nothing when there is none to report.
+ *
+ * A repository-less folder, a missing git and a non-zero exit all land in the same
+ * place: no branch. A detached HEAD is dropped by `parseBranch`, because `HEAD` is a
+ * state and not a name to put where a branch belongs.
+ */
+async function currentBranch(cwd: string): Promise<{ branch?: string }> {
+  const git = resolveOnPath("git");
+  if (git === undefined) {
+    return {};
+  }
+
+  const result = await runExecutable(git, ["rev-parse", "--abbrev-ref", "HEAD"], {
+    shell: /\.(cmd|bat)$/i.test(git),
+    cwd,
+    onOutput: () => {},
+  });
+  if (!result.ok) {
+    return {};
+  }
+
+  const branch = parseBranch(result.text);
+  return branch === undefined ? {} : { branch };
 }
 
 /**

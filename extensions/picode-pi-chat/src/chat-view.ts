@@ -23,6 +23,7 @@ import {
   type TranscriptResult,
   type TranscriptionBackend,
 } from "./transcription";
+import { describeLiveStats, type EnvironmentStats } from "./stats";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import {
   VIDEO_LIMITS,
@@ -67,6 +68,14 @@ export interface ChatViewHost {
   /** Loads a chosen previous conversation into the running agent. */
   resumeSession(session: SessionSummary): Promise<void>;
   /**
+   * The figures that describe where the agent runs: MCP servers, this project's
+   * conversations, the project name and the branch.
+   *
+   * Read here rather than in the view because it is a file and a subprocess, and the
+   * view caches the answer for the life of a bind.
+   */
+  environment(): Promise<EnvironmentStats>;
+  /**
    * pi's own image helpers, or undefined when they could not be loaded.
    *
    * The view never resolves the pi entry itself: loading an ESM package is host
@@ -92,7 +101,10 @@ const CHAT_BODY = `    <header class="toolbar">
       <button id="restart" type="button" class="icon-button" title="Reiniciar el proceso de pi" aria-label="Reiniciar"><span class="codicon codicon-refresh"></span></button>
       <button id="menu" type="button" class="icon-button" title="Configuración de pi" aria-label="Configuración"><span class="codicon codicon-settings-gear"></span></button>
     </header>
-    <main id="messages" class="messages" aria-live="polite"></main>
+    <div class="body">
+      <aside id="stats" class="stats" hidden></aside>
+      <main id="messages" class="messages" aria-live="polite"></main>
+    </div>
     <form id="composer" class="composer">
       <textarea
         id="prompt"
@@ -120,6 +132,7 @@ const CHAT_BODY = `    <header class="toolbar">
         <button id="send" type="submit" class="primary icon-button" title="Enviar (Enter)" aria-label="Enviar"><span class="codicon codicon-send"></span></button>
       </div>
     </form>
+    <div id="stats-strip" class="stats-strip" hidden></div>
     <div id="dropdown" class="dropdown" hidden>
       <input
         id="dropdown-filter"
@@ -216,6 +229,14 @@ export class ChatView implements vscode.WebviewViewProvider {
    * and this is the list that says whether it is one of ours.
    */
   private offeredSessions: SessionSummary[] = [];
+  /**
+   * The environment figures, read once per bind.
+   *
+   * The MCP file and the git subprocess are not per-reply work, so they run when the
+   * panel binds and again when the session count can have changed: a new session or a
+   * restart. Until then the same object is resent, which costs nothing.
+   */
+  private environmentStats: EnvironmentStats | undefined;
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -339,7 +360,12 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.boundClient = client;
     this.eventSubscription = client.onEvent((event) => this.handleEvent(event));
 
+    // A restart is a new bind, and restarting is exactly when the branch or the MCP
+    // config may have changed, so the cached environment does not survive it.
+    this.environmentStats = undefined;
+
     await this.pushState();
+    await this.pushEnvironment();
     await this.pushModels();
     await this.pushThinkingLevels();
   }
@@ -401,6 +427,9 @@ export class ChatView implements vscode.WebviewViewProvider {
         state: toWebviewState(state),
         // Formatted here, where the totals live, so the renderer stays presentation.
         usage: summarizeUsage(this.totals, this.contextWindow),
+        // The live figures travel with the state so the panel redraws its column
+        // from one message, the way it always redrew its chips.
+        stats: describeLiveStats(this.totals, this.contextWindow),
         contextAttached: this.attachContext,
         reasoning: this.panelReasoning,
       });
@@ -409,6 +438,28 @@ export class ChatView implements vscode.WebviewViewProvider {
       this.postStatus("error");
       this.post({ type: "error", message: toErrorMessage(error) });
     }
+  }
+
+  /**
+   * Sends the environment figures, reading them once per bind.
+   *
+   * A host that cannot read them leaves the strip empty rather than reporting an
+   * error over the transcript: the environment is context around the session, not a
+   * failure of it.
+   */
+  private async pushEnvironment(): Promise<void> {
+    if (this.view === undefined) {
+      return;
+    }
+    if (this.environmentStats === undefined) {
+      try {
+        this.environmentStats = await this.host.environment();
+      } catch (error) {
+        this.host.output?.appendLine(`[pi] entorno no disponible: ${toErrorMessage(error)}`);
+        return;
+      }
+    }
+    this.post({ type: "environment", stats: this.environmentStats });
   }
 
   /**
@@ -964,6 +1015,7 @@ export class ChatView implements vscode.WebviewViewProvider {
     switch (message.type) {
       case "ready": {
         await this.pushState();
+        await this.pushEnvironment();
         await this.pushModels();
         await this.pushThinkingLevels();
         await this.pushRecentSessions();
@@ -1114,7 +1166,11 @@ export class ChatView implements vscode.WebviewViewProvider {
         try {
           await this.client.newSession();
           this.notifySessionReset();
+          // A new conversation is a new file on disk, so the count is the one figure
+          // that changed: the cache is dropped and the environment read again.
+          this.environmentStats = undefined;
           await this.pushState();
+          await this.pushEnvironment();
           // A new conversation changes what "previous" means: the one just left is
           // now the newest candidate, and the list the panel holds is stale.
           await this.pushRecentSessions();

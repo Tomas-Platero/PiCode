@@ -31,6 +31,8 @@ const PAIRS = [
       "menu",
       "attach",
       "attachments",
+      "stats",
+      "stats-strip",
     ],
   },
   {

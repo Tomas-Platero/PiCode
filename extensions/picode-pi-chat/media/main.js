@@ -12,6 +12,8 @@
   var elements = {
     status: document.getElementById("status"),
     session: document.getElementById("session"),
+    stats: document.getElementById("stats"),
+    statsStrip: document.getElementById("stats-strip"),
     messages: document.getElementById("messages"),
     form: document.getElementById("composer"),
     prompt: document.getElementById("prompt"),
@@ -37,6 +39,11 @@
   var userEcho = null;
   // Last session state the host pushed, used to mark the current model and level.
   var lastState = null;
+  // The live figures, kept so the strip's cache share can be redrawn when they
+  // change: the strip shows cache beside the environment, and cache is live.
+  var liveStats = null;
+  // The environment figures, pushed once per bind, for the strip under the composer.
+  var environmentStats = null;
   // What the panel does with the model's reasoning, pushed with the session
   // state: `collapsed` (one line that opens), `expanded`, or `hidden`.
   var reasoningMode = "collapsed";
@@ -46,7 +53,12 @@
   // Previous conversations the host offered, newest first, as the empty panel draws
   // them. Kept even while the transcript has messages: they are what the next empty
   // panel offers, and the list is not re-requested just because a message arrived.
-  var recentSessions = [];
+  //
+  // `null` means the host has not answered yet, and `[]` means it answered with no
+  // history. The two draw differently: without the distinction the empty panel either
+  // rearranges itself when the list arrives or shows a spinner forever on a project
+  // that genuinely has no previous conversations.
+  var recentSessions = null;
   // Which dropdown is open, the visible options, and the highlighted one.
   var openDropdown = null;
   var filteredOptions = [];
@@ -558,14 +570,30 @@
    * so a row this script invented would resolve to nothing.
    */
   function renderRecentSessions(empty) {
-    if (recentSessions.length === 0) {
-      // Nothing to offer is nothing to draw: a heading over an empty list reads as a
-      // section that failed to load, not as a project without history.
+    if (recentSessions !== null && recentSessions.length === 0) {
+      // The host answered with nothing to offer, so there is nothing to draw: a heading
+      // over an empty list reads as a section that failed to load, not as a project
+      // without history.
       return;
     }
 
     var section = createElement("section", "empty-sessions");
     section.appendChild(createElement("h3", null, "Sesiones anteriores"));
+
+    if (recentSessions === null) {
+      // The list is still on its way. Drawing the heading now, with one quiet line under
+      // it, means the section takes its place before the answer arrives instead of
+      // popping in later and rearranging the panel under the owner's eyes.
+      var loading = createElement("p", "empty-sessions-loading");
+      var spinner = codicon("loading");
+      spinner.classList.add("codicon-modifier-spin");
+      loading.appendChild(spinner);
+      loading.appendChild(createElement("span", null, "Cargando sesiones\u2026"));
+      section.appendChild(loading);
+      empty.appendChild(section);
+      return;
+    }
+
     for (var index = 0; index < recentSessions.length; index += 1) {
       var session = recentSessions[index];
       var row = createElement("button", "session-item");
@@ -795,7 +823,11 @@
         break;
       case "state":
         reasoningMode = normalizeReasoningMode(message.reasoning);
-        renderState(message.state, message.usage);
+        renderState(message.state);
+        renderStats(message.stats);
+        break;
+      case "environment":
+        renderEnvironment(message.stats);
         break;
       case "models":
         models = Array.isArray(message.models) ? message.models : [];
@@ -835,6 +867,8 @@
         renderAttachments();
         break;
       case "recentSessions": {
+        // An answer, empty included: it stops the loading line and, when it carries a
+        // list, offers it. Only a `clear` puts the list back to `null`.
         recentSessions = Array.isArray(message.sessions) ? message.sessions : [];
         // Redrawn only while the empty state is the thing on screen, so the sessions
         // appear without the owner having to do anything. When the transcript has
@@ -852,6 +886,11 @@
         toolItems.clear();
         stream = null;
         userEcho = null;
+        // A new or switched conversation means the list on screen belongs to another
+        // session: it goes back to not-yet-known and the host, which re-pushes it,
+        // answers again. Listing the old session's conversations here would offer
+        // files that conversation never had.
+        recentSessions = null;
         attachments = [];
         renderAttachments();
         setStatus("idle");
@@ -868,7 +907,7 @@
     }
   }
 
-  function renderState(state, usageLine) {
+  function renderState(state) {
     if (!state || typeof state !== "object") {
       return;
     }
@@ -902,12 +941,79 @@
     if (state.sessionName) {
       parts.push(state.sessionName);
     }
-    // The cost line is formatted by the host, which owns the totals.
-    if (usageLine) {
-      parts.push(usageLine);
-    }
+    // The usage line is deliberately absent: tokens, cost and context now live in
+    // the stats column, and repeating them here would say the same thing twice.
 
     elements.session.textContent = parts.join(" · ");
+  }
+
+  // --- stats --------------------------------------------------------------
+  //
+  // The host owns the figures and the labels are the panel's, so a figure can move
+  // between the column and the strip without leaving the host. Both surfaces are
+  // redrawn when their message arrives and leave the transcript alone.
+
+  function renderStats(stats) {
+    liveStats = stats && typeof stats === "object" ? stats : null;
+
+    var blocks = [];
+    if (liveStats && liveStats.context) {
+      blocks.push({ label: "ctx", value: liveStats.context });
+    }
+    if (liveStats && liveStats.cost) {
+      blocks.push({ label: "coste", value: liveStats.cost });
+    }
+    if (liveStats && liveStats.tokens) {
+      blocks.push({ label: "tokens", value: liveStats.tokens });
+    }
+
+    elements.stats.textContent = "";
+    for (var index = 0; index < blocks.length; index += 1) {
+      var block = createElement("div", "stat");
+      block.appendChild(createElement("span", "stat-label", blocks[index].label));
+      block.appendChild(createElement("span", "stat-value", blocks[index].value));
+      elements.stats.appendChild(block);
+    }
+    // A value the host could not compute is not drawn, and a column with nothing
+    // left in it is hidden rather than left as an empty 52px stripe.
+    elements.stats.hidden = blocks.length === 0;
+
+    // Cache is a live figure shown in the strip, so a new reading redraws it too.
+    drawStrip();
+  }
+
+  function renderEnvironment(stats) {
+    environmentStats = stats && typeof stats === "object" ? stats : null;
+    drawStrip();
+  }
+
+  function drawStrip() {
+    var segments = [];
+    if (environmentStats) {
+      if (environmentStats.mcps) {
+        segments.push(environmentStats.mcps + " MCP");
+      }
+      if (liveStats && liveStats.cache) {
+        segments.push("caché " + liveStats.cache);
+      }
+      if (environmentStats.sessions) {
+        segments.push(environmentStats.sessions + " ses");
+      }
+      if (environmentStats.project) {
+        segments.push(environmentStats.project);
+      }
+      // The branch is the longest name, so it goes last where an ellipsis can
+      // take the tail without hiding the figures before it.
+      if (environmentStats.branch) {
+        segments.push(environmentStats.branch);
+      }
+    }
+
+    elements.statsStrip.textContent = "";
+    for (var index = 0; index < segments.length; index += 1) {
+      elements.statsStrip.appendChild(createElement("span", "stat-segment", segments[index]));
+    }
+    elements.statsStrip.hidden = segments.length === 0;
   }
 
   // --- model and reasoning dropdowns --------------------------------------
