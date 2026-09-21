@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { collectReferences, composePrompt } from "./context";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiSessionState, type PiUsage } from "./protocol";
-import type { RuntimeDescriptor } from "./runtime";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { buildWebviewHtml } from "./webview-html";
 
@@ -15,10 +14,6 @@ type ViewStatus = "idle" | "running" | "settled" | "error";
 export interface ChatViewHost {
   /** A started client for the active runtime, or undefined when pi cannot start. */
   ensureClient(): Promise<PiRpcClient | undefined>;
-  /** Describes the active runtime for the panel's runtime control. */
-  describeRuntime(): Promise<RuntimeDescriptor>;
-  /** Opens the runtime picker and applies the choice. */
-  selectRuntime(): Promise<void>;
   /** Applies a model chosen in the panel's own dropdown. */
   applyModel(modelId: string, provider?: string): Promise<void>;
   /** Applies a reasoning level chosen in the panel's own dropdown. */
@@ -31,14 +26,6 @@ const CHAT_BODY = `    <header class="toolbar">
       <button id="new-session" type="button" class="secondary" title="Empezar una sesión nueva de pi">Nueva</button>
       <button id="abort" type="button" class="secondary" disabled title="Detener la ejecución actual">Detener</button>
     </header>
-    <div class="runtime-strip">
-      <button
-        id="runtime"
-        type="button"
-        class="runtime-chip"
-        title="Elegir qué pi ejecuta PiCode"
-      >comprobando pi\u2026</button>
-    </div>
     <main id="messages" class="messages" aria-live="polite"></main>
     <section id="tool-section" class="tool-section" hidden>
       <h2 class="tool-heading">Actividad de herramientas</h2>
@@ -189,14 +176,6 @@ export class ChatView implements vscode.WebviewViewProvider {
     await this.pushState();
   }
 
-  /**
-   * Refreshes the runtime control. Called after a runtime switch so the panel
-   * never shows a runtime the process is not actually running.
-   */
-  public async refreshRuntime(): Promise<void> {
-    await this.pushRuntime();
-  }
-
   /** Notifies the webview that a new session started and the transcript is gone. */
   public notifySessionReset(): void {
     this.totals = emptyUsage();
@@ -258,7 +237,6 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.eventSubscription = client.onEvent((event) => this.handleEvent(event));
 
     await this.pushState();
-    await this.pushRuntime();
     await this.pushModels();
     await this.pushThinkingLevels();
   }
@@ -380,25 +358,6 @@ export class ChatView implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * Reports which pi the session is running. The control is informational first:
-   * a switcher that does not say what is active invites the owner to guess.
-   */
-  private async pushRuntime(): Promise<void> {
-    if (this.view === undefined) {
-      return;
-    }
-    try {
-      const runtime = await this.host.describeRuntime();
-      this.post({ type: "runtime", runtime });
-    } catch (error) {
-      this.post({
-        type: "error",
-        message: `No se pudo leer el runtime de pi: ${toErrorMessage(error)}`,
-      });
-    }
-  }
-
   private post(message: unknown): void {
     if (this.view === undefined || this.disposed) {
       return;
@@ -418,18 +377,8 @@ export class ChatView implements vscode.WebviewViewProvider {
     switch (message.type) {
       case "ready": {
         await this.pushState();
-        await this.pushRuntime();
         await this.pushModels();
         await this.pushThinkingLevels();
-        break;
-      }
-      case "selectRuntime": {
-        await this.host.selectRuntime();
-        await this.pushRuntime();
-        break;
-      }
-      case "refreshRuntime": {
-        await this.pushRuntime();
         break;
       }
       case "setModel": {

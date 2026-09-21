@@ -100,41 +100,6 @@ button.secondary:hover:not(:disabled) {
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
-/* --- runtime control ---------------------------------------------------- */
-
-.runtime-strip {
-  display: flex;
-  padding: 4px 8px 6px 8px;
-}
-
-/*
- * A chip rather than a button: it reports state first and opens a picker as a
- * consequence, which is the shape VS Code uses for its own model control.
- */
-.runtime-chip {
-  width: 100%;
-  text-align: left;
-  padding: 2px 6px;
-  font-size: 0.85em;
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.runtime-chip:hover {
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-focusBorder);
-}
-
-.runtime-chip-missing {
-  color: var(--vscode-errorForeground);
-  border-color: var(--vscode-errorForeground);
-}
-
 /* --- model and reasoning ------------------------------------------------ */
 
 .model-strip {

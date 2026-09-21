@@ -19,7 +19,6 @@
     send: document.getElementById("send"),
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
-    runtime: document.getElementById("runtime"),
     model: document.getElementById("model"),
     thinking: document.getElementById("thinking"),
     context: document.getElementById("context"),
@@ -382,9 +381,6 @@
       case "state":
         renderState(message.state, message.usage);
         break;
-      case "runtime":
-        renderRuntime(message.runtime);
-        break;
       case "models":
         models = Array.isArray(message.models) ? message.models : [];
         if (openDropdown === "model") {
@@ -469,43 +465,6 @@
       ? "Cada mensaje lleva la carpeta, el archivo activo, la selección y los problemas. Pulsa para no adjuntarlos."
       : "No se adjunta contexto del editor. Pulsa para volver a adjuntarlo.";
     elements.session.textContent = parts.join(" · ");
-  }
-
-  // Which pi is running is the one thing the panel cannot infer: the runtime can
-  // be the user's own install, PiCode's pinned copy, or an arbitrary executable.
-  function renderRuntime(runtime) {
-    if (!runtime || typeof runtime !== "object") {
-      return;
-    }
-
-    var label;
-    if (runtime.mode === "managed") {
-      label = "pi propio de PiCode";
-    } else if (runtime.mode === "custom") {
-      label = "pi personalizado";
-    } else {
-      label = "pi del sistema";
-    }
-    if (runtime.version) {
-      label += " " + runtime.version;
-    }
-    if (!runtime.available) {
-      label += " (no encontrado)";
-    }
-
-    elements.runtime.textContent = label;
-    elements.runtime.className = "runtime-chip" + (runtime.available ? "" : " runtime-chip-missing");
-
-    var detail = [label];
-    if (runtime.display) {
-      detail.push(runtime.display);
-    }
-    if (runtime.pin && runtime.pin.version) {
-      detail.push("fijado " + runtime.pin.package + "@" + runtime.pin.version);
-    }
-    detail.push("");
-    detail.push("Pulsa para elegir qué pi se ejecuta.");
-    elements.runtime.title = detail.join("\n");
   }
 
   // --- model and reasoning dropdowns --------------------------------------
@@ -716,10 +675,6 @@
 
     elements.newSession.addEventListener("click", function () {
       send({ type: "newSession" });
-    });
-
-    elements.runtime.addEventListener("click", function () {
-      send({ type: "selectRuntime" });
     });
 
     elements.model.addEventListener("click", function () {
