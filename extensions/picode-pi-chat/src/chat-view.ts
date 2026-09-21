@@ -38,6 +38,9 @@ import { buildWebviewHtml } from "./webview-html";
 
 type ViewStatus = "idle" | "running" | "settled" | "error";
 
+/** What the panel may do with the model's reasoning, mirrored from its setting. */
+type PanelReasoning = "collapsed" | "expanded" | "hidden";
+
 /**
  * What the view needs from the extension host. Keeping this explicit means the
  * view never reaches for configuration or the process itself.
@@ -161,6 +164,15 @@ export class ChatView implements vscode.WebviewViewProvider {
    */
   private attachContext =
     vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", false);
+  /**
+   * What the panel does with the model's reasoning: one line that opens on click,
+   * always open, or nothing at all.
+   *
+   * Read once, like the context toggle, and sent with every state push so the
+   * renderer honours the disposition the owner chose in their settings.
+   */
+  private readonly panelReasoning: PanelReasoning =
+    vscode.workspace.getConfiguration("picode.panel").get<PanelReasoning>("reasoning", "collapsed");
   /**
    * The images the owner has attached to the message being written.
    *
@@ -376,6 +388,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         // Formatted here, where the totals live, so the renderer stays presentation.
         usage: summarizeUsage(this.totals, this.contextWindow),
         contextAttached: this.attachContext,
+        reasoning: this.panelReasoning,
       });
     } catch (error) {
       // State is a convenience; a stopped process is reported by its own error.

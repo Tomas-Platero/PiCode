@@ -39,6 +39,9 @@
   var userEcho = null;
   // Last session state the host pushed, used to mark the current model and level.
   var lastState = null;
+  // What the panel does with the model's reasoning, pushed with the session
+  // state: `collapsed` (one line that opens), `expanded`, or `hidden`.
+  var reasoningMode = "collapsed";
   // Catalogue pushed by the host, and the reasoning levels of the current model.
   var models = [];
   var thinkingLevels = [];
@@ -149,16 +152,112 @@
 
   function appendBlock(container, kind, text) {
     var block = createElement("div", "block block-" + kind);
-    if (kind === "thinking") {
-      var label = createElement("div", "block-label");
-      label.appendChild(codicon("lightbulb"));
-      label.appendChild(createElement("span", null, "razonamiento"));
-      block.appendChild(label);
-    }
     block.appendChild(createElement("div", "block-text", text));
     container.appendChild(block);
     scrollToBottom();
     return block;
+  }
+
+  /** Keeps the reasoning disposition to the three the setting declares. */
+  function normalizeReasoningMode(value) {
+    return value === "expanded" || value === "hidden" ? value : "collapsed";
+  }
+
+  /**
+   * Builds a reasoning block: a summary row the owner can click, and the trace.
+   *
+   * Reasoning is collapsed by default because a whole scratchpad in the middle of
+   * the transcript buries the reply it was meant to produce. The summary carries a
+   * live character count while the block is still being written, so a model that
+   * has been thinking for a while does not look like a stalled panel.
+   *
+   * The open/closed choice lives on the block, not in a global flag: a block the
+   * owner opens while it is still streaming stays open, and no delta rewrites it.
+   * Returns null when the panel is set to hide reasoning, so nothing is created.
+   */
+  function appendThinking(container, text, streaming, expandedOverride) {
+    if (reasoningMode === "hidden") {
+      // `hidden` means no element at all: a block that clipped itself would still
+      // receive every delta and would still be there to be found.
+      return null;
+    }
+    var block = createElement("div", "block block-thinking");
+    var expanded =
+      typeof expandedOverride === "boolean" ? expandedOverride : reasoningMode === "expanded";
+
+    var summary = createElement("button", "block-thinking-summary");
+    summary.type = "button";
+    var chevron = codicon(expanded ? "chevron-down" : "chevron-right");
+    summary.appendChild(chevron);
+    var label = createElement("span", "block-thinking-label");
+    summary.appendChild(label);
+    block.appendChild(summary);
+
+    var body = createElement("div", "block-text", text || "");
+    block.appendChild(body);
+
+    block.__summary = summary;
+    block.__chevron = chevron;
+    block.__label = label;
+    block.__body = body;
+    block.__expanded = expanded;
+    block.__streaming = streaming;
+    updateThinkingSummary(block);
+
+    summary.addEventListener("click", function () {
+      block.__expanded = !block.__expanded;
+      updateThinkingSummary(block);
+    });
+
+    container.appendChild(block);
+    scrollToBottom();
+    return block;
+  }
+
+  /**
+   * Redraws one reasoning summary from that block's own remembered state.
+   *
+   * Only the label's count moves while streaming; `__expanded` belongs to the
+   * owner, so nothing here reads it from the stream or writes it on a delta.
+   */
+  function updateThinkingSummary(block) {
+    var expanded = Boolean(block.__expanded);
+    block.classList.toggle("block-thinking-open", expanded);
+    block.classList.toggle("block-thinking-collapsed", !expanded);
+    block.__summary.setAttribute("aria-expanded", expanded ? "true" : "false");
+    block.__chevron.className = "codicon codicon-" + (expanded ? "chevron-down" : "chevron-right");
+    updateThinkingLabel(block);
+  }
+
+  /** The label, with the live count only while collapsed and still being written. */
+  function updateThinkingLabel(block) {
+    if (block.__streaming && !block.__expanded) {
+      block.__label.textContent =
+        "razonamiento \u00b7 " + formatCount(block.__body.textContent.length) + " caracteres";
+      return;
+    }
+    block.__label.textContent = "razonamiento";
+  }
+
+  /**
+   * Spanish digit grouping for the live count.
+   *
+   * Written out rather than taken from `toLocaleString`, because the webview's
+   * locale is the editor's, not the panel's, and the panel is Spanish here.
+   */
+  function formatCount(value) {
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+
+  /**
+   * The open/closed choice the owner made for a reasoning block being rebuilt.
+   *
+   * `message_end` replaces the streamed body with the authoritative content, so
+   * without this a block opened mid-stream would snap shut as the turn ends.
+   */
+  function streamedThinkingExpanded(index) {
+    var block = stream && stream.blocks[String(index)];
+    return block && typeof block.__expanded === "boolean" ? block.__expanded : undefined;
   }
 
   function textFromContent(content) {
@@ -275,7 +374,7 @@
         var textBlock = appendBlock(container, "text", block.text || "");
         insertMarkdown(textBlock.querySelector(".block-text"), block.text || "");
       } else if (block.type === "thinking") {
-        appendBlock(container, "thinking", block.thinking || "");
+        appendThinking(container, block.thinking || "", false, streamedThinkingExpanded(index));
       } else if (block.type === "toolCall") {
         appendBlock(container, "toolcall", formatToolCall(block));
       } else if (block.type === "image") {
@@ -294,12 +393,19 @@
   }
 
   function blockFor(kind) {
+    if (kind.kind === "thinking" && reasoningMode === "hidden") {
+      return null;
+    }
     var current = ensureStream();
     var key = String(kind.index);
     if (!current.blocks[key]) {
-      current.blocks[key] = appendBlock(current.view.body, kind.kind, kind.text || "");
+      current.blocks[key] =
+        kind.kind === "thinking"
+          ? appendThinking(current.view.body, kind.text || "", true)
+          : appendBlock(current.view.body, kind.kind, kind.text || "");
     }
-    return current.blocks[key].querySelector(".block-text");
+    var block = current.blocks[key];
+    return block ? block.querySelector(".block-text") : null;
   }
 
   function endStream() {
@@ -512,14 +618,33 @@
       case "thinking_start":
         blockFor({ kind: "thinking", index: index });
         break;
-      case "thinking_delta":
-        blockFor({ kind: "thinking", index: index }).textContent += delta.delta || "";
-        break;
-      case "thinking_end":
-        if (typeof delta.content === "string") {
-          blockFor({ kind: "thinking", index: index }).textContent = delta.content;
+      case "thinking_delta": {
+        var reasoningBody = blockFor({ kind: "thinking", index: index });
+        if (reasoningBody) {
+          reasoningBody.textContent += delta.delta || "";
+          // Only the count moves while streaming. The block's open/closed state
+          // is the owner's, so a delta never touches `__expanded`.
+          var deltaBlock = stream && stream.blocks[String(index)];
+          if (deltaBlock) {
+            updateThinkingLabel(deltaBlock);
+          }
         }
         break;
+      }
+      case "thinking_end": {
+        var reasoningEnded = blockFor({ kind: "thinking", index: index });
+        if (reasoningEnded) {
+          if (typeof delta.content === "string") {
+            reasoningEnded.textContent = delta.content;
+          }
+          var endedBlock = stream && stream.blocks[String(index)];
+          if (endedBlock) {
+            endedBlock.__streaming = false;
+            updateThinkingSummary(endedBlock);
+          }
+        }
+        break;
+      }
       case "toolcall_start":
         blockFor({ kind: "toolcall", index: index, text: (delta.toolName || "tool") + " " });
         break;
@@ -604,6 +729,7 @@
         setStatus(message.status);
         break;
       case "state":
+        reasoningMode = normalizeReasoningMode(message.reasoning);
         renderState(message.state, message.usage);
         break;
       case "models":

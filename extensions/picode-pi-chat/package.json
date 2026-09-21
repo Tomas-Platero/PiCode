@@ -182,6 +182,18 @@
           "description": "Adjuntar el contexto del editor (carpeta abierta, archivo activo, selección y problemas) a cada mensaje. El panel lo puede cambiar por sesión con el chip Contexto.",
           "scope": "window"
         },
+        "picode.panel.reasoning": {
+          "type": "string",
+          "enum": ["collapsed", "expanded", "hidden"],
+          "enumDescriptions": [
+            "Muestra una sola línea con el razonamiento, que se abre al pulsarla.",
+            "Muestra siempre el razonamiento completo.",
+            "No muestra nunca el razonamiento."
+          ],
+          "default": "collapsed",
+          "description": "Qué hace el panel con el razonamiento del modelo: `collapsed` muestra una sola línea que se abre al pulsarla, `expanded` lo muestra siempre y `hidden` no lo muestra nunca.",
+          "scope": "window"
+        },
         "picode.media.ffmpegPath": {
           "type": "string",
           "default": "",

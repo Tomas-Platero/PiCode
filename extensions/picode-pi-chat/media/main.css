@@ -380,13 +380,40 @@ button.secondary:hover:not(:disabled) {
   padding: 6px 8px;
 }
 
-.block-label {
+/*
+ * The reasoning summary: one line that opens on click instead of the whole trace.
+ * A button-like row, so it is reachable by keyboard and reads as a control rather
+ * than as transcript text.
+ */
+.block-thinking-summary {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  width: 100%;
+  text-align: left;
+}
+
+.block-thinking-summary:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+.block-thinking-summary:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+/* Collapsed is the point: the trace stays out of the transcript until it is opened. */
+.block-thinking-collapsed > .block-text {
+  display: none;
+}
+
+.block-thinking-label {
   color: var(--vscode-descriptionForeground);
 }
 
