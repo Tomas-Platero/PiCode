@@ -13,6 +13,7 @@ import type {
   PiEvent,
   PiModel,
   PiNewSessionData,
+  PiPromptOptions,
   PiSessionState,
   PiSlashCommand,
   PiSwitchSessionData,
@@ -112,7 +113,7 @@ export interface SdkAgentSession {
    * through `ExtensionBindings.onError`, which is why the client binds them.
    */
   bindExtensions(bindings: { onError?: (error: unknown) => void }): Promise<void>;
-  prompt(text: string, options?: { streamingBehavior?: "steer" | "followUp" }): Promise<void>;
+  prompt(text: string, options?: PiPromptOptions): Promise<void>;
   abort(): Promise<void>;
   readonly model?: unknown;
   readonly thinkingLevel?: string;
@@ -238,11 +239,23 @@ export class PiSdkClient implements PiClient {
     }
   }
 
-  prompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
+  prompt(text: string, options?: PiPromptOptions): Promise<void> {
     const session = this.requireSession();
-    // The SDK's option is optional exactly like the RPC client's is: omitting it
-    // while idle is the normal path, and a busy agent is told how to queue.
-    return session.prompt(text, streamingBehavior ? { streamingBehavior } : undefined);
+    const images = options?.images;
+    // The SDK's options are optional exactly like the RPC client's are: omitting
+    // them while idle is the normal path, and a busy agent is told how to queue.
+    // An empty object is not the same as no object to the SDK, so it is only
+    // passed when it actually carries something.
+    const sdkOptions: PiPromptOptions = {
+      ...(options?.streamingBehavior ? { streamingBehavior: options.streamingBehavior } : {}),
+      ...(images && images.length > 0 ? { images } : {}),
+    };
+    return session.prompt(
+      text,
+      sdkOptions.streamingBehavior !== undefined || sdkOptions.images !== undefined
+        ? sdkOptions
+        : undefined,
+    );
   }
 
   async abort(): Promise<void> {

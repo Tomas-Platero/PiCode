@@ -3,6 +3,7 @@ import type {
   PiEvent,
   PiModel,
   PiNewSessionData,
+  PiPromptOptions,
   PiSessionState,
   PiSlashCommand,
   PiSwitchSessionData,
@@ -35,7 +36,11 @@ export interface PiClient {
   onEvent(listener: (event: PiEvent) => void): PiSubscription;
   /** Brings the backend up. Idempotent. Throws when it cannot start. */
   start(): Promise<void>;
-  prompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
+  /**
+   * Sends a prompt: text plus, optionally, images, because those are the two
+   * things pi accepts.
+   */
+  prompt(text: string, options?: PiPromptOptions): Promise<void>;
   abort(): Promise<void>;
   newSession(): Promise<PiNewSessionData>;
   getState(): Promise<PiSessionState>;

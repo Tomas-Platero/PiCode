@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { AjustesView } from "./ajustes-view";
+import { loadImageTools, type ImageTools } from "./attachments";
 import { ChatView, type ChatViewHost } from "./chat-view";
 import {
   showCatalogSearch,
@@ -40,6 +41,7 @@ import {
   installManagedRuntime,
   readTransport,
   resolveRuntime,
+  resolveSdkEntry,
   type PiTransport,
   type RuntimeDescriptor,
   type RuntimeMode,
@@ -55,6 +57,9 @@ let activatedAt = 0;
 let startupResolveSkipped = false;
 let outputChannel: vscode.OutputChannel | undefined;
 let defaultModelApplied = false;
+/** pi's image helpers, cached per SDK entry: importing an ESM package is not free. */
+let attachmentToolsEntry: string | undefined;
+let attachmentToolsPromise: Promise<ImageTools | undefined> | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   activatedAt = Date.now();
@@ -68,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
     openMenu: () => showPiMenu(menu),
     restart: () => resetClient(),
+    imageTools: () => attachmentTools(context.extensionUri),
     // The view reports host-side failures that must not interrupt the transcript;
     // the shared channel already exists here, so one is not created for it.
     ...(outputChannel ? { output: outputChannel } : {}),
@@ -732,8 +738,41 @@ function gentleActions(context: vscode.ExtensionContext): GentleActions {
  */
 async function sendSlashCommand(name: string): Promise<void> {
   await withLiveClient(async (rpc) => {
-    await rpc.prompt(name, rpc.isStreaming ? "steer" : undefined);
+    await rpc.prompt(name, rpc.isStreaming ? { streamingBehavior: "steer" } : undefined);
   }, `enviar ${name}`);
+}
+
+/**
+ * pi's own image helpers, for preparing attachments.
+ *
+ * Loaded once and cached per SDK entry: the entry is an ESM module import, and
+ * paying for it on every message would be waste. A failure is logged and reported
+ * as `undefined` rather than thrown, because attachments are an addition to the
+ * panel: a pi that cannot prepare them must not stop the panel from working.
+ */
+function attachmentTools(extensionUri: vscode.Uri): Promise<ImageTools | undefined> {
+  const entry = resolveSdkEntry(extensionUri);
+  if (entry === undefined) {
+    outputChannel?.appendLine(
+      "[pi] no hay entrada del SDK: los adjuntos de imagen no están disponibles",
+    );
+    return Promise.resolve(undefined);
+  }
+
+  if (attachmentToolsPromise === undefined || attachmentToolsEntry !== entry) {
+    attachmentToolsEntry = entry;
+    attachmentToolsPromise = loadAttachmentTools(entry);
+  }
+  return attachmentToolsPromise;
+}
+
+async function loadAttachmentTools(entry: string): Promise<ImageTools | undefined> {
+  try {
+    return await loadImageTools(entry);
+  } catch (error) {
+    outputChannel?.appendLine(`[pi] adjuntos de imagen no disponibles: ${toErrorMessage(error)}`);
+    return undefined;
+  }
 }
 
 /**

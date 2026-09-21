@@ -1,7 +1,15 @@
 import * as vscode from "vscode";
+import {
+  ATTACHMENT_LIMITS,
+  formatAttachmentNote,
+  prepareImage,
+  type ImageTools,
+  type PrepareImageInput,
+  type PreparedImage,
+} from "./attachments";
 import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
-import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiSessionState, type PiUsage } from "./protocol";
+import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
 import { addMessageUsage, emptyUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { buildWebviewHtml } from "./webview-html";
 
@@ -22,6 +30,14 @@ export interface ChatViewHost {
   openMenu(): Promise<void>;
   /** Restarts the agent backend, keeping the panel where it is. */
   restart(): Promise<void>;
+  /**
+   * pi's own image helpers, or undefined when they could not be loaded.
+   *
+   * The view never resolves the pi entry itself: loading an ESM package is host
+   * work, and a failure has to be reported once by the host instead of on every
+   * message. Without them the panel still works; it just cannot attach images.
+   */
+  imageTools?(): Promise<ImageTools | undefined>;
   /**
    * Where host-side failures that must not interrupt the transcript are written.
    *
@@ -366,6 +382,45 @@ export class ChatView implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Prepares the attachments a prompt carried, reporting each refusal.
+   *
+   * A refusal is not a reason to drop the message: the owner still wants the text
+   * to arrive, and they need to know which image was left behind and why. Only the
+   * count limit is fatal, because it is a decision about the whole message.
+   */
+  private async prepareAttachments(
+    candidates: readonly PrepareImageInput[],
+  ): Promise<PreparedImage[]> {
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const tools = await this.host.imageTools?.();
+    if (!tools) {
+      // Reported rather than silently dropped: an image that disappears without a
+      // word is worse than one the panel says it could not prepare.
+      this.post({
+        type: "error",
+        message:
+          "No se pueden adjuntar imágenes: pi no publica las funciones que las " +
+          "preparan. El mensaje se envía solo con el texto.",
+      });
+      return [];
+    }
+
+    const prepared: PreparedImage[] = [];
+    for (const candidate of candidates) {
+      const outcome = await prepareImage(tools, candidate, ATTACHMENT_LIMITS);
+      if (outcome.ok) {
+        prepared.push(outcome.image);
+      } else {
+        this.post({ type: "error", message: outcome.reason });
+      }
+    }
+    return prepared;
+  }
+
   private post(message: unknown): void {
     if (this.view === undefined || this.disposed) {
       return;
@@ -416,12 +471,34 @@ export class ChatView implements vscode.WebviewViewProvider {
         if (text.length === 0 || !this.client) {
           return;
         }
+
+        const candidates = readImageCandidates(message.images);
+        if (candidates.length > ATTACHMENT_LIMITS.maxCount) {
+          this.postStatus("error");
+          this.post({
+            type: "error",
+            message:
+              `Se pueden adjuntar como máximo ${ATTACHMENT_LIMITS.maxCount} imágenes por ` +
+              `mensaje, y llegaron ${candidates.length}. El mensaje no se envió.`,
+          });
+          return;
+        }
+
+        const images = await this.prepareAttachments(candidates);
+        // The note goes before the owner's words, like the editor-context block:
+        // whatever PiCode adds is a preamble, and the message itself comes last.
+        const note = formatAttachmentNote(images);
+        // Collected at send time, not when the panel opened, so it describes the
+        // editor as it is when the message is actually sent.
+        const body = composePrompt(text, this.attachContext ? collectReferences() : []);
+        const outgoing = note === undefined ? body : `${note}\n\n${body}`;
+
         this.postStatus("running");
         try {
-          // Collected at send time, not when the panel opened, so it describes the
-          // editor as it is when the message is actually sent.
-          const references = this.attachContext ? collectReferences() : [];
-          await this.client.prompt(composePrompt(text, references));
+          await this.client.prompt(
+            outgoing,
+            images.length > 0 ? { images: images.map(toPiImageContent) } : undefined,
+          );
         } catch (error) {
           this.postStatus("error");
           this.post({ type: "error", message: toErrorMessage(error) });
@@ -542,6 +619,44 @@ function toWebviewState(state: PiSessionState): WebviewSessionState {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * Reads the attachments a webview message carried.
+ *
+ * The payload crosses the webview boundary, so nothing about it is trusted: an
+ * entry that is not an object with a non-empty `data` string and a `mimeType`
+ * string is skipped rather than sent anywhere. The claimed type is only passed
+ * along as a label for the refusal message; the detector decides the real one.
+ */
+function readImageCandidates(value: unknown): PrepareImageInput[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const candidates: PrepareImageInput[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    if (typeof entry.data !== "string" || entry.data.length === 0) {
+      continue;
+    }
+    if (typeof entry.mimeType !== "string") {
+      continue;
+    }
+    candidates.push({
+      base64: entry.data,
+      claimedMimeType: entry.mimeType,
+      ...(typeof entry.name === "string" && entry.name.length > 0 ? { name: entry.name } : {}),
+    });
+  }
+  return candidates;
+}
+
+/** The wire shape of one image: the same `{type,data,mimeType}` on both backends. */
+function toPiImageContent(image: PreparedImage): PiImageContent {
+  return { type: "image", data: image.data, mimeType: image.mimeType };
 }
 
 function toErrorMessage(error: unknown): string {

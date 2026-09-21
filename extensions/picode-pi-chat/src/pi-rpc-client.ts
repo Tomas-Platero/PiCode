@@ -9,6 +9,7 @@ import type {
   PiGetCommandsData,
   PiModel,
   PiNewSessionData,
+  PiPromptOptions,
   PiResponse,
   PiSessionState,
   PiSlashCommand,
@@ -184,12 +185,19 @@ export class PiRpcClient implements PiClient {
    * Sends a user prompt. When the agent is already streaming, the protocol
    * requires an explicit `streamingBehavior`; the client defaults to
    * `followUp` so a busy agent is not turned into a hard error.
+   *
+   * The images are already prepared by the caller: this client does not read
+   * files, it only carries what it is given.
    */
-  async prompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
-    const behavior = streamingBehavior ?? (this.streaming ? "followUp" : undefined);
-    const command: PiCommand = behavior
-      ? { type: "prompt", message: text, streamingBehavior: behavior }
-      : { type: "prompt", message: text };
+  async prompt(text: string, options?: PiPromptOptions): Promise<void> {
+    const behavior = options?.streamingBehavior ?? (this.streaming ? "followUp" : undefined);
+    const images = options?.images;
+    const command: PiCommand = {
+      type: "prompt",
+      message: text,
+      ...(images && images.length > 0 ? { images: [...images] } : {}),
+      ...(behavior ? { streamingBehavior: behavior } : {}),
+    };
     await this.request<undefined>(command);
   }
 

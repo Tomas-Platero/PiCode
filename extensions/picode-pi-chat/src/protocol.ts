@@ -166,18 +166,23 @@ export interface PiToolResultPayload {
  * Commands (host -> agent)
  * ------------------------------------------------------------------ */
 
+/** Everything a prompt may carry besides its text. */
+export interface PiPromptOptions {
+  /**
+   * Required while the agent is already streaming; omitted when it is idle.
+   * `steer` interrupts the current turn, `followUp` waits for it to finish.
+   */
+  streamingBehavior?: "steer" | "followUp";
+  /** Images to send with the message, already prepared for the wire. */
+  images?: readonly PiImageContent[];
+}
+
 /**
  * Logical command shapes. `id` is deliberately absent: the client assigns a
  * unique id for every command it writes (see {@link PiWireCommand}).
  */
 export type PiCommand =
-  | {
-      type: "prompt";
-      message: string;
-      images?: PiImageContent[];
-      /** Required when the agent is already streaming; omitted when idle. */
-      streamingBehavior?: "steer" | "followUp";
-    }
+  | ({ type: "prompt"; message: string } & PiPromptOptions)
   | { type: "abort" }
   | { type: "new_session"; parentSession?: string }
   | { type: "get_state" }
