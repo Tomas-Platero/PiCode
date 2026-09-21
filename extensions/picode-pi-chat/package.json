@@ -18,24 +18,48 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:picode.piChat"
+  ],
   "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "picode",
+          "title": "PiCode",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "picode": [
+        {
+          "id": "picode.piChat",
+          "name": "pi agent",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "picode.piChat.open",
-        "title": "PiCode: Open pi Chat"
+        "title": "PiCode: Open pi Chat",
+        "category": "PiCode"
       },
       {
         "command": "picode.piChat.newSession",
-        "title": "PiCode: New pi Session"
+        "title": "PiCode: New pi Session",
+        "category": "PiCode"
       },
       {
         "command": "picode.piChat.abort",
-        "title": "PiCode: Abort pi Run"
+        "title": "PiCode: Abort pi Run",
+        "category": "PiCode"
       },
       {
         "command": "picode.piChat.restart",
-        "title": "PiCode: Restart pi Process"
+        "title": "PiCode: Restart pi Process",
+        "category": "PiCode"
       }
     ],
     "configuration": {

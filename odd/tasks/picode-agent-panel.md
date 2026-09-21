@@ -47,21 +47,27 @@ rather than for a demonstration.
 | Decision | Choice | Rationale |
 | --- | --- | --- |
 | Surface | A panel we own (webview), driven by `pi --mode rpc` | ADR-003: process isolation, version independence, a stable protocol boundary |
+| Surface location | A native view in the **secondary side bar** (right), declared with `contributes.viewsContainers.secondarySidebar` | The product owner asked for the pi chat to live natively in the right sidebar. VSCodium 1.135 supports the location declaratively: its `viewsContainers` schema accepts `activitybar`, `panel` and `secondarySidebar`, and the registry assigns each a distinct container location. Declaring it beats asking the user to drag a container across, which would depend on per-workspace UI state and would not survive a fresh profile |
+| Host type | `WebviewViewProvider`, not the editor-tab `WebviewPanel` the first implementation used | A tab panel is not a sidebar view. The provider is resolved by the editor when the container becomes visible, which also keeps activation opt-in (ADR-009) |
 | Context model | Explicit references the user attaches, not implicit injection | Predictability, and it keeps the token budget visible before sending |
 | Statistics source | The RPC state and event stream only | No new integration surface, no invented protocol (ADR-006) |
 
 ## Task list
 
-### 1. Panel shell
+### 1. Move the panel into the secondary side bar
 
-Own layout and interaction model: transcript, composer, tool timeline,
-session/model/thinking pickers, keyboard-first behaviour. Replaces the current
-demonstration UI.
+The first implementation opened a `WebviewPanel` in an editor tab. Replace it with a
+`WebviewViewProvider` in a container declared in `secondarySidebar`, keeping the
+existing message protocol so the renderer is unchanged.
 
-- [ ] Layout and interaction model decided and implemented
-- [ ] Transcript renders text, thinking and tool events from the RPC stream
-- [ ] Composer supports send, steer, follow-up and abort
-- [ ] Model, thinking-level and session pickers wired to the RPC commands
+- [ ] Manifest declares a `secondarySidebar` container and a `webview` view in it
+- [ ] `ChatView` implements `WebviewViewProvider`, with context retained while hidden
+- [ ] The view starts pi only when the view resolves, so nothing starts at startup
+- [ ] The `open` command reveals the view (`<viewId>.focus`, with the container
+      command as a fallback)
+- [ ] Styling adapted to a narrow sidebar and to the sidebar background variable
+- [ ] Session commands still reach the view when it is not visible
+- [ ] Compiled, staged into the built-in extension, and started with no console error
 
 Commit: pending
 

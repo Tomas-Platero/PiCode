@@ -2,63 +2,85 @@ import * as vscode from "vscode";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
 import { isPanelEvent, type PiEvent, type PiSessionState } from "./protocol";
 
-type PanelStatus = "idle" | "running" | "settled" | "error";
+type ViewStatus = "idle" | "running" | "settled" | "error";
 
 /**
- * Hosts the pi chat webview: owns the panel, routes agent events into it and
- * forwards user actions back to the RPC client. The webview is presentation
- * only; all truth (process, protocol, state) stays in the extension host.
+ * Hosts the pi chat as a native view in the secondary side bar.
+ *
+ * The editor owns a view's lifecycle: it resolves this provider when the
+ * container becomes visible and disposes the view when the container is closed.
+ * The class therefore attaches to whatever view it is handed instead of owning
+ * one, and it must tolerate `view === undefined` for every action a command can
+ * trigger while the sidebar is closed.
+ *
+ * The provider is registered with `retainContextWhenHidden`, so collapsing the
+ * sidebar does not reload the webview and the transcript survives.
+ *
+ * Activation stays opt-in: nothing here runs at startup. pi is started on the
+ * first `resolveWebviewView`, which only happens because the user opened the
+ * container (ADR-009).
  */
-export class ChatPanel {
-  public static readonly viewType = "picode.piChat";
-  private static current: ChatPanel | undefined;
+export class ChatView implements vscode.WebviewViewProvider {
+  public static readonly viewId = "picode.piChat";
+  /** Container id, declared in the manifest under `secondarySidebar`. */
+  public static readonly containerId = "picode";
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly extensionUri: vscode.Uri;
-  private readonly client: PiRpcClient;
-  private readonly disposables: vscode.Disposable[] = [];
+  private view: vscode.WebviewView | undefined;
+  private client: PiRpcClient | undefined;
   private eventSubscription: PiSubscription | undefined;
+  private readonly disposables: vscode.Disposable[] = [];
   private disposed = false;
+  private boundClient: PiRpcClient | undefined;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, client: PiRpcClient) {
-    this.panel = panel;
-    this.extensionUri = extensionUri;
-    this.client = client;
+  private constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly ensureClient: () => Promise<PiRpcClient | undefined>,
+  ) {}
 
-    this.panel.webview.html = this.buildHtml(this.panel.webview);
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
-    this.panel.webview.onDidReceiveMessage(
+  public static create(
+    extensionUri: vscode.Uri,
+    ensureClient: () => Promise<PiRpcClient | undefined>,
+  ): ChatView {
+    return new ChatView(extensionUri, ensureClient);
+  }
+
+  /** True when the container is open and the webview is attached. */
+  public get isVisible(): boolean {
+    return this.view !== undefined;
+  }
+
+  /** The client the webview is currently bound to, if any. */
+  public get bound(): PiRpcClient | undefined {
+    return this.boundClient;
+  }
+
+  public async resolveWebviewView(view: vscode.WebviewView): Promise<void> {
+    this.releaseView();
+    this.view = view;
+
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+    };
+    view.webview.html = this.buildHtml(view.webview);
+    view.webview.onDidReceiveMessage(
       (message: unknown) => {
         void this.handleWebviewMessage(message);
       },
       null,
       this.disposables,
     );
+    view.onDidDispose(() => this.releaseView(), null, this.disposables);
 
-    this.eventSubscription = client.onEvent((event) => this.handleEvent(event));
+    await this.bindClient();
   }
 
-  /** Reveals the existing panel or creates the singleton one. */
-  public static createOrShow(context: vscode.ExtensionContext, client: PiRpcClient): ChatPanel {
-    const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
-    if (ChatPanel.current) {
-      ChatPanel.current.panel.reveal(column);
-      return ChatPanel.current;
-    }
-
-    const panel = vscode.window.createWebviewPanel(ChatPanel.viewType, "PiCode: pi Agent", column, {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "media")],
-    });
-
-    ChatPanel.current = new ChatPanel(panel, context.extensionUri, client);
-    return ChatPanel.current;
-  }
-
-  /** True when a chat panel is currently open. */
-  public static isOpen(): boolean {
-    return ChatPanel.current !== undefined;
+  /**
+   * Re-binds to the current client. A restart replaces the client object, so the
+   * view has to drop its subscription to the dead one and attach to the new one.
+   */
+  public async rebind(): Promise<void> {
+    await this.bindClient();
   }
 
   /** Refreshes the visible session state (used by session commands). */
@@ -71,7 +93,7 @@ export class ChatPanel {
     this.post({ type: "clear" });
   }
 
-  /** Reports a command failure in the panel without killing the session. */
+  /** Reports a command failure in the view without killing the session. */
   public notifyError(message: string): void {
     this.postStatus("error");
     this.post({ type: "error", message });
@@ -82,19 +104,47 @@ export class ChatPanel {
       return;
     }
     this.disposed = true;
+    this.releaseView();
+  }
 
-    if (ChatPanel.current === this) {
-      ChatPanel.current = undefined;
+  /* ---------------------------------------------------------------- *
+   * Attachment
+   * ---------------------------------------------------------------- */
+
+  private async bindClient(): Promise<void> {
+    const client = await this.ensureClient();
+
+    if (this.disposed) {
+      return;
+    }
+    if (!client) {
+      this.postStatus("error");
+      this.post({
+        type: "error",
+        message:
+          "pi could not be started. Check picode.pi.executablePath and the PiCode output channel.",
+      });
+      return;
     }
 
-    // Detach from the shared client first so no event can reach a dead panel.
+    // Detach from any previous client first, so no event can reach a webview
+    // that is bound to a different process.
+    this.eventSubscription?.dispose();
+    this.client = client;
+    this.boundClient = client;
+    this.eventSubscription = client.onEvent((event) => this.handleEvent(event));
+
+    await this.pushState();
+  }
+
+  private releaseView(): void {
     this.eventSubscription?.dispose();
     this.eventSubscription = undefined;
 
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
-    this.panel.dispose();
+    this.view = undefined;
   }
 
   /* ---------------------------------------------------------------- *
@@ -116,14 +166,14 @@ export class ChatPanel {
     }
 
     // `message_end` is authoritative and `agent_settled` closes a run, so both
-    // are good moments to resync the cheap state summary shown in the panel.
+    // are good moments to resync the cheap state summary shown in the view.
     if (event.type === "message_end" || event.type === "agent_settled") {
       void this.pushState();
     }
   }
 
   private async pushState(): Promise<void> {
-    if (this.disposed) {
+    if (this.view === undefined || !this.client) {
       return;
     }
     try {
@@ -136,15 +186,15 @@ export class ChatPanel {
     }
   }
 
-  private postStatus(status: PanelStatus): void {
+  private postStatus(status: ViewStatus): void {
     this.post({ type: "status", status });
   }
 
   private post(message: unknown): void {
-    if (this.disposed) {
+    if (this.view === undefined || this.disposed) {
       return;
     }
-    void this.panel.webview.postMessage(message);
+    void this.view.webview.postMessage(message);
   }
 
   /* ---------------------------------------------------------------- *
@@ -163,7 +213,7 @@ export class ChatPanel {
       }
       case "prompt": {
         const text = typeof message.text === "string" ? message.text.trim() : "";
-        if (text.length === 0) {
+        if (text.length === 0 || !this.client) {
           return;
         }
         this.postStatus("running");
@@ -176,6 +226,9 @@ export class ChatPanel {
         break;
       }
       case "abort": {
+        if (!this.client) {
+          return;
+        }
         try {
           await this.client.abort();
           this.postStatus("idle");
@@ -186,6 +239,9 @@ export class ChatPanel {
         break;
       }
       case "newSession": {
+        if (!this.client) {
+          return;
+        }
         try {
           await this.client.newSession();
           this.notifySessionReset();
@@ -227,14 +283,14 @@ export class ChatPanel {
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="${styleUri}" rel="stylesheet" />
-    <title>PiCode: pi Agent</title>
+    <title>PiCode: pi agent</title>
   </head>
   <body>
     <header class="toolbar">
       <span id="status" class="status status-idle">idle</span>
       <span id="session" class="session"></span>
-      <button id="new-session" type="button" class="secondary">New session</button>
-      <button id="abort" type="button" class="secondary" disabled>Abort</button>
+      <button id="new-session" type="button" class="secondary" title="Start a new pi session">New</button>
+      <button id="abort" type="button" class="secondary" disabled title="Stop the current run">Stop</button>
     </header>
     <main id="messages" class="messages" aria-live="polite"></main>
     <section id="tool-section" class="tool-section" hidden>

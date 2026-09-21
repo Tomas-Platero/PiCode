@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import { ChatPanel } from "./chat-panel";
+import { ChatView } from "./chat-view";
 import { PiRpcClient } from "./pi-rpc-client";
 
 let client: PiRpcClient | undefined;
-let panel: ChatPanel | undefined;
+let view: ChatView | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let defaultModelApplied = false;
 
@@ -11,23 +11,27 @@ export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel("PiCode");
   context.subscriptions.push(outputChannel);
 
+  view = ChatView.create(context.extensionUri, ensureClient);
+
   context.subscriptions.push(
+    // `retainContextWhenHidden` keeps the webview alive while the sidebar is
+    // collapsed, so a visible transcript is not thrown away by hiding it.
+    vscode.window.registerWebviewViewProvider(ChatView.viewId, view, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     vscode.commands.registerCommand("picode.piChat.open", async () => {
-      const rpc = getClient();
-      if (!(await ensureStarted(rpc))) {
-        return;
-      }
-      panel = ChatPanel.createOrShow(context, rpc);
+      await revealChatView();
     }),
     vscode.commands.registerCommand("picode.piChat.newSession", async () => {
-      const rpc = getClient();
-      if (!(await ensureStarted(rpc))) {
+      const rpc = view?.bound;
+      if (!rpc) {
+        await revealChatView();
         return;
       }
       try {
         await rpc.newSession();
-        panel?.notifySessionReset();
-        await panel?.refreshState();
+        view?.notifySessionReset();
+        await view?.refreshState();
       } catch (error) {
         reportCommandFailure("start a new session", error);
       }
@@ -49,20 +53,44 @@ export function activate(context: vscode.ExtensionContext): void {
       // how a changed executable path or extra arguments take effect.
       client = undefined;
       defaultModelApplied = false;
-      const rpc = getClient();
-      if (!(await ensureStarted(rpc))) {
-        return;
+
+      // Only restart the process if the view is open: starting pi is a
+      // consequence of opening the container, never of a stray command.
+      if (view?.isVisible) {
+        await view.rebind();
       }
-      panel?.notifySessionReset();
-      await panel?.refreshState();
     }),
   );
 }
 
 export function deactivate(): void {
+  view?.dispose();
+  view = undefined;
   client?.stop();
   client = undefined;
-  panel = undefined;
+}
+
+/**
+ * Reveals the chat view. `<viewId>.focus` is registered by the editor for every
+ * contributed view; the container command is the documented fallback and is also
+ * what shows the secondary side bar when it is hidden.
+ */
+async function revealChatView(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand(`${ChatView.viewId}.focus`);
+  } catch {
+    await vscode.commands.executeCommand(`workbench.view.extension.${ChatView.containerId}`);
+  }
+}
+
+/**
+ * Returns a started client, or undefined when pi cannot be started. Used by the
+ * view when it resolves, so the process exists exactly while there is a surface
+ * asking for it.
+ */
+async function ensureClient(): Promise<PiRpcClient | undefined> {
+  const rpc = getClient();
+  return (await ensureStarted(rpc)) ? rpc : undefined;
 }
 
 /**
@@ -82,6 +110,9 @@ function getClient(): PiRpcClient {
     ...(cwd ? { cwd } : {}),
     ...(outputChannel ? { output: outputChannel } : {}),
   });
+  // The view holds its own client reference; a replacement client must be
+  // re-bound or the webview would keep listening to a stopped process.
+  void view?.rebind();
   return client;
 }
 
