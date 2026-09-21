@@ -174,6 +174,20 @@ button.secondary:hover:not(:disabled) {
   min-width: 0;
 }
 
+/*
+ * The context chip is the only control here that changes what the agent receives, so
+ * it carries a colour when it is on rather than only a word.
+ */
+.context-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.context-chip.context-on {
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-charts-green, var(--vscode-panel-border));
+}
+
 .model-chip:hover,
 .thinking-chip:hover {
   color: var(--vscode-foreground);

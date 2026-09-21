@@ -22,6 +22,7 @@
     runtime: document.getElementById("runtime"),
     model: document.getElementById("model"),
     thinking: document.getElementById("thinking"),
+    context: document.getElementById("context"),
     dropdown: document.getElementById("dropdown"),
     dropdownFilter: document.getElementById("dropdown-filter"),
     dropdownOptions: document.getElementById("dropdown-options"),
@@ -451,6 +452,16 @@
     if (usageLine) {
       parts.push(usageLine);
     }
+
+    // What a message will carry is the one thing the owner should never have to
+    // guess, so the chip states it and clicking it changes it.
+    var attached = state.contextAttached !== false;
+    elements.context.textContent = "Contexto: " + (attached ? "sí" : "no");
+    elements.context.className =
+      "dropdown-toggle context-chip" + (attached ? " context-on" : "");
+    elements.context.title = attached
+      ? "Cada mensaje lleva la carpeta, el archivo activo, la selección y los problemas. Pulsa para no adjuntarlos."
+      : "No se adjunta contexto del editor. Pulsa para volver a adjuntarlo.";
     elements.session.textContent = parts.join(" · ");
   }
 
@@ -711,6 +722,10 @@
 
     elements.thinking.addEventListener("click", function () {
       openDropdownFor("thinking");
+    });
+
+    elements.context.addEventListener("click", function () {
+      send({ type: "toggleContext" });
     });
 
     elements.dropdownFilter.addEventListener("input", function () {

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { collectReferences, composePrompt } from "./context";
 import { PiRpcClient, type PiSubscription } from "./pi-rpc-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiSessionState, type PiUsage } from "./protocol";
 import type { RuntimeDescriptor } from "./runtime";
@@ -51,6 +52,12 @@ const CHAT_BODY = `    <header class="toolbar">
         placeholder="Pídele algo a pi. Enter envía; Shift+Enter añade una línea."
       ></textarea>
       <div class="composer-actions">
+        <button
+          id="context"
+          type="button"
+          class="dropdown-toggle context-chip"
+          title="Adjuntar el contexto del editor"
+        >Contexto: sí</button>
         <button
           id="model"
           type="button"
@@ -110,6 +117,14 @@ export class ChatView implements vscode.WebviewViewProvider {
   /** What this session has cost, added up from the messages pi reports. */
   private totals: UsageTotals = emptyUsage();
   private contextWindow: number | undefined;
+  /**
+   * Whether messages carry the editor context.
+   *
+   * Per session, seeded from the setting: the owner may want it on by default without
+   * every toggle writing to their settings file.
+   */
+  private attachContext =
+    vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", true);
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -289,6 +304,7 @@ export class ChatView implements vscode.WebviewViewProvider {
         state: toWebviewState(state),
         // Formatted here, where the totals live, so the renderer stays presentation.
         usage: summarizeUsage(this.totals, this.contextWindow),
+        contextAttached: this.attachContext,
       });
     } catch (error) {
       // State is a convenience; a stopped process is reported by its own error.
@@ -426,6 +442,11 @@ export class ChatView implements vscode.WebviewViewProvider {
         await this.pushState();
         break;
       }
+      case "toggleContext": {
+        this.attachContext = !this.attachContext;
+        await this.pushState();
+        break;
+      }
       case "prompt": {
         const text = typeof message.text === "string" ? message.text.trim() : "";
         if (text.length === 0 || !this.client) {
@@ -433,7 +454,10 @@ export class ChatView implements vscode.WebviewViewProvider {
         }
         this.postStatus("running");
         try {
-          await this.client.prompt(text);
+          // Collected at send time, not when the panel opened, so it describes the
+          // editor as it is when the message is actually sent.
+          const references = this.attachContext ? collectReferences() : [];
+          await this.client.prompt(composePrompt(text, references));
         } catch (error) {
           this.postStatus("error");
           this.post({ type: "error", message: toErrorMessage(error) });
