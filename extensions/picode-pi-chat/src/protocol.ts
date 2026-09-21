@@ -192,7 +192,8 @@ export type PiCommand =
   | { type: "get_available_thinking_levels" }
   | { type: "set_thinking_level"; level: PiThinkingLevel }
   | { type: "cycle_thinking_level" }
-  | { type: "get_commands" };
+  | { type: "get_commands" }
+  | { type: "switch_session"; sessionPath: string };
 
 export type PiCommandType = PiCommand["type"];
 
@@ -233,6 +234,11 @@ export interface PiThinkingLevelsData {
 
 export interface PiCycleThinkingLevelData {
   level: PiThinkingLevel | null;
+}
+
+/** `switch_session` answers whether the switch happened, or was refused. */
+export interface PiSwitchSessionData {
+  cancelled?: boolean;
 }
 
 export interface PiGetAvailableModelsData {

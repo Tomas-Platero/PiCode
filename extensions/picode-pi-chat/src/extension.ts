@@ -14,6 +14,13 @@ import {
 } from "./menu";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
 import {
+  formatBytes,
+  listSessions,
+  projectSessionsDir,
+  sessionsRoot,
+  type SessionSummary,
+} from "./sessions";
+import {
   firstMeaningfulLine,
   gentleCommands,
   parseReviewMode,
@@ -35,6 +42,8 @@ import {
 
 let client: PiRpcClient | undefined;
 let view: ChatView | undefined;
+/** The directory the agent runs in, which is also the project its sessions belong to. */
+let agentCwd: string | undefined;
 let statusItem: vscode.StatusBarItem | undefined;
 let ajustesView: AjustesView | undefined;
 /** When this session activated, used to tell a restored panel from a real click. */
@@ -70,6 +79,8 @@ export function activate(context: vscode.ExtensionContext): void {
     selectRuntime: () => selectRuntime(context),
     installManagedRuntime: () => installManagedFromMenu(context),
     sendCommand: (name) => sendSlashCommand(name),
+    sessions: () => listProjectSessions(),
+    resumeSession: (session) => resumeSession(session),
     gentle: gentleActions(context),
     newSession: () => startNewSession(),
     abort: () => abortRun(),
@@ -658,6 +669,45 @@ async function sendSlashCommand(name: string): Promise<void> {
 }
 
 /**
+ * The conversations pi has for this project.
+ *
+ * Read from disk because the protocol has no command that lists them: it can load a session
+ * once its path is known, and finding the path is the part pi does not expose.
+ */
+async function listProjectSessions(): Promise<SessionSummary[]> {
+  const extraArgs = vscode.workspace
+    .getConfiguration("picode.pi")
+    .get<string[]>("extraArgs", []);
+  const directory = projectSessionsDir(agentCwd ?? process.cwd(), sessionsRoot(extraArgs));
+  return directory === undefined ? [] : listSessions(directory);
+}
+
+/**
+ * Loads a previous conversation into the running agent.
+ *
+ * The view is cleared and told why: pi now holds the conversation, the panel does not, and
+ * replaying the history into the webview is a separate job from resuming it.
+ */
+async function resumeSession(session: SessionSummary): Promise<void> {
+  await withLiveClient(async (rpc) => {
+    const result = await rpc.switchSession(session.file);
+    if (result.cancelled === true) {
+      void vscode.window.showInformationMessage(
+        "PiCode: una extensión de pi canceló el cambio de sesión.",
+      );
+      return;
+    }
+
+    const label = session.name ?? session.title ?? session.stamp;
+    outputChannel?.appendLine(`[pi] sesión cargada: ${session.file}`);
+    view?.notifySessionSwitched(
+      `Sesión cargada: ${label}. pi tiene la conversación y ${formatBytes(session.bytes)} de historial; el panel no lo reproduce, así que escribe para continuar.`,
+    );
+    await view?.refreshState();
+  }, "reanudar una sesión");
+}
+
+/**
  * Runs an interaction against the live client, revealing the view first when no
  * session is running yet: the model and reasoning pickers act on a session, not
  * on configuration, so there is nothing to offer until pi is up.
@@ -846,6 +896,9 @@ function getClient(extensionUri: vscode.Uri): PiRpcClient {
 
   const configuration = vscode.workspace.getConfiguration("picode.pi");
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  // Recorded because the session files are filed under the agent's working directory, and
+  // listing another one would report "no sessions" for a project that has them.
+  agentCwd = cwd ?? process.cwd();
   const runtime = resolveRuntime(extensionUri);
   client = new PiRpcClient({
     executablePath: runtime.executable,

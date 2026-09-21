@@ -14,6 +14,7 @@ import type {
   PiSlashCommand,
   PiThinkingLevel,
   PiThinkingLevelsData,
+  PiSwitchSessionData,
   PiWireCommand,
 } from "./protocol";
 
@@ -260,6 +261,16 @@ export class PiRpcClient {
   async cycleThinkingLevel(): Promise<PiThinkingLevel | null> {
     const data = await this.request<PiCycleThinkingLevelData>({ type: "cycle_thinking_level" });
     return data.level ?? null;
+  }
+
+  /**
+   * Loads an existing session file, which is how a conversation is resumed.
+   *
+   * pi answers `cancelled: true` when an extension refused the switch, which is not a
+   * failure and must not be reported as one.
+   */
+  async switchSession(sessionPath: string): Promise<PiSwitchSessionData> {
+    return this.request<PiSwitchSessionData>({ type: "switch_session", sessionPath });
   }
 
   /** Discover extension commands, prompt templates and skills. */

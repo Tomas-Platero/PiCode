@@ -409,6 +409,12 @@
         userEcho = null;
         setStatus("idle");
         break;
+      case "note": {
+        // A line from PiCode itself, not from the agent, so it is labelled as such.
+        var note = addMessage("system");
+        note.body.textContent = String(message.text ?? "");
+        break;
+      }
       default:
         break;
     }

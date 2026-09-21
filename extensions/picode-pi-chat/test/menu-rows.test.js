@@ -149,10 +149,16 @@ check(
   "",
 );
 check(
-  "the session category offers usage, new, abort, the command list and restart",
+  "the session category offers usage, new, sessions, abort, the command list and restart",
   actions(buildCategorySettings("sesion", full)) ===
-    "back,usage,newSession,abort,piCommands,restart",
+    "back,usage,newSession,sessions,abort,piCommands,restart",
   actions(buildCategorySettings("sesion", full)),
+);
+check(
+  "the sessions row does not claim a count it has not read",
+  buildCategorySettings("sesion", full).find((row) => row.action === "sessions").label ===
+    "Sesiones de este proyecto…",
+  buildCategorySettings("sesion", full).find((row) => row.action === "sessions").label,
 );
 check(
   "the command row counts what the session loaded",

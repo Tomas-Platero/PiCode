@@ -61,12 +61,15 @@ async function main() {
     root,
   );
 
-  const distributionRoot = path.dirname(path.dirname(root));
-  check(
-    "the derived root is the distribution itself (VSCodium.exe is there)",
-    fs.existsSync(path.join(distributionRoot, "VSCodium.exe")),
+const distributionRoot = path.dirname(path.dirname(root));
+// Name-agnostic on purpose: Step 5 renames the executable, so asserting a particular name
+// makes this a statement about one machine's state rather than about the derivation.
+const executables = ["PiCode.exe", "VSCodium.exe"];
+check(
+    "the derived root is the distribution itself (the editor is there)",
+    executables.some((name) => fs.existsSync(path.join(distributionRoot, name))),
     distributionRoot,
-  );
+);
 
   const pin = runtime.readPin(extensionUri);
   check(

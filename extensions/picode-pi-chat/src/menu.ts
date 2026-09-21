@@ -8,6 +8,7 @@ import {
 } from "./pi-cli";
 import type { ResolvedRuntime } from "./runtime";
 import type { PiSlashCommand } from "./protocol";
+import { formatBytes, type SessionSummary } from "./sessions";
 import { emptyUsage, describeUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
 
@@ -152,6 +153,7 @@ export type PiSettingAction =
   | "gentleInstall"
   | "gentleCommand"
   | "usage"
+  | "sessions"
   | "piCommands"
   | "newSession"
   | "abort"
@@ -395,6 +397,14 @@ export function buildCategorySettings(
         { kind: "item", action: "newSession", label: "Nueva sesión", detail: "Empieza de cero" },
         {
           kind: "item",
+          action: "sessions",
+          // No count here on purpose: it would mean reading every session file to draw a
+          // menu, and the picker shows the list anyway.
+          label: "Sesiones de este proyecto…",
+          detail: "Reanudar una conversación anterior de esta carpeta",
+        },
+        {
+          kind: "item",
           action: "abort",
           label: "Detener la ejecución",
           detail: snapshot.streaming ? "Hay una ejecución en curso" : "No hay nada en curso",
@@ -465,6 +475,10 @@ export interface PiMenuDeps {
    * General rather than gentle-specific: a command is a command, whoever registered it.
    */
   sendCommand(name: string): Promise<void>;
+  /** The conversations pi has for this project, newest first. */
+  sessions(): Promise<SessionSummary[]>;
+  /** Loads one of them into the running agent. */
+  resumeSession(session: SessionSummary): Promise<void>;
   gentle: GentleActions;
   newSession(): Promise<void>;
   abort(): Promise<void>;
@@ -576,6 +590,9 @@ async function runSetting(
     case "piCommands":
       await showPiCommands(deps, snapshot);
       return true;
+    case "sessions":
+      await showSessions(deps);
+      return false;
     case "model":
       await deps.selectModel();
       return true;
@@ -687,6 +704,45 @@ async function showPiCommands(deps: PiMenuDeps, snapshot: PiMenuSnapshot): Promi
     return;
   }
   await deps.sendCommand(picked.command);
+}
+
+/**
+ * The conversations this project already has.
+ *
+ * pi stores one file per conversation and the protocol can switch to one, but nothing in the
+ * protocol lists them, so the files are read directly. Subagent runs land here too — pi names
+ * those itself, which is what makes them recognisable as something the owner did not start.
+ */
+async function showSessions(deps: PiMenuDeps): Promise<void> {
+  const sessions = await deps.sessions();
+  if (sessions.length === 0) {
+    void vscode.window.showInformationMessage(
+      "PiCode: pi no tiene sesiones guardadas para esta carpeta.",
+    );
+    return;
+  }
+
+  interface SessionItem extends vscode.QuickPickItem {
+    session: SessionSummary;
+  }
+
+  const items: SessionItem[] = sessions.map((session) => ({
+    session,
+    label: session.name ?? session.title ?? session.stamp,
+    description: [session.stamp, formatBytes(session.bytes)].join(" · "),
+    detail: session.name && session.title ? session.title : session.file,
+  }));
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: `PiCode: sesiones de este proyecto (${items.length})`,
+    placeHolder: "Elige una para continuar donde lo dejaste",
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  if (!picked) {
+    return;
+  }
+  await deps.resumeSession(picked.session);
 }
 
 /** Everything PiCode knows about Gentle AI, in a report rather than a row. */

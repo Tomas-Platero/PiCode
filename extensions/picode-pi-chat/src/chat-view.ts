@@ -204,6 +204,18 @@ export class ChatView implements vscode.WebviewViewProvider {
     this.post({ type: "clear" });
   }
 
+  /**
+   * Notifies the webview that another conversation was loaded.
+   *
+   * The transcript is cleared because the loaded session's history is not replayed: pi has
+   * the conversation, the view does not. Saying so is the difference between an empty panel
+   * that looks broken and an empty panel that is explained.
+   */
+  public notifySessionSwitched(note: string): void {
+    this.notifySessionReset();
+    this.post({ type: "note", text: note });
+  }
+
   /** Reports a command failure in the view without killing the session. */
   public notifyError(message: string): void {
     this.postStatus("error");
