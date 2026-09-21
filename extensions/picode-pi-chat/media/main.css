@@ -720,3 +720,115 @@ button.secondary:hover:not(:disabled) {
 .prompt::placeholder {
   color: var(--vscode-input-placeholderForeground);
 }
+
+/* --- attachments --------------------------------------------------------- */
+
+/*
+ * The chip row sits between the textarea and the action row, and only exists while
+ * something is attached: `display: flex` would otherwise beat the default rule for
+ * `hidden`, so hiding it is spelled out here.
+ */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 6px 8px;
+}
+
+.attachments[hidden] {
+  display: none;
+}
+
+.attachment {
+  margin: 0;
+  position: relative;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vscode-input-background);
+  max-width: 96px;
+}
+
+.attachment img {
+  display: block;
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.attachment figcaption {
+  font-size: 0.7em;
+  padding: 2px 4px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border: none;
+  border-radius: 4px;
+  padding: 0 2px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/*
+ * Dragging over the panel outlines it instead of moving anything: an outline takes
+ * no space, so the panel does not shift while the pointer is over it.
+ */
+.drop-active {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+
+/* --- images -------------------------------------------------------------- */
+
+.message-image {
+  margin: 6px 0;
+}
+
+.message-image img {
+  max-width: 100%;
+  max-height: 220px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+/*
+ * The full-size view is the panel's own rather than a window: it covers the panel,
+ * and closing it is a click anywhere in it or Escape.
+ */
+.image-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--vscode-editorWidget-background);
+  cursor: zoom-out;
+}
+
+.image-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-overlay-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}

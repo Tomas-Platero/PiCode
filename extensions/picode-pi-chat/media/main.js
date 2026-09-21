@@ -18,6 +18,8 @@
     form: document.getElementById("composer"),
     prompt: document.getElementById("prompt"),
     send: document.getElementById("send"),
+    attachments: document.getElementById("attachments"),
+    attach: document.getElementById("attach"),
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
     restart: document.getElementById("restart"),
@@ -75,6 +77,12 @@
   ];
   // toolCallId -> { item, output }
   var toolItems = new Map();
+  // Prepared images the host has accepted, in the order they arrived. Only the
+  // host holds their bytes: a chip carries the id it was given and the thumbnail
+  // the host drew, and submitting sends those ids back rather than the image.
+  var attachments = [];
+  // The full-size image currently open, if any.
+  var overlay = null;
 
   function send(message) {
     vscode.postMessage(message);
@@ -165,9 +173,9 @@
       var part = content[index];
       if (part && part.type === "text" && typeof part.text === "string") {
         parts.push(part.text);
-      } else if (part && part.type === "image") {
-        parts.push("[image]");
       }
+      // An image block contributes no text at all: it is drawn as a figure, and a
+      // message that is only an image must not also read "image" underneath it.
     }
     return parts.join("\n");
   }
@@ -208,6 +216,29 @@
     }
   }
 
+  /**
+   * The source of one image block.
+   *
+   * The local echo already holds the data URL the host drew the thumbnail from;
+   * pi's own message carries the bytes and their media type apart. Both forms end
+   * up as the same URL, so the record looks the same whichever side drew it.
+   */
+  function imageSource(block) {
+    if (typeof block.dataUrl === "string" && block.dataUrl) {
+      return block.dataUrl;
+    }
+    return "data:" + block.mimeType + ";base64," + block.data;
+  }
+
+  function messageImage(block) {
+    var figure = createElement("figure", "message-image");
+    var image = createElement("img");
+    image.src = imageSource(block);
+    image.alt = "imagen adjunta";
+    figure.appendChild(image);
+    return figure;
+  }
+
   function renderContent(container, content) {
     container.textContent = "";
     if (!Array.isArray(content)) {
@@ -229,6 +260,8 @@
         appendBlock(container, "thinking", block.thinking || "");
       } else if (block.type === "toolCall") {
         appendBlock(container, "toolcall", formatToolCall(block));
+      } else if (block.type === "image") {
+        container.appendChild(messageImage(block));
       }
     }
   }
@@ -402,11 +435,11 @@
       // with what was actually sent, and `message_end` describes that same
       // message again, so it must not add a second bubble.
       if (userEcho) {
-        userEcho.body.textContent = textFromContent(message.content);
+        renderContent(userEcho.body, message.content);
         userEcho = null;
       } else if (phase === "start") {
         var echo = addMessage("user");
-        echo.body.textContent = textFromContent(message.content);
+        renderContent(echo.body, message.content);
       }
       return;
     }
@@ -568,6 +601,28 @@
       case "error":
         showError(message.message);
         break;
+      case "attachments": {
+        var added = Array.isArray(message.added) ? message.added : [];
+        for (var addedIndex = 0; addedIndex < added.length; addedIndex += 1) {
+          attachments.push(added[addedIndex]);
+        }
+        renderAttachments();
+        // One place reports trouble: a file the host would not take comes back as
+        // a refusal, and the transcript is where a failure is already reported.
+        var refused = Array.isArray(message.refused) ? message.refused : [];
+        for (var refusedIndex = 0; refusedIndex < refused.length; refusedIndex += 1) {
+          var refusal = refused[refusedIndex] || {};
+          showError(
+            (refusal.name ? refusal.name + ": " : "") +
+              (refusal.reason || "No se pudo adjuntar la imagen."),
+          );
+        }
+        break;
+      }
+      case "attachmentsCleared":
+        attachments = [];
+        renderAttachments();
+        break;
       case "clear":
         elements.messages.textContent = "";
         elements.tools.textContent = "";
@@ -575,6 +630,8 @@
         toolItems.clear();
         stream = null;
         userEcho = null;
+        attachments = [];
+        renderAttachments();
         setStatus("idle");
         renderEmptyState();
         break;
@@ -849,7 +906,258 @@
       if (href) {
         send({ type: "openLink", href: href });
       }
+      return;
     }
+
+    var image = target.closest(".message-image img");
+    if (image) {
+      openImageOverlay(image.src);
+    }
+  }
+
+  // --- attachments ---------------------------------------------------------
+  //
+  // The host owns the bytes: it is the side that can run pi's image tools, and an
+  // id is all the webview needs to hand back. So the panel draws the thumbnail it
+  // was given with the id beside it, and a prompt carries ids.
+
+  function isImageFile(file) {
+    return Boolean(file) && typeof file.type === "string" && file.type.indexOf("image/") === 0;
+  }
+
+  function hasImageFile(files) {
+    if (!files || files.length === 0) {
+      return false;
+    }
+    for (var index = 0; index < files.length; index += 1) {
+      if (isImageFile(files[index])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Reads one file into the two fields the host's protocol carries.
+   *
+   * A data URL is the only reader the webview has, and the protocol wants the
+   * payload and its media type apart: the part after the comma is the data and the
+   * part before the semicolon is the type. A payload with no type is dropped rather
+   * than posted as a guess.
+   */
+  function readImageFile(file, callback) {
+    var reader = new FileReader();
+    reader.addEventListener("load", function () {
+      var result = typeof reader.result === "string" ? reader.result : "";
+      var comma = result.indexOf(",");
+      var head = comma < 0 ? "" : result.slice(0, comma);
+      var colon = head.indexOf(":");
+      var semicolon = head.indexOf(";");
+      if (colon < 0 || semicolon < colon) {
+        callback(null);
+        return;
+      }
+      callback({
+        data: result.slice(comma + 1),
+        mimeType: head.slice(colon + 1, semicolon),
+        name: file.name || "imagen",
+      });
+    });
+    reader.addEventListener("error", function () {
+      callback(null);
+    });
+    reader.readAsDataURL(file);
+  }
+
+  /** Posts the bytes a paste or a drop carries, once every file has been read. */
+  function postImageFiles(files) {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    var wanted = [];
+    for (var index = 0; index < files.length; index += 1) {
+      if (isImageFile(files[index])) {
+        wanted.push(files[index]);
+      }
+    }
+    if (wanted.length === 0) {
+      return;
+    }
+
+    var images = [];
+    var remaining = wanted.length;
+    for (var position = 0; position < wanted.length; position += 1) {
+      readImageFile(wanted[position], function (image) {
+        if (image) {
+          images.push(image);
+        }
+        remaining -= 1;
+        // One message per interaction: the host answers a batch with a single
+        // `attachments` record, so one post per file would draw several answers.
+        if (remaining === 0 && images.length > 0) {
+          send({ type: "attachBytes", images: images });
+        }
+      });
+    }
+  }
+
+  /**
+   * The composer keeps its text when a paste carries no file.
+   *
+   * `preventDefault` on ordinary text would stop it from ever arriving, so it is
+   * only called once a file is known to be there. That is what keeps the pasted
+   * image from also being inserted as text without breaking the composer.
+   */
+  function onPromptPaste(event) {
+    var files = event.clipboardData ? event.clipboardData.files : null;
+    if (!hasImageFile(files)) {
+      return;
+    }
+    event.preventDefault();
+    postImageFiles(files);
+  }
+
+  function onBodyDragOver(event) {
+    event.preventDefault();
+    document.body.classList.add("drop-active");
+  }
+
+  function onBodyDragLeave() {
+    document.body.classList.remove("drop-active");
+  }
+
+  /**
+   * A drop is taken anywhere in the panel.
+   *
+   * The default is always stopped: without it the webview navigates to the dropped
+   * file, which would take the conversation with it. A drop that carries no image
+   * simply attaches nothing.
+   */
+  function onBodyDrop(event) {
+    event.preventDefault();
+    document.body.classList.remove("drop-active");
+    postImageFiles(event.dataTransfer ? event.dataTransfer.files : null);
+  }
+
+  /** `160\u00d7120`, and a word when the host had to shrink the image. */
+  function describeAttachment(image) {
+    return image.width + "\u00d7" + image.height + (image.resized ? " \u00b7 reducida" : "");
+  }
+
+  function renderAttachments() {
+    elements.attachments.textContent = "";
+    elements.attachments.hidden = attachments.length === 0;
+
+    for (var index = 0; index < attachments.length; index += 1) {
+      var image = attachments[index];
+      var chip = createElement("figure", "attachment");
+
+      var preview = createElement("img");
+      preview.src = image.dataUrl;
+      preview.alt = "";
+      chip.appendChild(preview);
+
+      chip.appendChild(createElement("figcaption", null, describeAttachment(image)));
+
+      var remove = createElement("button", "attachment-remove codicon codicon-close");
+      remove.type = "button";
+      remove.title = "Quitar";
+      remove.setAttribute("aria-label", "Quitar");
+      // The id travels on the button so the one delegated listener can read it
+      // back without a closure per chip.
+      remove.setAttribute("data-attachment-id", image.id);
+      chip.appendChild(remove);
+
+      elements.attachments.appendChild(chip);
+    }
+  }
+
+  /**
+   * One listener for the whole row.
+   *
+   * The row is redrawn whenever the list changes, so a listener per chip would be
+   * re-attached on every redraw; a listener on the container survives it.
+   */
+  function onAttachmentsClick(event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== "function") {
+      return;
+    }
+
+    var remove = target.closest(".attachment-remove");
+    if (remove) {
+      send({ type: "detachAttachment", id: remove.getAttribute("data-attachment-id") });
+      return;
+    }
+
+    var preview = target.closest(".attachment img");
+    if (preview) {
+      openImageOverlay(preview.src);
+    }
+  }
+
+  // --- full-size image -----------------------------------------------------
+
+  /**
+   * Opens one image at full size, inside the panel.
+   *
+   * The overlay is built here and removed here: it never opens a window, never
+   * navigates, and never asks the host for anything. It is fixed, so it covers the
+   * panel whatever the transcript's scroll position is.
+   */
+  function openImageOverlay(source) {
+    closeImageOverlay();
+
+    var node = createElement("div", "image-overlay");
+
+    var image = createElement("img");
+    image.src = source;
+    image.alt = "imagen adjunta";
+    node.appendChild(image);
+
+    var close = createElement("button", "image-overlay-close icon-button codicon codicon-close");
+    close.type = "button";
+    close.title = "Cerrar";
+    close.setAttribute("aria-label", "Cerrar");
+    node.appendChild(close);
+
+    // One click handler on the overlay covers the image, the padding and the close
+    // button, because the button's own click bubbles to it.
+    node.addEventListener("click", closeImageOverlay);
+    document.addEventListener("keydown", onOverlayKeydown);
+    document.body.appendChild(node);
+    overlay = node;
+  }
+
+  /** Closes the overlay and takes its Escape listener with it. */
+  function closeImageOverlay() {
+    if (!overlay) {
+      return;
+    }
+    document.removeEventListener("keydown", onOverlayKeydown);
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+    overlay = null;
+  }
+
+  function onOverlayKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeImageOverlay();
+    }
+  }
+
+  /**
+   * The image block the echo and pi's own message share.
+   *
+   * The webview holds the thumbnail's data URL rather than the bytes, so the echo
+   * carries the URL and the type; `imageSource` turns either shape into the same
+   * source, which keeps the echo and the authoritative message identical.
+   */
+  function attachmentBlock(image) {
+    return { type: "image", mimeType: image.mimeType, dataUrl: image.dataUrl };
   }
 
   function submitPrompt() {
@@ -857,14 +1165,25 @@
     if (!text.trim()) {
       return;
     }
-    // Local echo; pi's own user message_start replaces this element.
+    // Local echo; pi's own user message_start replaces this element. The images go
+    // with the text, so the owner sees what they just sent before pi confirms it.
     var echo = addMessage("user");
-    echo.body.textContent = text;
+    var content = [{ type: "text", text: text }];
+    for (var index = 0; index < attachments.length; index += 1) {
+      content.push(attachmentBlock(attachments[index]));
+    }
+    renderContent(echo.body, content);
     userEcho = echo;
+
+    var ids = [];
+    for (var position = 0; position < attachments.length; position += 1) {
+      ids.push(attachments[position].id);
+    }
 
     elements.prompt.value = "";
     setStatus("running");
-    send({ type: "prompt", text: text });
+    // The bytes stay with the host: a prompt carries the ids of what is attached.
+    send({ type: "prompt", text: text, attachmentIds: ids });
   }
 
   function registerEvents() {
@@ -879,6 +1198,19 @@
         submitPrompt();
       }
     });
+
+    elements.prompt.addEventListener("paste", onPromptPaste);
+
+    // The whole panel takes a drop, so the target the owner aims at does not have
+    // to be the composer itself.
+    document.body.addEventListener("dragover", onBodyDragOver);
+    document.body.addEventListener("dragleave", onBodyDragLeave);
+    document.body.addEventListener("drop", onBodyDrop);
+
+    elements.attach.addEventListener("click", function () {
+      send({ type: "pickImages" });
+    });
+    elements.attachments.addEventListener("click", onAttachmentsClick);
 
     elements.abort.addEventListener("click", function () {
       send({ type: "abort" });
@@ -920,6 +1252,7 @@
 
   registerEvents();
   setStatus("idle");
+  renderAttachments();
   send({ type: "ready" });
   if (!elements.messages.firstChild) {
     renderEmptyState();

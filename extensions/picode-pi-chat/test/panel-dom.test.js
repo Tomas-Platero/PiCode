@@ -20,7 +20,18 @@ const PAIRS = [
     script: "media/main.js",
     markup: "out/chat-view.js",
     // The controls the panel is built around, by name.
-    required: ["model", "thinking", "dropdown", "dropdown-filter", "send", "prompt", "restart", "menu"],
+    required: [
+      "model",
+      "thinking",
+      "dropdown",
+      "dropdown-filter",
+      "send",
+      "prompt",
+      "restart",
+      "menu",
+      "attach",
+      "attachments",
+    ],
   },
   {
     name: "ajustes",
