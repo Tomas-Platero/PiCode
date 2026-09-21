@@ -174,7 +174,8 @@
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node test/runtime.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js",
     "test:live": "node test/rpc.live.js",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run compile",
+    "test:install": "node test/install.live.js"
   },
   "devDependencies": {
     "@types/node": "^20",
