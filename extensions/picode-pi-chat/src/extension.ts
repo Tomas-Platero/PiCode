@@ -18,7 +18,9 @@ import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
 import {
   formatBytes,
   listSessions,
+  parseSession,
   projectSessionsDir,
+  readSession,
   sessionsRoot,
   type SessionSummary,
 } from "./sessions";
@@ -863,8 +865,10 @@ async function currentBranch(cwd: string): Promise<{ branch?: string }> {
 /**
  * Loads a previous conversation into the running agent.
  *
- * The view is cleared and told why: pi now holds the conversation, the panel does not, and
- * replaying the history into the webview is a separate job from resuming it.
+ * The conversation is also read back from its own file and replayed into the panel, so the
+ * owner sees the conversation pi now holds instead of an empty column. Reading is best
+ * effort: a file that cannot be read or parsed falls back to saying so, because an empty
+ * panel with no reason reads as a broken one.
  */
 async function resumeSession(session: SessionSummary): Promise<void> {
   await withLiveClient(async (rpc) => {
@@ -878,10 +882,23 @@ async function resumeSession(session: SessionSummary): Promise<void> {
 
     const label = session.name ?? session.title ?? session.stamp;
     outputChannel?.appendLine(`[pi] sesión cargada: ${session.file}`);
-    view?.notifySessionSwitched(
-      `Sesión cargada: ${label}. pi tiene la conversación y ${formatBytes(session.bytes)} de historial; el panel no lo reproduce, así que escribe para continuar.`,
-    );
-    await view?.refreshState();
+
+    try {
+      const replay = parseSession(readSession(session.file));
+      outputChannel?.appendLine(
+        `[pi] historial cargado: ${session.file} ` +
+          `(${replay.messages.length - replay.omitted} de ${replay.messages.length} mensajes)`,
+      );
+      await view?.notifyHistory(replay);
+    } catch (error) {
+      outputChannel?.appendLine(
+        `[pi] no se pudo leer el historial de ${session.file}: ${toErrorMessage(error)}`,
+      );
+      view?.notifySessionSwitched(
+        `Sesión cargada: ${label}. pi tiene la conversación y ${formatBytes(session.bytes)} de historial; el panel no lo reproduce, así que escribe para continuar.`,
+      );
+      await view?.refreshState();
+    }
   }, "reanudar una sesión");
 }
 

@@ -239,3 +239,170 @@ export function listSessions(directory: string, limit = 30): SessionSummary[] {
 export function readSession(file: string): string {
   return readFileSync(file, "utf8");
 }
+
+/** One message as the session file recorded it, in the shapes the panel already renders. */
+export interface SessionMessage {
+  role: "user" | "assistant" | "toolResult";
+  /** The message's own content blocks, passed through untouched. */
+  content: unknown;
+  /** Present on assistant messages. */
+  usage?: unknown;
+  /** Present on tool results, so a replayed row can be matched to its call. */
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
+  timestamp?: number;
+}
+
+export interface SessionReplay {
+  /** Every message the file holds, in order, including the ones `tail` was cut from. */
+  messages: SessionMessage[];
+  /** How many messages the caller asked to omit from the end of `messages`. */
+  omitted: number;
+  /** The whole conversation's usage, summed from every assistant message present. */
+  totals: SessionUsageTotals;
+}
+
+/** What a session has cost and consumed, summed over its assistant messages. */
+export interface SessionUsageTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  reasoning: number;
+  cost: number;
+  assistantMessages: number;
+  /** The last assistant message's context size, which is what a window limit applies to. */
+  contextTokens: number;
+  /** Rows of tool results, which is the closest thing a file has to "tool calls". */
+  toolCalls: number;
+}
+
+/** How many of the most recent messages a replay keeps when the caller does not say. */
+const REPLAY_LIMIT = 40;
+
+/** Anything that survived `JSON.parse` and can be read by key. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** A missing, non-numeric or non-finite field contributes nothing. */
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Reads a session file into the messages a panel can replay.
+ *
+ * `limit` is how many of the most recent messages the caller wants; everything is
+ * still parsed, because the totals describe the whole conversation and a resumed
+ * session that reported only the cost of its visible tail would be wrong in a way
+ * nobody could see.
+ *
+ * The content blocks are passed through exactly as the file holds them. They are the
+ * same vocabulary the live events carry, so the replay renders through the same code
+ * as a live reply and the two cannot drift apart.
+ */
+export function parseSession(text: string, limit?: number): SessionReplay {
+  const messages: SessionMessage[] = [];
+  let input = 0;
+  let output = 0;
+  let cacheRead = 0;
+  let cacheWrite = 0;
+  let reasoning = 0;
+  let cost = 0;
+  let contextTokens = 0;
+  let assistantMessages = 0;
+  let toolCalls = 0;
+
+  const wanted = typeof limit === "number" && Number.isFinite(limit) ? limit : REPLAY_LIMIT;
+
+  for (const line of typeof text === "string" ? text.split(/\r?\n/) : []) {
+    if (line.trim().length === 0) {
+      continue;
+    }
+
+    // A session file is an append-only log, so the last line can be half-written and a
+    // stray line can be anything at all. One unreadable entry must not cost the whole
+    // conversation, so anything that does not parse is skipped silently.
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    // The message normally sits under `message`, but a bare `{ role, content }` line is
+    // tolerated the same way `sessionTitle` already tolerates it.
+    const message = isRecord(entry.message) ? entry.message : entry;
+    const role = message.role;
+    if (role !== "user" && role !== "assistant" && role !== "toolResult") {
+      continue;
+    }
+
+    const parsed: SessionMessage = { role, content: message.content };
+
+    const timestamp = typeof message.timestamp === "number" ? message.timestamp : entry.timestamp;
+    if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+      parsed.timestamp = timestamp;
+    }
+
+    if (role === "assistant" && message.usage !== undefined) {
+      parsed.usage = message.usage;
+    }
+
+    if (role === "toolResult") {
+      if (typeof message.toolCallId === "string") {
+        parsed.toolCallId = message.toolCallId;
+      }
+      if (typeof message.toolName === "string") {
+        parsed.toolName = message.toolName;
+      }
+      if (typeof message.isError === "boolean") {
+        parsed.isError = message.isError;
+      }
+    }
+
+    messages.push(parsed);
+
+    if (role === "assistant") {
+      assistantMessages += 1;
+      if (isRecord(message.usage)) {
+        const usage = message.usage;
+        input += numberOrZero(usage.input);
+        output += numberOrZero(usage.output);
+        cacheRead += numberOrZero(usage.cacheRead);
+        cacheWrite += numberOrZero(usage.cacheWrite);
+        reasoning += numberOrZero(usage.reasoning);
+        cost += isRecord(usage.cost) ? numberOrZero(usage.cost.total) : 0;
+        // Context pressure is not a sum: it is how full the window was on the last
+        // turn, so the newest usable reading replaces the previous one.
+        contextTokens =
+          numberOrZero(usage.input) + numberOrZero(usage.cacheRead) + numberOrZero(usage.cacheWrite);
+      }
+    } else if (role === "toolResult") {
+      toolCalls += 1;
+    }
+  }
+
+  const omitted = messages.length > wanted ? messages.length - wanted : 0;
+
+  return {
+    messages,
+    omitted,
+    totals: {
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      reasoning,
+      cost,
+      assistantMessages,
+      contextTokens,
+      toolCalls,
+    },
+  };
+}

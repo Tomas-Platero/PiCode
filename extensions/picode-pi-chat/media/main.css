@@ -743,6 +743,29 @@ button.secondary:hover:not(:disabled) {
   display: none;
 }
 
+/* --- history marker ----------------------------------------------------- */
+
+/*
+ * The line that says a loaded conversation starts partway through. It is not a
+ * message, so it wears neither a role row nor a bubble: the rule running to the
+ * right edge separates it from the transcript below without boxing it in.
+ */
+.history-marker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8em;
+}
+
+.history-marker::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--vscode-panel-border);
+}
+
 /* --- empty state -------------------------------------------------------- */
 
 /*

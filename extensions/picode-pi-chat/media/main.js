@@ -463,18 +463,52 @@
     item.glyph = name;
   }
 
+  /**
+   * Builds one tool row, the shape both a live tool and a replayed one wear.
+   *
+   * Kept in one place because the row is a transcript entry either way: a live
+   * execution grows into it through `upsertTool`, and a `toolResult` read back from a
+   * session file is appended already finished. `argsText` is the serialized arguments,
+   * or an empty string when there are none to show.
+   */
+  function createToolRow(name, argsText) {
+    // The row is a transcript entry, not a second list: it wears the message
+    // grid so its glyph sits in the same gutter as the speaker icons.
+    var row = createElement("div", "tool tool-running");
+    var status = codicon("loading");
+    status.classList.add("tool-status", "codicon-modifier-spin");
+    row.appendChild(status);
+    var head = createElement("div", "tool-head");
+    head.appendChild(createElement("span", "tool-name", name || "herramienta"));
+    head.appendChild(createElement("span", "tool-args", argsText));
+    row.appendChild(head);
+    var item = {
+      item: row,
+      status: status,
+      glyph: "loading",
+      output: createElement("pre", "tool-output", ""),
+    };
+    row.appendChild(item.output);
+    return item;
+  }
+
+  /**
+   * Writes a tool row's outcome into its class and its glyph.
+   *
+   * The row says what happened in one glyph and one class: spinning while it runs, a
+   * check when it finished, an error mark when it failed.
+   */
+  function applyToolOutcome(item, outcome) {
+    item.item.className = "tool tool-" + outcome;
+    if (item.glyph !== TOOL_OUTCOMES[outcome].glyph) {
+      setToolStatus(item, TOOL_OUTCOMES[outcome].glyph, TOOL_OUTCOMES[outcome].spinning);
+    }
+  }
+
   function upsertTool(event, phase) {
     var item = toolItems.get(event.toolCallId);
     if (!item) {
-      // The row is a transcript entry, not a second list: it wears the message
-      // grid so its glyph sits in the same gutter as the speaker icons, and one
-      // toolCallId maps to one row for as long as the run lasts.
-      var row = createElement("div", "tool tool-running");
-      var status = codicon("loading");
-      status.classList.add("tool-status", "codicon-modifier-spin");
-      row.appendChild(status);
-      var head = createElement("div", "tool-head");
-      head.appendChild(createElement("span", "tool-name", event.toolName || "herramienta"));
+      // One toolCallId maps to one row for as long as the run lasts.
       var args = "";
       try {
         args = JSON.stringify(event.args || {});
@@ -483,19 +517,11 @@
         // take down the tool timeline.
         args = "";
       }
-      head.appendChild(createElement("span", "tool-args", args));
-      row.appendChild(head);
-      item = {
-        item: row,
-        status: status,
-        glyph: "loading",
-        output: createElement("pre", "tool-output", ""),
-      };
-      row.appendChild(item.output);
+      item = createToolRow(event.toolName, args);
       // Appended where it happened: pi emits the execution after the assistant
       // message that asked for it, so the row lands after that message and in
       // front of whatever comes next.
-      elements.messages.appendChild(row);
+      elements.messages.appendChild(item.item);
       toolItems.set(event.toolCallId, item);
     }
 
@@ -506,15 +532,24 @@
       }
     }
 
-    // The row says what happened in one glyph and one class: spinning while it
-    // runs, a check when it finished, an error mark when it failed.
-    var outcome = phase === "end" ? (event.isError ? "error" : "end") : "running";
-    item.item.className = "tool tool-" + outcome;
-    if (item.glyph !== TOOL_OUTCOMES[outcome].glyph) {
-      setToolStatus(item, TOOL_OUTCOMES[outcome].glyph, TOOL_OUTCOMES[outcome].spinning);
-    }
+    applyToolOutcome(item, phase === "end" ? (event.isError ? "error" : "end") : "running");
     scrollToBottom();
     return item;
+  }
+
+  /**
+   * Appends a tool result read back from a session file.
+   *
+   * Nothing here is live: there is no run to update and no spinner to settle, so the row
+   * is appended already finished and is deliberately not registered with `toolItems`,
+   * where a live event could find it. It is built by the same code as a live execution,
+   * so a replayed conversation and a fresh one cannot look different.
+   */
+  function appendHistoryTool(message) {
+    var item = createToolRow(message.toolName, "");
+    item.output.textContent = textFromContent(message.content);
+    applyToolOutcome(item, message.isError ? "error" : "end");
+    elements.messages.appendChild(item.item);
   }
 
   /**
@@ -687,6 +722,52 @@
     }
     var other = addMessage(role);
     other.body.textContent = textFromContent(message.content);
+  }
+
+  /**
+   * Draws one message read back from a session file.
+   *
+   * It goes through the same renderers a live reply does — `addMessage` for the role
+   * row, `renderContent` for the blocks, the tool row for a result — because the host
+   * passes the file's own blocks through untouched. A second rendering path is how the
+   * two drift apart, so there is only this one.
+   */
+  function renderHistoryMessage(message) {
+    if (!message || typeof message !== "object") {
+      return;
+    }
+    if (message.role === "user" || message.role === "assistant") {
+      var view = addMessage(message.role);
+      renderContent(view.body, message.content);
+      return;
+    }
+    if (message.role === "toolResult") {
+      appendHistoryTool(message);
+    }
+  }
+
+  /**
+   * The line that says the loaded conversation does not start at its beginning.
+   *
+   * One line at the top of the replayed part, so the owner reads the count before the
+   * first message instead of wondering where the rest of the conversation went.
+   */
+  function appendHistoryMarker(shown, omitted) {
+    var marker = createElement("div", "history-marker", historyMarkerText(shown, omitted));
+    elements.messages.appendChild(marker);
+  }
+
+  /** Both clauses agree with their own count, singular or plural. */
+  function historyMarkerText(shown, omitted) {
+    var head =
+      shown === 1
+        ? "Se muestra el último mensaje"
+        : "Se muestran los últimos " + formatCount(shown) + " mensajes";
+    var tail =
+      omitted === 1
+        ? "1 anterior no se ha cargado"
+        : formatCount(omitted) + " anteriores no se han cargado";
+    return head + "; " + tail + ".";
   }
 
   // --- delta types (payload of message_update) ------------------------------
@@ -879,6 +960,22 @@
           elements.messages.removeChild(empty);
           renderEmptyState();
         }
+        break;
+      }
+      case "history": {
+        // A conversation pi loaded from disk, replayed as the transcript it was. The
+        // host cleared the panel first, so this starts from an empty one.
+        var historyMessages = Array.isArray(message.messages) ? message.messages : [];
+        var omitted = typeof message.omitted === "number" ? message.omitted : 0;
+        // The marker goes first, before the part it describes.
+        if (omitted > 0) {
+          appendHistoryMarker(historyMessages.length, omitted);
+        }
+        for (var historyIndex = 0; historyIndex < historyMessages.length; historyIndex += 1) {
+          renderHistoryMessage(historyMessages[historyIndex]);
+        }
+        // Nothing here is live: no status, no spinner and no usage accounting. The
+        // session's totals were seeded by the host and arrive with its state.
         break;
       }
       case "clear":

@@ -11,7 +11,7 @@ import {
 import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
-import type { SessionSummary } from "./sessions";
+import type { SessionReplay, SessionSummary } from "./sessions";
 import {
   TRANSCRIPTION_LIMITS,
   formatTranscriptBlock,
@@ -312,15 +312,50 @@ export class ChatView implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Notifies the webview that another conversation was loaded.
+   * Notifies the webview that another conversation was loaded and the transcript is gone.
    *
-   * The transcript is cleared because the loaded session's history is not replayed: pi has
-   * the conversation, the view does not. Saying so is the difference between an empty panel
-   * that looks broken and an empty panel that is explained.
+   * This is the fallback for a session whose file could not be read: pi holds the
+   * conversation and the panel cannot, so saying so is the difference between an empty
+   * panel that looks broken and an empty panel that is explained. A session whose file
+   * can be read is replayed by `notifyHistory` instead.
    */
   public notifySessionSwitched(note: string): void {
     this.notifySessionReset();
     this.post({ type: "note", text: note });
+  }
+
+  /**
+   * Replays a conversation read from a session file into the panel.
+   *
+   * Everything a session switch clears is cleared here too, so no transcript row or
+   * attachment chip from the previous conversation can be mistaken for one of this one's.
+   * The loaded conversation's totals replace the empty ones rather than being added to
+   * them: a resumed conversation reporting `coste 0,00 $` would be lying about a
+   * conversation that has cost money, and the file knows the truth.
+   *
+   * The messages travel in the shapes the renderer already draws, with the file's own
+   * content blocks passed through untouched, so the replay renders through the same code
+   * as a live reply and the two cannot drift apart. `messages` is every message the file
+   * holds, so only the last `omitted` are sent and the panel is told how many were left
+   * out.
+   */
+  public async notifyHistory(replay: SessionReplay): Promise<void> {
+    this.notifySessionReset();
+    // `SessionUsageTotals` names every field exactly as `UsageTotals` does.
+    this.totals = { ...replay.totals };
+    this.post({
+      type: "history",
+      messages: replay.messages.slice(replay.omitted).map((message) => ({
+        role: message.role,
+        content: message.content,
+        ...(message.toolCallId === undefined ? {} : { toolCallId: message.toolCallId }),
+        ...(message.toolName === undefined ? {} : { toolName: message.toolName }),
+        ...(message.isError === undefined ? {} : { isError: message.isError }),
+      })),
+      omitted: replay.omitted,
+    });
+    // The stats column reads the session totals, so it is redrawn from the seeded ones.
+    await this.pushState();
   }
 
   /** Reports a command failure in the view without killing the session. */
@@ -1187,8 +1222,8 @@ export class ChatView implements vscode.WebviewViewProvider {
         const file = typeof message.file === "string" ? message.file : "";
         const session = this.offeredSessions.find((entry) => entry.file === file);
         if (session) {
-          // The host's own `resumeSession` clears the panel and posts the explanation of
-          // why the history is not replayed, so nothing is duplicated here.
+          // The host's own `resumeSession` clears the panel and replays the loaded
+          // conversation, so nothing is duplicated here.
           await this.host.resumeSession(session);
         }
         break;
