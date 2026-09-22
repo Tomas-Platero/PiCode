@@ -35,8 +35,26 @@ export type PiSettingScope = "global" | "project";
 
 export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list" | "packages" | "action";
 
-/** A package row: its source and whether it is paused (kept but not loaded). */
-export interface PiPackageEntry {
+/**
+ * pi's four per-package resource filters, keyed by resource type.
+ *
+ * pi reads a list in two modes. With the default autoload its `applyPackageFilter`
+ * treats the list as an allow-list: only the listed paths load, an empty list
+ * disables every resource of that type, and the *absence* of the key is what means
+ * "no filter, load everything". With `autoload: false` its `applyPackageDeltaFilter`
+ * treats the list as a delta over "nothing loads": only the patterns it names load,
+ * and an empty list loads nothing. In both modes the missing key is the only "no
+ * filter", which is why an empty list must never be collapsed into it.
+ */
+export interface PiPackageFilters {
+  extensions?: readonly string[];
+  skills?: readonly string[];
+  prompts?: readonly string[];
+  themes?: readonly string[];
+}
+
+/** A package row: its source, whether it is paused, and the resource filters it carries. */
+export interface PiPackageEntry extends PiPackageFilters {
   source: string;
   /** True when the package is kept but not loaded (pi stores autoload=false). */
   paused: boolean;
@@ -296,10 +314,13 @@ export interface PiSettingsRecord {
 
 /**
  * A package entry as pi stores it: a source string, or an object that filters which
- * resources the package contributes. Only the source is read and written here; the
- * filtering fields belong to pi's package manager, not to this surface.
+ * resources the package contributes. The object's four filter arrays are read and
+ * written too, because a filter this surface dropped would silently re-enable
+ * whatever the owner had switched off in pi.
  */
-export type PiPackageSource = string | { source: string; autoload?: boolean };
+export type PiPackageSource =
+  | string
+  | ({ source: string; autoload?: boolean } & PiPackageFilters);
 
 export type PiCacheWarmingMode = "off" | "streaming" | "idle";
 
@@ -546,7 +567,17 @@ export function coerceSettingValue(
         if (typeof record.source !== "string" || record.source.trim() === "") {
           return undefined;
         }
-        entries.push({ source: record.source, paused: record.paused === true });
+        const coerced: PiPackageEntry = { source: record.source, paused: record.paused === true };
+        for (const field of PACKAGE_FILTER_FIELDS) {
+          const filter = parsePackageFilter(record[field]);
+          if (!filter.ok) {
+            return undefined;
+          }
+          if (filter.values !== undefined) {
+            coerced[field] = filter.values;
+          }
+        }
+        entries.push(coerced);
       }
       return entries;
     }
@@ -562,11 +593,86 @@ function scopedRecord(manager: PiSettingsManager, scope: PiSettingScope): PiSett
   return scope === "project" ? manager.getProjectSettings() : manager.getGlobalSettings();
 }
 
-/** A package entry reduced to what the editor renders: its source and its pause. */
+/**
+ * pi's four per-package resource filters, in pi's own key order.
+ *
+ * One list drives the read, the coercion and the write, so the three cannot drift
+ * apart: a filter that one of them knows and another forgets is exactly how pi's
+ * filtering would be destroyed on the next write.
+ */
+export const PACKAGE_FILTER_FIELDS = ["extensions", "skills", "prompts", "themes"] as const;
+
+type PiPackageFilterField = (typeof PACKAGE_FILTER_FIELDS)[number];
+
+/**
+ * The result of reading one filter array off a value from the webview.
+ *
+ * Three outcomes are told apart because they mean different things: `ok` with no
+ * `values` is "the entry declares no filter of this type", `ok` with `values` is a
+ * real filter, and `ok: false` is a value that cannot be stored at all. An empty
+ * array is a real filter too: it is what pi reads as "all off" when the autoload is
+ * default, so folding it into "no filter" would silently turn every skill back on.
+ */
+interface PackageFilterParse {
+  ok: boolean;
+  values?: string[];
+}
+
+function parsePackageFilter(value: unknown): PackageFilterParse {
+  if (value === undefined) {
+    return { ok: true };
+  }
+  if (!Array.isArray(value)) {
+    return { ok: false };
+  }
+  const values: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      return { ok: false };
+    }
+    values.push(entry);
+  }
+  return { ok: true, values };
+}
+
+/** A package entry reduced to what the editor renders: its source, pause and filters. */
 function packageEntry(entry: PiPackageSource): PiPackageEntry {
-  const source = typeof entry === "string" ? entry : entry.source;
-  const paused = typeof entry === "object" && entry.autoload === false;
-  return { source, paused };
+  if (typeof entry === "string") {
+    return { source: entry, paused: false };
+  }
+  const result: PiPackageEntry = { source: entry.source, paused: entry.autoload === false };
+  for (const field of PACKAGE_FILTER_FIELDS) {
+    const filter = entry[field];
+    // An empty list is kept on purpose: with the default autoload pi reads it as
+    // "nothing of this type loads", so dropping it here would re-enable everything.
+    if (filter !== undefined) {
+      result[field] = [...filter];
+    }
+  }
+  return result;
+}
+
+/** Turns one editor package row back into pi's stored form. */
+export function toPackageSource(entry: PiPackageEntry): PiPackageSource {
+  const stored: { source: string; autoload?: boolean } & PiPackageFilters = {
+    source: entry.source,
+  };
+  if (entry.paused) {
+    stored.autoload = false;
+  }
+  for (const field of PACKAGE_FILTER_FIELDS) {
+    const filter = entry[field];
+    // An empty list is written, not dropped: pi reads it as "all off" with the
+    // default autoload, and dropping the key would mean "no filter" instead.
+    if (filter !== undefined) {
+      stored[field] = [...filter];
+    }
+  }
+  // A plain source stays a plain string, and a paused package stays an object with
+  // `autoload: false`; a filter — including the empty allow-list that means "all
+  // off" — forces the object form.
+  const carriesFilters = PACKAGE_FILTER_FIELDS.some((field) => stored[field] !== undefined);
+  return entry.paused || carriesFilters ? stored : entry.source;
 }
 
 /** Turns the editor's package rows back into pi's stored form. */
@@ -583,9 +689,144 @@ function toPackageList(value: PiSettingValue, key: string): PiPackageSource[] {
     ) {
       throw new Error(`Setting "${key}" expects each package to declare a source.`);
     }
-    const record = entry as PiPackageEntry;
-    return record.paused === true ? { source: record.source, autoload: false } : record.source;
+    return toPackageSource(entry as PiPackageEntry);
   });
+}
+
+/**
+ * The `skills` key exactly as the entry stores it, or `undefined` when the entry
+ * carries no key at all.
+ *
+ * pi reads the key in two modes (its `collectPackageResources` chooses between
+ * `applyPackageFilter` and `applyPackageDeltaFilter`):
+ *
+ * - with the default autoload it is an allow-list, and an empty list disables every
+ *   skill the package contributes;
+ * - with `autoload: false` it is a delta over "nothing loads", so only the patterns
+ *   it names turn a skill on.
+ *
+ * In both modes the absence of the key is what means "no filter", so `undefined` is
+ * told apart from an empty array on purpose. An empty array only ever reaches this
+ * function because the owner switched the package's last skill off, and folding it
+ * into "no filter" is exactly the bug that would turn every skill back on.
+ */
+export function packageSkillFilter(entry: PiPackageEntry): readonly string[] | undefined {
+  return entry.skills;
+}
+
+/**
+ * The same package entry with one skill switched on or off.
+ *
+ * `packageSkills` is the complete set of skill patterns the package contributes,
+ * which the discovery already knows and the table passes. It is what lets a switch
+ * be expressed from either starting point: with the default autoload a package with
+ * no filter loads every skill, so switching one off means writing the allow-list of
+ * the rest; a package that already filters means removing the entry.
+ *
+ * The key is never collapsed away when it means something. Switching the last
+ * skill off writes an **empty list**, which pi reads as "all off"; dropping the
+ * key there would restore the default "no filter" and turn every skill back on.
+ * Switching a skill on does drop the key, but only when the resulting allow-list
+ * names every skill of the package, because that is identical to "no filter".
+ *
+ * The pause (`autoload: false`) is orthogonal and kept in every case; because a
+ * paused package's list is a delta, it is never dropped even when it names every
+ * skill, or the package would load nothing again.
+ */
+export function withPackageSkill(
+  entry: PiPackageEntry,
+  skill: string,
+  enabled: boolean,
+  packageSkills: readonly string[],
+): PiPackageEntry {
+  const result: PiPackageEntry = { source: entry.source, paused: entry.paused };
+  for (const field of PACKAGE_FILTER_FIELDS) {
+    const filter =
+      field === "skills"
+        ? nextSkillFilter(entry, entry.skills, skill, enabled, packageSkills)
+        : entry[field];
+    copyFilter(result, field, filter);
+  }
+  return result;
+}
+
+/**
+ * The `skills` key the switch must leave behind, or `undefined` when the entry must
+ * carry no key at all.
+ *
+ * The four cases the owner's table exercises:
+ *
+ * - no filter, switch one off, other skills exist -> the allow-list of the rest;
+ * - no filter, switch one off, it is the only skill -> an empty allow-list;
+ * - filtered, switch one off -> the rest, empty list kept when it was the last;
+ * - switch one on -> added to the list, and the key is dropped only once the list
+ *   names every skill of the package (with the default autoload).
+ */
+function nextSkillFilter(
+  entry: PiPackageEntry,
+  declared: readonly string[] | undefined,
+  skill: string,
+  enabled: boolean,
+  packageSkills: readonly string[],
+): readonly string[] | undefined {
+  if (enabled) {
+    if (declared === undefined) {
+      // No key: a normal package already loads every skill, so switching one on is
+      // a no-op and the entry stays as it is. A paused package loads nothing, so
+      // its delta has to name the skill.
+      return entry.paused ? [skill] : undefined;
+    }
+    if (declared.includes(skill)) {
+      return [...declared];
+    }
+    const added = [...declared, skill];
+    // A normal package whose allow-list names every skill is indistinguishable from
+    // no filter, so the key goes away and the source stays a plain string. A paused
+    // package keeps the delta: dropping it would load nothing again.
+    if (!entry.paused && coversEverySkill(added, packageSkills)) {
+      return undefined;
+    }
+    return added;
+  }
+
+  if (declared === undefined) {
+    // A paused package already loads nothing, so switching one off removes nothing.
+    if (entry.paused) {
+      return undefined;
+    }
+    // With the default autoload every skill loads, so switching one off means
+    // allowing every other skill. The package's only skill yields an empty
+    // allow-list, which pi reads as "all off" — never a missing key.
+    return packageSkills.filter((pattern) => pattern !== skill);
+  }
+
+  // Remove the entry, keeping an empty list when it was the last one: an empty
+  // allow-list is "all off", while dropping the key would turn every skill back on.
+  return declared.filter((pattern) => pattern !== skill);
+}
+
+/** Whether an allow-list names every skill the package contributes. */
+function coversEverySkill(
+  filter: readonly string[],
+  packageSkills: readonly string[],
+): boolean {
+  // An unknown package (no known patterns) cannot be proven complete, so the key
+  // stays rather than collapsing to "no filter".
+  if (packageSkills.length === 0) {
+    return false;
+  }
+  return packageSkills.every((pattern) => filter.includes(pattern));
+}
+
+/** Copies one filter onto a result entry, keeping an empty list when it is present. */
+function copyFilter(
+  result: PiPackageEntry,
+  field: PiPackageFilterField,
+  filter: readonly string[] | undefined,
+): void {
+  if (filter !== undefined) {
+    result[field] = [...filter];
+  }
 }
 
 function toBoolean(value: PiSettingValue, key: string): boolean {
