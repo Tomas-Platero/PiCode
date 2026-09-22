@@ -22,7 +22,6 @@
     abort: document.getElementById("abort"),
     newSession: document.getElementById("new-session"),
     restart: document.getElementById("restart"),
-    menu: document.getElementById("menu"),
     model: document.getElementById("model"),
     thinking: document.getElementById("thinking"),
     dropdown: document.getElementById("dropdown"),
@@ -1676,10 +1675,6 @@
 
     elements.restart.addEventListener("click", function () {
       send({ type: "restart" });
-    });
-
-    elements.menu.addEventListener("click", function () {
-      send({ type: "openMenu" });
     });
 
     elements.model.addEventListener("click", function () {

@@ -28,7 +28,6 @@ const PAIRS = [
       "send",
       "prompt",
       "restart",
-      "menu",
       "attach",
       "attachments",
       "stats-strip",

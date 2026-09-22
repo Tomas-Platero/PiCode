@@ -82,7 +82,6 @@ export function activate(context: vscode.ExtensionContext): void {
     applyModel: (modelId, provider) =>
       withLiveClient((rpc) => applyModel(rpc, modelId, provider)),
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
-    openMenu: () => showPiMenu(menu),
     restart: () => resetClient(),
     // The same two the popup's session picker uses: the panel's empty state offers the
     // project's previous conversations, so both surfaces read and load one list.

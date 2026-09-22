@@ -54,8 +54,6 @@ export interface ChatViewHost {
   applyModel(modelId: string, provider?: string): Promise<void>;
   /** Applies a reasoning level chosen in the panel's own dropdown. */
   applyThinkingLevel(level: string): Promise<void>;
-  /** Opens the pi configuration popup. */
-  openMenu(): Promise<void>;
   /** Restarts the agent backend, keeping the panel where it is. */
   restart(): Promise<void>;
   /**
@@ -99,7 +97,6 @@ const CHAT_BODY = `    <header class="toolbar">
       <button id="new-session" type="button" class="icon-button" title="Empezar una sesión nueva de pi" aria-label="Nueva sesión"><span class="codicon codicon-comment-discussion"></span></button>
       <button id="abort" type="button" class="icon-button" disabled title="Detener la ejecución actual" aria-label="Detener"><span class="codicon codicon-debug-stop"></span></button>
       <button id="restart" type="button" class="icon-button" title="Reiniciar el proceso de pi" aria-label="Reiniciar"><span class="codicon codicon-refresh"></span></button>
-      <button id="menu" type="button" class="icon-button" title="Configuración de pi" aria-label="Configuración"><span class="codicon codicon-settings-gear"></span></button>
     </header>
     <main id="messages" class="messages" aria-live="polite"></main>
     <form id="composer" class="composer">
@@ -1224,10 +1221,6 @@ export class ChatView implements vscode.WebviewViewProvider {
           // conversation, so nothing is duplicated here.
           await this.host.resumeSession(session);
         }
-        break;
-      }
-      case "openMenu": {
-        await this.host.openMenu();
         break;
       }
       case "restart": {
