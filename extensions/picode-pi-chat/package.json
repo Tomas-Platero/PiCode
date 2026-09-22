@@ -20,7 +20,8 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onView:picode.piChat",
-    "onView:picode.ajustes"
+    "onView:picode.ajustes",
+    "onView:picode.gentle"
   ],
   "contributes": {
     "viewsContainers": {
@@ -29,6 +30,11 @@
           "id": "picode-ajustes",
           "title": "PiCode",
           "icon": "media/picode.svg"
+        },
+        {
+          "id": "picode-gentle",
+          "title": "Gentle AI",
+          "icon": "media/gentle.svg"
         }
       ],
       "secondarySidebar": [
@@ -51,6 +57,13 @@
         {
           "id": "picode.ajustes",
           "name": "Ajustes de pi",
+          "type": "webview"
+        }
+      ],
+      "picode-gentle": [
+        {
+          "id": "picode.gentle",
+          "name": "Gentle AI",
           "type": "webview"
         }
       ]

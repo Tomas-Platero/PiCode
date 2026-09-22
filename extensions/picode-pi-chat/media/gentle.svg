@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Gentle AI</title>
+  <!--
+    The activity bar masks its icons, so this has to be a monochrome silhouette:
+    it is drawn in the same hand-authored line style as `picode.svg` beside it
+    (stroke only, round caps, the same grey the mask reads). The brand's own mark
+    is a rendered illustration, which is why the activity bar gets this mark and
+    the panel gets the real one.
+  -->
+  <g transform="translate(0,0)" fill="none" stroke="#C5C5C5" stroke-width="72" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 452 C556 452 586 482 586 522 C586 572 540 604 490 604 C424 604 384 552 384 494 C384 414 456 360 538 360 C636 360 698 436 698 534 C698 644 604 716 490 716"/>
+    <path d="M490 716 C474 800 480 870 512 936"/>
+    <path d="M494 806 C404 754 320 772 292 828 C352 884 448 874 494 806"/>
+    <path d="M506 862 C592 812 672 830 700 886 C642 940 550 930 506 862"/>
+  </g>
+</svg>

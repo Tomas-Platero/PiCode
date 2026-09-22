@@ -25,6 +25,7 @@ import {
   sessionsRoot,
   type SessionSummary,
 } from "./sessions";
+import { GentleView, type GentleRunId } from "./gentle-view";
 import { SettingsView } from "./settings-view";
 import {
   firstMeaningfulLine,
@@ -65,6 +66,7 @@ let view: ChatView | undefined;
 /** The directory the agent runs in, which is also the project its sessions belong to. */
 let agentCwd: string | undefined;
 let ajustesView: AjustesView | undefined;
+let gentleView: GentleView | undefined;
 let settingsView: SettingsView | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 /** pi's image helpers, cached per SDK entry: importing an ESM package is not free. */
@@ -92,6 +94,11 @@ export function activate(context: vscode.ExtensionContext): void {
     ...(outputChannel ? { output: outputChannel } : {}),
   } satisfies ChatViewHost);
 
+  // One Gentle AI port for every surface that touches it. The popup's category and the
+  // sidebar panel both read the state and run the actions through this object, so a
+  // second copy of either cannot appear on one surface and not the other.
+  const gentle = gentleActions(context);
+
   // pi's configuration lives in popup menus, reached from the status bar icon and
   // from a button on the chat view's title. Package management is the one surface
   // that talks to the pi CLI rather than to the RPC protocol, and it always talks
@@ -108,7 +115,7 @@ export function activate(context: vscode.ExtensionContext): void {
     sendCommand: (name) => sendSlashCommand(name),
     sessions: () => listProjectSessions(),
     resumeSession: (session) => resumeSession(session),
-    gentle: gentleActions(context),
+    gentle,
     newSession: () => startNewSession(),
     abort: () => abortRun(),
     restart: () => resetClient(),
@@ -149,6 +156,14 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   ajustesView = ajustes;
 
+  // Gentle AI's own container: the same state builder and the same runner the menu
+  // above uses, so the panel is a second way to see and switch the same thing.
+  const gentlePanel = GentleView.create(context.extensionUri, {
+    gentle,
+    runAction: (id: GentleRunId, command?: string) => runGentleAction(gentle, id, command),
+  });
+  gentleView = gentlePanel;
+
   context.subscriptions.push(
     // `retainContextWhenHidden` keeps the webview alive while the sidebar is
     // collapsed, so a visible transcript is not thrown away by hiding it.
@@ -156,6 +171,9 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerWebviewViewProvider(AjustesView.viewId, ajustes, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.window.registerWebviewViewProvider(GentleView.viewId, gentlePanel, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("picode.piChat.menu", () => showPiMenu(menu)),
@@ -195,6 +213,8 @@ export function deactivate(): void {
   view = undefined;
   ajustesView?.dispose();
   ajustesView = undefined;
+  gentleView?.dispose();
+  gentleView = undefined;
   settingsView?.dispose();
   settingsView = undefined;
   client?.stop();
@@ -804,6 +824,53 @@ function gentleActions(context: vscode.ExtensionContext): GentleActions {
       offerRestart(`${GENTLE_PACKAGE} quedó instalado`);
     },
   };
+}
+
+/**
+ * Runs one of the Gentle AI panel's requests.
+ *
+ * The panel draws buttons, not popup rows, so the ids are its own; every case still
+ * ends in the same `GentleActions` method the popup's Gentle AI category calls (and,
+ * for a command, in the same sender its command rows use). That is what keeps the two
+ * surfaces one implementation rather than two.
+ */
+async function runGentleAction(
+  gentle: GentleActions,
+  id: GentleRunId,
+  command?: string,
+): Promise<void> {
+  switch (id) {
+    case "install":
+      await gentle.install();
+      break;
+    case "review": {
+      const state = await gentle.state();
+      await gentle.setReview(state.review.rdd !== "on");
+      break;
+    }
+    case "telemetry-enable":
+      await gentle.telemetry("enable");
+      break;
+    case "telemetry-disable":
+      await gentle.telemetry("disable");
+      break;
+    case "telemetry-preview":
+      await gentle.telemetry("preview");
+      break;
+    case "sdd-status":
+      await gentle.run(["sdd-status"], "PiCode: SDD");
+      break;
+    case "doctor":
+      await gentle.run(["doctor"], "PiCode: diagnóstico de Gentle AI");
+      break;
+    case "command":
+      // The panel only offers commands pi itself registered, but the id alone would be
+      // nothing to send: an action without its command is ignored, not guessed.
+      if (command !== undefined && command.length > 0) {
+        await sendSlashCommand(command);
+      }
+      break;
+  }
 }
 
 /**

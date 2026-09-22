@@ -59,6 +59,14 @@ const PAIRS = [
       "settings-content",
     ],
   },
+  {
+    name: "gentle",
+    script: "media/gentle.js",
+    markup: "out/gentle-view.js",
+    // The mark, the line under the name, the place a failure is reported, and the
+    // three lists the host fills in.
+    required: ["logo", "summary", "notice", "lines", "commands", "actions"],
+  },
 ];
 
 function idsUsedByScript(source) {
