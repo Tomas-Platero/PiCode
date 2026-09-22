@@ -19,6 +19,5 @@
   "security.workspace.trust.enabled": true,
   "terminal.integrated.defaultProfile.windows": "PowerShell",
   "picode.pi.executablePath": "pi",
-  "picode.pi.defaultModel": "",
   "picode.pi.extraArgs": []
 }
