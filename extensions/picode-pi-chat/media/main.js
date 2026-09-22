@@ -12,7 +12,6 @@
   var elements = {
     status: document.getElementById("status"),
     session: document.getElementById("session"),
-    stats: document.getElementById("stats"),
     statsStrip: document.getElementById("stats-strip"),
     messages: document.getElementById("messages"),
     form: document.getElementById("composer"),
@@ -39,8 +38,9 @@
   var userEcho = null;
   // Last session state the host pushed, used to mark the current model and level.
   var lastState = null;
-  // The live figures, kept so the strip's cache share can be redrawn when they
-  // change: the strip shows cache beside the environment, and cache is live.
+  // The live figures, kept so the toolbar line and the strip's cache share can be
+  // redrawn when they change: the toolbar shows context, cost and tokens, and the
+  // strip shows cache beside the environment, and cache is live too.
   var liveStats = null;
   // The environment figures, pushed once per bind, for the strip under the composer.
   var environmentStats = null;
@@ -904,8 +904,10 @@
         break;
       case "state":
         reasoningMode = normalizeReasoningMode(message.reasoning);
+        // The live figures are stored before the redraw so the toolbar line and the
+        // strip's cache segment both read the same reading.
+        liveStats = message.stats && typeof message.stats === "object" ? message.stats : null;
         renderState(message.state);
-        renderStats(message.stats);
         break;
       case "environment":
         renderEnvironment(message.stats);
@@ -1035,49 +1037,34 @@
     if (typeof state.pendingMessageCount === "number" && state.pendingMessageCount > 0) {
       parts.push(state.pendingMessageCount + " en cola");
     }
+    // The live figures follow the count, in the order the bill reads them. Only
+    // context carries a label, because a bare percentage would not say what it is a
+    // percentage of; a cost already reads as money and a token count as a count.
+    if (liveStats && liveStats.context) {
+      parts.push("ctx " + liveStats.context);
+    }
+    if (liveStats && liveStats.cost) {
+      parts.push(liveStats.cost);
+    }
+    if (liveStats && liveStats.tokens) {
+      parts.push(liveStats.tokens);
+    }
     if (state.sessionName) {
       parts.push(state.sessionName);
     }
-    // The usage line is deliberately absent: tokens, cost and context now live in
-    // the stats column, and repeating them here would say the same thing twice.
 
     elements.session.textContent = parts.join(" · ");
+
+    // The strip describes where the agent runs, so a new state is also when it may
+    // have become worth showing or may need its cache figure refreshed.
+    drawStrip();
   }
 
   // --- stats --------------------------------------------------------------
   //
   // The host owns the figures and the labels are the panel's, so a figure can move
-  // between the column and the strip without leaving the host. Both surfaces are
-  // redrawn when their message arrives and leave the transcript alone.
-
-  function renderStats(stats) {
-    liveStats = stats && typeof stats === "object" ? stats : null;
-
-    var blocks = [];
-    if (liveStats && liveStats.context) {
-      blocks.push({ label: "ctx", value: liveStats.context });
-    }
-    if (liveStats && liveStats.cost) {
-      blocks.push({ label: "coste", value: liveStats.cost });
-    }
-    if (liveStats && liveStats.tokens) {
-      blocks.push({ label: "tokens", value: liveStats.tokens });
-    }
-
-    elements.stats.textContent = "";
-    for (var index = 0; index < blocks.length; index += 1) {
-      var block = createElement("div", "stat");
-      block.appendChild(createElement("span", "stat-label", blocks[index].label));
-      block.appendChild(createElement("span", "stat-value", blocks[index].value));
-      elements.stats.appendChild(block);
-    }
-    // A value the host could not compute is not drawn, and a column with nothing
-    // left in it is hidden rather than left as an empty 52px stripe.
-    elements.stats.hidden = blocks.length === 0;
-
-    // Cache is a live figure shown in the strip, so a new reading redraws it too.
-    drawStrip();
-  }
+  // between the toolbar and the strip without leaving the host: the toolbar line is
+  // built in `renderState`, and the strip is redrawn when either source arrives.
 
   function renderEnvironment(stats) {
     environmentStats = stats && typeof stats === "object" ? stats : null;
@@ -1085,6 +1072,16 @@
   }
 
   function drawStrip() {
+    // The strip says where the agent runs, which is only worth saying once the
+    // conversation has something in it: on a fresh panel it takes no space at all.
+    var started =
+      lastState && typeof lastState.messageCount === "number" && lastState.messageCount > 0;
+    if (!started) {
+      elements.statsStrip.textContent = "";
+      elements.statsStrip.hidden = true;
+      return;
+    }
+
     var segments = [];
     if (environmentStats) {
       if (environmentStats.mcps) {

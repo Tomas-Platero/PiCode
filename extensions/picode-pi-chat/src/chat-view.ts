@@ -101,10 +101,7 @@ const CHAT_BODY = `    <header class="toolbar">
       <button id="restart" type="button" class="icon-button" title="Reiniciar el proceso de pi" aria-label="Reiniciar"><span class="codicon codicon-refresh"></span></button>
       <button id="menu" type="button" class="icon-button" title="Configuración de pi" aria-label="Configuración"><span class="codicon codicon-settings-gear"></span></button>
     </header>
-    <div class="body">
-      <aside id="stats" class="stats" hidden></aside>
-      <main id="messages" class="messages" aria-live="polite"></main>
-    </div>
+    <main id="messages" class="messages" aria-live="polite"></main>
     <form id="composer" class="composer">
       <textarea
         id="prompt"
@@ -354,7 +351,8 @@ export class ChatView implements vscode.WebviewViewProvider {
       })),
       omitted: replay.omitted,
     });
-    // The stats column reads the session totals, so it is redrawn from the seeded ones.
+    // The live figures and the strip both read the session totals, so seeding the
+    // transcript is not complete until the toolbar and the strip are redrawn.
     await this.pushState();
   }
 
@@ -462,8 +460,8 @@ export class ChatView implements vscode.WebviewViewProvider {
         state: toWebviewState(state),
         // Formatted here, where the totals live, so the renderer stays presentation.
         usage: summarizeUsage(this.totals, this.contextWindow),
-        // The live figures travel with the state so the panel redraws its column
-        // from one message, the way it always redrew its chips.
+        // The live figures travel with the state so the toolbar line and the strip's
+        // cache segment are redrawn from one message, the way the chips are.
         stats: describeLiveStats(this.totals, this.contextWindow),
         contextAttached: this.attachContext,
         reasoning: this.panelReasoning,
