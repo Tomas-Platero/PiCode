@@ -362,49 +362,99 @@ button.secondary:hover:not(:disabled) {
 }
 
 /*
- * Two columns: the codicon sits in the 20px gutter and both the role row and the
- * body start in the content column, so the icon lines up with the first line of
- * text without a per-message wrapper.
+ * A message is a bubble beside an avatar, not a row of icon plus name above a body.
+ * The avatar is first in source order and the row is reversed for the owner, so
+ * their bubble lands on the right with the avatar on its outer edge, and pi's stays
+ * on the left. Reading order is unchanged.
  */
 .message {
-  display: grid;
-  grid-template-columns: 20px 1fr;
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
-  align-items: start;
+  max-width: 100%;
 }
 
-.message-role {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 20px 1fr;
-  gap: 8px;
+.message-user {
+  flex-direction: row-reverse;
+}
+
+/*
+ * The speaker's mark. A circle rather than a bare glyph, so it reads as an avatar
+ * and holds its place in the row even for an icon that is not square.
+ */
+.message-avatar {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
   align-items: center;
-  margin: 0;
-  font-size: 0.85em;
-  color: var(--vscode-descriptionForeground);
+  justify-content: center;
+  background: var(--vscode-badge-background, var(--vscode-input-background));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
+  font-size: 0.9em;
 }
 
 .message-body {
-  grid-column: 2;
   min-width: 0;
+  /*
+   * The bubble never spans the panel: a turn that filled the width would read as a
+   * document again, which is what the bubbles are here to stop. `max-width` is the
+   * one number that decides how much of a messaging app this looks like.
+   */
+  max-width: 82%;
+  padding: 7px 10px;
+  border-radius: 12px;
+  /* The corner nearest the speaker is squared, which is the bubble's tail. */
+  border-top-left-radius: 3px;
   /* The renderer owns the structure now, so text is no longer preformatted here. */
   white-space: normal;
   word-break: break-word;
 }
 
-/* The user's own words get a surface, because they are the one quoted thing here. */
-.message-user .message-body {
-  background: var(--vscode-input-background);
-  border-radius: 4px;
-  padding: 6px 8px;
+/* pi comes in on the left: a raised surface, outlined so it holds against the panel. */
+.message-assistant .message-body {
+  background: var(--vscode-editorWidget-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-panel-border);
 }
 
-.message-error {
+/*
+ * The owner's own words go out on the right, filled with the theme's own selection
+ * pair: it is the one accent with a guaranteed readable foreground in every theme,
+ * and the filled side is what makes a bubble read as outgoing.
+ */
+.message-user .message-body {
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-input-background));
+  color: var(--vscode-list-activeSelectionForeground, inherit);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 3px;
+}
+
+/*
+ * A code surface repaints its own background but not its own colour, so inside a
+ * filled bubble the accent foreground would land on the code block's own surface.
+ */
+.message-user .message-body .code-block,
+.message-user .message-body .code-block-body,
+.message-user .message-body .md-code {
+  color: var(--vscode-editor-foreground);
+}
+
+/*
+ * A failure is a surface, not a speaker: it keeps the error colours and sits where
+ * pi's bubbles sit, but it is not painted as one of pi's replies.
+ */
+.message-error .message-body {
   background: var(--vscode-inputValidation-errorBackground, transparent);
   border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
   color: var(--vscode-errorForeground);
-  border-radius: 4px;
-  padding: 6px 8px;
+}
+
+/* A system note is the panel talking, not a speaker: it reads as a quiet aside. */
+.message-system .message-body {
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  padding-left: 0;
 }
 
 .block {
@@ -608,17 +658,19 @@ button.secondary:hover:not(:disabled) {
 /* --- tool activity in the transcript ------------------------------------ */
 
 /*
- * A tool run is an entry in the conversation, so it reuses the message grid — the
- * glyph in the same 20px gutter, the content in the same column beside it — and
- * lines up with the messages around it instead of starting at its own left edge.
- * It stays quieter than a message on purpose: the tool work is the context of the
- * answer, not the answer.
+ * A tool run is an entry in the conversation, so it lines up with the turn it
+ * belongs to: indented to the same left edge as pi's bubbles, and quieter than them
+ * on purpose — the tool work is the context of the answer, not the answer.
+ *
+ * The indent is the avatar column plus the row gap (24px + 8px). It used to come
+ * for free from sharing the message grid, which the bubbles replaced.
  */
 .tool {
   display: grid;
   grid-template-columns: 20px 1fr;
   gap: 2px 8px;
   align-items: start;
+  margin-left: 32px;
   color: var(--vscode-descriptionForeground);
 }
 

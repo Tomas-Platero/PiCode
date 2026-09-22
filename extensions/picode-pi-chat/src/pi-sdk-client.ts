@@ -312,8 +312,8 @@ export class PiSdkClient implements PiClient {
    * reference is usually the id the picker reported — and ids can themselves
    * contain a slash (`deepseek/deepseek-v4-pro` on this machine), so the search
    * over what the runtime offers comes first and the `provider/model-id` split is
-   * the fallback for references written the way `picode.pi.defaultModel`
-   * documents them.
+   * the fallback for a reference written the way pi's own `defaultModel` setting
+   * documents it.
    */
   async setModel(modelRef: string, provider?: string): Promise<PiModel> {
     const session = this.requireSession();

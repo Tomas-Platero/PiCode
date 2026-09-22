@@ -30,7 +30,6 @@ by id, and `message_update` deltas are accumulated by `contentIndex` with
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `picode.pi.executablePath` | `pi` | Path to the pi CLI. On Windows a bare name resolves to the npm `.cmd` shim, which is launched through the system shell. |
-| `picode.pi.defaultModel` | `""` | Model applied to a new client as `provider/model-id`. Empty keeps the model pi already has configured. |
 | `picode.pi.extraArgs` | `[]` | Extra arguments appended to `pi --mode rpc`. |
 
 Diagnostics are written to the **PiCode** output channel.

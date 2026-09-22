@@ -13,7 +13,7 @@
     model: document.getElementById("card-model"),
     thinking: document.getElementById("card-thinking"),
     extensions: document.getElementById("card-extensions"),
-    menu: document.getElementById("menu"),
+    settings: document.getElementById("settings"),
     categories: document.getElementById("categories"),
   };
 
@@ -48,7 +48,7 @@
 
   function openCategory(id) {
     return function () {
-      send({ type: "openMenu", category: id });
+      send({ type: "openSettings", category: id });
     };
   }
 
@@ -84,8 +84,8 @@
     }
   }
 
-  elements.menu.addEventListener("click", function () {
-    send({ type: "openMenu" });
+  elements.settings.addEventListener("click", function () {
+    send({ type: "openSettings" });
   });
   window.addEventListener("message", function (event) {
     handleHostMessage(event.data);

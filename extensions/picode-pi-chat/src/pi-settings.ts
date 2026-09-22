@@ -33,9 +33,22 @@ import type { PiThinkingLevel } from "./protocol";
 
 export type PiSettingScope = "global" | "project";
 
-export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list";
+export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list" | "packages";
 
-export type PiSettingValue = boolean | number | string | string[] | undefined;
+/** A package row: its source and whether it is paused (kept but not loaded). */
+export interface PiPackageEntry {
+  source: string;
+  /** True when the package is kept but not loaded (pi stores autoload=false). */
+  paused: boolean;
+}
+
+export type PiSettingValue =
+  | boolean
+  | number
+  | string
+  | string[]
+  | PiPackageEntry[]
+  | undefined;
 
 export type PiSettingsCategoryId =
   | "estado"
@@ -47,6 +60,7 @@ export type PiSettingsCategoryId =
   | "red"
   | "herramientas"
   | "paquetes"
+  | "skills"
   | "apariencia"
   | "sesion";
 
@@ -68,6 +82,12 @@ export interface PiSettingDescriptor {
   readOnly: boolean;
   /** For `select`. */
   options?: readonly PiSettingOption[];
+  /**
+   * For a `select` without static options: the row may be cleared to "unset".
+   * Only the provider and model dropdowns use this; their options come from the
+   * live session, not from this file.
+   */
+  allowEmpty?: boolean;
   /** For `number`: the smallest value the control accepts. */
   minimum?: number;
   /** For `number`: a short unit shown after the input ("ms", "tokens"). */
@@ -77,7 +97,15 @@ export interface PiSettingDescriptor {
    * row can say so rather than the owner wondering why nothing happened.
    */
   needsRestart?: boolean;
-  read(manager: PiSettingsManager, scope: PiSettingScope): PiSettingValue;
+  /**
+   * Set when the value lives in PiCode's own VS Code configuration instead of pi's
+   * settings file. Such a descriptor declares no `read`/`write`: the service
+   * dispatches through the injected `PiCodeConfigStore`, and the key here is the
+   * configuration's own key name (`runtime`, `transport`).
+   */
+  picodeKey?: string;
+  /** Absent only for the descriptors that carry a `picodeKey`. */
+  read?(manager: PiSettingsManager, scope: PiSettingScope): PiSettingValue;
   write?(manager: PiSettingsManager, scope: PiSettingScope, value: PiSettingValue): void;
 }
 
@@ -90,6 +118,30 @@ export interface PiSettingsCategory {
 export interface PiSettingsGroup {
   category: PiSettingsCategory;
   settings: readonly PiSettingDescriptor[];
+}
+
+/**
+ * A descriptor reduced to what the webview can receive and render.
+ *
+ * The descriptor carries `read` / `write` closures, which the structured clone a
+ * `postMessage` performs cannot carry, and which the webview has no use for: it
+ * renders the kind, the scopes and the value the host already read. This shape is
+ * the serializable half of the contract, so the row builder can be tested without
+ * a webview and without leaking a function into the document.
+ */
+export interface SettingWire {
+  key: string;
+  category: PiSettingsCategoryId;
+  label: string;
+  description: string;
+  kind: PiSettingKind;
+  readOnly: boolean;
+  scopes: readonly PiSettingScope[];
+  options?: readonly PiSettingOption[];
+  allowEmpty?: boolean;
+  minimum?: number;
+  unit?: string;
+  needsRestart?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -123,6 +175,8 @@ export interface PiSettingsManager {
   setDefaultProvider(provider: string): void;
   getDefaultModel(): string | undefined;
   setDefaultModel(modelId: string): void;
+  /** Writes both halves of the default-model pair in one go. */
+  setDefaultModelAndProvider(provider: string, modelId: string): void;
 
   /* Razonamiento */
   getDefaultThinkingLevel(): PiThinkingLevel | undefined;
@@ -192,6 +246,8 @@ export interface PiSettingsManager {
   setEnableInstallTelemetry(enabled: boolean): void;
   getEnableAnalytics(): boolean;
   setEnableAnalytics(enabled: boolean): void;
+  getEnableSkillCommands(): boolean;
+  setEnableSkillCommands(enabled: boolean): void;
 
   /* Apariencia */
   getThemeSetting(): string | undefined;
@@ -230,7 +286,7 @@ export interface PiSettingsRecord {
  * resources the package contributes. Only the source is read and written here; the
  * filtering fields belong to pi's package manager, not to this surface.
  */
-export type PiPackageSource = string | { source: string };
+export type PiPackageSource = string | { source: string; autoload?: boolean };
 
 export type PiCacheWarmingMode = "off" | "streaming" | "idle";
 
@@ -309,6 +365,19 @@ const TRANSPORT_OPTIONS: readonly PiSettingOption[] = [
   { value: "websocket-cached", label: "WebSocket con caché" },
 ];
 
+/** PiCode's runtime modes, in the order the picker offers them. */
+const PICODE_RUNTIME_OPTIONS: readonly PiSettingOption[] = [
+  { value: "managed", label: "pi propio de PiCode" },
+  { value: "path", label: "El pi que ya tengo instalado" },
+  { value: "custom", label: "Un ejecutable concreto" },
+];
+
+/** PiCode's transports, in the order the picker offers them. */
+const PICODE_TRANSPORT_OPTIONS: readonly PiSettingOption[] = [
+  { value: "rpc", label: "Proceso aparte (RPC)" },
+  { value: "embedded", label: "Dentro del editor (SDK)" },
+];
+
 /* ------------------------------------------------------------------ *
  * Categories
  * ------------------------------------------------------------------ */
@@ -359,6 +428,11 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
     id: "paquetes",
     label: "Paquetes y recursos",
     description: "Qué paquetes, extensiones, skills, plantillas y temas carga pi, y qué telemetría envía.",
+  },
+  {
+    id: "skills",
+    label: "Skills",
+    description: "Qué skills carga pi y si se pueden lanzar como comandos de barra.",
   },
   {
     id: "apariencia",
@@ -414,7 +488,13 @@ export function coerceSettingValue(
       if (typeof value !== "string") {
         return undefined;
       }
-      const options = descriptor.options ?? [];
+      const options = descriptor.options;
+      // A select with no declared options is a dynamic one: the host supplies the
+      // options from the live session, so the value cannot be checked against a
+      // fixed list. Accept any non-empty string; whitespace means "unset".
+      if (options === undefined || options.length === 0) {
+        return value.trim() === "" ? undefined : value;
+      }
       return options.some((option) => option.value === value) ? value : undefined;
     }
 
@@ -438,6 +518,24 @@ export function coerceSettingValue(
       }
       return entries;
     }
+
+    case "packages": {
+      if (!Array.isArray(value)) {
+        return undefined;
+      }
+      const entries: PiPackageEntry[] = [];
+      for (const entry of value) {
+        if (typeof entry !== "object" || entry === null) {
+          return undefined;
+        }
+        const record = entry as Record<string, unknown>;
+        if (typeof record.source !== "string" || record.source.trim() === "") {
+          return undefined;
+        }
+        entries.push({ source: record.source, paused: record.paused === true });
+      }
+      return entries;
+    }
   }
 }
 
@@ -450,9 +548,30 @@ function scopedRecord(manager: PiSettingsManager, scope: PiSettingScope): PiSett
   return scope === "project" ? manager.getProjectSettings() : manager.getGlobalSettings();
 }
 
-/** The source id of a package entry, whichever of pi's two forms it was stored in. */
-function packageId(entry: PiPackageSource): string {
-  return typeof entry === "string" ? entry : entry.source;
+/** A package entry reduced to what the editor renders: its source and its pause. */
+function packageEntry(entry: PiPackageSource): PiPackageEntry {
+  const source = typeof entry === "string" ? entry : entry.source;
+  const paused = typeof entry === "object" && entry.autoload === false;
+  return { source, paused };
+}
+
+/** Turns the editor's package rows back into pi's stored form. */
+function toPackageList(value: PiSettingValue, key: string): PiPackageSource[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Setting "${key}" expects a list of packages.`);
+  }
+  return value.map((entry) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      typeof (entry as { source?: unknown }).source !== "string" ||
+      (entry as { source: string }).source.trim() === ""
+    ) {
+      throw new Error(`Setting "${key}" expects each package to declare a source.`);
+    }
+    const record = entry as PiPackageEntry;
+    return record.paused === true ? { source: record.source, autoload: false } : record.source;
+  });
 }
 
 function toBoolean(value: PiSettingValue, key: string): boolean {
@@ -506,7 +625,14 @@ function toList(value: PiSettingValue, key: string): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`Setting "${key}" expects a list of strings.`);
   }
-  return [...value];
+  const entries: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      throw new Error(`Setting "${key}" expects a list of strings.`);
+    }
+    entries.push(entry);
+  }
+  return entries;
 }
 
 /** The resource lists that hold plain paths; `packages` is the one that does not. */
@@ -540,14 +666,16 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     category: "modelo",
     label: "Proveedor por defecto",
     description:
-      "Proveedor con el que arrancan las sesiones nuevas. Un modelo sin proveedor se " +
-      "resuelve contra el catálogo completo.",
-    kind: "text",
+      "Proveedor con el que arrancan las sesiones nuevas. Sin proveedor, pi ignora el " +
+      "modelo de abajo y elige por su cuenta entre los que tengan credenciales.",
+    kind: "select",
+    allowEmpty: true,
     scopes: GLOBAL_SCOPE,
     readOnly: false,
     read: (manager) => manager.getDefaultProvider(),
     // pi has no setter that clears this pair, so "vacío" writes an empty string,
-    // which pi's own readers already treat as unset.
+    // which pi's own readers already treat as unset. The options are not declared
+    // here: the host fills them from the live session's available models.
     write: (manager, _scope, value) => manager.setDefaultProvider(toRequiredText(value, "defaultProvider")),
   },
   {
@@ -555,13 +683,26 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     category: "modelo",
     label: "Modelo por defecto",
     description:
-      "Modelo que usan las sesiones nuevas. Déjalo vacío para que pi siga con el que " +
-      "ya tenga configurado.",
-    kind: "text",
+      "Modelo que usan las sesiones nuevas, dentro del proveedor de arriba. Déjalo " +
+      "vacío para que pi siga con el que ya tenga configurado.",
+    kind: "select",
+    allowEmpty: true,
     scopes: GLOBAL_SCOPE,
     readOnly: false,
     read: (manager) => manager.getDefaultModel(),
-    write: (manager, _scope, value) => manager.setDefaultModel(toRequiredText(value, "defaultModel")),
+    // pi resolves this as `getModel(defaultProvider, defaultModel)`, so the id alone
+    // is not enough: writing both halves is what makes the choice survive, and pi
+    // offers the paired setter precisely for a choice made in a picker. Cleared, the
+    // id goes empty and the provider is left as it is.
+    write: (manager, _scope, value) => {
+      const modelId = toRequiredText(value, "defaultModel");
+      const provider = manager.getDefaultProvider();
+      if (modelId !== "" && provider !== undefined && provider !== "") {
+        manager.setDefaultModelAndProvider(provider, modelId);
+        return;
+      }
+      manager.setDefaultModel(modelId);
+    },
   },
 
   /* --- Razonamiento ----------------------------------------------- */
@@ -926,15 +1067,15 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     label: "Paquetes",
     description:
       "Paquetes de npm o git de los que pi carga extensiones, skills, plantillas y temas.",
-    kind: "list",
+    kind: "packages",
     scopes: ALL_SCOPES,
     readOnly: false,
     read: (manager, scope) => {
       const stored = scopedRecord(manager, scope).packages;
-      return stored === undefined ? undefined : stored.map(packageId);
+      return stored === undefined ? undefined : stored.map(packageEntry);
     },
     write: (manager, scope, value) => {
-      const entries = toList(value, "packages");
+      const entries = toPackageList(value, "packages");
       if (scope === "project") {
         manager.setProjectPackages(entries);
       } else {
@@ -962,7 +1103,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "skills",
-    category: "paquetes",
+    category: "skills",
     label: "Rutas de skills",
     description: "Carpetas con skills que pi puede invocar como comandos.",
     kind: "list",
@@ -995,6 +1136,20 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
         manager.setPromptTemplatePaths(paths);
       }
     },
+  },
+  {
+    key: "enableSkillCommands",
+    category: "skills",
+    label: "Skills como comandos",
+    description:
+      "Registra las skills en la lista de comandos de barra para poder lanzarlas como " +
+      "/nombre. Apagado, pi las conoce pero no las ofrece como comando.",
+    kind: "boolean",
+    scopes: GLOBAL_SCOPE,
+    readOnly: false,
+    read: (manager) => manager.getEnableSkillCommands(),
+    write: (manager, _scope, value) =>
+      manager.setEnableSkillCommands(toBoolean(value, "enableSkillCommands")),
   },
   {
     key: "enableInstallTelemetry",
@@ -1115,12 +1270,48 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     read: (manager) => manager.getSessionDir(),
   },
 
+  /* --- PiCode ------------------------------------------------------ *
+   * Not pi's settings: these decide which pi runs and how PiCode talks to it, and
+   * they live in this extension's own VS Code configuration. The descriptor keys
+   * are namespaced because pi already has a `transport` setting of its own, and the
+   * two mean different things: pi's picks the wire protocol to a provider, this one
+   * picks the process boundary. Neither can reach a running agent, which is why both
+   * say so.
+   */
+
+  {
+    key: "picode.runtime",
+    category: "picode",
+    label: "Qué pi se ejecuta",
+    description:
+      "El pi propio de PiCode va con versión fijada y aislado del global; el que ya " +
+      "tienes instalado se resuelve desde tu PATH. Vale para las sesiones nuevas.",
+    kind: "select",
+    scopes: GLOBAL_SCOPE,
+    readOnly: false,
+    options: PICODE_RUNTIME_OPTIONS,
+    picodeKey: "runtime",
+    needsRestart: true,
+  },
+  {
+    key: "picode.transport",
+    category: "picode",
+    label: "Cómo habla con pi",
+    description:
+      "RPC arranca pi como proceso aparte y se comunica por JSON en stdio; el SDK lo " +
+      "carga dentro del editor, sin proceso hijo.",
+    kind: "select",
+    scopes: GLOBAL_SCOPE,
+    readOnly: false,
+    options: PICODE_TRANSPORT_OPTIONS,
+    picodeKey: "transport",
+    needsRestart: true,
+  },
+
   /*
-   * No descriptors for `estado` and `picode` in this file, deliberately. Both
-   * categories are declared above so the rail has its final order, but what fills
-   * them is not a setting of pi: `estado` is pi's runtime health (version, paths,
-   * providers, sessions, usage) and `picode` is this extension's own configuration.
-   * Later tasks add them; until then `describeSettings` skips both.
+   * No descriptors for `estado` in this file, deliberately: it is pi's runtime
+   * health (version, paths, providers, sessions, usage), and it is filled from the
+   * live session rather than from this catalogue, so `describeSettings` skips it.
    */
 ];
 
@@ -1177,6 +1368,24 @@ export function describeSettings(
   return groups;
 }
 
+/** The serializable half of a descriptor, for the settings tab's webview. */
+export function describeSettingWire(descriptor: PiSettingDescriptor): SettingWire {
+  return {
+    key: descriptor.key,
+    category: descriptor.category,
+    label: descriptor.label,
+    description: descriptor.description,
+    kind: descriptor.kind,
+    readOnly: descriptor.readOnly,
+    scopes: descriptor.scopes,
+    ...(descriptor.options ? { options: descriptor.options } : {}),
+    ...(descriptor.allowEmpty ? { allowEmpty: true } : {}),
+    ...(descriptor.minimum !== undefined ? { minimum: descriptor.minimum } : {}),
+    ...(descriptor.unit ? { unit: descriptor.unit } : {}),
+    ...(descriptor.needsRestart ? { needsRestart: true } : {}),
+  };
+}
+
 /** Lookup by key, built once so `write` is not a linear scan per keystroke. */
 const DESCRIPTORS_BY_KEY: ReadonlyMap<string, PiSettingDescriptor> = new Map(
   PI_SETTING_DESCRIPTORS.map((descriptor) => [descriptor.key, descriptor]),
@@ -1185,6 +1394,18 @@ const DESCRIPTORS_BY_KEY: ReadonlyMap<string, PiSettingDescriptor> = new Map(
 /* ------------------------------------------------------------------ *
  * The service
  * ------------------------------------------------------------------ */
+
+/**
+ * PiCode's own VS Code configuration, as the catalogue sees it.
+ *
+ * Injected rather than imported: this module stays free of `vscode` so it can be
+ * loaded and exercised in plain Node, and the two rows that live in the editor's
+ * configuration are testable against a fake.
+ */
+export interface PiCodeConfigStore {
+  get(key: string): string | boolean | undefined;
+  set(key: string, value: unknown): Promise<void>;
+}
 
 export interface PiSettingsServiceOptions {
   /** Absolute path of the pi package's ESM entry (`dist/index.js`). */
@@ -1195,6 +1416,8 @@ export interface PiSettingsServiceOptions {
   agentDir?: string;
   /** Loads the SDK. Injected so the service can be exercised without a real pi. */
   load?: () => Promise<PiSettingsModule>;
+  /** PiCode's own configuration, for the descriptors that carry a `picodeKey`. */
+  picode?: PiCodeConfigStore;
 }
 
 /** A problem worth showing in the Estado category later. */
@@ -1235,20 +1458,26 @@ function asErrorMessage(error: unknown): string {
  */
 export class PiSettingsService {
   private readonly manager: PiSettingsManager;
+  /** PiCode's own configuration; absent when the caller did not supply one. */
+  private readonly picode: PiCodeConfigStore | undefined;
   /** Problems pi reported while loading or writing its settings file. */
   private readonly sdkProblems: PiSettingsDiagnostic[] = [];
   /** Problems raised by a descriptor's getter during the last `readAll`. */
   private readProblems: PiSettingsDiagnostic[] = [];
 
-  private constructor(manager: PiSettingsManager) {
+  private constructor(manager: PiSettingsManager, picode: PiCodeConfigStore | undefined) {
     this.manager = manager;
+    this.picode = picode;
   }
 
   static async create(options: PiSettingsServiceOptions): Promise<PiSettingsService> {
     const module = await loadSettingsModule(options);
     const cwd = options.cwd ?? process.cwd();
     const agentDir = options.agentDir ?? module.getAgentDir();
-    const service = new PiSettingsService(module.SettingsManager.create(cwd, agentDir));
+    const service = new PiSettingsService(
+      module.SettingsManager.create(cwd, agentDir),
+      options.picode,
+    );
     // A settings file that does not parse is the first thing pi reports, and the
     // owner needs to see it rather than a list of default values.
     service.collectSdkProblems();
@@ -1269,7 +1498,7 @@ export class PiSettingsService {
     this.readProblems = [];
     for (const descriptor of PI_SETTING_DESCRIPTORS) {
       try {
-        values[descriptor.key] = descriptor.read(this.manager, scope);
+        values[descriptor.key] = this.readDescriptor(descriptor, scope);
       } catch (error) {
         values[descriptor.key] = undefined;
         this.readProblems.push({
@@ -1281,11 +1510,48 @@ export class PiSettingsService {
     return values;
   }
 
-  /** Writes one value through pi's own typed setter and flushes it. */
-  async write(scope: PiSettingScope, key: string, value: unknown): Promise<void> {
+  /** One descriptor's current value, read from whichever store owns it. */
+  private readDescriptor(
+    descriptor: PiSettingDescriptor,
+    scope: PiSettingScope,
+  ): PiSettingValue {
+    if (descriptor.picodeKey !== undefined) {
+      return this.picode?.get(descriptor.picodeKey);
+    }
+    return descriptor.read?.(this.manager, scope);
+  }
+
+  /**
+   * Writes one value through pi's own typed setter and flushes it.
+   *
+   * Returns the value pi actually stored, which is the coerced one: the caller
+   * needs it because a running pi holds its settings in memory, so a write here
+   * reaches the file and not the process. Empty (`undefined`) means the setting was
+   * cleared.
+   */
+  async write(scope: PiSettingScope, key: string, value: unknown): Promise<PiSettingValue> {
     const descriptor = DESCRIPTORS_BY_KEY.get(key);
     if (!descriptor) {
       throw new Error(`Unknown setting "${key}".`);
+    }
+    if (descriptor.picodeKey !== undefined) {
+      if (!descriptor.scopes.includes(scope)) {
+        throw new Error(
+          `Setting "${key}" cannot be written in the "${scope}" scope; PiCode offers it globally.`,
+        );
+      }
+      const store = this.picode;
+      if (store === undefined) {
+        throw new Error(
+          `Setting "${key}" lives in PiCode's own configuration, which was not supplied.`,
+        );
+      }
+      const configured = coerceSettingValue(descriptor, value);
+      if (configured === undefined) {
+        throw new Error(`Setting "${key}" does not accept this value as a ${descriptor.kind}.`);
+      }
+      await store.set(descriptor.picodeKey, configured);
+      return configured;
     }
     const setter = descriptor.write;
     if (descriptor.readOnly || !setter) {
@@ -1309,6 +1575,7 @@ export class PiSettingsService {
     // A refused project write (an untrusted project) surfaces here rather than as
     // a rejected promise: pi records it and keeps going.
     this.collectSdkProblems();
+    return coerced;
   }
 
   /** Re-reads after a write so the caller renders what pi actually holds. */
@@ -1343,5 +1610,14 @@ export class PiSettingsService {
  * `undefined` as an unexpressible value.
  */
 function isClearRequest(descriptor: PiSettingDescriptor, value: unknown): boolean {
-  return descriptor.kind === "text" && typeof value === "string";
+  if (typeof value !== "string") {
+    return false;
+  }
+  // A text row and a dynamic select (no declared options) both write the empty
+  // string as "unset", because pi has no setter that clears the provider/model pair.
+  return (
+    descriptor.kind === "text" ||
+    (descriptor.kind === "select" &&
+      (descriptor.options === undefined || descriptor.options.length === 0))
+  );
 }

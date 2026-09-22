@@ -89,6 +89,7 @@ function createFakeManager() {
     defaultProjectTrust: "ask",
     installTelemetry: true,
     analytics: false,
+    skillCommands: true,
     theme: "dark",
     collapseChangelog: false,
     steeringMode: "one-at-a-time",
@@ -132,6 +133,10 @@ function createFakeManager() {
     },
     getDefaultModel: () => global.defaultModel,
     setDefaultModel: (modelId) => {
+      global.defaultModel = modelId;
+    },
+    setDefaultModelAndProvider: (provider, modelId) => {
+      global.defaultProvider = provider;
       global.defaultModel = modelId;
     },
 
@@ -254,6 +259,10 @@ function createFakeManager() {
     setEnableAnalytics: (enabled) => {
       global.analytics = enabled;
     },
+    getEnableSkillCommands: () => global.skillCommands,
+    setEnableSkillCommands: (enabled) => {
+      global.skillCommands = enabled;
+    },
 
     getThemeSetting: () => global.theme,
     setTheme: (theme) => {
@@ -293,13 +302,14 @@ function createFakeManager() {
 }
 
 /** Builds the service over the fake, recording what the SDK was constructed with. */
-async function createService(fake) {
+async function createService(fake, picode) {
   const created = {};
   const service = await PiSettingsService.create({
     // Only reachable when `load` is absent: the entry proves the injected loader is
     // the path under test, and that nothing resolves a real pi here.
     entry: path.join(__dirname, "no-existe", "dist", "index.js"),
     cwd: "C:/trabajo",
+    ...(picode === undefined ? {} : { picode }),
     load: async () => ({
       SettingsManager: {
         create: (cwd, agentDir) => {
@@ -355,7 +365,11 @@ async function main() {
 
   check(
     "readOnly is exactly the set of descriptors with no write",
-    PI_SETTING_DESCRIPTORS.every((descriptor) => descriptor.readOnly === (descriptor.write === undefined)),
+    PI_SETTING_DESCRIPTORS.every(
+      (descriptor) =>
+        descriptor.readOnly ===
+        (descriptor.write === undefined && descriptor.picodeKey === undefined),
+    ),
     PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.readOnly !== (descriptor.write === undefined))
       .map((descriptor) => descriptor.key)
       .join(", "),
@@ -369,16 +383,44 @@ async function main() {
 
   check(
     "every select declares options, and its option values are unique",
-    PI_SETTING_DESCRIPTORS.every(
-      (descriptor) =>
-        descriptor.kind !== "select" ||
-        (descriptor.options.length > 0 &&
-          new Set(descriptor.options.map((option) => option.value)).size ===
-            descriptor.options.length),
-    ),
+    PI_SETTING_DESCRIPTORS.every((descriptor) => {
+      if (descriptor.kind !== "select") {
+        return true;
+      }
+      const options = descriptor.options;
+      // Dynamic selects (provider and model) carry no static options: the host
+      // injects them from the live session. A static select must declare them.
+      return (
+        options === undefined ||
+        (options.length > 0 &&
+          new Set(options.map((option) => option.value)).size === options.length)
+      );
+    }),
     PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "select")
       .map((descriptor) => descriptor.key)
       .join(", "),
+  );
+
+  check(
+    "the provider and model are the dynamic selects, and both are clearable",
+    same(
+      PI_SETTING_DESCRIPTORS.filter(
+        (descriptor) => descriptor.kind === "select" && descriptor.options === undefined,
+      ).map((descriptor) => descriptor.key),
+      ["defaultProvider", "defaultModel"],
+    ) &&
+      PI_SETTING_DESCRIPTORS.filter(
+        (descriptor) => descriptor.key === "defaultProvider" || descriptor.key === "defaultModel",
+      ).every((descriptor) => descriptor.allowEmpty === true),
+    "",
+  );
+
+  check(
+    "the model id is bare, and only the thinking-level key is composited",
+    setting("defaultModel").label.startsWith("Modelo") &&
+      setting("modelThinkingLevels").kind === "list" &&
+      setting("defaultModel").kind === "select",
+    "",
   );
 
   check(
@@ -411,7 +453,7 @@ async function main() {
   check(
     "an empty category is skipped rather than rendered",
     groups.every((group) => group.settings.length > 0) &&
-      !groups.some((group) => group.category.id === "estado" || group.category.id === "picode"),
+      !groups.some((group) => group.category.id === "estado"),
     groups.map((group) => group.category.id).join(", "),
   );
 
@@ -446,6 +488,33 @@ async function main() {
   );
 
   check("no descriptors means no groups", describeSettings([]).length === 0, "");
+
+  check(
+    "the skills category carries the paths and the command switch",
+    same(
+      groups
+        .filter((group) => group.category.id === "skills")
+        .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
+      ["skills", "enableSkillCommands"],
+    ) &&
+      groups.find((group) => group.category.id === "skills").settings[1].kind === "boolean",
+    "",
+  );
+
+  check(
+    "the picode category carries the runtime and the transport, both restart-marked",
+    same(
+      groups
+        .filter((group) => group.category.id === "picode")
+        .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
+      ["picode.runtime", "picode.transport"],
+    ) &&
+      groups
+        .filter((group) => group.category.id === "picode")
+        .flatMap((group) => group.settings)
+        .every((descriptor) => descriptor.needsRestart === true && descriptor.picodeKey !== undefined),
+    groups.map((group) => group.category.id).join(", "),
+  );
 
   /* ---------------------------------------------------------------- *
    * Coercion — the webview boundary
@@ -492,6 +561,14 @@ async function main() {
   );
 
   check(
+    "a dynamic select accepts any non-empty string and treats whitespace as unset",
+    coerceSettingValue(setting("defaultModel"), "omni/gpt-5") === "omni/gpt-5" &&
+      coerceSettingValue(setting("defaultModel"), "   ") === undefined &&
+      coerceSettingValue(setting("defaultModel"), 42) === undefined,
+    "",
+  );
+
+  check(
     "text accepts a string and turns whitespace into unset",
     coerceSettingValue(setting("shellPath"), "bash") === "bash" &&
       coerceSettingValue(setting("shellPath"), "   ") === undefined &&
@@ -505,6 +582,21 @@ async function main() {
       coerceSettingValue(setting("extensions"), ["/a", 3]) === undefined &&
       coerceSettingValue(setting("extensions"), ["/a", ""]) === undefined &&
       coerceSettingValue(setting("extensions"), "/a") === undefined,
+    "",
+  );
+
+  check(
+    "a package list accepts rows with a source and coerces paused to boolean",
+    same(coerceSettingValue(setting("packages"), [
+      { source: "npm:pi-web-access", paused: false },
+      { source: "npm:pi-lens", paused: true },
+    ]), [
+      { source: "npm:pi-web-access", paused: false },
+      { source: "npm:pi-lens", paused: true },
+    ]) &&
+      coerceSettingValue(setting("packages"), "npm:pi-lens") === undefined &&
+      coerceSettingValue(setting("packages"), [{ paused: true }]) === undefined &&
+      coerceSettingValue(setting("packages"), [{ source: "  " }]) === undefined,
     "",
   );
 
@@ -574,6 +666,21 @@ async function main() {
       String((await service.readAll("global")).httpIdleTimeoutMs),
     );
 
+    await service.write("global", "defaultModel", "deepseek-v4-pro");
+    const paired = fake.getGlobalSettings();
+    check(
+      "choosing a default model writes the bare id next to its provider",
+      paired.defaultModel === "deepseek-v4-pro" && paired.defaultProvider === "deepseek",
+      JSON.stringify({ provider: paired.defaultProvider, model: paired.defaultModel }),
+    );
+
+    const stored = await service.write("global", "httpIdleTimeoutMs", "12345");
+    check(
+      "write returns the value pi stored, not the raw post",
+      stored === 12345,
+      String(stored),
+    );
+
     await service.write("global", "shellPath", "   ");
     check(
       "a whitespace-only text clears the setting instead of writing it",
@@ -599,6 +706,23 @@ async function main() {
       malformedOverride && malformedOverride.message,
     );
 
+    await service.write("global", "packages", [
+      { source: "npm:pi-web-access", paused: false },
+      { source: "npm:pi-lens", paused: true },
+    ]);
+    check(
+      "a paused package survives a round trip as autoload=false, an active one as a string",
+      same(fake.getGlobalSettings().packages, [
+        "npm:pi-web-access",
+        { source: "npm:pi-lens", autoload: false },
+      ]) &&
+        same((await service.readAll("global")).packages, [
+          { source: "npm:pi-web-access", paused: false },
+          { source: "npm:pi-lens", paused: true },
+        ]),
+      JSON.stringify(fake.getGlobalSettings().packages),
+    );
+
     await service.write("project", "extensions", ["/proyecto/ext"]);
     const projectValues = await service.readAll("project");
     const globalValues = await service.readAll("global");
@@ -619,6 +743,64 @@ async function main() {
       "a clean fake reports no diagnostics",
       service.diagnostics().length === 0,
       JSON.stringify(service.diagnostics()),
+    );
+  }
+
+  {
+    const fake = createFakeManager();
+    const store = {
+      values: {},
+      sets: [],
+      get: (key) => store.values[key],
+      set: async (key, value) => {
+        store.sets.push([key, value]);
+        store.values[key] = value;
+      },
+    };
+    const { service } = await createService(fake, store);
+
+    store.values.runtime = "path";
+    store.values.transport = "rpc";
+    const values = await service.readAll("global");
+    check(
+      "a PiCode row reads from the injected store, not from pi's settings",
+      values["picode.runtime"] === "path" && values["picode.transport"] === "rpc",
+      JSON.stringify({ runtime: values["picode.runtime"], transport: values["picode.transport"] }),
+    );
+
+    await service.write("global", "picode.transport", "embedded");
+    check(
+      "writing a PiCode row goes through the store's setter",
+      same(store.sets, [["transport", "embedded"]]),
+      JSON.stringify(store.sets),
+    );
+
+    const storedPicode = await service.write("global", "picode.transport", "rpc");
+    check(
+      "a PiCode write also returns the coerced value",
+      storedPicode === "rpc",
+      String(storedPicode),
+    );
+
+    const refused = await rejectionOf(service.write("global", "picode.runtime", "inventado"));
+    check(
+      "a PiCode row refuses a value outside its declared options",
+      refused !== undefined && refused.message.includes("picode.runtime"),
+      refused && refused.message,
+    );
+
+    const scopeRefused = await rejectionOf(service.write("project", "picode.runtime", "path"));
+    check(
+      "a PiCode row cannot be written in the project scope",
+      scopeRefused !== undefined && scopeRefused.message.includes("project"),
+      scopeRefused && scopeRefused.message,
+    );
+
+    check(
+      "pi's own transport setting is a different row from PiCode's",
+      setting("transport").category === "red" &&
+        setting("picode.transport").picodeKey === "transport",
+      "",
     );
   }
 

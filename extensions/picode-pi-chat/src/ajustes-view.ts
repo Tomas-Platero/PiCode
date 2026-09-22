@@ -8,7 +8,7 @@ const AJUSTES_BODY = `    <div class="card">
       <div class="card-row"><span class="card-label">Razonamiento</span><span id="card-thinking" class="card-value">—</span></div>
       <div class="card-row"><span class="card-label">Extensiones</span><span id="card-extensions" class="card-value">—</span></div>
     </div>
-    <button id="menu" class="primary wide" type="button">Abrir el menú de pi</button>
+    <button id="settings" class="primary wide" type="button">Abrir los ajustes de pi</button>
     <p class="section">Categorías</p>
     <div id="categories" class="categories"></div>`;
 
@@ -23,15 +23,8 @@ const AJUSTES_BODY = `    <div class="card">
  */
 export interface AjustesViewHost {
   snapshot(): Promise<PiMenuSnapshot>;
-  openMenu(category?: PiCategoryId): Promise<void>;
-  /**
-   * Called when the panel is shown, which is what clicking the icon does.
-   *
-   * A view container can only open a sidebar, so the icon cannot run a command by
-   * itself; showing the panel is the closest the editor offers, and the host
-   * decides from there whether a popup is appropriate.
-   */
-  autoOpenMenu(): Promise<void>;
+  /** Opens the settings tab, optionally straight into one category. */
+  openSettings(category?: PiCategoryId): Promise<void>;
 }
 
 export class AjustesView implements vscode.WebviewViewProvider {
@@ -75,9 +68,6 @@ export class AjustesView implements vscode.WebviewViewProvider {
     );
     view.onDidDispose(() => this.releaseView(), null, this.disposables);
 
-    // The panel's whole purpose is the popup, so it opens it on being shown rather
-    // than asking for a second click.
-    await this.host.autoOpenMenu();
     await this.pushState();
   }
 
@@ -123,10 +113,9 @@ export class AjustesView implements vscode.WebviewViewProvider {
         await this.pushState();
         break;
       }
-      case "openMenu": {
+      case "openSettings": {
         const category = record.category;
-        await this.host.openMenu(isCategory(category) ? category : undefined);
-        // The menu may have changed something, so the card is re-read once it closes.
+        await this.host.openSettings(isCategory(category) ? category : undefined);
         await this.pushState();
         break;
       }

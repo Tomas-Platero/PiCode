@@ -144,6 +144,17 @@
     return createElement("span", "codicon codicon-" + name);
   }
 
+  /**
+   * Builds a message as a bubble beside its speaker's avatar.
+   *
+   * The side the bubble sits on says who is talking, so the row of icon plus name
+   * that used to sit above every message is gone. The avatar keeps the role for a
+   * reader who cannot see the layout, through its `title` and `aria-label`.
+   *
+   * The avatar is always first in source order; the stylesheet reverses the row for
+   * the owner, which puts their bubble on the right with the avatar at its outer
+   * edge. Reading order therefore stays the speaking order.
+   */
   function addMessage(role) {
     // The explanation of the panel is only true while there is nothing else here.
     var empty = elements.messages.querySelector(".empty");
@@ -151,12 +162,18 @@
       elements.messages.removeChild(empty);
     }
 
+    var label = ROLE_LABELS[role] || role;
     var article = createElement("article", "message message-" + role);
-    var header = createElement("header", "message-role");
-    header.appendChild(codicon(ROLE_ICONS[role] || "comment-discussion"));
-    header.appendChild(createElement("span", "message-role-name", ROLE_LABELS[role] || role));
-    article.appendChild(header);
+
+    var avatar = createElement("span", "message-avatar");
+    avatar.title = label;
+    avatar.setAttribute("aria-label", label);
+    avatar.setAttribute("role", "img");
+    avatar.appendChild(codicon(ROLE_ICONS[role] || "comment-discussion"));
+
     var body = createElement("div", "message-body");
+
+    article.appendChild(avatar);
     article.appendChild(body);
     elements.messages.appendChild(article);
     scrollToBottom();

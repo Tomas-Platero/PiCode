@@ -15,6 +15,7 @@ import {
   type GentleActions,
 } from "./menu";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
+import type { PiSettingValue } from "./pi-settings";
 import {
   formatBytes,
   listSessions,
@@ -24,6 +25,7 @@ import {
   sessionsRoot,
   type SessionSummary,
 } from "./sessions";
+import { SettingsView } from "./settings-view";
 import {
   firstMeaningfulLine,
   gentleCommands,
@@ -63,17 +65,13 @@ let view: ChatView | undefined;
 /** The directory the agent runs in, which is also the project its sessions belong to. */
 let agentCwd: string | undefined;
 let ajustesView: AjustesView | undefined;
-/** When this session activated, used to tell a restored panel from a real click. */
-let activatedAt = 0;
-let startupResolveSkipped = false;
+let settingsView: SettingsView | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
-let defaultModelApplied = false;
 /** pi's image helpers, cached per SDK entry: importing an ESM package is not free. */
 let attachmentToolsEntry: string | undefined;
 let attachmentToolsPromise: Promise<ImageTools | undefined> | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  activatedAt = Date.now();
   outputChannel = vscode.window.createOutputChannel("PiCode");
   context.subscriptions.push(outputChannel);
 
@@ -119,11 +117,35 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   // The icon on the left opens this panel, because the editor decides that a
-  // container shows a sidebar. The popup itself is one click away from here.
+  // container shows a sidebar. The card is a shortcut into the settings tab, which
+  // is where configuration now happens.
+  const settings = SettingsView.create(context.extensionUri, {
+    resolveEntry: () => resolveSdkEntry(context.extensionUri),
+    cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    models: async () => {
+      const client = view?.bound;
+      return client ? client.getAvailableModels().catch(() => []) : [];
+    },
+    // PiCode's own settings are the editor's, not pi's: they are read and written
+    // through the configuration API, and always globally.
+    picode: () => ({
+      get: (key: string) => {
+        const value = vscode.workspace.getConfiguration("picode.pi").get<unknown>(key);
+        return typeof value === "string" || typeof value === "boolean" ? value : undefined;
+      },
+      set: async (key: string, value: unknown) => {
+        await vscode.workspace
+          .getConfiguration("picode.pi")
+          .update(key, value, vscode.ConfigurationTarget.Global);
+      },
+    }),
+    applied: (key, value) => applyWrittenSetting(key, value),
+  });
+  settingsView = settings;
+
   const ajustes = AjustesView.create(context.extensionUri, {
     snapshot: () => menuSnapshot(context.extensionUri),
-    openMenu: (category?: PiCategoryId) => showPiMenu(menu, category),
-    autoOpenMenu: () => autoOpenMenuFromPanel(menu),
+    openSettings: (category?: PiCategoryId) => settings.show(category),
   });
   ajustesView = ajustes;
 
@@ -137,6 +159,9 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("picode.piChat.menu", () => showPiMenu(menu)),
+    vscode.commands.registerCommand("picode.piChat.settings", async () => {
+      await settingsView?.show();
+    }),
     vscode.commands.registerCommand("picode.piChat.menu.installed", () =>
       showInstalledPackages(menu),
     ),
@@ -170,6 +195,8 @@ export function deactivate(): void {
   view = undefined;
   ajustesView?.dispose();
   ajustesView = undefined;
+  settingsView?.dispose();
+  settingsView = undefined;
   client?.stop();
   client = undefined;
 }
@@ -205,7 +232,6 @@ async function ensureClient(extensionUri: vscode.Uri): Promise<PiClient | undefi
 async function resetClient(): Promise<void> {
   client?.stop();
   client = undefined;
-  defaultModelApplied = false;
 
   // Only restart the process if the view is open: starting pi is a consequence
   // of opening the container, never of a stray command.
@@ -214,25 +240,60 @@ async function resetClient(): Promise<void> {
   }
 }
 
-const STARTUP_GRACE_MS = 20_000;
-
 /**
- * Opens the popup because the sidebar panel was shown, which is what clicking the
- * left icon does.
+ * Pushes a setting the owner just wrote to the pi that is running.
  *
- * One resolve per session is skipped: at startup the editor restores whichever views
- * were open, and that resolve is not a click, so popping a menu nobody asked for is
- * worse than leaving the panel's own button to do it. Every resolve after that one
- * is a real click.
+ * pi reads its settings when it starts and keeps them in memory, so a write from the
+ * options tab reaches the file but not the process. Two groups cannot wait for a
+ * restart: the default model, which decides what a new session starts with, and the
+ * two settings that pick which pi runs at all — those are read once, at process
+ * start, so applying them *is* a restart. Everything else is left alone: pi will
+ * read it when it next needs it.
  */
-async function autoOpenMenuFromPanel(menu: PiMenuDeps): Promise<void> {
-  const sinceActivation = Date.now() - activatedAt;
-  if (!startupResolveSkipped && sinceActivation < STARTUP_GRACE_MS) {
-    startupResolveSkipped = true;
-    outputChannel?.appendLine("[pi] panel restaurado al arrancar: el menú no se abre solo");
+async function applyWrittenSetting(key: string, value: PiSettingValue): Promise<void> {
+  if (key === "picode.runtime" || key === "picode.transport") {
+    await resetClient();
     return;
   }
-  await showPiMenu(menu);
+  if (key !== "defaultModel") {
+    return;
+  }
+
+  const rpc = view?.bound;
+  if (rpc === undefined || typeof value !== "string" || value.trim() === "") {
+    // Cleared, or nothing is running: the panel still re-reads so it stops
+    // claiming a model the settings no longer name.
+    await view?.refreshState();
+    return;
+  }
+
+  try {
+    await rpc.setModel(value);
+    outputChannel?.appendLine(`[pi] modelo por defecto aplicado a la sesión: ${value}`);
+  } catch (error) {
+    reportCommandFailure(`aplicar el modelo por defecto "${value}"`, error);
+  }
+  await view?.refreshState();
+}
+
+/**
+ * Re-applies the configured default model to a session that just started.
+ *
+ * `newSession` makes pi resolve the model from its own settings, which it may hold
+ * stale in memory. Re-applying what the options tab wrote is what makes "the new
+ * session starts with the default" true without a restart.
+ */
+async function reapplyDefaultModel(rpc: PiClient): Promise<void> {
+  const model = await settingsView?.defaultModel();
+  if (model === undefined) {
+    return;
+  }
+  try {
+    await rpc.setModel(model);
+    outputChannel?.appendLine(`[pi] modelo por defecto re-aplicado: ${model}`);
+  } catch (error) {
+    reportCommandFailure(`aplicar el modelo por defecto "${model}"`, error);
+  }
 }
 
 /**
@@ -345,6 +406,7 @@ async function listProviders(): Promise<ProviderSummary[]> {
 async function startNewSession(): Promise<void> {
   await withLiveClient(async (rpc) => {
     await rpc.newSession();
+    await reapplyDefaultModel(rpc);
     view?.notifySessionReset();
     await view?.refreshState();
   }, "iniciar una sesión nueva");
@@ -1167,37 +1229,7 @@ async function ensureStarted(rpc: PiClient): Promise<boolean> {
     return false;
   }
 
-  await applyDefaultModel(rpc);
   return true;
-}
-
-/**
- * Applies `picode.pi.defaultModel` once per client. A model failure is not fatal
- * (pi already has a configured default), so it is reported as a warning.
- */
-async function applyDefaultModel(rpc: PiClient): Promise<void> {
-  if (defaultModelApplied) {
-    return;
-  }
-  const configured = vscode.workspace
-    .getConfiguration("picode.pi")
-    .get<string>("defaultModel", "")
-    .trim();
-  if (configured.length === 0) {
-    return;
-  }
-
-  try {
-    await rpc.setModel(configured);
-    defaultModelApplied = true;
-    outputChannel?.appendLine(`[pi] default model set to "${configured}".`);
-  } catch (error) {
-    const message = toErrorMessage(error);
-    outputChannel?.appendLine(`[pi] could not apply default model "${configured}": ${message}`);
-    void vscode.window.showWarningMessage(
-      `PiCode: could not apply picode.pi.defaultModel "${configured}": ${message}`,
-    );
-  }
 }
 
 function reportCommandFailure(action: string, error: unknown): void {

@@ -42,8 +42,20 @@ const PAIRS = [
       "card-model",
       "card-thinking",
       "card-extensions",
-      "menu",
+      "settings",
       "categories",
+    ],
+  },
+  {
+    name: "settings",
+    script: "media/settings.js",
+    markup: "out/settings-view.js",
+    required: [
+      "settings-search",
+      "scope-global",
+      "scope-project",
+      "settings-rail",
+      "settings-content",
     ],
   },
 ];

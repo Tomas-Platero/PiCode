@@ -6,12 +6,17 @@
  * the listing, whether the agent actually loads what was installed, and whether removing
  * it puts the owner's pi configuration back as it was.
  *
- * It is deliberately not part of `npm test`: it needs a real `pi` on PATH and it
- * temporarily writes to the owner's `~/.pi` configuration. It cleans up after itself in
- * a finally block, so a failure part way through still removes what it added.
+ * It is deliberately not part of `npm test`: it needs a real `pi` on PATH.
  *
- * The probe package registers a prompt template instead of an extension, because a
- * prompt is loaded the same way and does not execute code on the owner's machine.
+ * **It must never write to the owner's pi configuration.** The first version of this test
+ * did, and a single `pi install` followed by `pi remove` was enough to prune the peer
+ * dependencies that other installed extensions were resolving against: `pi-ai` and
+ * `pi-coding-agent` disappeared from `~/.pi/agent/npm` and web access stopped loading.
+ * `PI_CODING_AGENT_DIR` exists precisely for this, so every call below runs against a
+ * throwaway directory and the owner's tree is only read, never written.
+ *
+ * The probe package registers a prompt template instead of an extension, because a prompt
+ * is loaded the same way and does not execute code.
  *
  * Run with: npm run test:install
  */
@@ -123,11 +128,19 @@ async function main() {
   const results = [];
   const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
 
+  // pi reads PI_CODING_AGENT_DIR for its configuration, and every child process this test
+  // spawns inherits the environment, so pointing it here is what keeps the owner's package
+  // tree out of reach.
+  const isolatedConfig = fs.mkdtempSync(path.join(os.tmpdir(), "picode-install-check-"));
+  process.env.PI_CODING_AGENT_DIR = isolatedConfig;
+
   const packageRoot = path.join(os.tmpdir(), PACKAGE_NAME);
   writeProbePackage(packageRoot);
 
   const before = await installedSources();
-  check("pi list answers before installing", before.length > 0, `${before.length} paquetes`);
+  // Empty is the expected answer in a fresh configuration, so this only asserts that the
+  // command answers rather than that it has anything to say.
+  check("pi list answers before installing", Array.isArray(before), `${before.length} paquetes`);
 
   let installed = false;
   try {
@@ -183,13 +196,14 @@ async function main() {
 
       const final = await installedSources();
       check(
-        "the owner's pi configuration is left as it was found",
+        "the isolated configuration is left as it was found",
         final.length === before.length &&
           !final.some((source) => source.includes(PACKAGE_NAME)),
         `antes ${before.length}, después ${final.length}`,
       );
     }
     fs.rmSync(packageRoot, { recursive: true, force: true });
+    fs.rmSync(isolatedConfig, { recursive: true, force: true });
   }
 
   let failed = 0;
