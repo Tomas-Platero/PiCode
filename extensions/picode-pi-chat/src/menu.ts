@@ -1047,6 +1047,21 @@ async function installFromFolder(deps: PiMenuDeps): Promise<void> {
 }
 
 /**
+ * What an install attempt did.
+ *
+ * The popup ignores it — it reports through the editor's own notifications — but the
+ * initial-setup wizard shows the outcome inside its panel, so the result has to
+ * travel back instead of ending in a notification that can be gone by the time the
+ * owner looks at the panel again.
+ */
+export interface InstallOutcome {
+  ok: boolean;
+  /** True when the owner dismissed the confirmation, so nothing ran. */
+  cancelled: boolean;
+  message: string;
+}
+
+/**
  * Installs a package from any source pi accepts.
  *
  * pi's documentation is explicit that packages run with full access to the system, so
@@ -1054,33 +1069,55 @@ async function installFromFolder(deps: PiMenuDeps): Promise<void> {
  * paraphrased: what the owner is about to run should be readable in the dialog.
  */
 async function installSource(deps: PiMenuDeps, source: string): Promise<void> {
-  if (source.length === 0) {
-    return;
+  await installSources(deps, [source]);
+}
+
+/**
+ * Installs one or more packages behind a single confirmation.
+ *
+ * The confirmation names every exact command, because that is what the owner is
+ * about to run and a list of packages would hide the commands behind a summary. The
+ * progress and the restart offer are the ones the single-source path always had; a
+ * source list is only how the Gentle AI layer's two halves — the orchestrator and
+ * its memory provider — go in together instead of one dialog each.
+ */
+export async function installSources(
+  deps: PiMenuDeps,
+  sources: readonly string[],
+): Promise<InstallOutcome> {
+  const specs = sources.map((source) => source.trim()).filter((source) => source.length > 0);
+  if (specs.length === 0) {
+    return { ok: false, cancelled: true, message: "No hay nada que instalar." };
   }
 
+  const commands = specs.map((spec) => `"pi install ${spec}"`).join(" y ");
   const answer = await vscode.window.showWarningMessage(
-    `¿Instalar ${source} en pi?`,
+    `¿Instalar ${specs.join(" y ")} en pi?`,
     {
       modal: true,
-      detail: `Los paquetes de pi ejecutan código con acceso completo al sistema. Se instalará con "pi install ${source}".`,
+      detail: `Los paquetes de pi ejecutan código con acceso completo al sistema. Se instalará con ${commands}.`,
     },
     "Instalar",
   );
   if (answer !== "Instalar") {
-    return;
+    return { ok: false, cancelled: true, message: "No se instaló nada." };
   }
 
-  const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${source}` },
-    () => runPiCli(deps.runtime(), ["install", source], undefined, deps.log),
-  );
-  if (!result.ok) {
-    void vscode.window.showErrorMessage(
-      `PiCode: pi install terminó con código ${result.code ?? "desconocido"}.`,
+  for (const spec of specs) {
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${spec}` },
+      () => runPiCli(deps.runtime(), ["install", spec], undefined, deps.log),
     );
-    return;
+    if (!result.ok) {
+      const reason = `pi install terminó con código ${result.code ?? "desconocido"}.`;
+      const message = specs.length > 1 ? `${reason} Falló al instalar ${spec}.` : reason;
+      void vscode.window.showErrorMessage(`PiCode: ${message}`);
+      return { ok: false, cancelled: false, message };
+    }
   }
-  deps.offerRestart(`${source} quedó instalado`);
+
+  deps.offerRestart(`${specs.join(" y ")} quedó instalado`);
+  return { ok: true, cancelled: false, message: `Instalado ${specs.join(" y ")}.` };
 }
 
 async function removePackage(deps: PiMenuDeps, source: string): Promise<void> {

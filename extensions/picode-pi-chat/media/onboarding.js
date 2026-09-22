@@ -1,0 +1,308 @@
+// PiCode's initial-setup wizard.
+//
+// Presentation only. The runtime reading, Gentle AI's state and every action come
+// from the host, which delegates them to the same functions the rest of the editor
+// uses; this script draws the two questions, sends the answer and shows the outcome
+// the host reports in place. A failure stays here instead of being swallowed: the
+// editor's notification can be gone by the time the owner looks back at the panel.
+(function () {
+  "use strict";
+
+  var vscode = acquireVsCodeApi();
+
+  var elements = {
+    notice: document.getElementById("notice"),
+    stepTabs: [
+      document.getElementById("step-tab-pi"),
+      document.getElementById("step-tab-gentle"),
+      document.getElementById("step-tab-summary"),
+    ],
+    piSection: document.getElementById("step-pi"),
+    gentleSection: document.getElementById("step-gentle"),
+    summarySection: document.getElementById("step-summary"),
+    runtimeCurrent: document.getElementById("runtime-current"),
+    runtimeChoices: document.getElementById("runtime-choices"),
+    runtimeCustom: document.getElementById("runtime-custom"),
+    runtimePath: document.getElementById("runtime-path"),
+    runtimeApply: document.getElementById("runtime-apply"),
+    runtimeResult: document.getElementById("runtime-result"),
+    gentleCurrent: document.getElementById("gentle-current"),
+    gentleInstall: document.getElementById("gentle-install"),
+    gentleSkip: document.getElementById("gentle-skip"),
+    gentleResult: document.getElementById("gentle-result"),
+    summaryRuntime: document.getElementById("summary-runtime"),
+    summaryGentle: document.getElementById("summary-gentle"),
+    openChat: document.getElementById("open-chat"),
+    openSettings: document.getElementById("open-settings"),
+    openGentle: document.getElementById("open-gentle"),
+    finish: document.getElementById("finish"),
+  };
+
+  // The three modes `runtime.ts` resolves, in the order the question offers them.
+  var MODES = [
+    {
+      id: "path",
+      label: "El pi que ya está en el PATH",
+      detail: "Tu instalación propia. Cambia cuando actualices pi.",
+    },
+    {
+      id: "managed",
+      label: "El pi propio de PiCode",
+      detail: "Instalado dentro de la distribución, con versión fijada.",
+    },
+    {
+      id: "custom",
+      label: "Otra instalación, por ruta",
+      detail: "Usa exactamente la ruta que escribas abajo.",
+    },
+  ];
+
+  var state = {
+    step: "pi",
+    runtime: null,
+    gentle: null,
+    configuredPath: "",
+    mode: null,
+  };
+
+  function send(message) {
+    vscode.postMessage(message);
+  }
+
+  function createElement(tag, className, text) {
+    var element = document.createElement(tag);
+    if (className) {
+      element.className = className;
+    }
+    if (typeof text === "string") {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  function showNotice(text) {
+    elements.notice.textContent = typeof text === "string" ? text : "";
+    elements.notice.hidden = elements.notice.textContent.length === 0;
+  }
+
+  // A result line reads differently depending on whether it reports a success, so the
+  // class carries that and the message stays the host's words.
+  function showResult(element, ok, message) {
+    element.textContent = typeof message === "string" ? message : "";
+    element.hidden = element.textContent.length === 0;
+    element.classList.toggle("ok", ok === true);
+    element.classList.toggle("failed", ok === false);
+  }
+
+  // --- the pi question ----------------------------------------------------
+
+  var MODE_LABELS = {
+    path: "el pi del PATH",
+    managed: "el pi propio de PiCode",
+    custom: "una instalación por ruta",
+  };
+
+  function runtimeLine(runtime) {
+    if (!runtime) {
+      return "Leyendo el pi en uso…";
+    }
+    var version = runtime.version ? runtime.version : "versión no disponible";
+    var found = runtime.available ? "" : " · el ejecutable no está";
+    return "En uso ahora: " + (MODE_LABELS[runtime.mode] || runtime.mode) + " · " + version + found;
+  }
+
+  function modeDetail(option, runtime) {
+    if (!runtime) {
+      return option.detail;
+    }
+    if (option.id === "managed") {
+      if (runtime.managedInstalled) {
+        return "Ya está instalado en " + runtime.managedRoot + ".";
+      }
+      var pin = runtime.pin && runtime.pin.version ? runtime.pin.version : "la fijada";
+      return (
+        "Se instala en la carpeta de PiCode con la versión " +
+        pin +
+        ". Descarga unos cientos de megabytes. Tu pi global no se toca."
+      );
+    }
+    if (option.id === "path") {
+      return runtime.mode === "path" && runtime.version
+        ? "Ahora mismo resuelve " + runtime.version + "."
+        : "Se resuelve en el PATH. Ahora mismo no hay ninguno disponible.";
+    }
+    return option.detail;
+  }
+
+  function modeChoice(option, runtime) {
+    var label = createElement("label", "onboarding-choice");
+    var input = document.createElement("input");
+    input.type = "radio";
+    input.name = "runtime-mode";
+    input.value = option.id;
+    input.checked = state.mode === option.id;
+    input.addEventListener("change", function () {
+      state.mode = option.id;
+      renderRuntime();
+    });
+    label.appendChild(input);
+
+    var text = createElement("span", "onboarding-choice-text");
+    text.appendChild(createElement("span", "onboarding-choice-label", option.label));
+    text.appendChild(createElement("span", "onboarding-choice-detail", modeDetail(option, runtime)));
+    label.appendChild(text);
+    return label;
+  }
+
+  function renderRuntime() {
+    var runtime = state.runtime;
+    elements.runtimeCurrent.textContent = runtimeLine(runtime);
+    if (state.mode === null) {
+      state.mode = runtime ? runtime.mode : "path";
+    }
+
+    elements.runtimeChoices.textContent = "";
+    for (var index = 0; index < MODES.length; index += 1) {
+      elements.runtimeChoices.appendChild(modeChoice(MODES[index], runtime));
+    }
+
+    elements.runtimeCustom.hidden = state.mode !== "custom";
+    if (document.activeElement !== elements.runtimePath) {
+      elements.runtimePath.value = state.configuredPath || "";
+    }
+  }
+
+  // --- the Gentle AI question ---------------------------------------------
+
+  function gentleLine(gentle) {
+    if (!gentle) {
+      return "Leyendo el estado de Gentle AI…";
+    }
+    if (!gentle.installed && !gentle.active) {
+      return "Gentle AI no está instalado.";
+    }
+    var version = gentle.version ? " · v" + gentle.version : "";
+    return gentle.active
+      ? "Gentle AI está instalado y activo en esta sesión" + version + "."
+      : "Gentle AI está instalado, pero esta sesión todavía no cargó sus comandos" + version + ".";
+  }
+
+  function renderGentle() {
+    elements.gentleCurrent.textContent = gentleLine(state.gentle);
+  }
+
+  // --- the closing summary ------------------------------------------------
+
+  function renderSummary() {
+    elements.summaryRuntime.textContent = runtimeLine(state.runtime);
+    elements.summaryGentle.textContent = gentleLine(state.gentle);
+  }
+
+  // --- steps --------------------------------------------------------------
+
+  function showStep(step) {
+    state.step = step;
+    elements.piSection.hidden = step !== "pi";
+    elements.gentleSection.hidden = step !== "gentle";
+    elements.summarySection.hidden = step !== "summary";
+
+    var order = ["pi", "gentle", "summary"];
+    var current = order.indexOf(step);
+    for (var index = 0; index < elements.stepTabs.length; index += 1) {
+      var tab = elements.stepTabs[index];
+      if (!tab) {
+        continue;
+      }
+      tab.classList.toggle("active", index === current);
+      tab.classList.toggle("done", index < current);
+    }
+  }
+
+  // --- host messages ------------------------------------------------------
+
+  function handleHostMessage(message) {
+    if (!message || typeof message.type !== "string") {
+      return;
+    }
+    switch (message.type) {
+      case "state":
+        state.runtime = message.runtime && typeof message.runtime === "object" ? message.runtime : null;
+        state.gentle = message.gentle && typeof message.gentle === "object" ? message.gentle : null;
+        if (typeof message.configuredPath === "string") {
+          state.configuredPath = message.configuredPath;
+        }
+        if (state.mode === null && state.runtime) {
+          state.mode = state.runtime.mode;
+        }
+        renderRuntime();
+        renderGentle();
+        renderSummary();
+        showNotice("");
+        break;
+      case "runtimeResult":
+        elements.runtimeApply.disabled = false;
+        showResult(elements.runtimeResult, message.ok, message.message);
+        if (message.ok) {
+          showStep("gentle");
+        }
+        break;
+      case "gentleResult":
+        elements.gentleInstall.disabled = false;
+        showResult(elements.gentleResult, message.ok, message.message);
+        if (message.ok) {
+          showStep("summary");
+        }
+        break;
+      case "completed":
+        elements.finish.disabled = true;
+        elements.finish.textContent = "Configuración guardada";
+        break;
+      case "error":
+        showNotice(message.message);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // --- wiring -------------------------------------------------------------
+
+  elements.runtimeApply.addEventListener("click", function () {
+    showResult(elements.runtimeResult, null, "");
+    elements.runtimeApply.disabled = true;
+    send({ type: "applyRuntime", mode: state.mode, path: elements.runtimePath.value });
+  });
+
+  elements.gentleInstall.addEventListener("click", function () {
+    showResult(elements.gentleResult, null, "");
+    elements.gentleInstall.disabled = true;
+    send({ type: "installGentle" });
+  });
+
+  elements.gentleSkip.addEventListener("click", function () {
+    send({ type: "skipGentle" });
+  });
+
+  elements.openChat.addEventListener("click", function () {
+    send({ type: "open", target: "chat" });
+  });
+
+  elements.openSettings.addEventListener("click", function () {
+    send({ type: "open", target: "settings" });
+  });
+
+  elements.openGentle.addEventListener("click", function () {
+    send({ type: "open", target: "gentle" });
+  });
+
+  elements.finish.addEventListener("click", function () {
+    send({ type: "finish" });
+  });
+
+  window.addEventListener("message", function (event) {
+    handleHostMessage(event.data);
+  });
+
+  showStep("pi");
+  send({ type: "ready" });
+})();

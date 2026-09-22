@@ -67,6 +67,38 @@ const PAIRS = [
     // three lists the host fills in.
     required: ["logo", "summary", "notice", "lines", "commands", "actions"],
   },
+  {
+    name: "onboarding",
+    script: "media/onboarding.js",
+    markup: "out/onboarding.js",
+    // The wizard's questions and their in-place outcome lines, plus the step tabs and
+    // the closing summary's readings and ways out.
+    required: [
+      "notice",
+      "step-tab-pi",
+      "step-tab-gentle",
+      "step-tab-summary",
+      "step-pi",
+      "step-gentle",
+      "step-summary",
+      "runtime-current",
+      "runtime-choices",
+      "runtime-custom",
+      "runtime-path",
+      "runtime-apply",
+      "runtime-result",
+      "gentle-current",
+      "gentle-install",
+      "gentle-skip",
+      "gentle-result",
+      "summary-runtime",
+      "summary-gentle",
+      "open-chat",
+      "open-settings",
+      "open-gentle",
+      "finish",
+    ],
+  },
 ];
 
 function idsUsedByScript(source) {

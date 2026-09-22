@@ -121,6 +121,11 @@
         "category": "PiCode"
       },
       {
+        "command": "picode.piChat.onboarding",
+        "title": "PiCode: Repetir la configuración inicial",
+        "category": "PiCode"
+      },
+      {
         "command": "picode.piChat.menu.installed",
         "title": "PiCode: Extensiones instaladas",
         "category": "PiCode"

@@ -5,6 +5,7 @@ import { loadImageTools, type ImageTools } from "./attachments";
 import { ChatView, type ChatViewHost } from "./chat-view";
 import {
   GENTLE_PANEL_TARGET,
+  installSources,
   resolveCategoryTarget,
   showCatalogSearch,
   showInstalledPackages,
@@ -16,6 +17,12 @@ import {
   type ProviderSummary,
   type GentleActions,
 } from "./menu";
+import {
+  GENTLE_SOURCES,
+  OnboardingView,
+  type OnboardingResult,
+  type OnboardingTarget,
+} from "./onboarding";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
 import type { PiSettingValue } from "./pi-settings";
 import {
@@ -70,6 +77,7 @@ let agentCwd: string | undefined;
 let ajustesView: AjustesView | undefined;
 let gentleView: GentleView | undefined;
 let settingsView: SettingsView | undefined;
+let onboardingView: OnboardingView | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 /** pi's image helpers, cached per SDK entry: importing an ESM package is not free. */
 let attachmentToolsEntry: string | undefined;
@@ -177,6 +185,31 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   gentleView = gentlePanel;
 
+  // The initial-setup wizard. Every question it asks delegates to a function the rest
+  // of the editor already uses: the runtime switch `selectRuntime` applies, the Gentle
+  // AI state the popup and the panel share, and the package install the packages table
+  // runs. That is what keeps the wizard from being a second configuration surface that
+  // drifts from the first.
+  const onboarding = OnboardingView.create(context.extensionUri, {
+    runtime: () => describeRuntime(context.extensionUri),
+    configuredPath: () =>
+      vscode.workspace.getConfiguration("picode.pi").get<string>("executablePath", "pi"),
+    applyRuntime: async (mode, customPath) =>
+      applyRuntimeMode(context, mode, {
+        customPath,
+        current: await describeRuntime(context.extensionUri),
+      }),
+    gentle: () => gentleState(context.extensionUri),
+    installGentle: () => installGentleLayer(menu),
+    complete: async () => {
+      // `globalState.update` answers with a Thenable, and the panel may want to finish
+      // only once the marker is written; awaiting it here keeps the promise shape.
+      await context.globalState.update(ONBOARDING_KEY, true);
+    },
+    open: (target) => openOnboardingTarget(target),
+  });
+  onboardingView = onboarding;
+
   context.subscriptions.push(
     // `retainContextWhenHidden` keeps the webview alive while the sidebar is
     // collapsed, so a visible transcript is not thrown away by hiding it.
@@ -204,6 +237,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("picode.piChat.selectRuntime", async () => {
       await selectRuntime(context);
     }),
+    // Repeatable on purpose: the same wizard, opened from the palette, is how the
+    // runtime is changed or Gentle AI switched on later without any reinstall.
+    vscode.commands.registerCommand("picode.piChat.onboarding", async () => {
+      await onboardingView?.show();
+    }),
     vscode.commands.registerCommand("picode.piChat.selectTransport", async () => {
       await selectTransport(context);
     }),
@@ -219,6 +257,11 @@ export function activate(context: vscode.ExtensionContext): void {
       await resetClient();
     }),
   );
+
+  // First run. Deliberately not awaited: the resolution probes a process, and
+  // activation must not wait on I/O to finish. The wizard opens only when there is no
+  // usable pi and it was never completed, so it never lands on a working setup.
+  void maybeOpenOnboarding(context);
 }
 
 export function deactivate(): void {
@@ -230,6 +273,8 @@ export function deactivate(): void {
   gentleView = undefined;
   settingsView?.dispose();
   settingsView = undefined;
+  onboardingView?.dispose();
+  onboardingView = undefined;
   client?.stop();
   client = undefined;
 }
@@ -501,14 +546,90 @@ async function installManaged(
 /** The Runtime category's install row: installs PiCode's own pi and switches to it. */
 async function installManagedFromMenu(context: vscode.ExtensionContext): Promise<void> {
   const current = await describeRuntime(context.extensionUri);
-  const installed = await installManaged(context, current);
-  if (!installed) {
+  // The same applier the picker and the wizard use: choosing the managed runtime and
+  // installing it because it is missing are one operation, not two code paths.
+  const applied = await applyRuntimeMode(context, "managed", { current });
+  if (!applied.ok) {
+    // `installManaged` already reported the failure it saw; a second message for the
+    // same event would only repeat it.
     return;
   }
-  await vscode.workspace
-    .getConfiguration("picode.pi")
-    .update("runtime", "managed", vscode.ConfigurationTarget.Global);
-  await resetClient();
+}
+
+/**
+ * The key that records that the wizard ran to completion.
+ *
+ * `globalState` rather than a settings entry: it is a fact about this installation,
+ * not a preference, and it must not appear in the settings tab as something to edit.
+ */
+const ONBOARDING_KEY = "picode.onboarding.completed";
+
+/**
+ * Opens the initial-setup wizard once, on a machine that cannot run pi yet.
+ *
+ * The condition is the runtime resolution the rest of the editor already uses — mode,
+ * executable and version probe — not a new check: "no usable pi" means
+ * `describeRuntime` found no executable, or found one that does not answer. It never
+ * opens when the wizard was already completed, and never when a pi resolves, so a
+ * working setup is never interrupted.
+ *
+ * Called without `await` from `activate`: the probe spawns a process, and activation
+ * must stay free of I/O.
+ */
+async function maybeOpenOnboarding(context: vscode.ExtensionContext): Promise<void> {
+  if (context.globalState.get<boolean>(ONBOARDING_KEY) === true) {
+    return;
+  }
+
+  let runtime: RuntimeDescriptor;
+  try {
+    runtime = await describeRuntime(context.extensionUri);
+  } catch (error) {
+    outputChannel?.appendLine(
+      `[onboarding] no se pudo resolver el runtime: ${toErrorMessage(error)}`,
+    );
+    return;
+  }
+
+  if (runtime.available && runtime.version !== undefined) {
+    return;
+  }
+
+  outputChannel?.appendLine(
+    "[onboarding] no hay un pi utilizable y la configuración inicial no se completó: se abre el asistente",
+  );
+  await onboardingView?.show();
+}
+
+/**
+ * Installs both halves of the Gentle AI layer from the wizard.
+ *
+ * It goes through `installSources`, the same function the packages table's install rows
+ * use, so the confirmation, the per-package progress and the restart offer are the ones
+ * that already exist. The wizard only differs in naming both commands in one dialog and
+ * in showing the outcome inside its panel.
+ */
+async function installGentleLayer(deps: PiMenuDeps): Promise<OnboardingResult> {
+  const outcome = await installSources(deps, GENTLE_SOURCES);
+  if (outcome.ok) {
+    invalidateGentle();
+  }
+  return { ok: outcome.ok, message: outcome.message };
+}
+
+/** Sends the wizard's closing summary to the surface it names. */
+async function openOnboardingTarget(target: OnboardingTarget): Promise<void> {
+  switch (target) {
+    case "chat":
+      await revealChatView();
+      break;
+    case "settings":
+      await settingsView?.show();
+      break;
+    case "gentle":
+      await vscode.commands.executeCommand(GENTLE_PANEL_TARGET);
+      break;
+  }
 }
 
 /**
@@ -586,6 +707,7 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
 
+  let chosenPath: string | undefined;
   if (picked.mode === "custom") {
     const entered = await vscode.window.showInputBox({
       title: "PiCode: ruta del ejecutable de pi",
@@ -595,21 +717,65 @@ async function selectRuntime(context: vscode.ExtensionContext): Promise<void> {
     if (entered === undefined) {
       return;
     }
+    // The empty string is a real answer: it means "go back to the bare name", which is
+    // why the choice carries the raw text and the shared applier decides the fallback.
+    chosenPath = entered;
+  }
+
+  const applied = await applyRuntimeMode(context, picked.mode, {
+    customPath: chosenPath,
+    current,
+  });
+  if (!applied.ok) {
+    void vscode.window.showErrorMessage(`PiCode: ${applied.message}`);
+    return;
+  }
+
+  void vscode.window.showInformationMessage(`PiCode: usando ${RUNTIME_LABELS[picked.mode]}.`);
+}
+
+/**
+ * Applies a chosen pi runtime: writes the mode, installs PiCode's own pi when the
+ * choice needs one that is not there, and rebinds the client.
+ *
+ * Extracted from the runtime picker so the initial-setup wizard applies a choice the
+ * same way. There is one place that decides what switching pi costs, which is the
+ * point: a wizard with its own runtime logic would be a second definition of the
+ * setting, free to drift from the picker that shows it.
+ *
+ * The result is returned rather than announced because the two callers report
+ * differently — the picker in a notification, the wizard inside its own panel.
+ */
+async function applyRuntimeMode(
+  context: vscode.ExtensionContext,
+  mode: RuntimeMode,
+  choice: { customPath?: string; current: RuntimeDescriptor },
+): Promise<OnboardingResult> {
+  const configuration = vscode.workspace.getConfiguration("picode.pi");
+
+  if (mode === "custom") {
+    const entered = choice.customPath?.trim() ?? "";
     await configuration.update(
       "executablePath",
-      entered.trim().length > 0 ? entered.trim() : "pi",
+      entered.length > 0 ? entered : "pi",
       vscode.ConfigurationTarget.Global,
     );
   }
 
-  if (picked.mode === "managed" && !current.managedInstalled) {
-    await installManaged(context, current);
+  if (mode === "managed" && !choice.current.managedInstalled) {
+    const installed = await installManaged(context, choice.current);
+    if (!installed) {
+      return {
+        ok: false,
+        message: "No se instaló el pi propio de PiCode, así que el runtime no cambió.",
+      };
+    }
   }
 
-  await configuration.update("runtime", picked.mode, vscode.ConfigurationTarget.Global);
+  await configuration.update("runtime", mode, vscode.ConfigurationTarget.Global);
   await resetClient();
-  outputChannel?.appendLine(`[runtime] mode is now "${picked.mode}".`);
-  void vscode.window.showInformationMessage(`PiCode: usando ${RUNTIME_LABELS[picked.mode]}.`);
+  outputChannel?.appendLine(`[runtime] mode is now "${mode}".`);
+  return { ok: true, message: `Ahora PiCode ejecuta ${RUNTIME_LABELS[mode]}.` };
 }
 
 /**
