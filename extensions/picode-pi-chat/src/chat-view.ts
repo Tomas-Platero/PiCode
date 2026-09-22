@@ -91,14 +91,26 @@ export interface ChatViewHost {
   output?: vscode.OutputChannel;
 }
 
-const CHAT_BODY = `    <header class="toolbar">
+/**
+ * Builds the panel's markup around the address only the host can resolve.
+ *
+ * It is a function rather than a constant because of one value in it: the mark the empty
+ * state draws. A webview cannot spell a URL for the extension's own media directory, so
+ * the host resolves it with `asWebviewUri` while the document is built and the renderer
+ * reads the answer back out of the markup.
+ */
+function chatBody(iconUri: string): string {
+  return `    <header class="toolbar">
       <span id="status" class="status" hidden></span>
       <span id="session" class="session"></span>
+      <button id="back-to-sessions" type="button" class="icon-button" title="Volver a la lista de sesiones" aria-label="Volver a la lista de sesiones" hidden><span class="codicon codicon-history"></span></button>
       <button id="new-session" type="button" class="icon-button" title="Empezar una sesión nueva de pi" aria-label="Nueva sesión"><span class="codicon codicon-comment-discussion"></span></button>
       <button id="abort" type="button" class="icon-button" disabled title="Detener la ejecución actual" aria-label="Detener"><span class="codicon codicon-debug-stop"></span></button>
       <button id="restart" type="button" class="icon-button" title="Reiniciar el proceso de pi" aria-label="Reiniciar"><span class="codicon codicon-refresh"></span></button>
     </header>
-    <main id="messages" class="messages" aria-live="polite"></main>
+    <!-- The mark's address travels on the element the empty state is drawn into, because
+         the renderer cannot build one of its own. -->
+    <main id="messages" class="messages" aria-live="polite" data-picode-icon="${iconUri}"></main>
     <form id="composer" class="composer">
       <textarea
         id="prompt"
@@ -138,6 +150,7 @@ const CHAT_BODY = `    <header class="toolbar">
       />
       <ul id="dropdown-options" class="dropdown-options" tabindex="-1" role="listbox"></ul>
     </div>`;
+}
 
 /**
  * Hosts the pi chat as a native view in the secondary side bar.
@@ -1219,8 +1232,22 @@ export class ChatView implements vscode.WebviewViewProvider {
         if (session) {
           // The host's own `resumeSession` clears the panel and replays the loaded
           // conversation, so nothing is duplicated here.
-          await this.host.resumeSession(session);
+          try {
+            await this.host.resumeSession(session);
+          } finally {
+            // The panel says a conversation is on its way, and every ending has to take
+            // that line away — including the ones that never touch the transcript: a
+            // switch pi cancelled, or a failure the editor reports on its own.
+            this.post({ type: "resumeFinished" });
+          }
         }
+        break;
+      }
+      case "listSessions": {
+        // The panel has gone back to its own list and asks for it again: the last answer
+        // went with the transcript that replaced it, and only the host can read this
+        // project's conversations.
+        await this.pushRecentSessions();
         break;
       }
       case "restart": {
@@ -1267,11 +1294,17 @@ export class ChatView implements vscode.WebviewViewProvider {
    * ---------------------------------------------------------------- */
 
   private buildHtml(webview: vscode.Webview): string {
+    // The empty state draws the panel's mark, and the webview may not name an extension
+    // asset itself: `asWebviewUri` is host work, `localResourceRoots` already covers
+    // `media`, and the policy already allows images from the cspSource.
+    const iconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, "media", "picode-icon.svg"),
+    );
     return buildWebviewHtml({
       webview,
       extensionUri: this.extensionUri,
       title: "PiCode: agente pi",
-      body: CHAT_BODY,
+      body: chatBody(iconUri.toString()),
       scripts: ["markdown.js", "main.js"],
       styles: ["codicon.css", "main.css"],
     });

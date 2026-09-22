@@ -136,6 +136,15 @@ button.secondary:hover:not(:disabled) {
   outline-offset: -1px;
 }
 
+/*
+ * `display: inline-flex` above beats the default rule for `hidden`, so an icon button
+ * that has to disappear spells it out here instead of leaving the attribute the rest of
+ * the panel hides things with without any effect.
+ */
+.icon-button[hidden] {
+  display: none;
+}
+
 /* The one icon button that keeps the editor's primary surface: Send. */
 .icon-button.primary {
   background: var(--vscode-button-background);
@@ -788,6 +797,24 @@ button.secondary:hover:not(:disabled) {
 .empty .codicon {
   font-size: 32px;
   opacity: 0.6;
+}
+
+/*
+ * The panel's own mark, on a surface the theme draws.
+ *
+ * The file keeps the colours it ships with, and no literal colour is written here: the
+ * mark's plate is dark, so it stands out by itself on a light theme, while a dark theme
+ * would let it dissolve into the sidebar. The surface under it — and its border — come
+ * from `--vscode-*` tokens, so the mark belongs to whatever theme is running instead of
+ * being recoloured for one of them.
+ */
+.empty-mark {
+  width: 40px;
+  height: 40px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-panel-border);
 }
 
 .empty h2 {

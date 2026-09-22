@@ -20,6 +20,7 @@
     attachments: document.getElementById("attachments"),
     attach: document.getElementById("attach"),
     abort: document.getElementById("abort"),
+    backToSessions: document.getElementById("back-to-sessions"),
     newSession: document.getElementById("new-session"),
     restart: document.getElementById("restart"),
     model: document.getElementById("model"),
@@ -58,6 +59,16 @@
   // rearranges itself when the list arrives or shows a spinner forever on a project
   // that genuinely has no previous conversations.
   var recentSessions = null;
+  // Where the panel's own mark lives, as the host resolved it.
+  //
+  // It arrives in the markup because a webview cannot spell a URL for the extension's
+  // media directory: the host turns the file into a webview URI while the document is
+  // built, and this script only reads the answer back. No path of our own is written
+  // here, so the file can move without this line following it.
+  var picodeIconUri = elements.messages.getAttribute("data-picode-icon") || "";
+  // The line the panel shows while a previous conversation is on its way, kept so that
+  // every ending of that wait can take it away again.
+  var sessionLoading = null;
   // Which dropdown is open, the visible options, and the highlighted one.
   var openDropdown = null;
   var filteredOptions = [];
@@ -160,6 +171,8 @@
     var empty = elements.messages.querySelector(".empty");
     if (empty) {
       elements.messages.removeChild(empty);
+      // A conversation is on screen now, so there is something to go back from.
+      updateBackToSessions();
     }
 
     var label = ROLE_LABELS[role] || role;
@@ -591,7 +604,7 @@
    */
   function renderEmptyState() {
     var empty = createElement("article", "empty");
-    empty.appendChild(codicon("hubot"));
+    empty.appendChild(createBrandMark());
     empty.appendChild(createElement("h2", null, "P\u00eddele algo a pi"));
     empty.appendChild(
       createElement(
@@ -611,6 +624,32 @@
 
     renderRecentSessions(empty);
     elements.messages.appendChild(empty);
+    // The panel is looking at its own list again, so the action that returns to it has
+    // nothing left to do.
+    updateBackToSessions();
+  }
+
+  /**
+   * The panel's mark, at the address the host resolved for it.
+   *
+   * Decorative: the heading under it already names the panel, so a screen reader is told
+   * nothing twice. The stylesheet places it on a surface the theme draws, because the
+   * file keeps its own colours and one of the two themes would otherwise swallow the
+   * plate the mark is drawn on.
+   */
+  function createBrandMark() {
+    if (!picodeIconUri) {
+      // Without an address the panel falls back to the glyph it used before instead of
+      // leaving a hole where the mark goes. The host always sends one: this is the shape
+      // of the failure, not a path the panel expects to take.
+      return codicon("hubot");
+    }
+
+    var mark = createElement("img", "empty-mark");
+    mark.src = picodeIconUri;
+    mark.alt = "";
+    mark.setAttribute("aria-hidden", "true");
+    return mark;
   }
 
   /**
@@ -681,7 +720,80 @@
     if (!file) {
       return;
     }
+    // The line goes up before the host is asked: the click is the moment the list stops
+    // being the truth, and an empty column for the length of a load reads as a panel
+    // that lost its place.
+    showSessionLoading();
     send({ type: "resumeSession", file: file });
+  }
+
+  /**
+   * Puts up the line that says a previous conversation is being loaded.
+   *
+   * It is the panel's own system note, so a line about the panel is drawn like the other
+   * lines the panel writes, down to the type it is set in.
+   */
+  function showSessionLoading() {
+    clearSessionLoading();
+    var note = addMessage("system");
+    note.body.textContent = "Cargando sesi\u00f3n\u2026";
+    sessionLoading = note.article;
+    // A wait is not a conversation: while this line is up there is nothing to return
+    // from, so the way back to the list goes with it.
+    updateBackToSessions();
+  }
+
+  /**
+   * Takes the loading line away, wherever the wait ended.
+   *
+   * Every ending calls this: the conversation's own messages, a failure the transcript
+   * reports, or the host saying the wait is over after neither arrived.
+   */
+  function clearSessionLoading() {
+    if (!sessionLoading) {
+      return;
+    }
+    if (sessionLoading.parentNode) {
+      sessionLoading.parentNode.removeChild(sessionLoading);
+    }
+    sessionLoading = null;
+    updateBackToSessions();
+  }
+
+  /**
+   * Keeps the way back to the list in step with what the transcript holds.
+   *
+   * The list is the panel's own empty state, so the action belongs exactly to the
+   * moments a conversation is on screen: an empty panel is already looking at the list
+   * it would return to, and a second way to it there would be a control that goes
+   * nowhere.
+   */
+  function updateBackToSessions() {
+    elements.backToSessions.hidden =
+      sessionLoading !== null || elements.messages.querySelector(".empty") !== null;
+  }
+
+  /**
+   * Returns the panel to its own list of previous conversations.
+   *
+   * Only the transcript is dropped: pi keeps the session it holds, so nothing is lost by
+   * looking at the list again, and the panel is drawn as it is on a fresh open — the same
+   * openers and the same conversations. The list is asked for again because the host's
+   * last answer went with the transcript that replaced it, and only the host can read
+   * this project's conversations; whatever the panel still remembers is drawn at once, so
+   * the section does not blink empty while the answer is on its way.
+   */
+  function returnToSessionList() {
+    elements.messages.textContent = "";
+    // The same resets the host's `clear` does, and for the same reason: a token that
+    // outlived its transcript would be written into a bubble nobody can see, and the
+    // next delta has to open a new one.
+    toolItems.clear();
+    stream = null;
+    userEcho = null;
+    clearSessionLoading();
+    renderEmptyState();
+    send({ type: "listSessions" });
   }
 
   function fillPrompt(text) {
@@ -941,6 +1053,9 @@
         }
         break;
       case "error":
+        // A failure ends whatever the panel was waiting for: what the owner needs to read
+        // is the error, not a line saying something is still on its way.
+        clearSessionLoading();
         showError(message.message);
         break;
       case "attachments": {
@@ -983,6 +1098,10 @@
       case "history": {
         // A conversation pi loaded from disk, replayed as the transcript it was. The
         // host cleared the panel first, so this starts from an empty one.
+        //
+        // The line that said this was loading has done its job: the conversation is
+        // here, and the host needs no second word about it.
+        clearSessionLoading();
         var historyMessages = Array.isArray(message.messages) ? message.messages : [];
         var omitted = typeof message.omitted === "number" ? message.omitted : 0;
         // The marker goes first, before the part it describes.
@@ -994,10 +1113,23 @@
         }
         // Nothing here is live: no status, no spinner and no usage accounting. The
         // session's totals were seeded by the host and arrive with its state.
+        //
+        // A conversation is what the panel holds now, so the way back to the list is
+        // real even when the file held nothing but tool results and no row above removed
+        // the empty state.
+        updateBackToSessions();
         break;
       }
+      case "resumeFinished":
+        // The wait for a previous conversation is over. The transcript may have said so
+        // already, or the load may have ended without touching it — a switch pi
+        // cancelled, or a failure the editor reported on its own — and in both cases the
+        // line must not stay up over a conversation that already arrived or never will.
+        clearSessionLoading();
+        break;
       case "clear":
         elements.messages.textContent = "";
+        clearSessionLoading();
         toolItems.clear();
         stream = null;
         userEcho = null;
@@ -1688,6 +1820,10 @@
 
     elements.newSession.addEventListener("click", function () {
       send({ type: "newSession" });
+    });
+
+    elements.backToSessions.addEventListener("click", function () {
+      returnToSessionList();
     });
 
     elements.restart.addEventListener("click", function () {

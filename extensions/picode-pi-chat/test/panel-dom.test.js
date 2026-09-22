@@ -31,6 +31,7 @@ const PAIRS = [
       "attach",
       "attachments",
       "stats-strip",
+      "back-to-sessions",
     ],
   },
   {
