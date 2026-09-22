@@ -325,57 +325,6 @@ body {
   border-radius: 3px;
 }
 
-/* The packages list editor: one row per package with pause and remove. */
-.package-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  min-width: 300px;
-  max-width: 460px;
-}
-
-.package-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border: 1px solid var(--vscode-panel-border, transparent);
-  border-radius: 3px;
-}
-
-.package-row.paused {
-  opacity: 0.6;
-}
-
-.package-source {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-  font-size: 0.9em;
-}
-
-.package-pause {
-  padding: 2px 8px;
-  border: 1px solid var(--vscode-panel-border, transparent);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--vscode-foreground);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.package-pause:hover {
-  background: var(--vscode-list-hoverBackground, transparent);
-}
-
-.package-pause.is-paused {
-  color: var(--vscode-descriptionForeground);
-}
-
 .package-remove {
   padding: 2px;
   border: none;
@@ -508,7 +457,6 @@ body {
   opacity: 1;
 }
 
-.package-table .package-pause,
 .package-table .package-remove {
   display: inline-flex;
   align-items: center;
@@ -516,10 +464,6 @@ body {
   width: 22px;
   height: 22px;
   padding: 0;
-}
-
-.package-table .package-pause {
-  margin-right: 4px;
 }
 
 .package-pagination {

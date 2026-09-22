@@ -664,21 +664,9 @@
 
     function renderActionCell(row) {
       var cell = document.createElement("td");
-      // Both actions post the same write as the switch: the switch is the row's
-      // state and these two are the operations on it.
-      var pause = createElement(
-        "button",
-        "package-pause codicon " +
-          (row.paused ? "codicon-triangle-right is-paused" : "codicon-debug-stop"),
-      );
-      pause.type = "button";
-      pause.title = row.paused ? "Reanudar" : "Pausar";
-      pause.addEventListener("click", function () {
-        setPaused(setting, row.index);
-      });
-      cell.appendChild(pause);
-
-      var remove = createElement("button", "package-remove codicon codicon-close");
+      // Pausing is the Estado toggle's job, so the only action left here is removing
+      // the row; the trash glyph is the one the vendored codicon subset already has.
+      var remove = createElement("button", "package-remove codicon codicon-trash");
       remove.type = "button";
       remove.title = "Eliminar";
       remove.addEventListener("click", function () {

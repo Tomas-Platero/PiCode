@@ -24,7 +24,7 @@
  *   `sessionDir` are all in that group); inventing a write path — hand-editing the
  *   settings file — is out of scope for this surface.
  * - Only a setting with a project setter is offered in the project scope. That is
- *   the five resource lists (`packages`, `extensions`, `skills`, `prompts`,
+ *   the resource lists the catalogue still carries (`packages`, `skills`,
  *   `themes`); everything else is global-only.
  */
 
@@ -54,9 +54,7 @@ export type PiSettingsCategoryId =
   | "estado"
   | "picode"
   | "modelo"
-  | "razonamiento"
-  | "compactacion"
-  | "reintentos"
+  | "analitica"
   | "red"
   | "herramientas"
   | "paquetes"
@@ -400,19 +398,15 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
     description: "Con qué proveedor y qué modelo arrancan las sesiones nuevas.",
   },
   {
-    id: "razonamiento",
-    label: "Razonamiento",
-    description: "Cuánto piensa el agente antes de responder y qué se muestra de ese proceso.",
-  },
-  {
-    id: "compactacion",
-    label: "Compactación",
-    description: "Cuándo y cómo pi resume la conversación para no quedarse sin contexto.",
-  },
-  {
-    id: "reintentos",
-    label: "Reintentos",
-    description: "Qué hace pi cuando una llamada al proveedor o un turno del agente falla.",
+    id: "analitica",
+    label: "Analítica",
+    // The label alone does not say what the category holds, so the description
+    // spells out the three groups that were merged into it: the thinking level, the
+    // compaction of the context and the retries.
+    description:
+      "Cuánto piensa el agente (el nivel de razonamiento), cómo resume la conversación " +
+      "cuando se queda sin contexto (la compactación) y qué hace cuando una llamada al " +
+      "proveedor o un turno falla (los reintentos).",
   },
   {
     id: "red",
@@ -427,7 +421,7 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
   {
     id: "paquetes",
     label: "Paquetes y recursos",
-    description: "Qué paquetes, extensiones, skills, plantillas y temas carga pi, y qué telemetría envía.",
+    description: "Qué paquetes carga pi; cada paquete aporta sus propias extensiones, skills, plantillas y temas.",
   },
   {
     id: "skills",
@@ -705,11 +699,16 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     },
   },
 
-  /* --- Razonamiento ----------------------------------------------- */
+  /* --- Analítica -------------------------------------------------- *
+   * One category for the three groups the owner asked to merge: how much the agent
+   * thinks, how the conversation is compacted, and what happens when a call fails.
+   * Every descriptor keeps its own `key`, because those are stable settings
+   * identifiers, but all of them now declare the same `analitica` category.
+   */
 
   {
     key: "defaultThinkingLevel",
-    category: "razonamiento",
+    category: "analitica",
     label: "Nivel de razonamiento",
     description:
       "Cuánto piensa el agente por defecto. Los modelos con un nivel propio lo ignoran.",
@@ -723,7 +722,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "modelThinkingLevels",
-    category: "razonamiento",
+    category: "analitica",
     label: "Nivel por modelo",
     description:
       "Excepciones al nivel por defecto, una por modelo, con la forma «proveedor/modelo=nivel». " +
@@ -737,7 +736,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "hideThinkingBlock",
-    category: "razonamiento",
+    category: "analitica",
     label: "Ocultar el bloque de razonamiento",
     description: "Esconde el razonamiento del modelo en la transcripción, aunque el modelo lo emita.",
     kind: "boolean",
@@ -749,7 +748,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "showCacheMissNotices",
-    category: "razonamiento",
+    category: "analitica",
     label: "Avisos de caché perdida",
     description:
       "Muestra un aviso cuando una llamada no reutiliza la caché del proveedor y se " +
@@ -762,7 +761,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
       manager.setShowCacheMissNotices(toBoolean(value, "showCacheMissNotices")),
   },
 
-  /* --- Compactación ----------------------------------------------- *
+  /* --- Analítica: compactación ------------------------------------ *
    * All five are read-only: pi exposes getters for the compaction and branch-summary
    * token budgets but no setter for any of them, so the row shows the value pi
    * resolved (including its own default when the setting is absent) and offers no
@@ -771,7 +770,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
 
   {
     key: "compaction.enabled",
-    category: "compactacion",
+    category: "analitica",
     label: "Compactación automática",
     description:
       "Cuando la conversación se acerca al límite de contexto, pi la resume y sigue " +
@@ -785,7 +784,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "compaction.reserveTokens",
-    category: "compactacion",
+    category: "analitica",
     label: "Tokens reservados",
     description: "Contexto que pi deja libre para poder generar el resumen sin quedarse sin sitio.",
     kind: "number",
@@ -797,7 +796,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "compaction.keepRecentTokens",
-    category: "compactacion",
+    category: "analitica",
     label: "Tokens recientes que conserva",
     description: "Parte final de la conversación que pi mantiene literal, sin resumir.",
     kind: "number",
@@ -809,7 +808,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "branchSummary.reserveTokens",
-    category: "compactacion",
+    category: "analitica",
     label: "Tokens reservados al resumir una rama",
     description: "Espacio reservado cuando el resumen es el de una rama del árbol de sesiones.",
     kind: "number",
@@ -821,7 +820,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "branchSummary.skipPrompt",
-    category: "compactacion",
+    category: "analitica",
     label: "No preguntar al resumir una rama",
     description: "Resume la rama directamente, sin pedir confirmación antes de continuar.",
     kind: "boolean",
@@ -830,14 +829,14 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     read: (manager) => manager.getBranchSummarySettings().skipPrompt,
   },
 
-  /* --- Reintentos ------------------------------------------------- *
+  /* --- Analítica: reintentos -------------------------------------- *
    * Only `enabled` has a setter. pi reads the three numbers from the settings file
    * but publishes no way to write them, so they are shown as they are.
    */
 
   {
     key: "retry.enabled",
-    category: "reintentos",
+    category: "analitica",
     label: "Reintentar automáticamente",
     description: "Reintenta una llamada al proveedor o un turno del agente cuando falla por causas temporales.",
     kind: "boolean",
@@ -848,7 +847,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "retry.maxRetries",
-    category: "reintentos",
+    category: "analitica",
     label: "Intentos como máximo",
     description: "Número de reintentos por turno del agente antes de dar el fallo por definitivo.",
     kind: "number",
@@ -859,7 +858,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "retry.baseDelayMs",
-    category: "reintentos",
+    category: "analitica",
     label: "Espera inicial",
     description: "Tiempo antes del primer reintento. Cada intento siguiente espera más.",
     kind: "number",
@@ -871,7 +870,7 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
   {
     key: "retry.maxAgentDelayMs",
-    category: "reintentos",
+    category: "analitica",
     label: "Espera máxima por turno",
     description: "Tope de la espera acumulada cuando un turno del agente se está reintentando.",
     kind: "number",
@@ -1055,10 +1054,11 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
   },
 
   /* --- Paquetes y recursos ---------------------------------------- *
-   * The five resource lists are the only settings pi can also write per project,
-   * and each one has a different setter for each scope. An empty list clears the
-   * scope's object; the project scope needs a trusted project, which pi enforces
-   * itself and reports through `drainErrors()`.
+   * The packages table is all this category keeps. The resource-path lists that used
+   * to live here are gone from the surface; what remains is the setting pi can also
+   * write per project. An empty list clears the scope's object; the project scope
+   * needs a trusted project, which pi enforces itself and reports through
+   * `drainErrors()`.
    */
 
   {
@@ -1084,24 +1084,6 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     },
   },
   {
-    key: "extensions",
-    category: "paquetes",
-    label: "Rutas de extensiones",
-    description: "Carpetas o ficheros con extensiones de pi que se cargan además de las de los paquetes.",
-    kind: "list",
-    scopes: ALL_SCOPES,
-    readOnly: false,
-    read: (manager, scope) => readScopedList(manager, scope, "extensions"),
-    write: (manager, scope, value) => {
-      const paths = toList(value, "extensions");
-      if (scope === "project") {
-        manager.setProjectExtensionPaths(paths);
-      } else {
-        manager.setExtensionPaths(paths);
-      }
-    },
-  },
-  {
     key: "skills",
     category: "skills",
     label: "Rutas de skills",
@@ -1120,24 +1102,6 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     },
   },
   {
-    key: "prompts",
-    category: "paquetes",
-    label: "Rutas de plantillas de prompt",
-    description: "Carpetas con plantillas que el owner lanza como comandos de barra.",
-    kind: "list",
-    scopes: ALL_SCOPES,
-    readOnly: false,
-    read: (manager, scope) => readScopedList(manager, scope, "prompts"),
-    write: (manager, scope, value) => {
-      const paths = toList(value, "prompts");
-      if (scope === "project") {
-        manager.setProjectPromptTemplatePaths(paths);
-      } else {
-        manager.setPromptTemplatePaths(paths);
-      }
-    },
-  },
-  {
     key: "enableSkillCommands",
     category: "skills",
     label: "Skills como comandos",
@@ -1151,35 +1115,6 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     write: (manager, _scope, value) =>
       manager.setEnableSkillCommands(toBoolean(value, "enableSkillCommands")),
   },
-  {
-    key: "enableInstallTelemetry",
-    category: "paquetes",
-    label: "Telemetría de instalación",
-    description:
-      "Envía a pi un aviso anónimo cuando se instala o actualiza un paquete. Ayuda a " +
-      "saber qué paquetes se usan de verdad.",
-    kind: "boolean",
-    scopes: GLOBAL_SCOPE,
-    readOnly: false,
-    read: (manager) => manager.getEnableInstallTelemetry(),
-    write: (manager, _scope, value) =>
-      manager.setEnableInstallTelemetry(toBoolean(value, "enableInstallTelemetry")),
-  },
-  {
-    key: "enableAnalytics",
-    category: "paquetes",
-    label: "Analítica",
-    description:
-      "Envía estadísticas de uso a pi. Al activarla por primera vez se genera un " +
-      "identificador anónimo que acompaña a esos envíos.",
-    kind: "boolean",
-    scopes: GLOBAL_SCOPE,
-    readOnly: false,
-    read: (manager) => manager.getEnableAnalytics(),
-    write: (manager, _scope, value) =>
-      manager.setEnableAnalytics(toBoolean(value, "enableAnalytics")),
-  },
-
   /* --- Apariencia ------------------------------------------------- *
    * `theme` has no project setter (only the theme *paths* do), so the theme itself
    * is global-only and the project scope would be a control that cannot work.

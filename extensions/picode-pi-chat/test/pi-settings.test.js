@@ -437,7 +437,7 @@ async function main() {
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project")).map(
         (descriptor) => descriptor.key,
       ),
-      ["packages", "extensions", "skills", "prompts", "themes"],
+      ["packages", "skills", "themes"],
     ),
     PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project"))
       .map((descriptor) => descriptor.key)
@@ -499,6 +499,55 @@ async function main() {
     ) &&
       groups.find((group) => group.category.id === "skills").settings[1].kind === "boolean",
     "",
+  );
+
+  check(
+    "the merged Analítica category carries thinking, compaction and retries",
+    same(
+      groups
+        .filter((group) => group.category.id === "analitica")
+        .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
+      [
+        "defaultThinkingLevel",
+        "modelThinkingLevels",
+        "hideThinkingBlock",
+        "showCacheMissNotices",
+        "compaction.enabled",
+        "compaction.reserveTokens",
+        "compaction.keepRecentTokens",
+        "branchSummary.reserveTokens",
+        "branchSummary.skipPrompt",
+        "retry.enabled",
+        "retry.maxRetries",
+        "retry.baseDelayMs",
+        "retry.maxAgentDelayMs",
+      ],
+    ),
+    groups
+      .filter((group) => group.category.id === "analitica")
+      .flatMap((group) => group.settings.map((descriptor) => descriptor.key))
+      .join(", "),
+  );
+
+  check(
+    "the paquetes category keeps only the packages table",
+    same(
+      groups
+        .filter((group) => group.category.id === "paquetes")
+        .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
+      ["packages"],
+    ),
+    "",
+  );
+
+  check(
+    "the provider retry settings stay in red, not in the merged category",
+    PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.key.indexOf("retry.provider.") === 0).every(
+      (descriptor) => descriptor.category === "red",
+    ),
+    PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.key.indexOf("retry.provider.") === 0)
+      .map((descriptor) => `${descriptor.key} -> ${descriptor.category}`)
+      .join(", "),
   );
 
   check(
@@ -578,10 +627,10 @@ async function main() {
 
   check(
     "a list accepts only non-empty strings",
-    same(coerceSettingValue(setting("extensions"), ["/a", "/b"]), ["/a", "/b"]) &&
-      coerceSettingValue(setting("extensions"), ["/a", 3]) === undefined &&
-      coerceSettingValue(setting("extensions"), ["/a", ""]) === undefined &&
-      coerceSettingValue(setting("extensions"), "/a") === undefined,
+    same(coerceSettingValue(setting("skills"), ["/a", "/b"]), ["/a", "/b"]) &&
+      coerceSettingValue(setting("skills"), ["/a", 3]) === undefined &&
+      coerceSettingValue(setting("skills"), ["/a", ""]) === undefined &&
+      coerceSettingValue(setting("skills"), "/a") === undefined,
     "",
   );
 
@@ -723,18 +772,18 @@ async function main() {
       JSON.stringify(fake.getGlobalSettings().packages),
     );
 
-    await service.write("project", "extensions", ["/proyecto/ext"]);
+    await service.write("project", "skills", ["/proyecto/skills"]);
     const projectValues = await service.readAll("project");
     const globalValues = await service.readAll("global");
     check(
       "a project write lands in the project scope",
-      same(projectValues.extensions, ["/proyecto/ext"]),
-      JSON.stringify(projectValues.extensions),
+      same(projectValues.skills, ["/proyecto/skills"]),
+      JSON.stringify(projectValues.skills),
     );
     check(
       "the global scope is untouched by a project write",
-      same(globalValues.extensions, ["/global/ext"]),
-      JSON.stringify(globalValues.extensions),
+      same(globalValues.skills, []),
+      JSON.stringify(globalValues.skills),
     );
 
     await service.reload();
