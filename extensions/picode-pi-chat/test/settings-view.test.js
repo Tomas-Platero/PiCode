@@ -51,11 +51,28 @@ function main() {
     "every wire declares its kind and scopes",
     wires.every(
       (wire) =>
-        ["boolean", "select", "number", "text", "list", "packages"].includes(wire.kind) &&
+        ["boolean", "select", "number", "text", "list", "packages", "action"].includes(
+          wire.kind,
+        ) &&
         Array.isArray(wire.scopes) &&
         wire.scopes.length > 0,
     ),
     "",
+  );
+
+  // An action row is the one wire that carries a command and nothing to render as a
+  // value: the webview needs the command from the host, and a value would be a lie.
+  const actionWires = wires.filter((wire) => wire.kind === "action");
+  check(
+    "an action wire carries its command and its label",
+    actionWires.length > 0 &&
+      actionWires.every(
+        (wire) =>
+          typeof wire.command === "string" &&
+          wire.command.trim() !== "" &&
+          wire.label.trim() !== "",
+      ),
+    JSON.stringify(actionWires.map((wire) => wire.key)),
   );
 
   const groups = describeSettings(PI_SETTING_DESCRIPTORS);

@@ -5,6 +5,7 @@ import {
   PI_SETTING_DESCRIPTORS,
   PiSettingsService,
   type PiCodeConfigStore,
+  type PiSettingDescriptor,
   type PiSettingOption,
   type PiSettingScope,
   type PiSettingValue,
@@ -61,6 +62,20 @@ const GROUPS: readonly SettingsGroupWire[] = describeSettings(PI_SETTING_DESCRIP
     },
     settings: group.settings.map(describeSettingWire),
   }),
+);
+
+/**
+ * The command each action row runs, by row key.
+ *
+ * The webview names the row it clicked and never the command: the command stays the
+ * host's to resolve from the catalogue, so a rewritten webview document cannot ask
+ * the host to run an arbitrary command id.
+ */
+const ACTION_COMMANDS: ReadonlyMap<string, string> = new Map(
+  PI_SETTING_DESCRIPTORS.filter(
+    (descriptor): descriptor is PiSettingDescriptor & { command: string } =>
+      descriptor.kind === "action" && typeof descriptor.command === "string",
+  ).map((descriptor) => [descriptor.key, descriptor.command]),
 );
 
 export interface SettingsViewOptions {
@@ -355,6 +370,26 @@ export class SettingsView {
         }
         await this.options.applied(record.key, written);
         await this.pushState();
+        break;
+      }
+      case "action": {
+        if (typeof record.key !== "string") {
+          return;
+        }
+        const command = ACTION_COMMANDS.get(record.key);
+        if (command === undefined) {
+          return;
+        }
+        try {
+          await vscode.commands.executeCommand(command);
+        } catch (error) {
+          // Same surface as a failed write: the owner has to see that the action
+          // did nothing rather than a button that silently stopped working.
+          this.post({
+            type: "writeError",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
         break;
       }
       case "refresh": {

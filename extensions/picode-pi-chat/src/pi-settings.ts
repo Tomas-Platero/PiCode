@@ -33,7 +33,7 @@ import type { PiThinkingLevel } from "./protocol";
 
 export type PiSettingScope = "global" | "project";
 
-export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list" | "packages";
+export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list" | "packages" | "action";
 
 /** A package row: its source and whether it is paused (kept but not loaded). */
 export interface PiPackageEntry {
@@ -76,7 +76,12 @@ export interface PiSettingDescriptor {
   kind: PiSettingKind;
   /** Only the scopes this setting can actually be written to. */
   scopes: readonly PiSettingScope[];
-  /** True when no setter exists, so the row shows a value and no control. */
+  /**
+   * True when no setter exists, so the row shows a value and no control. An
+   * `action` is read-only too — there is nothing to write — but the renderer draws
+   * its button before this flag is ever consulted, so a missing setter never turns
+   * an action into a value with a "solo lectura" note.
+   */
   readOnly: boolean;
   /** For `select`. */
   options?: readonly PiSettingOption[];
@@ -102,7 +107,15 @@ export interface PiSettingDescriptor {
    * configuration's own key name (`runtime`, `transport`).
    */
   picodeKey?: string;
-  /** Absent only for the descriptors that carry a `picodeKey`. */
+  /**
+   * For an `action`: the plain VS Code command id the row runs when clicked.
+   *
+   * An action row has no value at all, so it declares no `read` and no `write`: it
+   * is a button whose label is the row's own label, and the host resolves the id
+   * from this catalogue rather than trusting the webview with a command to run.
+   */
+  command?: string;
+  /** Absent for the descriptors that carry a `picodeKey`, and for an `action`. */
   read?(manager: PiSettingsManager, scope: PiSettingScope): PiSettingValue;
   write?(manager: PiSettingsManager, scope: PiSettingScope, value: PiSettingValue): void;
 }
@@ -140,6 +153,8 @@ export interface SettingWire {
   minimum?: number;
   unit?: string;
   needsRestart?: boolean;
+  /** For an `action`: the command id the button runs. */
+  command?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -459,6 +474,11 @@ export function coerceSettingValue(
   value: unknown,
 ): PiSettingValue | undefined {
   switch (descriptor.kind) {
+    // An action carries no value: the row is a button. Nothing the webview sends
+    // for it can be expressed as a setting, so every value is refused here.
+    case "action":
+      return undefined;
+
     case "boolean":
       return typeof value === "boolean" ? value : undefined;
 
@@ -1242,6 +1262,21 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     picodeKey: "transport",
     needsRestart: true,
   },
+  {
+    key: "picode.onboarding",
+    category: "picode",
+    label: "Repetir la configuración inicial",
+    description:
+      "Vuelve a abrir el asistente de configuración inicial: qué pi ejecuta PiCode y " +
+      "si Gentle AI está activo. No borra nada, rehace esas mismas elecciones sobre " +
+      "lo que ya está configurado.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value, therefore nothing to write; the renderer draws the button before
+    // this flag is consulted.
+    readOnly: true,
+    command: "picode.piChat.onboarding",
+  },
 
   /*
    * No descriptors for `estado` in this file, deliberately: it is pi's runtime
@@ -1318,6 +1353,7 @@ export function describeSettingWire(descriptor: PiSettingDescriptor): SettingWir
     ...(descriptor.minimum !== undefined ? { minimum: descriptor.minimum } : {}),
     ...(descriptor.unit ? { unit: descriptor.unit } : {}),
     ...(descriptor.needsRestart ? { needsRestart: true } : {}),
+    ...(descriptor.command ? { command: descriptor.command } : {}),
   };
 }
 
@@ -1468,6 +1504,14 @@ export class PiSettingsService {
     const descriptor = DESCRIPTORS_BY_KEY.get(key);
     if (!descriptor) {
       throw new Error(`Unknown setting "${key}".`);
+    }
+    // An action has nothing to write, and saying so is the honest answer: the
+    // generic read-only message would blame pi for a missing setter that was never
+    // part of the contract.
+    if (descriptor.kind === "action") {
+      throw new Error(
+        `Setting "${key}" is an action: it runs a command and has no value to write.`,
+      );
     }
     if (descriptor.picodeKey !== undefined) {
       if (!descriptor.scopes.includes(scope)) {

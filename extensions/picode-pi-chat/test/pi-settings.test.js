@@ -551,18 +551,45 @@ async function main() {
   );
 
   check(
-    "the picode category carries the runtime and the transport, both restart-marked",
+    "the picode category carries the runtime, the transport and the repeatable setup row",
     same(
       groups
         .filter((group) => group.category.id === "picode")
         .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
-      ["picode.runtime", "picode.transport"],
-    ) &&
-      groups
-        .filter((group) => group.category.id === "picode")
-        .flatMap((group) => group.settings)
-        .every((descriptor) => descriptor.needsRestart === true && descriptor.picodeKey !== undefined),
+      ["picode.runtime", "picode.transport", "picode.onboarding"],
+    ),
     groups.map((group) => group.category.id).join(", "),
+  );
+
+  check(
+    "the picode value rows are the restart-marked ones, both backed by the PiCode store",
+    ["picode.runtime", "picode.transport"].every((key) => {
+      const descriptor = setting(key);
+      return (
+        descriptor.category === "picode" &&
+        descriptor.needsRestart === true &&
+        descriptor.picodeKey !== undefined
+      );
+    }),
+    "",
+  );
+
+  check(
+    "the only action row is the repeatable initial setup, pointed at the wizard command",
+    same(
+      PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "action").map(
+        (descriptor) => descriptor.key,
+      ),
+      ["picode.onboarding"],
+    ) &&
+      setting("picode.onboarding").command === "picode.piChat.onboarding" &&
+      setting("picode.onboarding").read === undefined &&
+      setting("picode.onboarding").write === undefined,
+    JSON.stringify({
+      command: setting("picode.onboarding").command,
+      read: setting("picode.onboarding").read,
+      write: setting("picode.onboarding").write,
+    }),
   );
 
   /* ---------------------------------------------------------------- *
@@ -670,6 +697,33 @@ async function main() {
         readOnlyError.message.includes("retry.maxRetries") &&
         readOnlyError.message.includes("read-only"),
       readOnlyError && readOnlyError.message,
+    );
+
+    // An action row declares no read closure, and that absence must read as
+    // undefined rather than as a broken setting the owner has to fix.
+    const actionValues = await service.readAll("global");
+    check(
+      "an action row reads as undefined without a read error",
+      "picode.onboarding" in actionValues &&
+        actionValues["picode.onboarding"] === undefined &&
+        !service
+          .diagnostics()
+          .some(
+            (diagnostic) =>
+              diagnostic.type === "read_error" &&
+              diagnostic.message.includes("picode.onboarding"),
+          ),
+      JSON.stringify(service.diagnostics()),
+    );
+
+    const actionError = await rejectionOf(service.write("global", "picode.onboarding", true));
+    check(
+      "writing an action row is refused, naming the key and the reason",
+      actionError !== undefined &&
+        actionError.message.includes("picode.onboarding") &&
+        actionError.message.includes("action") &&
+        actionError.message.includes("no value"),
+      actionError && actionError.message,
     );
 
     const unknownError = await rejectionOf(service.write("global", "not.a.setting", 1));

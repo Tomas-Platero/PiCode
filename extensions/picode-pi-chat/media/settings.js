@@ -61,6 +61,11 @@
 
   function valueLabel(setting) {
     var value = state.values[setting.key];
+    // An action is a button, not a value: the host never sends one for it, so it
+    // shows nothing rather than the "sin definir" the other valueless rows use.
+    if (setting.kind === "action") {
+      return "";
+    }
     if (value === undefined || value === null) {
       return "sin definir";
     }
@@ -133,6 +138,24 @@
 
   function renderControl(setting) {
     var wrapper = createElement("div", "setting-control");
+
+    // An action row is a button, and this branch comes first so the read-only row
+    // below can never paint its "solo lectura" note over a row that has no value.
+    if (setting.kind === "action") {
+      // The row's own title already names what this is, so the button says what
+      // pressing it does instead of repeating the title next to itself. A second
+      // action row with a different verb will need the caption on the descriptor,
+      // the way `unit` is declared for a number.
+      var action = createElement("button", "setting-action-button", "Abrir el asistente");
+      action.type = "button";
+      action.addEventListener("click", function () {
+        // Only the row's key travels: the host owns the command the row runs.
+        send({ type: "action", key: setting.key });
+      });
+      wrapper.appendChild(action);
+      return wrapper;
+    }
+
     var value = state.values[setting.key];
 
     if (setting.readOnly) {

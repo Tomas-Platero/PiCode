@@ -347,7 +347,12 @@ body {
   width: auto;
 }
 
-.package-add-button {
+/*
+ * One button look for the whole tab. The packages add action and the settings action
+ * rows share it, so the second kind of button does not arrive with a second look.
+ */
+.package-add-button,
+.setting-action-button {
   padding: 4px 10px;
   border: 1px solid var(--vscode-button-border, transparent);
   border-radius: 3px;
