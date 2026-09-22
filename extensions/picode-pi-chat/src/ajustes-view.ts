@@ -1,5 +1,11 @@
 import * as vscode from "vscode";
-import { buildCategories, type PiCategoryId, type PiCategoryRow, type PiMenuSnapshot } from "./menu";
+import {
+  CATEGORY_ORDER,
+  buildCategories,
+  type PiCategoryId,
+  type PiCategoryRow,
+  type PiMenuSnapshot,
+} from "./menu";
 import { buildWebviewHtml } from "./webview-html";
 
 const AJUSTES_BODY = `    <div class="card">
@@ -141,12 +147,14 @@ export class AjustesView implements vscode.WebviewViewProvider {
   }
 }
 
-function isCategory(value: unknown): value is PiCategoryId {
-  return (
-    value === "modelo" ||
-    value === "extensiones" ||
-    value === "runtime" ||
-    value === "proveedores" ||
-    value === "sesion"
-  );
+/**
+ * Whether a value posted by the sidebar is one of the sidebar's own category ids.
+ *
+ * Derived from the declared category list rather than repeating the ids: the chain that
+ * used to stand here named every category except `gentle`, so the Gentle AI row was
+ * silently turned into "no category" and opened the settings tab instead of its panel.
+ * Exported so the suite can assert it accepts every category the sidebar declares.
+ */
+export function isCategory(value: unknown): value is PiCategoryId {
+  return typeof value === "string" && CATEGORY_ORDER.some((id) => id === value);
 }

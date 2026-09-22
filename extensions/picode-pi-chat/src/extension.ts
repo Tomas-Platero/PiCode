@@ -4,6 +4,8 @@ import { AjustesView } from "./ajustes-view";
 import { loadImageTools, type ImageTools } from "./attachments";
 import { ChatView, type ChatViewHost } from "./chat-view";
 import {
+  GENTLE_PANEL_TARGET,
+  resolveCategoryTarget,
   showCatalogSearch,
   showInstalledPackages,
   showPiMenu,
@@ -152,7 +154,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const ajustes = AjustesView.create(context.extensionUri, {
     snapshot: () => menuSnapshot(context.extensionUri),
-    openSettings: (category?: PiCategoryId) => settings.show(category),
+    // The sidebar's ids and the settings rail's ids are two different id spaces, so the
+    // translation happens here, at the one boundary that receives a sidebar id: a
+    // sidebar category is mapped to where it lives, and anything else passes through.
+    openSettings: async (category?: PiCategoryId) => {
+      const target = resolveCategoryTarget(category);
+      if (target === GENTLE_PANEL_TARGET) {
+        // `gentle` is not a settings category: it reveals the Gentle AI container.
+        await vscode.commands.executeCommand(target);
+        return;
+      }
+      await settings.show(target);
+    },
   });
   ajustesView = ajustes;
 

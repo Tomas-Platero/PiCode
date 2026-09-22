@@ -8,6 +8,7 @@ import {
 } from "./pi-cli";
 import type { ResolvedRuntime } from "./runtime";
 import type { PiSlashCommand } from "./protocol";
+import type { PiSettingsCategoryId } from "./pi-settings";
 import { formatBytes, type SessionSummary } from "./sessions";
 import { emptyUsage, describeUsage, summarizeUsage, type UsageTotals } from "./usage";
 import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
@@ -42,7 +43,14 @@ export const CATEGORY_LABELS: Record<PiCategoryId, string> = {
   sesion: "Sesión de pi",
 };
 
-const CATEGORY_ORDER: readonly PiCategoryId[] = [
+/**
+ * The sidebar's declared order, and therefore the complete set of ids it can post.
+ *
+ * Exported because it is the one source of truth for that set: a guard elsewhere has to
+ * derive from it instead of repeating the ids, which is exactly how `gentle` was once
+ * dropped from a hand-written chain and the Gentle AI row opened the settings tab.
+ */
+export const CATEGORY_ORDER: readonly PiCategoryId[] = [
   "modelo",
   "extensiones",
   "runtime",
@@ -50,6 +58,56 @@ const CATEGORY_ORDER: readonly PiCategoryId[] = [
   "gentle",
   "sesion",
 ];
+
+/**
+ * The Gentle AI panel, reached through the container the activity-bar entry opens.
+ *
+ * It is a marker rather than a rail id on purpose: `gentle` is not a settings
+ * category, so its target has to be distinguishable from one.
+ */
+export const GENTLE_PANEL_TARGET = "workbench.view.extension.picode-gentle";
+
+/**
+ * Where each sidebar category actually lives.
+ *
+ * The sidebar and the settings rail are two separate id spaces: this one is the
+ * sidebar's (`PiCategoryId`), and the rail's is `PI_SETTINGS_CATEGORIES`. The sidebar
+ * posts its own id, and a rail that does not know it silently opens on its first
+ * category — which is exactly the bug this table fixes. Keeping the translation as
+ * data here, next to the labels and the order it belongs with, is what lets a test
+ * assert that every target still exists in the rail and stop the two lists drifting
+ * apart again.
+ */
+export const CATEGORY_TARGETS: Record<
+  PiCategoryId,
+  PiSettingsCategoryId | typeof GENTLE_PANEL_TARGET
+> = {
+  modelo: "modelo",
+  extensiones: "paquetes",
+  runtime: "picode",
+  // `proveedores` has no section of its own yet: credentials get one later in the
+  // program, and until then the model section is the closest honest target, since
+  // that is where a provider is actually chosen.
+  proveedores: "modelo",
+  // `gentle` is not a settings category at all. Its value is not a rail id: it means
+  // "the Gentle AI container", and the sidebar boundary opens that panel instead.
+  gentle: GENTLE_PANEL_TARGET,
+  sesion: "sesion",
+};
+
+/**
+ * Translates a sidebar id, and leaves everything else exactly as it arrived.
+ *
+ * Only the sidebar's own ids are translated. A rail id, or no id at all, is passed
+ * through untouched, so the palette command and every other caller keep behaving as
+ * they always did.
+ */
+export function resolveCategoryTarget(category: string | undefined): string | undefined {
+  if (category === undefined || !Object.hasOwn(CATEGORY_TARGETS, category)) {
+    return category;
+  }
+  return CATEGORY_TARGETS[category as PiCategoryId];
+}
 
 export interface PiMenuSnapshot {
   model?: string;

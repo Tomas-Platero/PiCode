@@ -21,7 +21,17 @@ Module._resolveFilename = function resolve(request, ...rest) {
   return originalResolve.call(this, request, ...rest);
 };
 
-const { buildCategories, buildCategorySettings, describeAuthCheck } = require("../out/menu.js");
+const {
+  buildCategories,
+  buildCategorySettings,
+  describeAuthCheck,
+  CATEGORY_LABELS,
+  CATEGORY_TARGETS,
+  GENTLE_PANEL_TARGET,
+  resolveCategoryTarget,
+} = require("../out/menu.js");
+const { PI_SETTINGS_CATEGORIES } = require("../out/pi-settings.js");
+const { isCategory } = require("../out/ajustes-view.js");
 
 const results = [];
 const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
@@ -327,6 +337,76 @@ check(
   "with no providers the category says so instead of showing an empty list",
   buildCategorySettings("proveedores", full, [])[2].label.includes("Ningún proveedor"),
   "",
+);
+
+// --- category deep links ---------------------------------------------------
+
+// The sidebar posts its own category ids and the settings rail only knows its own, so
+// the two id spaces are joined by `CATEGORY_TARGETS`. These checks are the point of
+// that table: a target that stops existing in the rail would send a row to a category
+// the rail does not have, which is the bug the mapping fixes.
+const sidebarIds = categories.map((row) => row.id);
+const railIds = PI_SETTINGS_CATEGORIES.map((category) => category.id);
+const untargeted = sidebarIds.filter((id) => CATEGORY_TARGETS[id] === undefined);
+check(
+  "every sidebar category declares where it lives, and nothing else is declared",
+  untargeted.length === 0 && Object.keys(CATEGORY_TARGETS).length === sidebarIds.length,
+  JSON.stringify(untargeted),
+);
+const orphanTargets = Object.values(CATEGORY_TARGETS).filter(
+  (target) => target !== GENTLE_PANEL_TARGET && !railIds.includes(target),
+);
+check(
+  "every target is the Gentle AI panel or a category the settings rail really has",
+  orphanTargets.length === 0,
+  JSON.stringify(orphanTargets),
+);
+check(
+  "the deep-link table is the one the program locked",
+  CATEGORY_TARGETS.modelo === "modelo" &&
+    CATEGORY_TARGETS.extensiones === "paquetes" &&
+    CATEGORY_TARGETS.runtime === "picode" &&
+    CATEGORY_TARGETS.proveedores === "modelo" &&
+    CATEGORY_TARGETS.gentle === GENTLE_PANEL_TARGET &&
+    CATEGORY_TARGETS.sesion === "sesion",
+  JSON.stringify(CATEGORY_TARGETS),
+);
+check(
+  "a sidebar id is translated at the boundary",
+  resolveCategoryTarget("extensiones") === "paquetes" &&
+    resolveCategoryTarget("runtime") === "picode" &&
+    resolveCategoryTarget("gentle") === GENTLE_PANEL_TARGET,
+  ["extensiones", "runtime", "gentle"].map((id) => resolveCategoryTarget(id)).join(","),
+);
+check(
+  "a rail id, and no id at all, pass through untouched",
+  resolveCategoryTarget("apariencia") === "apariencia" &&
+    resolveCategoryTarget("estado") === "estado" &&
+    resolveCategoryTarget(undefined) === undefined,
+  ["apariencia", "estado", "undefined"]
+    .map((id) => String(resolveCategoryTarget(id === "undefined" ? undefined : id)))
+    .join(","),
+);
+
+// The guard in the sidebar's own message handler decides whether a posted id reaches that
+// boundary at all, and it is derived from the declared category list. A category added to
+// the sidebar without a guard entry therefore fails here, instead of silently opening the
+// first settings category the way `gentle` once did.
+const declaredCategories = Object.keys(CATEGORY_LABELS);
+const rejectedCategories = declaredCategories.filter((id) => !isCategory(id));
+check(
+  "the guard accepts every category the sidebar declares",
+  declaredCategories.length === sidebarIds.length && rejectedCategories.length === 0,
+  JSON.stringify({
+    declared: declaredCategories.length,
+    sidebar: sidebarIds.length,
+    rejected: rejectedCategories,
+  }),
+);
+check(
+  "the guard accepts nothing else, so a stray value still means no category",
+  !isCategory("apariencia") && !isCategory(undefined) && !isCategory(42) && !isCategory(""),
+  ["apariencia", undefined, 42, ""].map((value) => String(isCategory(value))).join(","),
 );
 
 // --- auth ------------------------------------------------------------------
