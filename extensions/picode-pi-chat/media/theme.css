@@ -1,0 +1,273 @@
+/*
+ * The theme gallery: the panel's two columns, and the mock editor the preview paints.
+ *
+ * Two colour systems live here and they are deliberately separate:
+ *
+ * - the gallery's own furniture uses the editor's variables (`--vscode-*`), so the panel
+ *   follows whatever theme is in force while the owner chooses the next one;
+ * - the preview mock uses only `--pv-*`, the variables `theme-gallery.js` sets from the
+ *   theme being previewed. Every one of them has a fallback, because a theme is free to
+ *   declare a handful of colours and inherit the rest — an unpainted mock would read as a
+ *   broken preview rather than as a modest theme.
+ */
+
+.theme-gallery {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr);
+  gap: 20px;
+  align-items: start;
+  padding: 12px 4px;
+}
+
+.theme-gallery.compact {
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr);
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .theme-gallery,
+  .theme-gallery.compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+.theme-search {
+  grid-column: 1 / -1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.theme-empty {
+  margin: 0;
+  opacity: 0.8;
+}
+
+.theme-row {
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  background: var(--vscode-editor-background);
+}
+
+.theme-row.is-installed {
+  border-left: 3px solid var(--vscode-focusBorder, #007fd4);
+}
+
+.theme-row-name {
+  font-weight: 600;
+}
+
+.theme-row-desc {
+  margin-top: 2px;
+  opacity: 0.75;
+  font-size: 0.92em;
+}
+
+.theme-row-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.theme-tag,
+.theme-chip {
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  font-size: 0.88em;
+  color: var(--vscode-foreground);
+  background: transparent;
+  font-family: inherit;
+}
+
+.theme-tag {
+  opacity: 0.8;
+}
+
+.theme-chip {
+  cursor: pointer;
+}
+
+.theme-chip:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.theme-chip.is-selected {
+  border-color: var(--vscode-focusBorder, #007fd4);
+  background: var(--vscode-list-activeSelectionBackground, rgba(0, 127, 212, 0.25));
+  color: var(--vscode-list-activeSelectionForeground, inherit);
+}
+
+.theme-chip.is-current::after {
+  content: " · en uso";
+  opacity: 0.75;
+}
+
+.theme-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 8px;
+}
+
+.theme-preview-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.theme-preview-title {
+  font-weight: 600;
+}
+
+.theme-preview-current {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 0.85em;
+  color: var(--vscode-badge-foreground, #ffffff);
+  background: var(--vscode-badge-background, #4d4d4d);
+}
+
+.theme-preview-note {
+  margin: 0;
+  min-height: 1.2em;
+  opacity: 0.85;
+}
+
+.theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.theme-button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--vscode-button-secondaryForeground, #ffffff);
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.theme-button.primary {
+  color: var(--vscode-button-foreground, #ffffff);
+  background: var(--vscode-button-background, #0e639c);
+}
+
+/* --- the mock editor ------------------------------------------------------ */
+
+.theme-mock {
+  border: 1px solid var(--pv-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  overflow: hidden;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.theme-mock-titlebar {
+  height: 22px;
+  background: var(--pv-title-bar-background, var(--pv-editor-background, #1e1e1e));
+  border-bottom: 1px solid var(--pv-border, rgba(128, 128, 128, 0.35));
+}
+
+.theme-mock-body {
+  display: grid;
+  grid-template-columns: 34px 118px 1fr;
+  min-height: 168px;
+}
+
+.theme-mock-activity {
+  background: var(--pv-activity-bar-background, var(--pv-side-bar-background, #333333));
+}
+
+.theme-mock-sidebar {
+  padding: 4px 6px;
+  background: var(--pv-side-bar-background, #252526);
+  color: var(--pv-side-bar-foreground, #cccccc);
+}
+
+.theme-mock-file {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theme-mock-main {
+  display: flex;
+  flex-direction: column;
+  background: var(--pv-editor-background, #1e1e1e);
+  color: var(--pv-editor-foreground, #d4d4d4);
+}
+
+.theme-mock-tabs {
+  display: flex;
+  background: var(--pv-tab-inactive-background, rgba(128, 128, 128, 0.12));
+}
+
+.theme-mock-tab {
+  padding: 3px 10px;
+  color: var(--pv-editor-foreground, #d4d4d4);
+  opacity: 0.7;
+}
+
+.theme-mock-tab.active {
+  opacity: 1;
+  color: var(--pv-tab-active-foreground, #ffffff);
+  background: var(--pv-tab-active-background, var(--pv-editor-background, #1e1e1e));
+}
+
+.theme-mock-code {
+  flex: 1;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.theme-mock-line {
+  min-height: 1.5em;
+}
+
+.theme-mock-line-selected {
+  background: var(--pv-selection, transparent);
+}
+
+.theme-mock-line-number {
+  display: inline-block;
+  width: 2.4em;
+  margin-right: 8px;
+  text-align: right;
+  color: var(--pv-line-number, var(--pv-editor-foreground, #858585));
+  opacity: 0.8;
+}
+
+.theme-mock-status {
+  height: 20px;
+  background: var(--pv-status-bar-background, #007acc);
+  color: var(--pv-status-bar-foreground, #ffffff);
+}
+
+.theme-preview-light .theme-mock-tab.active {
+  /* The active tab's own colour carries it on a light theme; the border keeps it readable
+     when a theme sets the tab and the surface to the same colour. */
+  border-bottom: 1px solid var(--pv-border, rgba(128, 128, 128, 0.35));
+}
