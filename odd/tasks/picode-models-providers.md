@@ -81,7 +81,7 @@ recorded here as evidence.
   Los dos nombres del perfil tienen un solo hogar (`profileNameFor`), porque ahora los
   usan tres superficies. Nada se escribe antes de esa confirmación: la credencial, que
   es la escritura, va después.
-- [ ] **T2 — `models.json` de una instancia: leer, fusionar, escribir.**
+- [x] **T2 — `models.json` de una instancia: leer, fusionar, escribir.**
   `src/models-config.ts`, sin `vscode`: parseo tolerante, fusión que conserva lo que no
   es suyo, alta y baja de un proveedor, resumen para la fila del panel, y escritura por
   reemplazo atómico que rechaza un fichero ilegible en vez de pisarlo.
@@ -112,3 +112,10 @@ recorded here as evidence.
   the login suite rewritten around the new rule — 25 and 53 checks pass, plus
   `instance-wiring` (7) and `onboarding` (29) untouched and green. The reversal is
   recorded in `AGENTS.md` and in `picode-pi-instances.md`.
+- **T2**: `src/models-config.ts` (509 lines, pure half plus `node:fs`) and
+  `test/models-config.test.js` — 57 checks, including the two source guards (no editor
+  import, never names `auth.json`) and real file I/O in a temp directory (missing file,
+  a directory as the target, write → read → parse, no leftover temp, a failed replace
+  that still removes its temp, and the `0o600` rule only for a **literal** key and only
+  off Windows). `pi-settings` still reports the one expected failure — the palette of
+  action rows it pins grows in T3.
