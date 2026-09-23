@@ -1515,6 +1515,23 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     readOnly: true,
     command: "picode.piChat.onboarding",
   },
+  {
+    key: "picode.importProfile",
+    category: "picode",
+    label: "Importar el perfil de tu pi",
+    description:
+      "Trae al perfil propio de PiCode una copia de lo que tiene el pi que ya usas " +
+      "en esta máquina. El original no se toca: solo se lee.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value, therefore nothing to write. The row is one more entry point to the
+    // command `instance-import-command.ts` already registers, and not a second
+    // implementation of it: the whole flow stays in that module, and the row only
+    // names it so the owner can find it without the palette.
+    readOnly: true,
+    command: "picode.piChat.importProfile",
+    actionLabel: "Importar ahora",
+  },
 
   /*
    * No descriptors for `estado` in this file, deliberately: it is pi's runtime

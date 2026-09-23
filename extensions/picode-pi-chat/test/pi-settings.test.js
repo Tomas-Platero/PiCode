@@ -28,6 +28,25 @@ const {
   PiSettingsService,
 } = require(path.join(__dirname, "..", "out", "pi-settings.js"));
 
+/*
+ * The import row's command id is not restated here: it is taken from the module that
+ * owns it, so a rename on either side fails this check instead of quietly leaving the
+ * row pointed at a command that no longer exists. That module imports `vscode`, so the
+ * same resolver hook `instance-import-command.test.js` uses is installed before it is
+ * loaded; nothing in this suite calls the editor.
+ */
+const Module = require("node:module");
+const originalResolveFilename = Module._resolveFilename;
+Module._resolveFilename = function resolve(request, ...rest) {
+  if (request === "vscode") {
+    return path.join(__dirname, "vscode-stub.js");
+  }
+  return originalResolveFilename.call(this, request, ...rest);
+};
+const { IMPORT_PROFILE_COMMAND } = require(
+  path.join(__dirname, "..", "out", "instance-import-command.js"),
+);
+
 const results = [];
 const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
 
@@ -552,12 +571,18 @@ async function main() {
   );
 
   check(
-    "the picode category carries the runtime, the transport, the version row and the repeatable setup row",
+    "the picode category carries the runtime, the transport, the version row, the repeatable setup row and the import row",
     same(
       groups
         .filter((group) => group.category.id === "picode")
         .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
-      ["picode.runtime", "picode.transport", "picode.piVersion", "picode.onboarding"],
+      [
+        "picode.runtime",
+        "picode.transport",
+        "picode.piVersion",
+        "picode.onboarding",
+        "picode.importProfile",
+      ],
     ),
     groups.map((group) => group.category.id).join(", "),
   );
@@ -576,24 +601,63 @@ async function main() {
   );
 
   check(
-    "the two action rows are the repeatable initial setup and the pi update, each with its own command",
+    "the three action rows are the repeatable initial setup, the pi update and the profile import, each with its own command",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "action").map(
         (descriptor) => descriptor.key,
       ),
-      ["picode.piVersion", "picode.onboarding"],
+      ["picode.piVersion", "picode.onboarding", "picode.importProfile"],
     ) &&
       setting("picode.onboarding").command === "picode.piChat.onboarding" &&
       setting("picode.onboarding").read === undefined &&
       setting("picode.onboarding").write === undefined &&
       setting("picode.piVersion").command === "picode.piChat.updatePi" &&
-      setting("picode.piVersion").write === undefined,
+      setting("picode.piVersion").write === undefined &&
+      // The id is the one `instance-import-command.ts` exports, not a copy of it.
+      setting("picode.importProfile").command === IMPORT_PROFILE_COMMAND &&
+      setting("picode.importProfile").read === undefined &&
+      setting("picode.importProfile").write === undefined,
     JSON.stringify({
       commands: PI_SETTING_DESCRIPTORS.filter(
         (descriptor) => descriptor.kind === "action",
       ).map((descriptor) => `${descriptor.key}=${descriptor.command}`),
     }),
   );
+
+  {
+    const importRow = setting("picode.importProfile");
+    check(
+      "the import row is an action in the PiCode category, drawing its button from its own caption",
+      importRow.category === "picode" &&
+        importRow.kind === "action" &&
+        importRow.scopes.includes("global") &&
+        // The button is drawn from its own caption: the wizard default ("Abrir el
+        // asistente") would name the wrong action on this row.
+        importRow.actionLabel !== undefined &&
+        importRow.actionLabel.trim() !== "",
+      JSON.stringify({
+        category: importRow.category,
+        kind: importRow.kind,
+        actionLabel: describeSettingWire(importRow).actionLabel,
+      }),
+    );
+    // The label and the description are read from the product, never restated here.
+    // Neither may name a path or a bare count: the owner decides from the copy landing
+    // in PiCode's own profile and from the original staying untouched, not from where
+    // the files live.
+    const ownerText = [importRow.label, importRow.description, importRow.actionLabel];
+    check(
+      "the import row text carries no path and no raw count",
+      ownerText.every(
+        (text) =>
+          typeof text === "string" &&
+          text.trim() !== "" &&
+          !/\d/.test(text) &&
+          !/[/\\~]/.test(text),
+      ),
+      JSON.stringify({ label: importRow.label, description: importRow.description }),
+    );
+  }
 
   check(
     "the pi update row draws its button from its own caption, and the wizard row keeps the default",
