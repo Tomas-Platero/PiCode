@@ -76,6 +76,22 @@ En la práctica:
   y eso no es aislamiento, es una avería. Primero se importa —o el dueño decide
   conscientemente empezar de cero—, y solo después se cambia la carpeta.
 
+> "necesito que en la config de modelos también podamos conectar proveedores, y
+> modelos y tal para cualqueir pi ya sea para el interno o el externo."
+
+En la práctica:
+
+- La configuración de modelos conecta proveedores y declara endpoints y modelos propios
+  (`models.json`) para **la instancia elegida**: el pi propio de PiCode, o el del PATH.
+- Con el **pi del PATH** elegido, escribir en su perfil **es configurar ese pi**, y es lo
+  que el dueño ha pedido. Ese perfil también lo usan los demás pi de la máquina, así que la
+  escritura se anuncia antes: un diálogo dice en qué perfil se va a guardar.
+- Con el **pi propio** elegido se escribe el perfil propio de PiCode, aunque todavía esté
+  vacío: un inicio de sesión existe precisamente para llenarlo, y por eso esa escritura no
+  sigue la guarda que entretanto responde el perfil de la máquina.
+- Las claves de un endpoint se guardan como **variable de entorno** —lo recomendado— o como
+  valor; nunca se enseñan de vuelta en pantalla.
+
 ## El programa es gratis; lo que se vende es la nube
 
 > "el servicio que voy a vender no es el programa de picode, este será gratuito 100%,
@@ -135,3 +151,5 @@ En la práctica:
 ## Registro
 
 - 2026-09-23 · creado, con las frases de esta sesión de trabajo.
+- 2026-09-23 · añadido el punto de conectar proveedores y modelos propios para la
+  instancia elegida, con la frase de esta sesión.

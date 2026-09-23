@@ -136,9 +136,21 @@ not as the intended way in.
 
 ## Out of scope
 
-Syncing anything to the cloud. Auto-updating the external instance. Writing to the external
-profile for any reason. Migrating sessions: a session belongs to the profile that made it,
-and moving them is a separate, deliberate decision.
+Syncing anything to the cloud. Auto-updating the external instance. Migrating sessions: a
+session belongs to the profile that made it, and moving them is a separate, deliberate
+decision.
+
+**Escritura en el perfil del dueño: revertido a propósito (2026-09-23).** Esta feature dejó
+el perfil externo en solo lectura «forever», y esa regla ya no está en pie: el dueño pidió
+que la configuración de modelos —proveedores y modelos propios— sirva para «cualqueir pi ya
+sea para el interno o el externo». Con el pi del PATH elegido, escribir en su perfil *es*
+configurar ese pi, y es lo que él ha pedido. Lo que cambia, y queda como regla nueva: el
+destino de una escritura es el perfil de la instancia elegida (`instanceProfileDir`), sin la
+guarda anti-mudez porque un login existe para llenar un perfil vacío; y cuando ese destino
+es el perfil del dueño, la superficie pide **una** confirmación que lo nombra antes de
+escribir. Detalle y tareas: `odd/tasks/picode-models-providers.md`. Todo lo demás de este
+documento sigue igual: nada reescribe el perfil del dueño por su cuenta, ni lo sincroniza, ni
+lo migra.
 
 ## Tasks
 

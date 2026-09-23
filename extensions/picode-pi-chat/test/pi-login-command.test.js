@@ -8,24 +8,30 @@
  * provider list rows, the key-versus-subscription decision, and the wording of the endings —
  * plus the catalogue's source, exercised over fake runtimes so no profile is built: with a
  * live session the list comes from it and the target profile is not built at all, and with
- * no session the fallback builds it exactly once. Three source-level guards close the rest:
+ * no session the fallback builds it exactly once. Four source-level guards close the rest:
  *
- * - `pi-login-command.ts` resolves its target through `instanceAgentDir(` and never
- *   through the guarded readers' `selectedAgentDir`, because on an empty internal profile
- *   that answer names the machine's profile, and a first login exists to fill the other
- *   one. The module deliberately does not name the guarded resolver at all, so the raw
- *   scan cannot be fooled by a comment.
+ * - `pi-login-command.ts` resolves its target through `instanceProfileDir(`, the unguarded
+ *   writer's answer, and never through the guarded readers' `selectedAgentDir`: on an empty
+ *   internal profile that answer names the machine's profile, and a first login exists to
+ *   fill the other one. The module deliberately does not name the guarded resolver at all,
+ *   so the raw scan cannot be fooled by a comment.
+ * - the same module still asks `instanceAgentDir(` — the reader that is `undefined` when the
+ *   selected instance is the owner's own pi — because who owns the target, and not where it
+ *   is, is what the confirmation and the success wording depend on. That confirmation is a
+ *   modal, gated on the owner's instance, and it sits after the provider was chosen and
+ *   before anything is written or started.
  * - `pi-sdk-client.ts` hands the running session's runtime out read-only, and the command
  *   reads the catalogue from it while the write keeps its own runtime over the target, so
- *   no richer list can send a credential into the profile the editor is running.
+ *   no older list can send a credential into the profile the row no longer points at.
  * - `extension.ts` registers the command id, wires the session's runtime to it, and
  *   `package.json` declares it with a Spanish title, so the palette and the registration
  *   cannot drift apart.
  *
  * The owner-facing sentences are taken from the product's own exported tables and
- * builders (`LOGIN_TEXTS`, `PROVIDER_KINDS`, `PROVIDER_MARKERS`,
- * `loginSuccessText`, `loginSyncFailureText`) instead of being restated here, so there is
- * one copy of every wording. They are printed verbatim at the end.
+ * builders (`LOGIN_TEXTS`, `PROVIDER_KINDS`, `PROVIDER_MARKERS`, `loginSuccessText`,
+ * `loginSyncFailureText`, and `profileNameFor` from `instance.ts` — the two profile names
+ * have one home, so they are read from it instead of being restated here) instead of being
+ * copied here, so there is one copy of every wording. They are printed verbatim at the end.
  *
  * The `vscode` module is stubbed through a resolver hook, as the other suites do, so the
  * compiled module loads without an editor.
@@ -64,11 +70,16 @@ function keyFacts(overrides = {}) {
 
 async function main() {
   const commandPath = path.join(EXTENSION_ROOT, "out", "pi-login-command.js");
-  if (!fs.existsSync(commandPath)) {
-    console.error(`Missing compiled output. Run "npm run compile" first.`);
-    process.exit(2);
+  const instancePath = path.join(EXTENSION_ROOT, "out", "instance.js");
+  for (const compiled of [commandPath, instancePath]) {
+    if (!fs.existsSync(compiled)) {
+      console.error(`Missing ${compiled}. Run "npm run compile" first.`);
+      process.exit(2);
+    }
   }
   const api = await import(pathToFileURL(commandPath).href);
+  // The two profile names are read from the module that owns them, not restated here.
+  const instance = await import(pathToFileURL(instancePath).href);
 
   const results = [];
   const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
@@ -299,16 +310,33 @@ async function main() {
 
   // --- the four endings ------------------------------------------------------
 
-  const profile = path.join("C:", "PiCode", "data", "pi-agent");
-  const success = api.loginSuccessText("Zhipu", profile);
+  const successOwn = api.loginSuccessText("Zhipu", instance.profileNameFor(true));
+  const successOwner = api.loginSuccessText("Zhipu", instance.profileNameFor(false));
   const syncFailure = api.loginSyncFailureText("Zhipu", "login");
-  const unknownProvider = api.unknownProviderText("Zhipu");
+  const unknownProvider = api.unknownProviderText("Zhipu", true);
+  const unknownProviderOwner = api.unknownProviderText("Zhipu", false);
 
   check(
-    "the refusal says PiCode owns no profile and points at the row that changes it",
-    api.LOGIN_TEXTS.ownerInstance.includes("perfil propio") &&
-      api.LOGIN_TEXTS.ownerInstance.includes("Qué pi se ejecuta"),
-    api.LOGIN_TEXTS.ownerInstance,
+    "the confirmation says where the credential goes and whose profile that is",
+    api.LOGIN_TEXTS.ownerProfileConfirm.includes("el perfil de tu pi") &&
+      api.LOGIN_TEXTS.ownerProfileConfirm.includes("el mismo que usa tu pi instalado en ") &&
+      api.LOGIN_TEXTS.ownerProfileConfirm.includes("El pi que ejecuta el editor es el tuyo") &&
+      !/no se puede|no tiene un perfil/i.test(api.LOGIN_TEXTS.ownerProfileConfirm),
+    api.LOGIN_TEXTS.ownerProfileConfirm,
+  );
+  check(
+    "the confirmation is one button and one honest refusal, and neither reads as a failure",
+    api.LOGIN_TEXTS.ownerProfileContinue.includes("perfil de mi pi") &&
+      api.LOGIN_TEXTS.ownerProfileDeclined.includes("no se escribió nada") &&
+      api.LOGIN_TEXTS.ownerProfileDeclined.includes("No se inició sesión") &&
+      !/error|fall/i.test(api.LOGIN_TEXTS.ownerProfileDeclined),
+    `${api.LOGIN_TEXTS.ownerProfileContinue} / ${api.LOGIN_TEXTS.ownerProfileDeclined}`,
+  );
+  check(
+    "the old refusal to log in with the owner's pi selected is gone from the table",
+    api.LOGIN_TEXTS.ownerInstance === undefined &&
+      !Object.values(api.LOGIN_TEXTS).some((text) => /Cambia la fila/.test(text)),
+    JSON.stringify(api.LOGIN_TEXTS.ownerInstance),
   );
   check(
     "the no-SDK ending says the update is the way out",
@@ -323,12 +351,32 @@ async function main() {
     api.LOGIN_TEXTS.cancelled,
   );
   check(
-    "the success ending names the provider, the profile and the reload",
-    success.includes("Zhipu") &&
-      success.includes(profile) &&
-      success.includes("Recarga la ventana") &&
-      success.includes("perfil propio de PiCode"),
-    success,
+    "the success ending names the provider, the profile in words, and the reload",
+    successOwn.includes("Zhipu") &&
+      successOwn.includes("el perfil propio de PiCode") &&
+      successOwn.includes("Recarga la ventana"),
+    successOwn,
+  );
+  check(
+    "the success ending prints no path, whichever profile it wrote",
+    !successOwn.includes("/") &&
+      !successOwn.includes("\\") &&
+      !successOwner.includes("/") &&
+      !successOwner.includes("\\"),
+    `${successOwn} / ${successOwner}`,
+  );
+  check(
+    "with the owner's pi selected the success ending names his profile instead",
+    successOwner.includes("el perfil de tu pi") &&
+      !successOwner.includes("perfil propio de PiCode") &&
+      successOwner.includes("Recarga la ventana"),
+    successOwner,
+  );
+  check(
+    "the two profile names are the two the writer may have written into",
+    instance.profileNameFor(true) === "el perfil propio de PiCode" &&
+      instance.profileNameFor(false) === "el perfil de tu pi",
+    `${instance.profileNameFor(true)} / ${instance.profileNameFor(false)}`,
   );
   check(
     "the synchronisation ending names the provider and the operation, in the owner's words",
@@ -340,21 +388,40 @@ async function main() {
     syncFailure,
   );
   check(
-    "the four endings are four different sentences",
+    "the endings are as many different sentences as there are endings",
     new Set([
-      api.LOGIN_TEXTS.ownerInstance,
+      api.LOGIN_TEXTS.ownerProfileConfirm,
+      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
+      api.LOGIN_TEXTS.noCatalogue,
+      api.LOGIN_TEXTS.noProviders,
       api.LOGIN_TEXTS.cancelled,
-      success,
+      successOwn,
+      successOwner,
       syncFailure,
-    ]).size === 5,
+    ]).size === 9,
     JSON.stringify([
-      api.LOGIN_TEXTS.ownerInstance,
+      api.LOGIN_TEXTS.ownerProfileConfirm,
+      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
+      api.LOGIN_TEXTS.noCatalogue,
+      api.LOGIN_TEXTS.noProviders,
       api.LOGIN_TEXTS.cancelled,
-      success,
+      successOwn,
+      successOwner,
       syncFailure,
     ]),
+  );
+  check(
+    "the confirmation's button is a label, not one of the sentences",
+    ![
+      api.LOGIN_TEXTS.ownerProfileConfirm,
+      api.LOGIN_TEXTS.ownerProfileDeclined,
+      successOwn,
+      successOwner,
+    ].includes(api.LOGIN_TEXTS.ownerProfileContinue) &&
+      api.LOGIN_TEXTS.ownerProfileContinue.length < api.LOGIN_TEXTS.ownerProfileConfirm.length,
+    api.LOGIN_TEXTS.ownerProfileContinue,
   );
   check(
     "an unknown operation is passed through instead of guessed at",
@@ -365,9 +432,16 @@ async function main() {
     "the unknown-provider ending explains the missing package and points at the import in the row's words",
     unknownProvider.includes("Zhipu") &&
       unknownProvider.includes("paquete") &&
-      unknownProvider.includes("perfil propio de PiCode") &&
       unknownProvider.includes("Importar el perfil de tu pi"),
     unknownProvider,
+  );
+  check(
+    "for the owner's own profile the same ending names his profile and the door that works there",
+    unknownProviderOwner.includes("el perfil de tu pi") &&
+      unknownProviderOwner.includes("paquete") &&
+      unknownProviderOwner.includes("pestaña de extensiones") &&
+      !unknownProviderOwner.includes("Importar el perfil de tu pi"),
+    unknownProviderOwner,
   );
   check(
     "the unknown-provider ending is not the generic failure ending",
@@ -377,13 +451,15 @@ async function main() {
   check(
     "the unknown-provider ending is its own sentence, not one of the others",
     new Set([
-      api.LOGIN_TEXTS.ownerInstance,
+      api.LOGIN_TEXTS.ownerProfileConfirm,
+      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
       api.LOGIN_TEXTS.cancelled,
-      success,
+      successOwn,
+      successOwner,
       syncFailure,
       unknownProvider,
-    ]).size === 6,
+    ]).size === 8,
     JSON.stringify([unknownProvider]),
   );
 
@@ -394,14 +470,62 @@ async function main() {
     "utf8",
   );
   check(
-    "the command resolves its target through instanceAgentDir(",
-    /\binstanceAgentDir\s*\(/.test(commandSource),
-    "no instanceAgentDir( call found",
+    "the command resolves its target through the writer's unguarded answer",
+    /\binstanceProfileDir\s*\(/.test(commandSource),
+    "no instanceProfileDir( call found",
   );
   check(
     "the command never names the guarded readers' answer",
     !commandSource.includes("selectedAgentDir"),
     "the guarded reader resolver is named in the command source",
+  );
+  check(
+    "the command still asks instanceAgentDir( for who owns the target",
+    /\binstanceAgentDir\s*\(/.test(commandSource) &&
+      /ownsProfile\s*=\s*instanceAgentDir\([^;]*!==\s*undefined/.test(commandSource),
+    "the ownership flag is not derived from instanceAgentDir(",
+  );
+  check(
+    "the target is the profile of the selected instance, and no longer a refusal",
+    !/LOGIN_TEXTS\.ownerInstance/.test(commandSource) &&
+      !commandSource.includes("target === undefined") &&
+      /const target = instanceProfileDir\(context\.extensionUri, runtimeMode\)/.test(
+        commandSource,
+      ),
+    "the target is not resolved through instanceProfileDir, or the old refusal survived",
+  );
+  check(
+    "the two instance decisions are imported from the module that owns them",
+    /import\s*\{[^}]*\binstanceAgentDir\b[^}]*\binstanceProfileDir\b[^}]*\bprofileNameFor\b[^}]*\}\s*from\s*"\.\/instance"/.test(
+      commandSource,
+    ),
+    "the login command does not take its resolvers and the profile names from instance.ts",
+  );
+  check(
+    "the modal confirmation is gated on the owner's instance",
+    /if \(!ownsProfile\) \{\s*const proceed = await vscode\.window\.showWarningMessage\(/.test(
+      commandSource,
+    ) &&
+      commandSource.includes("LOGIN_TEXTS.ownerProfileConfirm") &&
+      commandSource.includes("LOGIN_TEXTS.ownerProfileContinue") &&
+      commandSource.includes("LOGIN_TEXTS.ownerProfileDeclined") &&
+      /\{ modal: true \}/.test(commandSource),
+    "the owner's profile is written without a modal confirmation gated on the owner's instance",
+  );
+  check(
+    "the confirmation sits after the provider was chosen and before anything is written",
+    commandSource.indexOf("chooseProvider(entries)") <
+      commandSource.indexOf("if (!ownsProfile)") &&
+      commandSource.indexOf("if (!ownsProfile)") <
+        commandSource.indexOf("writer.login(chosen.id") &&
+      commandSource.indexOf("if (!ownsProfile)") < commandSource.indexOf("const writer ="),
+    "the confirmation is not between the provider choice and the write",
+  );
+  check(
+    "the success ending names the profile in words, never the path it wrote",
+    /loginSuccessText\(chosen\.label, profileNameFor\(ownsProfile\)\)/.test(commandSource) &&
+      !/loginSuccessText\(chosen\.label, target\)/.test(commandSource),
+    "the success ending still prints the target path",
   );
   check(
     "the command reads the running session's runtime, and falls back to the target's",
@@ -482,12 +606,16 @@ async function main() {
     console.log(`${entry.label} — ${entry.description} (${entry.detail})`);
   }
   console.log("--- the endings, verbatim ---");
-  console.log(`[refusal]  ${api.LOGIN_TEXTS.ownerInstance}`);
+  console.log(`[confirm]  ${api.LOGIN_TEXTS.ownerProfileConfirm}`);
+  console.log(`[button]   ${api.LOGIN_TEXTS.ownerProfileContinue}`);
+  console.log(`[declined] ${api.LOGIN_TEXTS.ownerProfileDeclined}`);
   console.log(`[no sdk]   ${api.LOGIN_TEXTS.noSdk}`);
   console.log(`[cancel]   ${api.LOGIN_TEXTS.cancelled}`);
-  console.log(`[success]  ${success}`);
+  console.log(`[success]  ${successOwn}`);
+  console.log(`[success]  ${successOwner}`);
   console.log(`[sync]     ${syncFailure}`);
   console.log(`[unknown]  ${unknownProvider}`);
+  console.log(`[unknown-owner]  ${unknownProviderOwner}`);
   console.log("---");
 
   // --- report ------------------------------------------------------------------

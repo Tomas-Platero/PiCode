@@ -139,6 +139,46 @@ async function main() {
     String(instance.instanceAgentDir(extensionUri, "custom")),
   );
 
+  // --- the writer's answer: always a directory, and never the guard ----------
+
+  /*
+   * The provider login and the custom-endpoint surface write through this, so the two
+   * facts that matter are pinned here: it names PiCode's own profile even while that
+   * profile does not exist (the guard would have answered the machine's one, which is
+   * exactly the profile a first login must not fill), and with the owner's pi selected
+   * it names the profile that pi itself resolves.
+   */
+  check(
+    "the managed instance's writable profile is PiCode's own, guard or no guard",
+    instance.instanceProfileDir(extensionUri, "managed") === expectedProfile &&
+      !fs.existsSync(expectedProfile),
+    String(instance.instanceProfileDir(extensionUri, "managed")),
+  );
+
+  const agentDirBefore = process.env.PI_CODING_AGENT_DIR;
+  const ownerProfile = path.join(os.tmpdir(), "picode-owner-profile-fixture");
+  process.env.PI_CODING_AGENT_DIR = ownerProfile;
+  check(
+    "with the owner's pi selected, the writable profile is the one that pi reads",
+    instance.instanceProfileDir(extensionUri, "path") === ownerProfile &&
+      instance.instanceProfileDir(extensionUri, "custom") === ownerProfile,
+    `${instance.instanceProfileDir(extensionUri, "path")} / ` +
+      `${instance.instanceProfileDir(extensionUri, "custom")}`,
+  );
+
+  delete process.env.PI_CODING_AGENT_DIR;
+  check(
+    "without the variable, the owner's profile is pi's own default directory",
+    instance.instanceProfileDir(extensionUri, "path") ===
+      path.join(os.homedir(), ".pi", "agent"),
+    String(instance.instanceProfileDir(extensionUri, "path")),
+  );
+  if (agentDirBefore === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = agentDirBefore;
+  }
+
   // --- the guard: the internal profile answers only when it can carry an instance --
 
   /*

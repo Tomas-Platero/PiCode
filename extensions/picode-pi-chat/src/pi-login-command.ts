@@ -8,23 +8,36 @@
  * what kind of credential each one wants in the owner's terms rather than pi's, runs the
  * login, and reports one of four honest endings.
  *
- * The profile is the whole point. PiCode owns exactly one profile —
- * `<distribution>/data/pi-agent`, `instanceAgentDir(uri, "managed")` — and it is
- * deliberately unguarded here so it names that directory even while it is still empty,
- * which is precisely the state a first login exists to fill. The *guarded readers'*
- * answer is never consulted: on an empty internal profile it names the machine's own
- * profile, and writing that would be PiCode writing a profile it does not own.
+ * The profile is the whole point, and the rule about it is one line: the credential goes
+ * into the profile of the instance the owner selected, and nowhere else. That is
+ * `instanceProfileDir(uri, mode)`, the *unguarded writer's* answer, which names PiCode's
+ * own profile — `<distribution>/data/pi-agent` — even while it is still empty, and names
+ * the profile the owner's installed pi reads when his pi is the selected instance. The
+ * *guarded readers'* answer is never consulted: on an empty internal profile it names the
+ * machine's own one, which is exactly the state a first login exists to fill. Writing one
+ * total mapping is also why this command has no refusal left: the profile it must fill is
+ * the guarded one, so refusing there would refuse the only case that needs a login.
+ *
+ * What the mapping does not settle is who the target belongs to, and that is a second
+ * question with its own answer: `instanceAgentDir(uri, mode)` is `undefined` exactly when
+ * the selected instance is the owner's own pi. That profile is not PiCode's — it is the
+ * one his installed pi reads and the one every other pi tool on the machine writes — so
+ * the flow asks once, with a modal, after the provider was chosen and before anything is
+ * written or started, and writes only once he says yes. Whichever of the two it wrote, it
+ * names it in words (`profileNameFor`) rather than printing a path the owner has to
+ * decode.
  *
  * The catalogue and the write come from different places, and on purpose. The list is
  * read from the runtime of the session already running when there is one — that runtime
- * was built over the profile in force, so it knows the providers the owner's installed
- * packages registered — and from the runtime the SDK builds for the target profile when
- * there is no session yet. The write always keeps its own runtime over the target
- * profile, so no richer list can send a credential into the profile the editor happens
- * to be running. Building either runtime with `createAgentSessionServices` (and not the
- * bare `ModelRuntime.create`) is what lets a provider registered by an extension
- * installed in that profile appear in the list: it is the same step a session takes
- * before it is created, without creating a session.
+ * was built over the profile in force at spawn time, so it knows the providers the
+ * owner's installed packages registered — and from the runtime the SDK builds for the
+ * target profile when there is no session yet. The write always keeps its own runtime
+ * over the target profile, so the credential lands in the profile the selection names
+ * *now*: the live runtime can be older than the row, and a credential written through it
+ * would land in a profile the row no longer points at. Building either runtime with
+ * `createAgentSessionServices` (and not the bare `ModelRuntime.create`) is what lets a
+ * provider registered by an extension installed in that profile appear in the list: it is
+ * the same step a session takes before it is created, without creating a session.
  *
  * The split is the same one the import command uses: everything that decides what the
  * owner reads is pure and testable without an editor (`loginType`, `providerEntry`,
@@ -34,7 +47,7 @@
 
 import { pathToFileURL } from "node:url";
 import * as vscode from "vscode";
-import { instanceAgentDir } from "./instance";
+import { instanceAgentDir, instanceProfileDir, profileNameFor } from "./instance";
 import { RELOAD_WINDOW_LABEL } from "./instance-import-command";
 import {
   AuthPromptCancelled,
@@ -247,13 +260,18 @@ export function providerEntries(runtime: LoginRuntime): ProviderEntry[] {
  * The sentences that need no provider to be written, one per refusal or ending.
  *
  * Each is the whole message of a refusal, so they are kept together for a test to assert
- * rather than restate. `ownerInstance` is the refusal that matters most: with the owner's
- * own pi selected there is no profile PiCode owns, so there is nowhere to log in to.
+ * rather than restate. The three `ownerProfile*` entries carry the one confirmation this
+ * command still owes: with the owner's own pi selected the target is the profile his
+ * installed pi reads, which also belongs to every other pi tool on the machine, so the
+ * answer he gives decides whether the credential may go there.
  */
 export const LOGIN_TEXTS = {
-  ownerInstance:
-    "El pi que ejecuta el editor es el tuyo, y PiCode no tiene un perfil propio donde guardar " +
-    "credenciales. Cambia la fila «Qué pi se ejecuta» al pi propio de PiCode y vuelve a intentarlo.",
+  ownerProfileConfirm:
+    "La credencial se va a guardar en el perfil de tu pi, el mismo que usa tu pi instalado en " +
+    "el equipo. El pi que ejecuta el editor es el tuyo, así que ahí es donde este inicio de " +
+    "sesión tiene efecto.",
+  ownerProfileContinue: "Guardar en el perfil de mi pi",
+  ownerProfileDeclined: "No se inició sesión: no se escribió nada en el perfil de tu pi.",
   noSdk: "Este pi no sabe iniciar sesión desde el SDK. Actualiza el pi integrado.",
   noCatalogue:
     "No se pudieron leer los proveedores de este pi, así que no se puede iniciar sesión desde aquí.",
@@ -285,13 +303,16 @@ export function operationText(operation: string): string {
  * The success ending: names the provider, names the profile that now holds the
  * credential, and says the reload is what makes the running agent use it.
  *
- * The profile is named because it is the fact that makes the login meaningful — the
- * credential is in PiCode's own profile and nowhere else — and because the running agent
- * was built at startup from a possibly different directory.
+ * The profile is named in words, never by path, because which of the two profiles holds
+ * the credential is the fact that makes the login meaningful — and because the running
+ * agent was built at startup from a possibly different directory, which is what the
+ * reload is for.
+ *
+ * `profileName` comes from `profileNameFor`, so the two possible names have one home.
  */
-export function loginSuccessText(provider: string, profile: string): string {
+export function loginSuccessText(provider: string, profileName: string): string {
   return (
-    `Credenciales de ${provider} guardadas en el perfil propio de PiCode (${profile}). ` +
+    `Credenciales de ${provider} guardadas en ${profileName}. ` +
     "Recarga la ventana para que el agente que está corriendo las use."
   );
 }
@@ -321,22 +342,31 @@ export function loginFailureText(provider: string, message: string): string {
  * The ending for a provider the target runtime does not know, which is not a failure to
  * retry but a missing package to bring in.
  *
- * The list is read from the profile in force — that is where the owner's installed
- * packages register their providers — but the credential lands in PiCode's own profile.
- * The two can therefore disagree on exactly one provider: the owner picks his own, and
- * PiCode's own profile has not installed the package that declares it, so pi's
- * `Models.login` throws `Unknown provider: <id>`.
+ * The two runtimes can disagree on exactly one provider. The list comes from the profile
+ * in force at spawn time — that is where the owner's installed packages register their
+ * providers — while the credential goes to the profile the selection names now, so a
+ * provider the first one knows and the second one has never installed makes pi's
+ * `Models.login` throw `Unknown provider: <id>`. Changing the row between the spawn and
+ * this command is enough to reach it, and so is importing a package into the target
+ * profile after the session started.
  *
- * The way forward is the import, and the sentence names it in the row's own words
- * («Importar el perfil de tu pi») instead of restating the instruction in a fourth
- * phrasing: importing is the step that copies that package list into PiCode's own profile.
+ * The way forward depends on **which** profile is missing the package, and that is why the
+ * sentence takes `ownsProfile` rather than naming PiCode's own profile outright. For
+ * PiCode's own profile the step is the import, in the row's own words («Importar el perfil
+ * de tu pi») instead of a fourth phrasing. For the owner's own profile the import is the
+ * wrong door — it copies *into* PiCode's profile — while the extensions tab installs with
+ * the very pi the editor runs, which is the pi that owns the profile the credential is
+ * heading for.
  */
-export function unknownProviderText(provider: string): string {
-  return (
-    `El proveedor ${provider} lo aporta un paquete que el perfil propio de PiCode todavía ` +
-    "no tiene, y ahí es donde se guardan las credenciales. Usa «Importar el perfil de tu " +
-    "pi» para traer ese paquete, y vuelve a intentarlo."
-  );
+export function unknownProviderText(provider: string, ownsProfile: boolean): string {
+  const missing =
+    `El proveedor ${provider} lo aporta un paquete que ${profileNameFor(ownsProfile)} todavía ` +
+    "no tiene, y ahí es donde se guardan las credenciales. ";
+  return ownsProfile
+    ? missing + "Usa «Importar el perfil de tu pi» para traer ese paquete, y vuelve a intentarlo."
+    : missing +
+        "Instala ese paquete en tu pi —la pestaña de extensiones instala con el mismo pi que " +
+        "ejecuta el editor— y vuelve a intentarlo.";
 }
 
 /**
@@ -413,7 +443,7 @@ export type LoginRuntimeLoad =
 
 /**
  * The runtime the provider list is read from: the one the running session was built
- * with, or the one `buildTarget` builds for PiCode's own profile when there is no session
+ * with, or the one `buildTarget` builds for the target profile when there is no session
  * yet.
  *
  * `buildTarget` is called **only** in that second case, and the reason is not thrift:
@@ -507,14 +537,16 @@ function chooseProvider(entries: ProviderEntry[]): Promise<ProviderEntry | undef
 }
 
 /**
- * The command: logs one provider in, writing into PiCode's own profile.
+ * The command: logs one provider in, writing into the profile of the selected instance.
  *
- * The target is resolved first and the flow stops there when the selected instance is the
- * owner's own, because PiCode owns no profile and may not write the owner's. The
- * credential goes into that one directory, through a runtime built over its files. The
- * list, unlike the write, is read from the running session's runtime when there is one,
- * because that runtime belongs to the profile in force and is the only one that knows the
- * providers the owner's installed packages registered.
+ * There is one total mapping — the profile of the instance the owner selected — so the
+ * target is resolved first and always a directory: PiCode's own profile for its own pi,
+ * and the profile his installed pi reads for `path`/`custom`, which is no longer a
+ * refusal but a target with a confirmation in front of it. The credential goes into that
+ * directory, through a runtime built over its files. The list, unlike the write, is read
+ * from the running session's runtime when there is one, because that runtime belongs to
+ * the profile in force and is the only one that knows the providers the owner's installed
+ * packages registered.
  *
  * Nothing here performs a login by itself; the runtime's `login` is pi's own flow, and the
  * interaction pi asks for is the editor's dialogs, so there is one set of prompts.
@@ -523,17 +555,19 @@ export async function loginProvider(
   context: vscode.ExtensionContext,
   liveRuntime: LiveLoginRuntime,
 ): Promise<void> {
-  // The unguarded writer's answer for the selected instance: PiCode's own profile when
-  // PiCode's own pi is selected, `undefined` when the owner's pi is. Passing the selected
-  // mode is what makes that `undefined` real; the guarded readers' answer is deliberately
-  // not consulted, because on an empty internal profile it names the machine's profile,
-  // which is exactly the directory this login must never write.
+  // One total mapping, and the same one every other surface follows. The writer's answer
+  // is what names it, unguarded: PiCode's own profile for its own pi — named even while it
+  // is still empty, because filling it is what a first login is for — and the profile the
+  // owner's installed pi reads when his pi is the selected instance. The guarded readers'
+  // answer is deliberately not consulted, because on an empty internal profile it names
+  // the machine's profile instead of the one being filled.
   const runtimeMode = resolveRuntime(context.extensionUri).mode;
-  const target = instanceAgentDir(context.extensionUri, runtimeMode);
-  if (target === undefined) {
-    void vscode.window.showErrorMessage(`PiCode: ${LOGIN_TEXTS.ownerInstance}`);
-    return;
-  }
+  const target = instanceProfileDir(context.extensionUri, runtimeMode);
+  // Who the target belongs to, which is a different question from where it is: the
+  // unguarded reader is `undefined` exactly when the selected instance is the owner's own
+  // pi. It is asked here, once, and answers the confirmation below and the wording of the
+  // success ending.
+  const ownsProfile = instanceAgentDir(context.extensionUri, runtimeMode) !== undefined;
 
   const entry = resolveSdkEntry(context.extensionUri);
   if (entry === undefined) {
@@ -542,10 +576,11 @@ export async function loginProvider(
   }
 
   /**
-   * Builds the runtime whose `auth.json` is PiCode's own profile — the only profile this
-   * command may write — and returns it, or `undefined` after saying why it could not be
-   * built. `target` is the parameter that decides the profile: it is handed to the SDK
-   * rather than derived from whatever the running session happens to use.
+   * Builds the runtime whose `auth.json` lives in the target profile — the profile of the
+   * selected instance, and the only one this command may write — and returns it, or
+   * `undefined` after saying why it could not be built. `target` is the parameter that
+   * decides the profile: it is handed to the SDK rather than derived from whatever the
+   * running session happens to use.
    */
   const targetRuntime = async (): Promise<LoginRuntime | undefined> => {
     const load = await loadLoginRuntime(entry, target);
@@ -561,9 +596,9 @@ export async function loginProvider(
   // The list comes from the profile in force whenever a session is running: that runtime
   // was built over the profile the editor is actually using, so it is the one whose
   // installed packages registered the owner's providers (`omni`, `nan` on this machine).
-  // The runtime built for `target` belongs to another profile and, while PiCode's own is
-  // still empty, knows only the providers pi ships — which is why reading the list from it
-  // answered with less than the instance has.
+  // The runtime built for `target` belongs to the profile the selection names now, which
+  // while PiCode's own is still empty knows only the providers pi ships — which is why
+  // reading the list from it answered with less than the instance has.
   const running = liveRuntime();
   // Kept so that when the fallback did build the target's runtime, the write below reuses
   // it instead of building a second one over the same profile.
@@ -571,11 +606,12 @@ export async function loginProvider(
   const catalogue = await catalogueRuntime(running, async () => {
     // No session yet: the first-run wizard reaches this command before any chat exists.
     // The fallback's cost is the pi behaviour that made this change worth making —
-    // `createAgentSessionServices({ agentDir: target })` may create PiCode's own profile
+    // `createAgentSessionServices({ agentDir: target })` may create the target profile
     // directory and an empty `auth.json` inside it, so with no session merely opening
-    // this command can still leave that file behind. It flips no guard and never touches
-    // the owner's profile, because the target is PiCode's own; it is a file created by
-    // looking, and with a session running this branch is not taken at all.
+    // this command can still leave that file behind. Whichever profile is selected pays
+    // that cost, PiCode's own or the owner's; it is a file created by looking, it flips no
+    // guard, and it is not the credential — but it is why this branch is taken only with
+    // no session at all.
     builtForTarget = await targetRuntime();
     return builtForTarget;
   });
@@ -600,11 +636,28 @@ export async function loginProvider(
     return;
   }
 
+  // The owner's profile is not PiCode's to write. It is the one his installed pi reads,
+  // so a credential written there is one every other pi tool on the machine can see, and
+  // only he can say whether that is where he wants this login to take effect. Asked with a
+  // modal, after the provider was chosen and before anything is written or started, so the
+  // answer decides a write that has not happened yet.
+  if (!ownsProfile) {
+    const proceed = await vscode.window.showWarningMessage(
+      `PiCode: ${LOGIN_TEXTS.ownerProfileConfirm}`,
+      { modal: true },
+      LOGIN_TEXTS.ownerProfileContinue,
+    );
+    if (proceed !== LOGIN_TEXTS.ownerProfileContinue) {
+      void vscode.window.showInformationMessage(`PiCode: ${LOGIN_TEXTS.ownerProfileDeclined}`);
+      return;
+    }
+  }
+
   // The write never runs on the running session's runtime: that runtime owns the profile
-  // in force, which is not necessarily PiCode's own, and a credential written through it
-  // would land in the owner's profile. It keeps its own runtime over `target` — the one
-  // the fallback already built, or one built now — so the target parameter stays what
-  // decides where a credential goes.
+  // in force at spawn time, which the row may have moved away from since, and a credential
+  // written through it would land in the profile the row no longer points at. It keeps its
+  // own runtime over `target` — the one the fallback already built, or one built now — so
+  // the target parameter stays what decides where a credential goes.
   const writer = builtForTarget ?? (await targetRuntime());
   if (writer === undefined) {
     return;
@@ -635,11 +688,13 @@ export async function loginProvider(
     }
     // Also checked before the generic failure, and only for the exact shape pi's
     // `Models.login` throws when the target profile does not register the provider: the
-    // list came from the profile in force, the write goes to PiCode's own, and the import
-    // is what reconciles them. Every other error still falls through to the generic
-    // ending below.
+    // list came from the profile in force at spawn time, the write goes to the profile the
+    // selection names now, and the import is what reconciles them. Every other error still
+    // falls through to the generic ending below.
     if (unknownProvider(error) !== undefined) {
-      void vscode.window.showErrorMessage(`PiCode: ${unknownProviderText(chosen.label)}`);
+      void vscode.window.showErrorMessage(
+        `PiCode: ${unknownProviderText(chosen.label, ownsProfile)}`,
+      );
       return;
     }
     void vscode.window.showErrorMessage(
@@ -652,7 +707,7 @@ export async function loginProvider(
   // startup and keeps the runtime it was built with, so the reload is what makes it use
   // the new credential. It is offered rather than promised.
   const choice = await vscode.window.showInformationMessage(
-    `PiCode: ${loginSuccessText(chosen.label, target)}`,
+    `PiCode: ${loginSuccessText(chosen.label, profileNameFor(ownsProfile))}`,
     RELOAD_WINDOW_LABEL,
   );
   if (choice === RELOAD_WINDOW_LABEL) {

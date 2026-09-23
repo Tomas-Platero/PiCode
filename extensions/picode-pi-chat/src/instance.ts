@@ -25,6 +25,9 @@
  *   environment: the guarded selection when PiCode owns it, the machine's profile
  *   otherwise. It is the only place that composes that fallback, so no reader can
  *   end up on the other instance's profile.
+ * - `instanceProfileDir()` answers a *writer*: the profile of the selected instance,
+ *   always a concrete directory and never guarded, because the provider login exists
+ *   to fill PiCode's own profile while it is still empty.
  * - `scanProfile()` reads a profile directory and returns an inventory. Its parsing
  *   is pure (`parsePackages`, `parseCredentials`, `parseModels`, `parseMcpServers`),
  *   so both the shapes and the walk can be exercised without a filesystem, and a
@@ -81,6 +84,46 @@ function internalAgentDir(extensionUri: Uri): string {
  */
 export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): string | undefined {
   return runtime === "managed" ? internalAgentDir(extensionUri) : undefined;
+}
+
+/**
+ * The profile directory of the selected instance, always a concrete directory.
+ *
+ * This is the answer a **writer** needs, and it is deliberately neither of the two
+ * other answers this module gives. `instanceAgentDir()` says `undefined` for the
+ * owner's instance, which is right for a spawner — pi then resolves its own default —
+ * and useless for a login, which has to name the directory it writes. And
+ * `selectedAgentDir()` applies the anti-mute guard, which is right for a reader and
+ * wrong here: a login exists to fill PiCode's own profile while it is still empty, and
+ * the guard answers the machine's profile precisely then.
+ *
+ * So the mapping is total: PiCode's own profile for the `managed` instance, and for
+ * `path`/`custom` the profile the owner's pi reads — `PI_CODING_AGENT_DIR` when the
+ * owner set it, otherwise `~/.pi/agent`, which is what pi resolves by itself.
+ *
+ * PiCode writes the owner's profile here because the owner asked it to: with his own pi
+ * selected, the provider login and the custom-endpoint row configure *that* pi, the way
+ * its own `/login` would. That reverses the read-only rule the two-instances feature
+ * set for the owner's profile, and the reversal is recorded in
+ * `odd/tasks/picode-models-providers.md`. The surfaces that write it say which profile
+ * they are writing, because it also belongs to every other pi tool on the machine.
+ */
+export function instanceProfileDir(extensionUri: Uri, runtime: RuntimeMode): string {
+  return runtime === "managed" ? internalAgentDir(extensionUri) : resolveAgentDir();
+}
+
+/**
+ * The profile a write went into, said in words instead of by path.
+ *
+ * A surface that writes a profile has to tell the owner *which* profile it wrote, and
+ * the answer is one of exactly two: PiCode's own profile when PiCode owns the target,
+ * the owner's own when his pi is the selected instance. Both names live here because
+ * three surfaces need them — the provider login, the custom-endpoint rows and the
+ * settings panel — and a second copy of the wording would let one of them start
+ * describing the same directory differently.
+ */
+export function profileNameFor(ownsProfile: boolean): string {
+  return ownsProfile ? "el perfil propio de PiCode" : "el perfil de tu pi";
 }
 
 /* ------------------------------------------------------------------ *
