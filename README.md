@@ -16,8 +16,10 @@ server to work.
 ## What is in this repository, and what is not
 
 The repository root doubles as the distribution root, because that is what enables portable
-mode (a `data/` folder next to the executable). **The ~700 MB VSCodium payload is not
-versioned.** What is versioned is the layer that turns a stock archive into PiCode:
+mode (a `data/` folder next to the executable). **The ~1 GB VSCodium payload is not
+versioned**, and it cannot be: GitHub refuses any push carrying a file over 100 MB, and the
+editor's own executable is 212 MB. What is versioned is the layer that turns a stock archive
+into PiCode:
 
 | Path | What it is |
 | --- | --- |

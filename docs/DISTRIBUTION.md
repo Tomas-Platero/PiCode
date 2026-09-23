@@ -21,8 +21,11 @@ root, which is what makes the following true:
 - the **file names** can be changed, so the visible identity is PiCode's: `PiCode.exe`,
   `bin/picode*`, and the Start Menu tile manifest.
 
-No compiler, no fork, no patch rebasing against upstream. The 700 MB payload is
-ignored by git; the repository version tracks the modification layer.
+No compiler, no fork, no patch rebasing against upstream. The 1 GB payload is
+ingored by git — it cannot be committed: GitHub refuses a push carrying a file over
+100 MB and the editor's executable alone is 212 MB, so versioning this tree would need
+Git LFS (free quota 1 GB, smaller than the payload) or an archive published as a release
+asset. The repository version tracks the modification layer.
 
 ### Why not the overlay
 

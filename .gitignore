@@ -6,8 +6,11 @@
 #
 # The repository root doubles as the PiCode distribution root: VSCodium is
 # extracted in place so a `data/` folder next to the executable enables portable
-# mode. The 700 MB payload is NOT versioned. What is versioned is the
-# modification layer that turns a stock VSCodium archive into PiCode:
+# mode. The 1 GB payload is NOT versioned: it cannot be. GitHub refuses any push carrying a
+# file over 100 MB and the editor's own executable is 212 MB, so putting this tree in git
+# would need Git LFS (whose free quota is 1 GB, smaller than the payload) or an archive
+# published as a release asset. What is versioned is the modification layer that turns a
+# stock VSCodium archive into PiCode:
 #
 #   distribution/apply-picode.ps1     applies the delta
 #   distribution/product-delta.json   the delta itself, as data
