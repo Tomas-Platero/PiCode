@@ -6,15 +6,22 @@
  * provider list and then offer to log in, and it must never touch any profile on this
  * machine. What is checked instead is everything that decides what the owner reads — the
  * provider list rows, the key-versus-subscription decision, and the wording of the four
- * endings — plus two source-level guards:
+ * endings — plus the catalogue's source, exercised over fake runtimes so no profile is
+ * built: with a live session the list comes from it and the target profile is not built at
+ * all, and with no session the fallback builds it exactly once. Three source-level guards
+ * close the rest:
  *
  * - `pi-login-command.ts` resolves its target through `instanceAgentDir(` and never
  *   through the guarded readers' `selectedAgentDir`, because on an empty internal profile
  *   that answer names the machine's profile, and a first login exists to fill the other
  *   one. The module deliberately does not name the guarded resolver at all, so the raw
  *   scan cannot be fooled by a comment.
- * - `extension.ts` registers the command id, and `package.json` declares it with a
- *   Spanish title, so the palette and the registration cannot drift apart.
+ * - `pi-sdk-client.ts` hands the running session's runtime out read-only, and the command
+ *   reads the catalogue from it while the write keeps its own runtime over the target, so
+ *   no richer list can send a credential into the profile the editor is running.
+ * - `extension.ts` registers the command id, wires the session's runtime to it, and
+ *   `package.json` declares it with a Spanish title, so the palette and the registration
+ *   cannot drift apart.
  *
  * The owner-facing sentences are taken from the product's own exported tables and
  * builders (`LOGIN_TEXTS`, `PROVIDER_KINDS`, `PROVIDER_MARKERS`,
@@ -126,6 +133,46 @@ async function main() {
   );
 
   // --- the catalogue, read from a runtime ------------------------------------
+
+  // The list must come from the runtime of the profile in force when there is one, and
+  // building PiCode's own profile is exactly what must not happen merely by opening the
+  // command. Both halves are executed over fake runtimes, because the real ones would
+  // build a real profile on this machine.
+  const liveFake = {
+    getProviders: () => [],
+    isUsingOAuth: () => false,
+    isUsingSubscription: () => false,
+    hasConfiguredAuth: () => false,
+    login: async () => ({ type: "api_key" }),
+  };
+  let targetBuilds = 0;
+  const withLive = await api.catalogueRuntime(liveFake, async () => {
+    targetBuilds += 1;
+    return undefined;
+  });
+  check(
+    "with a live session the list comes from it and the target profile is never built",
+    withLive === liveFake && targetBuilds === 0,
+    `runtime is the live one: ${withLive === liveFake}, target builds: ${targetBuilds}`,
+  );
+
+  const fallbackFake = {
+    getProviders: () => [],
+    isUsingOAuth: () => false,
+    isUsingSubscription: () => false,
+    hasConfiguredAuth: () => false,
+    login: async () => ({ type: "api_key" }),
+  };
+  let fallbackBuilds = 0;
+  const withoutLive = await api.catalogueRuntime(undefined, async () => {
+    fallbackBuilds += 1;
+    return fallbackFake;
+  });
+  check(
+    "with no session the fallback builds the target's runtime, exactly once",
+    withoutLive === fallbackFake && fallbackBuilds === 1,
+    `runtime is the fallback: ${withoutLive === fallbackFake}, target builds: ${fallbackBuilds}`,
+  );
 
   const asked = [];
   const fakeRuntime = {
@@ -286,14 +333,49 @@ async function main() {
     !commandSource.includes("selectedAgentDir"),
     "the guarded reader resolver is named in the command source",
   );
+  check(
+    "the command reads the running session's runtime, and falls back to the target's",
+    /const running = liveRuntime\(\);/.test(commandSource) &&
+      /await catalogueRuntime\(running, async \(\)/.test(commandSource),
+    "the live runtime is not the catalogue source, or the fallback is gone",
+  );
+  check(
+    "the command keeps the no-session fallback and writes down what it may create",
+    /builtForTarget = await targetRuntime\(\);/.test(commandSource) &&
+      commandSource.includes("createAgentSessionServices({ agentDir: target })") &&
+      commandSource.includes("empty `auth.json`"),
+    "the fallback or its documented cost is missing",
+  );
+  check(
+    "the write keeps its own runtime over the target profile, never the live one",
+    /const writer = builtForTarget \?\? \(await targetRuntime\(\)\)/.test(commandSource) &&
+      /writer\.login\(chosen\.id, chosen\.type, createAuthInteraction\(\)\)/.test(
+        commandSource,
+      ) &&
+      !/catalogue\.login\(/.test(commandSource),
+    "the login call is not anchored to the target profile's own runtime",
+  );
+
+  const sdkSource = fs.readFileSync(path.join(SOURCE_ROOT, "pi-sdk-client.ts"), "utf8");
+  check(
+    "the embedded client hands its running session's runtime out read-only",
+    /get sessionRuntime\(\): SdkModelRuntime \| undefined/.test(sdkSource) &&
+      /return this\.session\?\.modelRuntime;/.test(sdkSource),
+    "no sessionRuntime getter returning the session's runtime or undefined",
+  );
 
   const extensionSource = fs.readFileSync(path.join(SOURCE_ROOT, "extension.ts"), "utf8");
   check(
     "extension.ts registers the command id it imports",
     extensionSource.includes("LOGIN_PROVIDER_COMMAND") &&
       /registerCommand\(\s*LOGIN_PROVIDER_COMMAND/.test(extensionSource) &&
-      /loginProvider\(context\)/.test(extensionSource),
+      /loginProvider\(context,\s*liveLoginRuntime\)/.test(extensionSource),
     "the registration for LOGIN_PROVIDER_COMMAND was not found",
+  );
+  check(
+    "extension.ts wires the running session's runtime to the command",
+    /client instanceof PiSdkClient \? client\.sessionRuntime : undefined/.test(extensionSource),
+    "the live login runtime accessor is not wired",
   );
 
   // --- the command the palette runs ------------------------------------------

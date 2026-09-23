@@ -84,7 +84,11 @@ import {
 } from "./stats";
 import { instanceProfile, instanceProfileEnv, selectedAgentDir } from "./instance";
 import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
-import { LOGIN_PROVIDER_COMMAND, loginProvider } from "./pi-login-command";
+import {
+  LOGIN_PROVIDER_COMMAND,
+  loginProvider,
+  type LiveLoginRuntime,
+} from "./pi-login-command";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -373,8 +377,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // The provider login, the other way T6a fills PiCode's own profile. Registered on its
   // own for the same reason: it resolves its own target from the extension's location.
+  // It is handed the running session's runtime so the provider list comes from the
+  // profile in force; the credential still goes to PiCode's own profile.
   context.subscriptions.push(
-    vscode.commands.registerCommand(LOGIN_PROVIDER_COMMAND, () => loginProvider(context)),
+    vscode.commands.registerCommand(LOGIN_PROVIDER_COMMAND, () =>
+      loginProvider(context, liveLoginRuntime),
+    ),
   );
 
   // First run. Deliberately not awaited: the resolution probes a process, and
@@ -420,6 +428,17 @@ async function ensureClient(extensionUri: vscode.Uri): Promise<PiClient | undefi
   const rpc = getClient(extensionUri);
   return (await ensureStarted(rpc)) ? rpc : undefined;
 }
+
+/**
+ * The runtime of the session already running, or `undefined` when there is none or the
+ * running transport is not the embedded one.
+ *
+ * Only the SDK client has a runtime in this process to hand over; the RPC child keeps
+ * its profile in another one. Reading it is what lets the provider login list the
+ * providers of the profile in force instead of a runtime built for another profile.
+ */
+const liveLoginRuntime: LiveLoginRuntime = () =>
+  client instanceof PiSdkClient ? client.sessionRuntime : undefined;
 
 /**
  * Drops the client so the next request spawns from the current configuration.

@@ -15,12 +15,16 @@
  * answer is never consulted: on an empty internal profile it names the machine's own
  * profile, and writing that would be PiCode writing a profile it does not own.
  *
- * The catalogue is read from the runtime the SDK builds for that same profile, so the
- * list comes from pi instead of a table hand-written here, and the login writes through
- * the very runtime whose `auth.json` is the target's. Building it with
- * `createAgentSessionServices` (and not the bare `ModelRuntime.create`) is what lets a
- * provider registered by an extension installed in the profile appear in the list: it is
- * the same step a session takes before it is created, without creating a session.
+ * The catalogue and the write come from different places, and on purpose. The list is
+ * read from the runtime of the session already running when there is one — that runtime
+ * was built over the profile in force, so it knows the providers the owner's installed
+ * packages registered — and from the runtime the SDK builds for the target profile when
+ * there is no session yet. The write always keeps its own runtime over the target
+ * profile, so no richer list can send a credential into the profile the editor happens
+ * to be running. Building either runtime with `createAgentSessionServices` (and not the
+ * bare `ModelRuntime.create`) is what lets a provider registered by an extension
+ * installed in that profile appear in the list: it is the same step a session takes
+ * before it is created, without creating a session.
  *
  * The split is the same one the import command uses: everything that decides what the
  * owner reads is pure and testable without an editor (`loginType`, `providerEntry`,
@@ -100,6 +104,13 @@ export interface LoginSdk {
     agentDir: string;
   }): Promise<{ modelRuntime: LoginRuntime }>;
 }
+
+/**
+ * Reads the runtime of the session that is already running, or `undefined` when there is
+ * none — the wizard can reach the command before any chat exists. Supplied by the host,
+ * because where a live session lives is the host's business.
+ */
+export type LiveLoginRuntime = () => LoginRuntime | undefined;
 
 /**
  * `import()` that survives this project's CommonJS output.
@@ -345,6 +356,24 @@ export type LoginRuntimeLoad =
   | { kind: "unreadable" };
 
 /**
+ * The runtime the provider list is read from: the one the running session was built
+ * with, or the one `buildTarget` builds for PiCode's own profile when there is no session
+ * yet.
+ *
+ * `buildTarget` is called **only** in that second case, and the reason is not thrift:
+ * building a runtime over a profile is what may create the profile directory and an empty
+ * `auth.json` inside it, so with a session running, merely listing providers must not
+ * build anything. Extracted as a pure decision so a test proves that promise over two
+ * fake runtimes instead of leaving it to be inferred from the flow.
+ */
+export async function catalogueRuntime(
+  running: LoginRuntime | undefined,
+  buildTarget: () => Promise<LoginRuntime | undefined>,
+): Promise<LoginRuntime | undefined> {
+  return running ?? (await buildTarget());
+}
+
+/**
  * Builds the runtime whose `auth.json` lives in `target`.
  *
  * `createAgentSessionServices({ agentDir: target })` is the SDK's own step for a profile:
@@ -425,14 +454,19 @@ function chooseProvider(entries: ProviderEntry[]): Promise<ProviderEntry | undef
  * The command: logs one provider in, writing into PiCode's own profile.
  *
  * The target is resolved first and the flow stops there when the selected instance is the
- * owner's own, because PiCode owns no profile and may not write the owner's. Everything
- * after that works on that one directory: the runtime is built over its files, the list
- * comes from that runtime, and the credential goes back through that same runtime.
+ * owner's own, because PiCode owns no profile and may not write the owner's. The
+ * credential goes into that one directory, through a runtime built over its files. The
+ * list, unlike the write, is read from the running session's runtime when there is one,
+ * because that runtime belongs to the profile in force and is the only one that knows the
+ * providers the owner's installed packages registered.
  *
- * Nothing here performs a login by itself; `runtime.login` is pi's own flow, and the
+ * Nothing here performs a login by itself; the runtime's `login` is pi's own flow, and the
  * interaction pi asks for is the editor's dialogs, so there is one set of prompts.
  */
-export async function loginProvider(context: vscode.ExtensionContext): Promise<void> {
+export async function loginProvider(
+  context: vscode.ExtensionContext,
+  liveRuntime: LiveLoginRuntime,
+): Promise<void> {
   // The unguarded writer's answer for the selected instance: PiCode's own profile when
   // PiCode's own pi is selected, `undefined` when the owner's pi is. Passing the selected
   // mode is what makes that `undefined` real; the guarded readers' answer is deliberately
@@ -451,22 +485,55 @@ export async function loginProvider(context: vscode.ExtensionContext): Promise<v
     return;
   }
 
-  const load = await loadLoginRuntime(entry, target);
-  if (load.kind === "no-sdk") {
-    void vscode.window.showErrorMessage(`PiCode: ${LOGIN_TEXTS.noSdk}`);
+  /**
+   * Builds the runtime whose `auth.json` is PiCode's own profile — the only profile this
+   * command may write — and returns it, or `undefined` after saying why it could not be
+   * built. `target` is the parameter that decides the profile: it is handed to the SDK
+   * rather than derived from whatever the running session happens to use.
+   */
+  const targetRuntime = async (): Promise<LoginRuntime | undefined> => {
+    const load = await loadLoginRuntime(entry, target);
+    if (load.kind === "ready") {
+      return load.runtime;
+    }
+    void vscode.window.showErrorMessage(
+      `PiCode: ${load.kind === "no-sdk" ? LOGIN_TEXTS.noSdk : LOGIN_TEXTS.noCatalogue}`,
+    );
+    return undefined;
+  };
+
+  // The list comes from the profile in force whenever a session is running: that runtime
+  // was built over the profile the editor is actually using, so it is the one whose
+  // installed packages registered the owner's providers (`omni`, `nan` on this machine).
+  // The runtime built for `target` belongs to another profile and, while PiCode's own is
+  // still empty, knows only the providers pi ships — which is why reading the list from it
+  // answered with less than the instance has.
+  const running = liveRuntime();
+  // Kept so that when the fallback did build the target's runtime, the write below reuses
+  // it instead of building a second one over the same profile.
+  let builtForTarget: LoginRuntime | undefined;
+  const catalogue = await catalogueRuntime(running, async () => {
+    // No session yet: the first-run wizard reaches this command before any chat exists.
+    // The fallback's cost is the pi behaviour that made this change worth making —
+    // `createAgentSessionServices({ agentDir: target })` may create PiCode's own profile
+    // directory and an empty `auth.json` inside it, so with no session merely opening
+    // this command can still leave that file behind. It flips no guard and never touches
+    // the owner's profile, because the target is PiCode's own; it is a file created by
+    // looking, and with a session running this branch is not taken at all.
+    builtForTarget = await targetRuntime();
+    return builtForTarget;
+  });
+  // `undefined` here means `targetRuntime` already showed why it could not be built.
+  if (catalogue === undefined) {
     return;
   }
-  if (load.kind === "unreadable") {
-    void vscode.window.showErrorMessage(`PiCode: ${LOGIN_TEXTS.noCatalogue}`);
-    return;
-  }
-  const runtime = load.runtime;
-  if (typeof runtime.login !== "function") {
+
+  if (typeof catalogue.login !== "function") {
     void vscode.window.showErrorMessage(`PiCode: ${LOGIN_TEXTS.noSdk}`);
     return;
   }
 
-  const entries = providerEntries(runtime);
+  const entries = providerEntries(catalogue);
   if (entries.length === 0) {
     void vscode.window.showInformationMessage(`PiCode: ${LOGIN_TEXTS.noProviders}`);
     return;
@@ -477,8 +544,22 @@ export async function loginProvider(context: vscode.ExtensionContext): Promise<v
     return;
   }
 
+  // The write never runs on the running session's runtime: that runtime owns the profile
+  // in force, which is not necessarily PiCode's own, and a credential written through it
+  // would land in the owner's profile. It keeps its own runtime over `target` — the one
+  // the fallback already built, or one built now — so the target parameter stays what
+  // decides where a credential goes.
+  const writer = builtForTarget ?? (await targetRuntime());
+  if (writer === undefined) {
+    return;
+  }
+  if (typeof writer.login !== "function") {
+    void vscode.window.showErrorMessage(`PiCode: ${LOGIN_TEXTS.noSdk}`);
+    return;
+  }
+
   try {
-    await runtime.login(chosen.id, chosen.type, createAuthInteraction());
+    await writer.login(chosen.id, chosen.type, createAuthInteraction());
   } catch (error) {
     // The owner closing a prompt is not a failure; the bridge reports it as its own
     // error precisely so it is not told as one.

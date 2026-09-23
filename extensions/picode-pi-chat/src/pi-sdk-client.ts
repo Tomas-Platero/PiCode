@@ -115,9 +115,38 @@ export interface SdkSessionManager {
   open(path: string): SdkSessionManagerHandle;
 }
 
+/**
+ * pi's `Provider`, reduced to the facts a provider list reads.
+ *
+ * Quoted rather than imported, like every other pi shape here: pi is ESM-only
+ * and loaded by URL. `auth` names the two interactive logins, which is what
+ * decides whether a provider can be logged in at all.
+ */
+export interface SdkProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly auth: SdkProviderAuth;
+}
+
+/** pi's `ProviderAuth`; a method that is not a function is not an interactive login. */
+export interface SdkProviderAuth {
+  apiKey?: { login?: unknown };
+  oauth?: unknown;
+}
+
 export interface SdkModelRuntime {
   getModel(providerId: string, modelId: string): SdkModelValue | undefined;
   getAvailable(providerId?: string): Promise<readonly SdkModelValue[]>;
+  /**
+   * The providers this runtime's own profile has. It is the profile's answer and
+   * not a table: a provider an extension installed in that profile registered is
+   * in here, which is why the running session's runtime is what the login
+   * command reads the catalogue from (see `PiSdkClient.sessionRuntime`).
+   */
+  getProviders(): readonly SdkProvider[];
+  isUsingOAuth(providerId: string): boolean;
+  isUsingSubscription(providerId: string): boolean;
+  hasConfiguredAuth(providerId: string): boolean;
   /**
    * Persists a provider credential through the runtime's own store. The method
    * exists on every pi this client supports; the defensive check inside `login`
@@ -244,6 +273,22 @@ export class PiSdkClient implements PiClient {
 
   get isRunning(): boolean {
     return this.session !== undefined;
+  }
+
+  /**
+   * The model runtime the running session was built with, or `undefined` while
+   * there is no session.
+   *
+   * Read-only by design: it is the same object the session already owns, exposed
+   * because a session is private to this file. It is the only honest source for
+   * "which providers does the profile in force have", since a runtime built over
+   * another profile answers for that profile instead — which is exactly the
+   * poorer list this getter exists to stop. Nothing here builds, replaces or
+   * reconfigures the runtime; the session is still built by `launch` and no
+   * other way.
+   */
+  get sessionRuntime(): SdkModelRuntime | undefined {
+    return this.session?.modelRuntime;
   }
 
   /** Subscribes to agent events. The returned handle removes the listener. */
