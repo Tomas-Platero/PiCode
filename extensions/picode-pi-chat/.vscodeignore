@@ -5,6 +5,9 @@ node_modules/**
 **/*.map
 # .atl/ is external agent tooling state written by unrelated tooling; never ship it to users.
 .atl/**
+# The editor's own development configuration: it is what makes F5 work for a contributor and
+# it has no meaning inside a shipped extension.
+.vscode/**
 .gitignore
 **/*.vsix
 package-lock.json

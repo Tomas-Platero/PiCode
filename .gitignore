@@ -34,8 +34,32 @@
 /LICENSES.chromium.html
 /*.VisualElementsManifest.xml
 
+# The same payload on the other platforms a collaborator may unpack here: the patterns
+# above are Windows-shaped because this tree was first built on Windows, and a Linux or
+# macOS archive dropped in the same place must not be committed either.
+/*.so
+/*.dylib
+/chrome-sandbox
+/*.AppImage
+/PiCode.app/
+/lib/
+# The archive's own root launcher. `bin/picode` and `bin/picode.cmd` are PiCode's and stay
+# versioned; these two are VSCodium's and do not.
+/picode
+/codium
+
 # Runtime directories owned by the VSCodium archive.
 /bin/
 /locales/
 /policies/
 /resources/
+
+# Node tooling: the extension has its own nested ignore file, and this covers a stray
+# `npm install` at the distribution root.
+/node_modules/
+
+# Operating-system noise: a collaborator on macOS or Windows leaves these behind without
+# ever asking for them.
+.DS_Store
+Thumbs.db
+desktop.ini
