@@ -151,22 +151,51 @@ as evidence.
   un inventario de solo lectura: paquetes, **nombres** de credenciales, modelos, MCPs,
   skills, memoria y sesiones. Parsers puros separados de las lecturas. Invisible en el
   producto: nada cableado. `1835df4`, 22 suites verdes, 15 comprobaciones.
-- [ ] **T2 — La copia de un perfil.** `importProfile(from, to, selection, onProgress)`: copia
-  elemento a elemento hacia el perfil interno — ajustes (incluida la lista de paquetes),
-  modelos, MCPs, skills — y **credenciales solo si se piden aparte**. No escribe nunca en el
-  perfil de origen, no sobreescribe un destino con contenido sin decirlo, informa de cada
-  elemento y es repetible. Las **sesiones quedan fuera** (ver Out of scope). Pruebas con
-  fixtures: destino vacío, destino con contenido, origen a medias, y que la copia de
-  credenciales declinada no las toca.
-- [ ] **T3 — La fila de importación.** Una acción en el editor que enseña el inventario de
+- [x] **T2 — La copia de un perfil.** `importProfile({from, to, selection, onProgress})` en
+  `src/instance-import.ts`: copia elemento a elemento hacia el perfil interno — ajustes
+  (incluida la lista de paquetes), modelos, MCPs, skills, memoria — y **credenciales solo si
+  se piden aparte**, informando `declined` y no `absent` para que la razón se vea. El origen
+  solo se lee por construcción (las únicas escrituras son `copyFileSync` y `writeFileSync`
+  bajo el destino), los directorios se fusionan sin borrar nada que la importación no haya
+  puesto, y mismo origen y destino se rechaza antes de escribir. Las **sesiones quedan fuera**.
+  `3549bb3`, 23 suites verdes, 16 comprobaciones.
+- [x] **T3 — La fila de importación.** Una acción en el editor que enseña el inventario de
   T1, deja elegir qué viene, marca las credenciales como decisión aparte, ejecuta T2 y
-  **informa de cada elemento**; después instala los paquetes de la lista copiada por el
-  camino de instalación que ya existe. Sin terminal en ningún paso.
+  **informa de cada elemento**. Sin terminal en ningún paso.
+  - [x] **T3a — El flujo del comando.** `picode.piChat.importProfile` («PiCode: Importar el
+    perfil de tu pi»): resuelve los dos extremos, rechaza antes de escribir nada y en el
+    orden en que el dueño descubriría el problema (no hay perfil, no tiene nada, o son el
+    mismo o uno contiene al otro), enseña el inventario, copia con progreso e informa por
+    elemento. Las credenciales salen marcadas y **sin marcar por defecto**. La guarda de
+    solapamiento (`path.relative`) es lo que mantiene toda escritura bajo el perfil de
+    PiCode. `8197a9a`, 24 suites verdes, 19 comprobaciones.
+  - [ ] **T3b — La fila en el panel**, con el mismo mecanismo que la fila que repite la
+    configuración inicial (`kind: "action"` + `command`).
+  - [ ] **T3c — Instalar los paquetes copiados** por el camino de instalación existente.
+    Va **después de T4a**: ese camino lanza el pi, y si no apunta al perfil de la instancia
+    elegida instalaría en el perfil equivocado — que es justo el cruce que este trabajo
+    existe para evitar.
 - [ ] **T4 — El interruptor.** El aislamiento de verdad: el perfil de la instancia elegida
-  llega al entorno del proceso (RPC), al `agentDir` del SDK, al servicio de ajustes, al
-  descubrimiento de skills y a los dos ficheros que hoy se leen a pelo (`auth.json`,
-  `mcp.json`), con una fila que dice qué perfil está en uso. **Guarda:** no se enciende sin
-  credenciales; si no las hay, lo dice en vez de dejar el editor mudo.
+  llega a todo sitio que lea o escriba un perfil, con una fila que dice qué perfil está en
+  uso. **Guarda:** no se enciende sin credenciales; si no las hay, lo dice en vez de dejar el
+  editor mudo.
+  - [ ] **T4a — El resolutor en todos los sitios.** El perfil sigue al programa: `runtime`
+    ya elige cuál corre, así que `managed` usa el perfil propio y `path`/`custom` el del
+    dueño, sin ajuste nuevo. Los sitios, ya localizados:
+    - se lanzan con `PI_CODING_AGENT_DIR`: `pi-rpc-client.ts:329` (el RPC),
+      `chat-view.ts:1583`, y `pi-cli.ts:51` — **el instalador de paquetes**, el que más
+      importa porque es el que escribe;
+    - leen del perfil: `chat-view.ts:912` (la clave de NaN, una credencial),
+      `extension.ts:188` (el servicio de ajustes), `extension.ts:1510` (el `mcp.json`),
+      `pi-sdk-client.ts:416` (ya es parámetro);
+    - no lo necesitan: `runtime.ts:298` (`--version`) y `:647` (instalar el runtime).
+    Con un **test que impida el retroceso**: leer las fuentes y fijar qué ficheros pueden
+    llamar a `resolveAgentDir()` directamente, para que un lector nuevo no reintroduzca el
+    perfil compartido sin que salte.
+  - [ ] **T4b — La guarda y la fila.** No encender el perfil interno vacío: si `managed` está
+    elegido y no hay credenciales, decirlo y seguir con el perfil del dueño hasta que la
+    importación o el login lo resuelvan. Y una fila que diga qué perfil está en uso, sin
+    rutas.
 - [ ] **T5 — El puente interactivo.** `extension_ui_request` atendido (los cuatro diálogos que
   bloquean, los métodos que no esperan respuesta, correlación por id, sin tiempos de espera
   propios) en **las dos** implementaciones — RPC y SDK embebido — para que el login de un
