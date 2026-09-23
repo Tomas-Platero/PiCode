@@ -4,6 +4,8 @@ import { IMPORT_PROFILE_COMMAND } from "./instance-import-command";
 import { LOGIN_PROVIDER_COMMAND } from "./pi-login-command";
 import type { InstanceProfileState } from "./pi-settings";
 import type { RuntimeDescriptor, RuntimeMode } from "./runtime";
+import type { ApplyResult, ThemePreviewResult, ThemeRow } from "./theme-service";
+import { appliedMessage, externalUrlToOpen } from "./theme-view";
 import { buildWebviewHtml } from "./webview-html";
 
 /**
@@ -181,6 +183,32 @@ export function describeProfilePart(state: InstanceProfileState): OnboardingProf
   };
 }
 
+/** The rows the theme step shows, and why the gallery part is missing when it is. */
+export interface OnboardingThemes {
+  rows: readonly ThemeRow[];
+  /** The theme in force, so the step can say which one that is. */
+  current?: string;
+  /** Why the catalogue part is not there, when it could not be reached. */
+  error?: string;
+}
+
+/**
+ * The theme step's decision, in the owner's language.
+ *
+ * Two exits and no trap: applying a theme moves the step on, and so does continuing without
+ * one — the editor always has a theme, so “the one you already have” is a real answer rather
+ * than a way out. The catalogue being unreachable is said in the same sentence rather than
+ * hidden, because the installed themes are already enough to choose from.
+ */
+export function describeThemeStep(state: OnboardingThemes): string {
+  if (state.error !== undefined) {
+    return `${state.error} Puedes elegir entre los que ya tienes instalados, o seguir con el que venga.`;
+  }
+  return state.current === undefined || state.current === ""
+    ? "El editor está con el tema que trae de serie."
+    : `Ahora mismo el editor usa «${state.current}».`;
+}
+
 /**
  * What the panel may ask the host to do.
  *
@@ -211,6 +239,23 @@ export interface OnboardingHost {
   runOffer(command: OnboardingOfferCommand): Promise<void>;
   /** Gentle AI's real state, so the question and the summary say what is true. */
   gentle(): Promise<GentleState>;
+  /**
+   * The themes the theme step offers: the installed ones first, then the gallery's when it
+   * can be reached. The rows are the panel's own shape, so the same component draws both
+   * and a theme cannot look one way in the wizard and another in the panel.
+   */
+  themes(): Promise<OnboardingThemes>;
+  /** One theme, painted, for the step's preview. */
+  previewTheme(rowId: string, themeId: string): Promise<ThemePreviewResult>;
+  /** One theme, in force. */
+  applyTheme(rowId: string, themeId: string): Promise<ApplyResult>;
+  /**
+   * Reloads the window, which is what makes the editor know a theme it has just installed.
+   *
+   * The wizard asks for it instead of running the editor's own command: the ids of commands
+   * live where their surface is, and this module names none.
+   */
+  reload(): Promise<void>;
   /** Installs both packages of the layer, through the shared install path. */
   installGentle(): Promise<OnboardingResult>;
   /** Records that the wizard ran, so it never opens by itself again. */
@@ -233,7 +278,8 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
       <ol id="steps" class="onboarding-steps">
         <li id="step-tab-pi" class="onboarding-step">1. Qué pi se ejecuta</li>
         <li id="step-tab-gentle" class="onboarding-step">2. Gentle AI</li>
-        <li id="step-tab-summary" class="onboarding-step">3. Resumen</li>
+        <li id="step-tab-theme" class="onboarding-step">3. Tema</li>
+        <li id="step-tab-summary" class="onboarding-step">4. Resumen</li>
       </ol>
     </header>
     <p id="notice" class="onboarding-notice" hidden></p>
@@ -269,6 +315,15 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
         </div>
         <p id="gentle-result" class="onboarding-result" hidden></p>
       </section>
+      <section id="step-theme" class="onboarding-section" hidden>
+        <h2 class="onboarding-question">¿Con qué tema quieres trabajar?</h2>
+        <p class="onboarding-current">Los temas que ya tienes instalados salen primero y sin red; los del catálogo se leen de su paquete y se enseñan pintados con sus propios colores.</p>
+        <div id="wizard-theme-root" class="onboarding-theme"></div>
+        <p id="wizard-theme-note" class="onboarding-result" hidden></p>
+        <div class="onboarding-actions">
+          <button id="wizard-theme-continue" class="onboarding-button primary" type="button">Continuar</button>
+        </div>
+      </section>
       <section id="step-summary" class="onboarding-section" hidden>
         <h2 class="onboarding-question">Esto es lo que usa el editor desde ahora</h2>
         <p id="summary-runtime" class="onboarding-current">leyendo…</p>
@@ -291,6 +346,8 @@ export class OnboardingView {
   private panel: vscode.WebviewPanel | undefined;
   private readonly disposables: vscode.Disposable[] = [];
   private disposed = false;
+  /** The theme rows the step is showing, so a message names one instead of carrying it. */
+  private themeRows: readonly ThemeRow[] = [];
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
@@ -341,8 +398,8 @@ export class OnboardingView {
       extensionUri: this.extensionUri,
       title: "PiCode: configuración inicial",
       body: ONBOARDING_BODY,
-      scripts: ["onboarding.js"],
-      styles: ["main.css", "onboarding.css"],
+      scripts: ["theme-gallery.js", "onboarding.js"],
+      styles: ["main.css", "theme.css", "onboarding.css"],
     });
     this.panel.webview.onDidReceiveMessage(
       (message: unknown) => {
@@ -376,6 +433,10 @@ export class OnboardingView {
     switch (record.type) {
       case "ready": {
         await this.pushState();
+        // The theme step's own data is pushed with the rest: the gallery is part of the
+        // wizard's first screen, and fetching it on arrival would show an empty step for a
+        // moment every time the window is opened.
+        await this.pushThemes();
         break;
       }
       case "applyRuntime": {
@@ -451,9 +512,94 @@ export class OnboardingView {
         }
         break;
       }
+      case "search": {
+        // The compact gallery draws no filter, but a message is answered rather than dropped:
+        // the step has one list and the host's is the same one.
+        await this.pushThemes();
+        break;
+      }
+      case "preview": {
+        await this.pushThemePreview(record);
+        break;
+      }
+      case "apply": {
+        await this.pushThemeApplied(record);
+        break;
+      }
+      case "themes": {
+        await this.pushThemes();
+        break;
+      }
+      case "openGallery": {
+        // The same allow-list the panel uses: a wizard step is not a second, looser door.
+        const url = typeof record.url === "string" ? record.url : "";
+        const allowed = externalUrlToOpen(url);
+        if (allowed !== undefined) {
+          await vscode.env.openExternal(vscode.Uri.parse(allowed));
+        }
+        break;
+      }
+      case "reload": {
+        await this.host.reload();
+        break;
+      }
       default:
         break;
     }
+  }
+
+  /**
+   * The theme step's rows, pushed with the sentence that says which one is in force.
+   *
+   * Kept here as well, so the two messages that follow name a row instead of carrying one:
+   * a webview is a document this extension does not control, and a message that names an id
+   * is resolved against the list the host sent rather than trusted.
+   */
+  private async pushThemes(): Promise<void> {
+    const state = await this.host.themes();
+    this.themeRows = state.rows;
+    this.post({
+      type: "themes",
+      rows: state.rows,
+      query: "",
+      stepText: describeThemeStep(state),
+      ...(state.current === undefined ? {} : { current: state.current }),
+      ...(state.error === undefined ? {} : { error: state.error }),
+    });
+  }
+
+  /** One theme painted, or the reason it could not be read. */
+  private async pushThemePreview(record: Record<string, unknown>): Promise<void> {
+    const requestId = typeof record.requestId === "number" ? record.requestId : 0;
+    const row = this.themeRows.find((candidate) => candidate.id === record.rowId);
+    const themeId = typeof record.themeId === "string" ? record.themeId : "";
+    if (row === undefined) {
+      this.post({ type: "preview", requestId, ok: false, reason: "Ese tema ya no está en la lista." });
+      return;
+    }
+    const answer = await this.host.previewTheme(row.id, themeId);
+    if (!answer.ok) {
+      this.post({ type: "preview", requestId, ok: false, reason: answer.reason });
+      return;
+    }
+    this.post({ type: "preview", requestId, ok: true, variant: answer.variant, preview: answer.preview });
+  }
+
+  /** One theme applied, said the same way the panel says it. */
+  private async pushThemeApplied(record: Record<string, unknown>): Promise<void> {
+    const row = this.themeRows.find((candidate) => candidate.id === record.rowId);
+    const themeId = typeof record.themeId === "string" ? record.themeId : "";
+    if (row === undefined) {
+      return;
+    }
+    const result = await this.host.applyTheme(row.id, themeId);
+    this.post({
+      type: "applied",
+      rowId: row.id,
+      themeId,
+      result,
+      message: appliedMessage(row, themeId, result),
+    });
   }
 
   private async pushState(): Promise<void> {

@@ -397,6 +397,69 @@ async function main() {
     "between #step-pi and #step-gentle",
   );
 
+  // --- el paso del tema ------------------------------------------------------
+
+  /*
+   * The step that makes the wizard answer the owner's second question — which theme — and the
+   * one place where the wizard reaches for the panel's own gallery instead of a second list:
+   * a theme has to look the same in both, and two renderers is how one of them starts showing a
+   * colour the other does not.
+   */
+  check(
+    "the theme step is its own step, between Gentle AI and the summary, and the tabs say so",
+    onboardingSource.includes('id="step-tab-theme"') &&
+      onboardingSource.includes('id="step-theme"') &&
+      onboardingSource.indexOf('id="step-tab-gentle"') <
+        onboardingSource.indexOf('id="step-tab-theme"') &&
+      onboardingSource.indexOf('id="step-tab-theme"') <
+        onboardingSource.indexOf('id="step-tab-summary"') &&
+      onboardingSource.indexOf('id="step-gentle"') < onboardingSource.indexOf('id="step-theme"') &&
+      onboardingSource.indexOf('id="step-theme"') < onboardingSource.indexOf('id="step-summary"'),
+    "the theme step is not between the other two",
+  );
+  check(
+    "the step's sentence has its three states and prints no path",
+    api.describeThemeStep({ rows: [] }) === "El editor está con el tema que trae de serie." &&
+      api.describeThemeStep({ rows: [], current: "Dracula Theme" }) ===
+        "Ahora mismo el editor usa «Dracula Theme»." &&
+      api
+        .describeThemeStep({ rows: [], error: "No se pudo consultar el catálogo de temas (red)." })
+        .includes("los que ya tienes instalados") &&
+      [api.describeThemeStep({ rows: [] }), api.describeThemeStep({ rows: [] })].every(
+        (line) => !line.includes("/") && !line.includes("\\"),
+      ),
+    api.describeThemeStep({ rows: [], current: "Dracula Theme" }),
+  );
+  check(
+    "the wizard mounts the panel's own gallery, compactly, into its own root element",
+    scriptSource.includes("PiCodeThemeGallery") &&
+      /mount\(elements\.themeRoot, \{ post: send, compact: true \}\)/.test(scriptSource) &&
+      onboardingSource.includes('id="wizard-theme-root"') &&
+      onboardingSource.includes('"theme-gallery.js"') &&
+      onboardingSource.includes('"theme.css"'),
+    "the theme step does not reuse the gallery",
+  );
+  check(
+    "the wizard decides nothing about a theme itself: it asks the host and forwards its answer",
+    /themes\(\): Promise<OnboardingThemes>/.test(onboardingSource) &&
+      /previewTheme\(rowId: string, themeId: string\)/.test(onboardingSource) &&
+      /applyTheme\(rowId: string, themeId: string\)/.test(onboardingSource) &&
+      /case "preview":/.test(onboardingSource) &&
+      /case "apply":/.test(onboardingSource) &&
+      // The ending is the panel's own builder, not a second copy of the sentence.
+      /appliedMessage\(row, themeId, result\)/.test(onboardingSource),
+    "the wizard grew its own theme flow",
+  );
+  check(
+    "the step's only exit is its own button, and it does not depend on applying anything",
+    onboardingSource.includes('id="wizard-theme-continue"') &&
+      /elements\.themeContinue\.addEventListener\("click", function \(\) \{\s*showStep\("summary"\)/.test(
+        scriptSource,
+      ) &&
+      !/themeApplied[\s\S]{0,80}showStep\("summary"\)/.test(scriptSource),
+    "the theme step advances on its own or has no exit",
+  );
+
   // --- the step does not move on by itself, and does not trap him either ------
 
   // The behaviour, observed in a throwaway DOM instead of inferred from the source: the pi

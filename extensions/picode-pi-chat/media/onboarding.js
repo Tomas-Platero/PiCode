@@ -15,10 +15,15 @@
     stepTabs: [
       document.getElementById("step-tab-pi"),
       document.getElementById("step-tab-gentle"),
+      document.getElementById("step-tab-theme"),
       document.getElementById("step-tab-summary"),
     ],
     piSection: document.getElementById("step-pi"),
     gentleSection: document.getElementById("step-gentle"),
+    themeSection: document.getElementById("step-theme"),
+    themeRoot: document.getElementById("wizard-theme-root"),
+    themeNote: document.getElementById("wizard-theme-note"),
+    themeContinue: document.getElementById("wizard-theme-continue"),
     summarySection: document.getElementById("step-summary"),
     runtimeCurrent: document.getElementById("runtime-current"),
     runtimeChoices: document.getElementById("runtime-choices"),
@@ -272,9 +277,15 @@
     state.step = step;
     elements.piSection.hidden = step !== "pi";
     elements.gentleSection.hidden = step !== "gentle";
+    elements.themeSection.hidden = step !== "theme";
     elements.summarySection.hidden = step !== "summary";
+    // The gallery is mounted the first time the step is shown, and drawn from the message
+    // the host already sent: mounting it up front would build a list nobody is looking at.
+    if (step === "theme") {
+      mountThemeGallery();
+    }
 
-    var order = ["pi", "gentle", "summary"];
+    var order = ["pi", "gentle", "theme", "summary"];
     var current = order.indexOf(step);
     for (var index = 0; index < elements.stepTabs.length; index += 1) {
       var tab = elements.stepTabs[index];
@@ -329,6 +340,18 @@
           showStep("summary");
         }
         break;
+      case "themes":
+        // The step's own sentence first, then the rows the shared gallery draws.
+        if (typeof message.stepText === "string") {
+          showResult(elements.themeNote, null, message.stepText);
+        }
+        mountThemeGallery();
+        themeGallery.feed(message);
+        break;
+      case "preview":
+      case "applied":
+        themeGallery.feed(message);
+        break;
       case "completed":
         elements.finish.disabled = true;
         elements.finish.textContent = "Configuración guardada";
@@ -339,6 +362,27 @@
       default:
         break;
     }
+  }
+
+  // --- the theme step's gallery -------------------------------------------
+
+  /*
+   * The gallery is the panel's own component, mounted compactly: one list, no descriptions,
+   * six rows. Sharing it is what keeps a theme from looking one way in the wizard and another
+   * way in the gallery, and the wizard neither knows how a theme is painted nor how it is
+   * applied — it forwards messages and the host answers them.
+   */
+  var themeGallery = { feed: function () {}, setCurrent: function () {} };
+  var themeGalleryMounted = false;
+
+  function mountThemeGallery() {
+    var api = globalThis.PiCodeThemeGallery;
+    if (themeGalleryMounted || !api || !elements.themeRoot) {
+      return;
+    }
+    themeGalleryMounted = true;
+    api.mount(elements.themeRoot, { post: send, compact: true });
+    themeGallery = api;
   }
 
   // --- wiring -------------------------------------------------------------
@@ -354,6 +398,13 @@
   // here would be a worse failure than the automatic advance being fixed.
   elements.profilePartContinue.addEventListener("click", function () {
     showStep("gentle");
+  });
+
+  // The theme step's way forward. Applying a theme does not move the step on by itself: the
+  // owner may want to look at another one, and the button is the only exit either way — with
+  // a theme applied or with the one he already had.
+  elements.themeContinue.addEventListener("click", function () {
+    showStep("summary");
   });
 
   elements.gentleInstall.addEventListener("click", function () {

@@ -50,6 +50,8 @@ Module._resolveFilename = function resolve(request, ...rest) {
 const { IMPORT_PROFILE_COMMAND } = require(
   path.join(__dirname, "..", "out", "instance-import-command.js"),
 );
+// The theme row's id, from the module that registers it, for the same reason as the others.
+const { SELECT_THEME_COMMAND } = require(path.join(__dirname, "..", "out", "theme-view.js"));
 
 /*
  * The same rule for the custom-endpoint row: its command id is read from the module that
@@ -658,7 +660,7 @@ async function main() {
   );
 
   check(
-    "the five action rows are the provider login, the custom endpoints, the repeatable initial setup, the pi update and the profile import, each with its own command",
+    "the six action rows are the provider login, the custom endpoints, the theme, the repeatable initial setup, the pi update and the profile import, each with its own command",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "action").map(
         (descriptor) => descriptor.key,
@@ -666,6 +668,7 @@ async function main() {
       [
         "picode.loginProvider",
         "picode.modelsProviders",
+        "picode.selectTheme",
         "picode.piVersion",
         "picode.onboarding",
         "picode.importProfile",
@@ -686,6 +689,17 @@ async function main() {
       setting("picode.modelsProviders").read !== undefined &&
       // The id is the one `models-command.ts` exports, not a copy of it.
       setting("picode.modelsProviders").command === MODELS_PROVIDERS_COMMAND &&
+      // The theme row is the Aspecto category's own: it opens the gallery, which is the
+      // editor's appearance rather than one of pi's settings.
+      setting("picode.selectTheme").category === "aspecto" &&
+      setting("picode.selectTheme").write === undefined &&
+      setting("picode.selectTheme").read === undefined &&
+      setting("picode.selectTheme").command === SELECT_THEME_COMMAND &&
+      // And the row beside it is the host's reading of the theme in force, with nothing to
+      // write: the gallery is what changes it.
+      setting("picode.colorTheme").category === "aspecto" &&
+      setting("picode.colorTheme").readOnly === true &&
+      setting("picode.colorTheme").read !== undefined &&
       setting("picode.onboarding").command === "picode.piChat.onboarding" &&
       setting("picode.onboarding").read === undefined &&
       setting("picode.onboarding").write === undefined &&

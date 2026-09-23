@@ -29,6 +29,7 @@ import {
   setInstanceProfileStateSource,
   setModelsConfigStateSource,
   setPiVersionStateSource,
+  setThemeStateSource,
   type InstanceProfileState,
   type PiSettingValue,
 } from "./pi-settings";
@@ -100,6 +101,8 @@ import {
   loginProvider,
   type LiveLoginRuntime,
 } from "./pi-login-command";
+import { SELECT_THEME_COMMAND, selectTheme, themeServiceFor } from "./theme-view";
+import type { ThemeRow, ThemeService } from "./theme-service";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -151,6 +154,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // no file handle. Handed the same way, so the line is re-read on every refresh instead of
   // being frozen at activation.
   setModelsConfigStateSource(() => readModelsProviders(context.extensionUri).summary);
+
+  // The Aspecto category's read-only row is the third of the same kind: which theme the
+  // editor is on is the editor's own configuration, and only this side can read it.
+  setThemeStateSource(() => currentColorTheme());
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),
@@ -305,6 +312,45 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     gentle: () => gentleState(context.extensionUri),
     installGentle: () => installGentleLayer(menu),
+    // The theme step reads and applies through the panel's own service, so a theme applied
+    // from the wizard and one applied from the gallery are the same act with the same rules.
+    // The installed themes are always there; the catalogue is asked for once and its failure
+    // is reported as a fact of the step instead of an empty list.
+    themes: async () => {
+      const state = onboardingThemesFor(context);
+      const installed = state.service.installed();
+      let catalog: readonly ThemeRow[] = [];
+      let error: string | undefined;
+      try {
+        catalog = await state.service.catalog("");
+      } catch (cause) {
+        error = `No se pudo consultar el catálogo de temas (${cause instanceof Error ? cause.message : String(cause)}).`;
+      }
+      state.rows = [...installed, ...catalog];
+      const current = state.service.current();
+      return {
+        rows: state.rows,
+        ...(current === undefined ? {} : { current }),
+        ...(error === undefined ? {} : { error }),
+      };
+    },
+    previewTheme: (rowId, themeId) => {
+      const state = onboardingThemesFor(context);
+      const row = state.rows.find((candidate) => candidate.id === rowId);
+      return row === undefined
+        ? Promise.resolve({ ok: false as const, reason: "Ese tema ya no está en la lista." })
+        : state.service.preview(row, themeId);
+    },
+    applyTheme: (rowId, themeId) => {
+      const state = onboardingThemesFor(context);
+      const row = state.rows.find((candidate) => candidate.id === rowId);
+      return row === undefined
+        ? Promise.resolve({ applied: false, installed: false, needsReload: false })
+        : state.service.apply(row, themeId);
+    },
+    reload: async () => {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    },
     complete: async () => {
       // `globalState.update` answers with a Thenable, and the panel may want to finish
       // only once the marker is written; awaiting it here keeps the promise shape.
@@ -410,6 +456,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(MODELS_PROVIDERS_COMMAND, () =>
       modelsProviders(context),
     ),
+  );
+
+  // The theme gallery: one panel behind the palette, the popup menu and the Aspecto row, so
+  // a theme is chosen the same way from all three. Registered on its own because it is the
+  // only surface that reads the editor's own configuration and installs extensions.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(SELECT_THEME_COMMAND, () => selectTheme(context)),
   );
 
   // First run. Deliberately not awaited: the resolution probes a process, and
@@ -972,6 +1025,39 @@ async function maybeOpenOnboarding(context: vscode.ExtensionContext): Promise<vo
     "[onboarding] no hay un pi utilizable y la configuración inicial no se completó: se abre el asistente",
   );
   await onboardingView?.show();
+}
+
+/**
+ * The wizard's theme state: one service, and the rows it last handed the theme step.
+ *
+ * Built on first use rather than at activation, because the wizard may never open — and kept
+ * between messages for the same reason the panel keeps its rows: a message from the webview
+ * names a row, and the host resolves that name against the list it sent.
+ */
+interface OnboardingThemes {
+  service: ThemeService;
+  rows: readonly ThemeRow[];
+}
+
+let onboardingThemes: OnboardingThemes | undefined;
+
+function onboardingThemesFor(context: vscode.ExtensionContext): OnboardingThemes {
+  if (onboardingThemes === undefined) {
+    onboardingThemes = { service: themeServiceFor(context), rows: [] };
+  }
+  return onboardingThemes;
+}
+
+/**
+ * The colour theme the editor is on, for the Aspecto category's read-only row.
+ *
+ * Read from the editor's own configuration on every call rather than cached: the panel is
+ * open while the owner changes it, and a value frozen at activation would keep saying
+ * "Default Dark Modern" after he picked another one. `undefined` is the honest answer when
+ * the setting holds nothing, and the row words that its own way.
+ */
+function currentColorTheme(): string | undefined {
+  return vscode.workspace.getConfiguration("workbench").get<string>("colorTheme");
 }
 
 /**

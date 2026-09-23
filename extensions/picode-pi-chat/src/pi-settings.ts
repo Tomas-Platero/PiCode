@@ -82,6 +82,7 @@ export type PiSettingValue =
 export type PiSettingsCategoryId =
   | "estado"
   | "picode"
+  | "aspecto"
   | "modelo"
   | "analitica"
   | "red"
@@ -478,6 +479,13 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
     id: "skills",
     label: "Skills",
     description: "Qué skills carga pi y si se pueden lanzar como comandos de barra.",
+  },
+  {
+    id: "aspecto",
+    label: "Aspecto",
+    description:
+      "Cómo se ve el editor: el tema de color, elegido de la galería o de los que ya tienes " +
+      "instalados. No es un ajuste de pi: es el del editor que lo ejecuta.",
   },
   {
     id: "sesion",
@@ -971,6 +979,20 @@ let readModelsConfigState: (() => string | undefined) | undefined;
 
 export function setModelsConfigStateSource(source: (() => string | undefined) | undefined): void {
   readModelsConfigState = source;
+}
+
+/**
+ * The theme in force, read by the host, for the `picode.colorTheme` row.
+ *
+ * Registered rather than imported for the same reason as the two readings above: this module
+ * has to stay loadable without `vscode`, and the editor's configuration is the host's. The
+ * value is whatever `workbench.colorTheme` holds — the theme's own id, or nothing when the
+ * editor is on its default — and never a path.
+ */
+let readThemeState: (() => string | undefined) | undefined;
+
+export function setThemeStateSource(source: (() => string | undefined) | undefined): void {
+  readThemeState = source;
 }
 
 /**
@@ -1555,6 +1577,42 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     write: (manager, _scope, value) =>
       manager.setEnableSkillCommands(toBoolean(value, "enableSkillCommands")),
   },
+  /* --- Aspecto ---------------------------------------------------- *
+   * The editor's appearance rather than pi's: the theme is the editor's own setting, and
+   * this category exists because the panel is where configuration happens — the same
+   * reason the PiCode category sits in it.
+   */
+
+  {
+    key: "picode.colorTheme",
+    category: "aspecto",
+    label: "Tema del editor",
+    description:
+      "El tema de color en vigor, tal y como lo guarda el editor. Se lee solo; se cambia " +
+      "desde la galería, que enseña cada tema antes de aplicarlo.",
+    kind: "text",
+    scopes: GLOBAL_SCOPE,
+    // A fact, not a setting: the value is the host's reading of the editor's own
+    // configuration, registered next to the other readings. There is nothing to write here.
+    readOnly: true,
+    read: () => readThemeState?.() ?? "El tema que trae el editor",
+  },
+  {
+    key: "picode.selectTheme",
+    category: "aspecto",
+    label: "Elegir un tema",
+    description:
+      "Abre la galería: los temas que ya tienes instalados, sin red, y los del catálogo de " +
+      "la galería con una vista previa pintada con los colores del propio tema.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value, therefore nothing to write. The row is one more entry point to the command
+    // the palette and the popup menu already have, and not a second implementation of it.
+    readOnly: true,
+    command: "picode.piChat.selectTheme",
+    actionLabel: "Abrir la galería",
+  },
+
   /* --- Sesión ----------------------------------------------------- */
 
   {
