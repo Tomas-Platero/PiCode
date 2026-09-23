@@ -139,6 +139,20 @@ export interface CatalogPackage {
   description: string;
   monthlyDownloads: number;
   repository?: string;
+  /**
+   * When this version was published, as the registry reports it.
+   *
+   * It rides along on the search response the page already makes: the gallery shows a
+   * package's age, and asking again for a date the same document carries would be one
+   * request per row for nothing. Absent when the registry's field cannot be read as a
+   * date, so a renderer can say "sin fecha" rather than printing an invalid one.
+   */
+  publishedAt?: string;
+}
+
+/** Whether the registry's date field is something a date can actually be built from. */
+function isPublishDate(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
 /** How many results one registry page holds when the caller does not say. */
@@ -176,6 +190,7 @@ interface NpmSearchObject {
     description?: unknown;
     keywords?: unknown;
     links?: { repository?: unknown };
+    date?: unknown;
   };
   downloads?: { monthly?: unknown };
 }
@@ -231,6 +246,7 @@ export async function searchCatalogPage(
       description: typeof pkg.description === "string" ? pkg.description : "",
       monthlyDownloads: typeof entry.downloads?.monthly === "number" ? entry.downloads.monthly : 0,
       ...(typeof repository === "string" ? { repository } : {}),
+      ...(isPublishDate(pkg.date) ? { publishedAt: pkg.date } : {}),
     });
   }
 

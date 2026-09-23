@@ -1,4 +1,7 @@
 import * as vscode from "vscode";
+import { resolvePackageTypes } from "./catalog";
+import { searchCatalogPage, type CatalogPackage } from "./pi-cli";
+import type { InstallOutcome } from "./menu";
 import {
   describeSettingWire,
   describeSettings,
@@ -55,6 +58,26 @@ interface SettingsGroupWire {
   settings: readonly SettingWire[];
 }
 
+/**
+ * The largest window one registry search may load.
+ *
+ * It is the registry's own ceiling. The catalogue tab pages over this loaded window
+ * without searching again, so the window is what "loaded" means in its footer, and
+ * the registry's total — which runs into the thousands — is never fetched.
+ */
+const CATALOG_WINDOW = 250;
+
+/** One catalogue row as the webview renders it: the search fields plus the type tags. */
+interface CatalogRowWire {
+  name: string;
+  version: string;
+  description: string;
+  monthlyDownloads: number;
+  tags: string[];
+  publishedAt?: string;
+  repository?: string;
+}
+
 /** The catalogue, reduced once to the shape the webview renders. */
 const GROUPS: readonly SettingsGroupWire[] = describeSettings(PI_SETTING_DESCRIPTORS).map(
   (group) => ({
@@ -98,6 +121,14 @@ export interface SettingsViewOptions {
   skills(packages: readonly PiPackageEntry[]): Promise<SkillDiscoveryResult>;
   /** PiCode's own configuration, for the rows that live in the editor's settings. */
   picode(): PiCodeConfigStore | undefined;
+  /**
+   * Installs catalogue packages through the menu's own path.
+   *
+   * A catalogue row is only a caller: `installSources` keeps the confirmation, the
+   * exact command it names and the restart offer, so a row cannot become a second,
+   * unconfirmed install route.
+   */
+  install(sources: readonly string[]): Promise<InstallOutcome>;
   /**
    * Called after a value was written, with the value pi actually stored.
    *
@@ -442,6 +473,38 @@ export class SettingsView {
         }
         break;
       }
+      case "catalogSearch": {
+        const query = typeof record.query === "string" ? record.query : "";
+        await this.searchCatalog(query);
+        break;
+      }
+      case "catalogInstall": {
+        const name = typeof record.name === "string" ? record.name.trim() : "";
+        if (name.length === 0) {
+          return;
+        }
+        await this.options.install([`npm:${name}`]);
+        // Re-read whatever the install changed. `pi install` writes the package into
+        // pi's own settings, and this repaint is what makes the row stop offering it.
+        await this.pushState();
+        break;
+      }
+      case "openLink": {
+        const href = typeof record.href === "string" ? record.href : "";
+        const lowered = href.toLowerCase();
+        // The renderer already refuses anything else. The host repeats the check
+        // because the webview boundary is where trust ends, and the renderer is one
+        // message away from being replaced.
+        if (
+          !lowered.startsWith("http://") &&
+          !lowered.startsWith("https://") &&
+          !lowered.startsWith("mailto:")
+        ) {
+          return;
+        }
+        await vscode.env.openExternal(vscode.Uri.parse(href));
+        break;
+      }
       case "refresh": {
         const service = await this.ensureService();
         await service?.reload();
@@ -453,6 +516,38 @@ export class SettingsView {
       }
       default:
         break;
+    }
+  }
+
+  /**
+   * One registry search for the catalogue tab, plus the type tags of the window it
+   * loaded.
+   *
+   * The search is asked once for the whole window the tab pages through, never once
+   * per page: the registry is the slow part, and the window is what the footer calls
+   * "loaded". The type tags cost one npm document per row, so they are resolved only
+   * for that window — never for the registry's total — and the resolver's own cache
+   * makes revisiting a page free.
+   */
+  private async searchCatalog(query: string): Promise<void> {
+    try {
+      const page = await searchCatalogPage(query, { limit: CATALOG_WINDOW });
+      const types = await resolvePackageTypes(page.packages);
+      this.post({
+        type: "catalogState",
+        query,
+        total: page.total,
+        rows: page.packages.map((pkg) => toCatalogRow(pkg, types)),
+      });
+    } catch (error) {
+      // The same visible contract as a failed write: an error line in the tab, never a
+      // list that is empty for a reason the owner cannot see.
+      this.post({
+        type: "catalogError",
+        message: `No se pudo consultar el catálogo: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
     }
   }
 
@@ -602,6 +697,20 @@ export class SettingsView {
 
 function isScope(value: unknown): value is PiSettingScope {
   return value === "global" || value === "project";
+}
+
+/** One search result plus its resolved type tags, in the shape the webview renders. */
+function toCatalogRow(pkg: CatalogPackage, types: Map<string, string[]>): CatalogRowWire {
+  const tags = types.get(pkg.name);
+  return {
+    name: pkg.name,
+    version: pkg.version,
+    description: pkg.description,
+    monthlyDownloads: pkg.monthlyDownloads,
+    tags: tags !== undefined && tags.length > 0 ? tags : ["package"],
+    ...(pkg.publishedAt === undefined ? {} : { publishedAt: pkg.publishedAt }),
+    ...(pkg.repository === undefined ? {} : { repository: pkg.repository }),
+  };
 }
 
 /**

@@ -171,6 +171,9 @@ export function activate(context: vscode.ExtensionContext): void {
           .update(key, value, vscode.ConfigurationTarget.Global);
       },
     }),
+    // A catalogue row installs through the menu's own path, so the confirmation and
+    // the restart offer are the ones the packages table and the wizard already use.
+    install: (sources) => installSources(menu, sources),
     applied: (key, value) => applyWrittenSetting(key, value),
   });
   settingsView = settings;

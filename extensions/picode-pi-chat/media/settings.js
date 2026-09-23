@@ -32,6 +32,23 @@
     // the only side that knows whether a package skill is on in that scope.
     skills: [],
     skillProblems: [],
+    // Which of the Packages section's two tabs is showing. Kept here, in module
+    // state, so a repaint after a host write does not throw the owner back to the
+    // packages table.
+    packagesTab: "packages",
+    // The catalogue the Catálogo tab shows: the window the host loaded, the
+    // registry's total and the page the footer is on. Everything the renderer
+    // needs survives a repaint here, never in the table's own DOM.
+    catalog: {
+      query: "",
+      requested: false,
+      loading: false,
+      error: "",
+      rows: [],
+      total: 0,
+      page: 1,
+      pageSize: packageRows.DEFAULT_PAGE_SIZE,
+    },
     // The skills table keeps its page, its filters and its sort here, in module
     // state, and never in its own DOM: flipping a switch makes the host re-post
     // `state`, this script rebuilds the whole content pane, and anything remembered
@@ -1099,6 +1116,369 @@
     paint();
   }
 
+  // --- the Packages section's two tabs ------------------------------------
+
+  /*
+   * The Packages section has two surfaces now: the installed table it always had
+   * and the registry's catalogue. The tabs are module state and not DOM state for
+   * the same reason the tables are: the host re-posts `state` after every write and
+   * this script rebuilds the whole pane, so a tab remembered in an element would
+   * flip back to Paquetes on the first repaint.
+   */
+  function renderPackagesTabs() {
+    var tabs = createElement("div", "category-tabs");
+    tabs.setAttribute("role", "tablist");
+    tabs.appendChild(createPackagesTab("packages", "Paquetes"));
+    tabs.appendChild(createPackagesTab("catalog", "Catálogo"));
+    elements.content.appendChild(tabs);
+  }
+
+  function createPackagesTab(id, label) {
+    var button = createElement("button", "category-tab", label);
+    button.type = "button";
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", String(state.packagesTab === id));
+    if (state.packagesTab === id) {
+      button.classList.add("active");
+    }
+    button.addEventListener("click", function () {
+      if (state.packagesTab === id) {
+        return;
+      }
+      state.packagesTab = id;
+      // The catalogue is fetched the first time its tab is opened, not on every
+      // repaint: the lookup costs a registry search and one type document per row.
+      if (id === "catalog" && !state.catalog.requested) {
+        requestCatalogSearch();
+      } else {
+        renderContent();
+      }
+    });
+    return button;
+  }
+
+  // --- the catalogue ------------------------------------------------------
+
+  /*
+   * The Catálogo tab: the window the host searched, the page the footer is on, and
+   * one row per package.
+   *
+   * The host owns the registry search and the type resolution; this only draws what
+   * it sent. Install state is decided here, against the packages the settings state
+   * already carries, so the host does not have to send the installed list twice.
+   */
+
+  /** Sends the current query and paints the loading line until the host answers. */
+  function requestCatalogSearch() {
+    state.catalog.requested = true;
+    state.catalog.loading = true;
+    state.catalog.error = "";
+    // A different query starts a different set of rows, so the old page means
+    // nothing and would show an empty table if it were kept.
+    state.catalog.page = 1;
+    renderContent();
+    send({ type: "catalogSearch", query: state.catalog.query });
+  }
+
+  /**
+   * How long ago a catalogue row was published, in Spanish.
+   *
+   * The registry reports `publishedAt` as an ISO string; a missing or unparseable
+   * one is "sin fecha", because a plausible wrong age is worse than admitting the
+   * date is not there. A future date clamps to "ahora mismo" so clock skew cannot
+   * print a negative age.
+   */
+  function publishedAgo(value) {
+    if (typeof value !== "string" || value === "") {
+      return "sin fecha";
+    }
+    var then = Date.parse(value);
+    if (isNaN(then)) {
+      return "sin fecha";
+    }
+    var seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+    if (seconds < 60) {
+      return "ahora mismo";
+    }
+    var minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return "hace " + minutes + (minutes === 1 ? " minuto" : " minutos");
+    }
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return "hace " + hours + (hours === 1 ? " hora" : " horas");
+    }
+    var days = Math.floor(hours / 24);
+    if (days < 30) {
+      return "hace " + days + (days === 1 ? " día" : " días");
+    }
+    var months = Math.floor(days / 30);
+    if (months < 12) {
+      return "hace " + months + (months === 1 ? " mes" : " meses");
+    }
+    var years = Math.floor(months / 12);
+    return "hace " + years + (years === 1 ? " año" : " años");
+  }
+
+  /** The monthly figure with Spanish thousands, so a large number stays readable. */
+  function formatDownloads(value) {
+    var downloads = typeof value === "number" && isFinite(value) ? value : 0;
+    return downloads.toLocaleString("es-ES") + " /mes";
+  }
+
+  /**
+   * The installed packages keyed by their bare name.
+   *
+   * The settings hold a spec — `npm:name`, `npm:name@version`, or a git/local source —
+   * and the catalogue lists the bare npm name, so the comparison is between the
+   * parsed name and the row's. `package-rows.js` already knows how to split the
+   * prefix and the pin off, so neither side strips them by hand.
+   */
+  function installedNames() {
+    var entries = Array.isArray(state.values.packages) ? state.values.packages : [];
+    var names = {};
+    for (var index = 0; index < entries.length; index += 1) {
+      var entry = entries[index];
+      if (!entry || typeof entry.source !== "string") {
+        continue;
+      }
+      var parsed = packageRows.parseSource(entry.source);
+      if (parsed.name !== "") {
+        names[parsed.name] = true;
+      }
+    }
+    return names;
+  }
+
+  function renderCatalogRow(row, installed) {
+    var tableRow = document.createElement("tr");
+
+    var name = document.createElement("td");
+    name.textContent = row.name;
+    if (typeof row.version === "string" && row.version !== "") {
+      name.title = row.name + "@" + row.version;
+    }
+    tableRow.appendChild(name);
+
+    var description = document.createElement("td");
+    description.textContent = typeof row.description === "string" ? row.description : "";
+    tableRow.appendChild(description);
+
+    var types = document.createElement("td");
+    var tags = Array.isArray(row.tags) ? row.tags : [];
+    for (var index = 0; index < tags.length; index += 1) {
+      types.appendChild(createElement("span", "catalog-tag", String(tags[index])));
+    }
+    tableRow.appendChild(types);
+
+    var downloads = document.createElement("td");
+    downloads.textContent = formatDownloads(row.monthlyDownloads);
+    tableRow.appendChild(downloads);
+
+    var published = document.createElement("td");
+    published.textContent = publishedAgo(row.publishedAt);
+    tableRow.appendChild(published);
+
+    var repository = document.createElement("td");
+    if (typeof row.repository === "string" && row.repository !== "") {
+      var link = createElement("a", "catalog-link", "Repositorio");
+      // The webview cannot navigate, so the target travels as data and the host
+      // opens it: a stored URL must never become the anchor's own navigation.
+      link.href = "#";
+      link.setAttribute("data-href", row.repository);
+      link.addEventListener("click", function (event) {
+        event.preventDefault();
+        send({ type: "openLink", href: row.repository });
+      });
+      repository.appendChild(link);
+    } else {
+      repository.textContent = "—";
+    }
+    tableRow.appendChild(repository);
+
+    var action = document.createElement("td");
+    if (installed[row.name] === true) {
+      // An installed package is named as such and offers no button: installing it
+      // again would be a no-op that looks like a working action.
+      action.appendChild(createElement("span", "catalog-installed", "Ya instalado"));
+    } else {
+      var install = createElement("button", "catalog-install", "Instalar");
+      install.type = "button";
+      install.addEventListener("click", function () {
+        send({ type: "catalogInstall", name: row.name });
+      });
+      action.appendChild(install);
+    }
+    tableRow.appendChild(action);
+    return tableRow;
+  }
+
+  function renderCatalog() {
+    var view = state.catalog;
+    var pane = createElement("div", "catalog-pane");
+
+    var search = createElement("div", "catalog-search");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "settings-search-input";
+    input.placeholder = "Buscar en el catálogo de pi";
+    input.spellcheck = false;
+    input.value = view.query;
+    input.addEventListener("input", function () {
+      // Only the draft is updated here: the search is explicit, so typing does not
+      // fire a registry lookup per keystroke.
+      view.query = input.value;
+    });
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        requestCatalogSearch();
+      }
+    });
+    var searchButton = createElement("button", "catalog-search-button", "Buscar");
+    searchButton.type = "button";
+    searchButton.addEventListener("click", function () {
+      requestCatalogSearch();
+    });
+    search.appendChild(input);
+    search.appendChild(searchButton);
+    pane.appendChild(search);
+
+    // The loading line, the error line and the table are mutually exclusive: an
+    // empty table under a failure the owner cannot see reads as a broken pane.
+    if (view.loading) {
+      pane.appendChild(createElement("p", "catalog-status", "Consultando el catálogo…"));
+      elements.content.appendChild(pane);
+      return;
+    }
+    if (view.error !== "") {
+      pane.appendChild(createElement("p", "settings-error", view.error));
+      elements.content.appendChild(pane);
+      return;
+    }
+
+    var summary = createElement("div", "catalog-summary");
+    pane.appendChild(summary);
+
+    var tableWrapper = createElement("div", "catalog-table-wrapper");
+    var table = createElement("table", "catalog-table");
+    var tableHead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    var headers = ["Nombre", "Descripción", "Tipos", "Descargas", "Publicado", "Repositorio", "Acción"];
+    for (var h = 0; h < headers.length; h += 1) {
+      var header = document.createElement("th");
+      header.textContent = headers[h];
+      headRow.appendChild(header);
+    }
+    tableHead.appendChild(headRow);
+    table.appendChild(tableHead);
+    var body = document.createElement("tbody");
+    table.appendChild(body);
+    tableWrapper.appendChild(table);
+    pane.appendChild(tableWrapper);
+
+    var empty = createElement("p", "catalog-empty settings-empty", "No se encontraron paquetes.");
+    empty.hidden = true;
+    pane.appendChild(empty);
+
+    var footer = createElement("div", "catalog-pagination");
+    // The page-size list is the packages table's, so the two footers offer the same
+    // sizes and the default is one of them.
+    var sizeOptions = packageRows.PAGE_SIZES.slice();
+    var sizeSelect = createSelect(
+      "setting-select",
+      sizeOptions.map(function (size) {
+        return { value: String(size), label: String(size) };
+      }),
+      String(view.pageSize),
+      function (value) {
+        view.pageSize = Number(value);
+        view.page = 1;
+        paint();
+      },
+    );
+
+    var current = null;
+
+    function createPageButton(glyph, title, onClick) {
+      var button = createElement("button", null, glyph);
+      button.type = "button";
+      button.title = title;
+      button.addEventListener("click", onClick);
+      return button;
+    }
+
+    function goToPage(target) {
+      view.page = target;
+      paint();
+      // Paging moves the table out of sight; it comes back into view at its top.
+      tableWrapper.scrollIntoView({ block: "start" });
+    }
+
+    var pager = document.createElement("div");
+    var indicator = createElement("span");
+    indicator.title = "Página actual";
+    var first = createPageButton("«", "Primera página", function () {
+      goToPage(1);
+    });
+    var previous = createPageButton("‹", "Anterior", function () {
+      goToPage(view.page - 1);
+    });
+    var next = createPageButton("›", "Siguiente", function () {
+      goToPage(view.page + 1);
+    });
+    var lastButton = createPageButton("»", "Última página", function () {
+      goToPage(current.pageCount);
+    });
+    pager.appendChild(first);
+    pager.appendChild(previous);
+    pager.appendChild(indicator);
+    pager.appendChild(next);
+    pager.appendChild(lastButton);
+    footer.appendChild(createLabel("Por página", sizeSelect));
+    footer.appendChild(pager);
+    pane.appendChild(footer);
+
+    function paintRows(page) {
+      body.textContent = "";
+      // No rows means no table: an empty body with a header row looks like a loading
+      // failure, so the table gives way to the empty-state line.
+      var isEmpty = page.items.length === 0;
+      tableWrapper.hidden = isEmpty;
+      empty.hidden = !isEmpty;
+
+      var installed = installedNames();
+      for (var index = 0; index < page.items.length; index += 1) {
+        body.appendChild(renderCatalogRow(page.items[index], installed));
+      }
+    }
+
+    function paintFooter(page) {
+      // One page of rows needs no footer: the page-size selector goes with it,
+      // because a single-page selector is noise.
+      footer.hidden = !page.paged;
+      indicator.textContent = "Página " + page.page + " de " + page.pageCount;
+      first.disabled = page.page <= 1;
+      previous.disabled = page.page <= 1;
+      next.disabled = page.page >= page.pageCount;
+      lastButton.disabled = page.page >= page.pageCount;
+    }
+
+    function paint() {
+      current = packageRows.paginate(view.rows, { page: view.page, pageSize: view.pageSize });
+      // paginate clamps: keeping the clamped page means a shorter search lands on the
+      // last page that exists instead of on an empty one.
+      view.page = current.page;
+      summary.textContent =
+        view.rows.length + " resultados cargados de " + view.total + " en el registro";
+      paintRows(current);
+      paintFooter(current);
+    }
+
+    paint();
+    elements.content.appendChild(pane);
+  }
+
   function renderContent() {
     elements.content.textContent = "";
 
@@ -1137,6 +1517,16 @@
     elements.content.appendChild(
       createElement("p", "settings-category-description", selected.category.description),
     );
+
+    // Only the Packages section carries the second surface. Every other section
+    // renders exactly the rows it always did, with no tab bar above them.
+    if (selected.category.id === "paquetes") {
+      renderPackagesTabs();
+      if (state.packagesTab === "catalog") {
+        renderCatalog();
+        return;
+      }
+    }
 
     for (var j = 0; j < selected.settings.length; j += 1) {
       elements.content.appendChild(renderSettingRow(selected.settings[j]));
@@ -1194,6 +1584,28 @@
         break;
       case "writeError":
         showBanner(message.message);
+        break;
+      case "catalogState":
+        state.catalog.loading = false;
+        state.catalog.error = "";
+        state.catalog.requested = true;
+        state.catalog.rows = Array.isArray(message.rows) ? message.rows : [];
+        state.catalog.total =
+          typeof message.total === "number" ? message.total : state.catalog.rows.length;
+        // A new result set starts at its first page.
+        state.catalog.page = 1;
+        renderContent();
+        break;
+      case "catalogError":
+        state.catalog.loading = false;
+        state.catalog.error =
+          typeof message.message === "string" && message.message !== ""
+            ? message.message
+            : "No se pudo consultar el catálogo.";
+        state.catalog.rows = [];
+        state.catalog.total = 0;
+        state.catalog.page = 1;
+        renderContent();
         break;
       default:
         break;

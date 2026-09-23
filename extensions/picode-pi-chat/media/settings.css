@@ -707,3 +707,208 @@ body {
   gap: 4px;
   margin-top: 8px;
 }
+
+/*
+ * The Packages section's two tabs, at the top of the category. The look is the
+ * scope tabs' own, so the section's two surfaces read as one control instead of
+ * two headers, and only `--vscode-*` variables are used so it survives every theme.
+ */
+.category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.category-tab {
+  padding: 5px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.category-tab:hover {
+  color: var(--vscode-foreground);
+}
+
+.category-tab.active {
+  color: var(--vscode-foreground);
+  border-bottom-color: var(--vscode-focusBorder);
+}
+
+/*
+ * The catalogue: the registry search, the window the host loaded and the table it
+ * draws. A table of its own while it is a different surface from the packages
+ * table, and a painter of its own for the same reason the skills table is.
+ */
+.catalog-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.catalog-search .settings-search-input {
+  flex: 1;
+  width: auto;
+  min-width: 160px;
+}
+
+/*
+ * The search action wears the packages add action's look, so the two buttons in
+ * the same section do not arrive with two different styles.
+ */
+.catalog-search-button {
+  padding: 4px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.catalog-summary,
+.catalog-status {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.catalog-status {
+  margin: 12px 0;
+}
+
+.catalog-table-wrapper {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.catalog-table th,
+.catalog-table td {
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.catalog-table th {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.catalog-table tbody td {
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.catalog-table tbody tr:hover {
+  background: var(--vscode-list-hoverBackground, transparent);
+}
+
+.catalog-tag {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 1px 6px;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+.catalog-link {
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+}
+
+.catalog-link:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.catalog-install {
+  padding: 3px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.catalog-installed {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.catalog-empty {
+  margin: 12px 0;
+}
+
+.catalog-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/*
+ * The footer and the empty state are hidden with the `hidden` attribute, and an
+ * element whose class sets `display` is not hidden by it: the author rule wins
+ * over the browser's own. So the hiding is spelled out here too.
+ */
+.catalog-pagination[hidden],
+.catalog-table-wrapper[hidden],
+.catalog-empty[hidden] {
+  display: none;
+}
+
+.catalog-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.catalog-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog-pagination button {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.catalog-pagination button:hover:not(:disabled) {
+  background: var(--vscode-list-hoverBackground, transparent);
+}
+
+.catalog-pagination button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.catalog-pagination span {
+  padding: 0 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
