@@ -444,7 +444,18 @@ if (-not (Test-Path -LiteralPath $markSource)) {
     # history, not inside every shipped copy of the icon.
     $mark = (Get-Content -LiteralPath $markSource -Raw) -replace '(?s)<metadata>.*?</metadata>', '' -replace '\s+xmlns:c2pa="[^"]*"', ''
 
-    foreach ($name in @("code-icon.svg", "vscode-icon.svg")) {
+    # The letterpress files are the mark an empty editor draws behind its hints ("mostrar
+    # todos los comandos", "abrir configuración", "alternar terminal"). They were the one
+    # place this step missed, which is the worst place to miss: it is on screen whenever the
+    # owner has nothing open, so a branded editor there reads as unbranded at a glance.
+    foreach ($name in @(
+        "code-icon.svg",
+        "vscode-icon.svg",
+        "letterpress-dark.svg",
+        "letterpress-light.svg",
+        "letterpress-hcDark.svg",
+        "letterpress-hcLight.svg"
+    )) {
         $target = Join-Path $RepoRoot "resources\app\out\media\$name"
         if (-not (Test-Path -LiteralPath $target)) {
             Write-Skip "$name is not there"
