@@ -51,7 +51,7 @@ function main() {
     "every wire declares its kind and scopes",
     wires.every(
       (wire) =>
-        ["boolean", "select", "number", "text", "list", "packages", "action"].includes(
+        ["boolean", "select", "number", "text", "list", "packages", "skills", "action"].includes(
           wire.kind,
         ) &&
         Array.isArray(wire.scopes) &&
@@ -87,6 +87,17 @@ function main() {
     "no setting is lost between catalogue and groups",
     PI_SETTING_DESCRIPTORS.every((d) => groupedKeys.has(d.key)),
     "",
+  );
+
+  // The discovery row is the one wire drawn as a list of rows the host sends
+  // beside the values: it carries the kind and nothing to run, unlike an action.
+  const skillsWires = wires.filter((wire) => wire.kind === "skills");
+  check(
+    "the skills discovery row is wired as a list with no command",
+    skillsWires.length === 1 &&
+      skillsWires[0].key === "discoveredSkills" &&
+      skillsWires[0].command === undefined,
+    JSON.stringify(skillsWires.map((wire) => wire.key)),
   );
 
   /* ---------------------------------------------------------------- *

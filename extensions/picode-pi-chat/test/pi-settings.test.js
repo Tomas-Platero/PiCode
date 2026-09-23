@@ -432,12 +432,12 @@ async function main() {
   );
 
   check(
-    "only a setting pi can write per project offers the project scope",
+    "the project scope is offered by the packages table, the skills list and the theme paths",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project")).map(
         (descriptor) => descriptor.key,
       ),
-      ["packages", "skills", "themes"],
+      ["packages", "discoveredSkills", "themes"],
     ),
     PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project"))
       .map((descriptor) => descriptor.key)
@@ -490,15 +490,34 @@ async function main() {
   check("no descriptors means no groups", describeSettings([]).length === 0, "");
 
   check(
-    "the skills category carries the paths and the command switch",
+    "the skills category carries the discovery row and the command switch",
     same(
       groups
         .filter((group) => group.category.id === "skills")
         .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
-      ["skills", "enableSkillCommands"],
+      ["discoveredSkills", "enableSkillCommands"],
     ) &&
+      groups.find((group) => group.category.id === "skills").settings[0].kind === "skills" &&
       groups.find((group) => group.category.id === "skills").settings[1].kind === "boolean",
     "",
+  );
+
+  check(
+    "the manual skills path list is gone from the catalogue",
+    !PI_SETTING_DESCRIPTORS.some((descriptor) => descriptor.key === "skills"),
+    PI_SETTING_DESCRIPTORS.map((descriptor) => descriptor.key).join(", "),
+  );
+
+  check(
+    "the discovery row carries no value of its own and no setter",
+    setting("discoveredSkills").kind === "skills" &&
+      setting("discoveredSkills").readOnly === true &&
+      setting("discoveredSkills").read === undefined &&
+      setting("discoveredSkills").write === undefined,
+    JSON.stringify({
+      kind: setting("discoveredSkills").kind,
+      readOnly: setting("discoveredSkills").readOnly,
+    }),
   );
 
   check(
@@ -654,10 +673,10 @@ async function main() {
 
   check(
     "a list accepts only non-empty strings",
-    same(coerceSettingValue(setting("skills"), ["/a", "/b"]), ["/a", "/b"]) &&
-      coerceSettingValue(setting("skills"), ["/a", 3]) === undefined &&
-      coerceSettingValue(setting("skills"), ["/a", ""]) === undefined &&
-      coerceSettingValue(setting("skills"), "/a") === undefined,
+    same(coerceSettingValue(setting("themes"), ["/a", "/b"]), ["/a", "/b"]) &&
+      coerceSettingValue(setting("themes"), ["/a", 3]) === undefined &&
+      coerceSettingValue(setting("themes"), ["/a", ""]) === undefined &&
+      coerceSettingValue(setting("themes"), "/a") === undefined,
     "",
   );
 
@@ -826,18 +845,18 @@ async function main() {
       JSON.stringify(fake.getGlobalSettings().packages),
     );
 
-    await service.write("project", "skills", ["/proyecto/skills"]);
+    await service.write("project", "themes", ["/proyecto/temas"]);
     const projectValues = await service.readAll("project");
     const globalValues = await service.readAll("global");
     check(
       "a project write lands in the project scope",
-      same(projectValues.skills, ["/proyecto/skills"]),
-      JSON.stringify(projectValues.skills),
+      same(projectValues.themes, ["/proyecto/temas"]),
+      JSON.stringify(projectValues.themes),
     );
     check(
       "the global scope is untouched by a project write",
-      same(globalValues.skills, []),
-      JSON.stringify(globalValues.skills),
+      same(globalValues.themes, []),
+      JSON.stringify(globalValues.themes),
     );
 
     await service.reload();

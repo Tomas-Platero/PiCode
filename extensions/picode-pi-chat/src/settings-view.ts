@@ -4,13 +4,16 @@ import {
   describeSettings,
   PI_SETTING_DESCRIPTORS,
   PiSettingsService,
+  withPackageSkill,
   type PiCodeConfigStore,
+  type PiPackageEntry,
   type PiSettingDescriptor,
   type PiSettingOption,
   type PiSettingScope,
   type PiSettingValue,
   type SettingWire,
 } from "./pi-settings";
+import type { SkillDiscoveryResult } from "./skills";
 import { buildWebviewHtml } from "./webview-html";
 import type { PiModel } from "./protocol";
 
@@ -85,6 +88,14 @@ export interface SettingsViewOptions {
   cwd(): string | undefined;
   /** The models pi has configured, for the provider/model dropdowns. */
   models(): Promise<readonly PiModel[]>;
+  /**
+   * The skills pi can see, discovered from the same runtime the chat uses.
+   *
+   * The rows depend on the scope's own `packages` value — that is what pi filters
+   * packages by — so the view passes the entries it already read for the current
+   * scope: a filter written in one scope must not change what the other scope shows.
+   */
+  skills(packages: readonly PiPackageEntry[]): Promise<SkillDiscoveryResult>;
   /** PiCode's own configuration, for the rows that live in the editor's settings. */
   picode(): PiCodeConfigStore | undefined;
   /**
@@ -98,6 +109,15 @@ export interface SettingsViewOptions {
 }
 
 const MODELS_TTL_MS = 10_000;
+
+/**
+ * How long a skill listing may be reused.
+ *
+ * The cache key already covers this panel's own writes; the lifetime covers the one
+ * thing a key cannot see — a package installed, or a skill file added, while the tab
+ * stayed open.
+ */
+const SKILLS_TTL_MS = 15_000;
 
 /**
  * The catalogue with the provider/model dropdown options filled from the session.
@@ -175,6 +195,10 @@ export class SettingsView {
   private scope: PiSettingScope = "global";
   private startAt: string | undefined;
   private modelsCache: { models: readonly PiModel[]; at: number } | undefined;
+  /** The last skill discovery, with the key it was made for. See `discoveredSkills`. */
+  private skillsCache:
+    | { key: string; at: number; value: SkillDiscoveryResult }
+    | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   private constructor(
@@ -248,10 +272,10 @@ export class SettingsView {
       extensionUri: this.extensionUri,
       title: "PiCode: ajustes de pi",
       body: SETTINGS_BODY,
-      // The pure module first: `settings.js` reads `globalThis.PiCodePackageRows`
-      // while it renders the packages table, so the reversed order would leave it
-      // with nothing to draw from.
-      scripts: ["package-rows.js", "settings.js"],
+      // The two pure row modules first: `settings.js` reads `PiCodePackageRows` and
+      // `PiCodeSkillRows` while it renders their tables, so the reversed order would
+      // leave it with nothing to draw from.
+      scripts: ["package-rows.js", "skill-rows.js", "settings.js"],
       // `codicon.css` belongs here and not only in the chat panel: the packages
       // table's action column is two icon-only buttons, and a `.codicon` class with
       // no stylesheet behind it paints an empty square — a button that looks
@@ -349,6 +373,32 @@ export class SettingsView {
         await this.pushState();
         break;
       }
+      case "toggleSkill": {
+        const service = await this.ensureService();
+        if (service === undefined) {
+          this.post({ type: "error", message: this.serviceError ?? "No se pudo escribir." });
+          return;
+        }
+        if (
+          !isScope(record.scope) ||
+          typeof record.pattern !== "string" ||
+          typeof record.packageSource !== "string" ||
+          typeof record.enabled !== "boolean"
+        ) {
+          return;
+        }
+        await this.toggleSkill(
+          service,
+          record.scope,
+          record.pattern,
+          record.packageSource,
+          record.enabled,
+        );
+        // Repaint either way: on success this is what keeps the pane in place with
+        // the new state, and on a refusal it restores the switch to what pi stores.
+        await this.pushState();
+        break;
+      }
       case "write": {
         const service = await this.ensureService();
         if (service === undefined) {
@@ -395,12 +445,42 @@ export class SettingsView {
       case "refresh": {
         const service = await this.ensureService();
         await service?.reload();
+        // A refresh is the owner asking for a re-read, so the cached listing goes with
+        // it: reusing it here would answer the one question the button exists to ask.
+        this.skillsCache = undefined;
         await this.pushState();
         break;
       }
       default:
         break;
     }
+  }
+
+  /**
+   * The skill discovery, reused while the answer cannot have changed.
+   *
+   * `pi list` is a process, and the pane repaints after every write, so asking for the
+   * listing on each repaint would make every switch in this tab pay for a spawn. The
+   * cache key is the scope's `packages` value, because that is what decides which
+   * package skills are on: a toggle changes it, which is exactly when the answer went
+   * stale, so the invalidation is the data rather than an event to remember to fire.
+   */
+  private async discoveredSkills(
+    scope: PiSettingScope,
+    packages: readonly PiPackageEntry[],
+  ): Promise<SkillDiscoveryResult> {
+    const key = `${scope}|${JSON.stringify(packages)}`;
+    const now = Date.now();
+    if (
+      this.skillsCache !== undefined &&
+      this.skillsCache.key === key &&
+      now - this.skillsCache.at < SKILLS_TTL_MS
+    ) {
+      return this.skillsCache.value;
+    }
+    const value = await this.options.skills(packages);
+    this.skillsCache = { key, at: now, value };
+    return value;
   }
 
   private async pushState(): Promise<void> {
@@ -410,16 +490,25 @@ export class SettingsView {
     try {
       const values = await this.service.readAll(this.scope);
       const groups = groupsWithOptions(await this.availableModels(), values);
+      // The discovery is scope-aware on purpose: whether a package skill is on is
+      // decided by this scope's `packages` value, so the entries read above are what
+      // the discovery is told to filter by.
+      const found = await this.discoveredSkills(this.scope, packageEntriesOf(values.packages));
       this.post({
         type: "state",
         scope: this.scope,
         groups,
         values,
+        skills: found.skills,
+        skillProblems: found.problems,
         diagnostics: this.service.diagnostics(),
         ...(this.startAt !== undefined ? { startAt: this.startAt } : {}),
       });
       this.startAt = undefined;
     } catch (error) {
+      // A discovery that throws lands here too: the tab's existing error path
+      // reports it, so a failed listing never renders as an empty skills list the
+      // owner would read as "no skills".
       this.post({
         type: "error",
         message: `No se pudo leer el estado de pi: ${
@@ -428,8 +517,113 @@ export class SettingsView {
       });
     }
   }
+
+  /**
+   * Flips one package skill, by rewriting that package's row in the scope's
+   * `packages` setting.
+   *
+   * The webview names the skill (its pattern) and its package, never a whole list:
+   * the host reads what pi stores and rebuilds only that package's entry, so a
+   * write cannot drop a filter the webview never saw. The package's complete set of
+   * skill patterns comes from a fresh discovery — `withPackageSkill` needs all of
+   * them to express "this one off" as the allow-list of the rest.
+   */
+  private async toggleSkill(
+    service: PiSettingsService,
+    scope: PiSettingScope,
+    pattern: string,
+    packageSource: string,
+    enabled: boolean,
+  ): Promise<void> {
+    const values = await service.readAll(scope);
+    const packages = packageEntriesOf(values.packages);
+
+    let found: SkillDiscoveryResult;
+    try {
+      // The cached listing is preferred on purpose: the pushState that follows this
+      // toggle would otherwise discover the same thing a second time for one click.
+      found = await this.discoveredSkills(scope, packages);
+    } catch (error) {
+      this.post({
+        type: "writeError",
+        message: `No se pudieron leer las skills: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+      return;
+    }
+
+    const skill = found.skills.find(
+      (candidate) =>
+        candidate.source === "package" &&
+        candidate.packageSource === packageSource &&
+        candidate.pattern === pattern,
+    );
+    if (skill === undefined || !skill.canToggle || skill.pattern === undefined) {
+      this.post({
+        type: "writeError",
+        message:
+          "Solo las skills de un paquete se pueden activar o desactivar; escribe esa skill desde su paquete en la tabla de Paquetes.",
+      });
+      return;
+    }
+
+    const packageSkills = found.skills
+      .filter(
+        (candidate) =>
+          candidate.source === "package" &&
+          candidate.packageSource === packageSource &&
+          typeof candidate.pattern === "string",
+      )
+      .map((candidate) => candidate.pattern as string);
+
+    const index = packages.findIndex((entry) => entry.source === packageSource);
+    if (index < 0) {
+      this.post({
+        type: "writeError",
+        message: "Ese paquete ya no está instalado, así que su skill tampoco se puede cambiar.",
+      });
+      return;
+    }
+
+    const next = packages.slice();
+    next[index] = withPackageSkill(packages[index], pattern, enabled, packageSkills);
+    try {
+      const written = await service.write(scope, "packages", next);
+      await this.options.applied("packages", written);
+    } catch (error) {
+      this.post({
+        type: "writeError",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }
 
 function isScope(value: unknown): value is PiSettingScope {
   return value === "global" || value === "project";
+}
+
+/**
+ * The `packages` value as the editor rows the discovery and the switch use.
+ *
+ * `readAll` already returns `PiPackageEntry[]` for that key, so this only narrows
+ * the shared `PiSettingValue` union; anything that is not a row is dropped rather
+ * than trusted, because the value crosses the webview once on its way to a write.
+ */
+function packageEntriesOf(value: PiSettingValue): PiPackageEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const entries: PiPackageEntry[] = [];
+  for (const item of value) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      typeof (item as { source?: unknown }).source === "string"
+    ) {
+      entries.push(item as PiPackageEntry);
+    }
+  }
+  return entries;
 }

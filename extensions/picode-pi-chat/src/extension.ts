@@ -36,6 +36,7 @@ import {
 } from "./sessions";
 import { GentleView, type GentleRunId } from "./gentle-view";
 import { SettingsView } from "./settings-view";
+import { discoverSkills, installedPackagesLister } from "./skills";
 import {
   firstMeaningfulLine,
   gentleCommands,
@@ -143,6 +144,17 @@ export function activate(context: vscode.ExtensionContext): void {
       const client = view?.bound;
       return client ? client.getAvailableModels().catch(() => []) : [];
     },
+    // The skills the settings tab lists, discovered from the same runtime the chat
+    // runs and pi's own agent directory. It is scope-aware because the caller hands
+    // it that scope's `packages` value: a package filter is what turns a skill on or
+    // off, so the two scopes can show different states for the same skill.
+    skills: async (packages) =>
+      discoverSkills({
+        agentDir: resolveAgentDir(),
+        cwd: agentCwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+        listPackages: installedPackagesLister(resolveRuntime(context.extensionUri)),
+        packageEntries: packages,
+      }),
     // PiCode's own settings are the editor's, not pi's: they are read and written
     // through the configuration API, and always globally.
     picode: () => ({

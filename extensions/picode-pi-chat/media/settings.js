@@ -8,9 +8,10 @@
 
   var vscode = acquireVsCodeApi();
 
-  // Loaded before this file by the settings panel's script list: the table takes
-  // its default page size and every derived column from it.
+  // Loaded before this file by the settings panel's script list: the tables take
+  // their default page size and every derived column from them.
   var packageRows = globalThis.PiCodePackageRows;
+  var skillRows = globalThis.PiCodeSkillRows;
 
   var elements = {
     search: document.getElementById("settings-search"),
@@ -26,6 +27,11 @@
     scope: "global",
     selected: null,
     query: "",
+    // The discovered skills the host computed for the current scope, plus the
+    // problems the discovery reported beside them. Never derived here: the host is
+    // the only side that knows whether a package skill is on in that scope.
+    skills: [],
+    skillProblems: [],
     // The packages table keeps its page, its filters and its sort here, in module
     // state, and never in its own DOM: the host re-posts `state` after every write
     // and this script rebuilds the whole content pane, so anything remembered in
@@ -122,11 +128,14 @@
   }
 
   function renderSettingRow(setting) {
-    // The packages row stacks its text above the control: a six-column table cannot
-    // live in the 45% of the pane the other controls take.
+    // The packages and skills rows stack their text above the control: a six-column
+    // table and a list of rows cannot live in the 45% of the pane the other controls
+    // take.
     var row = createElement(
       "div",
-      setting.kind === "packages" ? "setting-row setting-row-wide" : "setting-row",
+      setting.kind === "packages" || setting.kind === "skills"
+        ? "setting-row setting-row-wide"
+        : "setting-row",
     );
     var text = createElement("div", "setting-text");
     text.appendChild(createElement("div", "setting-title", setting.label));
@@ -153,6 +162,13 @@
         send({ type: "action", key: setting.key });
       });
       wrapper.appendChild(action);
+      return wrapper;
+    }
+
+    // The skills row is a list, not a value. Like the action above, it is handled
+    // before the read-only branch so its own row shape is what gets drawn.
+    if (setting.kind === "skills") {
+      renderSkills(wrapper);
       return wrapper;
     }
 
@@ -296,6 +312,103 @@
     }
 
     return wrapper;
+  }
+
+  // --- the skills list ----------------------------------------------------
+
+  /*
+   * The skills list: one plain row per discovered skill, in the order the discovery
+   * returned them. Filters, sorting and pagination are the next task, so this draws
+   * exactly what the host sent and nothing else.
+   *
+   * The rows themselves come from `skill-rows.js`, the pure module the suite covers,
+   * so the origin label here is the one the tests assert and cannot drift. The switch
+   * is the packages table's own markup: a skill is a resource of a package, and the
+   * two switches write the same kind of thing.
+   */
+
+  /** Why a skill that cannot be switched is not switched, in one short line. */
+  function skillReason(row) {
+    if (row.origin === "pi") {
+      return "Viene con pi; no se puede desactivar.";
+    }
+    if (row.origin === "project") {
+      return "Es del proyecto; no se puede desactivar.";
+    }
+    return "Esta skill no se puede activar ni desactivar.";
+  }
+
+  function renderSkillRow(row) {
+    var item = createElement("div", "skill-row");
+    if (!row.enabled) {
+      item.classList.add("skill-row-off");
+    }
+
+    var text = createElement("div", "skill-text");
+    text.appendChild(createElement("div", "skill-name", row.name));
+    if (row.description !== "") {
+      text.appendChild(createElement("div", "skill-description", row.description));
+    }
+    text.appendChild(createElement("div", "skill-origin", row.originLabel));
+    item.appendChild(text);
+
+    var control = createElement("div", "skill-control");
+    if (row.canToggle) {
+      var toggle = createElement("label", "toggle");
+      var checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = row.enabled;
+      checkbox.setAttribute("aria-label", row.enabled ? "Desactivar" : "Activar");
+      checkbox.addEventListener("change", function () {
+        // The message names the skill by its filter pattern and its package, never by
+        // its index: the host rebuilds that package's entry from what pi stores, so
+        // the webview never recomputes a filter and never has to know the package's
+        // other patterns.
+        send({
+          type: "toggleSkill",
+          scope: state.scope,
+          pattern: row.pattern,
+          packageSource: row.skill.packageSource,
+          enabled: checkbox.checked,
+        });
+      });
+      toggle.appendChild(checkbox);
+      toggle.appendChild(createElement("span", "toggle-slider"));
+      control.appendChild(toggle);
+    } else {
+      control.appendChild(
+        createElement("span", "setting-readonly", row.enabled ? "Activada" : "Desactivada"),
+      );
+      control.appendChild(createElement("span", "setting-note", skillReason(row)));
+    }
+    item.appendChild(control);
+    return item;
+  }
+
+  function renderSkills(wrapper) {
+    var rows = skillRows.buildRows(state.skills);
+
+    if (rows.length === 0) {
+      wrapper.appendChild(
+        createElement("p", "skills-empty settings-empty", "No se encontraron skills."),
+      );
+    } else {
+      var list = createElement("div", "skill-list");
+      for (var index = 0; index < rows.length; index += 1) {
+        list.appendChild(renderSkillRow(rows[index]));
+      }
+      wrapper.appendChild(list);
+    }
+
+    // A partial listing still shows what was found; the problems go beside it, the
+    // way the discovery was designed to report them, instead of blanking the list.
+    if (state.skillProblems.length > 0) {
+      var problems = createElement("div", "skill-problems");
+      for (var p = 0; p < state.skillProblems.length; p += 1) {
+        problems.appendChild(createElement("p", "settings-error", state.skillProblems[p].message));
+      }
+      wrapper.appendChild(problems);
+    }
   }
 
   // --- the packages table -------------------------------------------------
@@ -803,6 +916,8 @@
         state.groups = Array.isArray(message.groups) ? message.groups : [];
         state.values =
           message.values && typeof message.values === "object" ? message.values : {};
+        state.skills = Array.isArray(message.skills) ? message.skills : [];
+        state.skillProblems = Array.isArray(message.skillProblems) ? message.skillProblems : [];
         if (
           typeof message.startAt === "string" &&
           state.groups.some(function (group) { return group.category.id === message.startAt; })

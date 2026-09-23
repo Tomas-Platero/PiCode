@@ -33,7 +33,15 @@ import type { PiThinkingLevel } from "./protocol";
 
 export type PiSettingScope = "global" | "project";
 
-export type PiSettingKind = "boolean" | "select" | "number" | "text" | "list" | "packages" | "action";
+export type PiSettingKind =
+  | "boolean"
+  | "select"
+  | "number"
+  | "text"
+  | "list"
+  | "packages"
+  | "skills"
+  | "action";
 
 /**
  * pi's four per-package resource filters, keyed by resource type.
@@ -498,6 +506,12 @@ export function coerceSettingValue(
     // An action carries no value: the row is a button. Nothing the webview sends
     // for it can be expressed as a setting, so every value is refused here.
     case "action":
+      return undefined;
+
+    // A skills row carries no value of its own either: its rows come from the
+    // discovery, and the switch a package skill draws writes the `packages`
+    // setting. Nothing the webview sends is this row's value.
+    case "skills":
       return undefined;
 
     case "boolean":
@@ -1344,23 +1358,29 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
       }
     },
   },
+  /*
+   * The skills list. Its rows are not pi's settings: they come from the discovery
+   * (`src/skills.ts`), which walks pi's own directory, every installed package and
+   * the project. That is why the descriptor carries no value of its own and no
+   * setter — the host injects the discovered rows into the pushed state, and the
+   * switch a package skill draws rewrites that package's entry in `packages`, which
+   * is the setting pi actually filters by. Manual path entry is deliberately gone:
+   * the three routes are automatic.
+   *
+   * Both scopes are offered because the scope's own `packages` value decides whether
+   * a package skill is on, so the two scopes legitimately show different states.
+   */
   {
-    key: "skills",
+    key: "discoveredSkills",
     category: "skills",
-    label: "Rutas de skills",
-    description: "Carpetas con skills que pi puede invocar como comandos.",
-    kind: "list",
+    label: "Skills que ve pi",
+    description:
+      "Las skills que pi encuentra por sus tres vías automáticas: su propia carpeta, " +
+      "las de los paquetes instalados y las del proyecto. Solo las de un paquete se " +
+      "pueden activar o desactivar.",
+    kind: "skills",
     scopes: ALL_SCOPES,
-    readOnly: false,
-    read: (manager, scope) => readScopedList(manager, scope, "skills"),
-    write: (manager, scope, value) => {
-      const paths = toList(value, "skills");
-      if (scope === "project") {
-        manager.setProjectSkillPaths(paths);
-      } else {
-        manager.setSkillPaths(paths);
-      }
-    },
+    readOnly: true,
   },
   {
     key: "enableSkillCommands",

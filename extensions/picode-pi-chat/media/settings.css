@@ -533,3 +533,78 @@ body {
 .package-empty {
   margin: 12px 0;
 }
+
+/*
+ * The skills list: one plain row per discovered skill, name over description over
+ * origin, with the switch that belongs to the packages table. Only `--vscode-*`
+ * variables, so it reads in every theme.
+ */
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.skill-row:last-child {
+  border-bottom: none;
+}
+
+/*
+ * A skill that is off is dimmed the way a paused package row is: the two lists
+ * describe the same kind of thing, so "off" should read the same in both.
+ */
+.skill-row-off {
+  opacity: 0.6;
+}
+
+.skill-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-name {
+  font-weight: 600;
+}
+
+.skill-description {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  margin-top: 2px;
+}
+
+.skill-origin {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  margin-top: 2px;
+}
+
+.skill-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/*
+ * The problems a partial discovery reported, stacked beside the list it could not
+ * fully fill. The line itself is `.settings-error`; only the stack is new.
+ */
+.skill-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.skills-empty {
+  margin: 0;
+}
