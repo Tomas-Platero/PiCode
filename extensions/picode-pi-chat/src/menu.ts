@@ -46,6 +46,11 @@ export const CATEGORY_LABELS: Record<PiCategoryId, string> = {
 /**
  * The sidebar's declared order, and therefore the complete set of ids it can post.
  *
+ * Gentle AI is deliberately absent. The layer has its own activity-bar entry and its own
+ * panel, so the row here was a second door to the same room; the card keeps only the
+ * doors that lead somewhere new. `gentle` is still a declared `PiCategoryId` — the
+ * settings popup implements that category — but no sidebar row can produce it any more.
+ *
  * Exported because it is the one source of truth for that set: a guard elsewhere has to
  * derive from it instead of repeating the ids, which is exactly how `gentle` was once
  * dropped from a hand-written chain and the Gentle AI row opened the settings tab.
@@ -55,7 +60,6 @@ export const CATEGORY_ORDER: readonly PiCategoryId[] = [
   "extensiones",
   "runtime",
   "proveedores",
-  "gentle",
   "sesion",
 ];
 
@@ -90,7 +94,12 @@ export const CATEGORY_TARGETS: Record<
   // that is where a provider is actually chosen.
   proveedores: "modelo",
   // `gentle` is not a settings category at all. Its value is not a rail id: it means
-  // "the Gentle AI container", and the sidebar boundary opens that panel instead.
+  // "the Gentle AI container", and the boundary opens that panel instead.
+  //
+  // It stays declared even though the card no longer draws the row, because the `Record`
+  // above needs a destination for every id it declares and `gentle` is still a
+  // `PiCategoryId`: the settings popup implements that category. Removing this entry
+  // means removing the popup's category first, not just the row that used to reach it.
   gentle: GENTLE_PANEL_TARGET,
   sesion: "sesion",
 };
@@ -189,15 +198,6 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
           label: CATEGORY_LABELS.proveedores,
           description: "Configurar accesos",
           detail: providers,
-        };
-      case "gentle":
-        return {
-          id,
-          label: CATEGORY_LABELS.gentle,
-          // The review switch is not repeated here: the Gentle AI panel owns that
-          // control, and this line answers only whether the layer is working.
-          description: summarizeGentleCategory(snapshot.gentle),
-          detail: "Estado, revisión, telemetría y sus comandos",
         };
       default:
         return {

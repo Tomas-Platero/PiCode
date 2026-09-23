@@ -26,6 +26,7 @@ const {
   buildCategorySettings,
   describeAuthCheck,
   CATEGORY_LABELS,
+  CATEGORY_ORDER,
   CATEGORY_TARGETS,
   GENTLE_PANEL_TARGET,
   resolveCategoryTarget,
@@ -55,15 +56,14 @@ const actions = (rows) => rows.filter((row) => row.kind === "item").map((row) =>
 // --- first level -----------------------------------------------------------
 
 const categories = buildCategories(full);
-check("there is one category per area", categories.length === 6, `${categories.length}`);
+check("there is one category per area", categories.length === 5, `${categories.length}`);
 check(
   "each category's second line says what opening it does",
   categories[0].description === "Elegir el modelo y cuánto razona" &&
     categories[1].description === "Ver y gestionar los paquetes" &&
     categories[2].description === "Cambiar qué pi se ejecuta" &&
     categories[3].description === "Configurar accesos" &&
-    categories[4].description === "leyendo…" &&
-    categories[5].description === "Uso, conversaciones y reinicio",
+    categories[4].description === "Uso, conversaciones y reinicio",
   JSON.stringify(categories.map((row) => row.description)),
 );
 check(
@@ -72,11 +72,14 @@ check(
     categories[1].detail === "10 instaladas" &&
     categories[2].detail === "pi del PATH 0.86.1 · RPC (proceso aparte)" &&
     categories[3].detail === "3 con modelos" &&
-    categories[5].detail === "En reposo · 42 mensajes",
+    categories[4].detail === "En reposo · 42 mensajes",
   JSON.stringify(categories.map((row) => row.detail)),
 );
+// The card used to end on a Gentle AI row whose second line read the layer's state. That
+// row is gone: Gentle AI has its own activity-bar panel and `summarizeGentleCategory` is
+// covered by the gentle suite. What is checked here is that no state can put the row back.
 check(
-  "a loaded gentle is reported with its version and without the review switch",
+  "the card never draws the retired Gentle AI row, whatever the layer reports",
   buildCategories({
     ...full,
     gentle: {
@@ -88,19 +91,8 @@ check(
       review: { rdd: "off", global: "off", cloneLocal: "unset" },
       telemetry: "enabled",
     },
-  })[4].description === "activo · v3.4.0",
-  buildCategories({
-    ...full,
-    gentle: {
-      installed: true,
-      active: true,
-      commandCount: 12,
-      commands: [],
-      version: "gentle-ai 3.4.0",
-      review: { rdd: "off", global: "off", cloneLocal: "unset" },
-      telemetry: "enabled",
-    },
-  })[4].description,
+  }).every((row) => row.id !== "gentle"),
+  "",
 );
 
 const unknown = buildCategories({
@@ -118,13 +110,13 @@ check(
 );
 check(
   "a missing session says so rather than showing zero messages",
-  unknown[5].description === "Uso, conversaciones y reinicio" &&
-    unknown[5].detail === "En reposo · sin sesión",
-  unknown[5].detail,
+  unknown[4].description === "Uso, conversaciones y reinicio" &&
+    unknown[4].detail === "En reposo · sin sesión",
+  unknown[4].detail,
 );
 check(
   "a running agent shows as working",
-  buildCategories({ ...full, streaming: true })[5].detail === "Trabajando · 42 mensajes",
+  buildCategories({ ...full, streaming: true })[4].detail === "Trabajando · 42 mensajes",
   "",
 );
 
@@ -358,10 +350,14 @@ check(
 const sidebarIds = categories.map((row) => row.id);
 const railIds = PI_SETTINGS_CATEGORIES.map((category) => category.id);
 const untargeted = sidebarIds.filter((id) => CATEGORY_TARGETS[id] === undefined);
+// The table keeps a `gentle` entry the card can no longer produce, because `gentle` is
+// still a declared id the settings popup implements. So the invariant is one target more
+// than rows, and the extra target must be exactly that retired one.
+const extraTargets = Object.keys(CATEGORY_TARGETS).filter((id) => !sidebarIds.includes(id));
 check(
-  "every sidebar category declares where it lives, and nothing else is declared",
-  untargeted.length === 0 && Object.keys(CATEGORY_TARGETS).length === sidebarIds.length,
-  JSON.stringify(untargeted),
+  "every sidebar category declares where it lives, and only the retired gentle id sits on top",
+  untargeted.length === 0 && extraTargets.join(",") === "gentle",
+  JSON.stringify({ untargeted, extraTargets }),
 );
 const orphanTargets = Object.values(CATEGORY_TARGETS).filter(
   (target) => target !== GENTLE_PANEL_TARGET && !railIds.includes(target),
@@ -372,17 +368,19 @@ check(
   JSON.stringify(orphanTargets),
 );
 check(
-  "the deep-link table is the one the program locked",
+  "the deep-link table still sends every sidebar row where the program locked it",
   CATEGORY_TARGETS.modelo === "modelo" &&
     CATEGORY_TARGETS.extensiones === "paquetes" &&
     CATEGORY_TARGETS.runtime === "picode" &&
     CATEGORY_TARGETS.proveedores === "modelo" &&
-    CATEGORY_TARGETS.gentle === GENTLE_PANEL_TARGET &&
-    CATEGORY_TARGETS.sesion === "sesion",
+    CATEGORY_TARGETS.sesion === "sesion" &&
+    // Kept on purpose, though nothing posts it any more: `gentle` remains a declared id
+    // and this is the destination the panel boundary resolves it to.
+    CATEGORY_TARGETS.gentle === GENTLE_PANEL_TARGET,
   JSON.stringify(CATEGORY_TARGETS),
 );
 check(
-  "a sidebar id is translated at the boundary",
+  "a sidebar id is translated at the boundary, and the retired gentle id still names the panel",
   resolveCategoryTarget("extensiones") === "paquetes" &&
     resolveCategoryTarget("runtime") === "picode" &&
     resolveCategoryTarget("gentle") === GENTLE_PANEL_TARGET,
@@ -399,19 +397,22 @@ check(
 );
 
 // The guard in the sidebar's own message handler decides whether a posted id reaches that
-// boundary at all, and it is derived from the declared category list. A category added to
-// the sidebar without a guard entry therefore fails here, instead of silently opening the
-// first settings category the way `gentle` once did.
-const declaredCategories = Object.keys(CATEGORY_LABELS);
-const rejectedCategories = declaredCategories.filter((id) => !isCategory(id));
+// boundary at all, and it is derived from the declared order — the ids the card can draw.
+// `gentle` is still a declared label, because the settings popup implements that category,
+// but it is no longer a card row: the guard must accept every row and reject `gentle`, or a
+// future re-add without a guard entry would fail here instead of opening the wrong place.
+const drawnCategories = Object.keys(CATEGORY_LABELS).filter((id) => CATEGORY_ORDER.includes(id));
+const rejectedCategories = drawnCategories.filter((id) => !isCategory(id));
+const declaredButNotDrawn = Object.keys(CATEGORY_LABELS).filter(
+  (id) => !CATEGORY_ORDER.includes(id),
+);
 check(
-  "the guard accepts every category the sidebar declares",
-  declaredCategories.length === sidebarIds.length && rejectedCategories.length === 0,
-  JSON.stringify({
-    declared: declaredCategories.length,
-    sidebar: sidebarIds.length,
-    rejected: rejectedCategories,
-  }),
+  "the guard accepts every category the sidebar draws, and rejects the retired gentle id",
+  drawnCategories.length === sidebarIds.length &&
+    rejectedCategories.length === 0 &&
+    declaredButNotDrawn.join(",") === "gentle" &&
+    !isCategory("gentle"),
+  JSON.stringify({ drawnCategories, rejectedCategories, declaredButNotDrawn }),
 );
 check(
   "the guard accepts nothing else, so a stray value still means no category",
