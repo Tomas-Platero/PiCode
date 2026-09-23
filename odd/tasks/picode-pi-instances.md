@@ -272,6 +272,27 @@ as evidence.
     OAuth y sí necesitan el puente. `login()` rechaza con `CredentialSynchronizationError` cuando
     commitea la credencial pero falla la sincronización: hay que inspeccionarlo, no reintentar
     a ciegas.
+  - [x] **T5c — El login llena el perfil de PiCode o no escribe.** El defecto que encontró T5b,
+    arreglado: `login(providerId, type, interaction, agentDir)` con el destino **obligatorio**, así
+    que el compilador rechaza la omisión en vez de dejar que un llamador herede la carpeta
+    equivocada. Con el pi del dueño elegido, `instanceAgentDir` es `undefined` y, al ser el
+    parámetro `string`, **ni siquiera se puede pasar**: no hay respaldo silencioso y no hay forma
+    de escribir el perfil del dueño ni por accidente. `434c6eb` y su arreglo. El suite ganó un
+    **control por mutación** (se cambia el código a propósito para ver el test nuevo fallar), que
+    es la primera evidencia de falsación de este trabajo.
+  - [ ] **T6a — El asistente de primer arranque, sin terminal.** Cuando el pi elegido es el propio y
+    su perfil aún no sirve, el asistente lo dice —el editor sigue usando el del dueño hasta
+    entonces— y ofrece las **dos** formas de llenarlo, cada una ejecutando lo que ya existe y no
+    una segunda implementación: **importar** (T3) o **iniciar sesión** (T6b). Ningún camino puede
+    terminar en «ejecuta esto en un terminal». Si el pi elegido es el del dueño, PiCode no posee
+    perfil: no hay paso de perfil ni login, y lo dice en vez de ofrecer algo que no puede funcionar.
+  - [ ] **T6b — Iniciar sesión en un proveedor, desde el editor.** El comando que T6a ofrece:
+    elegir proveedor y, según sea, una clave (campo de texto) o una suscripción (OAuth, con el
+    `interaction` que ya existe), escribiendo **siempre** en el perfil de PiCode. Informa honesto:
+    distingue «este pi no sabe iniciar sesión desde el SDK» de un fallo de sincronización
+    (`CredentialSynchronizationError`: nombrar proveedor y operación, no reintentar a ciegas). Si el
+    catálogo de proveedores no se puede descubrir por el SDK, **parar y decirlo**, no inventar una
+    lista a mano.
 - [ ] **T6 — El asistente sin terminal.** El de primer arranque se completa entero dentro del
   editor: importar (T3) o empezar de cero. Mientras T5 no exista, si el perfil interno está
   vacío lo **dice antes** de ofrecer ese camino, y no deja al dueño en un callejón sin salida.
