@@ -444,26 +444,29 @@ if (-not (Test-Path -LiteralPath $markSource)) {
     # history, not inside every shipped copy of the icon.
     $mark = (Get-Content -LiteralPath $markSource -Raw) -replace '(?s)<metadata>.*?</metadata>', '' -replace '\s+xmlns:c2pa="[^"]*"', ''
 
-    # Every asset in the tree that carries the upstream logo. The letterpress pair is the
-    # mark an empty editor draws behind its hints ("mostrar todos los comandos", "abrir
-    # configuración", "alternar terminal"), which is the worst place to miss because it is on
-    # screen whenever the owner has nothing open; the sessions files are the same glyph one
-    # view further in, for the agent sessions surface.
+    # The watermark is the line drawing, not the mark with its plate.
     #
-    # The paths are relative to `resources\app`, not bare names, because not all of them live
-    # in `out\media`: the sessions letterpress sits under its own contrib directory.
+    # `picode-icon.svg` opens with a full-canvas `rect`, which is right for an icon that has
+    # to hold its own against a background and wrong for the mark an empty editor draws
+    # behind its hints: there, the plate becomes a dark block sitting on the editor's own
+    # surface. `picode.svg` is the same family drawn as strokes only, so it stays a mark at
+    # any size instead of a rectangle.
+    $watermarkSource = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode.svg"
+    $watermark = if (Test-Path -LiteralPath $watermarkSource) {
+        Get-Content -LiteralPath $watermarkSource -Raw
+    } else {
+        Write-Warn "No line-drawing mark at $watermarkSource; the watermarks will use the icon mark."
+        $mark
+    }
+
+    # Every asset in the tree that carries the upstream logo. The paths are relative to
+    # `resources\app`, not bare names, because not all of them live in `out\media`.
     foreach ($relative in @(
         "out\media\code-icon.svg",
         "out\media\vscode-icon.svg",
-        "out\media\letterpress-dark.svg",
-        "out\media\letterpress-light.svg",
-        "out\media\letterpress-hcDark.svg",
-        "out\media\letterpress-hcLight.svg",
         "out\media\sessions-icon.svg",
         "out\media\sessions-logo-dark.svg",
-        "out\media\sessions-logo-light.svg",
-        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-dark.svg",
-        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-light.svg"
+        "out\media\sessions-logo-light.svg"
     )) {
         $target = Join-Path $RepoRoot "resources\app\$relative"
         if (-not (Test-Path -LiteralPath $target)) {
@@ -473,6 +476,29 @@ if (-not (Test-Path -LiteralPath $markSource)) {
         Write-Act "Draw $relative with the PiCode mark"
         if (-not $isPreview) {
             Set-Content -LiteralPath $target -Value $mark -NoNewline
+            $Done.Add("replaced $relative")
+        }
+    }
+
+    # The watermarks: what an empty editor — and the agent sessions surface one view further
+    # in — draws behind their hints ("mostrar todos los comandos", "abrir configuración",
+    # "alternar terminal"). They take the line drawing rather than the icon mark.
+    foreach ($relative in @(
+        "out\media\letterpress-dark.svg",
+        "out\media\letterpress-light.svg",
+        "out\media\letterpress-hcDark.svg",
+        "out\media\letterpress-hcLight.svg",
+        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-dark.svg",
+        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-light.svg"
+    )) {
+        $target = Join-Path $RepoRoot "resources\app\$relative"
+        if (-not (Test-Path -LiteralPath $target)) {
+            Write-Skip "$relative is not there"
+            continue
+        }
+        Write-Act "Draw $relative with the PiCode line mark"
+        if (-not $isPreview) {
+            Set-Content -LiteralPath $target -Value $watermark -NoNewline
             $Done.Add("replaced $relative")
         }
     }
