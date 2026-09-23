@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { resolveLatestVersions } from "./catalog";
 
 /**
  * Which `pi` PiCode runs.
@@ -359,6 +360,238 @@ export async function describeRuntime(extensionUri: vscode.Uri): Promise<Runtime
 export interface InstallResult {
   ok: boolean;
   message: string;
+  /** The version that ended up recorded, set only when the install succeeded. */
+  version?: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * The managed pi's own version
+ * ------------------------------------------------------------------ */
+
+/**
+ * What PiCode can say about its own pi's version, and what the settings row shows.
+ *
+ * The three states the owner acts on are `current` (nothing to do), `available` (the
+ * registry publishes a different version than the record holds) and `unknown` (the check
+ * did not answer, which is not the same as "no update"). `missing` is the fourth: the
+ * record exists but nothing is installed at the managed root, so there is nothing to
+ * update — there is something to install.
+ */
+export type PiUpdateState = "current" | "available" | "unknown" | "missing";
+
+export interface PiUpdateReport {
+  /** The version the record holds, which is what the editor reports. */
+  installed: string;
+  /** False when nothing is installed at the managed root, whatever the record says. */
+  managedInstalled: boolean;
+  /** The version the registry publishes as latest, when the check answered. */
+  latest?: string;
+  /** True when pressing the row would change what runs: updated, downgraded or installed. */
+  updateAvailable: boolean;
+  state: PiUpdateState;
+  /** One Spanish line for the settings row. */
+  message: string;
+}
+
+export interface PiUpdateInput {
+  /** The version in `runtime.json`: the record of what PiCode installed. */
+  installed: string;
+  /** Whether the managed bundle is actually there. */
+  managedInstalled: boolean;
+  /** The registry's answer, or undefined when the check could not be made. */
+  latest: string | undefined;
+}
+
+/**
+ * Orders two published pi versions.
+ *
+ * pi publishes plain `major.minor.patch`, so the parts are compared as numbers — the
+ * string comparison that puts `0.9.0` above `0.87.1` would decide an update wrongly — and
+ * anything after `-` is ignored. `undefined` means the two cannot be ordered at all, which
+ * the caller reads as "cannot tell" rather than as either of them being newer.
+ */
+export function compareVersions(left: string, right: string): number | undefined {
+  const leftParts = versionParts(left);
+  const rightParts = versionParts(right);
+  if (leftParts === undefined || rightParts === undefined) {
+    return undefined;
+  }
+
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) {
+      return difference < 0 ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function versionParts(version: string): number[] | undefined {
+  const core = version.trim().split("-")[0] ?? "";
+  if (core === "") {
+    return undefined;
+  }
+
+  const parts: number[] = [];
+  for (const part of core.split(".")) {
+    if (!/^\d+$/.test(part)) {
+      return undefined;
+    }
+    parts.push(Number(part));
+  }
+  return parts;
+}
+
+/**
+ * The one line the settings row states before the owner decides anything.
+ *
+ * It always names the installed version (or says there is none) and always names what the
+ * registry published (or says that could not be found out), because those are the two
+ * facts the decision needs and neither can be guessed from the other.
+ */
+export function buildPiUpdateReport(input: PiUpdateInput): PiUpdateReport {
+  const { installed, managedInstalled, latest } = input;
+  const installedLabel = `Instalada la ${installed}`;
+
+  if (latest === undefined) {
+    return {
+      installed,
+      managedInstalled,
+      updateAvailable: false,
+      state: managedInstalled ? "unknown" : "missing",
+      message: managedInstalled
+        ? `${installedLabel} · no se pudo comprobar la última publicada.`
+        : "Sin instalar · no se pudo comprobar la última publicada.",
+    };
+  }
+
+  if (!managedInstalled) {
+    return {
+      installed,
+      managedInstalled,
+      latest,
+      updateAvailable: true,
+      state: "missing",
+      message: `Sin instalar · publicada la ${latest}.`,
+    };
+  }
+
+  if (latest === installed) {
+    return {
+      installed,
+      managedInstalled,
+      latest,
+      updateAvailable: false,
+      state: "current",
+      message: `${installedLabel} · es la última publicada.`,
+    };
+  }
+
+  const order = compareVersions(latest, installed);
+  return {
+    installed,
+    managedInstalled,
+    latest,
+    updateAvailable: true,
+    state: "available",
+    // An older published version is named as older: the row must not read as an update
+    // the owner is missing when pressing it would in fact go backwards.
+    message:
+      order !== undefined && order < 0
+        ? `${installedLabel} · publicada la ${latest}, más antigua.`
+        : `${installedLabel} · publicada la ${latest}.`,
+  };
+}
+
+/**
+ * Asks the package registry which version of the pinned package is published as latest.
+ *
+ * `undefined` is a check that could not be made, never "there is no newer version": the
+ * row says which of the two happened. The registry client is the catalogue's own, so the
+ * update check and the catalogue cannot end up asking two different questions of the same
+ * endpoint.
+ */
+export async function latestPublishedVersion(pin: RuntimePin): Promise<string | undefined> {
+  const versions = await resolveLatestVersions([pin.package]);
+  return versions.get(pin.package);
+}
+
+/**
+ * The manifest of the managed install, whose version is the one actually on disk.
+ *
+ * `runtime.json` records what PiCode installed, but a record is a claim; this is the
+ * fact. It is read straight after npm reports success, so the record is written from the
+ * package that landed rather than from the version that was asked for.
+ */
+export function readManagedVersion(root: string, pin: RuntimePin): string | undefined {
+  const manifest = path.join(root, "node_modules", ...pin.package.split("/"), "package.json");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(manifest, "utf8")) as unknown;
+  } catch {
+    return undefined;
+  }
+
+  const version =
+    typeof parsed === "object" && parsed !== null
+      ? (parsed as { version?: unknown }).version
+      : undefined;
+  return typeof version === "string" && version !== "" ? version : undefined;
+}
+
+/**
+ * Records the version of the managed install that is on disk.
+ *
+ * `runtime.json` is data: the version in it is what the editor reports and what the next
+ * update compares against, so it is written from the package npm just left behind and only
+ * then. An install that produced no package records nothing, and says so, rather than
+ * leaving the file claiming a version the disk does not have.
+ */
+export function writePin(extensionUri: vscode.Uri, version: string): void {
+  const file = vscode.Uri.joinPath(extensionUri, PIN_FILE).fsPath;
+  // The package stays whatever the file says: this records a version, it does not decide
+  // which package PiCode installs.
+  const pin = readPin(extensionUri);
+  writeFileSync(file, `${JSON.stringify({ package: pin.package, version }, null, 2)}\n`, "utf8");
+}
+
+/**
+ * The install's outcome, decided by what is on disk once npm is done.
+ *
+ * Separated from the npm run so the rule can be exercised without a registry: the record
+ * follows the artifact, and an npm run that left no package is a failed install even when
+ * npm exited zero.
+ */
+export function recordManagedInstall(
+  extensionUri: vscode.Uri,
+  root: string,
+  pin: RuntimePin,
+): InstallResult {
+  const installed = readManagedVersion(root, pin);
+  if (installed === undefined) {
+    return {
+      ok: false,
+      message: `npm terminó sin error, pero ${pin.package} no quedó en la carpeta del runtime de PiCode.`,
+    };
+  }
+
+  try {
+    writePin(extensionUri, installed);
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Se instaló ${pin.package}@${installed}, pero no se pudo anotar la versión instalada: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+
+  return {
+    ok: true,
+    version: installed,
+    message: `Instalado ${pin.package}@${installed}.`,
+  };
 }
 
 /**
@@ -367,23 +600,29 @@ export interface InstallResult {
  * `--ignore-scripts` is deliberate: the managed install only needs the published
  * bundle, and running arbitrary install scripts is a supply-chain surface this
  * product should not add on the user's behalf.
+ *
+ * `version` installs a version other than the pinned one — the settings tab's update row
+ * uses it to move the managed pi forward — and the record is written from whatever npm
+ * leaves on disk, never from the version that was requested.
  */
 export function installManagedRuntime(
   extensionUri: vscode.Uri,
   onOutput: (line: string) => void,
+  version?: string,
 ): Promise<InstallResult> {
   const pin = readPin(extensionUri);
   const root = managedRoot(extensionUri);
   const npm = resolveOnPath("npm");
+  const target = version ?? pin.version;
 
   if (!npm) {
     return Promise.resolve({
       ok: false,
-      message: "npm was not found on PATH, so the managed pi runtime cannot be installed.",
+      message: "No se encontró npm en el PATH, así que no se puede instalar el pi propio de PiCode.",
     });
   }
 
-  const spec = `${pin.package}@${pin.version}`;
+  const spec = `${pin.package}@${target}`;
   const args = [
     "install",
     "--prefix",
@@ -421,13 +660,16 @@ export function installManagedRuntime(
     child.stdout?.on("data", forward);
     child.stderr?.on("data", forward);
     child.on("error", (error) => {
-      resolve({ ok: false, message: `npm could not be started: ${error.message}` });
+      resolve({ ok: false, message: `npm no se pudo iniciar: ${error.message}` });
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve({ ok: true, message: `Installed ${spec}.` });
+        // Only a finished npm run gets to touch the record, and only with the version it
+        // actually left behind: a failure here must not leave `runtime.json` naming a
+        // version that is not on disk.
+        resolve(recordManagedInstall(extensionUri, root, pin));
       } else {
-        resolve({ ok: false, message: `npm exited with code ${code}.` });
+        resolve({ ok: false, message: `npm terminó con el código ${code}.` });
       }
     });
   });

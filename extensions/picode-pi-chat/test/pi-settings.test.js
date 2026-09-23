@@ -22,7 +22,9 @@ const {
   PI_SETTINGS_CATEGORIES,
   PI_SETTING_DESCRIPTORS,
   describeSettings,
+  describeSettingWire,
   coerceSettingValue,
+  setPiVersionStateSource,
   PiSettingsService,
 } = require(path.join(__dirname, "..", "out", "pi-settings.js"));
 
@@ -570,12 +572,12 @@ async function main() {
   );
 
   check(
-    "the picode category carries the runtime, the transport and the repeatable setup row",
+    "the picode category carries the runtime, the transport, the version row and the repeatable setup row",
     same(
       groups
         .filter((group) => group.category.id === "picode")
         .flatMap((group) => group.settings.map((descriptor) => descriptor.key)),
-      ["picode.runtime", "picode.transport", "picode.onboarding"],
+      ["picode.runtime", "picode.transport", "picode.piVersion", "picode.onboarding"],
     ),
     groups.map((group) => group.category.id).join(", "),
   );
@@ -594,21 +596,54 @@ async function main() {
   );
 
   check(
-    "the only action row is the repeatable initial setup, pointed at the wizard command",
+    "the two action rows are the repeatable initial setup and the pi update, each with its own command",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "action").map(
         (descriptor) => descriptor.key,
       ),
-      ["picode.onboarding"],
+      ["picode.piVersion", "picode.onboarding"],
     ) &&
       setting("picode.onboarding").command === "picode.piChat.onboarding" &&
       setting("picode.onboarding").read === undefined &&
-      setting("picode.onboarding").write === undefined,
+      setting("picode.onboarding").write === undefined &&
+      setting("picode.piVersion").command === "picode.piChat.updatePi" &&
+      setting("picode.piVersion").write === undefined,
     JSON.stringify({
-      command: setting("picode.onboarding").command,
-      read: setting("picode.onboarding").read,
-      write: setting("picode.onboarding").write,
+      commands: PI_SETTING_DESCRIPTORS.filter(
+        (descriptor) => descriptor.kind === "action",
+      ).map((descriptor) => `${descriptor.key}=${descriptor.command}`),
     }),
+  );
+
+  check(
+    "the pi update row draws its button from its own caption, and the wizard row keeps the default",
+    setting("picode.piVersion").actionLabel === "Instalar la última publicada" &&
+      setting("picode.piVersion").label.trim() !== "" &&
+      setting("picode.piVersion").description.trim() !== "" &&
+      setting("picode.onboarding").actionLabel === undefined,
+    JSON.stringify({
+      update: describeSettingWire(setting("picode.piVersion")).actionLabel,
+      wizard: describeSettingWire(setting("picode.onboarding")).actionLabel,
+    }),
+  );
+
+  check(
+    "the pi update row reads the host's reading, and has none before the host registers one",
+    setting("picode.piVersion").read() === undefined,
+    String(setting("picode.piVersion").read()),
+  );
+
+  setPiVersionStateSource(() => "Instalada la 0.86.1 · publicada la 0.87.1.");
+  check(
+    "the host's reading is what the row hands the tab",
+    setting("picode.piVersion").read() === "Instalada la 0.86.1 · publicada la 0.87.1.",
+    String(setting("picode.piVersion").read()),
+  );
+  setPiVersionStateSource(undefined);
+  check(
+    "unregistering the reading leaves the row with nothing rather than a stale line",
+    setting("picode.piVersion").read() === undefined,
+    String(setting("picode.piVersion").read()),
   );
 
   /* ---------------------------------------------------------------- *
@@ -744,6 +779,28 @@ async function main() {
         actionError.message.includes("no value"),
       actionError && actionError.message,
     );
+
+    // The version row is the one action whose reading is a fact the host owns: the tab
+    // paints it from the values `readAll` returns, so that reading has to arrive there.
+    setPiVersionStateSource(() => "Instalada la 0.86.1 · publicada la 0.87.1.");
+    const versionValues = await service.readAll("global");
+    check(
+      "the tab receives the version row's reading, with no read error beside it",
+      versionValues["picode.piVersion"] === "Instalada la 0.86.1 · publicada la 0.87.1." &&
+        !service
+          .diagnostics()
+          .some((diagnostic) => diagnostic.message.includes("picode.piVersion")),
+      JSON.stringify(versionValues["picode.piVersion"]),
+    );
+    const versionWrite = await rejectionOf(
+      service.write("global", "picode.piVersion", "0.87.1"),
+    );
+    check(
+      "the version row has no value to write: pressing it runs the update command",
+      versionWrite !== undefined && versionWrite.message.includes("picode.piVersion"),
+      versionWrite && versionWrite.message,
+    );
+    setPiVersionStateSource(undefined);
 
     const unknownError = await rejectionOf(service.write("global", "not.a.setting", 1));
     check(

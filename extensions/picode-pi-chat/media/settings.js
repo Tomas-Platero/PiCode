@@ -103,10 +103,12 @@
 
   function valueLabel(setting) {
     var value = state.values[setting.key];
-    // An action is a button, not a value: the host never sends one for it, so it
-    // shows nothing rather than the "sin definir" the other valueless rows use.
+    // An action is normally a button and nothing else: the host sends no value for the
+    // wizard row, so it shows no line rather than the "sin definir" the other valueless
+    // rows use. The version row is the exception — its value is the fact the owner reads
+    // before pressing it — so a value the host did send is shown instead of swallowed.
     if (setting.kind === "action") {
-      return "";
+      return value === undefined || value === null ? "" : String(value);
     }
     if (value === undefined || value === null) {
       return "sin definir";
@@ -187,11 +189,22 @@
     // An action row is a button, and this branch comes first so the read-only row
     // below can never paint its "solo lectura" note over a row that has no value.
     if (setting.kind === "action") {
-      // The row's own title already names what this is, so the button says what
-      // pressing it does instead of repeating the title next to itself. A second
-      // action row with a different verb will need the caption on the descriptor,
-      // the way `unit` is declared for a number.
-      var action = createElement("button", "setting-action-button", "Abrir el asistente");
+      // The row's own title names the thing, so the button says what pressing it does
+      // instead of repeating the title next to itself; a row that states a fact before
+      // the owner decides puts that fact here, in front of the button.
+      var actionState = valueLabel(setting);
+      if (actionState !== "") {
+        var stateLine = createElement("span", "setting-readonly", actionState);
+        // The line can outgrow the control's half of the pane and be trimmed, so the
+        // whole of it stays reachable on hover.
+        stateLine.title = actionState;
+        wrapper.appendChild(stateLine);
+      }
+      var action = createElement(
+        "button",
+        "setting-action-button",
+        setting.actionLabel || "Abrir el asistente",
+      );
       action.type = "button";
       action.addEventListener("click", function () {
         // Only the row's key travels: the host owns the command the row runs.

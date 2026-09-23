@@ -24,7 +24,7 @@ import {
   type OnboardingTarget,
 } from "./onboarding";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
-import type { PiSettingValue } from "./pi-settings";
+import { setPiVersionStateSource, type PiSettingValue } from "./pi-settings";
 import {
   formatBytes,
   listSessions,
@@ -57,14 +57,19 @@ import { PiSdkClient } from "./pi-sdk-client";
 import type { PiClient } from "./pi-client";
 import type { PiModel, PiSlashCommand, PiThinkingLevel } from "./protocol";
 import {
+  buildPiUpdateReport,
   chooseBackend,
   describeRuntime,
   installManagedRuntime,
+  latestPublishedVersion,
+  managedInstalled,
+  readPin,
   readTransport,
   resolveOnPath,
   resolveRuntime,
   resolveSdkEntry,
   type PiTransport,
+  type PiUpdateReport,
   type RuntimeDescriptor,
   type RuntimeMode,
 } from "./runtime";
@@ -109,6 +114,11 @@ const PANEL_SETTINGS: readonly string[] = [
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel("PiCode");
   context.subscriptions.push(outputChannel);
+
+  // The settings tab's version row shows a fact only this side can read — the version
+  // PiCode's own pi is on and the one the registry publishes — so the row is handed that
+  // reading once here, and it renders what the last check found from then on.
+  setPiVersionStateSource(() => managedPiCheck?.report.message);
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),
@@ -212,7 +222,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.commands.executeCommand(target);
         return;
       }
-      await settings.show(target);
+      await showSettingsTab(context.extensionUri, target);
     },
   });
   ajustesView = ajustes;
@@ -258,7 +268,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // only once the marker is written; awaiting it here keeps the promise shape.
       await context.globalState.update(ONBOARDING_KEY, true);
     },
-    open: (target) => openOnboardingTarget(target),
+    open: (target) => openOnboardingTarget(context.extensionUri, target),
   });
   onboardingView = onboarding;
 
@@ -276,7 +286,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("picode.piChat.menu", () => showPiMenu(menu)),
     vscode.commands.registerCommand("picode.piChat.settings", async () => {
-      await settingsView?.show();
+      await showSettingsTab(context.extensionUri);
+    }),
+    // The settings tab's version row runs this. It is not offered in the palette: the row
+    // is where the fact it acts on is stated, so it is where the action belongs.
+    vscode.commands.registerCommand("picode.piChat.updatePi", async () => {
+      await updateManagedPi(context);
     }),
     vscode.commands.registerCommand("picode.piChat.menu.installed", () =>
       showInstalledPackages(menu),
@@ -611,34 +626,73 @@ async function abortRun(): Promise<void> {
 async function installManaged(
   context: vscode.ExtensionContext,
   current: RuntimeDescriptor,
-): Promise<boolean> {
+  version?: string,
+): Promise<ManagedInstallOutcome> {
+  const outcome = await runManagedInstall(context, current, version);
+  // The picker reports a failed install the way it reports its other failures. The
+  // settings tab's version row does not come through here: it has a banner of its own.
+  if (!outcome.ok && !outcome.declined) {
+    void vscode.window.showErrorMessage(`PiCode: ${outcome.message}`);
+  }
+  return outcome;
+}
+
+/** What an install attempt did, whichever surface asked for it. */
+interface ManagedInstallOutcome {
+  ok: boolean;
+  /** True when the owner answered "no" to the confirmation, so nothing failed. */
+  declined: boolean;
+  message: string;
+  /** The version that ended up recorded, when the install succeeded. */
+  version?: string;
+}
+
+/**
+ * Confirms, installs, and reports nothing: the caller owns how a failure is shown.
+ *
+ * `version` installs a published version other than the one the record holds, which is how
+ * the settings tab moves the managed pi forward. The confirmation names that version, so
+ * the owner approves the version that will actually be installed.
+ */
+async function runManagedInstall(
+  context: vscode.ExtensionContext,
+  current: RuntimeDescriptor,
+  version?: string,
+): Promise<ManagedInstallOutcome> {
+  const target = version ?? current.pin.version;
   const answer = await vscode.window.showWarningMessage(
-    `PiCode va a instalar ${current.pin.package}@${current.pin.version} en ${current.managedRoot}. ` +
+    `PiCode va a instalar ${current.pin.package}@${target} en ${current.managedRoot}. ` +
       "Descarga unos cientos de megabytes. Tu pi global no se toca.",
     { modal: true },
     "Instalar",
   );
   if (answer !== "Instalar") {
-    return false;
+    return { ok: false, declined: true, message: "Cancelaste la instalación." };
   }
 
   outputChannel?.show(true);
   const result = await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `PiCode: instalando pi ${current.pin.version}`,
+      title: `PiCode: instalando pi ${target}`,
     },
     () =>
-      installManagedRuntime(context.extensionUri, (line) =>
-        outputChannel?.appendLine(`[runtime] ${line}`),
+      installManagedRuntime(
+        context.extensionUri,
+        (line) => outputChannel?.appendLine(`[runtime] ${line}`),
+        target,
       ),
   );
   if (!result.ok) {
-    void vscode.window.showErrorMessage(`PiCode: ${result.message}`);
-    return false;
+    return { ok: false, declined: false, message: result.message };
   }
   outputChannel?.appendLine(`[runtime] ${result.message}`);
-  return true;
+  return {
+    ok: true,
+    declined: false,
+    message: result.message,
+    ...(result.version ? { version: result.version } : {}),
+  };
 }
 
 /** The Runtime category's install row: installs PiCode's own pi and switches to it. */
@@ -652,6 +706,130 @@ async function installManagedFromMenu(context: vscode.ExtensionContext): Promise
     // same event would only repeat it.
     return;
   }
+}
+
+/**
+ * What the settings tab's version row shows, and when it was read.
+ *
+ * The row's value is a fact about this installation — the version the record holds, and
+ * whether the bundle is actually there — joined with an answer from the registry, so the
+ * host reads it and keeps it: the webview is painted from the values `readAll` hands it in
+ * one synchronous pass, and a registry round trip cannot happen inside that pass.
+ */
+let managedPiCheck: { report: PiUpdateReport; at: number } | undefined;
+
+/**
+ * How long a version check is reused.
+ *
+ * The registry is asked when the settings tab is opened, never on a repaint, and the answer
+ * changes on the order of days; a second visit inside this window reuses it instead of
+ * asking again. The update action does not use the cache: it asks again, because that is
+ * the moment the answer decides what gets installed.
+ */
+const MANAGED_PI_CHECK_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Reads the record and the registry's latest, and keeps them for the row to read.
+ *
+ * Never rejects: a record that cannot be read, or a registry that cannot be reached, leaves
+ * the row with no line rather than with a wrong one, and the tab still opens.
+ */
+async function refreshManagedPiCheck(extensionUri: vscode.Uri): Promise<void> {
+  const now = Date.now();
+  if (managedPiCheck !== undefined && now - managedPiCheck.at < MANAGED_PI_CHECK_TTL_MS) {
+    return;
+  }
+
+  try {
+    const pin = readPin(extensionUri);
+    const report = buildPiUpdateReport({
+      installed: pin.version,
+      managedInstalled: managedInstalled(extensionUri, pin),
+      latest: await latestPublishedVersion(pin),
+    });
+    managedPiCheck = { report, at: Date.now() };
+    outputChannel?.appendLine(
+      `[runtime] pi propio ${report.installed} · última publicada ${report.latest ?? "desconocida"}`,
+    );
+  } catch (error) {
+    outputChannel?.appendLine(
+      `[runtime] no se pudo leer la versión del pi propio: ${toErrorMessage(error)}`,
+    );
+  }
+}
+
+/**
+ * Opens the settings tab, with the version row's fact read before it paints.
+ *
+ * Every entry point to the tab goes through here: the panel renders the values the host
+ * pushed in one pass, so a check started after that pass would only reach the owner on the
+ * next repaint — and this row exists to state its fact *before* he decides anything.
+ */
+async function showSettingsTab(extensionUri: vscode.Uri, startAt?: string): Promise<void> {
+  await refreshManagedPiCheck(extensionUri);
+  await settingsView?.show(startAt);
+}
+
+/**
+ * Moves PiCode's own pi to the latest published version, from the settings tab's row.
+ *
+ * The four steps the row promises: ask the registry, install through the one installer the
+ * runtime picker uses, record what landed, and restart pi so the new version is the one
+ * running. A failure is thrown, and the tab shows it in the banner it already uses for a
+ * failed write — a silent no-op here would leave the owner believing an updated pi is
+ * running. Declining the confirmation is not a failure and is not reported as one.
+ */
+async function updateManagedPi(context: vscode.ExtensionContext): Promise<void> {
+  const extensionUri = context.extensionUri;
+
+  let current: RuntimeDescriptor;
+  try {
+    current = await describeRuntime(extensionUri);
+  } catch (error) {
+    throw new Error(
+      `No se pudo leer qué versión de pi está anotada: ${toErrorMessage(error)}`,
+    );
+  }
+  const pin = current.pin;
+
+  const latest = await latestPublishedVersion(pin);
+  if (latest === undefined) {
+    throw new Error(
+      "No se pudo averiguar cuál es la última versión publicada de pi: el registro npm no respondió.",
+    );
+  }
+
+  if (current.managedInstalled && latest === pin.version) {
+    void vscode.window.showInformationMessage(
+      `PiCode: el pi propio ya está en la última versión publicada (${latest}).`,
+    );
+    return;
+  }
+
+  const outcome = await runManagedInstall(context, current, latest);
+  if (!outcome.ok) {
+    if (outcome.declined) {
+      return;
+    }
+    throw new Error(`No se pudo actualizar el pi de PiCode: ${outcome.message}`);
+  }
+
+  const installed = outcome.version ?? latest;
+  // The record just changed, so the row's reading of it did too. Seeding the cache with
+  // the check this command already made keeps that from costing a second registry call.
+  managedPiCheck = {
+    report: buildPiUpdateReport({ installed, managedInstalled: true, latest }),
+    at: Date.now(),
+  };
+  outputChannel?.appendLine(`[runtime] pi propio actualizado a ${installed}.`);
+
+  await resetClient();
+  // The panel repaints only when the host pushes a new state, and this click came from it:
+  // reopening the tab is that push, and it is what makes the row show the new version.
+  await showSettingsTab(extensionUri);
+  void vscode.window.showInformationMessage(
+    `PiCode: el pi propio está ahora en la versión ${installed}.`,
+  );
 }
 
 /**
@@ -716,13 +894,16 @@ async function installGentleLayer(deps: PiMenuDeps): Promise<OnboardingResult> {
 }
 
 /** Sends the wizard's closing summary to the surface it names. */
-async function openOnboardingTarget(target: OnboardingTarget): Promise<void> {
+async function openOnboardingTarget(
+  extensionUri: vscode.Uri,
+  target: OnboardingTarget,
+): Promise<void> {
   switch (target) {
     case "chat":
       await revealChatView();
       break;
     case "settings":
-      await settingsView?.show();
+      await showSettingsTab(extensionUri);
       break;
     case "gentle":
       await vscode.commands.executeCommand(GENTLE_PANEL_TARGET);
@@ -862,7 +1043,7 @@ async function applyRuntimeMode(
 
   if (mode === "managed" && !choice.current.managedInstalled) {
     const installed = await installManaged(context, choice.current);
-    if (!installed) {
+    if (!installed.ok) {
       return {
         ok: false,
         message: "No se instaló el pi propio de PiCode, así que el runtime no cambió.",

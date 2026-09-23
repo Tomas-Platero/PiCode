@@ -141,6 +141,11 @@ export interface PiSettingDescriptor {
    * from this catalogue rather than trusting the webview with a command to run.
    */
   command?: string;
+  /**
+   * For an `action`: what its button says, when the row's own label does not name the
+   * verb. The title names the thing, the button names what pressing it does.
+   */
+  actionLabel?: string;
   /** Absent for the descriptors that carry a `picodeKey`, and for an `action`. */
   read?(manager: PiSettingsManager, scope: PiSettingScope): PiSettingValue;
   write?(manager: PiSettingsManager, scope: PiSettingScope, value: PiSettingValue): void;
@@ -181,6 +186,8 @@ export interface SettingWire {
   needsRestart?: boolean;
   /** For an `action`: the command id the button runs. */
   command?: string;
+  /** For an `action`: the caption of its button. Absent means the host's default. */
+  actionLabel?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -922,6 +929,22 @@ function readScopedList(
  * ------------------------------------------------------------------ */
 
 /**
+ * The state of PiCode's own pi, read by the `picode.piVersion` row.
+ *
+ * That row is an action — it installs the latest published version — and the fact it shows
+ * before the owner presses it is a reading of this installation (which version is on disk)
+ * joined with a registry answer, so it is the host that computes it and caches it. A reader
+ * is registered instead of imported because this module must stay loadable without
+ * `vscode`, which is what owns the paths and the network; with no reader registered the row
+ * has no value, which is what an action row with nothing to say looks like.
+ */
+let readPiVersionState: (() => string | undefined) | undefined;
+
+export function setPiVersionStateSource(source: (() => string | undefined) | undefined): void {
+  readPiVersionState = source;
+}
+
+/**
  * Every setting this surface knows, grouped by category in the declared order.
  *
  * The descriptor objects are literal and complete on purpose: this array is the
@@ -1493,6 +1516,10 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
    * two mean different things: pi's picks the wire protocol to a provider, this one
    * picks the process boundary. Neither can reach a running agent, which is why both
    * say so.
+   *
+   * The version row is here with them and is the one that is not configuration: it
+   * states which version of PiCode's own pi is installed, and installing the latest
+   * published one is what its button does.
    */
 
   {
@@ -1522,6 +1549,23 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     options: PICODE_TRANSPORT_OPTIONS,
     picodeKey: "transport",
     needsRestart: true,
+  },
+  {
+    key: "picode.piVersion",
+    category: "picode",
+    label: "Versión del pi propio",
+    description:
+      "El pi propio de PiCode se instala aparte de tu pi global, con una versión " +
+      "concreta. El botón instala la última publicada y reinicia pi para usarla.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value to write: the row is a button. Its value comes from the host, which is
+    // the only side that can read the version on disk and ask the registry for the
+    // latest one; without that reading the row shows no line at all.
+    readOnly: true,
+    command: "picode.piChat.updatePi",
+    actionLabel: "Instalar la última publicada",
+    read: () => readPiVersionState?.(),
   },
   {
     key: "picode.onboarding",
@@ -1615,6 +1659,7 @@ export function describeSettingWire(descriptor: PiSettingDescriptor): SettingWir
     ...(descriptor.unit ? { unit: descriptor.unit } : {}),
     ...(descriptor.needsRestart ? { needsRestart: true } : {}),
     ...(descriptor.command ? { command: descriptor.command } : {}),
+    ...(descriptor.actionLabel ? { actionLabel: descriptor.actionLabel } : {}),
   };
 }
 

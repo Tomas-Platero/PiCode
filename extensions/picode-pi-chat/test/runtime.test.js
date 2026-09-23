@@ -291,6 +291,153 @@ check(
   delete process.env.TEST_TRANSPORT;
   process.env.TEST_RUNTIME_MODE = "managed";
 
+  // --- the managed pi's version row ------------------------------------------
+
+  check(
+    "published versions are ordered numerically, not as text",
+    runtime.compareVersions("0.87.1", "0.86.9") > 0 &&
+      runtime.compareVersions("0.86.1", "0.86.1") === 0 &&
+      runtime.compareVersions("0.86.1", "0.87.1") < 0 &&
+      runtime.compareVersions("1.0.0", "0.99.99") > 0 &&
+      runtime.compareVersions("0.86.1-rc.1", "0.86.1") === 0,
+    JSON.stringify([
+      runtime.compareVersions("0.87.1", "0.86.9"),
+      runtime.compareVersions("0.86.1", "0.86.1"),
+      runtime.compareVersions("1.0.0", "0.99.99"),
+    ]),
+  );
+  check(
+    "a version that is not x.y.z cannot be ordered",
+    runtime.compareVersions("nonsense", "0.86.1") === undefined &&
+      runtime.compareVersions("0.86.1", "") === undefined,
+    String(runtime.compareVersions("nonsense", "0.86.1")),
+  );
+
+  const upToDate = runtime.buildPiUpdateReport({
+    installed: "0.87.1",
+    managedInstalled: true,
+    latest: "0.87.1",
+  });
+  check(
+    "a record that matches the registry says so and offers nothing to install",
+    upToDate.state === "current" &&
+      upToDate.updateAvailable === false &&
+      upToDate.message === "Instalada la 0.87.1 · es la última publicada.",
+    JSON.stringify(upToDate),
+  );
+
+  const pending = runtime.buildPiUpdateReport({
+    installed: "0.86.1",
+    managedInstalled: true,
+    latest: "0.87.1",
+  });
+  check(
+    "a newer published version is named next to the installed one",
+    pending.state === "available" &&
+      pending.updateAvailable === true &&
+      pending.message === "Instalada la 0.86.1 · publicada la 0.87.1.",
+    JSON.stringify(pending),
+  );
+
+  const unchecked = runtime.buildPiUpdateReport({
+    installed: "0.86.1",
+    managedInstalled: true,
+    latest: undefined,
+  });
+  check(
+    "a check that did not answer says so instead of claiming there is no update",
+    unchecked.state === "unknown" &&
+      unchecked.updateAvailable === false &&
+      unchecked.latest === undefined &&
+      unchecked.message === "Instalada la 0.86.1 · no se pudo comprobar la última publicada.",
+    JSON.stringify(unchecked),
+  );
+
+  const absent = runtime.buildPiUpdateReport({
+    installed: "0.86.1",
+    managedInstalled: false,
+    latest: "0.87.1",
+  });
+  check(
+    "a record with nothing on disk reads as not installed",
+    absent.state === "missing" &&
+      absent.updateAvailable === true &&
+      absent.message === "Sin instalar · publicada la 0.87.1.",
+    JSON.stringify(absent),
+  );
+  check(
+    "with nothing installed and no answer, the row admits it cannot tell",
+    runtime.buildPiUpdateReport({ installed: "0.86.1", managedInstalled: false, latest: undefined })
+      .message === "Sin instalar · no se pudo comprobar la última publicada.",
+    runtime.buildPiUpdateReport({ installed: "0.86.1", managedInstalled: false, latest: undefined })
+      .message,
+  );
+
+  const publishedOlder = runtime.buildPiUpdateReport({
+    installed: "0.87.1",
+    managedInstalled: true,
+    latest: "0.86.1",
+  });
+  check(
+    "a published version older than the installed one is named as older",
+    publishedOlder.updateAvailable === true && /más antigua/.test(publishedOlder.message),
+    publishedOlder.message,
+  );
+
+  // --- the record the install leaves behind ----------------------------------
+
+  // A throwaway extension directory, never the staged one: this section writes
+  // `runtime.json`, and a test must not touch the copy the editor runs from.
+  const pinExtension = fs.mkdtempSync(path.join(os.tmpdir(), "picode-pin-"));
+  const pinRoot = fs.mkdtempSync(path.join(os.tmpdir(), "picode-managed-"));
+  const pinUri = { fsPath: pinExtension };
+  fs.writeFileSync(
+    path.join(pinExtension, "runtime.json"),
+    `${JSON.stringify({ package: runtime.PI_PACKAGE, version: "0.86.1" }, null, 2)}\n`,
+  );
+
+  const nothingLanded = runtime.recordManagedInstall(
+    pinUri,
+    pinRoot,
+    runtime.readPin(pinUri),
+  );
+  check(
+    "an install that left no package on disk records nothing and says so",
+    nothingLanded.ok === false &&
+      nothingLanded.version === undefined &&
+      runtime.readPin(pinUri).version === "0.86.1",
+    JSON.stringify({ result: nothingLanded, record: runtime.readPin(pinUri) }),
+  );
+
+  // The manifest npm leaves behind: its version is the installed one, and it is read
+  // back rather than assumed, so the record cannot name a version the disk lacks.
+  const stagedPackage = path.join(
+    pinRoot,
+    "node_modules",
+    "@earendil-works",
+    "pi-coding-agent",
+  );
+  fs.mkdirSync(stagedPackage, { recursive: true });
+  fs.writeFileSync(
+    path.join(stagedPackage, "package.json"),
+    JSON.stringify({ name: runtime.PI_PACKAGE, version: "0.87.1" }),
+  );
+
+  const recorded = runtime.recordManagedInstall(pinUri, pinRoot, runtime.readPin(pinUri));
+  const writtenPin = JSON.parse(fs.readFileSync(path.join(pinExtension, "runtime.json"), "utf8"));
+  check(
+    "a finished install records the version the package on disk carries",
+    recorded.ok === true &&
+      recorded.version === "0.87.1" &&
+      runtime.readPin(pinUri).version === "0.87.1" &&
+      writtenPin.version === "0.87.1" &&
+      writtenPin.package === runtime.PI_PACKAGE,
+    JSON.stringify({ result: recorded, record: writtenPin }),
+  );
+
+  fs.rmSync(pinExtension, { recursive: true, force: true });
+  fs.rmSync(pinRoot, { recursive: true, force: true });
+
   // --- report ----------------------------------------------------------------
 
   let failed = 0;
