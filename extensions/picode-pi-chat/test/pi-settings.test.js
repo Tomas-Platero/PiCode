@@ -17,6 +17,7 @@
  * Run with: npm test
  */
 const path = require("node:path");
+const fs = require("node:fs");
 
 const {
   PI_SETTINGS_CATEGORIES,
@@ -25,6 +26,7 @@ const {
   describeSettingWire,
   coerceSettingValue,
   setPiVersionStateSource,
+  setInstanceProfileStateSource,
   PiSettingsService,
 } = require(path.join(__dirname, "..", "out", "pi-settings.js"));
 
@@ -571,7 +573,7 @@ async function main() {
   );
 
   check(
-    "the picode category carries the runtime, the transport, the version row, the repeatable setup row and the import row",
+    "the picode category carries the runtime, the transport, the profile row, the version row, the repeatable setup row and the import row",
     same(
       groups
         .filter((group) => group.category.id === "picode")
@@ -579,6 +581,7 @@ async function main() {
       [
         "picode.runtime",
         "picode.transport",
+        "picode.instanceProfile",
         "picode.piVersion",
         "picode.onboarding",
         "picode.importProfile",
@@ -689,6 +692,131 @@ async function main() {
     setting("picode.piVersion").read() === undefined,
     String(setting("picode.piVersion").read()),
   );
+
+  {
+    const profileRow = setting("picode.instanceProfile");
+    check(
+      "the profile row is a fact in the PiCode category: a read-only line with nothing to write",
+      profileRow.category === "picode" &&
+        profileRow.kind === "text" &&
+        profileRow.readOnly === true &&
+        profileRow.write === undefined &&
+        profileRow.picodeKey === undefined &&
+        profileRow.scopes.includes("global"),
+      JSON.stringify({
+        category: profileRow.category,
+        kind: profileRow.kind,
+        readOnly: profileRow.readOnly,
+      }),
+    );
+
+    // Same rule as the import row: the owner decides by reading which profile is in
+    // use, not by where the files live.
+    check(
+      "the profile row's own text carries no path and no raw count",
+      [profileRow.label, profileRow.description].every(
+        (text) => text.trim() !== "" && !/\d/.test(text) && !/[/\\~]/.test(text),
+      ),
+      JSON.stringify({ label: profileRow.label, description: profileRow.description }),
+    );
+
+    check(
+      "the profile row has no reading before the host registers one",
+      profileRow.read() === undefined,
+      String(profileRow.read()),
+    );
+
+    // The three answers the resolver can give. The facts come from the resolver, so
+    // the row only words them: it never reads a profile of its own.
+    const words = (state) => {
+      setInstanceProfileStateSource(() => state);
+      return profileRow.read();
+    };
+    const internal = words({
+      owned: true,
+      managed: true,
+      internalExists: true,
+      internalProviders: 2,
+    });
+    const owner = words({
+      owned: false,
+      managed: false,
+      internalExists: true,
+      internalProviders: 2,
+    });
+    const noProfile = words({
+      owned: false,
+      managed: true,
+      internalExists: false,
+      internalProviders: 0,
+    });
+    const noCredentials = words({
+      owned: false,
+      managed: true,
+      internalExists: true,
+      internalProviders: 0,
+    });
+
+    check(
+      "the row names PiCode's own profile when that is what pi is using",
+      internal === "El perfil propio de PiCode.",
+      String(internal),
+    );
+    check(
+      "the row names the owner's profile when that is what pi is using",
+      owner === "El perfil de tu pi, el que ya tienes en el equipo.",
+      String(owner),
+    );
+    check(
+      "when the internal profile is selected but not usable, the row says why and points at the import row",
+      noProfile.includes("no tiene perfil") &&
+        noCredentials.includes("no tiene credenciales") &&
+        noProfile.includes("Importar el perfil de tu pi") &&
+        noCredentials.includes("Importar el perfil de tu pi") &&
+        !/\d/.test(noProfile) &&
+        !/\d/.test(noCredentials) &&
+        !/[/\\~]/.test(noProfile) &&
+        !/[/\\~]/.test(noCredentials),
+      JSON.stringify({ noProfile, noCredentials }),
+    );
+
+    setInstanceProfileStateSource(undefined);
+    check(
+      "unregistering the reading leaves the profile row with nothing rather than a stale line",
+      profileRow.read() === undefined,
+      String(profileRow.read()),
+    );
+
+    // Feeding the row is a separate fact from the row's wording: with a reading
+    // registered, the tab has to receive four real lines and never the "sin definir"
+    // placeholder the renderer falls back to for an unset value.
+    check(
+      "with the host's reading registered the row is fed: four real lines, never «sin definir»",
+      [internal, owner, noProfile, noCredentials].every(
+        (text) => typeof text === "string" && text.trim() !== "" && text !== "sin definir",
+      ),
+      JSON.stringify({ internal, owner, noProfile, noCredentials }),
+    );
+
+    // The registration itself lives in `extension.ts`, which owns the extension's
+    // location and the selected runtime. It is pinned here, next to the same reading
+    // the version row relies on, so a registration that later falls is a failing check
+    // and not a row that quietly renders nothing. Only the source text is read.
+    const extensionSource = fs.readFileSync(
+      path.join(__dirname, "..", "src", "extension.ts"),
+      "utf8",
+    );
+    check(
+      "the host registers the profile reading next to the version reading",
+      extensionSource.includes("setInstanceProfileStateSource(") &&
+        extensionSource.includes("setPiVersionStateSource(") &&
+        extensionSource.includes("instanceProfile(context.extensionUri, runtime.mode)"),
+      extensionSource
+        .split(/\r?\n/)
+        .filter((line) => line.includes("setInstanceProfileStateSource("))
+        .join(" | "),
+    );
+  }
 
   /* ---------------------------------------------------------------- *
    * Coercion — the webview boundary

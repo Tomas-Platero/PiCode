@@ -925,6 +925,64 @@ export function setPiVersionStateSource(source: (() => string | undefined) | und
 }
 
 /**
+ * The facts the `picode.instanceProfile` row states, read by the host from the
+ * instance resolver.
+ *
+ * Registered rather than imported for the same reason as the version reading above:
+ * `instance.ts` reaches `vscode` through the runtime module, and this module has to
+ * stay loadable without it. The host is also the only side that knows the extension's
+ * location, which is what names PiCode's own profile — and the resolver already reads
+ * that profile while it decides, so the host asks it once and hands the row these
+ * facts instead of the row reading `auth.json` a second time.
+ */
+export interface InstanceProfileState {
+  /** True when the profile in use is PiCode's own, credentials and all. */
+  owned: boolean;
+  /** True when PiCode's own runtime is the selected one. */
+  managed: boolean;
+  /** Whether PiCode's own profile directory exists. */
+  internalExists: boolean;
+  /** Providers with stored credentials in PiCode's own profile. */
+  internalProviders: number;
+}
+
+let readInstanceProfileState: (() => InstanceProfileState | undefined) | undefined;
+
+export function setInstanceProfileStateSource(
+  source: (() => InstanceProfileState | undefined) | undefined,
+): void {
+  readInstanceProfileState = source;
+}
+
+/**
+ * What the `picode.instanceProfile` row says, in the owner's language and without a
+ * path.
+ *
+ * The three answers mirror the resolver's own: PiCode's profile counts only when it
+ * has credentials, the owner's profile is what everything falls back to, and — when
+ * the internal one is selected but not usable yet — the row says what is missing and
+ * names the import row by its own label instead of inventing a second instruction.
+ * `internalExists` and `internalProviders` are the two facts the resolver reported, so
+ * "no profile" and "no credentials" stay told apart here rather than collapsed into
+ * one vague line.
+ */
+function describeInstanceProfile(state: InstanceProfileState): string {
+  if (state.owned) {
+    return "El perfil propio de PiCode.";
+  }
+  if (!state.managed) {
+    return "El perfil de tu pi, el que ya tienes en el equipo.";
+  }
+  const missing = state.internalExists
+    ? "todavía no tiene credenciales"
+    : "todavía no tiene perfil";
+  return (
+    `El perfil de tu pi, porque el pi propio de PiCode ${missing}. ` +
+    "Usa «Importar el perfil de tu pi» para encenderlo."
+  );
+}
+
+/**
  * Every setting this surface knows, grouped by category in the declared order.
  *
  * The descriptor objects are literal and complete on purpose: this array is the
@@ -1452,7 +1510,9 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
    *
    * The version row is here with them and is the one that is not configuration: it
    * states which version of PiCode's own pi is installed, and installing the latest
-   * published one is what its button does.
+   * published one is what its button does. The profile row is the other fact in the
+   * category: it states which profile pi is actually reading, so the owner can see
+   * that the internal instance is not switched on while it still has nothing to read.
    */
 
   {
@@ -1482,6 +1542,24 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     options: PICODE_TRANSPORT_OPTIONS,
     picodeKey: "transport",
     needsRestart: true,
+  },
+  {
+    key: "picode.instanceProfile",
+    category: "picode",
+    label: "Perfil en uso",
+    description:
+      "De dónde salen las credenciales, los modelos y los paquetes que pi está usando " +
+      "ahora mismo: del perfil propio de PiCode o del tuyo. Se lee solo; importar o " +
+      "cambiar de instancia es lo que lo mueve.",
+    kind: "text",
+    scopes: GLOBAL_SCOPE,
+    // A fact, not a setting: the value is the host's reading of the instance resolver,
+    // registered once next to the version reading. There is nothing to write here.
+    readOnly: true,
+    read: () => {
+      const state = readInstanceProfileState?.();
+      return state === undefined ? undefined : describeInstanceProfile(state);
+    },
   },
   {
     key: "picode.piVersion",

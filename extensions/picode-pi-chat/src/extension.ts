@@ -24,7 +24,7 @@ import {
   type OnboardingTarget,
 } from "./onboarding";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
-import { setPiVersionStateSource, type PiSettingValue } from "./pi-settings";
+import { setInstanceProfileStateSource, setPiVersionStateSource, type PiSettingValue } from "./pi-settings";
 import {
   formatBytes,
   listSessions,
@@ -122,6 +122,21 @@ export function activate(context: vscode.ExtensionContext): void {
   // PiCode's own pi is on and the one the registry publishes — so the row is handed that
   // reading once here, and it renders what the last check found from then on.
   setPiVersionStateSource(() => managedPiCheck?.report.message);
+
+  // The profile row is the same kind of fact: only this side can name the extension's
+  // location, and only the resolver can say whether PiCode's own profile is usable yet.
+  // Both facts are read here, on each read of the row, so a profile that becomes usable
+  // (after an import) or a runtime that changes is reflected without a restart.
+  setInstanceProfileStateSource(() => {
+    const runtime = resolveRuntime(context.extensionUri);
+    const profile = instanceProfile(context.extensionUri, runtime.mode);
+    return {
+      owned: profile.owned,
+      managed: runtime.mode === "managed",
+      internalExists: profile.internal.exists,
+      internalProviders: profile.internal.providers,
+    };
+  });
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),

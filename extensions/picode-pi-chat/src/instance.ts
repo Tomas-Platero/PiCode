@@ -10,12 +10,15 @@
  * The parts are deliberately separate:
  *
  * - `instanceAgentDir()` maps a runtime mode to a profile directory, or to
- *   `undefined` when pi should resolve its own default. It never touches the disk.
- * - `instanceProfile()` names the two facts separately — where the profile is, and
- *   whether PiCode owns it — and `instanceProfileEnv()` turns them into the
- *   environment additions a spawned pi receives, so the rule about setting the
- *   variable, or deliberately not setting it, lives in one place instead of at each
- *   of the spawn sites.
+ *   `undefined` when pi should resolve its own default. It never touches the disk,
+ *   and it is deliberately unguarded: the import needs to name PiCode's own profile
+ *   even while it is still empty.
+ * - `instanceProfile()` names the facts separately — where the profile is, whether
+ *   PiCode owns it, and what PiCode's own profile holds — and applies the anti-mute
+ *   guard: the internal profile is the answer only once it can carry an instance.
+ *   `instanceProfileEnv()` turns those facts into the environment additions a
+ *   spawned pi receives, so the rule about setting the variable, or deliberately
+ *   not setting it, lives in one place instead of at each of the spawn sites.
  * - `scanProfile()` reads a profile directory and returns an inventory. Its parsing
  *   is pure (`parsePackages`, `parseCredentials`, `parseModels`, `parseMcpServers`),
  *   so both the shapes and the walk can be exercised without a filesystem, and a
@@ -37,28 +40,40 @@ import { managedRoot, type RuntimeMode } from "./runtime";
  * ------------------------------------------------------------------ */
 
 /**
+ * The profile PiCode's own instance would use: `<distribution>/data/pi-agent`.
+ *
+ * The distribution root is derived from `managedRoot` rather than recomputed here:
+ * that function already walks the four levels from the extension up to the
+ * distribution, so reusing it keeps a single source of truth and rules out the
+ * off-by-one that would place the profile outside the distribution.
+ *
+ * Kept apart from `instanceAgentDir()` because the guard and the row both have to
+ * name PiCode's own profile even when the selected instance is the owner's, and
+ * `instanceAgentDir()` deliberately answers only for the selection.
+ */
+function internalAgentDir(extensionUri: Uri): string {
+  // <distribution>/resources/pi-runtime -> <distribution>
+  const distributionRoot = path.resolve(managedRoot(extensionUri), "..", "..");
+  return path.join(distributionRoot, "data", "pi-agent");
+}
+
+/**
  * The profile directory of the selected instance, or `undefined` when pi must
  * resolve its own.
  *
  * `managed` runs PiCode's own pi, whose profile lives inside the distribution at
- * `<distribution>/data/pi-agent`. The distribution root is derived from
- * `managedRoot` rather than recomputed here: that function already walks the four
- * levels from the extension up to the distribution, so reusing it keeps a single
- * source of truth and rules out the off-by-one that would place the profile outside
- * the distribution.
+ * `<distribution>/data/pi-agent`. `path` and `custom` run the owner's own pi, and
+ * `undefined` is the honest answer: it means "do not set the variable and do not
+ * pass a directory", so pi resolves its own default exactly as it does when run from
+ * a terminal. PiCode only ever reads that profile; it never writes to it.
  *
- * `path` and `custom` run the owner's own pi, and `undefined` is the honest answer:
- * it means "do not set the variable and do not pass a directory", so pi resolves its
- * own default exactly as it does when run from a terminal. PiCode only ever reads
- * that profile; it never writes to it.
+ * This is the raw mapping and it is deliberately **not** guarded: the import writes
+ * into PiCode's own profile, and a guard here would make importing into an empty
+ * profile — the only way to fill it — impossible. The guard belongs in
+ * `instanceProfile()`, which is what every spawner and every reader follows.
  */
 export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): string | undefined {
-  if (runtime !== "managed") {
-    return undefined;
-  }
-  // <distribution>/resources/pi-runtime -> <distribution>
-  const distributionRoot = path.resolve(managedRoot(extensionUri), "..", "..");
-  return path.join(distributionRoot, "data", "pi-agent");
+  return runtime === "managed" ? internalAgentDir(extensionUri) : undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -66,14 +81,30 @@ export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): strin
  * ------------------------------------------------------------------ */
 
 /**
- * The profile of the selected instance, as two separate facts.
+ * What PiCode's own profile holds, read while the resolver answered.
+ *
+ * `providers` is the number of top-level keys in `auth.json` — the credential
+ * *names*, never a value. The row that says which profile is in use renders them from
+ * here instead of reading the profile again, so the guard and the row can never
+ * disagree about the same profile.
+ */
+export interface InternalProfileFacts {
+  /** Whether PiCode's own profile directory exists. */
+  exists: boolean;
+  /** Providers with stored credentials in it. */
+  providers: number;
+}
+
+/**
+ * The profile of the selected instance, as separate facts.
  *
  * They are deliberately not folded into one value: `agentDir` answers *where* the
- * profile is, and `owned` answers *whether PiCode may write there*. PiCode owns only
- * the managed profile; the owner's belongs to the machine and to every other pi tool
- * on it, so PiCode reads it and never writes it. A caller that has to refuse a write
- * (the guard that keeps an empty internal profile from being switched on) has to ask
- * the second question, and a single "the profile" value could not answer it.
+ * profile is, `owned` answers *whether PiCode may write there and did select it*, and
+ * `internal` answers what PiCode's own profile holds. PiCode owns only the managed
+ * profile; the owner's belongs to the machine and to every other pi tool on it, so
+ * PiCode reads it and never writes it. A caller that has to refuse a write (the guard
+ * that keeps an empty internal profile from being switched on) has to ask the second
+ * question, and a single "the profile" value could not answer it.
  */
 export interface InstanceProfile {
   /**
@@ -81,19 +112,52 @@ export interface InstanceProfile {
    * its own. `undefined` is the fact a spawner reads as "set nothing".
    */
   agentDir: string | undefined;
-  /** True only for `managed`: PiCode's own profile, the one PiCode may write. */
+  /** True only when the selected instance is PiCode's own and its profile is usable. */
   owned: boolean;
+  /** What PiCode's own profile holds, read in the same pass as this answer. */
+  internal: InternalProfileFacts;
 }
 
 /**
- * The two facts about the selected instance's profile.
+ * Whether PiCode's own profile can carry an instance: the directory exists and
+ * `auth.json` names at least one provider.
  *
- * `owned` is derived from the mode rather than from the profile's location: nothing
- * about the path says who may write it, and a managed profile whose directory happens
- * to live somewhere unusual is still PiCode's own.
+ * This is the anti-mute rule, and it is why the guard sits here rather than in a
+ * caller. A managed instance whose profile holds no credentials cannot talk to a
+ * model, and — because the switch points every spawn and every write at that same
+ * profile — it is not isolation but a broken editor. So a profile that is absent,
+ * empty or unreadable is "not usable", and the resolver falls back to exactly the
+ * behaviour that predates this feature: the machine's own profile.
+ *
+ * The credentials are read with the credential parser this module already has, which
+ * takes the file's top-level keys and nothing else, so a secret cannot travel out of
+ * `auth.json` even to decide whether there is one.
+ */
+function readInternalProfile(agentDir: string): { usable: boolean; facts: InternalProfileFacts } {
+  const exists = existsSync(agentDir);
+  const providers = parseCredentials(readJson(path.join(agentDir, "auth.json"))).count;
+  return { usable: exists && providers > 0, facts: { exists, providers } };
+}
+
+/**
+ * The facts about the selected instance's profile, with the anti-mute guard applied.
+ *
+ * `owned` is derived from the guard rather than from the mode alone: nothing about the
+ * path says who may write it, and a managed profile whose directory happens to live
+ * somewhere unusual is still PiCode's own — but it only becomes the answer once it can
+ * actually carry an instance. Until then the resolver answers the machine's profile
+ * (an `undefined` `agentDir`) with `owned: false`, so every spawn and every reader
+ * keeps following today's behaviour and the switch cannot be left half flipped.
  */
 export function instanceProfile(extensionUri: Uri, runtime: RuntimeMode): InstanceProfile {
-  return { agentDir: instanceAgentDir(extensionUri, runtime), owned: runtime === "managed" };
+  const internalDir = internalAgentDir(extensionUri);
+  const internal = readInternalProfile(internalDir);
+  const owned = runtime === "managed" && internal.usable;
+  return {
+    agentDir: owned ? internalDir : undefined,
+    owned,
+    internal: internal.facts,
+  };
 }
 
 /**

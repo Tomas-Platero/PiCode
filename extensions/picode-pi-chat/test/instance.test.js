@@ -139,6 +139,100 @@ async function main() {
     String(instance.instanceAgentDir(extensionUri, "custom")),
   );
 
+  // --- the guard: the internal profile answers only when it can carry an instance --
+
+  /*
+   * The anti-mute rule, on throwaway distributions. Each fixture lays out its own
+   * `<distribution>/data/pi-agent`, created or not on purpose, so the resolver sees
+   * the four shapes and nothing here reads or writes a real profile on this machine.
+   */
+  function distribution(prefix) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    cleanup(root);
+    return {
+      extensionUri: { fsPath: path.join(root, "resources", "app", "extensions", "picode-pi-chat") },
+      internalProfile: path.join(root, "data", "pi-agent"),
+    };
+  }
+
+  const usableDistribution = distribution("picode-dist-usable-");
+  writeFile(
+    path.join(usableDistribution.internalProfile, "auth.json"),
+    JSON.stringify({ anthropic: { type: "api_key", key: SECRET } }),
+  );
+  const usableProfile = instance.instanceProfile(usableDistribution.extensionUri, "managed");
+  check(
+    "the internal profile is the answer once it exists and has a provider",
+    usableProfile.agentDir === usableDistribution.internalProfile &&
+      usableProfile.owned === true &&
+      usableProfile.internal.exists === true &&
+      usableProfile.internal.providers === 1,
+    JSON.stringify(usableProfile),
+  );
+  check(
+    "a usable internal profile is the one the spawn environment sets",
+    instance.instanceProfileEnv(usableProfile).PI_CODING_AGENT_DIR ===
+      usableDistribution.internalProfile,
+    JSON.stringify(instance.instanceProfileEnv(usableProfile)),
+  );
+
+  // The owner's instance never carries PiCode's profile, whatever that profile holds.
+  const externalProfile = instance.instanceProfile(usableDistribution.extensionUri, "path");
+  check(
+    "the owner's instance is never owned, even when the internal profile is usable",
+    externalProfile.agentDir === undefined &&
+      externalProfile.owned === false &&
+      externalProfile.internal.providers === 1,
+    JSON.stringify(externalProfile),
+  );
+
+  const absentDistribution = distribution("picode-dist-absent-");
+  const absentProfile = instance.instanceProfile(absentDistribution.extensionUri, "managed");
+  check(
+    "anti-mute: an absent internal profile answers the machine's, with owned false",
+    absentProfile.agentDir === undefined &&
+      absentProfile.owned === false &&
+      absentProfile.internal.exists === false &&
+      absentProfile.internal.providers === 0,
+    JSON.stringify(absentProfile),
+  );
+  check(
+    "anti-mute: an absent internal profile sets no variable, so pi resolves the machine's",
+    Object.keys(instance.instanceProfileEnv(absentProfile)).length === 0,
+    JSON.stringify(instance.instanceProfileEnv(absentProfile)),
+  );
+
+  const credentiallessDistribution = distribution("picode-dist-keyless-");
+  writeFile(path.join(credentiallessDistribution.internalProfile, "auth.json"), "{}");
+  const credentiallessProfile = instance.instanceProfile(
+    credentiallessDistribution.extensionUri,
+    "managed",
+  );
+  check(
+    "anti-mute: an internal profile with no credentials answers the machine's",
+    credentiallessProfile.agentDir === undefined &&
+      credentiallessProfile.owned === false &&
+      credentiallessProfile.internal.exists === true &&
+      credentiallessProfile.internal.providers === 0,
+    JSON.stringify(credentiallessProfile),
+  );
+
+  const unreadableDistribution = distribution("picode-dist-unreadable-");
+  // `auth.json` is a directory, so reading it as a file fails the same way a
+  // corrupted or locked file does: no credentials to report, and no usable profile.
+  fs.mkdirSync(path.join(unreadableDistribution.internalProfile, "auth.json"), {
+    recursive: true,
+  });
+  const unreadableProfile = instance.instanceProfile(unreadableDistribution.extensionUri, "managed");
+  check(
+    "anti-mute: an unreadable auth.json answers the machine's profile too",
+    unreadableProfile.agentDir === undefined &&
+      unreadableProfile.owned === false &&
+      unreadableProfile.internal.exists === true &&
+      unreadableProfile.internal.providers === 0,
+    JSON.stringify(unreadableProfile),
+  );
+
   // --- the pure parsers ------------------------------------------------------
 
   const credentialsWithValues = instance.parseCredentials({
@@ -294,6 +388,21 @@ async function main() {
   );
 
   // --- report ----------------------------------------------------------------
+
+  // The four cases the guard exists for, verbatim, so the observed fallback is
+  // readable without reading the assertions above.
+  console.log("\ninstanceProfile() per guard case:");
+  for (const [label, profile] of [
+    ["internal usable", usableProfile],
+    ["internal absent", absentProfile],
+    ["without credentials", credentiallessProfile],
+    ["unreadable auth.json", unreadableProfile],
+  ]) {
+    console.log(
+      `  ${label}: agentDir=${profile.agentDir === undefined ? "undefined" : profile.agentDir} ` +
+        `owned=${profile.owned} internal=${JSON.stringify(profile.internal)}`,
+    );
+  }
 
   for (const dir of cleanups) {
     fs.rmSync(dir, { recursive: true, force: true });
