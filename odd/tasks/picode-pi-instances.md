@@ -286,13 +286,23 @@ as evidence.
     una segunda implementación: **importar** (T3) o **iniciar sesión** (T6b). Ningún camino puede
     terminar en «ejecuta esto en un terminal». Si el pi elegido es el del dueño, PiCode no posee
     perfil: no hay paso de perfil ni login, y lo dice en vez de ofrecer algo que no puede funcionar.
-  - [ ] **T6b — Iniciar sesión en un proveedor, desde el editor.** El comando que T6a ofrece:
-    elegir proveedor y, según sea, una clave (campo de texto) o una suscripción (OAuth, con el
-    `interaction` que ya existe), escribiendo **siempre** en el perfil de PiCode. Informa honesto:
-    distingue «este pi no sabe iniciar sesión desde el SDK» de un fallo de sincronización
-    (`CredentialSynchronizationError`: nombrar proveedor y operación, no reintentar a ciegas). Si el
-    catálogo de proveedores no se puede descubrir por el SDK, **parar y decirlo**, no inventar una
-    lista a mano.
+  - [x] **T6b — Iniciar sesión en un proveedor, desde el editor.** `picode.piChat.loginProvider`
+    («PiCode: Iniciar sesión en un proveedor»): pide el proveedor en los términos del dueño
+    —diciendo si es **clave** o **suscripción**— y corre el login propio de pi contra el perfil
+    de PiCode. El destino sale de `instanceAgentDir` y `selectedAgentDir` no aparece **ni una vez**
+    en el fichero. Los finales no se colapsan: este pi no sabe iniciar sesión, cancelado, y
+    **sincronización fallida** —que nombra proveedor y operación, advierte de no reintentar a
+    ciegas y nunca lee la credencial—. `e463a3c`, 27 suites, 27 comprobaciones. Detalle que
+    confirma que el puente no fue trabajo perdido: **pi pide la clave él mismo** (`type:"secret"`)
+    y el puente lo convierte en campo que no ecoa.
+    **El catálogo se descubre** (`getProviders()`, con `isUsingOAuth`/`isUsingSubscription`), así
+    que no hay lista escrita a mano. **Desviación declarada**: el runtime se construye para el
+    perfil destino (`createAgentSessionServices({cwd, agentDir: target})`) porque el de la sesión
+    viva es privado en `pi-sdk-client.ts`; consecuencia real —los proveedores que registra una
+    **extensión instalada en el perfil destino** solo aparecen si esos paquetes están ahí—, o sea
+    que hoy, con el perfil interno vacío, la lista son los proveedores propios de pi y no los de
+    `omni`/`nan`. Se resuelve importando (que trae esos paquetes) o compartiendo el runtime de la
+    sesión, que exigiría `pi-sdk-client.ts` en las superficies.
 - [ ] **T6 — El asistente sin terminal.** El de primer arranque se completa entero dentro del
   editor: importar (T3) o empezar de cero. Mientras T5 no exista, si el perfil interno está
   vacío lo **dice antes** de ofrecer ese camino, y no deja al dueño en un callejón sin salida.
@@ -300,6 +310,11 @@ as evidence.
   informe de qué cambió. Y una frase repetida en tres sitios —«Qué pi se ejecuta», en
   `pi-settings.ts`, `menu.ts` y `instance-import-command.ts`—: unificarla, como se hizo con la
   versión, para que un renombrado no deje un texto señalando a una fila con otro nombre.
+  Y dos detalles menores que quedan anotados en vez de perderse: abrir el comando de login
+  construye el runtime del destino y con ello puede crear un `auth.json` vacío en el perfil
+  propio (es comportamiento de pi, no enciende la guarda y no toca el perfil del dueño, pero
+  conviene que no sea un efecto de *abrir* un comando); y el editor multilínea (`editor`) sigue
+  respondiéndose cancelado, con el porqué escrito junto al código.
 
 ## Evidence
 
