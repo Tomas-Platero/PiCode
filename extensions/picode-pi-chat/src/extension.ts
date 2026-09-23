@@ -83,6 +83,7 @@ import {
 } from "./stats";
 import { instanceProfile, instanceProfileEnv, selectedAgentDir } from "./instance";
 import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
+import { LOGIN_PROVIDER_COMMAND, loginProvider } from "./pi-login-command";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -369,6 +370,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(IMPORT_PROFILE_COMMAND, () =>
       importProfileIntoInstance(context, menu),
     ),
+  );
+
+  // The provider login, the other way T6a fills PiCode's own profile. Registered on its
+  // own for the same reason: it resolves its own target from the extension's location.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(LOGIN_PROVIDER_COMMAND, () => loginProvider(context)),
   );
 
   // First run. Deliberately not awaited: the resolution probes a process, and
