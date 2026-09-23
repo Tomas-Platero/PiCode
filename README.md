@@ -29,11 +29,22 @@ into PiCode:
 | `docs/` | `ARCHITECTURE.md`, `DECISIONS.md` (ADRs) and `DISTRIBUTION.md` (how the owned tree is built and what was removed from it). |
 | `AGENTS.md` | The owner's own words, verbatim (Spanish), with what each one means in practice. Read it before changing product behaviour. |
 
-So a fresh clone is not a runnable editor yet. That is deliberate: shipping the payload
-would double the download and, worse, freeze a copy of VSCodium that nobody would update.
-Reproducing it takes two steps.
+So a fresh clone is not a runnable editor yet. That is deliberate: versioning the payload
+would freeze a copy of VSCodium nobody would update, and git refuses a file over 100 MB
+anyway — the editor's own executable is 212 MB.
 
 ## Getting a runnable tree
+
+There are two ways, and they are for different people.
+
+### To try it: the release
+
+Download the ZIP from [Releases](https://github.com/TomasPlatero/PiCode/releases), unzip it
+anywhere and run `PiCode.exe`. It is portable: on first run it creates a `data/` folder next
+to the executable, and deleting that folder gives you a clean PiCode. **No profile travels
+in the archive** — no settings, no credentials, no caches.
+
+### To work on the distribution layer: build the tree
 
 Requirements:
 
