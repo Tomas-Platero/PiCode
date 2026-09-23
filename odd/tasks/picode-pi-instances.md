@@ -339,14 +339,24 @@ as evidence.
     Y se falsificó antes de creerlo: cambiar solo la lista de argumentos lo deja pasar (ya no
     prohíbe el refactor que lo motivó), mientras quitar el registro o dejar de usar el resolutor
     dentro de ese cuerpo lo hacen fallar.
-  - [ ] **T7b — La lista del login viene del perfil equivocado, y mirar un comando crea un
-    fichero.** Los dos defectos tienen la misma causa: la lista de proveedores sale de un runtime
-    construido **para el perfil propio**, así que (1) solo enseña los proveedores de ese perfil
-    —con el perfil propio vacío, los de pi y ninguno de los que registran los paquetes del
-    dueño— y (2) construir ese runtime puede **crear** la carpeta y un `auth.json` vacío en el
-    perfil propio con solo *abrir* el comando. La lista pasa a salir del runtime de la sesión en
-    vigor —el perfil que sí conoce los proveedores del dueño— y la escritura sigue donde estaba,
-    en el perfil de PiCode, con su parámetro obligatorio.
+  - [x] **T7b — La lista del login viene del perfil en vigor, y la escritura se queda donde
+    debe.** La lista sale ahora del runtime de la **sesión en vigor** —el perfil que sí conoce
+    los proveedores del dueño— y la credencial se sigue escribiendo en el perfil de PiCode, con
+    su parámetro obligatorio intacto; el escritor **nunca** es el runtime vivo. Con sesión viva,
+    abrir el comando **no construye nada** en el perfil propio (verificado con runtimes falsos:
+    con sesión el constructor del destino se invoca 0 veces; sin ella, exactamente 1). El caso sin
+    sesión puede crear la carpeta y el `auth.json` vacío, y ese coste está escrito donde está el
+    respaldo en vez de dejarse para el descubrimiento. `2925caf`.
+  - [x] **T7c — Sin callejón sin salida en inglés.** La lista mejor trajo un final peor: elegir
+    un proveedor del perfil en vigor que el de PiCode no tiene —los de un paquete que el dueño
+    instaló— fallaba con `Unknown provider: <id>`, en inglés y sin la salida a la vista. Ahora es
+    una explicación en español que nombra la causa y el camino, con las palabras de la fila
+    («Importar el perfil de tu pi»). Se reconoce **por forma** (nombre y código del error más el
+    prefijo literal del mensaje), no por prosa: reconocer por prosa se pudre en silencio. Y una
+    matriz de casos cercanos —un error normal, uno con el **mismo** código y otro mensaje, y algo
+    que no es un objeto— demuestra que no se traga ningún otro fallo. Si pi renombra ese mensaje,
+    el caso deja de reconocerse y el dueño ve el final genérico con el detalle de pi: degradar
+    así es seguro, tragarse el fallo no. `2925caf`+este.
   - **Descartado a propósito, y queda escrito para que nadie lo «recupere»**: los **tamaños** en la
     importación y el **informe de la segunda importación** eran **ideas mías, no del dueño**. La
     importación ya informa elemento por elemento (copiado, sobreescrito, ausente, declinado,
