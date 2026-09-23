@@ -110,7 +110,29 @@ is what will eventually make an empty internal profile a first-class start.
 | 1. The resolver and the scan | `instanceAgentDir()` + a read-only inventory of the external profile, with tests. **No behaviour change**: nothing is switched, nothing is copied | The foundation, and the only part that is safe on its own |
 | 2. The import | Scan, choose, copy, report; credentials separate; repeatable | Must land **before** the switch, or the switch leaves the editor without credentials |
 | 3. The switch | The managed instance gets the internal profile end to end (RPC env, SDK `agentDir`, settings service, skills discovery, `auth.json`, `mcp.json`), with a row that says which profile is in use | The moment the instances become independent |
-| 4. Polish | The import's progress, sizes, and a second import that reports what changed | After the isolation is real |
+| 4. The interactive bridge (`extension_ui_request`) | pi can ask the editor for input — select, confirm, input, editor — which is what makes a provider login possible **from inside the editor** | Promoted ahead of the polish at the owner's request (2026-09-23), because it is what lets the first-run wizard work end to end: an empty internal profile only becomes a first-class start once credentials can be created here. It also unlocks models, providers and MCP authorisation, so it pays twice |
+| 5. Polish | The import's progress, sizes, and a second import that reports what changed | After the isolation is real and the empty start is possible |
+
+### The first run must not require a terminal
+
+The owner's words: "mi idea era que el wizard de primer arranque (elegir tipo de pi +
+activar gentle-ai) funcione todo dentro del editor, sin pasar por terminal", and "asegurarnos
+de que el wizard no dependa de hacer login por terminal como paso intermedio".
+
+The wizard asks two questions and installs what the answers name. It has to be completable
+**entirely inside the editor**, so no path through it may end in "now run this command in a
+terminal":
+
+- bringing Gentle AI in, and installing and updating the internal pi, already happen in the
+  editor through the existing install path;
+- an external profile's configuration arrives through the import (slice 2);
+- **credentials for an empty internal profile are the one case that still needs the bridge**
+  (slice 4). Until it exists, an empty start is possible but only from a terminal, and the
+  wizard must **say so before offering that path** rather than leaving the owner at a dead
+  end.
+
+The terminal command recorded below stays in this document as the interim escape hatch, and
+not as the intended way in.
 
 ## Out of scope
 
