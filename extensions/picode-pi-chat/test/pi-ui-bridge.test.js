@@ -62,6 +62,14 @@ async function main() {
 
   const results = [];
   const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
+  const throws = (fn) => {
+    try {
+      fn();
+      return false;
+    } catch {
+      return true;
+    }
+  };
 
   // --- one response per family, as the exact JSON on the wire ---------------
 
@@ -180,6 +188,152 @@ async function main() {
       JSON.stringify(answer),
     );
   }
+
+  // --- the provider-login interaction, built from the same dialogs ---------
+
+  check(
+    "the bridge exports the login interaction factory",
+    typeof bridge.createAuthInteraction === "function",
+  );
+  check(
+    "the bridge exports the pure prompt mapping",
+    typeof bridge.authPromptToDialog === "function",
+  );
+  check(
+    "the bridge exports the pure answer mapping",
+    typeof bridge.authDialogAnswer === "function",
+  );
+  check(
+    "the bridge exports the pure notice mapping",
+    typeof bridge.authEventToNotice === "function",
+  );
+
+  // Text and manual codes are one line; a secret must be masked. These are the
+  // shapes the shared input helper is called with, asserted without an editor.
+  const inputCases = [
+    {
+      prompt: { type: "text", message: "Pega tu clave", placeholder: "sk-..." },
+      password: false,
+      placeholder: "sk-...",
+    },
+    { prompt: { type: "secret", message: "Pega tu clave" }, password: true },
+    { prompt: { type: "manual_code", message: "Pega el código" }, password: false },
+  ];
+  for (const testCase of inputCases) {
+    const dialog = bridge.authPromptToDialog(testCase.prompt);
+    check(
+      `"${testCase.prompt.type}" is a single-line input (password: ${testCase.password})`,
+      dialog.kind === "input" &&
+        dialog.password === testCase.password &&
+        dialog.title === testCase.prompt.message,
+      JSON.stringify(dialog),
+    );
+    check(
+      `"${testCase.prompt.type}" keeps the placeholder ${testCase.placeholder ?? "(none)"}`,
+      dialog.placeholder === testCase.placeholder,
+      JSON.stringify(dialog),
+    );
+  }
+
+  // A select must carry both what the owner reads and the id pi gets back.
+  const selectPrompt = {
+    type: "select",
+    message: "¿Cómo quieres entrar?",
+    options: [
+      { id: "api_key", label: "Clave de API" },
+      { id: "oauth", label: "Suscripción", description: "ChatGPT Plus" },
+    ],
+  };
+  const selectDialog = bridge.authPromptToDialog(selectPrompt);
+  check(
+    "a select keeps each option's id, label and description",
+    selectDialog.kind === "choose" &&
+      JSON.stringify(selectDialog.options) === JSON.stringify(selectPrompt.options),
+    JSON.stringify(selectDialog),
+  );
+
+  // The answer the login expects: the id for a select, the raw text for an
+  // input, and a thrown cancellation -- never a silent empty string.
+  check(
+    "an input answer is the typed text",
+    bridge.authDialogAnswer({ kind: "input", title: "t", password: false }, "sk-123") ===
+      "sk-123",
+  );
+  check(
+    "a select answer is the option id, not its label",
+    bridge.authDialogAnswer(selectDialog, "oauth") === "oauth",
+  );
+  check(
+    "a select answer that is not one of the offered ids is refused",
+    throws(() => bridge.authDialogAnswer(selectDialog, "Suscripción")),
+  );
+  check(
+    "a dismissed prompt throws instead of submitting an empty answer",
+    throws(() => bridge.authDialogAnswer(selectDialog, undefined)) &&
+      throws(() =>
+        bridge.authDialogAnswer({ kind: "input", title: "t", password: false }, undefined),
+      ),
+  );
+
+  // Notifications: the URL and the device code must survive into what is shown.
+  const urlNotice = bridge.authEventToNotice({
+    type: "auth_url",
+    url: "https://example.test/login",
+    instructions: "Abre esto",
+  });
+  check(
+    "an auth_url notice carries its url for the browser",
+    urlNotice.url === "https://example.test/login" &&
+      urlNotice.message.includes("https://example.test/login"),
+    JSON.stringify(urlNotice),
+  );
+  const deviceNotice = bridge.authEventToNotice({
+    type: "device_code",
+    userCode: "ABCD-1234",
+    verificationUri: "https://example.test/device",
+  });
+  check(
+    "a device_code notice carries the code and the uri",
+    deviceNotice.url === "https://example.test/device" &&
+      deviceNotice.message.includes("ABCD-1234") &&
+      deviceNotice.message.includes("https://example.test/device"),
+    JSON.stringify(deviceNotice),
+  );
+  check(
+    "a plain info notice is its message",
+    bridge.authEventToNotice({ type: "info", message: "Paso 1" }).message === "Paso 1",
+  );
+
+  const interaction = bridge.createAuthInteraction();
+  check(
+    "the login interaction has the prompt/notify shape pi asks for",
+    typeof interaction.prompt === "function" && typeof interaction.notify === "function",
+  );
+
+  // --- the SDK login call, checked at the source ---------------------------
+
+  // The login cannot be run here (no editor, no provider), so what is proved is
+  // the call's shape and that it goes through the runtime that owns auth.json.
+  const sdkSource = fs.readFileSync(path.join(SOURCE_ROOT, "pi-sdk-client.ts"), "utf8");
+  check(
+    "the embedded client logs in through the session's model runtime",
+    /runtime\.login\(/.test(sdkSource) && /requireSession\(\)\.modelRuntime/.test(sdkSource),
+    "no runtime.login( call anchored to the session model runtime",
+  );
+  check(
+    "the login call passes provider id, auth type and the interaction",
+    /runtime\.login\(\s*providerId\s*,\s*type\s*,\s*interaction\s*\)/.test(sdkSource),
+    "login call shape not found",
+  );
+  check(
+    "the client does not persist credentials through the non-persistent override",
+    !/\.setRuntimeApiKey\s*\(/.test(sdkSource),
+  );
+  check(
+    "the client passes its own agentDir to the SDK services that own auth.json",
+    /createAgentSessionServices\(\{\s*cwd\s*,\s*agentDir\s*\}\)/.test(sdkSource),
+    "createAgentSessionServices({ cwd, agentDir }) not found",
+  );
 
   console.log("\nthe three response shapes, as written to pi's stdin:");
   for (const shape of shapes) {

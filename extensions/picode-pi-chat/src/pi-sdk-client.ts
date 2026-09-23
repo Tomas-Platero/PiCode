@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type * as vscode from "vscode";
+import type { AuthInteraction } from "./pi-ui-bridge";
 import type { PiClient, PiSubscription } from "./pi-client";
 import {
   toPiCommands,
@@ -92,6 +93,25 @@ export interface SdkSessionManager {
 export interface SdkModelRuntime {
   getModel(providerId: string, modelId: string): SdkModelValue | undefined;
   getAvailable(providerId?: string): Promise<readonly SdkModelValue[]>;
+  /**
+   * Persists a provider credential through the runtime's own store. The method
+   * exists on every pi this client supports; the defensive check inside `login`
+   * is what keeps an older entry from failing later with a vaguer error.
+   */
+  login(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<SdkCredential>;
+}
+
+/** pi's `AuthType`; pi-ai owns the union (`dist/auth/types.d.ts`). */
+export type AuthType = "api_key" | "oauth";
+
+/** A stored credential; opaque here because pi owns its fields. */
+export interface SdkCredential {
+  type: AuthType;
+  [key: string]: unknown;
 }
 
 export interface SdkExtensionRunner {
@@ -291,6 +311,47 @@ export class PiSdkClient implements PiClient {
       followUpMode: session.followUpMode,
     };
     return toPiSessionState(snapshot);
+  }
+
+  /**
+   * Logs a provider in from inside the editor and persists its credential.
+   *
+   * The ability is here because the RPC transport cannot do it: `/login` is
+   * interactive-mode only and there is no login command in the RPC union, and
+   * `setRuntimeApiKey` is an in-memory override pi does not persist
+   * (`docs/sdk.md`), so a key set that way leaves the profile looking
+   * credential-less on the next reload and PiCode's anti-mute guard keeps
+   * saying the instance is not usable.
+   *
+   * This call is the one that persists. `createAgentSessionServices({ agentDir })`
+   * builds its `ModelRuntime` with `authPath: join(agentDir, "auth.json")`, and
+   * `createAgentSessionFromServices` hands that same runtime to the session, so
+   * the directory `login` writes to is exactly the client's `agentDir`.
+   *
+   * Finding, because it is not the profile the first-run wizard needs: the
+   * client is built with `selectedAgentDir()`, and that resolver follows the
+   * anti-mute guard -- it answers the internal profile only while that profile
+   * already holds a credential, and the machine profile otherwise. So on the
+   * empty internal profile this ability exists to fill, `login` writes to the
+   * machine's `auth.json` and the internal one stays empty. The wizard must wire
+   * this through `instanceAgentDir()` (the unguarded writer's answer, the same
+   * one the package install already uses), not through `selectedAgentDir()`.
+   *
+   * pi resolves once the provider's catalog and availability are locally
+   * consistent. When the credential was committed but that synchronization
+   * failed it rejects with pi's `CredentialSynchronizationError`; that error
+   * still means the write happened, so its `providerId`, `operation` and
+   * `credential` fields are there to inspect and the mutation must never be
+   * retried blindly.
+   */
+  login(providerId: string, type: AuthType, interaction: AuthInteraction): Promise<SdkCredential> {
+    const runtime = this.requireSession().modelRuntime;
+    if (typeof runtime.login !== "function") {
+      throw new Error(
+        "Este pi no sabe iniciar sesión desde el SDK. Actualiza el pi integrado.",
+      );
+    }
+    return runtime.login(providerId, type, interaction);
   }
 
   async getAvailableModels(): Promise<PiModel[]> {

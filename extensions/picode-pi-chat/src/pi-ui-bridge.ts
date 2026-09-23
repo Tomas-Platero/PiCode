@@ -30,6 +30,42 @@ export type PiExtensionUiHandler = (
 ) => Promise<PiExtensionUiAnswer | undefined> | PiExtensionUiAnswer | undefined;
 
 /**
+ * The editor's quick pick, shared by pi's extension dialogs and its provider
+ * login. Returns the chosen item's index so each caller can turn it back into
+ * whatever it actually offered -- a plain string, or an option id.
+ */
+async function chooseFromList(
+  title: string,
+  items: readonly vscode.QuickPickItem[],
+): Promise<number | undefined> {
+  const picked = await vscode.window.showQuickPick([...items], {
+    title,
+    ignoreFocusOut: true,
+  });
+  return picked === undefined ? undefined : items.indexOf(picked);
+}
+
+/**
+ * The editor's single-line input box, shared by the extension dialogs and the
+ * login prompts. `password` masks what the owner types, which the extension
+ * request protocol has no flag for -- the reason this helper exists instead of
+ * calling `showInputBox` twice.
+ */
+async function askForText(options: {
+  title: string;
+  placeholder?: string;
+  password: boolean;
+}): Promise<string | undefined> {
+  return vscode.window.showInputBox({
+    title: options.title,
+    prompt: options.title,
+    ...(options.placeholder === undefined ? {} : { placeHolder: options.placeholder }),
+    ...(options.password ? { password: true } : {}),
+    ignoreFocusOut: true,
+  });
+}
+
+/**
  * One function per family, in the order the protocol declares them:
  * `select` -> quick pick, `confirm` -> modal, `input` -> input box, `notify` ->
  * the notification matching `notifyType`. `editor` is answered `cancelled`, and
@@ -47,11 +83,11 @@ export async function handleExtensionUiRequest(
       // `ignoreFocusOut` is what lets the owner switch to a browser mid-login
       // without the pick being dismissed, which is the main thing this bridge
       // exists for. Dismissing the pick (Escape) is `cancelled`.
-      const choice = await vscode.window.showQuickPick([...request.options], {
-        title: request.title,
-        ignoreFocusOut: true,
-      });
-      return choice === undefined ? { cancelled: true } : { value: choice };
+      const index = await chooseFromList(
+        request.title,
+        request.options.map((option) => ({ label: option })),
+      );
+      return index === undefined ? { cancelled: true } : { value: request.options[index] };
     }
 
     case "confirm": {
@@ -72,11 +108,10 @@ export async function handleExtensionUiRequest(
     }
 
     case "input": {
-      const value = await vscode.window.showInputBox({
+      const value = await askForText({
         title: request.title,
-        prompt: request.title,
-        ...(request.placeholder === undefined ? {} : { placeHolder: request.placeholder }),
-        ignoreFocusOut: true,
+        password: false,
+        ...(request.placeholder === undefined ? {} : { placeholder: request.placeholder }),
       });
       return value === undefined ? { cancelled: true } : { value };
     }
@@ -126,4 +161,200 @@ export async function handleExtensionUiRequest(
       // the panel's own input box, and the other three would need a place to live.
       return undefined;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Provider login: pi's `AuthInteraction`, answered with the same dialogs
+ * ------------------------------------------------------------------ */
+
+/**
+ * pi-ai's auth types (`@earendil-works/pi-ai/dist/auth/types.d.ts`), quoted
+ * rather than imported because pi is ESM-only and loaded by URL at runtime.
+ *
+ * `ModelRuntime.login(providerId, type, interaction)` is the call that persists
+ * a credential to `auth.json`; `setRuntimeApiKey` is an in-memory override pi
+ * does not persist. `AuthInteraction` is what pi asks the host for while that
+ * login runs.
+ */
+export type AuthPrompt =
+  | { signal?: AbortSignal; type: "text"; message: string; placeholder?: string }
+  | { signal?: AbortSignal; type: "secret"; message: string; placeholder?: string }
+  | {
+      signal?: AbortSignal;
+      type: "select";
+      message: string;
+      options: readonly AuthChoice[];
+    }
+  | { signal?: AbortSignal; type: "manual_code"; message: string; placeholder?: string };
+
+/** One `select` option: `id` is what pi gets back, `label` is what the owner reads. */
+export interface AuthChoice {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+/** A login event pi announces and never waits on. */
+export type AuthEvent =
+  | { type: "info"; message: string; links?: readonly { url: string; label?: string }[] }
+  | { type: "auth_url"; url: string; instructions?: string }
+  | {
+      type: "device_code";
+      userCode: string;
+      verificationUri: string;
+      intervalSeconds?: number;
+      expiresInSeconds?: number;
+    }
+  | { type: "progress"; message: string };
+
+export interface AuthInteraction {
+  signal?: AbortSignal;
+  prompt(prompt: AuthPrompt): Promise<string>;
+  notify(event: AuthEvent): void;
+}
+
+/** What the editor is asked, one descriptor per `AuthPrompt` variant. */
+export type AuthDialog =
+  | { kind: "input"; title: string; password: boolean; placeholder?: string }
+  | { kind: "choose"; title: string; options: readonly AuthChoice[] };
+
+/**
+ * Maps one login prompt to the editor dialog that answers it. Pure, so the
+ * mapping is tested without an editor; `createAuthInteraction` is the only
+ * thing here that touches `vscode`.
+ *
+ * Two shapes do not fit `PiExtensionUiRequest`, and it is the mapping that
+ * adapts them instead of a second dialog: a `secret` must be masked
+ * (`password: true`, which the extension protocol has no field for), and a
+ * `select` separates the `id` pi gets back from the `label` the owner reads
+ * (the extension protocol's options are bare strings).
+ */
+export function authPromptToDialog(prompt: AuthPrompt): AuthDialog {
+  switch (prompt.type) {
+    case "select":
+      return { kind: "choose", title: prompt.message, options: prompt.options };
+    case "secret":
+      return {
+        kind: "input",
+        title: prompt.message,
+        password: true,
+        ...(prompt.placeholder === undefined ? {} : { placeholder: prompt.placeholder }),
+      };
+    case "text":
+    case "manual_code":
+      return {
+        kind: "input",
+        title: prompt.message,
+        password: false,
+        ...(prompt.placeholder === undefined ? {} : { placeholder: prompt.placeholder }),
+      };
+  }
+}
+
+/** Thrown when the owner dismisses a login prompt, so a cancelled login is not a failed one. */
+export class AuthPromptCancelled extends Error {
+  constructor(title: string) {
+    super(`Login cancelled: ${title}`);
+    this.name = "AuthPromptCancelled";
+  }
+}
+
+/**
+ * The string pi's login expects from one editor answer, or a thrown
+ * cancellation. `undefined` is the editor saying the owner dismissed the
+ * prompt, and an empty string would be worse than an error: it would submit an
+ * empty authorization code as if the owner had typed it. A `select` must answer
+ * with an option id, so a value that is not one of the offered ids is refused
+ * instead of reaching pi as an unknown choice.
+ */
+export function authDialogAnswer(dialog: AuthDialog, answer: string | undefined): string {
+  if (answer === undefined) {
+    throw new AuthPromptCancelled(dialog.title);
+  }
+  if (dialog.kind === "choose" && !dialog.options.some((option) => option.id === answer)) {
+    throw new Error(`"${answer}" is not one of the offered options for ${dialog.title}`);
+  }
+  return answer;
+}
+
+/** What a login event becomes on screen: a message, and a URL to open if it carries one. */
+export interface AuthNotice {
+  message: string;
+  url?: string;
+}
+
+/** Maps a login event to the notice shown to the owner. Pure, like the prompt mapping. */
+export function authEventToNotice(event: AuthEvent): AuthNotice {
+  switch (event.type) {
+    case "info": {
+      const links = (event.links ?? []).map((link) =>
+        link.label === undefined ? link.url : `${link.label}: ${link.url}`,
+      );
+      return {
+        message: links.length === 0 ? event.message : `${event.message}\n${links.join("\n")}`,
+      };
+    }
+    case "auth_url":
+      return {
+        message:
+          event.instructions === undefined ? event.url : `${event.instructions}\n${event.url}`,
+        url: event.url,
+      };
+    case "device_code":
+      return {
+        message: `Introduce el código ${event.userCode} en ${event.verificationUri}`,
+        url: event.verificationUri,
+      };
+    case "progress":
+      return { message: event.message };
+  }
+}
+
+/**
+ * Builds the `AuthInteraction` pi calls during `ModelRuntime.login`. The prompts
+ * go through the same quick pick and input box as pi's extension dialogs, so
+ * there is one dialog layer and not a second set of look-alikes.
+ *
+ * Known gap: `AuthPrompt.signal` and `AuthInteraction.signal` cannot dismiss an
+ * editor dialog that is already open (VS Code offers no way to close its own
+ * quick pick or input box programmatically). A prompt pi aborts while the owner
+ * still has it on screen can therefore still be answered, and that answer
+ * reaches a login that has already moved on, where pi discards it. The
+ * alternative -- a host-side timer answering on the owner's behalf -- is the
+ * failure this module exists to avoid.
+ */
+export function createAuthInteraction(): AuthInteraction {
+  return {
+    async prompt(prompt) {
+      const dialog = authPromptToDialog(prompt);
+      if (dialog.kind === "choose") {
+        const index = await chooseFromList(
+          dialog.title,
+          dialog.options.map((option) => ({
+            label: option.label,
+            ...(option.description === undefined ? {} : { description: option.description }),
+          })),
+        );
+        return authDialogAnswer(dialog, index === undefined ? undefined : dialog.options[index].id);
+      }
+      const value = await askForText({
+        title: dialog.title,
+        password: dialog.password,
+        ...(dialog.placeholder === undefined ? {} : { placeholder: dialog.placeholder }),
+      });
+      return authDialogAnswer(dialog, value);
+    },
+    notify(event) {
+      const { message, url } = authEventToNotice(event);
+      if (url === undefined) {
+        void vscode.window.showInformationMessage(message);
+        return;
+      }
+      void vscode.window.showInformationMessage(message, "Abrir en el navegador").then((choice) => {
+        if (choice !== undefined) {
+          void vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+      });
+    },
+  };
 }
