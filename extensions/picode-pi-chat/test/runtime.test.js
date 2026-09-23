@@ -438,6 +438,78 @@ check(
   fs.rmSync(pinExtension, { recursive: true, force: true });
   fs.rmSync(pinRoot, { recursive: true, force: true });
 
+  // --- what the shell is handed ------------------------------------------------
+
+  // The failure this covers: on Windows `npm` resolves to a `.cmd` under the Node
+  // install, which by default sits in `C:\Program Files`, and the shell split that
+  // program path at the space. The arguments below are the ones the update uses;
+  // the `--prefix` path is the managed root, which also carries a space whenever
+  // the distribution does.
+  const updateArgsNoSpace = [
+    "install",
+    "--prefix",
+    "d:\\repositorios\\PiCode\\resources\\pi-runtime",
+    "--omit=dev",
+    "--no-audit",
+    "--no-fund",
+    "--ignore-scripts",
+    "@earendil-works/pi-coding-agent@0.87.1",
+  ];
+  const spacedNpm = runtime.shellSpawnTarget("C:\\Program Files\\nodejs\\npm.cmd", updateArgsNoSpace);
+  console.log(`spawn program: ${spacedNpm.command}`);
+  console.log(`spawn args:    ${JSON.stringify(spacedNpm.args)}`);
+  console.log(`spawn shell:   ${spacedNpm.shell}`);
+  check(
+    "a program path with a space is quoted, exactly once and as one token",
+    spacedNpm.command === '"C:\\Program Files\\nodejs\\npm.cmd"' &&
+      spacedNpm.shell === true &&
+      JSON.stringify(spacedNpm.args) === JSON.stringify(updateArgsNoSpace),
+    JSON.stringify(spacedNpm),
+  );
+
+  const spacedPrefix = runtime.shellSpawnTarget("C:\\Program Files\\nodejs\\npm.cmd", [
+    "install",
+    "--prefix",
+    "C:\\Users\\Jane Doe\\PiCode\\resources\\pi-runtime",
+  ]);
+  check(
+    "an argument with a space is quoted and one without is left alone",
+    JSON.stringify(spacedPrefix.args) ===
+      JSON.stringify([
+        "install",
+        "--prefix",
+        '"C:\\Users\\Jane Doe\\PiCode\\resources\\pi-runtime"',
+      ]),
+    JSON.stringify(spacedPrefix.args),
+  );
+
+  const plainExecutable = runtime.shellSpawnTarget("/usr/local/bin/npm", [
+    "install",
+    "--prefix",
+    "/home/Jane Doe/pi-runtime",
+  ]);
+  check(
+    "a program that needs no shell is handed over unquoted, arguments included",
+    plainExecutable.command === "/usr/local/bin/npm" &&
+      plainExecutable.shell === false &&
+      JSON.stringify(plainExecutable.args) ===
+        JSON.stringify(["install", "--prefix", "/home/Jane Doe/pi-runtime"]),
+    JSON.stringify(plainExecutable),
+  );
+
+  const ordinaryNpm = runtime.shellSpawnTarget("C:\\nodejs\\npm.cmd", [
+    "install",
+    "@earendil-works/pi-coding-agent@0.87.1",
+  ]);
+  check(
+    "an ordinary install needs no quotes at all",
+    ordinaryNpm.command === "C:\\nodejs\\npm.cmd" &&
+      ordinaryNpm.shell === true &&
+      JSON.stringify(ordinaryNpm.args) ===
+        JSON.stringify(["install", "@earendil-works/pi-coding-agent@0.87.1"]),
+    JSON.stringify(ordinaryNpm),
+  );
+
   // --- report ----------------------------------------------------------------
 
   let failed = 0;

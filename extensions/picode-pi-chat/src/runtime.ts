@@ -595,6 +595,34 @@ export function recordManagedInstall(
 }
 
 /**
+ * The program, argument list and shell flag handed to `spawn` for a CLI shim.
+ *
+ * `spawn` with a shell joins the program and its arguments into one command line
+ * instead of escaping them, so whatever contains whitespace splits in two at the
+ * shell. Quoting only the arguments is not enough: on Windows `npm` resolves to
+ * `<node>\npm.cmd`, and a default Node install lives under `C:\Program Files`,
+ * so the unquoted program becomes `C:\Program` and the plan never runs. The
+ * program is the first token of that command line, so it follows the same rule
+ * as the arguments — and the `--prefix` path is quoted for the same reason.
+ *
+ * A program that needs no shell is returned untouched: without a shell there is
+ * no command line to split, and quotes added here would reach the child as part
+ * of the argument itself.
+ */
+export function shellSpawnTarget(
+  program: string,
+  args: string[],
+): { command: string; args: string[]; shell: boolean } {
+  const shell = /\.(cmd|bat)$/i.test(program);
+  if (!shell) {
+    return { command: program, args: [...args], shell };
+  }
+
+  const quote = (value: string): string => (/\s/.test(value) ? `"${value}"` : value);
+  return { command: quote(program), args: args.map(quote), shell };
+}
+
+/**
  * Installs the pinned runtime into the distribution's own tree.
  *
  * `--ignore-scripts` is deliberate: the managed install only needs the published
@@ -637,15 +665,10 @@ export function installManagedRuntime(
   onOutput(`Running: npm ${args.join(" ")}`);
 
   return new Promise((resolve) => {
-    // `spawn` with a shell concatenates arguments instead of escaping them, so a
-    // path containing a space would split into two. Quote only what needs it.
-    const usesShell = /\.(cmd|bat)$/i.test(npm);
-    const spawnArgs = usesShell
-      ? args.map((argument) => (/\s/.test(argument) ? `"${argument}"` : argument))
-      : args;
+    const invocation = shellSpawnTarget(npm, args);
 
-    const child = spawn(npm, spawnArgs, {
-      shell: usesShell,
+    const child = spawn(invocation.command, invocation.args, {
+      shell: invocation.shell,
       windowsHide: true,
     });
 
