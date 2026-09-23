@@ -59,13 +59,16 @@ interface SettingsGroupWire {
 }
 
 /**
- * The largest window one registry search may load.
+ * How many catalogue rows one registry search loads.
  *
- * It is the registry's own ceiling. The catalogue tab pages over this loaded window
- * without searching again, so the window is what "loaded" means in its footer, and
- * the registry's total — which runs into the thousands — is never fetched.
+ * It is what the footer reports as loaded, and the tab pages over it without searching
+ * again. Every row of it costs one registry document to tag, so the window is the cost
+ * of a search as well as the browse depth; the resolver's own cache makes revisiting a
+ * page free. The registry's total — which runs into the thousands — is never fetched.
+ *
+ * 120 is six pages of twenty: several pages to browse through without a long wait.
  */
-const CATALOG_WINDOW = 250;
+const CATALOG_WINDOW = 120;
 
 /** One catalogue row as the webview renders it: the search fields plus the type tags. */
 interface CatalogRowWire {
@@ -532,7 +535,9 @@ export class SettingsView {
   private async searchCatalog(query: string): Promise<void> {
     try {
       const page = await searchCatalogPage(query, { limit: CATALOG_WINDOW });
-      const types = await resolvePackageTypes(page.packages);
+      // One registry document per loaded row, so eight at a time halves the wait; the
+      // resolver's cache makes revisiting a page free.
+      const types = await resolvePackageTypes(page.packages, { concurrency: 8 });
       this.post({
         type: "catalogState",
         query,
