@@ -140,6 +140,43 @@ Syncing anything to the cloud. Auto-updating the external instance. Writing to t
 profile for any reason. Migrating sessions: a session belongs to the profile that made it,
 and moving them is a separate, deliberate decision.
 
+## Tasks
+
+Worked in this order. A task is checked only when its outcome and its checks were
+observed; every task closes with one work-unit commit on the feature branch, recorded here
+as evidence.
+
+- [x] **T1 — El resolutor y el escaneo.** `instanceAgentDir(extensionUri, runtime)` (managed
+  → `<distribution>/data/pi-agent`, path/custom → `undefined`) y `scanProfile(agentDir)` con
+  un inventario de solo lectura: paquetes, **nombres** de credenciales, modelos, MCPs,
+  skills, memoria y sesiones. Parsers puros separados de las lecturas. Invisible en el
+  producto: nada cableado. `1835df4`, 22 suites verdes, 15 comprobaciones.
+- [ ] **T2 — La copia de un perfil.** `importProfile(from, to, selection, onProgress)`: copia
+  elemento a elemento hacia el perfil interno — ajustes (incluida la lista de paquetes),
+  modelos, MCPs, skills — y **credenciales solo si se piden aparte**. No escribe nunca en el
+  perfil de origen, no sobreescribe un destino con contenido sin decirlo, informa de cada
+  elemento y es repetible. Las **sesiones quedan fuera** (ver Out of scope). Pruebas con
+  fixtures: destino vacío, destino con contenido, origen a medias, y que la copia de
+  credenciales declinada no las toca.
+- [ ] **T3 — La fila de importación.** Una acción en el editor que enseña el inventario de
+  T1, deja elegir qué viene, marca las credenciales como decisión aparte, ejecuta T2 y
+  **informa de cada elemento**; después instala los paquetes de la lista copiada por el
+  camino de instalación que ya existe. Sin terminal en ningún paso.
+- [ ] **T4 — El interruptor.** El aislamiento de verdad: el perfil de la instancia elegida
+  llega al entorno del proceso (RPC), al `agentDir` del SDK, al servicio de ajustes, al
+  descubrimiento de skills y a los dos ficheros que hoy se leen a pelo (`auth.json`,
+  `mcp.json`), con una fila que dice qué perfil está en uso. **Guarda:** no se enciende sin
+  credenciales; si no las hay, lo dice en vez de dejar el editor mudo.
+- [ ] **T5 — El puente interactivo.** `extension_ui_request` atendido (los cuatro diálogos que
+  bloquean, los métodos que no esperan respuesta, correlación por id, sin tiempos de espera
+  propios) en **las dos** implementaciones — RPC y SDK embebido — para que el login de un
+  proveedor se pueda hacer desde el editor. Es lo que quita el terminal del camino.
+- [ ] **T6 — El asistente sin terminal.** El de primer arranque se completa entero dentro del
+  editor: importar (T3) o empezar de cero. Mientras T5 no exista, si el perfil interno está
+  vacío lo **dice antes** de ofrecer ese camino, y no deja al dueño en un callejón sin salida.
+- [ ] **T7 — Pulido.** Progreso de la importación, tamaños, y una segunda importación que
+  informe de qué cambió.
+
 ## Evidence
 
 - Work-unit commits, `npm test` green with per-suite counts on each.
