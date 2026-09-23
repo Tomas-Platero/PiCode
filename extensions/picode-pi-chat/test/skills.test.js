@@ -30,6 +30,7 @@ Module._resolveFilename = function resolve(request, ...rest) {
 const {
   parseSkillFrontmatter,
   parsePiManifest,
+  parsePackageFacts,
   packageLoadsSkill,
   skillFilterPattern,
   discoverSkills,
@@ -99,6 +100,61 @@ check(
 );
 check("a package with no pi block contributes no skills", parsePiManifest('{"name":"x"}') === undefined, "");
 check("a broken manifest contributes no skills", parsePiManifest("{not json") === undefined, "");
+
+/* ------------------------------------------------------------------ *
+ * The manifest facts the packages table cannot derive from the spec
+ * ------------------------------------------------------------------ */
+
+const lensFacts = parsePackageFacts(
+  JSON.stringify({
+    name: "pi-lens",
+    version: "4.2.1",
+    author: "Apostolos Mantzaris",
+    repository: { type: "git", url: "git+https://github.com/apmantza/pi-lens.git" },
+  }),
+);
+check(
+  "a manifest's version, author and repository owner are all read",
+  lensFacts.version === "4.2.1" &&
+    lensFacts.author === "Apostolos Mantzaris" &&
+    lensFacts.repositoryOwner === "apmantza",
+  JSON.stringify(lensFacts),
+);
+check(
+  "an author object contributes its name, and nothing is guessed without one",
+  parsePackageFacts(JSON.stringify({ author: { name: "Grace Hopper" } })).author ===
+    "Grace Hopper" &&
+    parsePackageFacts(JSON.stringify({ author: { email: "a@b.c" } })).author === undefined,
+  JSON.stringify(parsePackageFacts(JSON.stringify({ author: { name: "Grace Hopper" } }))),
+);
+check(
+  "a manifest with no author still names its repository owner",
+  parsePackageFacts(
+    JSON.stringify({ repository: "https://github.com/Gentleman-Programming/gentle-shell.git" }),
+  ).repositoryOwner === "Gentleman-Programming" &&
+    parsePackageFacts(
+      JSON.stringify({ repository: "https://github.com/Gentleman-Programming/gentle-shell.git" }),
+    ).author === undefined,
+  "",
+);
+check(
+  "a scp-style and a shorthand repository both name their owner",
+  parsePackageFacts(JSON.stringify({ repository: "git@github.com:HazAT/pi-interactive-subagents.git" }))
+    .repositoryOwner === "HazAT" &&
+    parsePackageFacts(JSON.stringify({ repository: "github:Gentleman-Programming/gentle-shell" }))
+      .repositoryOwner === "Gentleman-Programming",
+  JSON.stringify(
+    parsePackageFacts(
+      JSON.stringify({ repository: "git@github.com:HazAT/pi-interactive-subagents.git" }),
+    ),
+  ),
+);
+check(
+  "a manifest that declares none of the three yields no facts rather than guesses",
+  same(parsePackageFacts(JSON.stringify({ name: "x" })), {}) &&
+    parsePackageFacts("{not json") === undefined,
+  JSON.stringify(parsePackageFacts(JSON.stringify({ name: "x" }))),
+);
 
 check(
   "the filter pattern is a POSIX path relative to the package root",
@@ -331,7 +387,16 @@ async function main() {
     fs.mkdirSync(packageRoot, { recursive: true });
     fs.writeFileSync(
       path.join(packageRoot, "package.json"),
-      JSON.stringify({ name: "demo-pkg", pi: { skills: ["./skills"] } }),
+      JSON.stringify({
+        name: "demo-pkg",
+        version: "1.2.3",
+        author: { name: "Ada Lovelace" },
+        repository: {
+          type: "git",
+          url: "https://github.com/Gentleman-Programming/gentle-shell.git",
+        },
+        pi: { skills: ["./skills"] },
+      }),
     );
     writeSkill(
       path.join(packageRoot, "skills", "gamma"),
@@ -353,6 +418,7 @@ async function main() {
       packageEntries: [{ source: "npm:demo-pkg", paused: false, skills: [PATTERN] }],
     });
     const byName = new Map(found.skills.map((entry) => [entry.name, entry]));
+    const factsBySource = new Map(found.packageFacts.map((entry) => [entry.source, entry]));
 
     check(
       "every readable skill on every route is listed",
@@ -408,6 +474,18 @@ async function main() {
       "a package with no manifest contributes no skills and no problem",
       !found.skills.some((entry) => entry.packageSource === "npm:bare-pkg"),
       JSON.stringify(found.skills),
+    );
+    check(
+      "every installed package with a readable manifest contributes its facts",
+      factsBySource.get("npm:demo-pkg").version === "1.2.3" &&
+        factsBySource.get("npm:demo-pkg").author === "Ada Lovelace" &&
+        factsBySource.get("npm:demo-pkg").repositoryOwner === "Gentleman-Programming",
+      JSON.stringify(found.packageFacts),
+    );
+    check(
+      "a package with no readable manifest has no facts, so its row falls back to its spec",
+      factsBySource.has("npm:bare-pkg") === false && factsBySource.has("npm:no-path") === false,
+      JSON.stringify(found.packageFacts),
     );
 
     const filteredOut = await discoverSkills({

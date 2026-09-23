@@ -65,6 +65,31 @@ export interface SkillDiscoveryProblem {
 export interface SkillDiscoveryResult {
   skills: DiscoveredSkill[];
   problems: SkillDiscoveryProblem[];
+  /**
+   * What every installed package's own manifest knows.
+   *
+   * pi stores a package as one source string, which carries a version only when the
+   * spec was pinned and an author only when the package is scoped or comes from git.
+   * The packages table cannot derive either from that string alone, so the host reads
+   * every installed manifest once here and the table merges the facts at render time.
+   */
+  packageFacts: InstalledPackageFacts[];
+}
+
+/** The version, author and repository owner a package manifest knows. */
+export interface PackageFacts {
+  /** The manifest's `version`. */
+  version?: string;
+  /** The manifest's `author`, as a string or the `name` of its object form. */
+  author?: string;
+  /** The owner of the manifest's `repository` URL, the author of last resort. */
+  repositoryOwner?: string;
+}
+
+/** One installed package's facts, tied to the source a settings row is matched by. */
+export interface InstalledPackageFacts extends PackageFacts {
+  /** The source spec exactly as pi reports it, e.g. `npm:pi-lens`. */
+  source: string;
 }
 
 export interface SkillFrontmatter {
@@ -179,6 +204,115 @@ export function parsePiManifest(text: string): PiSkillManifest | undefined {
     ...(typeof name === "string" && name.trim() !== "" ? { name } : {}),
     skills: declared,
   };
+}
+
+/**
+ * A manifest `author`, read as the string it is or as the `name` of its object form.
+ *
+ * `maintainers` and `_npmUser` are deliberately not consulted: they are absent from
+ * the copies npm installs, so relying on them would leave the column empty for the
+ * packages that do carry an `author`.
+ */
+function authorName(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+  }
+  if (typeof value === "object" && value !== null) {
+    const name = (value as Record<string, unknown>).name;
+    if (typeof name === "string" && name.trim() !== "") {
+      return name.trim();
+    }
+  }
+  return undefined;
+}
+
+/** The `url` of a `repository` object, or `undefined` for any other shape. */
+function repositoryUrl(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const url = (value as Record<string, unknown>).url;
+  return typeof url === "string" ? url : undefined;
+}
+
+/**
+ * The owner of a repository URL, in any of the shapes npm accepts.
+ *
+ * A full URL (`git+https://github.com/apmantza/pi-lens.git`), a scp-style one
+ * (`git@github.com:owner/repo.git`), the `github:owner/repo` shorthand and the bare
+ * `owner/repo` one all resolve to their first path segment. `undefined` means nothing
+ * could be read rather than a guessed segment, so the author column stays empty
+ * instead of showing a host name.
+ */
+function ownerOfRepository(value: unknown): string | undefined {
+  let text = typeof value === "string" ? value : repositoryUrl(value);
+  if (typeof text !== "string") {
+    return undefined;
+  }
+  text = text.trim();
+  if (text === "") {
+    return undefined;
+  }
+
+  // `github:owner/repo` and its siblings name the owner right after the scheme word.
+  const shorthand = /^(?:github|gitlab|bitbucket|gist):(.+)$/i.exec(text);
+  if (shorthand !== null) {
+    text = shorthand[1];
+  }
+
+  // A full URL, or an scp-style one that keeps the host and the path together with a
+  // colon: drop the scheme and the host, and the first path segment is what remains.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^[^/]+@[^/]+:/.test(text)) {
+    const rest = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^[^/@]+@/, "");
+    const colon = rest.indexOf(":");
+    const slash = rest.indexOf("/");
+    let start = -1;
+    if (colon !== -1 && (slash === -1 || colon < slash)) {
+      // The scp form keeps the host and the path together: `host:owner/repo`.
+      start = colon + 1;
+    } else if (slash !== -1) {
+      start = slash + 1;
+    }
+    text = start === -1 ? "" : rest.slice(start);
+  }
+
+  const segments = text.split("/").filter((segment) => segment !== "");
+  return segments.length > 0 ? segments[0] : undefined;
+}
+
+/**
+ * The facts a package's own manifest knows that the stored source string does not:
+ * its version, its author, and the owner of its repository as the author of last
+ * resort. `undefined` means the text is not a readable manifest at all; an object
+ * with none of the three is a readable manifest that knows nothing extra.
+ */
+export function parsePackageFacts(text: string): PackageFacts | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return undefined;
+  }
+  const record = parsed as Record<string, unknown>;
+  const facts: PackageFacts = {};
+
+  if (typeof record.version === "string" && record.version.trim() !== "") {
+    facts.version = record.version.trim();
+  }
+  const author = authorName(record.author);
+  if (author !== undefined) {
+    facts.author = author;
+  }
+  const owner = ownerOfRepository(record.repository);
+  if (owner !== undefined) {
+    facts.repositoryOwner = owner;
+  }
+
+  return facts;
 }
 
 /**
@@ -364,6 +498,7 @@ function collectPackageSkills(
   packageEntries: ReadonlyMap<string, PiPackageEntry>,
   skills: DiscoveredSkill[],
   problems: SkillDiscoveryProblem[],
+  packageFacts: InstalledPackageFacts[],
 ): void {
   if (pkg.path === undefined || pkg.path.trim() === "") {
     problems.push({
@@ -376,6 +511,14 @@ function collectPackageSkills(
 
   const root = pkg.path;
   const manifestRead = readText(path.join(root, "package.json"));
+  // The facts are recorded for every installed package, including one whose `pi`
+  // block declares no skills: a version and an author are not skill metadata.
+  if (manifestRead.ok) {
+    const facts = parsePackageFacts(manifestRead.text);
+    if (facts !== undefined) {
+      packageFacts.push({ source: pkg.source, ...facts });
+    }
+  }
   const manifest = manifestRead.ok ? parsePiManifest(manifestRead.text) : undefined;
   if (manifest === undefined || manifest.skills.length === 0) {
     return;
@@ -460,6 +603,7 @@ export async function discoverSkills(
 ): Promise<SkillDiscoveryResult> {
   const skills: DiscoveredSkill[] = [];
   const problems: SkillDiscoveryProblem[] = [];
+  const packageFacts: InstalledPackageFacts[] = [];
 
   const collectRoute = (directory: string, source: SkillSource): void => {
     const collected = collectSkills(directory, source);
@@ -492,7 +636,7 @@ export async function discoverSkills(
       });
     }
     for (const pkg of packages) {
-      collectPackageSkills(pkg, packageEntries, skills, problems);
+      collectPackageSkills(pkg, packageEntries, skills, problems, packageFacts);
     }
   } catch (error) {
     // The walk already reports its own failures; this is the last net, because the
@@ -504,5 +648,5 @@ export async function discoverSkills(
     });
   }
 
-  return { skills, problems };
+  return { skills, problems, packageFacts };
 }

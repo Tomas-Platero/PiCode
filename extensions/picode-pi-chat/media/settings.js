@@ -32,6 +32,10 @@
     // the only side that knows whether a package skill is on in that scope.
     skills: [],
     skillProblems: [],
+    // The manifest facts of the installed packages, as the host read them. Never
+    // derived here: the source string alone cannot tell a version or an author, so
+    // the table merges what the host supplies over what the spec already gives.
+    packageFacts: [],
     // Which of the Packages section's two tabs is showing. Kept here, in module
     // state, so a repaint after a host write does not throw the owner back to the
     // packages table.
@@ -971,7 +975,7 @@
 
     /** The rows the filters and the sort leave, in the order the table shows them. */
     function visibleRows() {
-      var rows = packageRows.buildRows(storedEntries(setting));
+      var rows = packageRows.buildRows(storedEntries(setting), state.packageFacts);
       var visible = packageRows.filterRows(rows, {
         query: view.query,
         origin: view.origin,
@@ -1697,6 +1701,7 @@
           message.values && typeof message.values === "object" ? message.values : {};
         state.skills = Array.isArray(message.skills) ? message.skills : [];
         state.skillProblems = Array.isArray(message.skillProblems) ? message.skillProblems : [];
+        state.packageFacts = Array.isArray(message.packageFacts) ? message.packageFacts : [];
         if (
           typeof message.startAt === "string" &&
           state.groups.some(function (group) { return group.category.id === message.startAt; })

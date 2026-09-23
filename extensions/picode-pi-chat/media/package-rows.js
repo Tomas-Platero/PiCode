@@ -1,11 +1,11 @@
 /*
  * The derivation behind the packages table in the settings tab.
  *
- * pi stores a package as one source string and nothing else: `npm:pi-lens`,
+ * pi stores a package as one source string: `npm:pi-lens`,
  * `git:github.com/HazAT/pi-interactive-subagents`, or a local path written by
- * hand. Every column of the table except Estado is therefore derived from that
- * string, and the only place a derivation can be wrong without looking wrong is
- * in code that has no test: so it lives in its own file, free of the DOM, and
+ * hand. Every column of the table except Estado is derived from that string, and
+ * the only place a derivation can be wrong without looking wrong is in code that
+ * has no test: so it lives in its own file, free of the DOM, and
  * `test/package-rows.test.js` asserts it directly.
  *
  * Two facts from the owner's real settings file shaped this file:
@@ -13,9 +13,20 @@
  * 1. The same package may appear twice — `gentle-engram` and
  *    `gentle-engram@0.1.14` resolve to the same directory — so a row is
  *    identified by its position in the stored list and never by its source.
- * 2. Only a pinned spec carries a version in the value. Reading the installed
- *    `package.json` is a deliberate, available follow-up, not part of this: the
- *    Versión column is allowed to be "—" almost always.
+ * 2. Only a pinned spec carries a version in the value, and only a scoped or git
+ *    spec carries an author, so the stored string alone leaves almost every row
+ *    empty. The installed package's own manifest is where those two facts really
+ *    live, and the host reads it and hands the facts to `buildRows` beside the
+ *    entries; this file is the one that decides how they combine.
+ *
+ * The merge order is fixed so a cell is empty only when nothing knows:
+ *
+ * - author: the spec's scope or git owner, then the manifest's `author`, then the
+ *   owner of its repository URL;
+ * - version: the manifest's version, then the version pinned in the spec.
+ *
+ * A package listed in the settings but not installed has no facts to hand, so its
+ * row falls back to whatever the spec says instead of breaking.
  *
  * Written as a browser script for the same reason as `markdown.js`: the webview
  * loads it with a `<script>` tag, and the test requires this exact file — the one
@@ -103,28 +114,95 @@
   }
 
   /**
+   * The facts each installed package's manifest knows, indexed by the source spec
+   * they belong to.
+   *
+   * The host sends the list it read; the checks also pass a plain object keyed by
+   * source, which is the same thing with the lookup already done. A source that is
+   * absent means the package is not installed, and that absence is what makes its
+   * row fall back to its spec rather than break.
+   */
+  function factIndex(facts) {
+    var index = {};
+    if (Array.isArray(facts)) {
+      for (var position = 0; position < facts.length; position += 1) {
+        var fact = facts[position];
+        if (fact !== null && typeof fact === "object" && typeof fact.source === "string") {
+          index[fact.source] = fact;
+        }
+      }
+      return index;
+    }
+    if (facts !== null && typeof facts === "object") {
+      return facts;
+    }
+    return index;
+  }
+
+  /** A string field of a fact, or an empty one: never `undefined` while merging. */
+  function factText(value) {
+    return typeof value === "string" ? value : "";
+  }
+
+  /**
+   * The author of one row, in the fixed fallback order.
+   *
+   * What the spec already gives — a scope or a git owner — is the most direct thing
+   * known, so it wins; the manifest's `author` is next, and the owner of its
+   * repository URL is the last thing that can know. Nothing known stays empty.
+   */
+  function authorOf(specAuthor, fact) {
+    if (specAuthor !== "") {
+      return specAuthor;
+    }
+    var manifestAuthor = factText(fact.author);
+    if (manifestAuthor !== "") {
+      return manifestAuthor;
+    }
+    return factText(fact.repositoryOwner);
+  }
+
+  /**
+   * The version of one row, in the fixed fallback order.
+   *
+   * The installed manifest is the truth when it is there; a pinned spec is what
+   * remains for a package that is not installed, and nothing known stays empty so
+   * the table can print its dash.
+   */
+  function versionOf(specVersion, fact) {
+    var manifestVersion = factText(fact.version);
+    return manifestVersion !== "" ? manifestVersion : specVersion;
+  }
+
+  /**
    * One row per stored entry, carrying the index it has in the stored list.
    *
    * The index — not the source — is the identity of a row: the same source may be
-   * stored twice, and a write has to name the position it means.
+   * stored twice, and a write has to name the position it means. `facts` is
+   * optional: without it every row is the pure spec derivation the table always had.
    */
-  function buildRows(entries) {
+  function buildRows(entries, facts) {
     var list = Array.isArray(entries) ? entries : [];
+    var index = factIndex(facts);
     var rows = [];
 
-    for (var index = 0; index < list.length; index += 1) {
-      var entry = list[index];
+    for (var position = 0; position < list.length; position += 1) {
+      var entry = list[position];
       var record = entry !== null && typeof entry === "object" ? entry : {};
       var parsed = parseSource(record.source);
+      var fact =
+        index[parsed.source] !== undefined && index[parsed.source] !== null
+          ? index[parsed.source]
+          : {};
 
       rows.push({
-        index: index,
+        index: position,
         entry: entry,
         source: parsed.source,
         origin: parsed.origin,
         name: parsed.name,
-        author: parsed.author,
-        version: parsed.version,
+        author: authorOf(parsed.author, fact),
+        version: versionOf(parsed.version, fact),
         paused: Boolean(record.paused),
       });
     }

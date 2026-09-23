@@ -564,6 +564,8 @@ export class SettingsView {
    * cache key is the scope's `packages` value, because that is what decides which
    * package skills are on: a toggle changes it, which is exactly when the answer went
    * stale, so the invalidation is the data rather than an event to remember to fire.
+   * The package facts are read on the same pass, so they are cached and invalidated
+   * with the skills listing and never read a second time for one repaint.
    */
   private async discoveredSkills(
     scope: PiSettingScope,
@@ -601,6 +603,11 @@ export class SettingsView {
         values,
         skills: found.skills,
         skillProblems: found.problems,
+        // The packages table cannot derive a version or an author from the stored
+        // source alone, so the manifest facts ride along with the skills they were
+        // read beside. Including them here is what keeps a repaint from reading
+        // every installed manifest again.
+        packageFacts: found.packageFacts,
         diagnostics: this.service.diagnostics(),
         ...(this.startAt !== undefined ? { startAt: this.startAt } : {}),
       });

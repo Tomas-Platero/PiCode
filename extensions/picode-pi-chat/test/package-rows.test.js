@@ -106,6 +106,111 @@ check(
   JSON.stringify(duplicates.map((row) => ({ index: row.index, version: row.version }))),
 );
 
+// --- buildRows with the manifest facts -------------------------------------
+
+/*
+ * The four packages the owner's machine really has, with the facts their own
+ * manifests carry: pi-lens names an author, gentle-pi does not and only its
+ * repository owner is known, the scoped one has a scope that outranks its manifest,
+ * and the git one has a git owner that does the same. The fifth row is a package
+ * that is listed in the settings but not installed, which is the case that must
+ * fall back to its spec instead of breaking.
+ */
+const facts = [
+  {
+    source: "npm:pi-lens",
+    version: "4.2.1",
+    author: "Apostolos Mantzaris",
+    repositoryOwner: "apmantza",
+  },
+  { source: "npm:gentle-pi", version: "3.6.0", repositoryOwner: "Gentleman-Programming" },
+  { source: "npm:@tintinweb/pi-subagents", version: "0.19.0", author: "tintinweb" },
+  {
+    source: "git:github.com/HazAT/pi-interactive-subagents",
+    version: "3.7.2",
+    author: "HazAT",
+  },
+];
+
+const merged = buildRows(
+  [
+    { source: "npm:pi-lens", paused: false },
+    { source: "npm:gentle-pi", paused: false },
+    { source: "npm:@tintinweb/pi-subagents", paused: false },
+    { source: "git:github.com/HazAT/pi-interactive-subagents", paused: false },
+    { source: "npm:no-instalado@9.9.9", paused: false },
+  ],
+  facts,
+);
+
+check(
+  "a manifest author fills a row whose spec names none, and its version fills the version",
+  merged[0].name === "pi-lens" &&
+    merged[0].author === "Apostolos Mantzaris" &&
+    merged[0].version === "4.2.1",
+  JSON.stringify(merged[0]),
+);
+check(
+  "a manifest with no author falls back to the owner of its repository URL",
+  merged[1].author === "Gentleman-Programming" && merged[1].version === "3.6.0",
+  JSON.stringify(merged[1]),
+);
+check(
+  "the spec's scope wins over the manifest author, whose version still applies",
+  merged[2].name === "pi-subagents" &&
+    merged[2].author === "@tintinweb" &&
+    merged[2].version === "0.19.0",
+  JSON.stringify(merged[2]),
+);
+check(
+  "the spec's git owner wins over the manifest author, whose version still applies",
+  merged[3].author === "HazAT" && merged[3].version === "3.7.2",
+  JSON.stringify(merged[3]),
+);
+check(
+  "a package listed in the settings but not installed falls back to its spec",
+  merged[4].name === "no-instalado" &&
+    merged[4].author === "" &&
+    merged[4].version === "9.9.9",
+  JSON.stringify(merged[4]),
+);
+check(
+  "without facts every row is the pure spec derivation it always was",
+  buildRows([{ source: "npm:pi-lens" }])[0].author === "" &&
+    buildRows([{ source: "npm:pi-lens" }])[0].version === "",
+  JSON.stringify(buildRows([{ source: "npm:pi-lens" }])[0]),
+);
+check(
+  "the installed manifest version wins over a version pinned in the spec",
+  buildRows([{ source: "npm:gentle-pi@1.0.0" }], [{ source: "npm:gentle-pi@1.0.0", version: "3.6.0" }])[0]
+    .version === "3.6.0",
+  buildRows([{ source: "npm:gentle-pi@1.0.0" }], [{ source: "npm:gentle-pi@1.0.0", version: "3.6.0" }])[0]
+    .version,
+);
+check(
+  "facts keyed by source as a plain object work the same as the host's list",
+  buildRows([{ source: "npm:pi-lens" }], { "npm:pi-lens": { version: "4.2.1" } })[0].version ===
+    "4.2.1",
+  JSON.stringify(buildRows([{ source: "npm:pi-lens" }], { "npm:pi-lens": { version: "4.2.1" } })[0]),
+);
+check(
+  "the search matches a manifest author and a manifest version, because it matches the columns shown",
+  namesOf(filterRows(merged, { query: "mantzaris" })).join(",") === "pi-lens" &&
+    namesOf(filterRows(merged, { query: "4.2.1" })).join(",") === "pi-lens" &&
+    filterRows(merged, { query: "mantzaris", origin: "git" }).length === 0,
+  namesOf(filterRows(merged, { query: "mantzaris" })).join(","),
+);
+check(
+  "the repository owner is not shown when the manifest already names an author",
+  merged[0].author !== "apmantza" && filterRows(merged, { query: "apmantza" }).length === 0,
+  merged[0].author,
+);
+check(
+  "a merged row sorts by the version the manifest supplied",
+  sortRows(merged, { key: "version", direction: "asc" })[0].version === "0.19.0",
+  JSON.stringify(sortRows(merged, { key: "version", direction: "asc" }).map((row) => row.version)),
+);
+
 // --- filterRows ------------------------------------------------------------
 
 check(
