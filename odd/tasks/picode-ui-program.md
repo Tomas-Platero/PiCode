@@ -166,7 +166,8 @@ full `npm test` chain green before it landed. Nothing is pushed; nothing is rele
 | Fase 2, task 3.2 | `7b44919` | The live `/` dropdown in the composer, which inserts instead of sending, over one shared command read |
 | Fase 3, task 3.4 (data) | `eb5e61d` | A paged catalogue search, and the type tag derived from a package's own `pi` object |
 | Fase 3, task 3.4 (the tab) | `bf7acd3` | The Paquetes / Catálogo tabs, the gallery rows with type, downloads and age, and installing through the shared path |
-| Fase 3, task 3.4 (its cost) | _see `git log`_ | The loaded window and the tag fan-out bounded, so one search is 120 documents at most |
+| Fase 3, task 3.4 (its cost) | `9739cc7` | The loaded window and the tag fan-out bounded, so one search is 120 documents at most |
+| Fase 3, task 3.4 (the controls) | `c7a91a0` | The type filter and the order, acting on the loaded window with a line that says so |
 
 Decisions taken during the run, recorded because the owner asked not to be
 interrupted and these were settled without them:
@@ -204,11 +205,13 @@ where a design was settled it is recorded here so it does not have to be re-deri
 
 **Fase 3, not started**
 
-- **The catalogue's remaining polish.** The tab, its search, its rows and its install are
-  delivered; three pieces of what the gallery shows are not, and each is a small unit: the
-  **type filter** (only the loaded window can be filtered, so the surface has to say so),
-  the **order by downloads** and **by recency**, and the **"Recién publicados"** section
-  above the list.
+- **The catalogue's "Recién publicados".** Everything else the gallery shows is delivered:
+  the tab, the search, the rows with their type and age, the install, the type filter and the
+  order. What is not built is the "recently published" section, and it is not a matter of
+  wiring: the registry's search has **no recency order**, so the gallery's own list cannot be
+  reproduced from it without either walking the whole catalogue or finding another source.
+  The honest version — the newest of the loaded results — is a label rather than a section,
+  and it was left undone instead of being dressed up as what the gallery shows.
 - **The MCP section.** The config format and the six candidate files are mapped, and the
   owner chose a global/project scope selector. **Secrets warning**: `env` values are
   plaintext API keys and the owner's own `mcp.json` holds live tokens, so the write path
