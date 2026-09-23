@@ -163,7 +163,10 @@ full `npm test` chain green before it landed. Nothing is pushed; nothing is rele
 | Fase 2, task 3.1 (rows) | `951ffbb` | The skills derivation as a pure module |
 | Fase 2, task 3.1 (list and switch) | `59175a8` | The Skills category listing and a working per-skill switch, with the discovery cached against the datum that invalidates it |
 | Fase 2, task 3.1 (the table) | `be04ff2` | The Skills table's summary, search, origin and state filters, sortable headers and pagination, over the pure module |
-| Fase 2, task 3.2 | _see `git log`_ | The live `/` dropdown in the composer, which inserts instead of sending, over one shared command read |
+| Fase 2, task 3.2 | `7b44919` | The live `/` dropdown in the composer, which inserts instead of sending, over one shared command read |
+| Fase 3, task 3.4 (data) | `eb5e61d` | A paged catalogue search, and the type tag derived from a package's own `pi` object |
+| Fase 3, task 3.4 (the tab) | `bf7acd3` | The Paquetes / Catálogo tabs, the gallery rows with type, downloads and age, and installing through the shared path |
+| Fase 3, task 3.4 (its cost) | _see `git log`_ | The loaded window and the tag fan-out bounded, so one search is 120 documents at most |
 
 Decisions taken during the run, recorded because the owner asked not to be
 interrupted and these were settled without them:
@@ -201,13 +204,11 @@ where a design was settled it is recorded here so it does not have to be re-deri
 
 **Fase 3, not started**
 
-- **The Catalog tab.** Its open question is answered: the type tag pi.dev shows comes from
-  the **key names of the `pi` object in a package's own `package.json`** (`extensions` →
-  extension, `skills` → skill, `prompts` → prompt, `themes` → theme, concatenated; absent →
-  package). No API exposes it, so it costs one `GET https://registry.npmjs.org/<name>/latest`
-  per package and must be resolved only for the rows on screen, cached by `name@version`.
-  The search endpoint gives name, description, downloads and date for free and reports
-  10440 packages.
+- **The catalogue's remaining polish.** The tab, its search, its rows and its install are
+  delivered; three pieces of what the gallery shows are not, and each is a small unit: the
+  **type filter** (only the loaded window can be filtered, so the surface has to say so),
+  the **order by downloads** and **by recency**, and the **"Recién publicados"** section
+  above the list.
 - **The MCP section.** The config format and the six candidate files are mapped, and the
   owner chose a global/project scope selector. **Secrets warning**: `env` values are
   plaintext API keys and the owner's own `mcp.json` holds live tokens, so the write path
