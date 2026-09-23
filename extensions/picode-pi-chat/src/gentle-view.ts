@@ -3,7 +3,8 @@ import {
   describeGentle,
   describeUpdate,
   describeVersions,
-  summarizeGentle,
+  hasUpdate,
+  summarizeGentlePanel,
   GENTLE_PACKAGE,
   type GentleState,
   type GentleUpdateReport,
@@ -33,6 +34,7 @@ export type GentleActionId =
   | "install"
   | "update"
   | "review"
+  | "restart"
   | "telemetry-enable"
   | "telemetry-disable"
   | "telemetry-preview"
@@ -89,6 +91,11 @@ export function buildGentleActions(
 
   const rdd = state.review.rdd;
   return [
+    // Restarting is the fix for the one state that leaves the panel without commands,
+    // and the panel draws this row under the line that says so rather than in its own
+    // actions list. It is here so the wording and the runner stay with every other
+    // action instead of being written a second time inside the webview.
+    ...(state.active ? [] : [restartRow()]),
     ...(update?.available ? [updateRow(update)] : []),
     {
       id: "review",
@@ -96,10 +103,11 @@ export function buildGentleActions(
         rdd === "on"
           ? "Desactivar la revisión por candidato"
           : "Activar la revisión por candidato",
-      detail:
-        rdd === "unknown"
-          ? "gentle-ai no informó del estado de RDD"
-          : `RDD ${rdd} · global ${state.review.global}, clon ${state.review.cloneLocal}`,
+      // The label already says which way the switch will move, so the row carries no
+      // detail at all once the state is known. The scopes the flags came from — "global
+      // off, clon unset" — are readings of the switch, not something the owner decides
+      // with, and they used to be printed here.
+      ...(rdd === "unknown" ? { detail: "gentle-ai no informó de si está activada" } : {}),
     },
     {
       id: "telemetry-enable",
@@ -118,7 +126,7 @@ export function buildGentleActions(
     },
     {
       id: "sdd-status",
-      label: "Fase del cambio activo (SDD)",
+      label: "Fase del cambio activo (ODD)",
       detail: "Ejecuta gentle-ai sdd-status",
     },
     {
@@ -130,14 +138,33 @@ export function buildGentleActions(
 }
 
 /**
+ * The one row that carries the restart, offered only while the session is not running
+ * the layer's commands.
+ *
+ * The webview draws it directly under the line that explains why the command list is
+ * empty, because that line is an instruction the owner should be able to carry out with
+ * one click. It is primary for the same reason: it is the only thing to do in that
+ * state.
+ */
+function restartRow(): GentleActionRow {
+  return {
+    id: "restart",
+    label: "Reiniciar pi",
+    detail: "Vuelve a arrancar pi y carga los comandos de Gentle AI",
+    primary: true,
+  };
+}
+
+/**
  * The one row that carries the update, naming the version it installs.
  *
  * The names come from the report rather than from a second reading, and `describeUpdate`
- * is not reused here: the headline already names the version in the panel, while the
- * button has to say what it will run.
+ * is not reused here: the headline states the verdict in one line, while the button has
+ * to say what it will run. Only the packages actually behind are named: an up-to-date
+ * package listed in an install command is a version that is not changing.
  */
 function updateRow(update: GentleUpdateReport): GentleActionRow {
-  const behind = update.packages.filter((pair) => pair.latest !== undefined);
+  const behind = update.packages.filter(hasUpdate);
   const versions = behind.map((pair) => `${pair.name} ${pair.latest ?? ""}`).join(" y ");
   return {
     id: "update",
@@ -158,6 +185,13 @@ export interface GentleViewHost {
   gentle: GentleActions;
   /** Runs one of the panel's requests, by id. The command is set for command rows. */
   runAction(id: GentleRunId, command?: string): Promise<void>;
+  /**
+   * Restarts the agent, the same call the chat panel's own toolbar button makes. It is
+   * injected rather than reached through `runAction`, because restarting is not one of
+   * gentle-ai's actions: it is this editor's, and it is the fix for the one state in
+   * which the layer is installed and the session has not loaded its commands.
+   */
+  restart(): Promise<void>;
   /**
    * What the registry publishes for each package of the layer, against what is
    * installed. Injected for the same reason the state is: the panel renders readings, it
@@ -247,10 +281,18 @@ export class GentleView implements vscode.WebviewViewProvider {
         }
         const command = typeof message.command === "string" ? message.command : undefined;
         try {
-          await this.host.runAction(id, command);
+          if (id === "restart") {
+            // The process restart is the editor's own, not a gentle-ai subcommand, so it
+            // does not travel through `runAction`: the panel and the chat toolbar end in
+            // the same `resetClient` this way, instead of in a second implementation.
+            await this.host.restart();
+          } else {
+            await this.host.runAction(id, command);
+          }
           // The action may have changed anything the panel reads — it installs the
-          // package, flips a switch the status line reports — so the state is asked
-          // for again instead of being patched here with a guess.
+          // package, flips a switch the status line reports, or restarts the process so
+          // the command list finally loads — so the state is asked for again instead of
+          // being patched here with a guess.
           await this.pushState();
         } catch (error) {
           // Reported in the panel, not swallowed: the editor's own notification can be
@@ -277,8 +319,10 @@ export class GentleView implements vscode.WebviewViewProvider {
         type: "state",
         state,
         // The phrasing is not written here. Both readings come from gentle.ts, so the
-        // panel and the popup describe the same situation with the same words.
-        summary: summarizeGentle(state),
+        // panel and the popup describe the same situation with the same words. The
+        // header's own line is the panel's, not the popup's: the popup row has room for
+        // the version and the review switch, and the panel states each once elsewhere.
+        summary: summarizeGentlePanel(state),
         lines: describeGentle(state),
         commands: state.commands,
         actions: buildGentleActions(state, update),
@@ -351,6 +395,7 @@ function isRunId(value: unknown): value is GentleRunId {
     value === "install" ||
     value === "update" ||
     value === "review" ||
+    value === "restart" ||
     value === "telemetry-enable" ||
     value === "telemetry-disable" ||
     value === "telemetry-preview" ||

@@ -5,7 +5,9 @@
  * of code a diff cannot show as wrong: `"0.10.0" > "0.9.9"` is false as text, and a panel
  * built on text would quietly stop offering updates the day a minor version reached two
  * digits. The comparison is therefore tested directly, and so is the wording of the three
- * states the panel can show, which must never be a blank.
+ * states the panel can show, which must never be a blank and must never say the same
+ * version twice: the per-package lines are drawn only when a package is behind or a side
+ * could not be read.
  *
  * The registry half is hermetic: `globalThis.fetch` is replaced by a stub before the
  * modules are loaded, the stub records every URL it was asked for, and the real registry
@@ -63,8 +65,12 @@ const {
   buildUpdateReport,
   describeUpdate,
   describeVersions,
+  describeGentle,
+  summarizeGentlePanel,
+  unknownGentleState,
   GENTLE_LAYER_PACKAGES,
 } = require("../out/gentle.js");
+const { buildGentleActions } = require("../out/gentle-view.js");
 const { resolveLatestVersions } = require("../out/catalog.js");
 
 const results = [];
@@ -151,8 +157,8 @@ const behind = buildUpdateReport([
 ]);
 check("an older installed version is an available update", behind.available === true, String(behind.available));
 check(
-  "the available update names the version and the one installed",
-  describeUpdate(behind) === "Actualización disponible: gentle-pi 1.2.5 (tienes 1.2.4).",
+  "an available update states the verdict without repeating the numbers below it",
+  describeUpdate(behind) === "Actualización disponible.",
   describeUpdate(behind),
 );
 
@@ -166,6 +172,11 @@ check(
   describeUpdate(current) === "Todo al día: gentle-pi 0.10.0 · gentle-engram 0.4.2.",
   describeUpdate(current),
 );
+check(
+  "and it is the whole answer: both versions are already in that line, so no per-package line repeats them",
+  describeVersions(current).length === 0,
+  describeVersions(current).join(" | "),
+);
 
 const registryFailed = buildUpdateReport([
   { name: "gentle-pi", installed: "1.2.4", latest: "1.2.5" },
@@ -177,9 +188,11 @@ check(
   describeUpdate(registryFailed),
 );
 check(
-  "a package the registry did not answer for is named, not silently dropped",
-  describeUpdate(registryFailed) === "Actualización disponible: gentle-pi 1.2.5 (tienes 1.2.4).",
-  describeUpdate(registryFailed),
+  "an update still leads the line while the other package's version is unknown, and the unknown side keeps a line of its own",
+  describeUpdate(registryFailed) === "Actualización disponible." &&
+    describeVersions(registryFailed).join(" | ") ===
+      "gentle-pi: instalada 1.2.4 · publicada 1.2.5 | gentle-engram: instalada 0.4.2 · publicada desconocida",
+  describeVersions(registryFailed).join(" | "),
 );
 
 const allFailed = buildUpdateReport([
@@ -188,9 +201,8 @@ const allFailed = buildUpdateReport([
 ]);
 check("a failed check is not reported as an update", allFailed.available === false, String(allFailed.available));
 check(
-  "the failed check names the packages that left it incomplete",
-  describeUpdate(allFailed) ===
-    "No se pudo comprobar si hay actualización: gentle-pi y gentle-engram sin una versión que comparar.",
+  "the failed check states the verdict, and the packages that left it incomplete keep their own lines",
+  describeUpdate(allFailed) === "No se pudo comprobar si hay actualización.",
   describeUpdate(allFailed),
 );
 
@@ -207,45 +219,47 @@ check(
 );
 check(
   "and the state says the check was incomplete rather than showing a blank",
-  describeUpdate(noInstalledVersion) ===
-    "No se pudo comprobar si hay actualización: gentle-pi sin una versión que comparar.",
+  describeUpdate(noInstalledVersion) === "No se pudo comprobar si hay actualización.",
   describeUpdate(noInstalledVersion),
 );
 check(
-  "the unreadable package is still spelled out line by line",
+  "only the unreadable package gets a line; the settled one would only repeat its own pair",
   describeVersions(noInstalledVersion).join(" | ") ===
-    "gentle-pi: instalada desconocida · publicada 1.2.5 | gentle-engram: instalada 0.4.2 · publicada 0.4.2",
+    "gentle-pi: instalada desconocida · publicada 1.2.5",
   describeVersions(noInstalledVersion).join(" | "),
 );
 
-// An update in one package and an unknown version in the other: the update is the
-// headline, because it is the thing the owner can act on, and the unknown package is
-// still named in its own line rather than dropped.
+// An update in one package and an unknown version in the other: the verdict leads the
+// line, because it is the thing the owner can act on, and both packages keep their own
+// line below it rather than one of them being dropped.
 const mixed = buildUpdateReport([
   { name: "gentle-pi", installed: undefined, latest: "1.2.5" },
   { name: "gentle-engram", installed: "0.4.2", latest: "0.4.3" },
 ]);
 check(
   "an update in one package is offered even while the other's version is unknown",
-  mixed.available === true && describeUpdate(mixed).includes("gentle-engram 0.4.3"),
-  describeUpdate(mixed),
+  mixed.available === true &&
+    describeUpdate(mixed) === "Actualización disponible." &&
+    describeVersions(mixed).some((line) => line.includes("publicada 0.4.3")),
+  describeVersions(mixed).join(" | "),
 );
 check(
-  "and the unknown package still appears in the per-package lines",
-  describeVersions(mixed)[0].includes("instalada desconocida"),
-  describeVersions(mixed)[0],
+  "and both the unknown package and the updated one keep a line",
+  describeVersions(mixed).length === 2 &&
+    describeVersions(mixed)[0].includes("instalada desconocida"),
+  describeVersions(mixed).join(" | "),
 );
 
 check(
   "an empty report still says the check failed instead of leaving the line blank",
-  describeUpdate(buildUpdateReport([])) === "No se pudo comprobar si hay actualización.",
+  describeUpdate(buildUpdateReport([])) === "No se pudo comprobar si hay actualización." &&
+    describeVersions(buildUpdateReport([])).length === 0,
   describeUpdate(buildUpdateReport([])),
 );
 
 check(
-  "the per-package lines name the installed and the published version",
-  describeVersions(behind).join(" | ") ===
-    "gentle-pi: instalada 1.2.4 · publicada 1.2.5 | gentle-engram: instalada 0.4.2 · publicada 0.4.2",
+  "the per-package line of a package that is behind names both numbers",
+  describeVersions(behind).join(" | ") === "gentle-pi: instalada 1.2.4 · publicada 1.2.5",
   describeVersions(behind).join(" | "),
 );
 check(
@@ -261,6 +275,51 @@ check(
   "building a report copies the pairs instead of holding the caller's objects",
   built.packages[0] !== pairs[0] && pairs[0].installed === "1.2.4",
   String(built.packages[0] === pairs[0]),
+);
+
+// --- the panel's own wording, once the internals are gone --------------------
+
+// The state a session shows when the package is installed and this session did not run
+// its commands. The value of `telemetry` is the real line gentle-ai prints, source and
+// all: the panel has to translate it rather than show it.
+const unloaded = {
+  ...unknownGentleState(),
+  installed: true,
+  active: false,
+  version: "gentle-ai 3.6.1",
+  review: { rdd: "off", global: "off", cloneLocal: "unset" },
+  telemetry: "telemetry: disabled (source: state)",
+};
+const unloadedActions = buildGentleActions(unloaded);
+check(
+  "a session without its commands is offered the restart the line asks for",
+  unloadedActions.some((row) => row.id === "restart" && row.label === "Reiniciar pi"),
+  JSON.stringify(unloadedActions.map((row) => row.id)),
+);
+check(
+  "the review switch keeps its row and loses the scope pair the panel used to print",
+  unloadedActions.some((row) => row.id === "review") &&
+    unloadedActions.every(
+      (row) => !String(row.detail ?? "").includes("global") && !String(row.detail ?? "").includes("clon"),
+    ),
+  JSON.stringify(unloadedActions.map((row) => row.detail)),
+);
+check(
+  "a session that is already running the commands is not offered a restart",
+  buildGentleActions({ ...unloaded, active: true, commandCount: 12 }).every(
+    (row) => row.id !== "restart",
+  ),
+  JSON.stringify(buildGentleActions({ ...unloaded, active: true }).map((row) => row.id)),
+);
+check(
+  "the panel's own header does not repeat the version the versions section states",
+  summarizeGentlePanel({ ...unloaded, active: true }) === "activo",
+  summarizeGentlePanel({ ...unloaded, active: true }),
+);
+check(
+  "the telemetry reading is a word the owner reads, not gentle-ai's line with its source",
+  describeGentle(unloaded).includes("telemetría: desactivada"),
+  JSON.stringify(describeGentle(unloaded)),
 );
 
 // --- the registry, through the stub -----------------------------------------

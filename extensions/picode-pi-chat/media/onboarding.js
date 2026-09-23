@@ -174,21 +174,38 @@
 
   // --- the Gentle AI question ---------------------------------------------
 
-  function gentleLine(gentle) {
+  // `gentle-ai version` answers with its own name and the number — "gentle-ai 3.6.1".
+  // Gluing a "v" onto that whole answer is what produced "vgentle-ai 3.6.1": the number
+  // is taken out of the answer and the "v" goes where a version's "v" goes.
+  function versionTag(version) {
+    var match = typeof version === "string" ? version.match(/\d+(?:\.\d+)+/) : null;
+    if (match) {
+      return " · v" + match[0];
+    }
+    return version ? " · " + version : "";
+  }
+
+  // `inQuestion` is the wizard's second step, where an already-active layer leaves
+  // nothing to decide; the closing summary reuses the same reading without that tail.
+  function gentleLine(gentle, inQuestion) {
     if (!gentle) {
       return "Leyendo el estado de Gentle AI…";
     }
     if (!gentle.installed && !gentle.active) {
       return "Gentle AI no está instalado.";
     }
-    var version = gentle.version ? " · v" + gentle.version : "";
-    return gentle.active
-      ? "Gentle AI está instalado y activo en esta sesión" + version + "."
-      : "Gentle AI está instalado, pero esta sesión todavía no cargó sus comandos" + version + ".";
+    var version = versionTag(gentle.version);
+    if (gentle.active) {
+      var settled = inQuestion ? ". No hay nada que decidir." : ".";
+      return "Gentle AI ya está activo en esta sesión" + version + settled;
+    }
+    return (
+      "Gentle AI está instalado, pero esta sesión todavía no cargó sus comandos" + version + "."
+    );
   }
 
   function renderGentle() {
-    elements.gentleCurrent.textContent = gentleLine(state.gentle);
+    elements.gentleCurrent.textContent = gentleLine(state.gentle, true);
   }
 
   // --- the closing summary ------------------------------------------------

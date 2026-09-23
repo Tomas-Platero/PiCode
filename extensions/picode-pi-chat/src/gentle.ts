@@ -364,8 +364,13 @@ export function hasUpdate(pair: GentleVersionPair): boolean {
 
 /**
  * The one line the panel shows above the versions, in one of three honest states: an
- * update is available and which version it is, everything is current, or the check
- * could not be completed and which package left it incomplete.
+ * update exists, everything is current, or the check could not be completed.
+ *
+ * Only the current state carries numbers, because it is the one state with no
+ * per-package line under it: the two installed versions are the whole answer, and this
+ * is the single place they are said. When a package is behind, or a version could not
+ * be read, `describeVersions` draws the line that holds the numbers — repeating them
+ * here is exactly the duplication the panel is being trimmed of.
  *
  * There is deliberately no fourth silent state: a package whose version cannot be read
  * and a registry that does not answer are both reported as the check having failed, so
@@ -373,45 +378,70 @@ export function hasUpdate(pair: GentleVersionPair): boolean {
  * or nothing was asked.
  */
 export function describeUpdate(report: GentleUpdateReport): string {
-  const outdated = report.packages.filter(hasUpdate);
-  if (outdated.length > 0) {
-    const named = outdated
-      .map((pair) => `${pair.name} ${pair.latest ?? ""} (tienes ${pair.installed ?? "?"})`)
-      .join(" y ");
-    return `Actualización disponible: ${named}.`;
-  }
-
   if (report.packages.length === 0) {
     return "No se pudo comprobar si hay actualización.";
   }
-
-  const unreadable = report.packages.filter(
-    (pair) => pair.installed === undefined || pair.latest === undefined,
-  );
-  if (unreadable.length > 0) {
-    return `No se pudo comprobar si hay actualización: ${unreadable
-      .map((pair) => pair.name)
-      .join(" y ")} sin una versión que comparar.`;
+  // The action wins over the incomplete check: an update that exists is something the
+  // owner can do now, and the package whose version could not be read is named in its
+  // own line below rather than allowed to hide it.
+  if (report.packages.some(hasUpdate)) {
+    return "Actualización disponible.";
+  }
+  if (report.packages.some(unreadableVersion)) {
+    return "No se pudo comprobar si hay actualización.";
   }
 
   const current = report.packages.map((pair) => `${pair.name} ${pair.installed ?? ""}`).join(" · ");
   return `Todo al día: ${current}.`;
 }
 
+/** Whether one side of the pair is missing, which makes the whole check incomplete. */
+function unreadableVersion(pair: GentleVersionPair): boolean {
+  return pair.installed === undefined || pair.latest === undefined;
+}
+
 /**
- * One line per package, naming the installed and the published version side by side.
+ * One line per package that has something the headline cannot carry: an installed and
+ * a published version that differ, or a side that could not be read.
  *
- * The two numbers are what the owner asked for literally — "¿hay alguna actualización?"
- * — and showing them on the same line is what makes the answer checkable instead of
- * taken on trust.
+ * Empty when every package is settled. The headline already named both installed
+ * versions in that case, and a line repeating them is the repetition the owner asked to
+ * remove; when a package is behind or a version is unreadable, on the other hand, the
+ * two numbers side by side are the detail that makes the verdict checkable.
  */
 export function describeVersions(report: GentleUpdateReport): string[] {
-  return report.packages.map(
-    (pair) =>
-      `${pair.name}: instalada ${pair.installed ?? "desconocida"} · publicada ${
-        pair.latest ?? "desconocida"
-      }`,
-  );
+  return report.packages
+    .filter((pair) => !isSettled(pair))
+    .map(
+      (pair) =>
+        `${pair.name}: instalada ${pair.installed ?? "desconocida"} · publicada ${
+          pair.latest ?? "desconocida"
+        }`,
+    );
+}
+
+/** A pair the headline already covers: both versions read, and nothing newer published. */
+function isSettled(pair: GentleVersionPair): boolean {
+  return pair.installed !== undefined && pair.latest !== undefined && !hasUpdate(pair);
+}
+
+/**
+ * The one line under the panel's own name.
+ *
+ * `summarizeGentle` is the popup's line: a quick-pick row has nowhere else to put the
+ * version or the review switch, so it carries both. The panel states each of them once
+ * in its own section — the version in the versions line, the review switch among the
+ * actions — and repeating them in its header is the redundancy it is being trimmed of.
+ * Here only the question a glance has to answer: is it working.
+ */
+export function summarizeGentlePanel(state: GentleState | undefined): string {
+  if (!state) {
+    return "leyendo…";
+  }
+  if (!state.installed && !state.active) {
+    return "no instalado";
+  }
+  return state.active ? "activo" : "instalado, sin cargar";
 }
 
 /** The one line the category shows next to its name. */
@@ -432,14 +462,38 @@ export function summarizeGentle(state: GentleState | undefined): string {
   return parts.join(" · ");
 }
 
-/** The lines the status popup shows, in the order it shows them. */
+/**
+ * The telemetry switch as a word the owner reads.
+ *
+ * `gentle-ai telemetry status` answers in English with its own bookkeeping attached —
+ * `telemetry: disabled (source: state)` — and the only part of that which belongs on a
+ * panel is whether the switch is on.
+ */
+function describeTelemetry(value: string): string {
+  const text = value.toLowerCase();
+  if (/\b(enabled|on|active)\b/.test(text)) {
+    return "activada";
+  }
+  if (/\b(disabled|off|inactive)\b/.test(text)) {
+    return "desactivada";
+  }
+  return "desconocida";
+}
+
+/**
+ * The readings the status popup and the panel show, in the order they show them.
+ *
+ * Three readings and no more: whether the package is there, whether this session is
+ * running it, and whether telemetry is on. The binary's path, its own version number
+ * and the review pair with both of its scopes are internals — "¿dónde está?" is not a
+ * question the owner asked, the version is stated once in the versions section, and the
+ * review switch is already on its own button. The telemetry value is translated rather
+ * than dropped because the two switch buttons alone do not say which state is in effect.
+ */
 export function describeGentle(state: GentleState): string[] {
   return [
     `paquete ${GENTLE_PACKAGE}: ${state.installed ? "instalado" : "no instalado"}`,
     `cargado en esta sesión: ${state.active ? `sí, ${state.commandCount} comandos` : "no"}`,
-    `binario ${GENTLE_BINARY}: ${state.binary ?? "no encontrado"}`,
-    `versión: ${state.version ?? "desconocida"}`,
-    `revisión (RDD): ${state.review.rdd} · global ${state.review.global}, clon ${state.review.cloneLocal}`,
-    `telemetría: ${state.telemetry}`,
+    `telemetría: ${describeTelemetry(state.telemetry)}`,
   ];
 }

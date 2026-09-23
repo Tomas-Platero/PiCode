@@ -218,11 +218,21 @@ export function activate(context: vscode.ExtensionContext): void {
   ajustesView = ajustes;
 
   // Gentle AI's own container: the same state builder and the same runner the menu
-  // above uses, so the panel is a second way to see and switch the same thing.
+  // above uses, so the panel is a second way to see and switch the same thing. The
+  // restart is injected rather than routed through `runAction` because it is the
+  // editor's own operation, not a gentle-ai subcommand: the panel's button and the
+  // chat toolbar's end in this one `resetClient`.
   const gentlePanel = GentleView.create(context.extensionUri, {
     gentle,
     runAction: (id: GentleRunId, command?: string) =>
       runGentleAction(menu, gentle, id, command),
+    restart: async () => {
+      await resetClient();
+      // The panel re-reads its state as soon as this returns, and the reading it would
+      // otherwise get is the cached one that says the commands are missing. Dropping it
+      // here is what makes the button visibly do something.
+      invalidateGentle();
+    },
     update: () => gentleUpdate(context.extensionUri),
   });
   gentleView = gentlePanel;
@@ -1191,6 +1201,12 @@ async function runGentleAction(
       await gentle.setReview(state.review.rdd !== "on");
       break;
     }
+    case "restart":
+      // The panel draws this row under the missing-commands line, and its click is
+      // handled before it reaches here; the case exists so the id has one meaning on
+      // both sides of the host boundary.
+      await deps.restart();
+      break;
     case "telemetry-enable":
       await gentle.telemetry("enable");
       break;
@@ -1201,7 +1217,7 @@ async function runGentleAction(
       await gentle.telemetry("preview");
       break;
     case "sdd-status":
-      await gentle.run(["sdd-status"], "PiCode: SDD");
+      await gentle.run(["sdd-status"], "PiCode: ODD");
       break;
     case "doctor":
       await gentle.run(["doctor"], "PiCode: diagnóstico de Gentle AI");

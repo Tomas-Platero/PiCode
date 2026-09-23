@@ -423,7 +423,7 @@ export function buildCategorySettings(
         {
           kind: "item",
           action: "gentleSdd",
-          label: "SDD: fase del cambio activo",
+          label: "ODD: fase del cambio activo",
           detail: "Ejecuta gentle-ai sdd-status",
         },
         {
@@ -721,7 +721,7 @@ async function runSetting(
       await showGentleTelemetry(deps);
       return true;
     case "gentleSdd":
-      await deps.gentle.run(["sdd-status"], "PiCode: SDD");
+      await deps.gentle.run(["sdd-status"], "PiCode: ODD");
       return true;
     case "gentleDoctor":
       await deps.gentle.run(["doctor"], "PiCode: diagnóstico de Gentle AI");

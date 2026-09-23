@@ -23,10 +23,10 @@ import { buildWebviewHtml } from "./webview-html";
 /**
  * The memory half of the Gentle AI layer.
  *
- * `gentle-pi` is the orchestrator — ODD, the SDD skills — and it is what the rest of
- * this codebase installs. The memory provider is a separate package, and nothing else
- * ever installed it; the wizard is where the two go in together, because "activate
- * Gentle AI" is one decision and two commands.
+ * `gentle-pi` is the orchestrator — ODD, the method the layer is built around — and it
+ * is what the rest of this codebase installs. The memory provider is a separate package,
+ * and nothing else ever installed it; the wizard is where the two go in together, because
+ * "activate Gentle AI" is one decision and two commands.
  */
 export const GENTLE_MEMORY_PACKAGE = "gentle-engram";
 
@@ -104,10 +104,7 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
       <section id="step-gentle" class="onboarding-section" hidden>
         <h2 class="onboarding-question">¿Activamos Gentle AI ahora?</h2>
         <p id="gentle-current" class="onboarding-current">leyendo…</p>
-        <p>Gentle AI aporta dos cosas: las skills de SDD (trabajo por fases con artefactos revisables) y la memoria engram, que conserva lo aprendido entre sesiones.</p>
-        <p>Se instala con estos dos comandos, exactamente estos:</p>
-        <pre id="gentle-commands" class="onboarding-commands">pi install npm:gentle-pi
-pi install npm:gentle-engram</pre>
+        <p>Gentle AI se apoya en el agente que ya usas, no lo sustituye. Mantiene el contexto entre sesiones, así que las decisiones ya tomadas no vuelven a preguntarse. El trabajo pequeño sigue siendo pequeño y el grande conserva un único documento con el que retomarlo. Antes de cambiar nada, el agente explora; después, comprueba lo que cambió.</p>
         <p>Si respondes que no, la opción sigue disponible más tarde desde el panel de Gentle AI, sin reinstalar nada.</p>
         <div class="onboarding-actions">
           <button id="gentle-install" class="onboarding-button primary" type="button">Instalar Gentle AI</button>

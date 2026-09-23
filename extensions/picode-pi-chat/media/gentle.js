@@ -85,19 +85,54 @@
   }
 
   // Not having commands is a state, not a failure: installed and loaded are two
-  // different things, and the line says which of them the owner is looking at.
+  // different things, and the line says which of them the owner is looking at. It is
+  // kept to one sentence because the fix travels with it as a button, drawn just below
+  // by `renderCommands`.
   function commandsMessage(state) {
     if (state && state.installed && !state.active) {
-      return "gentle-pi está instalado, pero esta sesión no cargó sus comandos: reinicia pi.";
+      return "Esta sesión no cargó los comandos de Gentle AI.";
     }
     return "pi no informó de ningún comando de Gentle AI en esta sesión.";
   }
 
-  function renderCommands(state, commands) {
+  // One action as a button, shared by the actions list and the restart drawn under the
+  // line that asks for it: two buttons that run one id must look and behave the same.
+  function actionButton(action) {
+    var button = createElement(
+      "button",
+      action.primary ? "gentle-action primary" : "gentle-action secondary",
+    );
+    button.type = "button";
+    button.appendChild(createElement("span", "gentle-action-label", action.label));
+    if (action.detail) {
+      button.appendChild(createElement("span", "gentle-action-detail", action.detail));
+    }
+    button.addEventListener("click", runAction(action.id));
+    return button;
+  }
+
+  function restartAction(actions) {
+    var list = Array.isArray(actions) ? actions : [];
+    for (var index = 0; index < list.length; index += 1) {
+      if (list[index] && list[index].id === "restart") {
+        return list[index];
+      }
+    }
+    return null;
+  }
+
+  function renderCommands(state, commands, actions) {
     clear(elements.commands);
     var list = Array.isArray(commands) ? commands : [];
     if (list.length === 0) {
       elements.commands.appendChild(createElement("p", "gentle-empty", commandsMessage(state)));
+      // The instruction the empty line used to carry — "reinicia pi" — is a button, and
+      // it sits next to the line it answers. Nothing is written here that the host did
+      // not send: the label and the id are the action's own.
+      var restart = restartAction(actions);
+      if (restart) {
+        elements.commands.appendChild(actionButton(restart));
+      }
       return;
     }
     for (var index = 0; index < list.length; index += 1) {
@@ -127,14 +162,13 @@
     var list = Array.isArray(actions) ? actions : [];
     for (var index = 0; index < list.length; index += 1) {
       var action = list[index];
-      var button = createElement("button", action.primary ? "gentle-action primary" : "gentle-action secondary");
-      button.type = "button";
-      button.appendChild(createElement("span", "gentle-action-label", action.label));
-      if (action.detail) {
-        button.appendChild(createElement("span", "gentle-action-detail", action.detail));
+      // The restart is drawn under the missing-commands line it answers, so it is not
+      // repeated here. It is only ever sent while the commands are missing, which is
+      // exactly the state `renderCommands` draws it in.
+      if (action && action.id === "restart") {
+        continue;
       }
-      button.addEventListener("click", runAction(action.id));
-      elements.actions.appendChild(button);
+      elements.actions.appendChild(actionButton(action));
     }
   }
 
@@ -146,7 +180,7 @@
         : "leyendo…";
     renderLines(message.lines);
     renderVersion(message.version);
-    renderCommands(state, message.commands);
+    renderCommands(state, message.commands, message.actions);
     renderActions(message.actions);
     showNotice("");
   }
