@@ -126,6 +126,11 @@
         "category": "PiCode"
       },
       {
+        "command": "picode.piChat.updatePi",
+        "title": "PiCode: Actualizar el pi propio",
+        "category": "PiCode"
+      },
+      {
         "command": "picode.piChat.menu.installed",
         "title": "PiCode: Extensiones instaladas",
         "category": "PiCode"
