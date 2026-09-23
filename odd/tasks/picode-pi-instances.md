@@ -179,9 +179,14 @@ as evidence.
   llega a todo sitio que lea o escriba un perfil, con una fila que dice qué perfil está en
   uso. **Guarda:** no se enciende sin credenciales; si no las hay, lo dice en vez de dejar el
   editor mudo.
-  - [ ] **T4a — El resolutor en todos los sitios.** El perfil sigue al programa: `runtime`
-    ya elige cuál corre, así que `managed` usa el perfil propio y `path`/`custom` el del
-    dueño, sin ajuste nuevo. Los sitios, ya localizados:
+  - [x] **T4a — El resolutor en los sitios que lanzan pi.** Los procesos que pi lanza reciben
+    el perfil de la instancia elegida, pasado explícitamente de arriba abajo (un `env` en las
+    opciones del cliente RPC, un parámetro obligatorio en `runPiCli`, un campo en
+    `PiMenuDeps`, y el perfil en `installedPackagesLister`). Los añadidos van **los últimos**,
+    así PiCode impone su perfil frente a un `PI_CODING_AGENT_DIR` exportado por el dueño, y no
+    lo impone cuando la instancia es la suya. Ningún módulo lanzador deriva la raíz de la
+    distribución por su cuenta. `ccafd8e` (el ayudante y la comprobación) y `3549bb3`… → ver
+    commits. **No desplegado a propósito**, por lo que sigue abajo. Los sitios, ya localizados:
     - se lanzan con `PI_CODING_AGENT_DIR`: el hijo del RPC (`pi-rpc-client.ts:329`, construido
       en `extension.ts`) y **el instalador de paquetes** (`pi-cli.ts:51` vía `runPiCli`,
       llamado desde `extension.ts`, `menu.ts` y `skills.ts`) — el que más importa porque es el
@@ -201,10 +206,34 @@ as evidence.
     Con un **test que impida el retroceso**: leer las fuentes y fijar qué ficheros pueden
     llamar a `resolveAgentDir()` directamente, para que un lector nuevo no reintroduzca el
     perfil compartido sin que salte.
-  - [ ] **T4b — La guarda y la fila.** No encender el perfil interno vacío: si `managed` está
-    elegido y no hay credenciales, decirlo y seguir con el perfil del dueño hasta que la
-    importación o el login lo resuelvan. Y una fila que diga qué perfil está en uso, sin
-    rutas.
+  - [ ] **T4b — La guarda, dentro del resolutor.** El interruptor no se echa a medias. **El
+    peligro es real y está vivo en esta máquina**: `runtime` es `managed`, el perfil interno
+    (`<distribución>/data/pi-agent`) **no existe**, y T4a ya apunta ahí las instalaciones de
+    paquetes. Con el perfil interno vacío, la instancia gestionada se queda **muda**: sin
+    credenciales, sin paquetes, sin gentle-ai.
+    La decisión va **en el resolutor, no en un llamador**: `instanceProfile()` solo responde
+    el perfil interno cuando ese perfil **sirve**; si no, responde el de la máquina con
+    `owned: false`, que es exactamente el comportamiento de hoy. Así **todos** los que lanzan
+    pi y **todos** los que leen un perfil siguen la misma respuesta sin cambiar una línea, y
+    no puede quedar medio echado. Sirve = la carpeta existe y tiene al menos un proveedor en
+    `auth.json` (se leen claves, nunca valores, con el parser que ya existe). Los hechos que
+    la fila necesita —si el perfil interno existe y cuántos proveedores tiene— salen también
+    del resolutor, para que la fila no los recalcule ni los lea por su cuenta.
+    Y una fila en la categoría PiCode que diga **qué perfil está en uso**, sin rutas; cuando
+    `managed` esté elegido y el perfil propio no sirva todavía, lo dice y señala la fila de
+    importar.
+    *Limitación conocida, a propósito:* una instancia interna sin credenciales (un modelo
+    local sin clave) todavía no se puede usar, porque la guarda no distingue «vacío» de
+    «vacío a propósito». Queda anotado para el pulido, en vez de resolverse adivinando.
+  - [ ] **T4c — Los lectores.** Ya con la guarda en el resolutor, los que leen un perfil
+    pasan a preguntarle a él: `pi-sdk-client.ts:416` (el transporte **embebido**, que es el que
+    usa esta máquina), `chat-view.ts:912` (la clave de NaN, una credencial),
+    `extension.ts:188` (el servicio de ajustes) y `extension.ts:1510` (el `mcp.json`). La
+    lista fijada del test antirretroceso baja entonces a su forma final —`instance.ts`,
+    `instance-import-command.ts`— y eso **es** la demostración del aislamiento.
+    No lo necesitan: `runtime.ts:298` (`--version`) y `:647` (instalar el runtime).
+  - **Regla de despliegue:** el aislamiento se despliega **entero**, cuando la guarda está.
+    Media respuesta desplegada es un editor que instala en un perfil y lee en otro.
 - [ ] **T5 — El puente interactivo.** `extension_ui_request` atendido (los cuatro diálogos que
   bloquean, los métodos que no esperan respuesta, correlación por id, sin tiempos de espera
   propios) en **las dos** implementaciones — RPC y SDK embebido — para que el login de un
