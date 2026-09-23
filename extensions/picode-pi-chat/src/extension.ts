@@ -89,6 +89,23 @@ let outputChannel: vscode.OutputChannel | undefined;
 let attachmentToolsEntry: string | undefined;
 let attachmentToolsPromise: Promise<ImageTools | undefined> | undefined;
 
+/**
+ * The editor settings the panel's own behaviour depends on.
+ *
+ * A write to one of these has to reach the panel without a window reload, so this is the
+ * whole list the configuration listener below reacts to. `picode.pi.*` is deliberately
+ * absent: `runtime`, `executablePath`, `transport` and `extraArgs` decide which pi runs,
+ * and switching the running pi is the job of the selectRuntime and selectTransport
+ * commands, which restart the process. A configuration listener must not restart pi
+ * behind the owner's back.
+ */
+const PANEL_SETTINGS: readonly string[] = [
+  "picode.context.attach",
+  "picode.panel.reasoning",
+  "picode.media.ffmpegPath",
+  "picode.media.transcription",
+];
+
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel("PiCode");
   context.subscriptions.push(outputChannel);
@@ -280,6 +297,21 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("picode.piChat.abort", () => abortRun()),
     vscode.commands.registerCommand("picode.piChat.restart", async () => {
       await resetClient();
+    }),
+    // The panel seeds its context toggle and its reasoning disposition when the view is
+    // created, so a write made outside the panel's own surfaces -- the settings file,
+    // the Settings editor -- would otherwise keep the panel on the activation-time value
+    // until the window reloaded. One listener covers the whole `picode` section, and
+    // only the keys the panel actually reads move it.
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (!event.affectsConfiguration("picode")) {
+        return;
+      }
+      const changed = PANEL_SETTINGS.filter((key) => event.affectsConfiguration(key));
+      if (changed.length === 0) {
+        return;
+      }
+      view?.applyConfiguration(changed);
     }),
   );
 

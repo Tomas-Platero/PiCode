@@ -193,8 +193,9 @@ export class ChatView implements vscode.WebviewViewProvider {
   /**
    * Whether messages carry the editor context.
    *
-   * Per session, seeded from the setting: the owner may want it on by default without
-   * every toggle writing to their settings file.
+   * Seeded from the setting when the view is created and re-read by
+   * `applyConfiguration` when the setting changes outside the panel: a value read once
+   * at activation would otherwise survive until the window reloaded.
    */
   private attachContext =
     vscode.workspace.getConfiguration("picode.context").get<boolean>("attach", false);
@@ -202,10 +203,11 @@ export class ChatView implements vscode.WebviewViewProvider {
    * What the panel does with the model's reasoning: one line that opens on click,
    * always open, or nothing at all.
    *
-   * Read once, like the context toggle, and sent with every state push so the
-   * renderer honours the disposition the owner chose in their settings.
+   * Seeded like the context toggle, re-read by `applyConfiguration`, and sent with
+   * every state push so the renderer honours the disposition the owner chose in their
+   * settings.
    */
-  private readonly panelReasoning: PanelReasoning =
+  private panelReasoning: PanelReasoning =
     vscode.workspace.getConfiguration("picode.panel").get<PanelReasoning>("reasoning", "collapsed");
   /**
    * The images the owner has attached to the message being written.
@@ -314,6 +316,45 @@ export class ChatView implements vscode.WebviewViewProvider {
   /** Refreshes the visible session state (used by session commands). */
   public async refreshState(): Promise<void> {
     await this.pushState();
+  }
+
+  /**
+   * Applies a change made outside the panel to the settings its own behaviour uses.
+   *
+   * `changed` is the subset of the watched `picode.*` keys the configuration event
+   * reported. The context toggle and the reasoning disposition were seeded when the view
+   * was created, so re-reading them here drops that seed and the panel uses the value in
+   * effect now, not the one in effect at activation. The media settings are read at use
+   * time, so there is nothing to re-read for them and the repaint below is the whole
+   * reaction to a change in one of them.
+   *
+   * The guard is the comparison against the values already in use: the extension's own
+   * surfaces write configuration too, and reacting to every event would repaint the panel
+   * for a change that has nothing to do with what it shows.
+   */
+  public applyConfiguration(changed: readonly string[]): void {
+    const previousAttach = this.attachContext;
+    const previousReasoning = this.panelReasoning;
+
+    if (changed.includes("picode.context.attach")) {
+      this.attachContext = vscode.workspace
+        .getConfiguration("picode.context")
+        .get<boolean>("attach", false);
+    }
+    if (changed.includes("picode.panel.reasoning")) {
+      this.panelReasoning = vscode.workspace
+        .getConfiguration("picode.panel")
+        .get<PanelReasoning>("reasoning", "collapsed");
+    }
+
+    const cachedMoved =
+      this.attachContext !== previousAttach || this.panelReasoning !== previousReasoning;
+    // A media setting is read at use time, so there is no cached value to compare: the
+    // event itself already says it changed, and the repaint is the only work there is.
+    const mediaChanged = changed.some((key) => key.startsWith("picode.media."));
+    if (cachedMoved || mediaChanged) {
+      void this.pushState();
+    }
   }
 
   /** Notifies the webview that a new session started and the transcript is gone. */
