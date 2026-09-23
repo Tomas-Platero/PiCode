@@ -344,25 +344,134 @@ export type PiEvent =
   /** Direct `bash` command output, correlated by the originating command id. */
   | { type: "bash_execution_update"; id?: string; delta: string }
   /**
-   * Extension UI requests are emitted by the agent itself (status widgets,
-   * notifications). The chat panel does not render extension UI yet, but the
-   * client must not confuse them with responses, so they are typed and ignored.
+   * The agent asking its host for input, or telling it how to draw a terminal.
+   * Both families travel the same channel and share `type`, so they are carried
+   * as one request type rather than as two events. The panel does not render
+   * extension UI, but the request is part of the event stream and cannot be
+   * confused with the responses that settle it.
    */
+  | PiExtensionUiRequest;
+
+export type PiEventType = PiEvent["type"];
+
+/* ------------------------------------------------------------------ *
+ * Extension UI: the agent asking its host
+ * ------------------------------------------------------------------ */
+
+/**
+ * Requests pi blocks on until the host answers them.
+ *
+ * The contract is pi 0.86.1's `RpcExtensionUIRequest`
+ * (`resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-types.d.ts`),
+ * whose method union is identical to 0.87.1's. Every request carries a unique
+ * `id`, and pi matches a response **by `id` alone**.
+ *
+ * `timeout` is pi's own budget: it abandons the request on its own schedule when
+ * the host does not answer in time. The host must not track it. A host-side timer
+ * would eventually answer a request pi has already given up on, which invents a
+ * decision on the owner's behalf.
+ */
+export type PiExtensionUiDialogRequest =
   | {
       type: "extension_ui_request";
       id: string;
-      method: string;
-      title?: string;
-      message?: string;
-      options?: string[];
-      statusKey?: string;
-      statusText?: string;
-      widgetKey?: string;
-      widgetLines?: string[];
-      notifyType?: "info" | "warning" | "error";
+      method: "select";
+      title: string;
+      options: string[];
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "confirm";
+      title: string;
+      message: string;
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "input";
+      title: string;
+      placeholder?: string;
+      timeout?: number;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "editor";
+      title: string;
+      prefill?: string;
     };
 
-export type PiEventType = PiEvent["type"];
+/**
+ * Requests pi emits and never waits on. There is no response shape for these,
+ * so answering one is meaningless: `notify` is a message for the owner, and the
+ * other four configure a terminal interface this panel is not.
+ */
+export type PiExtensionUiNoticeRequest =
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "notify";
+      message: string;
+      notifyType?: "info" | "warning" | "error";
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "setStatus";
+      statusKey: string;
+      statusText: string | undefined;
+    }
+  | {
+      type: "extension_ui_request";
+      id: string;
+      method: "setWidget";
+      widgetKey: string;
+      widgetLines: string[] | undefined;
+      widgetPlacement?: "aboveEditor" | "belowEditor";
+    }
+  | { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
+  | { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
+
+export type PiExtensionUiRequest = PiExtensionUiDialogRequest | PiExtensionUiNoticeRequest;
+
+/**
+ * What the owner decided about one dialog, before it takes on the identity of
+ * the request it settles. Three mutually exclusive decisions, so `confirm` can
+ * never be answered with free text and `select` can never be answered with a
+ * boolean.
+ */
+export type PiExtensionUiAnswer =
+  | { value: string }
+  | { confirmed: boolean }
+  | { cancelled: true };
+
+/**
+ * The only three records pi accepts as an answer, one per decision. `cancelled`
+ * reads as `undefined` in pi for `select`/`input`/`editor` and as `false` for
+ * `confirm`, which is exactly the owner dismissing the dialog.
+ */
+export type PiExtensionUiResponse =
+  | { type: "extension_ui_response"; id: string; value: string }
+  | { type: "extension_ui_response"; id: string; confirmed: boolean }
+  | { type: "extension_ui_response"; id: string; cancelled: true };
+
+/**
+ * Builds the one record that answers `answer`. The id is the request's, and it
+ * can only come from the request: a response that is not correlated by id is
+ * dropped by pi, so the correlation is made structural here instead of trusted.
+ */
+export function extensionUiResponse(id: string, answer: PiExtensionUiAnswer): PiExtensionUiResponse {
+  if ("value" in answer) {
+    return { type: "extension_ui_response", id, value: answer.value };
+  }
+  if ("confirmed" in answer) {
+    return { type: "extension_ui_response", id, confirmed: answer.confirmed };
+  }
+  return { type: "extension_ui_response", id, cancelled: true };
+}
 
 /** Events forwarded verbatim to the webview (extension UI traffic is not). */
 export const PANEL_EVENT_TYPES: readonly PiEventType[] = [

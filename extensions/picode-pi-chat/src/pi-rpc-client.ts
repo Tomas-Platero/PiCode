@@ -5,6 +5,9 @@ import type {
   PiCycleModelData,
   PiCycleThinkingLevelData,
   PiEvent,
+  PiExtensionUiAnswer,
+  PiExtensionUiRequest,
+  PiExtensionUiResponse,
   PiGetAvailableModelsData,
   PiGetCommandsData,
   PiModel,
@@ -18,6 +21,8 @@ import type {
   PiSwitchSessionData,
   PiWireCommand,
 } from "./protocol";
+import { extensionUiResponse } from "./protocol";
+import type { PiExtensionUiHandler } from "./pi-ui-bridge";
 import { type PiClient, type PiSubscription } from "./pi-client";
 
 export type { PiSubscription } from "./pi-client";
@@ -43,6 +48,14 @@ export interface PiRpcClientOptions {
    * Absent means the inherited environment alone, which is what the live tests use.
    */
   env?: Record<string, string>;
+  /**
+   * Answers pi's interactive requests (`extension_ui_request`).
+   *
+   * Required, not optional: pi blocks on a dialog until the host answers it, so
+   * "who answers, and how" is a decision every construction has to make rather
+   * than inherit by omission.
+   */
+  onUiRequest: PiExtensionUiHandler;
   /** Diagnostic sink; a VS Code OutputChannel named "PiCode" in production. */
   output?: vscode.OutputChannel;
 }
@@ -468,6 +481,10 @@ export class PiRpcClient implements PiClient {
       this.streaming = false;
     }
 
+    if (event.type === "extension_ui_request") {
+      this.answerExtensionUiRequest(event);
+    }
+
     for (const listener of this.listeners) {
       listener(event);
     }
@@ -492,6 +509,67 @@ export class PiRpcClient implements PiClient {
       return;
     }
     pending.reject(new Error(response.error || `Command "${response.command}" failed.`));
+  }
+
+  /**
+   * Carries one interactive request out to the handler and the owner's answer
+   * back to pi.
+   *
+   * Two rules are what make this correct, and both live here rather than in the
+   * handler:
+   *
+   * - **Correlation is by `id` only.** The record written to stdin gets its id
+   *   from the request being answered, never from the answer, so a response can
+   *   never name the wrong pending dialog.
+   * - **No timer of ours.** pi abandons a request on its own schedule
+   *   (`timeout`), and the only thing this side does is wait for the owner. A
+   *   host-side timer would answer a dialog pi has already forgotten, inventing
+   *   a decision on the owner's behalf.
+   */
+  private answerExtensionUiRequest(request: PiExtensionUiRequest): void {
+    let pending: Promise<PiExtensionUiAnswer | undefined>;
+    try {
+      pending = Promise.resolve(this.options.onUiRequest(request));
+    } catch (error) {
+      this.log(`Extension UI handler threw for "${request.method}": ${asErrorMessage(error)}`);
+      pending = Promise.resolve({ cancelled: true });
+    }
+
+    void pending.then(
+      (answer) => {
+        if (answer === undefined) {
+          // `notify` and the four terminal-configuring methods have no answer.
+          return;
+        }
+        this.writeExtensionUiResponse(extensionUiResponse(request.id, answer));
+      },
+      (error: unknown) => {
+        // A handler that failed must not leave pi blocked on a dialog nobody
+        // will ever answer; `cancelled` is the one true "the owner did not answer".
+        this.log(`Extension UI handler failed for "${request.method}": ${asErrorMessage(error)}`);
+        this.writeExtensionUiResponse(extensionUiResponse(request.id, { cancelled: true }));
+      },
+    );
+  }
+
+  /** Writes one answer to pi's stdin. A dead child is logged, not thrown. */
+  private writeExtensionUiResponse(response: PiExtensionUiResponse): void {
+    const child = this.child;
+    const stdin = child?.stdin ?? null;
+    if (!child || !stdin || !isWritable(child)) {
+      this.log(`Dropping "${response.type}" for "${response.id}": pi is not accepting input.`);
+      return;
+    }
+
+    try {
+      stdin.write(`${JSON.stringify(response)}\n`, "utf8", (error) => {
+        if (error) {
+          this.log(`Failed to write an extension UI response: ${error.message}`);
+        }
+      });
+    } catch (error) {
+      this.log(`Failed to write an extension UI response: ${asErrorMessage(error)}`);
+    }
   }
 
   /** Sends a command and unwraps `data`; rejects when the command fails. */

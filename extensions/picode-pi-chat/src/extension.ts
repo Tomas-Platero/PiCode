@@ -53,6 +53,7 @@ import {
 } from "./gentle";
 import { resolveLatestVersions } from "./catalog";
 import { PiRpcClient } from "./pi-rpc-client";
+import { handleExtensionUiRequest } from "./pi-ui-bridge";
 import { PiSdkClient } from "./pi-sdk-client";
 import type { PiClient } from "./pi-client";
 import type { PiModel, PiSlashCommand, PiThinkingLevel } from "./protocol";
@@ -1880,6 +1881,9 @@ function getClient(extensionUri: vscode.Uri): PiClient {
     argsPrefix: runtime.argsPrefix,
     extraArgs: configuration.get<string[]>("extraArgs", []),
     env: piProfileEnv(extensionUri, runtime),
+    // pi blocks on its own dialogs until the host answers; this is what lets a
+    // provider login be completed from inside the editor instead of a terminal.
+    onUiRequest: handleExtensionUiRequest,
     ...(cwd ? { cwd } : {}),
     ...(outputChannel ? { output: outputChannel } : {}),
   });
