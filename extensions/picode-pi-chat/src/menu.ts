@@ -11,7 +11,7 @@ import type { PiSlashCommand } from "./protocol";
 import type { PiSettingsCategoryId } from "./pi-settings";
 import { formatBytes, type SessionSummary } from "./sessions";
 import { emptyUsage, describeUsage, summarizeUsage, type UsageTotals } from "./usage";
-import { summarizeGentle, describeGentle, type GentleState } from "./gentle";
+import { summarizeGentleCategory, describeGentle, type GentleState } from "./gentle";
 
 /**
  * pi's configuration, as a categorized popup.
@@ -138,7 +138,15 @@ export interface PiCategoryRow {
   detail?: string;
 }
 
-/** The first level: what each category currently holds. */
+/**
+ * The first level: the door each category opens, and the value behind it.
+ *
+ * The visible second line says what pressing the row does, not what the value is: the
+ * sidebar draws only this line, and the card above it already carries the pi, the model
+ * and the extension count. The current value travels in `detail`, which the popup shows
+ * under the row and the sidebar deliberately does not, so no fact is stated twice on the
+ * card.
+ */
 export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
   const installed =
     snapshot.installedCount === undefined ? "contando…" : `${snapshot.installedCount} instaladas`;
@@ -146,6 +154,7 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
     snapshot.providerCount === undefined ? "leyendo…" : `${snapshot.providerCount} con modelos`;
   const messages =
     snapshot.messageCount === undefined ? "sin sesión" : `${snapshot.messageCount} mensajes`;
+  const session = `${snapshot.streaming ? "Trabajando" : "En reposo"} · ${messages}`;
 
   return CATEGORY_ORDER.map((id) => {
     switch (id) {
@@ -153,43 +162,49 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
         return {
           id,
           label: CATEGORY_LABELS.modelo,
-          description: snapshot.model ?? "sin modelo",
-          detail: `Razonamiento: ${snapshot.reasoning ?? "no disponible"}`,
+          description: "Elegir el modelo y cuánto razona",
+          detail: `Modelo: ${snapshot.model ?? "sin modelo"} · razonamiento: ${
+            snapshot.reasoning ?? "no disponible"
+          }`,
         };
       case "extensiones":
         return {
           id,
           label: CATEGORY_LABELS.extensiones,
-          description: installed,
-          detail: "Instalar, ver y actualizar lo que pi carga",
+          description: "Ver y gestionar los paquetes",
+          detail: installed,
         };
       case "runtime":
         return {
           id,
           label: CATEGORY_LABELS.runtime,
-          description: `${snapshot.runtime} · ${snapshot.transport}`,
-          detail: snapshot.runtimeAvailable ? "Disponible" : "No encontrado",
+          description: "Cambiar qué pi se ejecuta",
+          detail: `${snapshot.runtime} · ${snapshot.transport}${
+            snapshot.runtimeAvailable ? "" : " · no encontrado"
+          }`,
         };
       case "proveedores":
         return {
           id,
           label: CATEGORY_LABELS.proveedores,
-          description: providers,
-          detail: "Comprobar si un proveedor tiene credenciales",
+          description: "Configurar accesos",
+          detail: providers,
         };
       case "gentle":
         return {
           id,
           label: CATEGORY_LABELS.gentle,
-          description: summarizeGentle(snapshot.gentle),
+          // The review switch is not repeated here: the Gentle AI panel owns that
+          // control, and this line answers only whether the layer is working.
+          description: summarizeGentleCategory(snapshot.gentle),
           detail: "Estado, revisión, telemetría y sus comandos",
         };
       default:
         return {
           id: "sesion",
           label: CATEGORY_LABELS.sesion,
-          description: snapshot.streaming ? "trabajando" : "en reposo",
-          detail: messages,
+          description: "Uso, conversaciones y reinicio",
+          detail: session,
         };
     }
   });
@@ -385,7 +400,7 @@ export function buildCategorySettings(
       rows.push({
         kind: "item",
         action: "gentleStatus",
-        label: `Gentle AI: ${summarizeGentle(gentle)}`,
+        label: `Gentle AI: ${summarizeGentleCategory(gentle)}`,
         detail: "Paquete, binario, versión y si está cargado en esta sesión",
       });
 

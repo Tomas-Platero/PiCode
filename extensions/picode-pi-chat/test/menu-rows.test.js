@@ -57,17 +57,26 @@ const actions = (rows) => rows.filter((row) => row.kind === "item").map((row) =>
 const categories = buildCategories(full);
 check("there is one category per area", categories.length === 6, `${categories.length}`);
 check(
-  "each category shows its current value next to the name",
-  categories[0].description === "DeepSeek V4 Pro" &&
-    categories[1].description === "10 instaladas" &&
-    categories[2].description === "pi del PATH 0.86.1 · RPC (proceso aparte)" &&
-    categories[3].description === "3 con modelos" &&
+  "each category's second line says what opening it does",
+  categories[0].description === "Elegir el modelo y cuánto razona" &&
+    categories[1].description === "Ver y gestionar los paquetes" &&
+    categories[2].description === "Cambiar qué pi se ejecuta" &&
+    categories[3].description === "Configurar accesos" &&
     categories[4].description === "leyendo…" &&
-    categories[5].description === "en reposo",
+    categories[5].description === "Uso, conversaciones y reinicio",
   JSON.stringify(categories.map((row) => row.description)),
 );
 check(
-  "a loaded gentle is reported with its version and review switch",
+  "the current values sit in the detail, where the sidebar does not repeat them",
+  categories[0].detail === "Modelo: DeepSeek V4 Pro · razonamiento: max" &&
+    categories[1].detail === "10 instaladas" &&
+    categories[2].detail === "pi del PATH 0.86.1 · RPC (proceso aparte)" &&
+    categories[3].detail === "3 con modelos" &&
+    categories[5].detail === "En reposo · 42 mensajes",
+  JSON.stringify(categories.map((row) => row.detail)),
+);
+check(
+  "a loaded gentle is reported with its version and without the review switch",
   buildCategories({
     ...full,
     gentle: {
@@ -75,11 +84,11 @@ check(
       active: true,
       commandCount: 12,
       commands: ["/gentle:status"],
-      version: "3.4.0",
+      version: "gentle-ai 3.4.0",
       review: { rdd: "off", global: "off", cloneLocal: "unset" },
       telemetry: "enabled",
     },
-  })[4].description === "activo · v3.4.0 · revisión off",
+  })[4].description === "activo · v3.4.0",
   buildCategories({
     ...full,
     gentle: {
@@ -87,7 +96,7 @@ check(
       active: true,
       commandCount: 12,
       commands: [],
-      version: "3.4.0",
+      version: "gentle-ai 3.4.0",
       review: { rdd: "off", global: "off", cloneLocal: "unset" },
       telemetry: "enabled",
     },
@@ -104,17 +113,18 @@ const unknown = buildCategories({
 });
 check(
   "an unknown count says it is counting instead of claiming zero",
-  unknown[1].description === "contando…" && unknown[3].description === "leyendo…",
-  JSON.stringify(unknown.map((row) => row.description)),
+  unknown[1].detail === "contando…" && unknown[3].detail === "leyendo…",
+  JSON.stringify(unknown.map((row) => row.detail)),
 );
 check(
   "a missing session says so rather than showing zero messages",
-  unknown[5].description === "en reposo" && unknown[5].detail === "sin sesión",
+  unknown[5].description === "Uso, conversaciones y reinicio" &&
+    unknown[5].detail === "En reposo · sin sesión",
   unknown[5].detail,
 );
 check(
   "a running agent shows as working",
-  buildCategories({ ...full, streaming: true })[5].description === "trabajando",
+  buildCategories({ ...full, streaming: true })[5].detail === "Trabajando · 42 mensajes",
   "",
 );
 

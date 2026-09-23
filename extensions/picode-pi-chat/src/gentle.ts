@@ -426,13 +426,10 @@ function isSettled(pair: GentleVersionPair): boolean {
 }
 
 /**
- * The one line under the panel's own name.
+ * The one line the Gentle AI panel shows under its own name.
  *
- * `summarizeGentle` is the popup's line: a quick-pick row has nowhere else to put the
- * version or the review switch, so it carries both. The panel states each of them once
- * in its own section — the version in the versions line, the review switch among the
- * actions — and repeating them in its header is the redundancy it is being trimmed of.
- * Here only the question a glance has to answer: is it working.
+ * The panel keeps the review switch in a control of its own and the version in its own
+ * section, so this line only has to answer the question a glance asks: is it working.
  */
 export function summarizeGentlePanel(state: GentleState | undefined): string {
   if (!state) {
@@ -444,8 +441,29 @@ export function summarizeGentlePanel(state: GentleState | undefined): string {
   return state.active ? "activo" : "instalado, sin cargar";
 }
 
-/** The one line the category shows next to its name. */
-export function summarizeGentle(state: GentleState | undefined): string {
+/**
+ * The version as a version, not as the tool's own answer.
+ *
+ * `gentle-ai version` answers with its own name and the number — "gentle-ai 3.6.1".
+ * Gluing a "v" onto that whole answer is what produced "vgentle-ai 3.6.1": the number
+ * is taken out of the answer and only then given its "v". The setup wizard does exactly
+ * this in `media/onboarding.js`, and sharing the shape keeps one version from being
+ * written two different ways in the product.
+ */
+function gentleVersionTag(version: string): string {
+  const match = version.match(/\d+(?:\.\d+)+/);
+  return match ? `v${match[0]}` : version;
+}
+
+/**
+ * The one line a category shows next to its name.
+ *
+ * The review switch lives in the Gentle AI panel, which has a control of its own for
+ * it, so the category line carries only the two things a door has to say: is the layer
+ * working, and which version is. The version is written the same way here as in the
+ * wizard, so the product has one rendering of it.
+ */
+export function summarizeGentleCategory(state: GentleState | undefined): string {
   if (!state) {
     return "leyendo…";
   }
@@ -454,12 +472,24 @@ export function summarizeGentle(state: GentleState | undefined): string {
   }
   const parts = [state.active ? "activo" : "instalado, sin cargar"];
   if (state.version) {
-    parts.push(`v${state.version}`);
-  }
-  if (state.review.rdd !== "unknown") {
-    parts.push(`revisión ${state.review.rdd}`);
+    parts.push(gentleVersionTag(state.version));
   }
   return parts.join(" · ");
+}
+
+/**
+ * The full summary, with the review switch.
+ *
+ * Kept for the diagnostic log, where the switch is useful and no control sits next to
+ * the line. The owner-facing categories use `summarizeGentleCategory`, which drops the
+ * switch because the Gentle AI panel already owns that control.
+ */
+export function summarizeGentle(state: GentleState | undefined): string {
+  const base = summarizeGentleCategory(state);
+  if (state && (state.installed || state.active) && state.review.rdd !== "unknown") {
+    return `${base} · revisión ${state.review.rdd}`;
+  }
+  return base;
 }
 
 /**

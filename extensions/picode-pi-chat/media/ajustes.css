@@ -57,13 +57,17 @@ button.wide {
 }
 
 /*
- * A row rather than a button: the label on the left and the current value on the
- * right, which is what the Settings editor shows for a category.
+ * A row rather than a button: the name on the first line and what it opens on the
+ * second. The value the row used to carry on the right now lives in the card above, so
+ * this line says what pressing does instead of repeating a fact the card already states.
+ * The column layout is what lets that line wrap instead of being cut off in a narrow
+ * sidebar.
  */
 .category {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   width: 100%;
   text-align: left;
   padding: 6px 8px;
@@ -79,20 +83,15 @@ button.wide {
 }
 
 .category-label {
-  flex: 0 1 auto;
-  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .category-value {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
+  max-width: 100%;
   font-size: 0.85em;
   color: var(--vscode-descriptionForeground);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
