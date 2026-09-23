@@ -182,9 +182,18 @@ as evidence.
   - [ ] **T4a — El resolutor en todos los sitios.** El perfil sigue al programa: `runtime`
     ya elige cuál corre, así que `managed` usa el perfil propio y `path`/`custom` el del
     dueño, sin ajuste nuevo. Los sitios, ya localizados:
-    - se lanzan con `PI_CODING_AGENT_DIR`: `pi-rpc-client.ts:329` (el RPC),
-      `chat-view.ts:1583`, y `pi-cli.ts:51` — **el instalador de paquetes**, el que más
-      importa porque es el que escribe;
+    - se lanzan con `PI_CODING_AGENT_DIR`: el hijo del RPC (`pi-rpc-client.ts:329`, construido
+      en `extension.ts`) y **el instalador de paquetes** (`pi-cli.ts:51` vía `runPiCli`,
+      llamado desde `extension.ts`, `menu.ts` y `skills.ts`) — el que más importa porque es el
+      que escribe;
+    - **corregido**: `chat-view.ts:1583` es el hijo de **ffmpeg**, no pi (verificado: es
+      `runFfmpeg`, no lee ningún perfil, y ese fichero nunca ha construido un `PiRpcClient`).
+      No lleva la variable: ponérsela a un proceso que no lee perfiles sería ruido que
+      alguien leería como intención;
+    - **el perfil se pasa explícitamente** de arriba abajo (un `env` en las opciones del
+      cliente RPC, un parámetro en `runPiCli`/`runExecutable`, un campo en `PiMenuDeps`).
+      Ningún módulo lanzador deriva la raíz de la distribución por su cuenta: dos formas de
+      localizarla serían justo el cruce que esto elimina;
     - leen del perfil: `chat-view.ts:912` (la clave de NaN, una credencial),
       `extension.ts:188` (el servicio de ajustes), `extension.ts:1510` (el `mcp.json`),
       `pi-sdk-client.ts:416` (ya es parámetro);
