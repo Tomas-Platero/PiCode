@@ -51,6 +51,14 @@ const { IMPORT_PROFILE_COMMAND } = require(
   path.join(__dirname, "..", "out", "instance-import-command.js"),
 );
 
+/*
+ * The same rule for the custom-endpoint row: its command id is read from the module that
+ * registers it, so the row and the registration cannot drift apart.
+ */
+const { MODELS_PROVIDERS_COMMAND } = require(
+  path.join(__dirname, "..", "out", "models-command.js"),
+);
+
 const results = [];
 const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
 
@@ -650,13 +658,34 @@ async function main() {
   );
 
   check(
-    "the three action rows are the repeatable initial setup, the pi update and the profile import, each with its own command",
+    "the five action rows are the provider login, the custom endpoints, the repeatable initial setup, the pi update and the profile import, each with its own command",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.kind === "action").map(
         (descriptor) => descriptor.key,
       ),
-      ["picode.piVersion", "picode.onboarding", "picode.importProfile"],
+      [
+        "picode.loginProvider",
+        "picode.modelsProviders",
+        "picode.piVersion",
+        "picode.onboarding",
+        "picode.importProfile",
+      ],
     ) &&
+      // The two rows that connect a provider sit with the models, which is where the
+      // owner asked for them, and hold no value of their own: one opens the login, the
+      // other opens the custom endpoints.
+      setting("picode.loginProvider").category === "modelo" &&
+      setting("picode.loginProvider").write === undefined &&
+      // No reading either: the provider list lives behind the command, not in the row.
+      setting("picode.loginProvider").read === undefined &&
+      setting("picode.loginProvider").command === "picode.piChat.loginProvider" &&
+      setting("picode.modelsProviders").category === "modelo" &&
+      setting("picode.modelsProviders").write === undefined &&
+      // Its line is the host's reading of the selected instance's `models.json`, which is
+      // why the row declares a reader and holds no path of its own.
+      setting("picode.modelsProviders").read !== undefined &&
+      // The id is the one `models-command.ts` exports, not a copy of it.
+      setting("picode.modelsProviders").command === MODELS_PROVIDERS_COMMAND &&
       setting("picode.onboarding").command === "picode.piChat.onboarding" &&
       setting("picode.onboarding").read === undefined &&
       setting("picode.onboarding").write === undefined &&

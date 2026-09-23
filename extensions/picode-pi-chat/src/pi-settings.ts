@@ -444,7 +444,9 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
   {
     id: "modelo",
     label: "Modelo",
-    description: "Con qué proveedor y qué modelo arrancan las sesiones nuevas.",
+    description:
+      "Con qué proveedor y qué modelo arrancan las sesiones nuevas, y desde dónde se añaden: " +
+      "un proveedor con sus credenciales, o un endpoint y sus modelos propios.",
   },
   {
     id: "analitica",
@@ -955,6 +957,23 @@ export function setInstanceProfileStateSource(
 }
 
 /**
+ * What the `picode.modelsProviders` row states: the one-line summary of what the chosen
+ * instance's own `models.json` declares.
+ *
+ * Registered rather than imported, like the two readings above. The row is a fact about a
+ * file this module must not open: `models.json` lives in the profile of the selected
+ * instance, and naming that profile needs the extension's location, so the host reads the
+ * file and composes the sentence while the row only renders what it is handed. With no
+ * reader registered the row shows no line, which is what an action row with nothing to say
+ * looks like.
+ */
+let readModelsConfigState: (() => string | undefined) | undefined;
+
+export function setModelsConfigStateSource(source: (() => string | undefined) | undefined): void {
+  readModelsConfigState = source;
+}
+
+/**
  * What the `picode.instanceProfile` row says, in the owner's language and without a
  * path.
  *
@@ -1075,6 +1094,43 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
       }
       manager.setDefaultModel(modelId);
     },
+  },
+
+  {
+    key: "picode.loginProvider",
+    category: "modelo",
+    label: "Iniciar sesión en un proveedor",
+    description:
+      "Inicia sesión en un proveedor —con su clave o con tu suscripción— desde el editor, en " +
+      "el pi que esté elegido: el propio de PiCode o el tuyo. La credencial se guarda en el " +
+      "perfil de esa instancia; si es el tuyo, se avisa antes de escribir.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value, therefore nothing to write. The row is one more entry point to the command
+    // the palette already has, and not a second implementation of it: the whole login flow
+    // stays in `pi-login-command.ts`, and the row only names it so it is reachable where
+    // the models live.
+    readOnly: true,
+    command: "picode.piChat.loginProvider",
+    actionLabel: "Iniciar sesión",
+  },
+  {
+    key: "picode.modelsProviders",
+    category: "modelo",
+    label: "Proveedores y modelos propios",
+    description:
+      "Declara un endpoint que pi no trae de serie —Ollama, LM Studio, vLLM, una pasarela— y " +
+      "los modelos que ofrece, o quita uno que ya no uses. Se escribe en el models.json de " +
+      "la instancia elegida.",
+    kind: "action",
+    scopes: GLOBAL_SCOPE,
+    // No value to write: the row is a button. The line above it is the host's reading of
+    // that `models.json` — how many providers it declares and which ones — so the owner
+    // sees what is already there before opening the flow.
+    readOnly: true,
+    command: "picode.piChat.modelsProviders",
+    actionLabel: "Añadir o quitar",
+    read: () => readModelsConfigState?.(),
   },
 
   /* --- Analítica -------------------------------------------------- *

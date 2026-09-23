@@ -25,7 +25,13 @@ import {
   type OnboardingTarget,
 } from "./onboarding";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
-import { setInstanceProfileStateSource, setPiVersionStateSource, type InstanceProfileState, type PiSettingValue } from "./pi-settings";
+import {
+  setInstanceProfileStateSource,
+  setModelsConfigStateSource,
+  setPiVersionStateSource,
+  type InstanceProfileState,
+  type PiSettingValue,
+} from "./pi-settings";
 import {
   formatBytes,
   listSessions,
@@ -85,6 +91,11 @@ import {
 import { instanceProfile, instanceProfileEnv, selectedAgentDir } from "./instance";
 import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
 import {
+  MODELS_PROVIDERS_COMMAND,
+  modelsProviders,
+  readModelsProviders,
+} from "./models-command";
+import {
   LOGIN_PROVIDER_COMMAND,
   loginProvider,
   type LiveLoginRuntime,
@@ -134,6 +145,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // That reading is shared with the wizard's pi step, so the row and the wizard state the
   // same profile from the same facts and cannot contradict each other.
   setInstanceProfileStateSource(() => instanceProfileState(context));
+
+  // The custom-endpoint row states what the selected instance's `models.json` declares, and
+  // that is a reading of a file only this side can resolve: the row itself holds no path and
+  // no file handle. Handed the same way, so the line is re-read on every refresh instead of
+  // being frozen at activation.
+  setModelsConfigStateSource(() => readModelsProviders(context.extensionUri).summary);
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),
@@ -382,6 +399,16 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(LOGIN_PROVIDER_COMMAND, () =>
       loginProvider(context, liveLoginRuntime),
+    ),
+  );
+
+  // The custom endpoints, the other half of connecting a provider: the login writes a
+  // credential, and this one writes the endpoint and its model ids. Registered on its own
+  // for the same reason as the login — it resolves its own target, the profile of the
+  // instance the row names, from the extension's location.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(MODELS_PROVIDERS_COMMAND, () =>
+      modelsProviders(context),
     ),
   );
 

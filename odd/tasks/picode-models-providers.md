@@ -61,6 +61,7 @@ Read as three facts about the surface:
 | Writing the owner's profile | **Allowed**, on this explicit request, behind one confirmation that names the profile | `picode-pi-instances.md` set the owner's profile read-only *for that feature*; the owner has now asked for the opposite for this one. The reversal is recorded there, and the confirmation is what keeps it a decision instead of an effect |
 | A login is confirmed, not silent | The confirmation appears **only when the target is the owner's own profile** | Behind PiCode's own profile the write is the feature's normal outcome; behind the owner's, it is a file another tool also owns |
 | `models.json` writes | Direct read-modify-write of the JSON, through `src/models-config.ts` | pi has no setter for that file; the documented way in is the file. The module preserves every key it does not own, refuses a file that does not parse, and replaces the file with a rename |
+| A file PiCode cannot read | Refused, never overwritten | A `models.json` that is not JSON, or whose `providers` is not an object, is a file a stranger wrote. The command says so and stops, because a write over it would drop whatever it held |
 | An API key in `models.json` | Offered as an environment variable (`$NAME`) or a literal, never echoed, and never shown back | Both are pi's own forms; the env var is the safer default and the literal is what a local endpoint wants |
 | Removing a custom provider | Offered, on the same surface | An endpoint that is added with a typo must be removable without a terminal, or the surface creates work it cannot undo |
 | Logging a provider **out** | Deliberately out of scope here | pi does expose `logout`, but a session-scoped disconnect has its own questions (which profile, which ending). It is recorded as an open question rather than built by inertia |
@@ -85,15 +86,22 @@ recorded here as evidence.
   `src/models-config.ts`, sin `vscode`: parseo tolerante, fusión que conserva lo que no
   es suyo, alta y baja de un proveedor, resumen para la fila del panel, y escritura por
   reemplazo atómico que rechaza un fichero ilegible en vez de pisarlo.
-- [ ] **T3 — El comando, las filas del panel y su cableado.**
+- [x] **T3 — El comando, las filas del panel y su cableado.**
   `picode.piChat.modelsProviders`: enseña lo que hay en el `models.json` del perfil de
-  la instancia elegida, añade un proveedor (id, `baseUrl`, `api`, clave, ids de modelo)
+  la instancia elegida, añade un proveedor (id, dirección, `api`, clave, ids de modelo)
   o quita uno, informa de lo escrito y ofrece recargar la ventana. En la categoría
-  **Modelo** del panel: «Conectar un proveedor» y «Proveedores y modelos propios», cada
-  una con el comando que ya existe detrás y con el resumen del `models.json` en vigor,
-  más la descripción de la categoría diciendo que sirven para las dos instancias.
-- [ ] **T4 — Registro.** El cierre: qué quedó hecho, qué no y dónde, con los commits
-  como evidencia.
+  **Modelo** del panel: «Iniciar sesión en un proveedor» y «Proveedores y modelos
+  propios», cada una con el comando que ya existe detrás y con el resumen del
+  `models.json` en vigor, más la descripción de la categoría diciendo que sirven para las
+  dos instancias.
+  Dos decisiones que la implementación tuvo que tomar y que quedan escritas:
+  **una confirmación por escritura, nunca dos** (quitar un proveedor siempre pregunta,
+  porque la entrada puede llevar claves que la forma no recogió; escribir en el perfil del
+  dueño pregunta por la misma razón que el login; cuando las dos cosas coinciden hay **un**
+  diálogo que dice qué se va a hacer y en qué perfil), y **un nombre para cada cosa** (la
+  fila y la paleta dicen «Iniciar sesión en un proveedor», que es como ya lo llamaban la
+  paleta y el asistente, en vez de introducir un sinónimo).
+- [x] **T4 — Registro.** El cierre, con los commits como evidencia.
 
 ## Open questions
 
@@ -103,6 +111,9 @@ recorded here as evidence.
 - A provider that needs an extension (custom streaming or OAuth) is still a package
   install, not a `models.json` entry: that is pi's own boundary and is not crossed
   here.
+- The pi popup menu (`menu.ts`) is deliberately not touched: the panel is where
+  configuration lives now, and the two rows are there. The command is still in the
+  palette for anyone who looks for it there.
 
 ## Evidence
 
@@ -117,5 +128,17 @@ recorded here as evidence.
   import, never names `auth.json`) and real file I/O in a temp directory (missing file,
   a directory as the target, write → read → parse, no leftover temp, a failed replace
   that still removes its temp, and the `0o600` rule only for a **literal** key and only
-  off Windows). `pi-settings` still reports the one expected failure — the palette of
-  action rows it pins grows in T3.
+  off Windows).
+- **T3**: `src/models-command.ts` (642 lines) and `test/models-command.test.js` (47
+  checks), the two `modelo` rows and the models.json state source in
+  `src/pi-settings.ts`, the registration and the state-source wiring in
+  `src/extension.ts`, and the command in `package.json`. `pi-settings` went from the one
+  expected failure to 85 green. **The whole chain**: `npm test` exits 0 — 30 suites,
+  1150 checks, no failure. Three defects were found reviewing the writer's output and
+  fixed before the commit: the owner's profile was being written with no confirmation,
+  removing a declared provider asked nothing (and an entry may carry keys the form never
+  collected), and the key field echoed a literal credential. The suite grew the three
+  guards for exactly those. Two smaller ones: `pickPlaceHolder` was declared and never
+  used (deleted — dead copy is the redundancy this project rejects), and one doc comment
+  claimed `json` was `undefined` exactly when `problem` was set, which a missing file
+  contradicted: a missing file is now `{}`, which is what pi itself reads.
