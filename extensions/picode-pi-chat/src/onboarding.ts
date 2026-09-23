@@ -124,7 +124,7 @@ export const PROFILE_MISSING_WORDS = {
  * between the two moments: nothing was imported there, and nothing is filled yet here.
  */
 export const PROFILE_FALLBACK_CLAUSE =
-  "nada ha cambiado: el editor sigue usando el perfil de tu equipo";
+  "nada ha cambiado: el editor sigue usando el perfil de tu pi";
 
 /**
  * The two doors, in the order the safety rule puts them: import first, because it fills the
@@ -254,7 +254,7 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
           <p id="profile-part-text" class="onboarding-current"></p>
           <div id="profile-part-offers" class="onboarding-actions"></div>
           <div class="onboarding-actions">
-            <button id="profile-part-continue" class="onboarding-button" type="button">Continuar con el perfil de tu equipo</button>
+            <button id="profile-part-continue" class="onboarding-button" type="button">Continuar con el perfil de tu pi</button>
           </div>
         </div>
       </section>

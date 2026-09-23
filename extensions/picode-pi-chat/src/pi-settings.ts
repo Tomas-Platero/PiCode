@@ -965,13 +965,17 @@ export function setInstanceProfileStateSource(
  * `internalExists` and `internalProviders` are the two facts the resolver reported, so
  * "no profile" and "no credentials" stay told apart here rather than collapsed into
  * one vague line.
+ *
+ * One name for one thing: the owner's profile is called «el perfil de tu pi» here and
+ * everywhere else, the same words the import row already shows him. A second name —
+ * «el perfil de tu equipo» — made two screens describe one profile in two ways.
  */
 function describeInstanceProfile(state: InstanceProfileState): string {
   if (state.owned) {
     return "El perfil propio de PiCode.";
   }
   if (!state.managed) {
-    return "El perfil de tu pi, el que ya tienes en el equipo.";
+    return "El perfil de tu pi.";
   }
   const missing = state.internalExists
     ? "todavía no tiene credenciales"

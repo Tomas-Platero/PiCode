@@ -327,6 +327,50 @@ async function createService(fake, picode) {
   return { service, created };
 }
 
+/**
+ * The body of the `function <name>(…) { … }` declaration, by matching its braces.
+ *
+ * It exists so a check can assert what a function does without pinning how its call
+ * sites are spelled. Finding the declaration by name and reading its body keeps the
+ * argument list free to change, which is exactly what a check on a call's literal text
+ * forbade. `undefined` means there is no such declaration; `undefined` fields are the
+ * caller's business to reject.
+ */
+function functionBody(source, name) {
+  const declaration = new RegExp(`\\bfunction\\s+${name}\\s*\\(`).exec(source);
+  if (declaration === null) {
+    return undefined;
+  }
+  let depth = 0;
+  let index = source.indexOf("(", declaration.index);
+  for (; index < source.length; index += 1) {
+    if (source[index] === "(") {
+      depth += 1;
+    } else if (source[index] === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        break;
+      }
+    }
+  }
+  const bodyStart = source.indexOf("{", index);
+  if (bodyStart === -1) {
+    return undefined;
+  }
+  let braces = 0;
+  for (let cursor = bodyStart; cursor < source.length; cursor += 1) {
+    if (source[cursor] === "{") {
+      braces += 1;
+    } else if (source[cursor] === "}") {
+      braces -= 1;
+      if (braces === 0) {
+        return source.slice(bodyStart, cursor + 1);
+      }
+    }
+  }
+  return undefined;
+}
+
 /* ------------------------------------------------------------------ *
  * The catalogue
  * ------------------------------------------------------------------ */
@@ -764,7 +808,7 @@ async function main() {
     );
     check(
       "the row names the owner's profile when that is what pi is using",
-      owner === "El perfil de tu pi, el que ya tienes en el equipo.",
+      owner === "El perfil de tu pi.",
       String(owner),
     );
     check(
@@ -802,19 +846,31 @@ async function main() {
     // location and the selected runtime. It is pinned here, next to the same reading
     // the version row relies on, so a registration that later falls is a failing check
     // and not a row that quietly renders nothing. Only the source text is read.
+    //
+    // What is asserted is the fact, not the spelling: the host registers a reading,
+    // and that registered reading goes through the shared resolver. The call's literal
+    // shape — `instanceProfile(context.extensionUri, runtime.mode)` — is deliberately
+    // not required, because pinning it forced the argument list of the shared helper
+    // during an unrelated refactor. The reading is found by name and its body is read.
     const extensionSource = fs.readFileSync(
       path.join(__dirname, "..", "src", "extension.ts"),
       "utf8",
     );
+    const registration = /setInstanceProfileStateSource\(\s*\(\)\s*=>\s*([A-Za-z_$][\w$]*)\s*\(/.exec(
+      extensionSource,
+    );
+    const readingName = registration === null ? undefined : registration[1];
+    const readingBody =
+      readingName === undefined ? undefined : functionBody(extensionSource, readingName);
     check(
-      "the host registers the profile reading next to the version reading",
-      extensionSource.includes("setInstanceProfileStateSource(") &&
-        extensionSource.includes("setPiVersionStateSource(") &&
-        extensionSource.includes("instanceProfile(context.extensionUri, runtime.mode)"),
-      extensionSource
-        .split(/\r?\n/)
-        .filter((line) => line.includes("setInstanceProfileStateSource("))
-        .join(" | "),
+      "the host registers the profile reading next to the version reading, and that reading goes through the shared resolver",
+      extensionSource.includes("setPiVersionStateSource(") &&
+        readingName !== undefined &&
+        readingBody !== undefined &&
+        readingBody.includes("instanceProfile("),
+      readingName === undefined
+        ? "no setInstanceProfileStateSource reading found"
+        : `${readingName} goes through the shared resolver: ${readingBody?.includes("instanceProfile(") === true}`,
     );
   }
 

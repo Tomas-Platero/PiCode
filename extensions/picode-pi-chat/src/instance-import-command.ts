@@ -371,11 +371,11 @@ export const RUNTIME_ROW_LABEL = "Qué pi se ejecuta";
 export const CLOSING_TEXTS = {
   ready:
     "El perfil propio de PiCode ya tiene lo que trajiste. El agente que está corriendo " +
-    "todavía usa el perfil de tu equipo, así que recarga la ventana para que use el nuevo.",
+    "todavía usa el perfil de tu pi, así que recarga la ventana para que use el nuevo.",
   withoutCredentials:
     "El perfil propio de PiCode se llenó, pero no tiene credenciales, así que todavía no " +
     "puede hablar con ningún modelo y nada ha cambiado: el editor sigue usando el perfil " +
-    "de tu equipo. Vuelve a importar marcando las credenciales para encenderlo.",
+    "de tu pi. Vuelve a importar marcando las credenciales para encenderlo.",
   otherRuntime:
     "El perfil propio de PiCode se llenó, pero el editor sigue ejecutando tu pi, no el de " +
     `PiCode, así que la copia todavía no se usa. Cambia la fila «${RUNTIME_ROW_LABEL}» y ` +

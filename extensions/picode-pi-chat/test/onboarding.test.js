@@ -38,7 +38,7 @@ const SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
  * say. It is Spanish and lives in the markup next to the two doors, because it is one of them
  * in substance: pressing it leaves the step without filling PiCode's profile.
  */
-const CONTINUE_LABEL = "Continuar con el perfil de tu equipo";
+const CONTINUE_LABEL = "Continuar con el perfil de tu pi";
 
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function resolve(request, ...rest) {
