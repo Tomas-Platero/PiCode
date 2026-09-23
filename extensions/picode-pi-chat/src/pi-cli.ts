@@ -141,6 +141,34 @@ export interface CatalogPackage {
   repository?: string;
 }
 
+/** How many results one registry page holds when the caller does not say. */
+const DEFAULT_SEARCH_LIMIT = 25;
+
+/** The registry rejects a `size` above this one, so the caller's value is bounded. */
+const MAX_SEARCH_LIMIT = 250;
+
+/** What one registry page answered, with the number that makes paging possible. */
+export interface CatalogSearchPage {
+  /**
+   * Everything the registry says matches, not only this page.
+   *
+   * It counts the registry's own list, which is what the offset addresses, so it can be
+   * larger than what the re-check below returns: free text is scored across the whole
+   * registry and the keyword is a hint rather than a filter.
+   */
+  total: number;
+  /** The offset this page started at, for asking the following one. */
+  offset: number;
+  packages: CatalogPackage[];
+}
+
+export interface CatalogSearchOptions {
+  /** Results to ask for, bounded to what the registry accepts. */
+  limit?: number;
+  /** Results to skip: the page size times the number of pages already read. */
+  offset?: number;
+}
+
 interface NpmSearchObject {
   package?: {
     name?: unknown;
@@ -160,17 +188,28 @@ interface NpmSearchObject {
  * the whole registry, so the keyword is a hint rather than a filter — results are
  * therefore filtered again here, which is what keeps a search for "memory" from
  * quietly listing packages that are not pi packages at all.
+ *
+ * Paging follows the registry's own count: `total` counts its whole match list and
+ * `offset` indexes into it, so a page can come back shorter than the page size simply
+ * because the re-check dropped rows that were never pi packages.
  */
-export async function searchCatalog(query: string, limit = 25): Promise<CatalogPackage[]> {
+export async function searchCatalogPage(
+  query: string,
+  options: CatalogSearchOptions = {},
+): Promise<CatalogSearchPage> {
+  const limit = Math.min(MAX_SEARCH_LIMIT, Math.max(1, Math.trunc(options.limit ?? DEFAULT_SEARCH_LIMIT)));
+  // A negative offset is a caller mistake; the registry would answer with nonsense, and
+  // the list starts at zero anyway.
+  const offset = Math.max(0, Math.trunc(options.offset ?? 0));
   const text = query.trim().length > 0 ? `keywords:pi-package ${query.trim()}` : "keywords:pi-package";
-  const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(text)}&size=${limit}`;
+  const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(text)}&size=${limit}&from=${offset}`;
 
   const response = await fetch(url, { headers: { accept: "application/json" } });
   if (!response.ok) {
     throw new Error(`el registro npm respondió ${response.status}`);
   }
 
-  const payload = (await response.json()) as { objects?: NpmSearchObject[] };
+  const payload = (await response.json()) as { total?: unknown; objects?: NpmSearchObject[] };
   const results: CatalogPackage[] = [];
 
   for (const entry of payload.objects ?? []) {
@@ -195,5 +234,21 @@ export async function searchCatalog(query: string, limit = 25): Promise<CatalogP
     });
   }
 
-  return results;
+  return {
+    // A registry that prints no count leaves the offset plus what came back as the
+    // honest floor: it is what is known to exist.
+    total: typeof payload.total === "number" ? payload.total : offset + results.length,
+    offset,
+    packages: results,
+  };
+}
+
+/**
+ * The first page of the catalog, for a caller that only shows one.
+ *
+ * Kept because the search popup calls it on every keystroke: it wants the rows and has
+ * no use for the count or the offset.
+ */
+export async function searchCatalog(query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<CatalogPackage[]> {
+  return (await searchCatalogPage(query, { limit })).packages;
 }
