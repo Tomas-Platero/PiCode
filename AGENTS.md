@@ -92,6 +92,24 @@ En la práctica:
 - Las claves de un endpoint se guardan como **variable de entorno** —lo recomendado— o como
   valor; nunca se enseñan de vuelta en pantalla.
 
+> "Vamos a ver, necesito integrar los temas de https://vscodethemes.com para que tanto en
+> la primera instalación como en cualquier momento puedan elegirse uno de esos temas."
+
+En la práctica:
+
+- Elegir el **tema del editor** está en tres sitios y es el mismo sitio por dentro: el paso
+  «Tema» del asistente de primer arranque, la fila de la categoría **Aspecto** en los
+  ajustes, y el comando de la paleta y del menú de PiCode.
+- El catálogo sale de **Open VSX**, la galería desde la que este editor *instala* de verdad,
+  no del Marketplace de Microsoft.
+- **`vscodethemes.com` es un escaparate, no un origen**: escanea ese Marketplace y no aloja
+  ningún tema. Se queda como el sitio al que se va a mirar sus capturas, enlazado desde
+  cada tema; un tema que solo esté allí no se puede instalar aquí, y se dice.
+- La vista previa la pinta PiCode con **los colores del propio tema**, nunca con la captura
+  de otro: se ve la verdad, funciona sin red y no depende de permiso de nadie.
+- Aplicar un tema **instala si hace falta** y deja el tema en vigor; el reinicio de ventana
+  solo se ofrece cuando de verdad hace falta.
+
 ## El programa es gratis; lo que se vende es la nube
 
 > "el servicio que voy a vender no es el programa de picode, este será gratuito 100%,
@@ -153,3 +171,5 @@ En la práctica:
 - 2026-09-23 · creado, con las frases de esta sesión de trabajo.
 - 2026-09-23 · añadido el punto de conectar proveedores y modelos propios para la
   instancia elegida, con la frase de esta sesión.
+- 2026-09-23 · añadido el punto de elegir el tema del editor desde el catálogo, con la frase
+  de esta sesión y la corrección de qué es vscodethemes.com.

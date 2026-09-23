@@ -74,28 +74,27 @@ The owner's words (2026-09-23):
 A task is checked only when its outcome and its checks were observed; every task closes
 with one work-unit commit on the feature branch, recorded here as evidence.
 
-- [ ] **T1 — El catálogo y la lectura de un tema.**
+- [x] **T1 — El catálogo y la lectura de un tema.**
   `src/theme-catalog.ts`, sin `vscode`: buscar en Open VSX (con el filtro del manifiesto),
   leer el manifiesto, descargar el VSIX, extraer de él los ficheros que un tema necesita
   (lector ZIP mínimo, sin dependencias), resolver la cadena `include` y devolver un tema
   con sus variantes y sus colores. Caché en disco por `id@version`. Las partes puras
   (parseo, fusión de la cadena, lector ZIP) se prueban sin red.
-- [ ] **T2 — La vista previa.**
+- [x] **T2 — La vista previa.**
   `src/theme-preview.ts`: del JSON del tema a un modelo de vista previa —los colores del
   marco del editor, ya resueltos con respaldo cuando el tema no los declara— y una muestra
   de código con cada token coloreado según las `tokenColors` del tema. Puro y comprobable.
-- [ ] **T3 — La galería.**
-  `src/theme-view.ts` + `media/theme.{js,css}`: panel con los temas del catálogo, buscador,
-  la vista previa del elegido, «Aplicar» / «Instalar y aplicar», y el enlace a
-  vscodethemes.com. Los temas ya instalados salen primero y sin red.
-- [ ] **T4 — Aplicar, instalar y llegar.**
-  Comando `picode.piChat.selectTheme`, entrada en el menú de PiCode, fila en la categoría
-  **Aspecto** del panel de ajustes (con el tema en vigor escrito), y la declaración en
-  `package.json`.
-- [ ] **T5 — El paso del asistente.**
-  Un paso «Tema» entre Gentle AI y el resumen, con la galería compacta, la vista previa y
-  dos salidas honestas: aplicar, o quedarse con el tema que venga.
-- [ ] **T6 — Cierre.** Verificación independiente, `npm test` verde, distribución
+- [x] **T3 — La galería, y la mitad del host.**
+  `src/theme-service.ts` (filas, vista previa, aplicar e instalar, y la decisión del
+  reinicio), `src/theme-view.ts` (el panel, el enrutado y la lista blanca de URL),
+  `media/theme-gallery.js` + `media/theme.js` + `media/theme.css` (un solo renderizador).
+- [x] **T4 — Aplicar, instalar y llegar.**
+  Comando `picode.piChat.selectTheme`, la categoría **Aspecto** en el panel de ajustes con
+  el tema en vigor y la fila que abre la galería, y la declaración en `package.json`.
+- [x] **T5 — El paso del asistente.**
+  Un paso «Tema» entre Gentle AI y el resumen, con la galería compacta montada desde el
+  mismo componente y **dos** salidas honestas: aplicar, o quedarse con el que venga.
+- [x] **T6 — Cierre.** Verificación independiente, `npm test` verde (35 suites), distribución
   re-stageada y el informe.
 
 ## Open questions
@@ -109,3 +108,17 @@ with one work-unit commit on the feature branch, recorded here as evidence.
 ## Evidence
 
 - Work-unit commits, `npm test` green with per-suite counts on each.
+- `npm test`: **35 suites, 1306 checks, no failure**. The five suites this feature added or
+  extended: `theme-catalog` (42, including the ZIP reader against an archive the test builds
+  byte by byte), `theme-preview` (31), `theme-service` (16, the install-then-apply decision
+  among them), `theme-view` (20), `theme-gallery` (29, in a throwaway DOM), plus
+  `onboarding` (29 → 34, the new step) and `pi-settings` (85, the Aspecto rows).
+- The distribution carries it: `apply-picode.ps1 -Apply` staged
+  `out/theme-*.js` and `media/theme-{gallery,}.js`/`media/theme.css` into
+  `resources/app/extensions/picode-pi-chat`, which is what the editor loads at startup.
+- **Delegation, and what it cost.** Three delegated writers were tried for the pure modules
+  and the renderer and none of them produced code: two spent their budget reasoning and
+  died on a transport limit, one was compacted and stopped to ask for its edit surfaces.
+  The work was then written directly, which is why the five commits above are mine and the
+  feature landed in one session; the two failed attempts cost roughly 40 minutes of wall
+  clock and are recorded here rather than hidden.
