@@ -987,8 +987,8 @@ function describeInstanceProfile(state: InstanceProfileState): string {
 }
 
 /**
- * The line the settings panel shows above every category while the profile in use is
- * not the one that was chosen.
+ * The line the settings panel shows while the profile in use is not the one that was
+ * chosen.
  *
  * That is exactly one situation: PiCode's own pi is the selection, its profile cannot
  * carry an instance yet, and the anti-mute guard keeps the editor on the owner's
@@ -1001,6 +1001,12 @@ function describeInstanceProfile(state: InstanceProfileState): string {
  * it. It appears only while the situation exists — when the profile in use is the
  * chosen one, there is nothing to say and this returns `undefined`, so the panel
  * draws no line. A permanent banner would be clutter, not a fact.
+ *
+ * The panel draws it above whichever category is open, except the one that already
+ * states the sentence below: the PiCode category carries that very profile row, so
+ * repeating the line above it would print one datum twice on one screen. That
+ * suppression is the renderer's, because which category is open is the renderer's
+ * state; this function keeps its single responsibility of wording the fact.
  */
 export function describeProfileNotice(state: InstanceProfileState): string | undefined {
   return state.managed && !state.owned ? describeInstanceProfile(state) : undefined;

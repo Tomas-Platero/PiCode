@@ -1617,20 +1617,41 @@
     elements.content.appendChild(pane);
   }
 
+  // The one category whose own rows already state the profile sentence: the PiCode
+  // category holds the `Perfil en uso` row, which says the very words the line above
+  // the pane says. Naming it here is what keeps one datum from being printed twice on
+  // one screen. `pi-settings.test.js` ties this id to the category that actually
+  // carries that row, so moving the row without moving this fails instead of quietly
+  // reprinting the sentence.
+  var PROFILE_NOTICE_OWN_CATEGORY = "picode";
+
+  /*
+   * The line to draw above the content pane, or "" when none belongs there.
+   *
+   * Two facts decide it and nothing else: whether the host sent a notice at all, and
+   * which category is open. A category that already states the sentence gets no line —
+   * the datum is right below it, and the same words twice on one screen is the
+   * redundancy this owner rejects. The search view has no category open, so the caller
+   * passes null and the line stays: no category's rows are on screen there to state it.
+   */
+  function profileNoticeForCategory(notice, categoryId) {
+    if (typeof notice !== "string" || notice === "") {
+      return "";
+    }
+    return categoryId === PROFILE_NOTICE_OWN_CATEGORY ? "" : notice;
+  }
+
   // The line about which profile these settings come from, drawn before any
-  // category's title or rows, so it is read whichever category is open. The words
-  // are the host's; this renderer only draws them, and only while the host sends
-  // them — with nothing to say there is no element and the pane looks as it did.
+  // category's title or rows. The words are the host's; this renderer only draws them,
+  // and only where the open category's own rows do not already state them.
   function renderProfileNotice() {
-    if (typeof state.profileNotice !== "string" || state.profileNotice === "") {
+    var openCategory = state.query.trim() === "" ? state.selected : null;
+    var line = profileNoticeForCategory(state.profileNotice, openCategory);
+    if (line === "") {
       return;
     }
     elements.content.appendChild(
-      createElement(
-        "p",
-        "settings-category-description settings-profile-notice",
-        state.profileNotice,
-      ),
+      createElement("p", "settings-category-description settings-profile-notice", line),
     );
   }
 

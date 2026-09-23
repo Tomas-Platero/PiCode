@@ -914,6 +914,30 @@ async function main() {
     );
     setInstanceProfileStateSource(undefined);
 
+    // The renderer keeps the line out of the one category whose own row states the same
+    // sentence. Which category that is belongs to this catalogue, not to the renderer, so
+    // the id the renderer names is tied here to the category that actually carries the
+    // row: moving `picode.instanceProfile` without moving the constant would otherwise
+    // reprint one sentence twice on one screen, silently.
+    const settingsScript = fs.readFileSync(
+      path.join(__dirname, "..", "media", "settings.js"),
+      "utf8",
+    );
+    const ownerCategory = /PROFILE_NOTICE_OWN_CATEGORY\s*=\s*"([^"]+)"/.exec(settingsScript);
+    const profileRowDescriptor = PI_SETTING_DESCRIPTORS.find(
+      (descriptor) => descriptor.key === "picode.instanceProfile",
+    );
+    check(
+      "the category the renderer keeps the line out of is the one that states it",
+      ownerCategory !== null &&
+        profileRowDescriptor !== undefined &&
+        profileRowDescriptor.category === ownerCategory[1],
+      JSON.stringify({
+        renderer: ownerCategory === null ? undefined : ownerCategory[1],
+        row: profileRowDescriptor === undefined ? undefined : profileRowDescriptor.category,
+      }),
+    );
+
     // The registration itself lives in `extension.ts`, which owns the extension's
     // location and the selected runtime. It is pinned here, next to the same reading
     // the version row relies on, so a registration that later falls is a failing check
