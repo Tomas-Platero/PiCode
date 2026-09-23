@@ -144,6 +144,96 @@ The deep-link mapping the fix must implement:
 | 4.2. Provider login: OAuth through the bridge, and API-key entry | new `src/auth-config.ts`, `src/settings-view.ts`, `media/*` |
 | 8. Update the bundled pi/SDK, and import an existing pi installation | `src/runtime.ts`, `src/extensions-view.ts` or the settings tab, `src/pi-cli.ts` |
 
+## Progress and evidence
+
+Every unit below is one commit on `feat/picode-distribution`, each verified with the
+full `npm test` chain green before it landed. Nothing is pushed; nothing is released.
+
+| Unit | Commit | Closed |
+| --- | --- | --- |
+| The base this program builds on | `26573ae`, `4f7381b` | The uncommitted settings tab and packages table from the previous sessions, salvaged as-is, plus their feature documents and this record |
+| A stale key in the distribution defaults | `2e95b23` | `distribution/settings.json` still named the retired `picode.pi.defaultModel` |
+| Fase 1, tasks 1a and 6 | `e0d94a6` | The empty chat's mark, the "Cargando sesión…" line and the way back to the session list |
+| Fase 1, task 1b | `22e6cae` | Gentle AI's own activity-bar entry and panel, over one shared port |
+| Fase 1, tasks 5 and 3.3 | `f95b1fc` | The Analítica merge, and Paquetes y recursos down to the table with Acción = Eliminar |
+| Fase 1, task 2 | `9cd33a4` | The six sidebar categories reach the section they name; `gentle` reveals its panel |
+| Fase 1, task 10 | `9525de0` | The setup wizard: which pi, and whether to bring Gentle AI, once and repeatable |
+| Fase 1, task 10b | `517c529` | Action rows in the catalogue, and the row that reopens the wizard |
+| Fase 2, task 3.1 (host) | `41e6303` | Skill discovery over the three automatic routes, and pi's package filters surviving a write |
+| Fase 2, task 3.1 (rows) | `951ffbb` | The skills derivation as a pure module |
+| Fase 2, task 3.1 (list and switch) | `59175a8` | The Skills category listing and a working per-skill switch, with the discovery cached against the datum that invalidates it |
+
+Decisions taken during the run, recorded because the owner asked not to be
+interrupted and these were settled without them:
+
+- **The Gentle AI activity-bar icon is an authored monochrome mark** (`media/gentle.svg`),
+drawn in the same line style as `picode.svg`. The brand's own mark is a rendered
+illustration that the activity bar's mask would flatten into a blob, so the bar gets
+the silhouette and the panel gets the real logo, downscaled to 256 px from the
+1.18 MB original. **A proper monochrome SVG from the brand owner would replace this**
+and is the only part of the entry that is an interpretation rather than the brand.
+- **Installing Gentle AI from the wizard installs two packages.** Nothing in PiCode
+ever installed `gentle-engram`; the layer is `gentle-pi` plus the memory provider, and
+the consent modal names both exact commands.
+- **The merged category is labelled "Analítica" as asked**, with a description that
+names what it holds, since the label alone does not carry thinking, compaction and
+retries.
+
+## Remaining work at hand-off
+
+Nothing below is half-done in the tree: every commit compiles with `noUnusedLocals` and
+runs the whole suite green. What is left is unstarted or deliberately deferred, and
+where a design was settled it is recorded here so it does not have to be re-derived.
+
+**Fase 2, still open**
+
+- **Filters, sorting and pagination for the Skills list.** The rows, the switch and the
+  pure derivation are delivered; the list renders in discovery order with no filter bar.
+  `media/skill-rows.js` already exposes everything that table needs.
+- **Migrate the packages table onto the shared table painter.** The skills list got its own
+  painter on purpose: refactoring the working packages table inside the same change was
+  the risk that made two writer attempts fail. The migration is its own,
+  behaviour-preserving unit.
+- **`/` autocomplete in the chat composer.** Fully scouted: the command payload carries
+  `name`, `description?` and `source` (`extension` | `prompt` | `skill`) but **no origin**,
+  so the origin comes from the discovery; the composer's dropdown is reusable, but its
+  `chooseOptionFor` **sends** a message (`setModel`, `setThinkingLevel`) where `/` must
+  **insert into the prompt**, so the option shape needs a second action kind; and the
+  command list is fetched but never posted to the webview today, so a new host→webview
+  message is needed.
+- **Hot reload.** Only partly possible, and the panel already declares which rows need a
+  restart: packages, transport, runtime and cache warming cannot reach a running agent.
+
+**Fase 3, not started**
+
+- **The Catalog tab.** Its open question is answered: the type tag pi.dev shows comes from
+  the **key names of the `pi` object in a package's own `package.json`** (`extensions` →
+  extension, `skills` → skill, `prompts` → prompt, `themes` → theme, concatenated; absent →
+  package). No API exposes it, so it costs one `GET https://registry.npmjs.org/<name>/latest`
+  per package and must be resolved only for the rows on screen, cached by `name@version`.
+  The search endpoint gives name, description, downloads and date for free and reports
+  10440 packages.
+- **The MCP section.** The config format and the six candidate files are mapped, and the
+  owner chose a global/project scope selector. **Secrets warning**: `env` values are
+  plaintext API keys and the owner's own `mcp.json` holds live tokens, so the write path
+  needs care.
+
+**Fase 4, not started, and gated**
+
+- **The interactive bridge (`extension_ui_request`).** Today an interactive request from pi
+  is **silently dropped** at `chat-view.ts:444`, so any flow that asks the owner something
+  waits forever with no symptom. The complete contract is verified and in memory
+  (`picode/extension-ui-bridge-contract`): four blocking dialogs (`select`, `confirm`,
+  `input`, `editor`), five fire-and-forget methods (`notify`, `setStatus`, `setWidget`,
+  `setTitle`, `set_editor_text`), three response shapes, correlation by id only, and the
+  rule that the host must **not** run its own timeout. It is also **two** implementations:
+  RPC mode needs the JSON request and response, while the embedded SDK needs a real
+  `ExtensionUIContext` injected through `bindExtensions`.
+- **Custom models and provider login** depend on that bridge. Models live in
+  `~/.pi/agent/models.json` and credentials in `auth.json`; pi's own login is the
+  interactive `/login`, and `pi auth` only inspects.
+- **Updating the bundled pi and importing an existing installation** is unstarted.
+
 ## Out of scope (this program)
 
 Pushing, pull requests and releases. Rewriting pi's own TUI surfaces. Any change to
