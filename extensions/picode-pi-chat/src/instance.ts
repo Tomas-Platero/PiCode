@@ -1,11 +1,13 @@
 /*
  * Which profile an instance uses, and what a profile holds — read-only.
  *
- * Slice 1 of the two-instances feature: the resolver, the facts a spawner needs and the
- * inventory. Nothing here is wired to the spawn environment, the SDK client, the
- * settings service or the skills discovery yet, so this module changes no behaviour on
- * its own. It exists so that the switch (slice 3) has exactly one place to ask "what
- * profile is this instance using" instead of a `resolveAgentDir()` call at every reader.
+ * The two-instances feature, gathered in one place: the resolver, the facts a spawner
+ * needs, the concrete directory a reader uses and the inventory. Every site that
+ * launches pi follows `instanceProfileEnv()`, and every site that reads a profile
+ * follows `selectedAgentDir()`, so the switch has exactly one place to ask "what
+ * profile is this instance using" instead of a `resolveAgentDir()` call at every
+ * reader. The anti-mute guard lives in `instanceProfile()`, which both of those
+ * consult, so the switch cannot be left half flipped.
  *
  * The parts are deliberately separate:
  *
@@ -19,6 +21,10 @@
  *   `instanceProfileEnv()` turns those facts into the environment additions a
  *   spawned pi receives, so the rule about setting the variable, or deliberately
  *   not setting it, lives in one place instead of at each of the spawn sites.
+ * - `selectedAgentDir()` answers a reader that needs a directory rather than an
+ *   environment: the guarded selection when PiCode owns it, the machine's profile
+ *   otherwise. It is the only place that composes that fallback, so no reader can
+ *   end up on the other instance's profile.
  * - `scanProfile()` reads a profile directory and returns an inventory. Its parsing
  *   is pure (`parsePackages`, `parseCredentials`, `parseModels`, `parseMcpServers`),
  *   so both the shapes and the walk can be exercised without a filesystem, and a
@@ -34,6 +40,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import type { Uri } from "vscode";
 import { managedRoot, type RuntimeMode } from "./runtime";
+import { resolveAgentDir } from "./transcription";
 
 /* ------------------------------------------------------------------ *
  * The resolver
@@ -179,6 +186,30 @@ export function instanceProfile(extensionUri: Uri, runtime: RuntimeMode): Instan
  */
 export function instanceProfileEnv(profile: InstanceProfile): Record<string, string> {
   return profile.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: profile.agentDir };
+}
+
+/* ------------------------------------------------------------------ *
+ * What a reader needs
+ * ------------------------------------------------------------------ */
+
+/**
+ * The concrete profile directory the selected instance is actually using.
+ *
+ * A reader cannot pass `undefined` on: the embedded transport, the settings service and
+ * the skills discovery all take a directory, and the one that received `undefined`
+ * would compose a fallback of its own — which is how a reader ends up watching a
+ * different profile than the process it reads for. So the fallback is composed once,
+ * here: PiCode's own profile while the guard says it can carry an instance, and the
+ * machine's profile otherwise.
+ *
+ * It asks `instanceProfile()` and not `instanceAgentDir()`, and that is the whole
+ * point. `instanceAgentDir()` names PiCode's own profile even while it is empty, which
+ * is what the import needs; a reader that followed it would switch to the internal
+ * profile the moment the import fills it, while the spawns were still on the machine's
+ * one. Reading the guarded answer is what keeps the switch from being half flipped.
+ */
+export function selectedAgentDir(extensionUri: Uri, runtime: RuntimeMode): string {
+  return instanceProfile(extensionUri, runtime).agentDir ?? resolveAgentDir();
 }
 
 /* ------------------------------------------------------------------ *

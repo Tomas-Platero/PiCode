@@ -9,10 +9,17 @@
  * construction: both profiles are valid directories, so nothing fails.
  *
  * The list below is therefore the *whole* allowed set, written down instead of
- * implied. A new entry means one of two things, and both are worth stopping for:
+ * implied. It has shrunk to two entries, and that shorter list **is** the
+ * demonstration that the isolation is complete: `instance.ts` is where the single
+ * fallback from PiCode's own profile to the machine's is composed, and
+ * `instance-import-command.ts` deliberately reads the machine's profile as the
+ * import's source. Every other reader asks `selectedAgentDir()`, which follows the
+ * guard. An entry that comes back is the regression this check exists to catch.
+ *
+ * A new entry means one of two things, and both are worth stopping for:
  *
  * - a new reader (or writer) of a profile that should have gone through
- *   `instanceAgentDir()` / `instanceProfileEnv()` instead, which is the bug this
+ *   `selectedAgentDir()` / `instanceProfileEnv()` instead, which is the bug this
  *   feature exists to remove; or
  * - a deliberate decision that the machine's profile is the right one here, which is
  *   allowed — but it has to be added to this list with its reason, so the decision is
@@ -39,16 +46,12 @@ const SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
  */
 const PINNED = [
   {
-    file: "chat-view.ts",
-    why: "the NaN key is read from the machine's auth.json for transcription; this reader is instance-bound and still to be moved onto instanceAgentDir()",
-  },
-  {
-    file: "extension.ts",
-    why: "the settings service and the mcp.json path still read the machine's profile; both are instance-bound and still to be moved onto instanceAgentDir()",
-  },
-  {
     file: "instance-import-command.ts",
     why: "the import's origin: reading the machine's profile on purpose, as the one-shot source of the copy, is the feature itself",
+  },
+  {
+    file: "instance.ts",
+    why: "the resolver itself: composing PiCode's own profile with the machine's default is where the single fallback belongs, so no reader has to build one",
   },
 ];
 

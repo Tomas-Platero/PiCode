@@ -17,6 +17,8 @@ import {
   type SettingWire,
 } from "./pi-settings";
 import type { SkillDiscoveryResult } from "./skills";
+import { selectedAgentDir } from "./instance";
+import { resolveRuntime } from "./runtime";
 import { buildWebviewHtml } from "./webview-html";
 import type { PiModel } from "./protocol";
 
@@ -349,9 +351,15 @@ export class SettingsView {
 
     try {
       const picode = this.options.picode();
+      // The profile the panel reads *and writes*: pi's own settings file lives there,
+      // so this has to be the selected instance's, not the machine's. It is resolved
+      // here rather than injected because this class already owns the extension's
+      // location, which is what the selection is read from.
+      const runtime = resolveRuntime(this.extensionUri);
       this.service = await PiSettingsService.create({
         entry,
         cwd: this.options.cwd(),
+        agentDir: selectedAgentDir(this.extensionUri, runtime.mode),
         ...(picode === undefined ? {} : { picode }),
       });
       return this.service;

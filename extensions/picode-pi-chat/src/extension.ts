@@ -80,9 +80,8 @@ import {
   parseBranch,
   type EnvironmentStats,
 } from "./stats";
-import { instanceProfile, instanceProfileEnv } from "./instance";
+import { instanceProfile, instanceProfileEnv, selectedAgentDir } from "./instance";
 import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
-import { resolveAgentDir } from "./transcription";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -151,7 +150,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // project's previous conversations, so both surfaces read and load one list.
     recentSessions: () => listProjectSessions(),
     resumeSession: (session) => resumeSession(session),
-    environment: () => readEnvironment(),
+    environment: () => readEnvironment(context.extensionUri),
     imageTools: () => attachmentTools(context.extensionUri),
     // The view reports host-side failures that must not interrupt the transcript;
     // the shared channel already exists here, so one is not created for it.
@@ -205,7 +204,7 @@ export function activate(context: vscode.ExtensionContext): void {
     skills: async (packages) => {
       const runtime = resolveRuntime(context.extensionUri);
       return discoverSkills({
-        agentDir: resolveAgentDir(),
+        agentDir: selectedAgentDir(context.extensionUri, runtime.mode),
         cwd: agentCwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
         listPackages: installedPackagesLister(runtime, piProfileEnv(context.extensionUri, runtime)),
         packageEntries: packages,
@@ -1547,15 +1546,18 @@ async function listProjectSessions(): Promise<SessionSummary[]> {
  * fails. The file read and the subprocess are not free, so the view caches the
  * result for the life of a bind instead of calling this on every reply.
  */
-async function readEnvironment(): Promise<EnvironmentStats> {
+async function readEnvironment(extensionUri: vscode.Uri): Promise<EnvironmentStats> {
   const cwd = agentCwd ?? process.cwd();
 
   // The MCP config lives next to pi's other configuration, and where that is is
-  // already known in one place; reading it here keeps that knowledge there.
+  // already known in one place; reading it here keeps that knowledge there. The
+  // directory is the selected instance's profile, because counting one profile's
+  // servers while pi runs on another is a figure that describes neither.
   let mcps: number | undefined;
   try {
+    const runtime = resolveRuntime(extensionUri);
     const bytes = await vscode.workspace.fs.readFile(
-      vscode.Uri.file(path.join(resolveAgentDir(), "mcp.json")),
+      vscode.Uri.file(path.join(selectedAgentDir(extensionUri, runtime.mode), "mcp.json")),
     );
     mcps = countMcpServers(Buffer.from(bytes).toString("utf8"));
   } catch {
@@ -1859,6 +1861,10 @@ function getClient(extensionUri: vscode.Uri): PiClient {
 
     client = new PiSdkClient({
       entry: choice.sdkEntry,
+      // The embedded transport reads and writes a profile like any other pi, so it
+      // follows the selected instance instead of the SDK's own default. Leaving it to
+      // the default is the shared profile this instance split exists to remove.
+      agentDir: selectedAgentDir(extensionUri, resolveRuntime(extensionUri).mode),
       ...(cwd ? { cwd } : {}),
       ...(outputChannel ? { output: outputChannel } : {}),
     });

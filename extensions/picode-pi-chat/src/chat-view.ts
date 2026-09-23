@@ -9,6 +9,8 @@ import {
   type PreparedImage,
 } from "./attachments";
 import { collectReferences, composePrompt } from "./context";
+import { selectedAgentDir } from "./instance";
+import { resolveRuntime } from "./runtime";
 import type { PiClient, PiSubscription } from "./pi-client";
 import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiSlashCommand, type PiUsage } from "./protocol";
 import type { SessionReplay, SessionSummary } from "./sessions";
@@ -17,7 +19,6 @@ import {
   formatTranscriptBlock,
   nodeFetch,
   readNanApiKey,
-  resolveAgentDir,
   transcribeWithNan,
   type AudioSource,
   type TranscriptResult,
@@ -909,7 +910,9 @@ export class ChatView implements vscode.WebviewViewProvider {
       };
     }
 
-    const key = readNanApiKey(resolveAgentDir());
+    const key = readNanApiKey(
+      selectedAgentDir(this.extensionUri, resolveRuntime(this.extensionUri).mode),
+    );
     if (key === undefined) {
       return {
         ok: false,
