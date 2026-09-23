@@ -444,27 +444,36 @@ if (-not (Test-Path -LiteralPath $markSource)) {
     # history, not inside every shipped copy of the icon.
     $mark = (Get-Content -LiteralPath $markSource -Raw) -replace '(?s)<metadata>.*?</metadata>', '' -replace '\s+xmlns:c2pa="[^"]*"', ''
 
-    # The letterpress files are the mark an empty editor draws behind its hints ("mostrar
-    # todos los comandos", "abrir configuración", "alternar terminal"). They were the one
-    # place this step missed, which is the worst place to miss: it is on screen whenever the
-    # owner has nothing open, so a branded editor there reads as unbranded at a glance.
-    foreach ($name in @(
-        "code-icon.svg",
-        "vscode-icon.svg",
-        "letterpress-dark.svg",
-        "letterpress-light.svg",
-        "letterpress-hcDark.svg",
-        "letterpress-hcLight.svg"
+    # Every asset in the tree that carries the upstream logo. The letterpress pair is the
+    # mark an empty editor draws behind its hints ("mostrar todos los comandos", "abrir
+    # configuración", "alternar terminal"), which is the worst place to miss because it is on
+    # screen whenever the owner has nothing open; the sessions files are the same glyph one
+    # view further in, for the agent sessions surface.
+    #
+    # The paths are relative to `resources\app`, not bare names, because not all of them live
+    # in `out\media`: the sessions letterpress sits under its own contrib directory.
+    foreach ($relative in @(
+        "out\media\code-icon.svg",
+        "out\media\vscode-icon.svg",
+        "out\media\letterpress-dark.svg",
+        "out\media\letterpress-light.svg",
+        "out\media\letterpress-hcDark.svg",
+        "out\media\letterpress-hcLight.svg",
+        "out\media\sessions-icon.svg",
+        "out\media\sessions-logo-dark.svg",
+        "out\media\sessions-logo-light.svg",
+        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-dark.svg",
+        "out\vs\sessions\contrib\chat\browser\media\letterpress-sessions-light.svg"
     )) {
-        $target = Join-Path $RepoRoot "resources\app\out\media\$name"
+        $target = Join-Path $RepoRoot "resources\app\$relative"
         if (-not (Test-Path -LiteralPath $target)) {
-            Write-Skip "$name is not there"
+            Write-Skip "$relative is not there"
             continue
         }
-        Write-Act "Draw $name with the PiCode mark"
+        Write-Act "Draw $relative with the PiCode mark"
         if (-not $isPreview) {
             Set-Content -LiteralPath $target -Value $mark -NoNewline
-            $Done.Add("replaced out\media\$name")
+            $Done.Add("replaced $relative")
         }
     }
 
