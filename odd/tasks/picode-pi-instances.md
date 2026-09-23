@@ -324,21 +324,39 @@ as evidence.
 - [ ] **T6 — El asistente sin terminal.** El de primer arranque se completa entero dentro del
   editor: importar (T3) o empezar de cero. Mientras T5 no exista, si el perfil interno está
   vacío lo **dice antes** de ofrecer ese camino, y no deja al dueño en un callejón sin salida.
-- [ ] **T7 — Pulido.** Progreso de la importación, tamaños, y una segunda importación que
-  informe de qué cambió. Y una frase repetida en tres sitios —«Qué pi se ejecuta», en
-  `pi-settings.ts`, `menu.ts` y `instance-import-command.ts`—: unificarla, como se hizo con la
-  versión, para que un renombrado no deje un texto señalando a una fila con otro nombre.
-  Y dos detalles menores que quedan anotados en vez de perderse: abrir el comando de login
-  construye el runtime del destino y con ello puede crear un `auth.json` vacío en el perfil
-  propio (es comportamiento de pi, no enciende la guarda y no toca el perfil del dueño, pero
-  conviene que no sea un efecto de *abrir* un comando); y el editor multilínea (`editor`) sigue
-  respondiéndose cancelado, con el porqué escrito junto al código.
-  Y dos incoherencias de lenguaje, que son la misma clase de defecto que la frase de la fila:
-  el perfil del dueño se llama **«el perfil de tu pi, el que ya tienes en el equipo»** en la fila
-  de ajustes y **«el perfil de tu equipo»** en el cierre de la importación —un nombre para cada
-  cosa, o los dos pantallas empiezan a contradecirse—; y un test de `pi-settings.test.js` fija la
-  **forma literal** de una llamada en `extension.ts`, lo que obligó a dar forma al ayudante
-  compartido. Un test debe fijar el **hecho**, no la ortografía de la llamada.
+- [x] **T7 — Pulido.** Lo que quedaba anotado, con lo que se hizo y lo que **se descarta a
+  propósito**:
+  - [x] **Un nombre para cada cosa.** El perfil del dueño se llamaba «el perfil de tu pi, el que
+    ya tienes en el equipo» en la fila y «el perfil de tu equipo» en los dos cierres de la
+    importación y en el asistente. Ahora es **«el perfil de tu pi»** en los cuatro sitios —las
+    mismas palabras que la fila que el dueño pulsa—, incluida la salida propia del paso del
+    asistente, que estaba en la misma pantalla y habría conservado el segundo nombre.
+  - [x] **Un test fijaba la ortografía en vez del hecho.** `pi-settings.test.js` exigía el literal
+    `instanceProfile(context.extensionUri, runtime.mode)` dentro de `extension.ts`, o sea que
+    congelaba la lista de argumentos de un ayudante: un refactor de su firma rompía el test sin
+    que nada estuviera roto. Ahora fija los dos hechos —el host registra una lectura del perfil y
+    esa lectura pasa por el resolutor compartido— leyendo el **cuerpo** de la función registrada.
+    Y se falsificó antes de creerlo: cambiar solo la lista de argumentos lo deja pasar (ya no
+    prohíbe el refactor que lo motivó), mientras quitar el registro o dejar de usar el resolutor
+    dentro de ese cuerpo lo hacen fallar.
+  - [ ] **T7b — La lista del login viene del perfil equivocado, y mirar un comando crea un
+    fichero.** Los dos defectos tienen la misma causa: la lista de proveedores sale de un runtime
+    construido **para el perfil propio**, así que (1) solo enseña los proveedores de ese perfil
+    —con el perfil propio vacío, los de pi y ninguno de los que registran los paquetes del
+    dueño— y (2) construir ese runtime puede **crear** la carpeta y un `auth.json` vacío en el
+    perfil propio con solo *abrir* el comando. La lista pasa a salir del runtime de la sesión en
+    vigor —el perfil que sí conoce los proveedores del dueño— y la escritura sigue donde estaba,
+    en el perfil de PiCode, con su parámetro obligatorio.
+  - **Descartado a propósito, y queda escrito para que nadie lo «recupere»**: los **tamaños** en la
+    importación y el **informe de la segunda importación** eran **ideas mías, no del dueño**. La
+    importación ya informa elemento por elemento (copiado, sobreescrito, ausente, declinado,
+    falló), y medir tamaños cuesta un recorrido recursivo del árbol de paquetes. Añadir cosas que
+    nadie pidió es exactamente la redundancia que este dueño rechaza: se quitan del plan en vez de
+    construirse por inercia.
+  - Se queda anotado, sin tocar: el editor multilínea (`editor`) se responde cancelado con el
+    porqué junto al código, y la frase «Qué pi se ejecuta» está escrita en tres ficheros
+    (`pi-settings.ts`, `menu.ts`, `instance-import-command.ts`): hoy coinciden, así que no hay
+    defecto visible, solo riesgo de deriva al renombrar.
 
 ## Evidence
 
