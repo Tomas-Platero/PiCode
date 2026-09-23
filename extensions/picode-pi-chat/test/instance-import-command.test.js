@@ -282,28 +282,52 @@ async function main() {
     JSON.stringify(env),
   );
 
-  const closingReady = api.closingText(true);
-  const closingNoCredentials = api.closingText(false);
+  const closingReady = api.closingMessage({ hasCredentials: true, managed: true });
+  const closingNoCredentials = api.closingMessage({ hasCredentials: false, managed: true });
+  const closingOtherRuntime = api.closingMessage({ hasCredentials: true, managed: false });
+  const closingOtherRuntimeNoCredentials = api.closingMessage({
+    hasCredentials: false,
+    managed: false,
+  });
   check(
-    "the closing text is chosen from the profile's credentials",
-    closingReady === `PiCode: ${api.CLOSING_TEXTS.ready}` &&
-      closingNoCredentials === `PiCode: ${api.CLOSING_TEXTS.withoutCredentials}`,
-    JSON.stringify({ closingReady, closingNoCredentials }),
+    "each closing is built from the product's own table",
+    closingReady.text === `PiCode: ${api.CLOSING_TEXTS.ready}` &&
+      closingNoCredentials.text === `PiCode: ${api.CLOSING_TEXTS.withoutCredentials}` &&
+      closingOtherRuntime.text === `PiCode: ${api.CLOSING_TEXTS.otherRuntime}`,
+    JSON.stringify({ closingReady, closingNoCredentials, closingOtherRuntime }),
   );
   check(
-    "the two closing texts say different things",
-    closingReady !== closingNoCredentials &&
-      closingReady.length > 0 &&
-      closingNoCredentials.length > 0,
-    JSON.stringify({ closingReady, closingNoCredentials }),
+    "the three closing texts say three different things",
+    new Set([closingReady.text, closingNoCredentials.text, closingOtherRuntime.text]).size === 3,
+    JSON.stringify([closingReady.text, closingNoCredentials.text, closingOtherRuntime.text]),
   );
   check(
-    "only the ready closing offers the reload, and it names the reload button",
-    closingReady.includes("recarga la ventana") &&
-      closingNoCredentials.includes("no tiene credenciales") &&
-      closingNoCredentials.includes("nada ha cambiado") &&
+    "only PiCode's own pi with credentials offers the reload",
+    closingReady.reload === true &&
+      closingNoCredentials.reload === false &&
+      closingOtherRuntime.reload === false &&
+      closingOtherRuntimeNoCredentials.reload === false &&
       api.RELOAD_WINDOW_LABEL === "Recargar la ventana",
-    JSON.stringify({ closingReady, closingNoCredentials, reload: api.RELOAD_WINDOW_LABEL }),
+    JSON.stringify({
+      closingReady,
+      closingNoCredentials,
+      closingOtherRuntime,
+      closingOtherRuntimeNoCredentials,
+      reload: api.RELOAD_WINDOW_LABEL,
+    }),
+  );
+  check(
+    "the reload-less closings name what actually blocks the switch",
+    closingReady.text.includes("recarga la ventana") &&
+      closingNoCredentials.text.includes("no tiene credenciales") &&
+      closingNoCredentials.text.includes("nada ha cambiado") &&
+      closingOtherRuntime.text.includes(`«${api.RUNTIME_ROW_LABEL}»`) &&
+      !closingOtherRuntime.text.includes("recarga la ventana") &&
+      api.RUNTIME_ROW_LABEL === "Qué pi se ejecuta",
+    JSON.stringify({
+      closingNoCredentials: closingNoCredentials.text,
+      closingOtherRuntime: closingOtherRuntime.text,
+    }),
   );
 
   // --- the three refusals -----------------------------------------------------
@@ -386,8 +410,9 @@ async function main() {
   console.log(`providers from auth -> ${JSON.stringify(providers)}`);
   console.log(`install environment -> ${JSON.stringify(env)}`);
   console.log("--- closing texts ---");
-  console.log(`[${api.RELOAD_WINDOW_LABEL}] ${closingReady}`);
-  console.log(`[no button] ${closingNoCredentials}`);
+  for (const closing of [closingReady, closingNoCredentials, closingOtherRuntime]) {
+    console.log(`[${closing.reload ? api.RELOAD_WINDOW_LABEL : "no button"}] ${closing.text}`);
+  }
   console.log("--- refusals ---");
   console.log(missing);
   console.log(withoutContent);

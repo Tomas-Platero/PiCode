@@ -25,10 +25,13 @@
  * the packages the copy left configured are installed through the existing install path,
  * into the very directory the copy wrote — never through the resolver's guard, which
  * would answer with the machine's profile while PiCode's own is still credential-less;
- * and the flow closes by offering a window reload, because the running agent was built at
- * startup and would otherwise keep using the other profile while the panel reads this
- * one. When no credentials came across, the closing says so instead of offering a reload
- * that would change nothing.
+ * and the flow closes by telling the truth about which profile the editor is on, because
+ * the running agent was built at startup and the panel is re-read on every refresh. The
+ * reload is offered only when the copy can actually carry the instance: credentials came
+ * across **and** the selected runtime is PiCode's own. With no credentials nothing
+ * switches yet, and with any other runtime the editor keeps running the owner's pi, so
+ * both say so — naming the row that changes it — instead of offering a reload that would
+ * change nothing.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -52,6 +55,7 @@ import {
   type ImportSelection,
 } from "./instance-import";
 import { installSources, type PiMenuDeps } from "./menu";
+import { resolveRuntime } from "./runtime";
 import { resolveAgentDir } from "./transcription";
 
 /** The command the palette runs. Declared in package.json and registered once. */
@@ -346,16 +350,23 @@ export function importProfileEnv(target: string): Record<string, string> {
 export const RELOAD_WINDOW_LABEL = "Recargar la ventana";
 
 /**
- * The two closing messages, one per state of the profile the import just filled.
+ * The row that picks which pi runs, named by the label the PiCode settings category shows.
+ *
+ * Spelled here rather than inline in `CLOSING_TEXTS.otherRuntime` so the closing points at
+ * one named place, and so a test can assert the row the message sends the owner to.
+ */
+export const RUNTIME_ROW_LABEL = "Qué pi se ejecuta";
+
+/**
+ * The three closing messages, one per state the import can leave behind.
  *
  * They are the flow's last word, so they say the one thing this screen must never get
  * wrong: which profile the editor is actually on. The facts the panel shows are re-read on
- * every refresh, but the agent's client is built once at startup, so right after a copy
- * the panel would read PiCode's own profile while the running agent still uses the
- * machine's — the reload is what closes that gap, and it is offered only when the profile
- * can actually carry the instance. Without credentials it cannot, nothing will switch
- * yet, and the honest message says so rather than let the owner believe the import
- * changed the editor.
+ * every refresh, but the agent's client is built once at startup, so right after a copy the
+ * panel would read PiCode's own profile while the running agent still uses the machine's —
+ * the reload is what closes that gap. It is offered only when the copy can actually carry
+ * the instance, which needs two facts at once, and this table carries the wording for all
+ * three outcomes so no caller paraphrases it.
  */
 export const CLOSING_TEXTS = {
   ready:
@@ -365,11 +376,52 @@ export const CLOSING_TEXTS = {
     "El perfil propio de PiCode se llenó, pero no tiene credenciales, así que todavía no " +
     "puede hablar con ningún modelo y nada ha cambiado: el editor sigue usando el perfil " +
     "de tu equipo. Vuelve a importar marcando las credenciales para encenderlo.",
+  otherRuntime:
+    "El perfil propio de PiCode se llenó, pero el editor sigue ejecutando tu pi, no el de " +
+    `PiCode, así que la copia todavía no se usa. Cambia la fila «${RUNTIME_ROW_LABEL}» y ` +
+    "elige el pi propio de PiCode para que la copia entre en uso.",
 } as const;
 
-/** The closing message for whether the target profile now holds credentials. */
-export function closingText(hasCredentials: boolean): string {
-  return `PiCode: ${hasCredentials ? CLOSING_TEXTS.ready : CLOSING_TEXTS.withoutCredentials}`;
+/**
+ * The two facts the closing decision is made of, both handed in by the caller.
+ *
+ * Keeping them explicit is what lets the decision be a pure function of the only two
+ * things that matter here: whether the copy can talk to a model, and whether the editor is
+ * even pointing at the profile the copy went into.
+ */
+export interface ClosingFacts {
+  /** Whether credentials came across into the copy, which is what lets it talk to a model. */
+  hasCredentials: boolean;
+  /** Whether the selected runtime is PiCode's own pi, whose profile is the copy's target. */
+  managed: boolean;
+}
+
+/** The closing message and whether it offers the reload, decided together so they cannot drift. */
+export interface ClosingMessage {
+  /** The message to show, prefix and all. */
+  text: string;
+  /** True only when reloading the window would actually change the profile the agent uses. */
+  reload: boolean;
+}
+
+/**
+ * The closing message for the import's outcome.
+ *
+ * Pure, and the single place the decision and its wording live. The reload is offered only
+ * when PiCode's own pi is selected (the copy fills the profile that pi reads) and the copy
+ * has credentials (so the anti-mute guard will let every reader and every spawn follow it).
+ * Any other runtime means the editor keeps using the owner's pi no matter what is in
+ * PiCode's profile, so the honest answer names the row that would change that instead of
+ * promising a reload that would not.
+ */
+export function closingMessage(facts: ClosingFacts): ClosingMessage {
+  if (!facts.managed) {
+    return { text: `PiCode: ${CLOSING_TEXTS.otherRuntime}`, reload: false };
+  }
+  if (!facts.hasCredentials) {
+    return { text: `PiCode: ${CLOSING_TEXTS.withoutCredentials}`, reload: false };
+  }
+  return { text: `PiCode: ${CLOSING_TEXTS.ready}`, reload: true };
 }
 
 /* ------------------------------------------------------------------ *
@@ -527,17 +579,23 @@ export async function importProfileIntoInstance(
     );
   }
 
-  // The reload is the closing step, and the credentials check is what makes it honest:
-  // without them the profile cannot carry the instance, the guard keeps every reader and
-  // every spawn on the machine's profile, and a reload would change nothing at all.
+  // The reload is the closing step, and the decision is made of two facts at once:
+  // without credentials the profile cannot carry the instance, so the guard keeps every
+  // reader and every spawn on the machine's profile; and with any runtime but PiCode's own
+  // the editor reads the owner's profile no matter what the copy holds. Either way a reload
+  // would change nothing, and the closing says so instead of offering the button.
   const hasCredentials =
     credentialProvidersFromAuth(readTextIfPresent(path.join(to, "auth.json"))).length > 0;
-  if (!hasCredentials) {
-    void vscode.window.showInformationMessage(closingText(false));
+  const closing = closingMessage({
+    hasCredentials,
+    managed: resolveRuntime(context.extensionUri).mode === "managed",
+  });
+  if (!closing.reload) {
+    void vscode.window.showInformationMessage(closing.text);
     return;
   }
   const choice = await vscode.window.showInformationMessage(
-    closingText(true),
+    closing.text,
     RELOAD_WINDOW_LABEL,
   );
   if (choice === RELOAD_WINDOW_LABEL) {
