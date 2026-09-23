@@ -364,9 +364,12 @@ as evidence.
     nadie pidió es exactamente la redundancia que este dueño rechaza: se quitan del plan en vez de
     construirse por inercia.
   - Se queda anotado, sin tocar: el editor multilínea (`editor`) se responde cancelado con el
-    porqué junto al código, y la frase «Qué pi se ejecuta» está escrita en tres ficheros
-    (`pi-settings.ts`, `menu.ts`, `instance-import-command.ts`): hoy coinciden, así que no hay
-    defecto visible, solo riesgo de deriva al renombrar.
+    porqué junto al código; la frase «Qué pi se ejecuta» está escrita en tres ficheros
+    (`pi-settings.ts`, `menu.ts`, `instance-import-command.ts`), que hoy coinciden —riesgo de
+    deriva al renombrar, no defecto visible—; y `readPin` (`runtime.ts:80`) hace
+    `JSON.parse(readFileSync(...))` **sin** red, así que un `runtime.json` corrupto lanza. Es
+    previo a todo esto, pero el aviso automático lo señaló al arreglar el espacio en la ruta:
+    se arregla cuando alguien toque esa función, no de pasada.
 
 ## Evidence
 
