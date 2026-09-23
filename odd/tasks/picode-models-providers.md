@@ -60,9 +60,10 @@ Read as three facts about the surface:
 | Which profile a login writes to | The profile of the **selected instance**, unguarded: `managed` → `<distribution>/data/pi-agent`; `path`/`custom` → `PI_CODING_AGENT_DIR`, else `~/.pi/agent` | One rule for both instances, and it is the profile that instance actually reads. It keeps T5c's rule for the internal instance — a login is what *fills* an empty PiCode profile — and extends it to the external one, which is what the owner asked for |
 | Writing the owner's profile | **Allowed**, on this explicit request, behind one confirmation that names the profile | `picode-pi-instances.md` set the owner's profile read-only *for that feature*; the owner has now asked for the opposite for this one. The reversal is recorded there, and the confirmation is what keeps it a decision instead of an effect |
 | A login is confirmed, not silent | The confirmation appears **only when the target is the owner's own profile** | Behind PiCode's own profile the write is the feature's normal outcome; behind the owner's, it is a file another tool also owns |
+| One confirmation per write, never two | Quitting a declared provider always asks; writing in the owner's profile asks as well; when both are true there is **one** modal that says what is about to happen and in which profile | The entry may carry keys the form never collected (`contextWindow`, `headers`), so a removal is not free, and asking twice about one decision reads as a broken dialog. The button is the models surface's own instead of the login's, because it also fronts a removal and one label has to fit both |
 | `models.json` writes | Direct read-modify-write of the JSON, through `src/models-config.ts` | pi has no setter for that file; the documented way in is the file. The module preserves every key it does not own, refuses a file that does not parse, and replaces the file with a rename |
 | A file PiCode cannot read | Refused, never overwritten | A `models.json` that is not JSON, or whose `providers` is not an object, is a file a stranger wrote. The command says so and stops, because a write over it would drop whatever it held |
-| An API key in `models.json` | Offered as an environment variable (`$NAME`) or a literal, never echoed, and never shown back | Both are pi's own forms; the env var is the safer default and the literal is what a local endpoint wants |
+| An API key in `models.json` | One field that accepts pi's own three forms — `$NAME`, a literal, or `!command` — with the placeholder saying so; it never echoes, and no sentence, log or test prints it back | The three forms are pi's, and formatting them as a choice would be three steps for one value. The env var is what the placeholder recommends, the literal is what a local endpoint wants, and the field is masked because a literal is the key itself. Empty means “leave the key the entry already has”, so a re-save never drops a working credential |
 | Removing a custom provider | Offered, on the same surface | An endpoint that is added with a typo must be removable without a terminal, or the surface creates work it cannot undo |
 | Logging a provider **out** | Deliberately out of scope here | pi does expose `logout`, but a session-scoped disconnect has its own questions (which profile, which ending). It is recorded as an open question rather than built by inertia |
 
@@ -106,6 +107,10 @@ recorded here as evidence.
 ## Open questions
 
 - Logging a provider out from the editor (see the decisions table).
+- **Quitar la clave de una entrada** que ya la tiene: la forma solo sabe ponerla o dejarla
+  como estaba, así que borrarla es hoy un edit del fichero. Es el único camino del panel
+  que no tiene puerta de vuelta, y está anotado aquí en vez de resuelto adivinando (el
+  candidato obvio, un valor centinela en el campo, se lee como una clave más).
 - Whether the panel should also show the credentials already stored (`auth.json`
   provider names), which the `Estado` category reads today.
 - A provider that needs an extension (custom streaming or OAuth) is still a package
@@ -129,16 +134,63 @@ recorded here as evidence.
   a directory as the target, write → read → parse, no leftover temp, a failed replace
   that still removes its temp, and the `0o600` rule only for a **literal** key and only
   off Windows).
-- **T3**: `src/models-command.ts` (642 lines) and `test/models-command.test.js` (47
-  checks), the two `modelo` rows and the models.json state source in
-  `src/pi-settings.ts`, the registration and the state-source wiring in
-  `src/extension.ts`, and the command in `package.json`. `pi-settings` went from the one
-  expected failure to 85 green. **The whole chain**: `npm test` exits 0 — 30 suites,
-  1150 checks, no failure. Three defects were found reviewing the writer's output and
-  fixed before the commit: the owner's profile was being written with no confirmation,
-  removing a declared provider asked nothing (and an entry may carry keys the form never
-  collected), and the key field echoed a literal credential. The suite grew the three
-  guards for exactly those. Two smaller ones: `pickPlaceHolder` was declared and never
-  used (deleted — dead copy is the redundancy this project rejects), and one doc comment
-  claimed `json` was `undefined` exactly when `problem` was set, which a missing file
-  contradicted: a missing file is now `{}`, which is what pi itself reads.
+- **T3**: `src/models-command.ts` and `test/models-command.test.js` (52 checks), the two
+  `modelo` rows and the models.json state source in `src/pi-settings.ts`, the registration
+  and the state-source wiring in `src/extension.ts`, and the command in `package.json`.
+  `pi-settings` went from the one expected failure to 85 green. **The whole chain**:
+  `npm test` exits 0 — 30 suites, 1163 checks, no failure. Three defects were found
+  reviewing the writer's output and fixed before the commit: the owner's profile was being
+  written with no confirmation, removing a declared provider asked nothing (and an entry
+  may carry keys the form never collected), and the key field echoed a literal credential.
+  The suite grew the three guards for exactly those. Two smaller ones: `pickPlaceHolder`
+  was declared and never used (deleted — dead copy is the redundancy this project
+  rejects), and one doc comment claimed `json` was `undefined` exactly when `problem` was
+  set, which a missing file contradicted: a missing file is now `{}`, which is what pi
+  itself reads.
+- **T5 (the verification pass)**: four more defects, found by the independent read-only
+  review and fixed in `e6d1c04` — see *Independent verification* below. Their suites grew
+  with them (`models-config` 57 → 65, `models-command` 47 → 52).
+- **T4**: the distribution re-staged so the editor actually carries it:
+  `distribution/apply-picode.ps1 -Apply` reported the product already matching its
+  delta, the portable profile and `settings.json` untouched, and staged the panel into
+  `resources/app/extensions/picode-pi-chat` — the folder now holds
+  `models-command.js`, `models-config.js` and the new command in `package.json`. That
+  tree is a build artifact (untracked), so the staging is reported here instead of in a
+  commit.
+- **Independent verification** (read-only, `gentle-ai-verify`) over the three commits:
+  result below.
+
+## Independent verification
+
+Read-only pass (`gentle-ai-verify`) over the three commits, and **four confirmed defects**
+found and fixed (`e6d1c04`), each one reachable:
+
+1. **PiCode refused files pi accepts.** pi parses `models.json` as
+   `JSON.parse(stripJsonComments(stripBom(content)))`, so `//` comments, a trailing comma
+   and a BOM are readable there; `JSON.parse` alone called such a file invalid. The
+   tolerances are now mirrored from pi's own `dist/utils/json.js`, and the file that comes
+   back normalized says so, because the write serializes the parsed object.
+2. **The mirror image was wrong too.** One provider that is not an object, or models that
+   are not `{ id }` objects, makes pi discard **every** entry in the file. Those two shapes
+   are now refused, because listing providers pi is ignoring — and promising a reload that
+   reads nothing — is worse than refusing the file.
+3. **A literal key was briefly world-readable.** The temp file was created at the default
+   mode and the target narrowed after the rename, so the secret existed at 0644 until the
+   rename — and forever if the process died in that window. The temp is now created at the
+   owner's mode, as pi's own credential writer does.
+4. **The reload was promised where it does nothing.** With PiCode's own pi selected and its
+   profile still unusable, the file lands in a profile the running agent does not read; the
+   ending now says that and offers no button — the same rule the import's closing follows.
+
+Also fixed from the same report: a failed write named the filesystem's raw message, which
+carries the profile's path onto the screen, and it now names a code the owner can act on;
+and a provider's `name` was parsed and never shown, which is the dead data this project
+does not keep lying around.
+
+Two suspicions are **accepted, not fixed**, and written down so nobody rediscovers them:
+the read-modify-write window from the pickers to the write can drop a provider another
+window added in the same seconds (single-user desktop, and locking the file is pi's own
+business), and the login's no-session fallback still builds the target runtime — which may
+create the profile directory and an empty `auth.json` — before its modal. In both cases
+what is written is the profile the selection names, so neither can land a credential or a
+provider in a profile the owner did not choose.
