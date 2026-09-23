@@ -162,6 +162,8 @@ full `npm test` chain green before it landed. Nothing is pushed; nothing is rele
 | Fase 2, task 3.1 (host) | `41e6303` | Skill discovery over the three automatic routes, and pi's package filters surviving a write |
 | Fase 2, task 3.1 (rows) | `951ffbb` | The skills derivation as a pure module |
 | Fase 2, task 3.1 (list and switch) | `59175a8` | The Skills category listing and a working per-skill switch, with the discovery cached against the datum that invalidates it |
+| Fase 2, task 3.1 (the table) | `be04ff2` | The Skills table's summary, search, origin and state filters, sortable headers and pagination, over the pure module |
+| Fase 2, task 3.2 | _see `git log`_ | The live `/` dropdown in the composer, which inserts instead of sending, over one shared command read |
 
 Decisions taken during the run, recorded because the owner asked not to be
 interrupted and these were settled without them:
@@ -194,13 +196,6 @@ where a design was settled it is recorded here so it does not have to be re-deri
   painter on purpose: refactoring the working packages table inside the same change was
   the risk that made two writer attempts fail. The migration is its own,
   behaviour-preserving unit.
-- **`/` autocomplete in the chat composer.** Fully scouted: the command payload carries
-  `name`, `description?` and `source` (`extension` | `prompt` | `skill`) but **no origin**,
-  so the origin comes from the discovery; the composer's dropdown is reusable, but its
-  `chooseOptionFor` **sends** a message (`setModel`, `setThinkingLevel`) where `/` must
-  **insert into the prompt**, so the option shape needs a second action kind; and the
-  command list is fetched but never posted to the webview today, so a new host→webview
-  message is needed.
 - **Hot reload.** Only partly possible, and the panel already declares which rows need a
   restart: packages, transport, runtime and cache warming cannot reach a running agent.
 
