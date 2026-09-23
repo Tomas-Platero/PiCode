@@ -25,6 +25,12 @@ import { buildWebviewHtml } from "./webview-html";
  * exist, run by the host; the wizard only names them, which is the same rule as the install
  * above. No path through the wizard ends in "now run this in a terminal".
  *
+ * That part also decides where the step stops advancing by itself: it says something, so the
+ * step stays until it is read, and it carries the step's own way forward for the owner who
+ * wants to keep running his pi meanwhile. Both travel together — the button lives inside the
+ * part — so a profile that just became usable takes the warning and the way out at once, and
+ * applying the pi is then what moves the step on.
+ *
  * The decision of what that part says is pure (`describeProfilePart`), so the three states —
  * PiCode's own pi without a profile, with one, and the owner's pi — can be exercised without
  * an editor, and the renderer is left with nothing to decide.
@@ -247,6 +253,9 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
         <div id="profile-part" hidden>
           <p id="profile-part-text" class="onboarding-current"></p>
           <div id="profile-part-offers" class="onboarding-actions"></div>
+          <div class="onboarding-actions">
+            <button id="profile-part-continue" class="onboarding-button" type="button">Continuar con el perfil de tu equipo</button>
+          </div>
         </div>
       </section>
       <section id="step-gentle" class="onboarding-section" hidden>

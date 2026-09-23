@@ -29,6 +29,7 @@
     profilePart: document.getElementById("profile-part"),
     profilePartText: document.getElementById("profile-part-text"),
     profilePartOffers: document.getElementById("profile-part-offers"),
+    profilePartContinue: document.getElementById("profile-part-continue"),
     gentleCurrent: document.getElementById("gentle-current"),
     gentleInstall: document.getElementById("gentle-install"),
     gentleSkip: document.getElementById("gentle-skip"),
@@ -195,9 +196,17 @@
     return button;
   }
 
+  // The one fact the part and the step's own way forward share, read from the host's own
+  // decision. While it is true the step has something to say: it does not move on by itself,
+  // and the button that moves it on is inside the part, so the two cannot disagree about
+  // whether the owner still needs a way out.
+  function profilePartVisible() {
+    return state.profile !== null && state.profile.visible === true;
+  }
+
   function renderProfilePart() {
     var part = state.profile;
-    var visible = part !== null && part.visible === true;
+    var visible = profilePartVisible();
     elements.profilePart.hidden = !visible;
     elements.profilePartText.textContent =
       visible && typeof part.text === "string" ? part.text : "";
@@ -305,7 +314,11 @@
       case "runtimeResult":
         elements.runtimeApply.disabled = false;
         showResult(elements.runtimeResult, message.ok, message.message);
-        if (message.ok) {
+        // The step moves on by itself only when it has nothing to say. While the profile part
+        // is visible, the sentence and its two doors are what has to be read, so the automatic
+        // advance waits for the step's own way forward to be pressed. Once the part is gone
+        // this very branch is that way forward again, so nobody is left without one.
+        if (message.ok && !profilePartVisible()) {
           showStep("gentle");
         }
         break;
@@ -334,6 +347,13 @@
     showResult(elements.runtimeResult, null, "");
     elements.runtimeApply.disabled = true;
     send({ type: "applyRuntime", mode: state.mode, path: elements.runtimePath.value });
+  });
+
+  // The pi step's way forward while it has something to say. It only moves between the
+  // wizard's own steps: the editor already works with the pi in force, and trapping the owner
+  // here would be a worse failure than the automatic advance being fixed.
+  elements.profilePartContinue.addEventListener("click", function () {
+    showStep("gentle");
   });
 
   elements.gentleInstall.addEventListener("click", function () {

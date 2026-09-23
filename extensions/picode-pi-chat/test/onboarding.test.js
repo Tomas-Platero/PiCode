@@ -33,6 +33,13 @@ const { pathToFileURL } = require("node:url");
 const EXTENSION_ROOT = path.resolve(__dirname, "..");
 const SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
 
+/**
+ * The pi step's own way forward, the label the owner reads while the part has something to
+ * say. It is Spanish and lives in the markup next to the two doors, because it is one of them
+ * in substance: pressing it leaves the step without filling PiCode's profile.
+ */
+const CONTINUE_LABEL = "Continuar con el perfil de tu equipo";
+
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function resolve(request, ...rest) {
   if (request === "vscode") {
@@ -66,6 +73,101 @@ function markupIds(source) {
 /** The ids the panel script looks up. */
 function scriptIds(source) {
   return new Set([...source.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]));
+}
+
+/**
+ * Runs the webview script once in a throwaway DOM and hands back what it wrote.
+ *
+ * The renderer is an IIFE that touches `document`, `window` and the VS Code API and exports
+ * nothing, so the smallest honest way to observe what it does with a host message is to give
+ * it those three and watch which step it leaves visible. Nothing here reimplements the script:
+ * every node a script id looks up is a stub, and only `hidden` and the registered listeners
+ * are read back. It is what makes "the step does not advance" an observation instead of a
+ * regex over the source.
+ */
+function runRenderer(scriptSource) {
+  const nodes = new Map();
+  const makeNode = (id) => ({
+    id,
+    hidden: false,
+    textContent: "",
+    value: "",
+    disabled: false,
+    checked: false,
+    type: "",
+    name: "",
+    className: "",
+    children: [],
+    listeners: {},
+    classList: {
+      classes: new Set(),
+      toggle(name, on) {
+        if (on) {
+          this.classes.add(name);
+        } else {
+          this.classes.delete(name);
+        }
+      },
+      add(name) {
+        this.classes.add(name);
+      },
+      remove(name) {
+        this.classes.delete(name);
+      },
+    },
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    },
+    addEventListener(type, handler) {
+      this.listeners[type] = handler;
+    },
+  });
+  const documentStub = {
+    activeElement: null,
+    getElementById(id) {
+      if (!nodes.has(id)) {
+        nodes.set(id, makeNode(id));
+      }
+      return nodes.get(id);
+    },
+    createElement() {
+      return makeNode(undefined);
+    },
+  };
+  const posted = [];
+  let onMessage = null;
+  const windowStub = {
+    addEventListener(type, handler) {
+      if (type === "message") {
+        onMessage = handler;
+      }
+    },
+  };
+  // eslint-disable-next-line no-new-func
+  new Function("acquireVsCodeApi", "document", "window", scriptSource)(
+    () => ({ postMessage: (message) => posted.push(message) }),
+    documentStub,
+    windowStub,
+  );
+  return {
+    nodes,
+    posted,
+    send(data) {
+      onMessage({ data });
+    },
+  };
+}
+
+/** The step the wizard is currently showing, read from the sections' own `hidden` flag. */
+function shownStep(nodes) {
+  if (nodes.get("step-gentle").hidden === false) {
+    return "gentle";
+  }
+  if (nodes.get("step-summary").hidden === false) {
+    return "summary";
+  }
+  return "pi";
 }
 
 async function main() {
@@ -295,6 +397,70 @@ async function main() {
     "between #step-pi and #step-gentle",
   );
 
+  // --- the step does not move on by itself, and does not trap him either ------
+
+  // The behaviour, observed in a throwaway DOM instead of inferred from the source: the pi
+  // step has something to say (the profile part is visible for the pi in force), a successful
+  // apply must leave it where it is — and the step's own way forward must still take the owner
+  // to the second question. With nothing to say, the automatic advance is exactly today's.
+
+  const withSomethingToSay = runRenderer(scriptSource);
+  withSomethingToSay.send({
+    type: "instanceProfile",
+    profile: { visible: true, text: withoutProfile.text, offers: [] },
+  });
+  withSomethingToSay.send({ type: "runtimeResult", ok: true, message: "Listo." });
+  check(
+    "with the part visible, a successful apply leaves the step on the pi question",
+    shownStep(withSomethingToSay.nodes) === "pi" &&
+      withSomethingToSay.nodes.get("step-gentle").hidden === true,
+    `shown step: ${shownStep(withSomethingToSay.nodes)}`,
+  );
+
+  const continueButton = withSomethingToSay.nodes.get("profile-part-continue");
+  const continueHandler = continueButton.listeners.click;
+  if (typeof continueHandler === "function") {
+    continueHandler();
+  }
+  check(
+    "the step's own way forward still moves on to the second question",
+    typeof continueHandler === "function" && shownStep(withSomethingToSay.nodes) === "gentle",
+    `shown step after the way forward: ${shownStep(withSomethingToSay.nodes)}`,
+  );
+  check(
+    "that way forward is inside the part, so the word and the way out share one state",
+    onboardingSource.includes(`id="profile-part-continue"`) &&
+      onboardingSource.indexOf('id="profile-part-continue"') >
+        onboardingSource.indexOf('id="profile-part"') &&
+      onboardingSource.indexOf('id="profile-part-continue"') <
+        onboardingSource.indexOf('id="step-gentle"'),
+    "#profile-part-continue lives between #profile-part and #step-gentle",
+  );
+  check(
+    "its label is Spanish, next to the two doors that fill the profile",
+    onboardingSource.includes(CONTINUE_LABEL) && scriptSource.includes("profile-part-continue"),
+    CONTINUE_LABEL,
+  );
+
+  const nothingToSay = runRenderer(scriptSource);
+  nothingToSay.send({
+    type: "instanceProfile",
+    profile: { visible: false, text: "", offers: [] },
+  });
+  nothingToSay.send({ type: "runtimeResult", ok: true, message: "Listo." });
+  check(
+    "with nothing to say, a successful apply advances as it does today",
+    shownStep(nothingToSay.nodes) === "gentle",
+    `shown step: ${shownStep(nothingToSay.nodes)}`,
+  );
+
+  check(
+    "the renderer decides the advance from the host's own visible flag, not a second rule",
+    /if \(message\.ok && !profilePartVisible\(\)\)/.test(scriptSource) &&
+      /function profilePartVisible\(\)/.test(scriptSource),
+    "message.ok && !profilePartVisible()",
+  );
+
   // --- the exact text the owner reads -----------------------------------------
 
   console.log("--- the pi step's profile part ---");
@@ -304,6 +470,13 @@ async function main() {
   console.log(`[visible] ${withoutCredentials.text}`);
   console.log(`  ${offers.map((offer) => `[${offer.label} -> ${offer.command}]`).join(" ")}`);
   console.log(`[oculto] (perfil propio ya utilizable) ${usable.text || "(sin texto)"}`);
+  console.log("---");
+  console.log("--- does the pi step move on by itself? ---");
+  console.log(
+    `[tiene algo que decir] runtimeResult ok -> el paso se queda en «pi»; ` +
+      `la salida propia es «${CONTINUE_LABEL}» y lleva al paso 2`,
+  );
+  console.log("[nada que decir]      runtimeResult ok -> avanza al paso 2, como antes");
   console.log("---");
 
   let failed = 0;
