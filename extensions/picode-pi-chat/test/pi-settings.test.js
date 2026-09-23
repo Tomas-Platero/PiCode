@@ -56,8 +56,8 @@ async function rejectionOf(promise) {
 
 /**
  * A `SettingsManager` with the same structural shape as the real one, backed by an
- * in-memory record: the global values plus the five per-scope resource lists, which
- * are the only settings pi can write in a project.
+ * in-memory record: the global values plus the per-scope resource lists, which are
+ * the only settings pi can write in a project.
  */
 function createFakeManager() {
   const global = {
@@ -92,8 +92,6 @@ function createFakeManager() {
     installTelemetry: true,
     analytics: false,
     skillCommands: true,
-    theme: "dark",
-    collapseChangelog: false,
     steeringMode: "one-at-a-time",
     followUpMode: "one-at-a-time",
     sessionDir: undefined,
@@ -101,14 +99,12 @@ function createFakeManager() {
     extensions: ["/global/ext"],
     skills: [],
     prompts: [],
-    themes: [],
   };
   const project = {
     packages: undefined,
     extensions: undefined,
     skills: undefined,
     prompts: undefined,
-    themes: undefined,
   };
 
   const fake = {
@@ -266,22 +262,6 @@ function createFakeManager() {
       global.skillCommands = enabled;
     },
 
-    getThemeSetting: () => global.theme,
-    setTheme: (theme) => {
-      global.theme = theme;
-    },
-    getThemePaths: () => [...global.themes],
-    setThemePaths: (paths) => {
-      global.themes = [...paths];
-    },
-    setProjectThemePaths: (paths) => {
-      project.themes = [...paths];
-    },
-    getCollapseChangelog: () => global.collapseChangelog,
-    setCollapseChangelog: (collapse) => {
-      global.collapseChangelog = collapse;
-    },
-
     getSteeringMode: () => global.steeringMode,
     setSteeringMode: (mode) => {
       global.steeringMode = mode;
@@ -434,12 +414,12 @@ async function main() {
   );
 
   check(
-    "the project scope is offered by the packages table, the skills list and the theme paths",
+    "the project scope is offered by the packages table and the skills list",
     same(
       PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project")).map(
         (descriptor) => descriptor.key,
       ),
-      ["packages", "discoveredSkills", "themes"],
+      ["packages", "discoveredSkills"],
     ),
     PI_SETTING_DESCRIPTORS.filter((descriptor) => descriptor.scopes.includes("project"))
       .map((descriptor) => descriptor.key)
@@ -481,10 +461,10 @@ async function main() {
   check(
     "a subset is ordered by the rail, not by the order it arrives in",
     same(
-      describeSettings([setting("steeringMode"), setting("theme")]).map(
+      describeSettings([setting("steeringMode"), setting("quietStartup")]).map(
         (group) => group.category.id,
       ),
-      ["apariencia", "sesion"],
+      ["herramientas", "sesion"],
     ),
     "",
   );
@@ -708,10 +688,10 @@ async function main() {
 
   check(
     "a list accepts only non-empty strings",
-    same(coerceSettingValue(setting("themes"), ["/a", "/b"]), ["/a", "/b"]) &&
-      coerceSettingValue(setting("themes"), ["/a", 3]) === undefined &&
-      coerceSettingValue(setting("themes"), ["/a", ""]) === undefined &&
-      coerceSettingValue(setting("themes"), "/a") === undefined,
+    same(coerceSettingValue(setting("npmCommand"), ["pnpm", "install"]), ["pnpm", "install"]) &&
+      coerceSettingValue(setting("npmCommand"), ["pnpm", 3]) === undefined &&
+      coerceSettingValue(setting("npmCommand"), ["pnpm", ""]) === undefined &&
+      coerceSettingValue(setting("npmCommand"), "pnpm") === undefined,
     "",
   );
 
@@ -902,18 +882,23 @@ async function main() {
       JSON.stringify(fake.getGlobalSettings().packages),
     );
 
-    await service.write("project", "themes", ["/proyecto/temas"]);
+    await service.write("project", "packages", [
+      { source: "npm:pi-web-access", paused: false },
+    ]);
     const projectValues = await service.readAll("project");
     const globalValues = await service.readAll("global");
     check(
       "a project write lands in the project scope",
-      same(projectValues.themes, ["/proyecto/temas"]),
-      JSON.stringify(projectValues.themes),
+      same(projectValues.packages, [{ source: "npm:pi-web-access", paused: false }]),
+      JSON.stringify(projectValues.packages),
     );
     check(
       "the global scope is untouched by a project write",
-      same(globalValues.themes, []),
-      JSON.stringify(globalValues.themes),
+      same(globalValues.packages, [
+        { source: "npm:pi-web-access", paused: false },
+        { source: "npm:pi-lens", paused: true },
+      ]),
+      JSON.stringify(globalValues.packages),
     );
 
     await service.reload();

@@ -24,8 +24,11 @@
  *   `sessionDir` are all in that group); inventing a write path — hand-editing the
  *   settings file — is out of scope for this surface.
  * - Only a setting with a project setter is offered in the project scope. That is
- *   the resource lists the catalogue still carries (`packages`, `skills`,
- *   `themes`); everything else is global-only.
+ *   the packages table; everything else is global-only.
+ *
+ * pi's own appearance settings (its theme, the theme paths and whether the
+ * changelog starts collapsed) are deliberately absent: they configure pi's
+ * terminal interface, which this surface does not govern.
  */
 
 import { pathToFileURL } from "node:url";
@@ -85,7 +88,6 @@ export type PiSettingsCategoryId =
   | "herramientas"
   | "paquetes"
   | "skills"
-  | "apariencia"
   | "sesion";
 
 export interface PiSettingOption {
@@ -295,14 +297,6 @@ export interface PiSettingsManager {
   getEnableSkillCommands(): boolean;
   setEnableSkillCommands(enabled: boolean): void;
 
-  /* Apariencia */
-  getThemeSetting(): string | undefined;
-  setTheme(theme: string): void;
-  setThemePaths(paths: string[]): void;
-  setProjectThemePaths(paths: string[]): void;
-  getCollapseChangelog(): boolean;
-  setCollapseChangelog(collapse: boolean): void;
-
   /* Sesión */
   getSteeringMode(): PiSteeringMode;
   setSteeringMode(mode: PiSteeringMode): void;
@@ -316,15 +310,19 @@ export interface PiSettingsManager {
  *
  * Only the keys that have a project setter are declared: every other setting lives
  * in the global object, where the typed getter is already the read path. The names
- * are pi's own `Settings` keys, which is why the four resource lists are
- * `extensions`, `skills`, `prompts` and `themes` rather than "paths".
+ * are pi's own `Settings` keys, which is why the resource lists are `extensions`,
+ * `skills` and `prompts` rather than "paths".
+ *
+ * The top-level `themes` key is not declared any more: it was the theme-path list of
+ * the retired Apariencia category, and pi's own appearance settings are out of this
+ * surface's scope. A package's `themes` *filter* is a different thing and stays
+ * declared on `PiPackageFilters`.
  */
 export interface PiSettingsRecord {
   packages?: readonly PiPackageSource[];
   extensions?: readonly string[];
   skills?: readonly string[];
   prompts?: readonly string[];
-  themes?: readonly string[];
 }
 
 /**
@@ -478,11 +476,6 @@ export const PI_SETTINGS_CATEGORIES: readonly PiSettingsCategory[] = [
     id: "skills",
     label: "Skills",
     description: "Qué skills carga pi y si se pueden lanzar como comandos de barra.",
-  },
-  {
-    id: "apariencia",
-    label: "Apariencia",
-    description: "Tema de pi y detalles de su interfaz.",
   },
   {
     id: "sesion",
@@ -882,10 +875,10 @@ function toOptionalText(value: PiSettingValue, key: string): string | undefined 
 }
 
 /**
- * Text a setter requires as a string. `undefined` here means "unset", and the three
- * settings that use this helper (default provider, default model, theme) have no
- * setter that clears them, so the empty string — which pi's own readers treat as
- * unset — is what is written.
+ * Text a setter requires as a string. `undefined` here means "unset", and the two
+ * settings that use this helper (default provider and default model) have no setter
+ * that clears them, so the empty string — which pi's own readers treat as unset — is
+ * what is written.
  */
 function toRequiredText(value: PiSettingValue, key: string): string {
   if (value === undefined) {
@@ -909,19 +902,6 @@ function toList(value: PiSettingValue, key: string): string[] {
     entries.push(entry);
   }
   return entries;
-}
-
-/** The resource lists that hold plain paths; `packages` is the one that does not. */
-type PiSettingsStringListField = "extensions" | "skills" | "prompts" | "themes";
-
-/** Reads a resource list out of one scope, leaving "not set here" as `undefined`. */
-function readScopedList(
-  manager: PiSettingsManager,
-  scope: PiSettingScope,
-  field: PiSettingsStringListField,
-): string[] | undefined {
-  const stored = scopedRecord(manager, scope)[field];
-  return stored === undefined ? undefined : [...stored];
 }
 
 /* ------------------------------------------------------------------ *
@@ -1419,53 +1399,6 @@ export const PI_SETTING_DESCRIPTORS: readonly PiSettingDescriptor[] = [
     write: (manager, _scope, value) =>
       manager.setEnableSkillCommands(toBoolean(value, "enableSkillCommands")),
   },
-  /* --- Apariencia ------------------------------------------------- *
-   * `theme` has no project setter (only the theme *paths* do), so the theme itself
-   * is global-only and the project scope would be a control that cannot work.
-   */
-
-  {
-    key: "theme",
-    category: "apariencia",
-    label: "Tema",
-    description: "Tema que pi usa en su propia interfaz.",
-    kind: "text",
-    scopes: GLOBAL_SCOPE,
-    readOnly: false,
-    read: (manager) => manager.getThemeSetting(),
-    write: (manager, _scope, value) => manager.setTheme(toRequiredText(value, "theme")),
-  },
-  {
-    key: "themes",
-    category: "apariencia",
-    label: "Rutas de temas",
-    description: "Carpetas con temas propios que se suman a los que pi ya trae.",
-    kind: "list",
-    scopes: ALL_SCOPES,
-    readOnly: false,
-    read: (manager, scope) => readScopedList(manager, scope, "themes"),
-    write: (manager, scope, value) => {
-      const paths = toList(value, "themes");
-      if (scope === "project") {
-        manager.setProjectThemePaths(paths);
-      } else {
-        manager.setThemePaths(paths);
-      }
-    },
-  },
-  {
-    key: "collapseChangelog",
-    category: "apariencia",
-    label: "Changelog plegado",
-    description: "Muestra el changelog de una versión nueva plegado en lugar de abierto.",
-    kind: "boolean",
-    scopes: GLOBAL_SCOPE,
-    readOnly: false,
-    read: (manager) => manager.getCollapseChangelog(),
-    write: (manager, _scope, value) =>
-      manager.setCollapseChangelog(toBoolean(value, "collapseChangelog")),
-  },
-
   /* --- Sesión ----------------------------------------------------- */
 
   {
