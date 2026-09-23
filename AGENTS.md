@@ -42,6 +42,64 @@ En la práctica:
   (`media/picode.svg`), no la marca con su placa de fondo: a ese tamaño la placa se ve
   como un bloque oscuro sobre el fondo del editor.
 
+## El método se llama ODD
+
+> "y ya no es SDD es ODD"
+
+- La metodología de la capa Gentle AI es **ODD (Organic Driven Development)**. SDD es
+  una rama dentro de ODD, no el nombre del método.
+- En lo que el dueño lee, «SDD» no aparece como nombre del método. Lo que sí pertenece a
+  esa rama —sus comandos y sus artefactos— conserva su nombre propio.
+
+## El pi del editor es nuestro, y se gobierna desde aquí
+
+> "no quiero que la versión de picode que vive en nuestro editor sea fija,
+> quiero poder actualizarlo desde el editor"
+>
+> "El perfil de pi me gustaría que fuera interno y la configuración, etc también
+> interna, pero poder 'importar' de la del pi del path"
+
+En la práctica:
+
+- El pi que corre dentro del editor no es una versión congelada a mano: se actualiza
+  **desde el propio editor**, sin editar ficheros ni reinstalar el editor.
+- Su perfil —ajustes, credenciales, modelos, paquetes, skills, **MCPs** y memoria— vive
+  **dentro de PiCode**, no en `~/.pi/agent`. El pi del PATH y el del editor dejan de compartir
+  carpeta: lo que se configure en uno no toca al otro.
+- Si usa el pi propio de PiCode, **todo es propio**: paquetes, skills, MCPs, credenciales y
+  memoria. Nada se lee ni se escribe fuera de PiCode, ni siquiera para consultarlo.
+- Y desde ahí se puede **importar** lo del pi del PATH cuando el dueño lo pida. No se copia
+  solo, y nada se sobreescribe sin decirlo: importar credenciales es una decisión, no un
+  efecto colateral de abrir el editor.
+- **Regla de seguridad, no de estilo**: el perfil interno no se activa si queda sin
+  credenciales. Un perfil propio y vacío deja el editor sin poder hablar con ningún modelo,
+  y eso no es aislamiento, es una avería. Primero se importa —o el dueño decide
+  conscientemente empezar de cero—, y solo después se cambia la carpeta.
+
+## El programa es gratis; lo que se vende es la nube
+
+> "el servicio que voy a vender no es el programa de picode, este será gratuito 100%,
+> si no la posibilidad de guardar toda configuración, ya sea de picode, pi o gentle
+> en la nube"
+
+En la práctica:
+
+- PiCode es gratis y completo. Ninguna función se recorta para vender el servicio, y nada
+  de lo que hace depende de la nube para funcionar.
+- Lo que se vende es **guardar toda la configuración en la nube**: la de PiCode, la de pi y
+  la de Gentle AI, como una sola cosa.
+- Consecuencia de ingeniería, y es la que manda: esa configuración tiene que vivir en **un
+  sitio propio de PiCode** y poder subirse y bajarse **como una unidad**. Por eso el perfil
+  interno no es solo aislamiento — es la unidad que se sincroniza. Un perfil compartido con
+  `~/.pi/agent` pertenece al usuario y a cualquier otra herramienta de la máquina: eso no se
+  puede subir ni sobreescribir desde un producto.
+- Importar lo que ya existe en el pi del PATH deja de ser una comodidad y pasa a ser el
+  **camino de entrada** de quien ya tiene perfil: repetible, y sin sobreescribir nada por
+  defecto.
+- **Las credenciales son la parte delicada.** `auth.json` guarda tokens de proveedor; subir
+  eso a la nube exige cifrado y consentimiento explícito. Copiarlas o subirlas es siempre
+  una decisión del dueño, nunca un efecto colateral.
+
 ## Cómo quiero que se trabaje
 
 > "No me pidas permisos ni que revise yo nada, termina TODAS las fases."
