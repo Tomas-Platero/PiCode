@@ -294,14 +294,16 @@ as evidence.
     de ajustes («Usa «Importar el perfil de tu pi» para encenderlo») porque un botón debajo de la
     frase **ya es** la instrucción, y apuntar a una sola fila habría dejado fuera la puerta del
     login, que llegó después de escribir esa frase.
-  - [ ] **T6c — El primer arranque no puede saltarse la verdad.** Hueco que reportó el escritor de
-    T6a: al pulsar «Aplicar este pi» con el pi propio, el asistente **avanza solo** al paso 2 con
-    el mensaje `runtimeResult` (pre-existente) y las pestañas no tienen manejador, así que en el
-    camino que más importa —el primer arranque— la frase y las dos puertas **no se llegan a leer**.
-    El dueño se queda con un editor que sigue usando su perfil y sin ninguna explicación. Cuando el
-    paso tiene algo que decir, no debe avanzar por su cuenta; pero **tampoco puede atraparle**
-    (seguir sin llenar el perfil tiene que seguir siendo posible, porque su editor funciona con su
-    propio pi): necesita una forma propia de continuar.
+  - [x] **T6c — El primer arranque no puede saltarse la verdad.** Arreglado: el paso solo avanza
+    cuando **no tiene nada que decir** (`message.ok && !profilePartVisible()`), y gana una salida
+    propia —«Continuar con el perfil de tu equipo»— que vive **dentro** de la parte del perfil.
+    Eso es lo que hace que la regla se sostenga con **un solo estado** en vez de dos: mientras la
+    parte se ve, la salida está; y cuando una puerta deja el perfil usable, frase y salida
+    desaparecen juntas, momento en que aplicar el pi vuelve a ser lo que avanza. Nunca hay un paso
+    visible sin salida, ni una salida que se salte lo que el paso tenía que decir. `35ac3fe`+este.
+    La suite **ejecuta** los dos comportamientos (con la parte visible el paso se queda y su botón
+    llega al paso 2; sin nada que decir, avanza como antes) en un DOM de usar y tirar, en vez de
+    inferirlos: la mejor evidencia de comportamiento de todo este trabajo.
   - [x] **T6b — Iniciar sesión en un proveedor, desde el editor.** `picode.piChat.loginProvider`
     («PiCode: Iniciar sesión en un proveedor»): pide el proveedor en los términos del dueño
     —diciendo si es **clave** o **suscripción**— y corre el login propio de pi contra el perfil
