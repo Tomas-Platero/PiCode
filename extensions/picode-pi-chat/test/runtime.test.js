@@ -21,6 +21,14 @@ const { pathToFileURL } = require("node:url");
 
 const EXTENSION_ROOT = path.resolve(__dirname, "..");
 const REPOSITORY_ROOT = path.resolve(EXTENSION_ROOT, "..", "..");
+/**
+ * Where the editor loads this extension from, once this repository has that tree unpacked.
+ *
+ * The staged copy is written by the apply script and `.gitignore` keeps it out of the
+ * repository, so a fresh clone has no such folder. The one probe that legitimately wants it
+ * — whether an importable pi exists on this disk — is measured there when it is there, and
+ * degrades to the source directory when it is not.
+ */
 const STAGED_EXTENSION = path.join(
   REPOSITORY_ROOT,
   "resources",
@@ -50,8 +58,35 @@ async function main() {
 
   const results = [];
   const check = (label, ok, detail) => results.push({ label, ok: Boolean(ok), detail });
+  const cleanups = [];
 
-  const extensionUri = { fsPath: STAGED_EXTENSION };
+  /*
+   * A throwaway distribution, not the one this repository sits in.
+   *
+   * This suite used to point at `<repository>/resources/app/extensions/picode-pi-chat` — the
+   * *staged* copy the apply script writes, which is not versioned. A fresh clone therefore
+   * had no such folder and the whole suite crashed before its first check, and the assertion
+   * that read the real tree ("the editor is there") only passed on a machine with the 1 GB
+   * payload unpacked. What the derivation has to be checked against is a *layout*, and a
+   * layout is something a test can build: the pin is the extension's own tracked file, copied
+   * into the fixture, so the suite still reads what the product ships.
+   */
+  const distribution = fs.mkdtempSync(path.join(os.tmpdir(), "picode-runtime-dist-"));
+  cleanups.push(distribution);
+  const extensionDir = path.join(
+    distribution,
+    "resources",
+    "app",
+    "extensions",
+    "picode-pi-chat",
+  );
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(EXTENSION_ROOT, "runtime.json"),
+    path.join(extensionDir, "runtime.json"),
+  );
+
+  const extensionUri = { fsPath: extensionDir };
 
   // --- paths -----------------------------------------------------------------
 
@@ -62,15 +97,12 @@ async function main() {
     root,
   );
 
-const distributionRoot = path.dirname(path.dirname(root));
-// Name-agnostic on purpose: Step 5 renames the executable, so asserting a particular name
-// makes this a statement about one machine's state rather than about the derivation.
-const executables = ["PiCode.exe", "VSCodium.exe"];
-check(
-    "the derived root is the distribution itself (the editor is there)",
-    executables.some((name) => fs.existsSync(path.join(distributionRoot, name))),
-    distributionRoot,
-);
+  const distributionRoot = path.dirname(path.dirname(root));
+  check(
+    "the four levels from the extension land on the distribution itself",
+    distributionRoot === distribution,
+    `${distributionRoot} (expected ${distribution})`,
+  );
 
   const pin = runtime.readPin(extensionUri);
   check(
@@ -259,7 +291,9 @@ check(
   // Machine-dependent by design, like the --version probe above: whether a pi is
   // installed here is a fact about this disk, so the guard decides what is measurable
   // and the assertion only runs against a real entry.
-  const realEntry = runtime.resolveSdkEntry(extensionUri);
+  const realEntry = runtime.resolveSdkEntry(
+    fs.existsSync(STAGED_EXTENSION) ? { fsPath: STAGED_EXTENSION } : extensionUri,
+  );
   if (realEntry === undefined) {
     check(
       "the embedded transport is not measurable on this machine: no importable pi on PATH",
@@ -511,6 +545,10 @@ check(
   );
 
   // --- report ----------------------------------------------------------------
+
+  for (const temporary of cleanups) {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
 
   let failed = 0;
   for (const result of results) {
