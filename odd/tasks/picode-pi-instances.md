@@ -175,6 +175,12 @@ as evidence.
     Va **después de T4a**: ese camino lanza el pi, y si no apunta al perfil de la instancia
     elegida instalaría en el perfil equivocado — que es justo el cruce que este trabajo
     existe para evitar.
+    Y **aplicar el cambio de perfil**. Los perfiles se leen en momentos distintos: la fila se
+    relee en cada refresco, pero el cliente del agente se construye al arrancar. Así que tras
+    importar hay que **ofrecer recargar la ventana**. Si no, la fila diría «el perfil propio de
+    PiCode» mientras el agente que ya está corriendo sigue usando el de la máquina: una
+    interfaz que miente sobre lo que está pasando, que es lo que menos se puede permitir en la
+    pantalla que existe para decir qué perfil usas.
 - [ ] **T4 — El interruptor.** El aislamiento de verdad: el perfil de la instancia elegida
   llega a todo sitio que lea o escriba un perfil, con una fila que dice qué perfil está en
   uso. **Guarda:** no se enciende sin credenciales; si no las hay, lo dice en vez de dejar el
