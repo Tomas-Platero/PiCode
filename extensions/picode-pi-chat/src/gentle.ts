@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import type { PiSlashCommand } from "./protocol";
 import { resolveOnPath } from "./runtime";
@@ -19,6 +19,163 @@ import { resolveOnPath } from "./runtime";
 
 export const GENTLE_PACKAGE = "gentle-pi";
 export const GENTLE_BINARY = "gentle-ai";
+
+/**
+ * The npm packages the Gentle AI layer is made of, in the order the panel lists them.
+ *
+ * `gentle-engram` is the memory provider the setup wizard installs beside the
+ * orchestrator (`GENTLE_MEMORY_PACKAGE` in `onboarding.ts`). The string is written
+ * twice on purpose: `onboarding.ts` reads this module for `GENTLE_PACKAGE`, so this one
+ * may not read it back without a cycle, and an update check that forgot half the layer
+ * would offer an update that leaves the memory provider behind.
+ */
+export const GENTLE_LAYER_PACKAGES: readonly string[] = [GENTLE_PACKAGE, "gentle-engram"];
+
+/**
+ * A version split into the two parts that decide its order.
+ *
+ * Build metadata (`+sha`) is dropped before splitting: semver says two versions that
+ * differ only in it are the same version, and an update check that offered 1.2.3+abc
+ * over 1.2.3 would be offering nothing.
+ */
+function parseVersion(value: string): { core: string[]; prerelease: string[] } | undefined {
+  const text = value.trim().replace(/^v/i, "");
+  if (text.length === 0) {
+    return undefined;
+  }
+
+  const withoutBuild = text.split("+")[0];
+  const dash = withoutBuild.indexOf("-");
+  const coreText = dash < 0 ? withoutBuild : withoutBuild.slice(0, dash);
+  const prereleaseText = dash < 0 ? "" : withoutBuild.slice(dash + 1);
+
+  const core = coreText.split(".");
+  // A core that is not dotted numbers is not a version this can order — "1.2.x" from a
+  // hand-written field, say — so the caller falls back to comparing the text as it is
+  // rather than ordering 1.2.x above 1.10.0 with invented rules.
+  if (core.some((part) => !/^\d+$/.test(part))) {
+    return undefined;
+  }
+
+  return { core, prerelease: prereleaseText.length === 0 ? [] : prereleaseText.split(".") };
+}
+
+/**
+ * Compares the dot-separated numbers of a version, where a missing part counts as zero.
+ *
+ * Numeric comparison is the whole point: as text, "10" sorts below "9" and 0.10.0 would
+ * look older than 0.9.9.
+ */
+function compareCorePart(left: string | undefined, right: string | undefined): number {
+  const a = left ?? "0";
+  const b = right ?? "0";
+  const leftNumber = Number(a);
+  const rightNumber = Number(b);
+  if (leftNumber === rightNumber) {
+    return 0;
+  }
+  return leftNumber < rightNumber ? -1 : 1;
+}
+
+/** One prerelease identifier, ordered the way semver orders them. */
+function comparePrereleasePart(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  const leftNumeric = /^\d+$/.test(left);
+  const rightNumeric = /^\d+$/.test(right);
+  // A numeric identifier is always lower than an alphanumeric one: 1.0.0-alpha.1 <
+  // 1.0.0-alpha.beta. Between two numeric ones the number decides, not the text.
+  if (leftNumeric && rightNumeric) {
+    return Number(left) < Number(right) ? -1 : 1;
+  }
+  if (leftNumeric) {
+    return -1;
+  }
+  if (rightNumeric) {
+    return 1;
+  }
+  return left < right ? -1 : 1;
+}
+
+/**
+ * Compares two versions, for the one decision this panel has to make: is the published
+ * one newer than the installed one.
+ *
+ * Negative when `left` is older, zero when the two are the same release, positive when
+ * `left` is newer. Numeric fields are compared as numbers, so 0.10.0 is newer than
+ * 0.9.9, a missing field counts as zero, build metadata is ignored, and a prerelease is
+ * older than the release it leads to. A leading `v` is accepted because the versions
+ * this reads come from other tools' output as much as from the registry.
+ *
+ * A value that cannot be read as a version falls back to a plain text comparison
+ * instead of throwing: the caller is rendering a state, and a panel that shows an
+ * unreadable version as unreadable is better than one that refuses to paint.
+ */
+export function compareVersions(left: string, right: string): number {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (a === undefined || b === undefined) {
+    return left === right ? 0 : left < right ? -1 : 1;
+  }
+
+  const length = Math.max(a.core.length, b.core.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = compareCorePart(a.core[index], b.core[index]);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  // Same numbers: 1.0.0-rc.1 precedes 1.0.0, and 1.0.0-rc.1 precedes 1.0.0-rc.2.
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    if (a.prerelease.length === 0 && b.prerelease.length === 0) {
+      return 0;
+    }
+    return a.prerelease.length === 0 ? 1 : -1;
+  }
+
+  const prereleaseLength = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let index = 0; index < prereleaseLength; index += 1) {
+    const leftPart = a.prerelease[index];
+    const rightPart = b.prerelease[index];
+    // A prerelease that ran out of identifiers is the lower one: 1.0.0-rc < 1.0.0-rc.1.
+    if (leftPart === undefined || rightPart === undefined) {
+      return leftPart === undefined ? -1 : 1;
+    }
+    const difference = comparePrereleasePart(leftPart, rightPart);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+}
+
+/** Whether `candidate` is a newer release than `installed`. */
+export function isNewerVersion(candidate: string, installed: string): boolean {
+  return compareVersions(candidate, installed) > 0;
+}
+
+/**
+ * The version an installed pi package declares in its own manifest.
+ *
+ * `pi list` reports a package's resolved location and no version, and the version that
+ * matters for an update check is the npm package's — not the bundled binary's, which is
+ * a different number and would be compared against the registry for nothing. Anything
+ * unreadable is unknown rather than zero.
+ */
+export function readInstalledPackageVersion(packageRoot: string): string | undefined {
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(packageRoot, "package.json"), "utf8")) as {
+      version?: unknown;
+    };
+    return typeof manifest.version === "string" && manifest.version.length > 0
+      ? manifest.version
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The commands a loaded gentle-pi registers.
@@ -158,6 +315,103 @@ export function unknownGentleState(): GentleState {
     review: { rdd: "unknown", global: "desconocido", cloneLocal: "desconocido" },
     telemetry: "desconocido",
   };
+}
+
+/**
+ * One package of the layer: what is installed here and what the registry publishes.
+ *
+ * Either side can be absent — a package the listing did not mention, a registry that did
+ * not answer — and absence is what the wording below turns into a stated failure instead
+ * of a blank.
+ */
+export interface GentleVersionPair {
+  name: string;
+  installed?: string;
+  latest?: string;
+}
+
+/** What the panel knows about updates, once every package has been asked about. */
+export interface GentleUpdateReport {
+  packages: GentleVersionPair[];
+  /** At least one package has a published version newer than the installed one. */
+  available: boolean;
+}
+
+/**
+ * Builds the report from the two readings.
+ *
+ * Pure and total: the comparison is the only decision, and a pair with a side missing
+ * simply cannot claim an update — an unknown version is never treated as behind, which
+ * is what would make the panel offer an update it cannot justify.
+ */
+export function buildUpdateReport(pairs: readonly GentleVersionPair[]): GentleUpdateReport {
+  const packages = pairs.map((pair) => ({ ...pair }));
+  const available = packages.some(
+    (pair) =>
+      pair.installed !== undefined &&
+      pair.latest !== undefined &&
+      isNewerVersion(pair.latest, pair.installed),
+  );
+  return { packages, available };
+}
+
+/** Whether this pair is behind its published version. */
+export function hasUpdate(pair: GentleVersionPair): boolean {
+  return (
+    pair.installed !== undefined && pair.latest !== undefined && isNewerVersion(pair.latest, pair.installed)
+  );
+}
+
+/**
+ * The one line the panel shows above the versions, in one of three honest states: an
+ * update is available and which version it is, everything is current, or the check
+ * could not be completed and which package left it incomplete.
+ *
+ * There is deliberately no fourth silent state: a package whose version cannot be read
+ * and a registry that does not answer are both reported as the check having failed, so
+ * the panel never leaves the owner guessing whether "no update" means nothing was found
+ * or nothing was asked.
+ */
+export function describeUpdate(report: GentleUpdateReport): string {
+  const outdated = report.packages.filter(hasUpdate);
+  if (outdated.length > 0) {
+    const named = outdated
+      .map((pair) => `${pair.name} ${pair.latest ?? ""} (tienes ${pair.installed ?? "?"})`)
+      .join(" y ");
+    return `Actualización disponible: ${named}.`;
+  }
+
+  if (report.packages.length === 0) {
+    return "No se pudo comprobar si hay actualización.";
+  }
+
+  const unreadable = report.packages.filter(
+    (pair) => pair.installed === undefined || pair.latest === undefined,
+  );
+  if (unreadable.length > 0) {
+    return `No se pudo comprobar si hay actualización: ${unreadable
+      .map((pair) => pair.name)
+      .join(" y ")} sin una versión que comparar.`;
+  }
+
+  const current = report.packages.map((pair) => `${pair.name} ${pair.installed ?? ""}`).join(" · ");
+  return `Todo al día: ${current}.`;
+}
+
+/**
+ * One line per package, naming the installed and the published version side by side.
+ *
+ * The two numbers are what the owner asked for literally — "¿hay alguna actualización?"
+ * — and showing them on the same line is what makes the answer checkable instead of
+ * taken on trust.
+ */
+export function describeVersions(report: GentleUpdateReport): string[] {
+  return report.packages.map(
+    (pair) =>
+      `${pair.name}: instalada ${pair.installed ?? "desconocida"} · publicada ${
+        pair.latest ?? "desconocida"
+      }`,
+  );
 }
 
 /** The one line the category shows next to its name. */

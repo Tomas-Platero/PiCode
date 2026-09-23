@@ -81,6 +81,23 @@
   word-break: break-word;
 }
 
+.gentle-version {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 8px 8px;
+}
+
+/*
+ * The one-line state above the per-package versions: which of the three answers the
+ * check gave, before the numbers that back it up.
+ */
+.gentle-version-headline {
+  margin: 0;
+  font-size: 0.9em;
+  word-break: break-word;
+}
+
 .gentle-commands {
   display: flex;
   flex-direction: column;

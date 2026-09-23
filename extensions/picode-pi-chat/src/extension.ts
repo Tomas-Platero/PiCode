@@ -38,15 +38,20 @@ import { GentleView, type GentleRunId } from "./gentle-view";
 import { SettingsView } from "./settings-view";
 import { discoverSkills, installedPackagesLister } from "./skills";
 import {
+  buildUpdateReport,
   firstMeaningfulLine,
   gentleCommands,
   parseReviewMode,
+  readInstalledPackageVersion,
   resolveGentleBinary,
   summarizeGentle,
   unknownGentleState,
+  GENTLE_LAYER_PACKAGES,
   GENTLE_PACKAGE,
   type GentleState,
+  type GentleUpdateReport,
 } from "./gentle";
+import { resolveLatestVersions } from "./catalog";
 import { PiRpcClient } from "./pi-rpc-client";
 import { PiSdkClient } from "./pi-sdk-client";
 import type { PiClient } from "./pi-client";
@@ -199,7 +204,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // above uses, so the panel is a second way to see and switch the same thing.
   const gentlePanel = GentleView.create(context.extensionUri, {
     gentle,
-    runAction: (id: GentleRunId, command?: string) => runGentleAction(gentle, id, command),
+    runAction: (id: GentleRunId, command?: string) =>
+      runGentleAction(menu, gentle, id, command),
+    update: () => gentleUpdate(context.extensionUri),
   });
   gentleView = gentlePanel;
 
@@ -906,6 +913,78 @@ function invalidateGentle(): void {
 }
 
 /**
+ * How long the registry's answer about the layer is reused.
+ *
+ * Longer than the state's own cache because it is not about this machine at all: a
+ * published version changes on the order of days, the panel repaints on every action,
+ * and every repaint would otherwise be two requests to the registry.
+ */
+const GENTLE_UPDATE_TTL_MS = 5 * 60 * 1000;
+let gentleUpdateCache: { value: GentleUpdateReport; at: number } | undefined;
+
+function invalidateGentleUpdate(): void {
+  gentleUpdateCache = undefined;
+}
+
+/**
+ * What each package of the Gentle AI layer is installed as, and what the registry
+ * publishes as its latest.
+ *
+ * Two independent readings, joined by the pure report builder: `pi list` says where each
+ * package lives (it prints no version, so the version is read from the package's own
+ * manifest) and the registry's `/latest` says what exists. Either one failing is a state
+ * the panel states out loud rather than a silent "no update".
+ *
+ * Cached, because a repaint is not a reason to ask the registry anything, and dropped
+ * by the update action so the panel re-reads a version it just replaced.
+ */
+async function gentleUpdate(extensionUri: vscode.Uri): Promise<GentleUpdateReport> {
+  const now = Date.now();
+  if (gentleUpdateCache && now - gentleUpdateCache.at < GENTLE_UPDATE_TTL_MS) {
+    return gentleUpdateCache.value;
+  }
+
+  const installed = new Map<string, string | undefined>();
+  try {
+    const listed = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, (): void => {});
+    const packages = parseInstalledPackages(listed.text);
+    for (const name of GENTLE_LAYER_PACKAGES) {
+      const entry = packages.find((item) => item.source === `npm:${name}`);
+      installed.set(
+        name,
+        entry?.path === undefined ? undefined : readInstalledPackageVersion(entry.path),
+      );
+    }
+  } catch {
+    // A listing that cannot be read leaves every installed version unknown, which the
+    // panel reports as an incomplete check.
+  }
+
+  let latest = new Map<string, string | undefined>();
+  try {
+    latest = await resolveLatestVersions(GENTLE_LAYER_PACKAGES);
+  } catch {
+    // The resolver answers per package rather than throwing; this only catches the
+    // impossible case, and leaves every published version unknown when it happens.
+  }
+
+  const report = buildUpdateReport(
+    GENTLE_LAYER_PACKAGES.map((name) => ({
+      name,
+      installed: installed.get(name),
+      latest: latest.get(name),
+    })),
+  );
+  gentleUpdateCache = { value: report, at: now };
+  outputChannel?.appendLine(
+    `[gentle] versiones ${report.packages
+      .map((pair) => `${pair.name} ${pair.installed ?? "?"} -> ${pair.latest ?? "?"}`)
+      .join(", ")}`,
+  );
+  return report;
+}
+
+/**
  * What PiCode can tell about Gentle AI.
  *
  * There is no API that says whether it is active, but there is something better than
@@ -1063,6 +1142,7 @@ function gentleActions(context: vscode.ExtensionContext): GentleActions {
  * surfaces one implementation rather than two.
  */
 async function runGentleAction(
+  deps: PiMenuDeps,
   gentle: GentleActions,
   id: GentleRunId,
   command?: string,
@@ -1070,6 +1150,9 @@ async function runGentleAction(
   switch (id) {
     case "install":
       await gentle.install();
+      break;
+    case "update":
+      await updateGentleLayer(deps);
       break;
     case "review": {
       const state = await gentle.state();
@@ -1099,6 +1182,24 @@ async function runGentleAction(
       }
       break;
   }
+}
+
+/**
+ * Updates the Gentle AI layer.
+ *
+ * An update is an install of the newer spec and nothing else: this is `installSources`,
+ * the same path the wizard and the catalogue rows use, which keeps the confirmation
+ * that names the exact commands, the progress and the restart offer the owner already
+ * knows. Both commands go in together because the layer is two packages, and updating
+ * only the orchestrator would leave the memory provider behind.
+ *
+ * Both readings are dropped afterwards so the panel re-reads what is now installed
+ * instead of showing the version the install just replaced.
+ */
+async function updateGentleLayer(deps: PiMenuDeps): Promise<void> {
+  await installSources(deps, GENTLE_SOURCES);
+  invalidateGentle();
+  invalidateGentleUpdate();
 }
 
 /**

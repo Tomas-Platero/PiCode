@@ -15,6 +15,7 @@
     summary: document.getElementById("summary"),
     notice: document.getElementById("notice"),
     lines: document.getElementById("lines"),
+    version: document.getElementById("version"),
     commands: document.getElementById("commands"),
     actions: document.getElementById("actions"),
   };
@@ -56,6 +57,30 @@
     var list = Array.isArray(lines) ? lines : [];
     for (var index = 0; index < list.length; index += 1) {
       elements.lines.appendChild(createElement("div", "gentle-line", String(list[index])));
+    }
+  }
+
+  // The installed version against the published one, one line per package of the layer.
+  // The wording is not written here: the three states — up to date, an update with its
+  // version, or the check having failed — are phrased by the host, so the panel and the
+  // popup describe the same situation the same way. A missing section is a webview from
+  // a host that does not send it, and is left alone rather than filled with a guess.
+  function renderVersion(version) {
+    if (!elements.version) {
+      return;
+    }
+    clear(elements.version);
+    if (!version || typeof version !== "object") {
+      return;
+    }
+    if (typeof version.headline === "string" && version.headline.length > 0) {
+      elements.version.appendChild(
+        createElement("p", "gentle-version-headline", version.headline),
+      );
+    }
+    var lines = Array.isArray(version.lines) ? version.lines : [];
+    for (var index = 0; index < lines.length; index += 1) {
+      elements.version.appendChild(createElement("div", "gentle-line", String(lines[index])));
     }
   }
 
@@ -120,6 +145,7 @@
         ? message.summary
         : "leyendo…";
     renderLines(message.lines);
+    renderVersion(message.version);
     renderCommands(state, message.commands);
     renderActions(message.actions);
     showNotice("");

@@ -1,5 +1,13 @@
 import * as vscode from "vscode";
-import { describeGentle, summarizeGentle, GENTLE_PACKAGE, type GentleState } from "./gentle";
+import {
+  describeGentle,
+  describeUpdate,
+  describeVersions,
+  summarizeGentle,
+  GENTLE_PACKAGE,
+  type GentleState,
+  type GentleUpdateReport,
+} from "./gentle";
 import type { GentleActions } from "./menu";
 import { buildWebviewHtml } from "./webview-html";
 
@@ -23,6 +31,7 @@ import { buildWebviewHtml } from "./webview-html";
  */
 export type GentleActionId =
   | "install"
+  | "update"
   | "review"
   | "telemetry-enable"
   | "telemetry-disable"
@@ -57,8 +66,16 @@ export interface GentleActionRow {
  * package is missing, the switches once it is there — and the telemetry choices are
  * three buttons rather than the popup's submenu, because a sidebar has no quick pick
  * to open. What matters is that both surfaces end in the same runner.
+ *
+ * The update row exists only while there is one: an update button that installs the
+ * version already installed is a button that lies about what it does, and the version
+ * line above it already says the layer is current. It is primary because it is the same
+ * kind of act as installing — it changes the setup rather than flipping a switch.
  */
-export function buildGentleActions(state: GentleState): GentleActionRow[] {
+export function buildGentleActions(
+  state: GentleState,
+  update?: GentleUpdateReport,
+): GentleActionRow[] {
   if (!state.installed) {
     return [
       {
@@ -72,6 +89,7 @@ export function buildGentleActions(state: GentleState): GentleActionRow[] {
 
   const rdd = state.review.rdd;
   return [
+    ...(update?.available ? [updateRow(update)] : []),
     {
       id: "review",
       label:
@@ -112,6 +130,24 @@ export function buildGentleActions(state: GentleState): GentleActionRow[] {
 }
 
 /**
+ * The one row that carries the update, naming the version it installs.
+ *
+ * The names come from the report rather than from a second reading, and `describeUpdate`
+ * is not reused here: the headline already names the version in the panel, while the
+ * button has to say what it will run.
+ */
+function updateRow(update: GentleUpdateReport): GentleActionRow {
+  const behind = update.packages.filter((pair) => pair.latest !== undefined);
+  const versions = behind.map((pair) => `${pair.name} ${pair.latest ?? ""}`).join(" y ");
+  return {
+    id: "update",
+    label: "Actualizar Gentle AI",
+    detail: `Instala ${versions} con el mismo pi install que la instalación`,
+    primary: true,
+  };
+}
+
+/**
  * The host side of the panel.
  *
  * `gentle` is the popup's own port, passed in rather than imported: this module must
@@ -122,6 +158,12 @@ export interface GentleViewHost {
   gentle: GentleActions;
   /** Runs one of the panel's requests, by id. The command is set for command rows. */
   runAction(id: GentleRunId, command?: string): Promise<void>;
+  /**
+   * What the registry publishes for each package of the layer, against what is
+   * installed. Injected for the same reason the state is: the panel renders readings, it
+   * does not take them, and the two packages are read once in the host and cached there.
+   */
+  update(): Promise<GentleUpdateReport>;
 }
 
 export class GentleView implements vscode.WebviewViewProvider {
@@ -228,6 +270,9 @@ export class GentleView implements vscode.WebviewViewProvider {
     }
     try {
       const state = await this.host.gentle.state();
+      // A check that cannot be taken is itself a state the panel states out loud, so a
+      // failure here never turns into a blank line under the version heading.
+      const update = await this.readUpdate();
       this.post({
         type: "state",
         state,
@@ -236,13 +281,25 @@ export class GentleView implements vscode.WebviewViewProvider {
         summary: summarizeGentle(state),
         lines: describeGentle(state),
         commands: state.commands,
-        actions: buildGentleActions(state),
+        actions: buildGentleActions(state, update),
+        version: { headline: describeUpdate(update), lines: describeVersions(update) },
       });
     } catch (error) {
       this.post({
         type: "error",
         message: `No se pudo leer el estado de Gentle AI: ${describeError(error)}`,
       });
+    }
+  }
+
+  private async readUpdate(): Promise<GentleUpdateReport> {
+    try {
+      return await this.host.update();
+    } catch {
+      // An empty report is the panel's own way of saying the check failed, and it is
+      // reached only if the host's own reading — which already reports its failures —
+      // threw anyway.
+      return { packages: [], available: false };
     }
   }
 
@@ -277,6 +334,8 @@ function gentleBody(logoUri: string): string {
     <p id="notice" class="gentle-notice" hidden></p>
     <p class="section">Estado</p>
     <div id="lines" class="gentle-lines"></div>
+    <p class="section">Versión</p>
+    <div id="version" class="gentle-version"></div>
     <p class="section">Comandos</p>
     <div id="commands" class="gentle-commands"></div>
     <p class="section">Acciones</p>
@@ -290,6 +349,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isRunId(value: unknown): value is GentleRunId {
   return (
     value === "install" ||
+    value === "update" ||
     value === "review" ||
     value === "telemetry-enable" ||
     value === "telemetry-disable" ||

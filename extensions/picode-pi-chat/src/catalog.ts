@@ -191,12 +191,90 @@ export async function resolvePackageTypes(
   return resolved;
 }
 
+/**
+ * Asks the registry which version each package publishes as its latest.
+ *
+ * The same `/latest` document and the same retry, backoff and 404 handling the type
+ * resolver uses, over the one URL helper both share: an update check that grew its own
+ * registry client would be a second place for the registry's behaviour to be wrong.
+ *
+ * The map holds an entry for every name asked about. An entry with `undefined` means the
+ * registry did not answer with a version, which the caller reports as a failed check
+ * rather than as "no update available". No pool bounds the fan-out because the caller is
+ * this editor's own layer — two packages — and not a page of search results.
+ */
+export async function resolveLatestVersions(
+  names: readonly string[],
+  options: ResolvePackageTypesOptions = {},
+): Promise<Map<string, string | undefined>> {
+  const maxAttempts = Math.max(1, Math.trunc(options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS));
+  const retryBase = Math.max(0, options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+
+  const versions = new Map<string, string | undefined>();
+  const unique: string[] = [];
+  for (const name of names) {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (trimmed.length > 0 && !unique.includes(trimmed)) {
+      unique.push(trimmed);
+    }
+  }
+
+  await Promise.all(
+    unique.map((name) => askLatestVersion(name, versions, { maxAttempts, retryBase })),
+  );
+
+  return versions;
+}
+
+/** One package's answer, written into the map; a failure is an entry with `undefined`. */
+async function askLatestVersion(
+  name: string,
+  versions: Map<string, string | undefined>,
+  config: { maxAttempts: number; retryBase: number },
+): Promise<void> {
+  try {
+    const document = await fetchLatestDocument(name, config);
+    const version =
+      typeof document === "object" && document !== null
+        ? (document as { version?: unknown }).version
+        : undefined;
+    versions.set(name, typeof version === "string" && version.length > 0 ? version : undefined);
+  } catch {
+    // An unreachable or throttled registry leaves the version unknown, which the panel
+    // says out loud; the other package's answer is still kept.
+    versions.set(name, undefined);
+  }
+}
+
 async function fetchPackageTypes(
   pkg: CatalogPackageIdentity,
   config: { maxAttempts: number; retryBase: number },
 ): Promise<string[]> {
-  const url = `https://registry.npmjs.org/${encodePackageName(pkg.name)}/latest`;
   const key = cacheKeyOf(pkg.name, pkg.version ?? "");
+  const document = await fetchLatestDocument(pkg.name, config);
+
+  // No document is not a failure: it means a plain package, and it is cached so a
+  // package that stays missing does not cost a request per visit.
+  const pi =
+    typeof document === "object" && document !== null ? (document as { pi?: unknown }).pi : undefined;
+  const tags = document === undefined ? [PLAIN_PACKAGE_TAG] : typeTagsFromPiObject(pi);
+  writeTypesToCache(key, tags);
+  return tags;
+}
+
+/**
+ * Reads a package's `/latest` document.
+ *
+ * The one place that knows the registry's package URL, so the type resolver and the
+ * update check cannot end up asking two different questions of the same endpoint. A 404
+ * is `undefined` rather than an error — "the registry has no such package" is an answer
+ * both callers can state — while a refusal or an outage is retried and then thrown.
+ */
+async function fetchLatestDocument(
+  name: string,
+  config: { maxAttempts: number; retryBase: number },
+): Promise<unknown> {
+  const url = `https://registry.npmjs.org/${encodePackageName(name)}/latest`;
 
   for (let attempt = 1; ; attempt += 1) {
     // `application/json` asks for the full document: the abbreviated one drops `pi`, and
@@ -204,18 +282,11 @@ async function fetchPackageTypes(
     const response = await fetch(url, { headers: { accept: "application/json" } });
 
     if (response.ok) {
-      const document = (await response.json()) as { pi?: unknown };
-      const tags = typeTagsFromPiObject(document?.pi);
-      writeTypesToCache(key, tags);
-      return tags;
+      return (await response.json()) as unknown;
     }
 
     if (response.status === 404) {
-      // No document is not a failure: it means a plain package, and it is cached so a
-      // package that stays missing does not cost a request per visit.
-      const tags = [PLAIN_PACKAGE_TAG];
-      writeTypesToCache(key, tags);
-      return tags;
+      return undefined;
     }
 
     if (attempt >= config.maxAttempts || !isRetryableStatus(response.status)) {
