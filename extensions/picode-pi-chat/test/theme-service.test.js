@@ -355,6 +355,46 @@ async function main() {
       deafConfig.state.writes.length === 1,
     JSON.stringify(deafConfig.state.writes),
   );
+
+  /*
+   * A message names a theme, and a name the row does not carry must apply nothing.
+   *
+   * The lookup used to fall back to the row's first theme, so `apply(row, "SomeArbitraryValue")`
+   * wrote that first theme while the toast named the arbitrary one the owner never chose — the
+   * action and the sentence describing it came apart, and only the sentence was visible.
+   */
+  const strictConfig = fakeConfiguration(undefined);
+  const strictService = api.createThemeService({
+    installedExtensions: () => [dracula],
+    configuration: () => strictConfig,
+    install: async () => {
+      throw new Error("nothing should be installed for an unknown theme");
+    },
+    registryBase: "https://open-vsx.org/api",
+  });
+  const notNamed = await strictService.apply(
+    { ...rows[1], themes: rows[1].themes.concat([{ id: "Other", label: "Other", path: "./o.json" }]) },
+    "No Existe",
+  );
+  check(
+    "a theme id the row does not carry applies nothing, instead of quietly applying the first",
+    notNamed.applied === false && strictConfig.state.writes.length === 0,
+    JSON.stringify({ result: notNamed, writes: strictConfig.state.writes }),
+  );
+
+  // A theme fixed at a nearer scope wins over the global write, so "applied" is a comparison.
+  const shadowed = api.createThemeService({
+    installedExtensions: () => [dracula],
+    configuration: () => ({ current: () => "Default Dark Modern", apply: async () => undefined }),
+    install: async () => undefined,
+    registryBase: "https://open-vsx.org/api",
+  });
+  const shadowedResult = await shadowed.apply(rows[1], "Dracula Theme");
+  check(
+    "when the editor does not end up on the theme, the answer says so instead of claiming it",
+    shadowedResult.applied === false && shadowedResult.current === "Default Dark Modern",
+    JSON.stringify(shadowedResult),
+  );
   check(
     "the service reports the theme in force",
     installedService.current() === "Dracula Theme" &&

@@ -577,7 +577,12 @@ export class OnboardingView {
       this.post({ type: "preview", requestId, ok: false, reason: "Ese tema ya no está en la lista." });
       return;
     }
-    const answer = await this.host.previewTheme(row.id, themeId);
+    const answer = await this.host
+      .previewTheme(row.id, themeId)
+      .catch((cause: unknown) => ({
+        ok: false as const,
+        reason: `No se pudo leer el tema: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }));
     if (!answer.ok) {
       this.post({ type: "preview", requestId, ok: false, reason: answer.reason });
       return;
@@ -592,13 +597,22 @@ export class OnboardingView {
     if (row === undefined) {
       return;
     }
-    const result = await this.host.applyTheme(row.id, themeId);
+    let result: ApplyResult;
+    let failure: string | undefined;
+    try {
+      result = await this.host.applyTheme(row.id, themeId);
+    } catch (cause) {
+      // A host that fails still gets an ending: the note says what went wrong instead of
+      // leaving the step waiting on an answer that is never coming.
+      result = { applied: false, installed: false, needsReload: false };
+      failure = `No se pudo aplicar el tema: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
     this.post({
       type: "applied",
       rowId: row.id,
       themeId,
       result,
-      message: appliedMessage(row, themeId, result),
+      message: failure ?? appliedMessage(row, themeId, result),
     });
   }
 

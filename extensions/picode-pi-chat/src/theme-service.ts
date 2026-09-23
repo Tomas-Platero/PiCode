@@ -167,13 +167,10 @@ export function installedThemeRows(extensions: readonly InstalledExtension[]): T
       themes,
       galleryUrl: vscodethemesUrl(displayName),
     };
-    if (typeof manifest.icon === "string" && manifest.icon !== "") {
-      // An installed extension's icon is a file inside it, which the gallery cannot fetch:
-      // the row keeps no picture rather than a URL that would never load.
-      rows.push(row);
-    } else {
-      rows.push(row);
-    }
+    // No picture even when the manifest declares an icon: an installed extension's icon is a
+    // file inside it, and the panels' CSP allows local resources and `data:` only, so a URL to
+    // it would render as an empty box.
+    rows.push(row);
   }
   return rows;
 }
@@ -209,8 +206,16 @@ export interface ThemeService {
 }
 
 /** The theme of a row the owner picked, falling back to its first one. */
+/**
+ * The theme of a row the caller named.
+ *
+ * Exact match and nothing else. It used to fall back to the row's first theme, which meant a
+ * message naming a theme that does not exist silently applied a different one — and the toast
+ * then described the theme that was asked for, not the one that was set. A caller that wants
+ * "the row's default" picks it itself, where it can see the list.
+ */
 function themeOf(row: ThemeRow, themeId: string): DeclaredTheme | undefined {
-  return row.themes.find((theme) => theme.id === themeId) ?? row.themes[0];
+  return row.themes.find((theme) => theme.id === themeId);
 }
 
 /** The id of an extension the editor has, for the "is it installed" question. */
@@ -300,9 +305,12 @@ export function createThemeService(deps: ThemeServiceDeps): ThemeService {
       const known = installedThemeRows(deps.installedExtensions()).some((installedRow) =>
         installedRow.themes.some((theme) => theme.id === declared.id),
       );
+      // And what it says it is on: writing `workbench.colorTheme` globally does not win over a
+      // theme fixed at a nearer scope, so "applied" is a comparison and not an assumption. A
+      // reader that cannot say (no value at all) is not a reader that disagrees.
       const current = configuration.current();
       return {
-        applied: true,
+        applied: current === undefined || current === declared.id,
         installed: !wasInstalled,
         needsReload: !wasInstalled && !known,
         ...(current === undefined ? {} : { current }),

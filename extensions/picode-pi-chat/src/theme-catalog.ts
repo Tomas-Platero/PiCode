@@ -639,23 +639,28 @@ export async function loadVariant(options: LoadVariantOptions): Promise<ThemeVar
       ? undefined
       : path.join(options.cacheDir, cacheFileName(options.extensionId, options.version));
   let bytes: Buffer | undefined;
+  let fromCache = false;
   if (cached !== undefined && existsSync(cached)) {
     try {
       bytes = readFileSync(cached);
+      fromCache = true;
     } catch {
       bytes = undefined;
     }
   }
   if (bytes === undefined && options.downloadUrl !== undefined) {
-    const response = await (options.fetchLike ?? fetch)(options.downloadUrl, {
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    });
-    if (response.ok) {
-      bytes = Buffer.from(await response.arrayBuffer());
-      if (cached !== undefined) {
-        mkdirSync(path.dirname(cached), { recursive: true });
-        writeFileSync(cached, bytes);
+    try {
+      const response = await (options.fetchLike ?? fetch)(options.downloadUrl, {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      });
+      if (response.ok) {
+        bytes = Buffer.from(await response.arrayBuffer());
       }
+    } catch {
+      // A network that fails is the same answer as a file that is not there: the caller says
+      // "no se pudo leer" and the panel keeps working. Letting the rejection escape left the
+      // preview note on "Leyendo el tema…" for ever, because nobody above it catches.
+      bytes = undefined;
     }
   }
   if (bytes === undefined) {
@@ -668,6 +673,27 @@ export async function loadVariant(options: LoadVariantOptions): Promise<ThemeVar
   } catch {
     return undefined;
   }
-  const theme = resolveThemeChain(vsixFiles(archive), options.declared.path);
-  return Object.keys(theme).length === 0 ? undefined : variantOf(theme);
+  let theme: ThemeJson;
+  try {
+    theme = resolveThemeChain(vsixFiles(archive), options.declared.path);
+  } catch {
+    // A deflated entry that does not decode throws from inside the reader, and that is a
+    // package this module cannot trust: it is not cached either, below, so a re-download is
+    // what happens next rather than the same corrupt bytes failing for ever.
+    return undefined;
+  }
+  if (Object.keys(theme).length === 0) {
+    return undefined;
+  }
+  // Written only now, once the bytes have been shown to be a package whose theme reads: a
+  // download that turns out to be garbage must not be what the cache keeps for this version.
+  if (cached !== undefined && !fromCache) {
+    try {
+      mkdirSync(path.dirname(cached), { recursive: true });
+      writeFileSync(cached, bytes);
+    } catch {
+      // Caching is an optimisation; failing to write it must not fail the preview.
+    }
+  }
+  return variantOf(theme);
 }

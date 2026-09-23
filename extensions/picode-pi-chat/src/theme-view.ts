@@ -131,8 +131,18 @@ const THEME_BODY = `    <div id="theme-root" class="theme-root"></div>`;
 export class ThemeView {
   public static readonly viewType = "picode.theme";
 
-  public static create(context: vscode.ExtensionContext): ThemeView {
-    return new ThemeView(context, themeServiceFor(context));
+  public static create(
+    context: vscode.ExtensionContext,
+    /**
+     * The service to drive.
+     *
+     * Injectable so the panel can be exercised through a stub editor: the real one reaches the
+     * network the moment a panel says `ready`, and a test that waited for open-vsx.org would be
+     * slow, flaky and dependent on somebody else's uptime.
+     */
+    service: ThemeService = themeServiceFor(context),
+  ): ThemeView {
+    return new ThemeView(context, service);
   }
 
   private panel: vscode.WebviewPanel | undefined;
@@ -190,6 +200,11 @@ export class ThemeView {
     }
     this.panel?.dispose();
     this.panel = undefined;
+    // Closing the tab lets the singleton go, so the next call builds a fresh view instead of
+    // keeping a disposed one as "the panel that is open".
+    if (openThemeView === this) {
+      openThemeView = undefined;
+    }
   }
 
   /**
@@ -228,27 +243,47 @@ export class ThemeView {
     }
   }
 
-  /** The rows, from the installed extensions first and then from the gallery. */
+  /**
+   * The rows: the installed ones first, and then the gallery's when they arrive.
+   *
+   * Two messages instead of one, and the first one is not an optimisation: a theme the owner
+   * already has needs no network, so waiting for the catalogue before drawing anything left the
+   * panel empty on a slow connection for a list it was holding in its hand. The second message
+   * replaces the first, and carries why the gallery part is missing when it could not be read.
+   */
   private async sendThemes(query: string): Promise<void> {
     const installed = this.service.installed();
+    this.rows = installed;
+    void this.post(this.themesMessage(installed, query));
+
     let catalog: readonly ThemeRow[] = [];
     let error: string | undefined;
     try {
       catalog = await this.service.catalog(query);
     } catch (cause) {
-      // The installed themes are still worth showing: the panel works offline, and saying
-      // why the rest is missing is more useful than an empty list.
+      // The installed themes are still worth showing: the panel works offline, and saying why
+      // the rest is missing is more useful than an empty list.
       error = `No se pudo consultar el catálogo de temas (${cause instanceof Error ? cause.message : String(cause)}).`;
     }
     this.rows = [...installed, ...catalog];
+    void this.post(this.themesMessage(this.rows, query, error));
+  }
+
+  /** One `themes` message, with the theme in force read at the moment it is built. */
+  private themesMessage(
+    rows: readonly ThemeRow[],
+    query: string,
+    error?: string,
+  ): Record<string, unknown> {
     const current = this.service.current();
-    void this.post({
-      type: "themes",
-      rows: this.rows,
-      query,
-      ...(current === undefined ? {} : { current }),
-      ...(error === undefined ? {} : { error }),
-    });
+    const message: Record<string, unknown> = { type: "themes", rows, query };
+    if (current !== undefined) {
+      message.current = current;
+    }
+    if (error !== undefined) {
+      message.error = error;
+    }
+    return message;
   }
 
   /** One theme, painted, or the reason it could not be read. */
@@ -260,7 +295,21 @@ export class ThemeView {
       void this.post({ type: "preview", requestId, ok: false, reason: "Ese tema ya no está en la lista." });
       return;
     }
-    const answer = await this.service.preview(row, themeId);
+    let answer;
+    try {
+      answer = await this.service.preview(row, themeId);
+    } catch (cause) {
+      // The service is written not to throw for a theme it cannot read, but this is the only
+      // place the owner is waiting on an answer: a rejection here would leave the note on
+      // "Leyendo el tema…" for ever, which reads as a frozen panel rather than a failure.
+      void this.post({
+        type: "preview",
+        requestId,
+        ok: false,
+        reason: `No se pudo leer el tema: ${cause instanceof Error ? cause.message : String(cause)}`,
+      });
+      return;
+    }
     if (!answer.ok) {
       void this.post({ type: "preview", requestId, ok: false, reason: answer.reason });
       return;
@@ -301,11 +350,14 @@ export class ThemeView {
       result,
       message: appliedMessage(row, themeId, result),
     });
-    // The row is now installed, and the list says so — without a new search, because the
-    // catalogue itself did not change.
+    // The row is now installed, and the list says so. The rows are sent again rather than only
+    // changed here, because the chip the owner is looking at ("Instalar y aplicar", the
+    // `Instalado` tag) is drawn by the webview from what it was last sent: updating the host's
+    // copy alone would leave the panel offering to install a theme it already has.
     this.rows = this.rows.map((candidate) =>
       candidate.id === row.id ? { ...candidate, installed: true } : candidate,
     );
+    void this.post(this.themesMessage(this.rows, ""));
   }
 
   /** The one external destination a message can reach. */
@@ -323,9 +375,19 @@ export class ThemeView {
   }
 }
 
-/** Opens the panel. What every surface that offers the picker runs. */
+/**
+ * The one open panel, or `undefined` when none is.
+ *
+ * The tab is per window, and this is what makes it one: `selectTheme` used to build a fresh
+ * view on every call, so the "reveal it instead of duplicating it" guard inside `show()` never
+ * held and the palette, the popup entry and the Aspecto row each opened another panel.
+ */
+let openThemeView: ThemeView | undefined;
+
+/** Opens the panel, revealing it rather than opening a second one. */
 export async function selectTheme(context: vscode.ExtensionContext): Promise<void> {
-  const view = ThemeView.create(context);
+  const view = openThemeView ?? ThemeView.create(context);
+  openThemeView = view;
   try {
     await view.show();
   } catch (error) {

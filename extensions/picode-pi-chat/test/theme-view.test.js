@@ -33,9 +33,12 @@ const EXTENSION_ROOT = path.resolve(__dirname, "..");
 const SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
 
 const originalResolve = Module._resolveFilename;
+const PANEL_STUB = path.join(__dirname, "vscode-panel-stub.js");
 Module._resolveFilename = function resolve(request, ...rest) {
   if (request === "vscode") {
-    return path.join(__dirname, "vscode-stub.js");
+    // The panel stub, not the resolver one: this suite drives a whole surface, so it needs
+    // real panels, real messages and the editor's settings kept somewhere readable.
+    return PANEL_STUB;
   }
   return originalResolve.call(this, request, ...rest);
 };
@@ -67,6 +70,167 @@ async function main() {
       return "";
     }
   };
+
+  /* --- the panel is one tab, and it exists --- -------------------------------- */
+
+  /*
+   * The defect this exists for: `selectTheme` built a fresh view on every call, so the guard
+   * that was supposed to reveal the open tab never held and the three doors into the gallery
+   * opened three panels. It is checked here by running the real flow through the panel stub —
+   * create, reveal, close and create again — because no reading of the source would have caught
+   * it: every line was correct on its own.
+   */
+  const stub = require(PANEL_STUB);
+  const settings = stub.__state;
+  const themeDir = tempDir("picode-theme-panel-");
+  fs.mkdirSync(path.join(themeDir, "themes"), { recursive: true });
+  fs.writeFileSync(
+    path.join(themeDir, "themes", "one.json"),
+    JSON.stringify({
+      name: "One",
+      type: "dark",
+      colors: { "editor.background": "#101010" },
+      tokenColors: [{ scope: "comment", settings: { foreground: "#202020" } }],
+    }),
+  );
+  settings.extensions = [
+    {
+      id: "fixture.theme",
+      extensionPath: themeDir,
+      packageJSON: {
+        displayName: "Fixture Theme",
+        version: "1.0.0",
+        contributes: {
+          themes: [{ id: "One", label: "One", uiTheme: "vs-dark", path: "./themes/one.json" }],
+        },
+      },
+    },
+  ];
+  const context = {
+    extensionUri: { fsPath: path.join(EXTENSION_ROOT) },
+    globalStorageUri: { fsPath: path.join(themeDir, "storage") },
+    globalState: { update: async () => undefined },
+    subscriptions: [],
+  };
+
+  await api.selectTheme(context);
+  check(
+    "opening the gallery creates one panel",
+    settings.panels.length === 1 && settings.panels[0].viewType === "picode.theme",
+    JSON.stringify(settings.panels.map((panel) => panel.viewType)),
+  );
+  check(
+    "the panel document is the shared builder's, with the gallery and its bootstrap",
+    settings.panels[0].webview.html.includes("theme-gallery.js") &&
+      settings.panels[0].webview.html.includes("theme.js") &&
+      settings.panels[0].webview.html.includes("theme.css") &&
+      settings.panels[0].webview.html.includes('id="theme-root"') &&
+      /script-src 'nonce-/.test(settings.panels[0].webview.html),
+    JSON.stringify({
+      gallery: settings.panels[0].webview.html.includes("theme-gallery.js"),
+      bootstrap: settings.panels[0].webview.html.includes("theme.js"),
+      styles: settings.panels[0].webview.html.includes("theme.css"),
+      root: settings.panels[0].webview.html.includes('id="theme-root"'),
+      nonce: /script-src 'nonce-/.test(settings.panels[0].webview.html),
+      start: settings.panels[0].webview.html.slice(0, 200),
+    }),
+  );
+  await api.selectTheme(context);
+  await api.selectTheme(context);
+  check(
+    "opening it again reveals the same tab instead of opening another one",
+    settings.panels.length === 1 && settings.reveals === 2,
+    `${settings.panels.length} panels, ${settings.reveals} reveals`,
+  );
+  settings.panels[0].__close();
+  await api.selectTheme(context);
+  check(
+    "a closed tab does not stay as the panel that is open: the next call builds a fresh one",
+    settings.panels.length === 2 && settings.panels[1].disposed === false,
+    `${settings.panels.length} panels`,
+  );
+  settings.panels[1].__close();
+
+  /*
+   * The flow of the panel itself, over a service that answers instantly.
+   *
+   * The real one reaches the gallery the moment a panel says `ready`, and a test that waited
+   * for open-vsx.org would be slow, flaky and dependent on somebody else's uptime. What is
+   * checked here is the panel's own behaviour — what it sends, when, and what it does with the
+   * answer — which is the half that had the defect.
+   */
+  const fakeRow = {
+    id: "fixture.theme",
+    displayName: "Fixture Theme",
+    description: "",
+    downloads: 0,
+    version: "1.0.0",
+    installed: true,
+    galleryUrl: "https://vscodethemes.com/?q=Fixture",
+    themes: [{ id: "One", label: "One", uiTheme: "vs-dark", path: "./themes/one.json" }],
+  };
+  const asked = { catalog: 0, apply: 0 };
+  const fakeService = {
+    installed: () => [fakeRow],
+    catalog: async () => {
+      asked.catalog += 1;
+      return [];
+    },
+    preview: async () => ({
+      ok: true,
+      variant: { id: "One", label: "One" },
+      preview: { dark: true, frame: {}, lines: [] },
+    }),
+    apply: async () => {
+      asked.apply += 1;
+      settings.settings["workbench.colorTheme"] = "One";
+      return { applied: true, installed: false, needsReload: false, current: "One" };
+    },
+    current: () => settings.settings["workbench.colorTheme"],
+  };
+  const view = api.ThemeView.create(context, fakeService);
+  await view.show();
+  const panel = settings.panels[settings.panels.length - 1];
+  panel.__receive({ type: "ready" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const listed = settings.posted.filter((message) => message.type === "themes");
+  check(
+    "the ready message gets the installed rows first, and then the gallery's",
+    listed.length === 2 &&
+      listed[0].rows.length === 1 &&
+      listed[0].rows[0].id === "fixture.theme" &&
+      listed[0].rows[0].installed === true &&
+      listed[1].rows.length === 1 &&
+      asked.catalog === 1,
+    JSON.stringify({
+      mensajes: listed.map((message) => message.rows.length),
+      catalogos: asked.catalog,
+    }),
+  );
+
+  panel.__receive({ type: "apply", rowId: "fixture.theme", themeId: "One" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const appliedSent = settings.posted.filter((message) => message.type === "applied").pop();
+  const relisted = settings.posted[settings.posted.length - 1];
+  check(
+    "applying writes the editor's setting and says so",
+    appliedSent !== undefined &&
+      appliedSent.result.applied === true &&
+      settings.settings["workbench.colorTheme"] === "One" &&
+      appliedSent.message.includes("One") &&
+      asked.apply === 1,
+    JSON.stringify({
+      applied: appliedSent === undefined ? null : appliedSent.result,
+      settings: settings.settings,
+      mensajes: settings.posted.map((message) => message.type),
+    }),
+  );
+  check(
+    "and the rows are sent again, so the panel cannot keep offering to install what it has",
+    relisted.type === "themes" && relisted.rows[0].installed === true && appliedSent !== relisted,
+    JSON.stringify({ ultimo: relisted.type }),
+  );
+  panel.__close();
 
   /* --- what a message may open ---------------------------------------------- */
 

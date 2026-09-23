@@ -279,8 +279,9 @@
     elements.gentleSection.hidden = step !== "gentle";
     elements.themeSection.hidden = step !== "theme";
     elements.summarySection.hidden = step !== "summary";
-    // The gallery is mounted the first time the step is shown, and drawn from the message
-    // the host already sent: mounting it up front would build a list nobody is looking at.
+    // The gallery is mounted here as well as on the first `themes` message, because the host
+    // pushes that message at "ready" — before this step is ever shown — and a component that
+    // is not mounted yet cannot be fed.
     if (step === "theme") {
       mountThemeGallery();
     }

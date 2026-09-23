@@ -701,6 +701,65 @@ async function main() {
     "a corrupt VSIX produced a theme",
   );
 
+  /*
+   * Two failures that used to escape, and the second one used to be permanent.
+   *
+   * A download that turns out to be garbage was written to the cache before anything read it,
+   * so every later preview of that theme failed identically with no way back: the corrupt bytes
+   * were the cache now. And a network that failed rejected out of `loadVariant`, which nobody
+   * above caught, so the panel kept saying "Leyendo el tema…" for ever.
+   */
+  const downloadCache = tempDir("picode-theme-download-cache-");
+  let brokenDownloads = 0;
+  const brokenBytes = fakeFetch({
+    "https://vsix/broken.vsix": {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => {
+        brokenDownloads += 1;
+        return buildZip([["extension/themes/x.json", "{ not json at all", 8]]);
+      },
+      json: async () => ({}),
+    },
+  });
+  const downloadOptions = {
+    extensionId: "broken.broken",
+    version: "9.9.9",
+    declared: { id: "Broken", label: "Broken", path: "./themes/x.json" },
+    downloadUrl: "https://vsix/broken.vsix",
+    cacheDir: downloadCache,
+    fetchLike: brokenBytes,
+  };
+  const firstTry = await api.loadVariant(downloadOptions);
+  check(
+    "a package whose theme cannot be read is not left in the cache",
+    firstTry === undefined && fs.readdirSync(downloadCache).length === 0,
+    `${fs.readdirSync(downloadCache).join(",")} (${brokenDownloads} descargas)`,
+  );
+  const secondTry = await api.loadVariant(downloadOptions);
+  check(
+    "and the next look downloads again, instead of failing on the same bad bytes for ever",
+    secondTry === undefined && brokenDownloads === 2,
+    `${brokenDownloads} descargas`,
+  );
+
+  const refusing = fakeFetch({});
+  const failing = async () => {
+    throw new Error("getaddrinfo ENOTFOUND open-vsx.org");
+  };
+  const offline = await api.loadVariant({
+    extensionId: "offline.theme",
+    version: "1.0.0",
+    declared: { id: "Offline", label: "Offline", path: "./themes/x.json" },
+    downloadUrl: "https://vsix/offline.vsix",
+    fetchLike: failing,
+  });
+  check(
+    "a network that fails answers undefined instead of rejecting, which is what left the preview waiting",
+    offline === undefined && refusing.calls.length === 0,
+    JSON.stringify(offline),
+  );
+
   /* --- the guards at the source --------------------------------------------- */
 
   const source = fs.readFileSync(path.join(SOURCE_ROOT, "theme-catalog.ts"), "utf8");
