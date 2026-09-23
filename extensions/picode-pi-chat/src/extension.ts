@@ -197,6 +197,9 @@ export function activate(context: vscode.ExtensionContext): void {
     selectThinkingLevel: () => withLiveClient(selectThinkingLevel),
     selectRuntime: () => selectRuntime(context),
     selectTransport: () => selectTransport(context),
+    // The theme gallery, the same panel the palette command and the Aspecto row open: the
+    // popup is the third way in, not a third implementation of the picker.
+    selectTheme: () => selectTheme(context),
     installManagedRuntime: () => installManagedFromMenu(context),
     sendCommand: (name) => sendSlashCommand(name),
     sessions: () => listProjectSessions(),
@@ -626,6 +629,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
       .catch(() => undefined);
     commands = await readCommands(client);
   }
+  const colorTheme = currentColorTheme();
 
   return {
     runtime: label,
@@ -642,6 +646,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
     ...(commands.length > 0 ? { commands } : {}),
     ...(view ? { usage: view.usage } : {}),
     ...(view?.modelContextWindow === undefined ? {} : { contextWindow: view.modelContextWindow }),
+    ...(colorTheme === undefined ? {} : { colorTheme }),
     gentle: await gentleState(extensionUri),
   };
 }

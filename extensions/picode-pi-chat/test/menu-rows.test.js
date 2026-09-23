@@ -56,14 +56,15 @@ const actions = (rows) => rows.filter((row) => row.kind === "item").map((row) =>
 // --- first level -----------------------------------------------------------
 
 const categories = buildCategories(full);
-check("there is one category per area", categories.length === 5, `${categories.length}`);
+check("there is one category per area", categories.length === 6, `${categories.length}`);
 check(
   "each category's second line says what opening it does",
   categories[0].description === "Elegir el modelo y cuánto razona" &&
     categories[1].description === "Ver y gestionar los paquetes" &&
     categories[2].description === "Cambiar qué pi se ejecuta" &&
     categories[3].description === "Configurar accesos" &&
-    categories[4].description === "Uso, conversaciones y reinicio",
+    categories[4].description === "Elegir el tema del editor" &&
+    categories[5].description === "Uso, conversaciones y reinicio",
   JSON.stringify(categories.map((row) => row.description)),
 );
 check(
@@ -72,7 +73,10 @@ check(
     categories[1].detail === "10 instaladas" &&
     categories[2].detail === "pi del PATH 0.86.1 · RPC (proceso aparte)" &&
     categories[3].detail === "3 con modelos" &&
-    categories[4].detail === "En reposo · 42 mensajes",
+    // The theme is the editor's own setting, so the row says so in the editor's words — and
+    // says which one when the editor reports none, instead of showing an empty value.
+    categories[4].detail === "Tema: el que trae el editor" &&
+    categories[5].detail === "En reposo · 42 mensajes",
   JSON.stringify(categories.map((row) => row.detail)),
 );
 // The card used to end on a Gentle AI row whose second line read the layer's state. That
@@ -110,14 +114,36 @@ check(
 );
 check(
   "a missing session says so rather than showing zero messages",
-  unknown[4].description === "Uso, conversaciones y reinicio" &&
-    unknown[4].detail === "En reposo · sin sesión",
-  unknown[4].detail,
+  unknown[4].description === "Elegir el tema del editor" &&
+    unknown[4].detail === "Tema: el que trae el editor" &&
+    unknown[5].description === "Uso, conversaciones y reinicio" &&
+    unknown[5].detail === "En reposo · sin sesión",
+  `${unknown[4].detail} / ${unknown[5].detail}`,
 );
 check(
   "a running agent shows as working",
-  buildCategories({ ...full, streaming: true })[4].detail === "Trabajando · 42 mensajes",
+  buildCategories({ ...full, streaming: true })[5].detail === "Trabajando · 42 mensajes",
   "",
+);
+check(
+  "the theme category states the theme in force when the editor reports one",
+  buildCategories({ ...full, colorTheme: "Dracula Theme" })[4].detail === "Tema: Dracula Theme",
+  buildCategories({ ...full, colorTheme: "Dracula Theme" })[4].detail,
+);
+check(
+  "the theme category opens the gallery and nothing else",
+  (() => {
+    const rows = buildCategorySettings("aspecto", full);
+    return (
+      rows.length === 3 &&
+      rows[0].action === "back" &&
+      rows[1].kind === "separator" &&
+      rows[2].action === "theme" &&
+      rows[2].label === "Abrir la galería de temas" &&
+      rows[2].description === "Tema en uso: el que trae el editor"
+    );
+  })(),
+  JSON.stringify(buildCategorySettings("aspecto", full)),
 );
 
 // --- second level ----------------------------------------------------------

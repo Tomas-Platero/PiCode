@@ -32,6 +32,7 @@ export type PiCategoryId =
   | "runtime"
   | "proveedores"
   | "gentle"
+  | "aspecto"
   | "sesion";
 
 export const CATEGORY_LABELS: Record<PiCategoryId, string> = {
@@ -40,6 +41,7 @@ export const CATEGORY_LABELS: Record<PiCategoryId, string> = {
   runtime: "Qué pi se ejecuta",
   proveedores: "Proveedores y credenciales",
   gentle: "Gentle AI",
+  aspecto: "Aspecto del editor",
   sesion: "Sesión de pi",
 };
 
@@ -60,6 +62,7 @@ export const CATEGORY_ORDER: readonly PiCategoryId[] = [
   "extensiones",
   "runtime",
   "proveedores",
+  "aspecto",
   "sesion",
 ];
 
@@ -101,6 +104,9 @@ export const CATEGORY_TARGETS: Record<
   // `PiCategoryId`: the settings popup implements that category. Removing this entry
   // means removing the popup's category first, not just the row that used to reach it.
   gentle: GENTLE_PANEL_TARGET,
+  // The editor's appearance is a settings rail category of its own — the one that holds the
+  // theme in force and the row that opens the gallery — so the sidebar's id lands there.
+  aspecto: "aspecto",
   sesion: "sesion",
 };
 
@@ -133,6 +139,8 @@ export interface PiMenuSnapshot {
   streaming: boolean;
   providerCount?: number;
   gentle?: GentleState;
+  /** The colour theme the editor is on, in the editor's own words. */
+  colorTheme?: string;
   /** What the session has cost, when a session has said anything yet. */
   usage?: UsageTotals;
   contextWindow?: number;
@@ -199,6 +207,13 @@ export function buildCategories(snapshot: PiMenuSnapshot): PiCategoryRow[] {
           description: "Configurar accesos",
           detail: providers,
         };
+      case "aspecto":
+        return {
+          id,
+          label: CATEGORY_LABELS.aspecto,
+          description: "Elegir el tema del editor",
+          detail: `Tema: ${snapshot.colorTheme ?? "el que trae el editor"}`,
+        };
       default:
         return {
           id: "sesion",
@@ -223,6 +238,7 @@ export type PiSettingAction =
   | "transport"
   | "reinstallRuntime"
   | "provider"
+  | "theme"
   | "gentleStatus"
   | "gentleReview"
   | "gentleTelemetry"
@@ -393,6 +409,21 @@ export function buildCategorySettings(
       ];
     }
 
+    case "aspecto":
+      return [
+        back,
+        { kind: "separator", label: "Tema del editor" },
+        {
+          kind: "item",
+          action: "theme",
+          label: "Abrir la galería de temas",
+          description: `Tema en uso: ${snapshot.colorTheme ?? "el que trae el editor"}`,
+          detail:
+            "Los que ya tienes salen sin red; los demás se leen de su paquete y se enseñan " +
+            "pintados con sus propios colores",
+        },
+      ];
+
     case "gentle": {
       const gentle = snapshot.gentle;
       const rows: PiSettingRow[] = [back, { kind: "separator", label: "Estado" }];
@@ -562,6 +593,8 @@ export interface PiMenuDeps {
   selectThinkingLevel(): Promise<void>;
   selectRuntime(): Promise<void>;
   selectTransport(): Promise<void>;
+  /** Opens the theme gallery: the editor's appearance, not one of pi's own settings. */
+  selectTheme(): Promise<void>;
   installManagedRuntime(): Promise<void>;
   /**
    * Sends a slash command to the running session as a message.
@@ -731,6 +764,9 @@ async function runSetting(
         await checkProvider(deps, row.provider);
       }
       return true;
+    case "theme":
+      await deps.selectTheme();
+      return false;
     case "gentleStatus":
       await showGentleStatus(deps);
       return true;
