@@ -548,6 +548,13 @@ export function describeAuthCheck(output: string): string {
 
 export interface PiMenuDeps {
   runtime(): ResolvedRuntime;
+  /**
+   * The environment additions that point a spawned pi at the profile of the instance
+   * the active runtime selects: `PI_CODING_AGENT_DIR` for PiCode's own instance,
+   * nothing for the owner's. Read from the same setting as {@link runtime}, so the
+   * profile always follows the program — this object is where the menu gets both.
+   */
+  profileEnv(): Record<string, string>;
   /** Current session, runtime and counts, for the popup's own labels. */
   snapshot(): Promise<PiMenuSnapshot>;
   providers(): Promise<ProviderSummary[]>;
@@ -884,6 +891,7 @@ async function checkProvider(deps: PiMenuDeps, provider: string): Promise<void> 
         ["auth", "check", "--provider", provider, "--json"],
         undefined,
         () => {},
+        deps.profileEnv(),
       ),
   );
 
@@ -906,7 +914,7 @@ interface PackageItem extends vscode.QuickPickItem {
 export async function showInstalledPackages(deps: PiMenuDeps): Promise<void> {
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: "PiCode: leyendo las extensiones" },
-    () => runPiCli(deps.runtime(), ["list"], undefined, deps.log),
+    () => runPiCli(deps.runtime(), ["list"], undefined, deps.log, deps.profileEnv()),
   );
 
   const packages: InstalledPackage[] = parseInstalledPackages(result.text);
@@ -1121,7 +1129,7 @@ export async function installSources(
   for (const spec of specs) {
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${spec}` },
-      () => runPiCli(deps.runtime(), ["install", spec], undefined, deps.log),
+      () => runPiCli(deps.runtime(), ["install", spec], undefined, deps.log, deps.profileEnv()),
     );
     if (!result.ok) {
       const reason = `pi install terminó con código ${result.code ?? "desconocido"}.`;
@@ -1147,7 +1155,7 @@ async function removePackage(deps: PiMenuDeps, source: string): Promise<void> {
 
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: `PiCode: quitando ${source}` },
-    () => runPiCli(deps.runtime(), ["remove", source], undefined, deps.log),
+    () => runPiCli(deps.runtime(), ["remove", source], undefined, deps.log, deps.profileEnv()),
   );
   if (!result.ok) {
     void vscode.window.showErrorMessage(
@@ -1161,7 +1169,7 @@ async function removePackage(deps: PiMenuDeps, source: string): Promise<void> {
 export async function updateExtensions(deps: PiMenuDeps): Promise<void> {
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "PiCode: actualizando extensiones" },
-    () => runPiCli(deps.runtime(), ["update", "--extensions"], undefined, deps.log),
+    () => runPiCli(deps.runtime(), ["update", "--extensions"], undefined, deps.log, deps.profileEnv()),
   );
   if (!result.ok) {
     void vscode.window.showErrorMessage(

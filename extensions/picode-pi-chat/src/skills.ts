@@ -582,11 +582,17 @@ function collectPackageSkills(
 /**
  * The real package source: `pi list` against the active runtime, through the
  * existing parser. The extension hands this to {@link discoverSkills}, so a skills
- * listing always talks to the same pi the chat runs.
+ * listing always talks to the same pi the chat runs — and, through `env`, to the same
+ * *profile*: the packages a listing reports are the ones the selected instance has,
+ * and asking the machine's profile instead would describe a different installation
+ * without saying so.
  */
-export function installedPackagesLister(runtime: ResolvedRuntime): SkillPackageLister {
+export function installedPackagesLister(
+  runtime: ResolvedRuntime,
+  env: Record<string, string>,
+): SkillPackageLister {
   return async () => {
-    const result = await runPiCli(runtime, ["list"], undefined, () => {});
+    const result = await runPiCli(runtime, ["list"], undefined, () => {}, env);
     return parseInstalledPackages(result.text);
   };
 }

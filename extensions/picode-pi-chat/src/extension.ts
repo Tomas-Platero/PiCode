@@ -70,6 +70,7 @@ import {
   resolveSdkEntry,
   type PiTransport,
   type PiUpdateReport,
+  type ResolvedRuntime,
   type RuntimeDescriptor,
   type RuntimeMode,
 } from "./runtime";
@@ -79,6 +80,7 @@ import {
   parseBranch,
   type EnvironmentStats,
 } from "./stats";
+import { instanceProfile, instanceProfileEnv } from "./instance";
 import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
 import { resolveAgentDir } from "./transcription";
 
@@ -152,6 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // to the active runtime's CLI.
   const menu: PiMenuDeps = {
     runtime: () => resolveRuntime(context.extensionUri),
+    profileEnv: () => piProfileEnv(context.extensionUri, resolveRuntime(context.extensionUri)),
     snapshot: () => menuSnapshot(context.extensionUri),
     providers: () => listProviders(),
     selectModel: () => withLiveClient(selectModel),
@@ -184,13 +187,15 @@ export function activate(context: vscode.ExtensionContext): void {
     // runs and pi's own agent directory. It is scope-aware because the caller hands
     // it that scope's `packages` value: a package filter is what turns a skill on or
     // off, so the two scopes can show different states for the same skill.
-    skills: async (packages) =>
-      discoverSkills({
+    skills: async (packages) => {
+      const runtime = resolveRuntime(context.extensionUri);
+      return discoverSkills({
         agentDir: resolveAgentDir(),
         cwd: agentCwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
-        listPackages: installedPackagesLister(resolveRuntime(context.extensionUri)),
+        listPackages: installedPackagesLister(runtime, piProfileEnv(context.extensionUri, runtime)),
         packageEntries: packages,
-      }),
+      });
+    },
     // PiCode's own settings are the editor's, not pi's: they are read and written
     // through the configuration API, and always globally.
     picode: () => ({
@@ -537,6 +542,19 @@ function invalidateInstalledCount(): void {
   installedCountCache = undefined;
 }
 
+/**
+ * The environment additions that point a spawned pi at the selected instance's profile.
+ *
+ * The decision itself is `instanceProfileEnv()`'s, in `instance.ts`, and it stays there:
+ * this only composes the two halves — which profile this runtime selects, and what a
+ * spawner does with it — because six call sites would otherwise repeat the composition
+ * and one of them would eventually get it wrong. `runtime` is passed rather than resolved
+ * here, so the profile cannot follow a different program than the one being spawned.
+ */
+function piProfileEnv(extensionUri: vscode.Uri, runtime: ResolvedRuntime): Record<string, string> {
+  return instanceProfileEnv(instanceProfile(extensionUri, runtime.mode));
+}
+
 /** How many packages pi reports, or undefined when the CLI cannot answer. */
 async function countInstalled(extensionUri: vscode.Uri): Promise<number | undefined> {
   const now = Date.now();
@@ -546,7 +564,8 @@ async function countInstalled(extensionUri: vscode.Uri): Promise<number | undefi
 
   let value: number | undefined;
   try {
-    const result = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, () => {});
+    const runtime = resolveRuntime(extensionUri);
+    const result = await runPiCli(runtime, ["list"], undefined, () => {}, piProfileEnv(extensionUri, runtime));
     value = parseInstalledPackages(result.text).length;
   } catch {
     value = undefined;
@@ -1178,7 +1197,8 @@ async function gentleUpdate(extensionUri: vscode.Uri): Promise<GentleUpdateRepor
 
   const installed = new Map<string, string | undefined>();
   try {
-    const listed = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, (): void => {});
+    const runtime = resolveRuntime(extensionUri);
+    const listed = await runPiCli(runtime, ["list"], undefined, (): void => {}, piProfileEnv(extensionUri, runtime));
     const packages = parseInstalledPackages(listed.text);
     for (const name of GENTLE_LAYER_PACKAGES) {
       const entry = packages.find((item) => item.source === `npm:${name}`);
@@ -1236,7 +1256,8 @@ async function gentleState(extensionUri: vscode.Uri): Promise<GentleState> {
   const silent = (): void => {};
 
   try {
-    const listed = await runPiCli(resolveRuntime(extensionUri), ["list"], undefined, silent);
+    const runtime = resolveRuntime(extensionUri);
+    const listed = await runPiCli(runtime, ["list"], undefined, silent, piProfileEnv(extensionUri, runtime));
     const entry = parseInstalledPackages(listed.text).find(
       (item) => item.source === `npm:${GENTLE_PACKAGE}`,
     );
@@ -1345,13 +1366,16 @@ function gentleActions(context: vscode.ExtensionContext): GentleActions {
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `PiCode: instalando ${GENTLE_PACKAGE}` },
-        () =>
-          runPiCli(
-            resolveRuntime(context.extensionUri),
+        () => {
+          const runtime = resolveRuntime(context.extensionUri);
+          return runPiCli(
+            runtime,
             ["install", `npm:${GENTLE_PACKAGE}`],
             undefined,
             log,
-          ),
+            piProfileEnv(context.extensionUri, runtime),
+          );
+        },
       );
       if (!result.ok) {
         void vscode.window.showErrorMessage(
@@ -1832,6 +1856,7 @@ function getClient(extensionUri: vscode.Uri): PiClient {
     executablePath: runtime.executable,
     argsPrefix: runtime.argsPrefix,
     extraArgs: configuration.get<string[]>("extraArgs", []),
+    env: piProfileEnv(extensionUri, runtime),
     ...(cwd ? { cwd } : {}),
     ...(outputChannel ? { output: outputChannel } : {}),
   });

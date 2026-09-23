@@ -34,6 +34,15 @@ export interface PiRpcClientOptions {
   extraArgs: readonly string[];
   /** Working directory for the agent; defaults to `process.cwd()`. */
   cwd?: string;
+  /**
+   * Environment additions for the child process, merged over the inherited
+   * environment and **last**, so they win.
+   *
+   * This is how the agent ends up on the profile of the instance PiCode selected:
+   * `PI_CODING_AGENT_DIR` for PiCode's own instance, nothing at all for the owner's.
+   * Absent means the inherited environment alone, which is what the live tests use.
+   */
+  env?: Record<string, string>;
   /** Diagnostic sink; a VS Code OutputChannel named "PiCode" in production. */
   output?: vscode.OutputChannel;
 }
@@ -331,6 +340,11 @@ export class PiRpcClient implements PiClient {
       windowsHide: true,
       shell,
       stdio: ["pipe", "pipe", "pipe"],
+      // The additions go last on purpose: for PiCode's own instance they have to beat
+      // a `PI_CODING_AGENT_DIR` the owner exported for the pi in their terminal, or
+      // that variable would point PiCode's agent at the owner's profile — the crossing
+      // this whole feature exists to remove.
+      env: { ...process.env, ...(this.options.env ?? {}) },
     });
 
     await new Promise<void>((resolve, reject) => {

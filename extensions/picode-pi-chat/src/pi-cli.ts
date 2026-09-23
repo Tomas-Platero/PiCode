@@ -9,6 +9,13 @@ import { spawnTarget, type ResolvedRuntime } from "./runtime";
  * work runs the CLI of the *active* runtime. That is deliberate: if the owner
  * chose PiCode's own pi, the packages must be managed by that pi, not by whatever
  * happens to be on PATH.
+ *
+ * The *profile* is a separate question from the program, and it is why `runPiCli`
+ * takes the environment additions rather than guessing: `instanceProfileEnv()` in
+ * `instance.ts` is the single place that decides them, and a caller that forgets to
+ * pass them would install into the machine's profile while believing it used the
+ * selected one — silently, because both are valid directories. The parameter is
+ * therefore required, not optional.
  */
 
 export interface PiCliResult {
@@ -23,12 +30,19 @@ export function runPiCli(
   args: readonly string[],
   cwd: string | undefined,
   onOutput: (line: string) => void,
+  /**
+   * The environment additions that point this CLI run at the profile of the selected
+   * instance, from `instanceProfileEnv()`. An empty object is a real value here: it
+   * means the owner's instance, whose pi resolves its own default.
+   */
+  env: Record<string, string>,
 ): Promise<PiCliResult> {
   const target = spawnTarget(runtime);
   onOutput(`pi ${args.join(" ")}`);
   return runExecutable(target.command, [...target.argsPrefix, ...args], {
     shell: target.shell,
     onOutput,
+    env,
     ...(cwd ? { cwd } : {}),
   });
 }
@@ -43,16 +57,29 @@ export function runPiCli(
 export function runExecutable(
   command: string,
   args: readonly string[],
-  options: { shell: boolean; cwd?: string; onOutput: (line: string) => void },
+  options: {
+    shell: boolean;
+    cwd?: string;
+    onOutput: (line: string) => void;
+    /**
+     * Extra environment for the child, merged last so it beats what this process
+     * inherited. Omitted by the non-pi callers (git, for one), which have no profile
+     * to point at.
+     */
+    env?: Record<string, string>;
+  },
 ): Promise<PiCliResult> {
-  const { shell, cwd, onOutput } = options;
+  const { shell, cwd, onOutput, env } = options;
 
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       shell,
       windowsHide: true,
       ...(cwd ? { cwd } : {}),
-      env: { ...process.env, NO_COLOR: "1" },
+      // The additions go last on purpose: for PiCode's own instance they have to beat a
+      // `PI_CODING_AGENT_DIR` the owner exported for the pi in their terminal, or that
+      // variable would make the install land in the owner's profile.
+      env: { ...process.env, NO_COLOR: "1", ...(env ?? {}) },
     });
 
     let text = "";
