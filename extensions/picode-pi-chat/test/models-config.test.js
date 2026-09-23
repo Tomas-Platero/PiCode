@@ -102,17 +102,81 @@ async function main() {
   };
   const accepted = api.parseModelsText(JSON.stringify(file));
   check(
-    "a readable file parses as it was, extra keys included",
-    accepted.ok === true && JSON.stringify(accepted.json) === JSON.stringify(file),
+    "a readable file parses as it was, extra keys included, and nothing had to be tolerated",
+    accepted.ok === true &&
+      JSON.stringify(accepted.json) === JSON.stringify(file) &&
+      accepted.tolerated === false,
     JSON.stringify(accepted),
+  );
+
+  /*
+   * pi's own tolerances, mirrored. pi parses this file as
+   * `JSON.parse(stripJsonComments(stripBom(content)))`, so `//` comments, a trailing comma
+   * and a BOM are all readable there — and a file PiCode called invalid would be a file pi
+   * accepts, which is the one direction of disagreement that makes this surface useless.
+   * Block comments stay invalid: pi does not strip them either.
+   */
+  const commented = '{\n  // lo que uso para probar\n  "providers": { "ollama": { "baseUrl": "http://x/v1" }, },\n}';
+  const tolerant = api.parseModelsText("\ufeff" + commented);
+  check(
+    "comments, a trailing comma and a BOM are read the way pi reads them, and reported",
+    tolerant.ok === true &&
+      tolerant.tolerated === true &&
+      JSON.stringify(tolerant.json) ===
+        JSON.stringify({ providers: { ollama: { baseUrl: "http://x/v1" } } }),
+    JSON.stringify(tolerant),
+  );
+  const blockComment = api.parseModelsText('{\n  /* x */\n  "providers": {}\n}');
+  check(
+    "a block comment is still not JSON, because pi does not accept it either",
+    blockComment.ok === false && blockComment.problem === "not-json",
+    JSON.stringify(blockComment),
+  );
+  const innerSlash = api.parseModelsText(
+    JSON.stringify({ providers: { ollama: { baseUrl: "http://x/v1", name: "a//b" } } }),
+  );
+  check(
+    "a `//` inside a string literal survives, as pi's own stripper leaves literals alone",
+    innerSlash.ok === true &&
+      innerSlash.tolerated === false &&
+      JSON.stringify(innerSlash.json).includes("a//b"),
+    JSON.stringify(innerSlash),
+  );
+
+  // --- the two shapes that make pi discard the whole file --------------------
+
+  const stringProvider = api.parseModelsText('{"providers": {"ollama": "http://x/v1"}}');
+  check(
+    "a provider that is not an object refuses the file, as pi's schema does",
+    stringProvider.ok === false && stringProvider.problem === "provider-not-object",
+    JSON.stringify(stringProvider),
+  );
+  const stringModel = api.parseModelsText('{"providers": {"o": {"models": ["llama3"]}}}');
+  check(
+    "a model as a bare string refuses the file, because pi discards the whole file over it",
+    stringModel.ok === false && stringModel.problem === "models-not-objects",
+    JSON.stringify(stringModel),
+  );
+  const modelsNotList = api.parseModelsText('{"providers": {"o": {"models": "llama3"}}}');
+  check(
+    "a `models` that is not a list refuses the file for the same reason",
+    modelsNotList.ok === false && modelsNotList.problem === "models-not-objects",
+    JSON.stringify(modelsNotList),
+  );
+  const emptyModels = api.parseModelsText('{"providers": {"o": {"models": []}}}');
+  check(
+    "an empty list of models is a shape pi accepts, so the file is usable",
+    emptyModels.ok === true,
+    JSON.stringify(emptyModels),
   );
 
   /* --- the bytes that go back to disk ------------------------------------- */
 
   const text = api.modelsFileText(file);
   check(
-    "the text round-trips through the parser unchanged",
-    JSON.stringify(api.parseModelsText(text)) === JSON.stringify({ ok: true, json: file }),
+    "the text round-trips through the parser unchanged, with nothing tolerated",
+    JSON.stringify(api.parseModelsText(text)) ===
+      JSON.stringify({ ok: true, json: file, tolerated: false }),
     text,
   );
   check(
@@ -129,7 +193,7 @@ async function main() {
         name: "Zeta",
         baseUrl: "http://z/v1",
         api: "openai-completions",
-        models: [{ id: "b" }, "a", { id: "b" }, { nope: 1 }, 7],
+        models: [{ id: "b" }, { id: "a" }, { id: "b" }, { nope: 1 }],
       },
       alpha: { apiKey: "$OPENAI_KEY", models: [{ id: "m" }] },
       broken: "not an object",
@@ -142,7 +206,7 @@ async function main() {
     JSON.stringify(listed.map((entry) => entry.id)),
   );
   check(
-    "model ids come from both of pi's shapes, in order and once each",
+    "model ids come in file order and once each",
     listed[3].models.join(",") === "b,a" && listed[0].models.join(",") === "m",
     JSON.stringify([listed[3].models, listed[0].models]),
   );
@@ -595,6 +659,20 @@ async function main() {
     "the module never mentions the credential file",
     !source.includes("auth.json"),
     "the credential file is named in the module",
+  );
+  /*
+   * The mode is a source guard because the property cannot be observed from outside: the
+   * temp file exists for the length of one rename, so what a test can pin is that the temp
+   * is **created** at the owner's mode rather than the target being narrowed afterwards —
+   * the version that left the secret readable for the window between the two, and left a
+   * readable temp behind for good if the process died in it.
+   */
+  check(
+    "the file holding a literal key is created at the owner's mode, never narrowed after the rename",
+    /hasLiteralKey\(json\);[\s\S]{0,160}mode: 0o600 \}/.test(source) &&
+      /writeFileSync\(temp, text, encoding\)/.test(source) &&
+      !source.includes("chmodSync"),
+    "the temp is not created at the owner's mode",
   );
 
   const manifest = JSON.parse(fs.readFileSync(path.join(EXTENSION_ROOT, "package.json"), "utf8"));

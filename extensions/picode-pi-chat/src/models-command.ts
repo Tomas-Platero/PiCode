@@ -36,7 +36,7 @@
 
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { instanceAgentDir, instanceProfileDir, profileNameFor } from "./instance";
+import { instanceAgentDir, instanceProfile, instanceProfileDir, profileNameFor } from "./instance";
 import { RELOAD_WINDOW_LABEL } from "./instance-import-command";
 import {
   PROVIDER_APIS,
@@ -125,19 +125,56 @@ export const MODELS_TEXTS = {
   ownerContinue: "Escribir en el perfil de mi pi",
   ownerDeclined: "No se cambió nada: no se escribió en el perfil de tu pi.",
   cancelled: "No se cambió nada: cerraste la elección.",
+  /**
+   * The one thing the write can do that the owner did not ask for.
+   *
+   * A file with `//` comments or a trailing comma is one pi reads (its loader strips both)
+   * and one this surface can only rewrite as plain JSON, so the comments go. Saying so is
+   * the difference between a normalization and a silent loss.
+   */
+  normalized:
+    "El fichero se ha reescrito como JSON sin los comentarios que tenía; pi los lee, pero " +
+    "PiCode no los conserva al guardar.",
+  /**
+   * The reload, which is not owed in one state: PiCode's own profile is written while the
+   * anti-mute guard keeps every running reader on the machine's profile, so a reload there
+   * would reload onto the same list and the sentence would be a promise nothing keeps.
+   */
+  reload: `${RELOAD_WINDOW_LABEL} para que pi lo lea.`,
+  deferred:
+    "Se ha escrito en el perfil propio de PiCode, que todavía no está en uso: el agente que " +
+    "está corriendo sigue leyendo el perfil de tu pi. Cuando el perfil propio tenga " +
+    "credenciales, lo leerá sin tocar nada más.",
+  /**
+   * The write failures worth naming, by the code the filesystem reports.
+   *
+   * A code is what the owner can act on, and it is the only thing said about the failure
+   * that cannot carry a path: the raw message of a failed write names the file it could
+   * not open, and internal paths are exactly what this panel does not put on screen.
+   */
+  writeFailures: {
+    EACCES: "el sistema no deja escribir ahí (permisos)",
+    EPERM: "el sistema no deja escribir ahí (permisos)",
+    EROFS: "ese sistema de ficheros es de solo lectura",
+    ENOSPC: "no queda espacio en el disco",
+    EBUSY: "el fichero está en uso por otro programa",
+  } as Record<string, string>,
 } as const;
 
 /**
  * Why the file cannot be used, in the owner's words.
  *
- * The four cases are the module's own problem codes plus the one I/O failure
- * `readModelsFile` reports, because they lead to the same ending and the owner does not
- * need to know which layer noticed.
+ * The module's own problem codes plus the one I/O failure `readModelsFile` reports,
+ * because they lead to the same ending and the owner does not need to know which layer
+ * noticed. The last two are the shapes that make **pi itself** discard the whole file, so
+ * they are the two where refusing is not caution but the same answer pi would give.
  */
 export const FILE_PROBLEM_TEXTS: Record<ModelsFileProblem | "unreadable", string> = {
   "not-json": "no es JSON válido",
   "not-object": "no es un objeto JSON",
   "providers-not-object": "su apartado `providers` no es un objeto",
+  "provider-not-object": "hay un proveedor que no es un objeto",
+  "models-not-objects": "los modelos de un proveedor no están escritos como objetos `{ id }`",
   unreadable: "no se pudo leer",
 };
 
@@ -170,6 +207,14 @@ export interface ModelsProvidersState {
   profileName: string;
   /** True when the profile is PiCode's own rather than the owner's installed pi. */
   owned: boolean;
+  /**
+   * True when the profile this surface writes is **not** the one the running agent
+   * reads yet: PiCode's own pi is selected and its profile cannot carry an instance, so
+   * the anti-mute guard keeps every reader on the machine's profile. A write there is
+   * still the right write — it is what the login will switch on — but the reload that
+   * follows it would reload onto the same list, which is why the ending says so.
+   */
+  deferred: boolean;
   /** What the file declares. The order is the surface's — by id, like the pickers — not the file's. */
   providers: readonly ConfiguredProvider[];
   /** The line the settings row and the picker show. */
@@ -178,6 +223,11 @@ export interface ModelsProvidersState {
   json: ModelsJson | undefined;
   /** Why the file cannot be used, when it cannot. */
   problem: ModelsFileProblem | "unreadable" | undefined;
+  /**
+   * True when the file was readable only through pi's tolerances — `//` comments, a
+   * trailing comma, a BOM — which the write below serializes away, so the owner is told.
+   */
+  normalized: boolean;
 }
 
 /**
@@ -194,7 +244,7 @@ export function refusedSummary(profileName: string): string {
   );
 }
 
-/** The refusal in full: which file, which of the four problems, and why nothing is written. */
+/** The refusal in full: which file, which problem, and why nothing is written. */
 export function refusedText(
   profileName: string,
   problem: ModelsFileProblem | "unreadable",
@@ -215,6 +265,11 @@ export function refusedText(
  * `profileNameFor(owned)`, so there is one copy of each of the two profile names in the
  * product. Nothing here throws: a missing file is an empty list, and a file that does not
  * parse is a problem the caller refuses on.
+ *
+ * `deferred` asks the *guarded* resolver, and only to word the ending: where the write
+ * goes is `instanceProfileDir`, never that answer. It is the one state in which the two
+ * differ — `managed` with a profile that cannot carry an instance — and the only thing
+ * read from it is whether the file being written is the one the agent will read.
  */
 export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersState {
   const mode = readMode();
@@ -225,13 +280,20 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
   const owned = instanceAgentDir(extensionUri, mode) !== undefined;
   const profileDir = instanceProfileDir(extensionUri, mode);
   const profileName = profileNameFor(owned);
+  const deferred = instanceProfile(extensionUri, mode).agentDir !== profileDir;
 
   const read = readModelsFile(path.join(profileDir, MODELS_FILE_NAME));
 
-  const state = (rest: Omit<ModelsProvidersState, "profileDir" | "profileName" | "owned">) => ({
+  const state = (
+    rest: Omit<
+      ModelsProvidersState,
+      "profileDir" | "profileName" | "owned" | "deferred"
+    >,
+  ) => ({
     profileDir,
     profileName,
     owned,
+    deferred,
     ...rest,
   });
 
@@ -241,6 +303,7 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
       summary: refusedSummary(profileName),
       json: undefined,
       problem: "unreadable",
+      normalized: false,
     });
   }
   if (read.kind === "missing") {
@@ -251,6 +314,7 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
       summary: describeConfiguredProviders([], profileName),
       json: {},
       problem: undefined,
+      normalized: false,
     });
   }
 
@@ -261,6 +325,7 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
       summary: refusedSummary(profileName),
       json: undefined,
       problem: parsed.problem,
+      normalized: false,
     });
   }
 
@@ -270,6 +335,7 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
     summary: describeConfiguredProviders(providers, profileName),
     json: parsed.json,
     problem: undefined,
+    normalized: parsed.tolerated,
   });
 }
 
@@ -299,16 +365,16 @@ export interface ApiItem extends vscode.QuickPickItem {
  * One provider as a row of the removal picker.
  *
  * The id is the label because it is the key the removal names and the provider half of
- * every `proveedor/modelo` reference; the endpoint and the api go in the description, and
- * the models and whether the entry carries a key in the detail. Whether it carries one is
- * stated and never shown — the file may hold a literal key, and this surface never prints
- * a credential.
+ * every `proveedor/modelo` reference; the name pi shows for it, the endpoint and the api
+ * go in the description, and the models and whether the entry carries a key in the detail.
+ * Whether it carries one is stated and never shown — the file may hold a literal key, and
+ * this surface never prints a credential.
  */
 export function providerRow(provider: ConfiguredProvider): ConfiguredProviderRow {
   return {
     id: provider.id,
     label: provider.id,
-    description: [provider.baseUrl, provider.api]
+    description: [provider.name, provider.baseUrl, provider.api]
       .filter((part) => part !== undefined && part !== "")
       .join(" · "),
     detail: [
@@ -440,24 +506,58 @@ export function addedText(
   const count = `${input.modelIds.length} modelo${input.modelIds.length === 1 ? "" : "s"}`;
   const declared =
     `${input.id} escrito en el ${MODELS_FILE_NAME} de ${profileName}: ${input.baseUrl} ` +
-    `(${input.api}), con ${count}. ` +
-    `${RELOAD_WINDOW_LABEL} para que pi lo lea.`;
+    `(${input.api}), con ${count}.`;
   return rejected.length === 0
     ? declared
     : `${declared} Se descartaron, por no ser identificadores válidos: ${rejected.join(", ")}.`;
 }
 
-/** The ending after a provider was taken out: the id, the profile, and the reload. */
+/** The ending after a provider was taken out: the id and the profile. */
 export function removedText(id: string, profileName: string): string {
-  return (
-    `${id} ya no está en el ${MODELS_FILE_NAME} de ${profileName}. ` +
-    `${RELOAD_WINDOW_LABEL} para que pi lo lea.`
-  );
+  return `${id} ya no está en el ${MODELS_FILE_NAME} de ${profileName}.`;
 }
 
-/** The ending when the file could not be written: what failed, in pi's or the filesystem's words. */
-export function writeFailedText(message: string): string {
-  return `No se pudo escribir el ${MODELS_FILE_NAME}. ${message}`;
+/**
+ * What is said after a write that the ending above does not cover: the reload, or why
+ * there is no reload to offer, and the one normalization the write performed.
+ *
+ * `deferred` is the state the anti-mute guard creates, and it is the reason this is a
+ * function instead of a constant: PiCode's own profile is written while the running agent
+ * reads the machine's, so `RELOAD_WINDOW_LABEL` there would reload onto the same list.
+ * The sentence says which profile holds the file and what will make it count — the
+ * credentials the profile row already asks for — instead of a button that changes nothing.
+ * The caller offers the label only when this returned the reload sentence, which is the
+ * same rule the import closes with: a button exists only where pressing it does something.
+ */
+export function afterWriteNotes(deferred: boolean, normalized: boolean): string {
+  const reload = deferred ? MODELS_TEXTS.deferred : MODELS_TEXTS.reload;
+  return normalized ? `${reload} ${MODELS_TEXTS.normalized}` : reload;
+}
+
+/**
+ * The ending when the file could not be written: what failed, in words the owner can act
+ * on.
+ *
+ * The filesystem's code is named when it is one of the handful this surface expects; a
+ * code it does not know falls back to the raw message, because an unexplained refusal is
+ * worse than one that names a path — and that path is the reason the known codes are
+ * preferred rather than printed.
+ */
+export function writeFailureReason(error: unknown): string {
+  const code =
+    typeof error === "object" && error !== null && typeof (error as { code?: unknown }).code === "string"
+      ? ((error as { code: string }).code as keyof typeof MODELS_TEXTS.writeFailures)
+      : undefined;
+  const named = code === undefined ? undefined : MODELS_TEXTS.writeFailures[code];
+  if (named !== undefined) {
+    return named;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** The ending when the file could not be written, with the reason as its own builder. */
+export function writeFailedText(reason: string): string {
+  return `No se pudo escribir el ${MODELS_FILE_NAME}: ${reason}.`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -519,10 +619,17 @@ export async function modelsProviders(context: vscode.ExtensionContext): Promise
   }
 
   // pi loads `models.json` once, when its model runtime is built, and the running agent
-  // was built at startup — so the reload is what makes it read the new list. It is
-  // offered rather than promised, exactly as the login offers it.
+  // was built at startup — so a reload is what makes it read the new list. The sentence
+  // says whether that is true here: in the one state where the file just written is not
+  // the file the agent reads, it says so instead, and **no reload is offered**, because a
+  // button exists only where pressing it changes something.
+  const text = `${change.text} ${afterWriteNotes(state.deferred, state.normalized)}`;
+  if (state.deferred) {
+    void vscode.window.showInformationMessage(`PiCode: ${text}`);
+    return;
+  }
   const choice = await vscode.window.showInformationMessage(
-    `PiCode: ${change.text}`,
+    `PiCode: ${text}`,
     RELOAD_WINDOW_LABEL,
   );
   if (choice === RELOAD_WINDOW_LABEL) {
@@ -735,9 +842,7 @@ function writeState(state: ModelsProvidersState, json: ModelsJson): boolean {
     writeModelsFile(path.join(state.profileDir, MODELS_FILE_NAME), json);
     return true;
   } catch (error) {
-    void vscode.window.showErrorMessage(
-      `PiCode: ${writeFailedText(error instanceof Error ? error.message : String(error))}`,
-    );
+    void vscode.window.showErrorMessage(`PiCode: ${writeFailedText(writeFailureReason(error))}`);
     return false;
   }
 }

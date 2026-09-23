@@ -189,7 +189,7 @@ async function main() {
       baseUrl: "http://localhost:11434/v1",
       api: "openai-completions",
       apiKey: "$OLLAMA_API_KEY",
-      models: [{ id: "qwen2.5-coder:7b" }, "llama3.1:8b"],
+      models: [{ id: "qwen2.5-coder:7b" }, { id: "llama3.1:8b" }],
     },
     gateway: {
       baseUrl: "https://gateway.example.test/v1",
@@ -243,20 +243,55 @@ async function main() {
     api.refusedText("el perfil de tu pi", "not-json"),
   );
   check(
-    "each of the four ways the file can be unusable has its own sentence",
+    "each of the ways the file can be unusable has its own sentence, pi's two shapes included",
     new Set([
       api.refusedText("un perfil", "not-json"),
       api.refusedText("un perfil", "not-object"),
       api.refusedText("un perfil", "providers-not-object"),
+      api.refusedText("un perfil", "provider-not-object"),
+      api.refusedText("un perfil", "models-not-objects"),
       api.refusedText("un perfil", "unreadable"),
-    ]).size === 4,
+    ]).size === 6,
     JSON.stringify([
       api.refusedText("un perfil", "not-json"),
-      api.refusedText("un perfil", "not-object"),
-      api.refusedText("un perfil", "providers-not-object"),
+      api.refusedText("un perfil", "provider-not-object"),
+      api.refusedText("un perfil", "models-not-objects"),
       api.refusedText("un perfil", "unreadable"),
     ]),
   );
+
+  // The two shapes pi's own schema discards the whole file over, through this surface.
+  writeFile(
+    path.join(machineProfile, "models.json"),
+    modelsJson({ ollama: { baseUrl: "http://x/v1", models: ["llama3"] } }),
+  );
+  const bareModel = api.readModelsProviders(ownDistribution.extensionUri);
+  check(
+    "a hand-written bare-string model refuses the file here too, instead of promising a reload pi would ignore",
+    bareModel.problem === "models-not-objects" &&
+      bareModel.providers.length === 0 &&
+      bareModel.summary === api.refusedSummary("el perfil de tu pi"),
+    JSON.stringify({ problem: bareModel.problem, summary: bareModel.summary }),
+  );
+  writeFile(path.join(machineProfile, "models.json"), modelsJson(declared));
+
+  // The tolerances: a file pi reads with comments in it is usable, and reported as rewritten.
+  writeFile(
+    path.join(machineProfile, "models.json"),
+    '{\n  // proveedores de prueba\n  "providers": {\n' +
+      '    "ollama": { "baseUrl": "http://localhost:11434/v1", "api": "openai-completions", },\n' +
+      "  },\n}\n",
+  );
+  const tolerated = api.readModelsProviders(ownDistribution.extensionUri);
+  check(
+    "a file pi reads thanks to its tolerances is usable here, and the normalization is stated",
+    tolerated.problem === undefined &&
+      tolerated.providers.length === 1 &&
+      tolerated.normalized === true &&
+      api.MODELS_TEXTS.normalized.includes("comentarios"),
+    JSON.stringify({ problem: tolerated.problem, normalized: tolerated.normalized }),
+  );
+  writeFile(path.join(machineProfile, "models.json"), modelsJson(declared));
   writeFile(path.join(machineProfile, "models.json"), modelsJson(declared));
 
   // A `auth.json` that is a directory proves the I/O failure is not read as "empty" either.
@@ -375,14 +410,39 @@ async function main() {
   };
   const added = api.addedText(input, "el perfil de tu pi", []);
   check(
-    "the ending after a write names what was declared, in which profile, and the reload",
+    "the ending after a write names what was declared and in which profile",
     added.includes("ollama") &&
       added.includes("el perfil de tu pi") &&
       added.includes("http://localhost:11434/v1") &&
       added.includes("openai-completions") &&
-      added.includes("2 modelos") &&
-      added.includes("Recargar la ventana"),
+      added.includes("2 modelos"),
     added,
+  );
+  /*
+   * The reload is no longer part of the ending but a fact of its own, because it is not
+   * always true: when the file written is not the one the running agent reads, the sentence
+   * says so and no button is offered. A label that promised a reload there would be a
+   * promise nothing keeps — the same rule the import's closing already follows.
+   */
+  check(
+    "the reload is stated only where reloading does something, and the deferred case says why there is none",
+    api.afterWriteNotes(false, false) === api.MODELS_TEXTS.reload &&
+      api.MODELS_TEXTS.reload.includes("Recargar la ventana") &&
+      api.afterWriteNotes(true, false) === api.MODELS_TEXTS.deferred &&
+      api.MODELS_TEXTS.deferred.includes("perfil propio de PiCode") &&
+      !api.MODELS_TEXTS.deferred.includes("Recargar la ventana") &&
+      !api.MODELS_TEXTS.deferred.includes(machineProfile),
+    JSON.stringify({
+      reload: api.afterWriteNotes(false, false),
+      deferred: api.afterWriteNotes(true, false),
+    }),
+  );
+  check(
+    "a file that had to be tolerated says what the write dropped, after the reload sentence",
+    api.afterWriteNotes(false, true).startsWith(api.MODELS_TEXTS.reload) &&
+      api.afterWriteNotes(false, true).includes("comentarios") &&
+      api.afterWriteNotes(true, true).startsWith(api.MODELS_TEXTS.deferred),
+    api.afterWriteNotes(false, true),
   );
   check(
     "the ending after a write prints no path and never the key, in any of its forms",
@@ -411,14 +471,23 @@ async function main() {
     api.addedText({ ...input, modelIds: ["auto"] }, "un perfil", []),
   );
   check(
-    "the ending after a removal names the id, the profile and the reload",
+    "the ending after a removal names the id and the profile",
     api.removedText("ollama", "el perfil propio de PiCode").includes("ollama") &&
       api.removedText("ollama", "el perfil propio de PiCode").includes(
         "el perfil propio de PiCode",
       ) &&
-      api.removedText("ollama", "el perfil propio de PiCode").includes("Recargar la ventana") &&
+      !api.removedText("ollama", "el perfil propio de PiCode").includes("Recargar la ventana") &&
       !api.removedText("ollama", "un perfil").includes(machineProfile),
     api.removedText("ollama", "el perfil propio de PiCode"),
+  );
+  check(
+    "a failing write names a code the owner can act on instead of the path in the message",
+    api.writeFailureReason({ code: "EACCES", message: "EACCES: permission denied, open 'X'" }) ===
+      api.MODELS_TEXTS.writeFailures.EACCES &&
+      !api.writeFailureReason({ code: "ENOSPC", message: "no space, open 'X'" }).includes("X") &&
+      api.writeFailureReason(new Error("algo raro")).includes("algo raro") &&
+      !api.writeFailedText(api.writeFailureReason({ code: "EROFS" })).includes("/"),
+    api.writeFailedText(api.writeFailureReason({ code: "EACCES" })),
   );
   check(
     "the write failure ending carries the reason it was given and not a paraphrase",

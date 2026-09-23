@@ -15,6 +15,15 @@
  *   else — `name`, `headers`, `compat`, `modelOverrides`, a model's own keys — as it
  *   was, including a model's extra keys across a re-save. Guessing at the rest of
  *   pi's shape here is how a hand-written endpoint would be destroyed by saving it.
+ *   The two shapes that make pi **discard the whole file** — an entry that is not an
+ *   object, and models that are not `{ id }` objects — are the exception: they are
+ *   refused rather than tolerated, because listing providers pi is ignoring and then
+ *   promising a reload that reads nothing is worse than saying the file cannot be used.
+ * - What counts as JSON is pi's own reading, not the strictest one. pi parses this file
+ *   as `JSON.parse(stripJsonComments(stripBom(content)))`, so `//` comments, a trailing
+ *   comma and a BOM are all fine — and a file that arrives with comments goes back
+ *   normalized, because the write serializes the parsed object. The tolerances are
+ *   mirrored, and that normalization is reported to the owner instead of discovered.
  * - Nothing here opens the file pi's own login writes. A key that lives in
  *   `models.json` is an `apiKey` in one of pi's three forms — a literal, `$NAME` /
  *   `${NAME}` interpolation, or a leading `!command` — and that is the only key this
@@ -29,7 +38,6 @@
  */
 
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -60,11 +68,25 @@ export interface ConfiguredProvider {
   hasKey: boolean;
 }
 
-/** Why a file could not be read as a `models.json`. */
-export type ModelsFileProblem = "not-json" | "not-object" | "providers-not-object";
+/** Why a file could not be read as a `models.json` pi would accept. */
+export type ModelsFileProblem =
+  | "not-json"
+  | "not-object"
+  | "providers-not-object"
+  | "provider-not-object"
+  | "models-not-objects";
 
 export type ModelsFileParse =
-  | { ok: true; json: ModelsJson }
+  | {
+      ok: true;
+      json: ModelsJson;
+      /**
+       * True when the bytes were not strict JSON and pi's own tolerances were what made
+       * them readable — `//` comments, a trailing comma, a BOM. The owner is told, because
+       * the write that follows serializes the parsed object and drops them.
+       */
+      tolerated: boolean;
+    }
   | { ok: false; problem: ModelsFileProblem };
 
 export type ModelsFileRead =
@@ -119,21 +141,19 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** The id one declared model carries, or `undefined` when the entry carries none. */
-function declaredModelId(entry: unknown): string | undefined {
-  if (typeof entry === "string") {
-    return entry;
-  }
-  return isRecord(entry) ? optionalString(entry.id) : undefined;
+/** The id one declared model carries, or `undefined` when it carries none. */
+function declaredModelId(entry: Record<string, unknown>): string | undefined {
+  return optionalString(entry.id);
 }
 
 /**
  * The model ids an entry declares, in file order, each kept once.
  *
- * pi accepts a model as `{ id }` or as a bare string, and a hand-written file mixes
- * both; anything else in the array is skipped rather than guessed at. The id is never
- * rewritten — `qwen2.5-coder:7b` is a name, not a pattern — and a repeated id yields
- * one row, because the surface lists what the entry declares and not how often.
+ * Only `{ id }` objects ever reach this: the parser refuses a file whose models are not
+ * objects at all, because pi's own schema does (`ModelDefinitionSchema` requires `id`),
+ * and one such entry makes pi discard every provider in the file. The id is never
+ * rewritten — `qwen2.5-coder:7b` is a name, not a pattern — and a repeated id yields one
+ * row, because the surface lists what the entry declares and not how often.
  */
 function modelIds(value: unknown): string[] {
   const ids: string[] = [];
@@ -142,7 +162,7 @@ function modelIds(value: unknown): string[] {
     return ids;
   }
   for (const entry of value) {
-    const id = declaredModelId(entry);
+    const id = isRecord(entry) ? declaredModelId(entry) : undefined;
     if (id === undefined || seen.has(id)) {
       continue;
     }
@@ -153,25 +173,78 @@ function modelIds(value: unknown): string[] {
 }
 
 /**
+ * The two shapes that make pi throw the whole file away, or `undefined`.
+ *
+ * pi validates the file against its own schema **before** it reads a single provider
+ * (`ModelConfigSchema` / `ProviderConfigSchema` / `ModelDefinitionSchema` in
+ * `dist/core/model-config.js`), so one provider that is not an object, or one `models`
+ * that is not a list of `{ id }` objects, discards every entry. Reading such a file
+ * anyway would let this surface list providers pi is ignoring and promise a reload that
+ * reads nothing, so it is refused like any other file PiCode cannot use.
+ *
+ * Nothing beyond these two shapes is checked: pi's schema is pi's, and a copy of it here
+ * is exactly what this module refuses to keep. A file pi rejects for some other reason is
+ * listed as it stands, which is the honest reading of a file this module does not own.
+ */
+function shapeProblem(json: ModelsJson): ModelsFileProblem | undefined {
+  const declared = providerRecords(json.providers);
+  for (const entry of Object.values(declared)) {
+    if (!isRecord(entry)) {
+      return "provider-not-object";
+    }
+    const models = entry.models;
+    if (models === undefined) {
+      continue;
+    }
+    if (!Array.isArray(models) || models.some((model) => !isRecord(model))) {
+      return "models-not-objects";
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The text pi itself would parse, and whether pi's tolerances were what made it readable.
+ *
+ * The two replacements are pi's own, copied from `stripJsonComments` in
+ * `dist/utils/json.js` and applied on top of pi's `stripBom` at
+ * `dist/core/model-config.js:253`: `//` line comments and trailing commas go, string
+ * literals are left alone. Mirroring them exactly — instead of inventing a relaxed JSON
+ * of this module's own — is what keeps a file pi reads from being called invalid here;
+ * block comments and single quotes stay invalid, because pi does not accept them either.
+ */
+function toleratedText(text: string): { text: string; tolerated: boolean } {
+  const withoutBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const stripped = withoutBom
+    .replace(/"(?:\\.|[^"\\])*"|\/\/[^\n]*/g, (match) => (match[0] === '"' ? match : ""))
+    .replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (match, tail: string | undefined) =>
+      tail ?? (match[0] === '"' ? match : ""),
+    );
+  return { text: stripped, tolerated: stripped !== withoutBom };
+}
+
+/**
  * Parses the bytes of a `models.json`, keeping pi's own shape and reporting only
  * what makes the file unreadable.
  *
  * An absent file, an empty one and a whitespace-only one are the same thing: a file
  * pi would read as "no custom providers", which is what a first write starts from.
- * Everything after that is the three ways a file cannot be merged into — it is not
- * JSON, it is JSON but not an object, or its `providers` section is not an object.
- * The distinction is kept because each one needs a different sentence in front of the
- * owner, and because a write over an unreadable file would silently drop whatever it
- * held. The parsed object is returned as it was, `providers` included, so the merge
- * can preserve the keys of a file this module does not fully understand.
+ * Everything after that is the ways a file cannot be merged into — it is not JSON even
+ * with pi's own tolerances, it is JSON but not an object, its `providers` section is not
+ * an object, one of its providers is not an object, or a provider's models are not
+ * `{ id }` objects. The distinction is kept because each one needs a different sentence in
+ * front of the owner, and because a write over an unreadable file would silently drop
+ * whatever it held. The parsed object is returned as it was, `providers` included, so the
+ * merge can preserve the keys of a file this module does not fully understand.
  */
 export function parseModelsText(text: string | undefined): ModelsFileParse {
   if (text === undefined || text.trim() === "") {
-    return { ok: true, json: {} };
+    return { ok: true, json: {}, tolerated: false };
   }
+  const tolerant = toleratedText(text);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(tolerant.text);
   } catch {
     return { ok: false, problem: "not-json" };
   }
@@ -181,7 +254,11 @@ export function parseModelsText(text: string | undefined): ModelsFileParse {
   if (parsed.providers !== undefined && !isRecord(parsed.providers)) {
     return { ok: false, problem: "providers-not-object" };
   }
-  return { ok: true, json: parsed };
+  const shape = shapeProblem(parsed);
+  if (shape !== undefined) {
+    return { ok: false, problem: shape };
+  }
+  return { ok: true, json: parsed, tolerated: tolerant.tolerated };
 }
 
 /** The bytes pi's own stores write: two-space indentation and a final newline. */
@@ -477,10 +554,12 @@ function hasLiteralKey(json: ModelsJson): boolean {
  * fragment of it. A failed write takes its temp file with it rather than leaving one
  * behind for the next reader to find.
  *
- * When the object carries a literal key, the file is narrowed to its owner — but only
- * where a mode means something, and never at the cost of the write: a platform or a
- * filesystem that refuses the change must not turn a saved provider into a failure,
- * because the write already happened.
+ * When the object carries a literal key, the temp file is **created** at the owner's own
+ * mode rather than narrowed after the rename. Where a mode means something, the window
+ * between the two left the secret readable, and a crash before the rename left a readable
+ * temp behind for good; pi's own credential writer creates its file the same way
+ * (`dist/core/auth-storage.js`). Where a mode means nothing the option is ignored, which is
+ * the platform's business and never a failure.
  */
 export function writeModelsFile(file: string, json: ModelsJson): void {
   const text = modelsFileText(json);
@@ -488,8 +567,12 @@ export function writeModelsFile(file: string, json: ModelsJson): void {
 
   tempCounter += 1;
   const temp = `${file}.${process.pid}.${tempCounter}.tmp`;
+  const secret = hasLiteralKey(json);
+  const encoding: "utf8" | { encoding: "utf8"; mode: number } = secret
+    ? { encoding: "utf8", mode: 0o600 }
+    : "utf8";
   try {
-    writeFileSync(temp, text, "utf8");
+    writeFileSync(temp, text, encoding);
     renameSync(temp, file);
   } catch (error) {
     try {
@@ -499,14 +582,5 @@ export function writeModelsFile(file: string, json: ModelsJson): void {
       // worth reporting, and it is rethrown below.
     }
     throw error;
-  }
-
-  if (process.platform !== "win32" && hasLiteralKey(json)) {
-    try {
-      chmodSync(file, 0o600);
-    } catch {
-      // Best effort: the file is written and pi can read it, which is what the owner
-      // asked for. Failing here would report a saved provider as a failure.
-    }
   }
 }
