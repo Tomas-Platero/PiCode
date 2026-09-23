@@ -94,8 +94,13 @@ with one work-unit commit on the feature branch, recorded here as evidence.
 - [x] **T5 — El paso del asistente.**
   Un paso «Tema» entre Gentle AI y el resumen, con la galería compacta montada desde el
   mismo componente y **dos** salidas honestas: aplicar, o quedarse con el que venga.
-- [x] **T6 — Cierre.** Verificación independiente, `npm test` verde (35 suites), distribución
+- **T6 — Cierre.** Verificación independiente, `npm test` verde (35 suites), distribución
   re-stageada y el informe.
+  **Corrección de una promesa mía**: el commit de las tres puertas decía que el menú de
+  PiCode abría la galería y no era cierto — la categoría **Aspecto** del menú se había
+  registrado en la decisión pero no se implementó. Lo dice el commit `7ed12c3`: la
+  categoría existe (el tema en vigor en la línea de detalle, y un segundo nivel con la
+  entrada que abre la galería), no se borró la promesa del documento.
 
 ## Open questions
 
