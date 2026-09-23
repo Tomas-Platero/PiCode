@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import { GENTLE_PACKAGE, type GentleState } from "./gentle";
+import { IMPORT_PROFILE_COMMAND } from "./instance-import-command";
+import { LOGIN_PROVIDER_COMMAND } from "./pi-login-command";
+import type { InstanceProfileState } from "./pi-settings";
 import type { RuntimeDescriptor, RuntimeMode } from "./runtime";
 import { buildWebviewHtml } from "./webview-html";
 
@@ -15,6 +18,16 @@ import { buildWebviewHtml } from "./webview-html";
  * table already call; a wizard with a private copy of the install would leave a second
  * definition of what installing pi or a package means. That reuse is what makes the
  * end state integrated instead of "configure it again afterwards".
+ *
+ * The pi question carries one part that is not a third question: while PiCode's own pi is
+ * selected and its profile cannot carry an instance yet, the step says so and offers the two
+ * doors that end it — the import and the provider login. Both are the commands that already
+ * exist, run by the host; the wizard only names them, which is the same rule as the install
+ * above. No path through the wizard ends in "now run this in a terminal".
+ *
+ * The decision of what that part says is pure (`describeProfilePart`), so the three states —
+ * PiCode's own pi without a profile, with one, and the owner's pi — can be exercised without
+ * an editor, and the renderer is left with nothing to decide.
  *
  * The markup and the renderer live in `media/onboarding.{js,css}`, the same host /
  * webview split every other panel in this extension uses.
@@ -44,6 +57,124 @@ export interface OnboardingResult {
   message: string;
 }
 
+/* ------------------------------------------------------------------ *
+ * The profile part of the pi question
+ * ------------------------------------------------------------------ */
+
+/**
+ * The commands the profile part's two doors run, taken from the modules that implement them.
+ *
+ * A literal here would be the second declaration of a command id, and the wizard would keep
+ * offering a name that no longer exists the day one is renamed. The union also makes "run
+ * something else" a type error, not a habit.
+ */
+export type OnboardingOfferCommand =
+  | typeof IMPORT_PROFILE_COMMAND
+  | typeof LOGIN_PROVIDER_COMMAND;
+
+/** One door out of an unusable profile: what it says and the command it runs. */
+export interface OnboardingOffer {
+  /** The command's own palette title, without the product prefix every title carries. */
+  readonly label: string;
+  /** The command to run, through its existing implementation and not a copy of it. */
+  readonly command: OnboardingOfferCommand;
+}
+
+/**
+ * What the pi step says about the profile of the instance in force.
+ *
+ * `visible` is part of the answer rather than something the renderer infers, so the three
+ * states cannot be half-drawn: there is no text to show without the decision to show it.
+ */
+export interface OnboardingProfilePart {
+  /** True only while PiCode's own pi is selected and its profile cannot carry an instance. */
+  readonly visible: boolean;
+  /** The sentence the step shows, empty when the part is not visible. */
+  readonly text: string;
+  /** The doors to fill the profile, empty when the part is not visible. */
+  readonly offers: readonly OnboardingOffer[];
+}
+
+/**
+ * The two ways PiCode's own profile can be unusable, in the settings row's own words.
+ *
+ * `pi-settings.ts` words the same distinction the same way, and `onboarding.test.js` pins
+ * both against that file's source: a profile that is absent and one that has no credentials
+ * are different problems, and a wizard that collapsed them into one vague line would be the
+ * second wording of the same fact.
+ */
+export const PROFILE_MISSING_WORDS = {
+  profile: "todavía no tiene perfil",
+  credentials: "todavía no tiene credenciales",
+} as const;
+
+/**
+ * The clause both screens use for the same fact: while PiCode's own profile cannot carry an
+ * instance, the editor keeps using the owner's.
+ *
+ * It is a verbatim piece of `CLOSING_TEXTS.withoutCredentials` — the import's closing — and the
+ * suite asserts it is still contained there, so the two screens cannot drift into two versions
+ * of one sentence. Only the reason in front differs, because that is what actually differs
+ * between the two moments: nothing was imported there, and nothing is filled yet here.
+ */
+export const PROFILE_FALLBACK_CLAUSE =
+  "nada ha cambiado: el editor sigue usando el perfil de tu equipo";
+
+/**
+ * The two doors, in the order the safety rule puts them: import first, because it fills the
+ * profile with the configuration the owner already has; the login second, for a deliberate
+ * start from zero.
+ *
+ * Each label is the command's palette title without the `PiCode: ` prefix, which is what the
+ * suite checks against the manifest, so a renamed command cannot leave a button behind.
+ */
+const PROFILE_OFFERS: readonly OnboardingOffer[] = [
+  { label: "Importar el perfil de tu pi", command: IMPORT_PROFILE_COMMAND },
+  { label: "Iniciar sesión en un proveedor", command: LOGIN_PROVIDER_COMMAND },
+];
+
+/** The part with nothing to say: hidden, with no text and no door. */
+const HIDDEN_PART: OnboardingProfilePart = { visible: false, text: "", offers: [] };
+
+/**
+ * The profile part for the selected instance, or nothing to show.
+ *
+ * Three states, and only one of them speaks:
+ *
+ * - the owner's pi: PiCode owns no profile there, so there is nothing to fill and nothing
+ *   inapplicable is dangled in front of him;
+ * - PiCode's own pi with a usable profile: nothing is missing, so nothing is said;
+ * - PiCode's own pi without one: the editor keeps using the owner's pi until PiCode's own
+ *   profile has credentials, and the two doors that end that are named by the commands that
+ *   already implement them.
+ *
+ * The input is the settings row's own fact shape (`InstanceProfileState`), read by the host
+ * from the instance resolver, so the row and the step cannot disagree about the same profile.
+ * `internalProviders` is not needed to decide: the resolver's `owned` already folds in "the
+ * directory exists and names a provider".
+ */
+export function describeProfilePart(state: InstanceProfileState): OnboardingProfilePart {
+  // The owner's own pi: PiCode reads that profile and never writes it, so it owns nothing to
+  // fill here — and an offer to fill a profile PiCode does not own would be a lie.
+  if (!state.managed) {
+    return HIDDEN_PART;
+  }
+  // PiCode's own pi, with a profile that already carries an instance: nothing to say.
+  if (state.owned) {
+    return HIDDEN_PART;
+  }
+  const missing = state.internalExists
+    ? PROFILE_MISSING_WORDS.credentials
+    : PROFILE_MISSING_WORDS.profile;
+  return {
+    visible: true,
+    text:
+      `El pi propio de PiCode ${missing}, así que ${PROFILE_FALLBACK_CLAUSE} ` +
+      "hasta que el perfil propio de PiCode tenga credenciales.",
+    offers: PROFILE_OFFERS,
+  };
+}
+
 /**
  * What the panel may ask the host to do.
  *
@@ -59,6 +190,19 @@ export interface OnboardingHost {
   configuredPath(): string;
   /** Applies a chosen pi, exactly the way the runtime picker does. */
   applyRuntime(mode: RuntimeMode, customPath?: string): Promise<OnboardingResult>;
+  /**
+   * The pi step's profile part, decided from the same facts the settings row states.
+   *
+   * Synchronous on purpose: the answer is a decision over four resolved facts, not a probe.
+   */
+  profilePart(): OnboardingProfilePart;
+  /**
+   * Runs one door of that part: the command that already exists, and nothing else.
+   *
+   * The host runs it; the wizard neither knows how to import a profile nor how to log a
+   * provider in, which is what keeps a second implementation from growing inside it.
+   */
+  runOffer(command: OnboardingOfferCommand): Promise<void>;
   /** Gentle AI's real state, so the question and the summary say what is true. */
   gentle(): Promise<GentleState>;
   /** Installs both packages of the layer, through the shared install path. */
@@ -100,6 +244,10 @@ const ONBOARDING_BODY = `    <header class="onboarding-head">
           <button id="runtime-apply" class="onboarding-button primary" type="button">Aplicar este pi</button>
         </div>
         <p id="runtime-result" class="onboarding-result" hidden></p>
+        <div id="profile-part" hidden>
+          <p id="profile-part-text" class="onboarding-current"></p>
+          <div id="profile-part-offers" class="onboarding-actions"></div>
+        </div>
       </section>
       <section id="step-gentle" class="onboarding-section" hidden>
         <h2 class="onboarding-question">¿Activamos Gentle AI ahora?</h2>
@@ -242,6 +390,24 @@ export class OnboardingView {
         }
         break;
       }
+      case "runOffer": {
+        if (!isOfferCommand(record.command)) {
+          break;
+        }
+        try {
+          await this.host.runOffer(record.command);
+          // A door may have filled the profile — the import brings credentials, the login
+          // creates one — so the part is read again: a profile that just became usable stops
+          // being advertised instead of leaving the owner looking at a stale warning.
+          await this.pushState();
+        } catch (error) {
+          this.post({
+            type: "error",
+            message: `No se pudo abrir esa acción: ${describeError(error)}`,
+          });
+        }
+        break;
+      }
       case "installGentle": {
         try {
           const result = await this.host.installGentle();
@@ -285,6 +451,10 @@ export class OnboardingView {
     if (this.panel === undefined) {
       return;
     }
+    // The profile part travels as its own reading, before the process probe: it is a decision
+    // over the resolver's facts, not the runtime's version, and a probe that fails must not
+    // also silence what the pi step says about PiCode's own profile.
+    this.post({ type: "instanceProfile", profile: this.host.profilePart() });
     try {
       const runtime = await this.host.runtime();
       const gentle = await this.host.gentle();
@@ -309,6 +479,17 @@ function isRuntimeMode(value: unknown): value is RuntimeMode {
 
 function isTarget(value: unknown): value is OnboardingTarget {
   return value === "chat" || value === "settings" || value === "gentle";
+}
+
+/**
+ * Whether a message names one of the two doors.
+ *
+ * The webview only ever sends an id it received from the host, so this is not a trust
+ * boundary being crossed — it is what keeps the host from becoming a generic "run any
+ * command" endpoint the day a message is built by hand.
+ */
+function isOfferCommand(value: unknown): value is OnboardingOfferCommand {
+  return value === IMPORT_PROFILE_COMMAND || value === LOGIN_PROVIDER_COMMAND;
 }
 
 function describeError(error: unknown): string {

@@ -26,6 +26,9 @@
     runtimePath: document.getElementById("runtime-path"),
     runtimeApply: document.getElementById("runtime-apply"),
     runtimeResult: document.getElementById("runtime-result"),
+    profilePart: document.getElementById("profile-part"),
+    profilePartText: document.getElementById("profile-part-text"),
+    profilePartOffers: document.getElementById("profile-part-offers"),
     gentleCurrent: document.getElementById("gentle-current"),
     gentleInstall: document.getElementById("gentle-install"),
     gentleSkip: document.getElementById("gentle-skip"),
@@ -61,6 +64,7 @@
     step: "pi",
     runtime: null,
     gentle: null,
+    profile: null,
     configuredPath: "",
     mode: null,
   };
@@ -172,6 +176,44 @@
     }
   }
 
+  // --- the pi step's profile part -----------------------------------------
+
+  // Nothing is decided here. The host sends the part already decided — `visible`, `text`,
+  // `offers` — from the same facts the settings row states, so this renderer only draws it:
+  // a second decision in the webview would be the second wording of one fact. Each button
+  // carries the command id its offer names, and this script never decides what runs.
+  //
+  // The part describes the pi in force, not the radio's pending choice: the editor is still
+  // running the pi it had until the owner presses "Aplicar este pi", and that is exactly the
+  // case the sentence has to be honest about.
+  function offerButton(offer) {
+    var button = createElement("button", "onboarding-button", offer.label);
+    button.type = "button";
+    button.addEventListener("click", function () {
+      send({ type: "runOffer", command: offer.command });
+    });
+    return button;
+  }
+
+  function renderProfilePart() {
+    var part = state.profile;
+    var visible = part !== null && part.visible === true;
+    elements.profilePart.hidden = !visible;
+    elements.profilePartText.textContent =
+      visible && typeof part.text === "string" ? part.text : "";
+    elements.profilePartOffers.textContent = "";
+    if (!visible || !Array.isArray(part.offers)) {
+      return;
+    }
+    for (var index = 0; index < part.offers.length; index += 1) {
+      var offer = part.offers[index];
+      if (!offer || typeof offer.label !== "string" || typeof offer.command !== "string") {
+        continue;
+      }
+      elements.profilePartOffers.appendChild(offerButton(offer));
+    }
+  }
+
   // --- the Gentle AI question ---------------------------------------------
 
   // `gentle-ai version` answers with its own name and the number — "gentle-ai 3.6.1".
@@ -255,6 +297,10 @@
         renderGentle();
         renderSummary();
         showNotice("");
+        break;
+      case "instanceProfile":
+        state.profile = message.profile && typeof message.profile === "object" ? message.profile : null;
+        renderProfilePart();
         break;
       case "runtimeResult":
         elements.runtimeApply.disabled = false;

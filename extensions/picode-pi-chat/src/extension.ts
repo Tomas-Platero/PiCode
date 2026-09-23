@@ -18,13 +18,14 @@ import {
   type GentleActions,
 } from "./menu";
 import {
+  describeProfilePart,
   GENTLE_SOURCES,
   OnboardingView,
   type OnboardingResult,
   type OnboardingTarget,
 } from "./onboarding";
 import { parseInstalledPackages, runPiCli, runExecutable } from "./pi-cli";
-import { setInstanceProfileStateSource, setPiVersionStateSource, type PiSettingValue } from "./pi-settings";
+import { setInstanceProfileStateSource, setPiVersionStateSource, type InstanceProfileState, type PiSettingValue } from "./pi-settings";
 import {
   formatBytes,
   listSessions,
@@ -126,18 +127,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // The profile row is the same kind of fact: only this side can name the extension's
   // location, and only the resolver can say whether PiCode's own profile is usable yet.
-  // Both facts are read here, on each read of the row, so a profile that becomes usable
-  // (after an import) or a runtime that changes is reflected without a restart.
-  setInstanceProfileStateSource(() => {
-    const runtime = resolveRuntime(context.extensionUri);
-    const profile = instanceProfile(context.extensionUri, runtime.mode);
-    return {
-      owned: profile.owned,
-      managed: runtime.mode === "managed",
-      internalExists: profile.internal.exists,
-      internalProviders: profile.internal.providers,
-    };
-  });
+  // That reading is shared with the wizard's pi step, so the row and the wizard state the
+  // same profile from the same facts and cannot contradict each other.
+  setInstanceProfileStateSource(() => instanceProfileState(context));
 
   view = ChatView.create(context.extensionUri, {
     ensureClient: () => ensureClient(context.extensionUri),
@@ -283,6 +275,13 @@ export function activate(context: vscode.ExtensionContext): void {
         customPath,
         current: await describeRuntime(context.extensionUri),
       }),
+    // The profile part of that same step, decided from the row's own facts. The two doors it
+    // offers are the commands that already exist — the import flow and the provider login —
+    // run through the palette's own entry point instead of a second copy of either here.
+    profilePart: () => describeProfilePart(instanceProfileState(context)),
+    runOffer: async (command) => {
+      await vscode.commands.executeCommand(command);
+    },
     gentle: () => gentleState(context.extensionUri),
     installGentle: () => installGentleLayer(menu),
     complete: async () => {
@@ -927,6 +926,25 @@ async function maybeOpenOnboarding(context: vscode.ExtensionContext): Promise<vo
     "[onboarding] no hay un pi utilizable y la configuración inicial no se completó: se abre el asistente",
   );
   await onboardingView?.show();
+}
+
+/**
+ * The facts about the profile in use, read from the instance resolver right now.
+ *
+ * One function for two surfaces: the settings row states these facts in words, and the
+ * wizard's pi step decides from them whether to speak. They are read on every call rather
+ * than cached, so a profile that becomes usable — after an import or a login — is reflected
+ * in both without a restart, and the two can never disagree about the same profile.
+ */
+function instanceProfileState(context: vscode.ExtensionContext): InstanceProfileState {
+  const runtime = resolveRuntime(context.extensionUri);
+  const profile = instanceProfile(context.extensionUri, runtime.mode);
+  return {
+    owned: profile.owned,
+    managed: runtime.mode === "managed",
+    internalExists: profile.internal.exists,
+    internalProviders: profile.internal.providers,
+  };
 }
 
 /**
