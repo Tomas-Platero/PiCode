@@ -775,6 +775,32 @@ body {
   font-size: 0.9em;
 }
 
+/*
+ * What the type filter and the order selector act on. It sits directly under the
+ * controls so the two cannot be read as searching the whole registry.
+ */
+.catalog-window-note {
+  margin: 6px 0 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+}
+
+.catalog-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.catalog-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
 .catalog-status {
   margin: 12px 0;
 }

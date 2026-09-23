@@ -48,6 +48,11 @@
       total: 0,
       page: 1,
       pageSize: packageRows.DEFAULT_PAGE_SIZE,
+      // The type filter and the order the loaded window is shown in. They live here,
+      // in module state, so a repaint keeps them; the registry offers neither, so
+      // both run over the window the host loaded and over nothing else.
+      type: "all",
+      order: "relevance",
     },
     // The skills table keeps its page, its filters and its sort here, in module
     // state, and never in its own DOM: flipping a switch makes the host re-post
@@ -1168,6 +1173,26 @@
    * already carries, so the host does not have to send the installed list twice.
    */
 
+  /*
+   * The four types pi derives from a manifest, plus the choice that filters nothing.
+   * The plain "package" tag pi falls back to is left out on purpose: it means "no
+   * type was declared", so those rows show under Todos alone.
+   */
+  var CATALOG_TYPE_FILTER_OPTIONS = [
+    { value: "all", label: "Todos" },
+    { value: "extension", label: "extension" },
+    { value: "skill", label: "skill" },
+    { value: "prompt", label: "prompt" },
+    { value: "theme", label: "theme" },
+  ];
+
+  var CATALOG_ORDER_OPTIONS = [
+    { value: "relevance", label: "Relevancia del registro" },
+    { value: "downloads", label: "Descargas mensuales" },
+    { value: "published", label: "Publicación más reciente" },
+    { value: "name", label: "Nombre (A-Z)" },
+  ];
+
   /** Sends the current query and paints the loading line until the host answers. */
   function requestCatalogSearch() {
     state.catalog.requested = true;
@@ -1226,6 +1251,61 @@
     return downloads.toLocaleString("es-ES") + " /mes";
   }
 
+  /** The monthly figure as a number, so a missing or unusable one counts as zero. */
+  function monthlyDownloadsOf(row) {
+    var value = row ? row.monthlyDownloads : undefined;
+    return typeof value === "number" && isFinite(value) ? value : 0;
+  }
+
+  /** When a row was published, or NaN when it carries no usable date. */
+  function publishedTimeOf(row) {
+    var value = row ? row.publishedAt : undefined;
+    return typeof value === "string" && value !== "" ? Date.parse(value) : NaN;
+  }
+
+  /**
+   * The loaded window after the type filter and the order selector.
+   *
+   * Both run over `state.catalog.rows` alone: the registry answers with one
+   * relevance-ordered window and offers no filter or sort of its own, so a control
+   * that reached past the rows already in hand would promise what this side cannot
+   * deliver.
+   */
+  function visibleCatalogRows() {
+    var view = state.catalog;
+    var rows = view.rows.slice();
+
+    if (view.type !== "all") {
+      rows = rows.filter(function (row) {
+        return Array.isArray(row.tags) && row.tags.indexOf(view.type) !== -1;
+      });
+    }
+
+    if (view.order === "downloads") {
+      rows.sort(function (left, right) {
+        return monthlyDownloadsOf(right) - monthlyDownloadsOf(left);
+      });
+    } else if (view.order === "published") {
+      rows.sort(function (left, right) {
+        var a = publishedTimeOf(left);
+        var b = publishedTimeOf(right);
+        // A row with no usable date is not "oldest": it goes last instead of
+        // sorting as though it had been published at the beginning of time.
+        if (isNaN(a) || isNaN(b)) {
+          return isNaN(a) && isNaN(b) ? 0 : isNaN(a) ? 1 : -1;
+        }
+        return b - a;
+      });
+    } else if (view.order === "name") {
+      rows.sort(function (left, right) {
+        return String(left.name).localeCompare(String(right.name), undefined, { numeric: true });
+      });
+    }
+    // "relevance" is the registry's own order: those rows stay as they arrived.
+
+    return rows;
+  }
+
   /**
    * The installed packages keyed by their bare name.
    *
@@ -1272,7 +1352,7 @@
     tableRow.appendChild(types);
 
     var downloads = document.createElement("td");
-    downloads.textContent = formatDownloads(row.monthlyDownloads);
+    downloads.textContent = formatDownloads(monthlyDownloadsOf(row));
     tableRow.appendChild(downloads);
 
     var published = document.createElement("td");
@@ -1356,6 +1436,42 @@
       elements.content.appendChild(pane);
       return;
     }
+
+    // The filter and the order sit above the list, under the explicit search, and
+    // the line under them states what they can and cannot reach.
+    var controls = createElement("div", "catalog-controls");
+    var typeSelect = createSelect(
+      "setting-select",
+      CATALOG_TYPE_FILTER_OPTIONS,
+      view.type,
+      function (value) {
+        view.type = value;
+        // The visible set changes, so the old page number means nothing.
+        view.page = 1;
+        paint();
+      },
+    );
+    var orderSelect = createSelect(
+      "setting-select",
+      CATALOG_ORDER_OPTIONS,
+      view.order,
+      function (value) {
+        view.order = value;
+        // The rows are reordered, so the old page number means nothing.
+        view.page = 1;
+        paint();
+      },
+    );
+    controls.appendChild(createLabel("Tipo", typeSelect));
+    controls.appendChild(createLabel("Orden", orderSelect));
+    pane.appendChild(controls);
+    pane.appendChild(
+      createElement(
+        "p",
+        "catalog-window-note",
+        "Filtro y orden se aplican sobre los resultados ya cargados: el registro no ofrece filtro ni orden propios.",
+      ),
+    );
 
     var summary = createElement("div", "catalog-summary");
     pane.appendChild(summary);
@@ -1465,9 +1581,10 @@
     }
 
     function paint() {
-      current = packageRows.paginate(view.rows, { page: view.page, pageSize: view.pageSize });
-      // paginate clamps: keeping the clamped page means a shorter search lands on the
-      // last page that exists instead of on an empty one.
+      var visible = visibleCatalogRows();
+      current = packageRows.paginate(visible, { page: view.page, pageSize: view.pageSize });
+      // paginate clamps: keeping the clamped page means a filter that leaves fewer
+      // rows lands on the last page that exists instead of on an empty one.
       view.page = current.page;
       summary.textContent =
         view.rows.length + " resultados cargados de " + view.total + " en el registro";
