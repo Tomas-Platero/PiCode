@@ -1,16 +1,21 @@
 /*
  * Which profile an instance uses, and what a profile holds — read-only.
  *
- * Slice 1 of the two-instances feature: the resolver and the inventory. Nothing here
- * is wired to the spawn environment, the SDK client, the settings service or the
- * skills discovery yet, so this module changes no behaviour on its own. It exists so
- * that the switch (slice 3) has exactly one place to ask "what profile is this
- * instance using" instead of a `resolveAgentDir()` call at every reader.
+ * Slice 1 of the two-instances feature: the resolver, the facts a spawner needs and the
+ * inventory. Nothing here is wired to the spawn environment, the SDK client, the
+ * settings service or the skills discovery yet, so this module changes no behaviour on
+ * its own. It exists so that the switch (slice 3) has exactly one place to ask "what
+ * profile is this instance using" instead of a `resolveAgentDir()` call at every reader.
  *
- * The two halves are deliberately separate:
+ * The parts are deliberately separate:
  *
  * - `instanceAgentDir()` maps a runtime mode to a profile directory, or to
  *   `undefined` when pi should resolve its own default. It never touches the disk.
+ * - `instanceProfile()` names the two facts separately — where the profile is, and
+ *   whether PiCode owns it — and `instanceProfileEnv()` turns them into the
+ *   environment additions a spawned pi receives, so the rule about setting the
+ *   variable, or deliberately not setting it, lives in one place instead of at each
+ *   of the spawn sites.
  * - `scanProfile()` reads a profile directory and returns an inventory. Its parsing
  *   is pure (`parsePackages`, `parseCredentials`, `parseModels`, `parseMcpServers`),
  *   so both the shapes and the walk can be exercised without a filesystem, and a
@@ -54,6 +59,62 @@ export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): strin
   // <distribution>/resources/pi-runtime -> <distribution>
   const distributionRoot = path.resolve(managedRoot(extensionUri), "..", "..");
   return path.join(distributionRoot, "data", "pi-agent");
+}
+
+/* ------------------------------------------------------------------ *
+ * What a spawner needs
+ * ------------------------------------------------------------------ */
+
+/**
+ * The profile of the selected instance, as two separate facts.
+ *
+ * They are deliberately not folded into one value: `agentDir` answers *where* the
+ * profile is, and `owned` answers *whether PiCode may write there*. PiCode owns only
+ * the managed profile; the owner's belongs to the machine and to every other pi tool
+ * on it, so PiCode reads it and never writes it. A caller that has to refuse a write
+ * (the guard that keeps an empty internal profile from being switched on) has to ask
+ * the second question, and a single "the profile" value could not answer it.
+ */
+export interface InstanceProfile {
+  /**
+   * The profile directory of the selected instance, or `undefined` when pi resolves
+   * its own. `undefined` is the fact a spawner reads as "set nothing".
+   */
+  agentDir: string | undefined;
+  /** True only for `managed`: PiCode's own profile, the one PiCode may write. */
+  owned: boolean;
+}
+
+/**
+ * The two facts about the selected instance's profile.
+ *
+ * `owned` is derived from the mode rather than from the profile's location: nothing
+ * about the path says who may write it, and a managed profile whose directory happens
+ * to live somewhere unusual is still PiCode's own.
+ */
+export function instanceProfile(extensionUri: Uri, runtime: RuntimeMode): InstanceProfile {
+  return { agentDir: instanceAgentDir(extensionUri, runtime), owned: runtime === "managed" };
+}
+
+/**
+ * The environment additions that point a spawned program at the selected instance's
+ * profile: the variable, or an empty object.
+ *
+ * The rule is asymmetric on purpose, and that is the whole reason it lives here. For
+ * PiCode's own instance the variable is set explicitly, to PiCode's own profile. For
+ * the owner's instance **nothing is set — not even the value pi would resolve by
+ * itself** — so the child resolves its default exactly as it does when the owner runs
+ * `pi` from a terminal. Setting it to that same value looks equivalent and is not: it
+ * would pin the profile pi saw at spawn time, so a `PI_CODING_AGENT_DIR` the owner
+ * exports in a shell profile, or a home that changes, would silently stop applying to
+ * the pi PiCode runs.
+ *
+ * Returning an empty object keeps that decision in one place, instead of a conditional
+ * at each of the spawn sites, where the safe default is easy to write the wrong way
+ * round.
+ */
+export function instanceProfileEnv(profile: InstanceProfile): Record<string, string> {
+  return profile.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: profile.agentDir };
 }
 
 /* ------------------------------------------------------------------ *
