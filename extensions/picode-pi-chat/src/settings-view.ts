@@ -5,6 +5,7 @@ import type { InstallOutcome } from "./menu";
 import {
   describeSettingWire,
   describeSettings,
+  instanceProfileNotice,
   PI_SETTING_DESCRIPTORS,
   PiSettingsService,
   withPackageSkill,
@@ -604,11 +605,17 @@ export class SettingsView {
       // decided by this scope's `packages` value, so the entries read above are what
       // the discovery is told to filter by.
       const found = await this.discoveredSkills(this.scope, packageEntriesOf(values.packages));
+      // The line the panel shows above every category while the profile in use is not
+      // the chosen one. It comes from the host's registered reading — the same facts
+      // the profile row states — rather than being resolved here: the panel reports a
+      // fact another surface already computed, it does not read a profile of its own.
+      const profileNotice = instanceProfileNotice();
       this.post({
         type: "state",
         scope: this.scope,
         groups,
         values,
+        ...(profileNotice === undefined ? {} : { profileNotice }),
         skills: found.skills,
         skillProblems: found.problems,
         // The packages table cannot derive a version or an author from the stored

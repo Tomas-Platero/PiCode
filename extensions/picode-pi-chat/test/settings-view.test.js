@@ -143,6 +143,63 @@ function main() {
     documented.filter((key) => !declared.has(key)).join(", "),
   );
 
+  /* ---------------------------------------------------------------- *
+   * The profile line
+   * ---------------------------------------------------------------- */
+
+  const settingsScript = fs.readFileSync(
+    path.join(__dirname, "..", "media", "settings.js"),
+    "utf8",
+  );
+  const settingsHost = fs.readFileSync(
+    path.join(__dirname, "..", "src", "settings-view.ts"),
+    "utf8",
+  );
+
+  // The panel is a renderer for what the host pushes, never a reader of the profile.
+  // Whether PiCode's own profile can carry an instance is the resolver's answer, handed
+  // to the profile row and to this line from one registered reading; a webview that
+  // looked at `auth.json` or at the selected profile would be a second, disagreeing
+  // answer — and the webview cannot reach either anyway.
+  check(
+    "the panel draws the profile line the host pushes and reads no profile of its own",
+    settingsScript.includes("message.profileNotice") &&
+      settingsScript.includes("state.profileNotice") &&
+      !/instanceProfile|readInstanceProfileState|selectedAgentDir|PI_CODING_AGENT_DIR|auth\.json|agentDir/.test(
+        settingsScript,
+      ),
+    "settings.js only renders the pushed line",
+  );
+
+  // The line lives outside the categories: it is drawn into the content frame before
+  // the query branch and before any category's title or rows, so it is read whichever
+  // category is open and whichever scope is selected.
+  check(
+    "the profile line is drawn before any category's rows",
+    /elements\.content\.textContent = "";\s*renderProfileNotice\(\);/.test(settingsScript) &&
+      settingsScript.includes("settings-profile-notice"),
+    "renderContent clears the pane, draws the line, then the category",
+  );
+
+  // It exists only while the situation exists: an empty push draws no element at all,
+  // rather than a permanent banner. The row is still read and the tab is unchanged.
+  check(
+    "the profile line is absent, not lying, when there is nothing to say",
+    /typeof state\.profileNotice !== "string" \|\| state\.profileNotice === ""/.test(settingsScript),
+    "no notice -> no element",
+  );
+
+  // The host takes the line from the same registered reading the profile row uses. It
+  // never resolves the instance profile (or reads one) for this line, which is what keeps
+  // the row and the line from disagreeing about the same profile.
+  check(
+    "the host takes the profile line from the shared reading, not from the resolver",
+    settingsHost.includes("instanceProfileNotice(") &&
+      !settingsHost.includes("instanceProfile(") &&
+      !settingsHost.includes("readInstanceProfileState"),
+    "settings-view.ts asks for the notice, it does not resolve a profile",
+  );
+
   let failed = 0;
   for (const result of results) {
     console.log(

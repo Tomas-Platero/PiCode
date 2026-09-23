@@ -27,6 +27,8 @@ const {
   coerceSettingValue,
   setPiVersionStateSource,
   setInstanceProfileStateSource,
+  describeProfileNotice,
+  instanceProfileNotice,
   PiSettingsService,
 } = require(path.join(__dirname, "..", "out", "pi-settings.js"));
 
@@ -841,6 +843,76 @@ async function main() {
       ),
       JSON.stringify({ internal, owner, noProfile, noCredentials }),
     );
+
+    // The line the panel shows above every category. It is the row's own sentence,
+    // reused and not reworded, and it appears only while the profile in use is not
+    // the one that was chosen: PiCode's own pi selected with a profile that cannot
+    // carry an instance yet. With the owner's pi, or with PiCode's own profile
+    // usable, there is nothing to say and no line at all.
+    const notices = {
+      noProfile: describeProfileNotice({
+        owned: false,
+        managed: true,
+        internalExists: false,
+        internalProviders: 0,
+      }),
+      noCredentials: describeProfileNotice({
+        owned: false,
+        managed: true,
+        internalExists: true,
+        internalProviders: 0,
+      }),
+      internal: describeProfileNotice({
+        owned: true,
+        managed: true,
+        internalExists: true,
+        internalProviders: 2,
+      }),
+      owner: describeProfileNotice({
+        owned: false,
+        managed: false,
+        internalExists: true,
+        internalProviders: 2,
+      }),
+    };
+    check(
+      "the panel's notice is the profile row's own sentence, not a fourth wording",
+      notices.noProfile === noProfile &&
+        notices.noCredentials === noCredentials &&
+        notices.noProfile.includes("Importar el perfil de tu pi"),
+      JSON.stringify(notices),
+    );
+    check(
+      "the notice is silent when the profile in use is the chosen one",
+      notices.internal === undefined && notices.owner === undefined,
+      JSON.stringify(notices),
+    );
+
+    // The notice reads the same registered facts the row does, so the two surfaces
+    // cannot disagree — and the settings host never resolves a profile of its own.
+    setInstanceProfileStateSource(() => ({
+      owned: false,
+      managed: true,
+      internalExists: true,
+      internalProviders: 0,
+    }));
+    check(
+      "the notice is read from the same host reading as the profile row",
+      instanceProfileNotice() === profileRow.read(),
+      JSON.stringify({ notice: instanceProfileNotice(), row: profileRow.read() }),
+    );
+    setInstanceProfileStateSource(() => ({
+      owned: true,
+      managed: true,
+      internalExists: true,
+      internalProviders: 2,
+    }));
+    check(
+      "and with a usable chosen profile there is no notice while the row still reads",
+      instanceProfileNotice() === undefined && typeof profileRow.read() === "string",
+      JSON.stringify({ notice: instanceProfileNotice(), row: profileRow.read() }),
+    );
+    setInstanceProfileStateSource(undefined);
 
     // The registration itself lives in `extension.ts`, which owns the extension's
     // location and the selected runtime. It is pinned here, next to the same reading

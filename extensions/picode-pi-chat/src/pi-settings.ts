@@ -987,6 +987,38 @@ function describeInstanceProfile(state: InstanceProfileState): string {
 }
 
 /**
+ * The line the settings panel shows above every category while the profile in use is
+ * not the one that was chosen.
+ *
+ * That is exactly one situation: PiCode's own pi is the selection, its profile cannot
+ * carry an instance yet, and the anti-mute guard keeps the editor on the owner's
+ * profile. The panel said nothing about it, so honest behaviour — showing the owner's
+ * settings because PiCode's own profile is still empty — read like the defect this
+ * whole guard exists to prevent.
+ *
+ * The sentence is the profile row's own, reused verbatim instead of written a fourth
+ * time: that row already says whose settings these are, why, and the row that fixes
+ * it. It appears only while the situation exists — when the profile in use is the
+ * chosen one, there is nothing to say and this returns `undefined`, so the panel
+ * draws no line. A permanent banner would be clutter, not a fact.
+ */
+export function describeProfileNotice(state: InstanceProfileState): string | undefined {
+  return state.managed && !state.owned ? describeInstanceProfile(state) : undefined;
+}
+
+/**
+ * The notice from the host's registered reading, or `undefined` before one exists.
+ *
+ * It goes through the same `readInstanceProfileState` the profile row reads, so the
+ * line and the row can never disagree about the same profile, and the panel never
+ * reads the resolver or `auth.json` by itself.
+ */
+export function instanceProfileNotice(): string | undefined {
+  const state = readInstanceProfileState?.();
+  return state === undefined ? undefined : describeProfileNotice(state);
+}
+
+/**
  * Every setting this surface knows, grouped by category in the declared order.
  *
  * The descriptor objects are literal and complete on purpose: this array is the

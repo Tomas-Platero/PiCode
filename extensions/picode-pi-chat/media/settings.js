@@ -36,6 +36,10 @@
     // derived here: the source string alone cannot tell a version or an author, so
     // the table merges what the host supplies over what the spec already gives.
     packageFacts: [],
+    // The line the host pushes while the profile in use is not the chosen one. Empty
+    // when there is nothing to say, and never worked out here: whether PiCode's own
+    // profile can carry an instance is the resolver's reading, not the renderer's.
+    profileNotice: "",
     // Which of the Packages section's two tabs is showing. Kept here, in module
     // state, so a repaint after a host write does not throw the owner back to the
     // packages table.
@@ -1613,8 +1617,26 @@
     elements.content.appendChild(pane);
   }
 
+  // The line about which profile these settings come from, drawn before any
+  // category's title or rows, so it is read whichever category is open. The words
+  // are the host's; this renderer only draws them, and only while the host sends
+  // them — with nothing to say there is no element and the pane looks as it did.
+  function renderProfileNotice() {
+    if (typeof state.profileNotice !== "string" || state.profileNotice === "") {
+      return;
+    }
+    elements.content.appendChild(
+      createElement(
+        "p",
+        "settings-category-description settings-profile-notice",
+        state.profileNotice,
+      ),
+    );
+  }
+
   function renderContent() {
     elements.content.textContent = "";
+    renderProfileNotice();
 
     var query = state.query.trim();
     if (query !== "") {
@@ -1702,6 +1724,8 @@
         state.skills = Array.isArray(message.skills) ? message.skills : [];
         state.skillProblems = Array.isArray(message.skillProblems) ? message.skillProblems : [];
         state.packageFacts = Array.isArray(message.packageFacts) ? message.packageFacts : [];
+        state.profileNotice =
+          typeof message.profileNotice === "string" ? message.profileNotice : "";
         if (
           typeof message.startAt === "string" &&
           state.groups.some(function (group) { return group.category.id === message.startAt; })
