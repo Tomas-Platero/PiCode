@@ -79,6 +79,7 @@ import {
   parseBranch,
   type EnvironmentStats,
 } from "./stats";
+import { IMPORT_PROFILE_COMMAND, importProfileIntoInstance } from "./instance-import-command";
 import { resolveAgentDir } from "./transcription";
 
 let client: PiClient | undefined;
@@ -338,6 +339,14 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       view?.applyConfiguration(changed);
     }),
+  );
+
+  // The one-shot import from the machine's own profile. Registered on its own so the
+  // block above — which every other command shares — is not touched by this feature.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(IMPORT_PROFILE_COMMAND, () =>
+      importProfileIntoInstance(context),
+    ),
   );
 
   // First run. Deliberately not awaited: the resolution probes a process, and
