@@ -171,16 +171,22 @@ as evidence.
     PiCode. `8197a9a`, 24 suites verdes, 19 comprobaciones.
   - [ ] **T3b — La fila en el panel**, con el mismo mecanismo que la fila que repite la
     configuración inicial (`kind: "action"` + `command`).
-  - [ ] **T3c — Instalar los paquetes copiados** por el camino de instalación existente.
+  - [x] **T3c — Instalar los paquetes copiados** por el camino de instalación existente.
     Va **después de T4a**: ese camino lanza el pi, y si no apunta al perfil de la instancia
     elegida instalaría en el perfil equivocado — que es justo el cruce que este trabajo
-    existe para evitar.
+    existe para evitar. `8caf35c`.
+    **Corrección que resultó decisiva**: la instalación va al **destino de la importación**
+    (`instanceAgentDir`, sin guarda), **no** a lo que diga la guarda. La guarda cambia de
+    respuesta en cuanto entran credenciales, así que con credenciales declinadas habría
+    instalado en el perfil de la máquina mientras los ficheros se copiaban en el otro. Copiar
+    en un sitio e instalar en otro es el cruce, en pequeño. Eso es exactamente para lo que
+    `instanceAgentDir()` está sin guarda y `selectedAgentDir()` es para lectores.
     Y **aplicar el cambio de perfil**. Los perfiles se leen en momentos distintos: la fila se
     relee en cada refresco, pero el cliente del agente se construye al arrancar. Así que tras
-    importar hay que **ofrecer recargar la ventana**. Si no, la fila diría «el perfil propio de
-    PiCode» mientras el agente que ya está corriendo sigue usando el de la máquina: una
-    interfaz que miente sobre lo que está pasando, que es lo que menos se puede permitir en la
-    pantalla que existe para decir qué perfil usas.
+    importar hay que **ofrecer recargar la ventana**. `9a6273f` corrigió que el cierre prometía
+    una recarga mirando solo las credenciales: con el pi del dueño elegido, recargar no cambia
+    nada. El cierre es ahora una función pura de dos hechos con tres finales, y **solo el
+    primero lleva botón**, porque solo ahí pulsarlo cambia algo.
 - [ ] **T4 — El interruptor.** El aislamiento de verdad: el perfil de la instancia elegida
   llega a todo sitio que lea o escriba un perfil, con una fila que dice qué perfil está en
   uso. **Guarda:** no se enciende sin credenciales; si no las hay, lo dice en vez de dejar el
@@ -231,24 +237,48 @@ as evidence.
     *Limitación conocida, a propósito:* una instancia interna sin credenciales (un modelo
     local sin clave) todavía no se puede usar, porque la guarda no distingue «vacío» de
     «vacío a propósito». Queda anotado para el pulido, en vez de resolverse adivinando.
-  - [ ] **T4c — Los lectores.** Ya con la guarda en el resolutor, los que leen un perfil
-    pasan a preguntarle a él: `pi-sdk-client.ts:416` (el transporte **embebido**, que es el que
-    usa esta máquina), `chat-view.ts:912` (la clave de NaN, una credencial),
-    `extension.ts:188` (el servicio de ajustes) y `extension.ts:1510` (el `mcp.json`). La
-    lista fijada del test antirretroceso baja entonces a su forma final —`instance.ts`,
-    `instance-import-command.ts`— y eso **es** la demostración del aislamiento.
+  - [x] **T4c — Los lectores.** `selectedAgentDir()` es el **único** sitio que compone el
+    respaldo (el perfil propio cuando la guarda dice que sirve, el de la máquina si no), y los
+    lectores le preguntan a él: el cliente **embebido** (el transporte que usa esta máquina),
+    el servicio de ajustes —que lee **y escribe**—, las skills, la clave de NaN y el `mcp.json`.
+    La lista fijada baja a sus dos entradas finales: `instance.ts` (el resolutor, donde el
+    respaldo vive) y `instance-import-command.ts` (el origen de la importación es el perfil de
+    la máquina, a propósito). **Ese encogimiento es la demostración**, y está escrito en el
+    comentario del propio test. `151c94a`.
+    **Correcciones al mapa de este documento**, porque dos etiquetas mías eran falsas y las
+    encontró el propio test, no mi grep: el lector de `extension.ts` que yo llamaba «servicio de
+    ajustes» era el **descubrimiento de skills** —un quinto lector que mi lista no tenía—, y
+    `settings-view.ts:352` no llamaba a `resolveAgentDir()` en absoluto: solo necesitaba que se
+    le pasara el `agentDir` explícito. Lo que impuso la lista fijada de dos entradas fue lo que
+    vio el quinto sitio: **una comprobación como instrumento**.
     No lo necesitan: `runtime.ts:298` (`--version`) y `:647` (instalar el runtime).
   - **Regla de despliegue:** el aislamiento se despliega **entero**, cuando la guarda está.
     Media respuesta desplegada es un editor que instala en un perfil y lee en otro.
-- [ ] **T5 — El puente interactivo.** `extension_ui_request` atendido (los cuatro diálogos que
-  bloquean, los métodos que no esperan respuesta, correlación por id, sin tiempos de espera
-  propios) en **las dos** implementaciones — RPC y SDK embebido — para que el login de un
-  proveedor se pueda hacer desde el editor. Es lo que quita el terminal del camino.
+    **Cumplida**: desplegado tras T4c, con la guarda respondiendo el perfil de la máquina en
+    esta máquina (el perfil propio todavía no existe), o sea sin cambiar nada de lo visible
+    salvo la fila nueva.
+- [ ] **T5 — El puente interactivo.** `extension_ui_request` atendido en **las dos**
+  implementaciones, que **no son el mismo trabajo** (comprobado en el pi instalado):
+  - En **RPC**, `extension_ui_request` existe solo en `modes/rpc/`. Cuatro diálogos que
+    bloquean (`select`, `confirm`, `input`, `editor` —este sin `timeout`) y cinco que no se
+    responden (`notify`, `setStatus`, `setWidget`, `setTitle`, `set_editor_text`). Respuestas:
+    `value` para selector/campo/editor, `confirmed` para confirmar, `cancelled` para cualquiera.
+    Correlación **solo por id**, y **sin tiempos de espera propios**: el `timeout` es de pi, y un
+    temporizador del host respondería a una petición que pi ya abandonó — inventando una
+    decisión en nombre del dueño.
+  - En **embebido** (el transporte de esta máquina) no hay tal evento: el SDK expone API propia
+    —`login()`, `logout()`, `setRuntimeApiKey()`, `removeRuntimeApiKey()`—. Para una clave de API
+    eso es un campo de texto; las **suscripciones** (ChatGPT Plus, Claude Pro, Copilot, xAI…) son
+    OAuth y sí necesitan el puente. `login()` rechaza con `CredentialSynchronizationError` cuando
+    commitea la credencial pero falla la sincronización: hay que inspeccionarlo, no reintentar
+    a ciegas.
 - [ ] **T6 — El asistente sin terminal.** El de primer arranque se completa entero dentro del
   editor: importar (T3) o empezar de cero. Mientras T5 no exista, si el perfil interno está
   vacío lo **dice antes** de ofrecer ese camino, y no deja al dueño en un callejón sin salida.
 - [ ] **T7 — Pulido.** Progreso de la importación, tamaños, y una segunda importación que
-  informe de qué cambió.
+  informe de qué cambió. Y una frase repetida en tres sitios —«Qué pi se ejecuta», en
+  `pi-settings.ts`, `menu.ts` y `instance-import-command.ts`—: unificarla, como se hizo con la
+  versión, para que un renombrado no deje un texto señalando a una fila con otro nombre.
 
 ## Evidence
 
