@@ -29,25 +29,10 @@
     "introductoryVideosUrl",
     "keyboardShortcutsUrlWin",
     "keyboardShortcutsUrlMac",
-    "keyboardShortcutsUrlLinux"
+    "keyboardShortcutsUrlLinux",
+    "defaultChatAgent"
   ],
   "unsetNested": {
-    "defaultChatAgent": [
-      "documentationUrl",
-      "termsStatementUrl",
-      "privacyStatementUrl",
-      "skusDocumentationUrl",
-      "optimizeUsageDocumentationUrl",
-      "publicCodeMatchesUrl",
-      "managePlanUrl",
-      "upgradePlanUrl",
-      "signUpUrl",
-      "entitlementUrl",
-      "entitlementSignupLimitedUrl",
-      "tokenEntitlementUrl",
-      "mcpRegistryDataUrl",
-      "managedSettingsUrl"
-    ],
     "extensionEnabledApiProposals": [
       "GitHub.copilot",
       "GitHub.copilot-chat",
