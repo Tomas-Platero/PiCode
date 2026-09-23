@@ -966,6 +966,15 @@ button.secondary:hover:not(:disabled) {
   outline: 1px solid var(--vscode-focusBorder);
 }
 
+/*
+ * The command list hangs off the composer rather than off a chip, so here the prompt
+ * itself wears the open state the two dropdown toggles wear: the list and the field it
+ * is filtering are read as one control.
+ */
+.prompt.dropdown-open {
+  border-color: var(--vscode-focusBorder);
+}
+
 .prompt::placeholder {
   color: var(--vscode-input-placeholderForeground);
 }

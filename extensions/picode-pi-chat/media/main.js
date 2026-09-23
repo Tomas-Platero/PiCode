@@ -50,6 +50,9 @@
   // Catalogue pushed by the host, and the reasoning levels of the current model.
   var models = [];
   var thinkingLevels = [];
+  // The slash commands pi has loaded, pushed with the state. Empty means there is nothing
+  // to offer rather than something to report: the `/` dropdown simply does not open.
+  var slashCommands = [];
   // Previous conversations the host offered, newest first, as the empty panel draws
   // them. Kept even while the transcript has messages: they are what the next empty
   // panel offers, and the list is not re-requested just because a message arrived.
@@ -102,6 +105,17 @@
     "Busca errores en el archivo abierto",
     "A\u00f1ade pruebas a lo \u00faltimo que cambi\u00e9",
   ];
+  // Where a slash command comes from, in the panel's words. A skill, an extension and a
+  // prompt template are all one slash command on the wire, so the option has to say which
+  // one it is; the popup's own menu names the same three the same way.
+  var COMMAND_SOURCES = { skill: "skill", extension: "extensi\u00f3n", prompt: "plantilla" };
+  // A command whose origin this side does not recognise keeps its own group at the end:
+  // dropping it would hide a command pi does have, and calling it an extension would state
+  // something that is not known here.
+  var COMMAND_OTHER_SOURCE = "otros";
+  // The order the list draws: a skill is the most specific thing the owner can reach for,
+  // so it comes first.
+  var COMMAND_SOURCE_ORDER = ["skill", "extension", "prompt", COMMAND_OTHER_SOURCE];
   // toolCallId -> { item, output }
   var toolItems = new Map();
   // Prepared images the host has accepted, in the order they arrived. Only the
@@ -800,6 +814,9 @@
     return function () {
       elements.prompt.value = text;
       elements.prompt.focus();
+      // The text changed without an `input` event, so the command list is told to follow
+      // it exactly as a keystroke would have told it.
+      syncCommandDropdown();
     };
   }
 
@@ -1035,6 +1052,19 @@
         // The live figures are stored before the redraw so the toolbar line and the
         // strip's cache segment both read the same reading.
         liveStats = message.stats && typeof message.stats === "object" ? message.stats : null;
+        // The command list travels with the state. An empty or failed list is not an
+        // error to report: the `/` dropdown has nothing to offer, which is exactly how
+        // the composer behaved before there was a list.
+        slashCommands = Array.isArray(message.commands) ? message.commands : [];
+        if (openDropdown === "command") {
+          // The owner may already be typing a command when a new list arrives, so the list
+          // on screen is redrawn — or taken away when there is nothing left to offer.
+          if (slashCommands.length === 0) {
+            closeDropdown();
+          } else {
+            renderOptions();
+          }
+        }
         renderState(message.state);
         break;
       case "environment":
@@ -1272,7 +1302,7 @@
     if (!openDropdown) {
       return;
     }
-    var previous = elements[openDropdown];
+    var previous = dropdownAnchor(openDropdown);
     openDropdown = null;
     elements.dropdown.hidden = true;
     elements.dropdownFilter.value = "";
@@ -1280,6 +1310,95 @@
     if (previous) {
       previous.classList.remove("dropdown-open");
     }
+  }
+
+  /**
+   * The control a dropdown hangs off.
+   *
+   * The model and reasoning lists belong to the chip that opened them; the command list
+   * belongs to the composer, because the `/query` that filters it is being typed there.
+   * Reading the anchor in one place is what lets the three lists share the opening,
+   * closing and drawing code around this function.
+   */
+  function dropdownAnchor(kind) {
+    return kind === "command" ? elements.prompt : elements[kind];
+  }
+
+  /**
+   * The `/query` the composer holds, or null when it is not a command being written.
+   *
+   * A command is the whole message so far and carries no whitespace: the first space is
+   * where its arguments begin, and from there the owner is writing a message rather than
+   * choosing a command. Opening the list and replacing the query both read this one rule,
+   * so what is on screen and what a choice replaces cannot disagree.
+   */
+  function commandQuery() {
+    var value = elements.prompt.value;
+    if (value.charAt(0) !== "/" || /\s/.test(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  /** Where one command comes from, as one of the groups the list draws. */
+  function commandOrigin(command) {
+    var source = command && typeof command.source === "string" ? command.source : "";
+    // Only the origins the protocol declares are named; anything else keeps its own group
+    // rather than borrowing a name it may not deserve.
+    return source === "skill" || source === "extension" || source === "prompt"
+      ? source
+      : COMMAND_OTHER_SOURCE;
+  }
+
+  /** The panel's word for one origin group. */
+  function commandSourceLabel(origin) {
+    return origin === COMMAND_OTHER_SOURCE ? COMMAND_OTHER_SOURCE : COMMAND_SOURCES[origin];
+  }
+
+  /** A command's name with the leading slash the composer needs, added only once. */
+  function commandName(command) {
+    var name = command && typeof command.name === "string" ? command.name : "";
+    return name.charAt(0) === "/" ? name : "/" + name;
+  }
+
+  /**
+   * The commands the typed `/query` matches, drawn one origin at a time.
+   *
+   * The composer is this list's filter box — the query is already being written a line
+   * below — so the matching happens here and the shared filter in `visibleOptions` has
+   * nothing left to remove.
+   *
+   * The groups are drawn in `COMMAND_SOURCE_ORDER` rather than in the order pi returned
+   * them, and every option still says where it comes from: the order is a convenience,
+   * not the only way to tell a skill from a template.
+   */
+  function commandOptions() {
+    var query = commandQuery();
+    var needle = query === null ? "" : query.slice(1).toLowerCase();
+    var options = [];
+    for (var position = 0; position < COMMAND_SOURCE_ORDER.length; position += 1) {
+      var origin = COMMAND_SOURCE_ORDER[position];
+      for (var index = 0; index < slashCommands.length; index += 1) {
+        var command = slashCommands[index];
+        if (commandOrigin(command) !== origin) {
+          continue;
+        }
+        var name = commandName(command);
+        var description = typeof command.description === "string" ? command.description : "";
+        var haystack = (name + " " + description).toLowerCase();
+        if (needle && !haystack.includes(needle)) {
+          continue;
+        }
+        options.push({
+          label: name,
+          hint: commandSourceLabel(origin) + (description ? " \u00b7 " + description : ""),
+          // A command is text the owner is still writing, so choosing inserts it instead
+          // of sending anything to the host.
+          action: { kind: "insert", text: name + " " },
+        });
+      }
+    }
+    return options;
   }
 
   function buildOptions() {
@@ -1298,10 +1417,14 @@
           label: model.name || model.id,
           hint: model.id + (traits.length ? "  " + traits.join(" " + String.fromCharCode(183) + " ") : ""),
           current: Boolean(lastState && model.id === lastState.model),
-          message: { type: "setModel", modelId: model.id, provider: model.provider },
+          action: { kind: "send", message: { type: "setModel", modelId: model.id, provider: model.provider } },
         });
       }
       return options;
+    }
+
+    if (openDropdown === "command") {
+      return commandOptions();
     }
 
     if (openDropdown === "thinking") {
@@ -1311,7 +1434,7 @@
           label: value,
           hint: lastState && value === lastState.thinkingLevel ? "actual" : "",
           current: Boolean(lastState && value === lastState.thinkingLevel),
-          message: { type: "setThinkingLevel", level: value },
+          action: { kind: "send", message: { type: "setThinkingLevel", level: value } },
         });
       }
     }
@@ -1344,7 +1467,7 @@
     elements.dropdownOptions.textContent = "";
     if (options.length === 0) {
       elements.dropdownOptions.appendChild(
-        createElement("li", "dropdown-empty", 'nada coincide con "' + elements.dropdownFilter.value + '"'),
+        createElement("li", "dropdown-empty", emptyOptionsText()),
       );
       return;
     }
@@ -1374,11 +1497,86 @@
     }
   }
 
+  /**
+   * What an empty list says.
+   *
+   * The model list is filtered by its own box, so the line can quote what is in it; the
+   * command list is filtered by the composer a line below, and that is where the reader
+   * has to look — quoting that box would quote the empty one.
+   */
+  function emptyOptionsText() {
+    if (openDropdown === "command") {
+      var query = commandQuery();
+      return "ning\u00fan comando coincide con " + (query === null ? "" : query);
+    }
+    return 'nada coincide con "' + elements.dropdownFilter.value + '"';
+  }
+
+  /**
+   * What choosing an option does.
+   *
+   * Two kinds, because the lists are not the same gesture: the model and reasoning lists
+   * switch a setting, so they send a message to the host, while a command is text the
+   * owner is writing, so it is inserted and nothing is sent.
+   */
   function chooseOptionFor(option) {
     return function () {
-      send(option.message);
+      if (option.action.kind === "insert") {
+        insertCommand(option.action.text);
+        return;
+      }
+      send(option.action.message);
       closeDropdown();
     };
+  }
+
+  /**
+   * Writes a chosen command into the composer, replacing the query that is there.
+   *
+   * Only the `/query` is replaced, and only while the composer still holds one: the list
+   * is filtered by that same rule, so a choice can never overwrite a message the owner has
+   * moved on to. The list closes because the text no longer ends at the command name, and
+   * the caret is left after it so the next keystroke writes its arguments.
+   */
+  function insertCommand(text) {
+    var query = commandQuery();
+    if (query === null) {
+      return;
+    }
+    var remainder = elements.prompt.value.slice(query.length);
+    elements.prompt.value = text + remainder;
+    elements.prompt.focus();
+    // Assigning `value` does not put the caret where the owner was working, so it is told
+    // where to go: after the command, where its arguments are written.
+    elements.prompt.setSelectionRange(
+      elements.prompt.value.length,
+      elements.prompt.value.length,
+    );
+    closeDropdown();
+  }
+
+  /**
+   * Keeps the command list in step with what the composer holds.
+   *
+   * Every path that changes the prompt's text calls this — a keystroke, an opener button
+   * and sending — so the list cannot be left up over text it does not describe. With no
+   * commands loaded there is nothing to open, and the panel behaves exactly as it did
+   * before it had the list.
+   */
+  function syncCommandDropdown() {
+    if (commandQuery() === null || slashCommands.length === 0) {
+      if (openDropdown === "command") {
+        closeDropdown();
+      }
+      return;
+    }
+    if (openDropdown !== "command") {
+      openDropdownFor("command");
+      return;
+    }
+    // A new character narrows the list, so the highlight goes back to its first entry.
+    highlightedIndex = 0;
+    renderOptions();
   }
 
   function openDropdownFor(kind) {
@@ -1390,12 +1588,18 @@
 
     openDropdown = kind;
     highlightedIndex = 0;
+    // Only the model list carries a filter box: the reasoning list is seven items, and the
+    // command list is filtered by the composer itself.
     elements.dropdownFilter.hidden = kind !== "model";
     elements.dropdown.hidden = false;
-    elements[kind].classList.add("dropdown-open");
+    dropdownAnchor(kind).classList.add("dropdown-open");
     renderOptions();
 
-    if (kind === "model") {
+    if (kind === "command") {
+      // The composer keeps the focus: the query is still being typed, and every keystroke
+      // is what filters the list.
+      elements.prompt.focus();
+    } else if (kind === "model") {
       elements.dropdownFilter.focus();
     } else {
       elements.dropdownOptions.focus();
@@ -1783,6 +1987,9 @@
     }
 
     elements.prompt.value = "";
+    // The composer is empty again, so a command list still up belongs to text that is no
+    // longer being written and must not survive the send.
+    syncCommandDropdown();
     setStatus("running");
     // The bytes stay with the host: a prompt carries the ids of what is attached.
     send({ type: "prompt", text: text, attachmentIds: ids });
@@ -1795,11 +2002,23 @@
     });
 
     elements.prompt.addEventListener("keydown", function (event) {
+      // While the command list is up the composer's keys belong to it: the arrows move the
+      // highlight, Enter chooses the highlighted command and Escape closes the list. Its
+      // handler runs first and its `preventDefault` is what says the key was taken, so the
+      // submit below cannot run on that Enter and send a half-written slash command.
+      if (openDropdown === "command") {
+        onDropdownKeydown(event);
+        if (event.defaultPrevented) {
+          return;
+        }
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         submitPrompt();
       }
     });
+
+    elements.prompt.addEventListener("input", syncCommandDropdown);
 
     elements.prompt.addEventListener("paste", onPromptPaste);
 

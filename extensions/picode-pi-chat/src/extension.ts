@@ -94,6 +94,9 @@ export function activate(context: vscode.ExtensionContext): void {
       withLiveClient((rpc) => applyModel(rpc, modelId, provider)),
     applyThinkingLevel: (level) => withLiveClient((rpc) => applyThinkingLevel(rpc, level)),
     restart: () => resetClient(),
+    // The panel's `/` dropdown draws the list the popup's menu already draws, read from
+    // the same bound client and shared through the same short-lived cache.
+    commands: async () => (view?.bound ? readCommands(view.bound) : []),
     // The same two the popup's session picker uses: the panel's empty state offers the
     // project's previous conversations, so both surfaces read and load one list.
     recentSessions: () => listProjectSessions(),
@@ -322,6 +325,9 @@ async function ensureClient(extensionUri: vscode.Uri): Promise<PiClient | undefi
 async function resetClient(): Promise<void> {
   client?.stop();
   client = undefined;
+  // A different pi is a different set of loaded commands, so the cached list must not
+  // outlive the process it was read from.
+  invalidateCommands();
 
   // Only restart the process if the view is open: starting pi is a consequence
   // of opening the container, never of a stray command.
@@ -415,7 +421,7 @@ async function menuSnapshot(extensionUri: vscode.Uri): Promise<PiMenuSnapshot> {
       .getAvailableModels()
       .then(countProviders)
       .catch(() => undefined);
-    commands = await client.getCommands().catch(() => []);
+    commands = await readCommands(client);
   }
 
   return {
@@ -470,6 +476,34 @@ async function countInstalled(extensionUri: vscode.Uri): Promise<number | undefi
     value = undefined;
   }
   installedCountCache = { value, at: now };
+  return value;
+}
+
+const COMMANDS_TTL_MS = 15_000;
+let commandsCache: { value: PiSlashCommand[]; at: number } | undefined;
+
+/** Called when the answer can have changed, so the next read asks again. */
+function invalidateCommands(): void {
+  commandsCache = undefined;
+}
+
+/**
+ * The commands pi has loaded: extensions, prompt templates and skills.
+ *
+ * Three surfaces draw the same list — the popup's menu, the Gentle AI section and the
+ * chat panel's `/` dropdown — and all three ask the same process, so the answer is kept
+ * briefly and shared: the panel opening is not a reason for a second round trip.
+ *
+ * A read that fails is an empty list. The list is context around a command the owner is
+ * writing, not a session failure, and the caller decides what an empty list means.
+ */
+async function readCommands(client: PiClient): Promise<PiSlashCommand[]> {
+  const now = Date.now();
+  if (commandsCache && now - commandsCache.at < COMMANDS_TTL_MS) {
+    return commandsCache.value;
+  }
+  const value = await client.getCommands().catch(() => [] as PiSlashCommand[]);
+  commandsCache = { value, at: now };
   return value;
 }
 
@@ -903,7 +937,7 @@ async function gentleState(extensionUri: vscode.Uri): Promise<GentleState> {
 
   const client = view?.bound;
   if (client) {
-    const commands = await client.getCommands().catch(() => []);
+    const commands = await readCommands(client);
     const gentle = gentleCommands(commands);
     state.commandCount = gentle.length;
     state.commands = gentle.map((command) =>

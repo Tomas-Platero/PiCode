@@ -10,7 +10,7 @@ import {
 } from "./attachments";
 import { collectReferences, composePrompt } from "./context";
 import type { PiClient, PiSubscription } from "./pi-client";
-import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiUsage } from "./protocol";
+import { isPanelEvent, type PiAssistantContent, type PiEvent, type PiImageContent, type PiSessionState, type PiSlashCommand, type PiUsage } from "./protocol";
 import type { SessionReplay, SessionSummary } from "./sessions";
 import {
   TRANSCRIPTION_LIMITS,
@@ -54,6 +54,14 @@ export interface ChatViewHost {
   applyModel(modelId: string, provider?: string): Promise<void>;
   /** Applies a reasoning level chosen in the panel's own dropdown. */
   applyThinkingLevel(level: string): Promise<void>;
+  /**
+   * The slash commands pi has loaded: extensions, prompt templates and skills.
+   *
+   * Injected like the other callbacks because listing them is an RPC to the agent, and
+   * the panel never speaks to the process itself. The view asks once per state push and
+   * a list that cannot be read is an empty list, never a failure of the panel.
+   */
+  commands(): Promise<readonly PiSlashCommand[]>;
   /** Restarts the agent backend, keeping the panel where it is. */
   restart(): Promise<void>;
   /**
@@ -465,9 +473,16 @@ export class ChatView implements vscode.WebviewViewProvider {
     try {
       const state = await this.client.getState();
       this.contextWindow = state.model?.contextWindow;
+      // A command list that cannot be read is an empty list rather than a panel failure:
+      // the `/` dropdown then has nothing to offer and the composer behaves exactly as it
+      // did before there was one.
+      const commands = await this.host.commands().catch(() => [] as readonly PiSlashCommand[]);
       this.post({
         type: "state",
         state: toWebviewState(state),
+        // The list travels with the state the panel already posts, so the `/` dropdown is
+        // filled by the message that is pushed on every bind and every settled turn.
+        commands,
         // Formatted here, where the totals live, so the renderer stays presentation.
         usage: summarizeUsage(this.totals, this.contextWindow),
         // The live figures travel with the state so the toolbar line and the strip's
