@@ -280,12 +280,28 @@ as evidence.
     de escribir el perfil del dueño ni por accidente. `434c6eb` y su arreglo. El suite ganó un
     **control por mutación** (se cambia el código a propósito para ver el test nuevo fallar), que
     es la primera evidencia de falsación de este trabajo.
-  - [ ] **T6a — El asistente de primer arranque, sin terminal.** Cuando el pi elegido es el propio y
-    su perfil aún no sirve, el asistente lo dice —el editor sigue usando el del dueño hasta
-    entonces— y ofrece las **dos** formas de llenarlo, cada una ejecutando lo que ya existe y no
-    una segunda implementación: **importar** (T3) o **iniciar sesión** (T6b). Ningún camino puede
-    terminar en «ejecuta esto en un terminal». Si el pi elegido es el del dueño, PiCode no posee
-    perfil: no hay paso de perfil ni login, y lo dice en vez de ofrecer algo que no puede funcionar.
+  - [x] **T6a — El asistente de primer arranque, sin terminal.** Cuando el pi elegido es el propio
+    y su perfil no sirve, el paso lo dice y ofrece las **dos puertas**, cada una ejecutando el
+    comando que ya existe (`executeCommand`, sin copia de ningún flujo). El renderizador **dibuja y
+    no decide**: decide el host, en una función pura. La fila de ajustes y el asistente leen el
+    perfil con **una sola lectura compartida**, que es lo que evita que se contradigan. `35ac3fe`,
+    28 suites. **Es la primera suite del asistente**: treinta suites cubrían esta extensión y
+    ninguna cubría quién decide con qué pi arrancas tu editor.
+    Texto, verbatim: «El pi propio de PiCode todavía no tiene perfil, así que nada ha cambiado: el
+    editor sigue usando el perfil de tu equipo hasta que el perfil propio de PiCode tenga
+    credenciales», con **Importar el perfil de tu pi** e **Iniciar sesión en un proveedor** debajo.
+    Y una decisión de producto que merece quedar escrita: **no** copia la instrucción de la fila
+    de ajustes («Usa «Importar el perfil de tu pi» para encenderlo») porque un botón debajo de la
+    frase **ya es** la instrucción, y apuntar a una sola fila habría dejado fuera la puerta del
+    login, que llegó después de escribir esa frase.
+  - [ ] **T6c — El primer arranque no puede saltarse la verdad.** Hueco que reportó el escritor de
+    T6a: al pulsar «Aplicar este pi» con el pi propio, el asistente **avanza solo** al paso 2 con
+    el mensaje `runtimeResult` (pre-existente) y las pestañas no tienen manejador, así que en el
+    camino que más importa —el primer arranque— la frase y las dos puertas **no se llegan a leer**.
+    El dueño se queda con un editor que sigue usando su perfil y sin ninguna explicación. Cuando el
+    paso tiene algo que decir, no debe avanzar por su cuenta; pero **tampoco puede atraparle**
+    (seguir sin llenar el perfil tiene que seguir siendo posible, porque su editor funciona con su
+    propio pi): necesita una forma propia de continuar.
   - [x] **T6b — Iniciar sesión en un proveedor, desde el editor.** `picode.piChat.loginProvider`
     («PiCode: Iniciar sesión en un proveedor»): pide el proveedor en los términos del dueño
     —diciendo si es **clave** o **suscripción**— y corre el login propio de pi contra el perfil
@@ -315,6 +331,12 @@ as evidence.
   propio (es comportamiento de pi, no enciende la guarda y no toca el perfil del dueño, pero
   conviene que no sea un efecto de *abrir* un comando); y el editor multilínea (`editor`) sigue
   respondiéndose cancelado, con el porqué escrito junto al código.
+  Y dos incoherencias de lenguaje, que son la misma clase de defecto que la frase de la fila:
+  el perfil del dueño se llama **«el perfil de tu pi, el que ya tienes en el equipo»** en la fila
+  de ajustes y **«el perfil de tu equipo»** en el cierre de la importación —un nombre para cada
+  cosa, o los dos pantallas empiezan a contradecirse—; y un test de `pi-settings.test.js` fija la
+  **forma literal** de una llamada en `extension.ts`, lo que obligó a dar forma al ayudante
+  compartido. Un test debe fijar el **hecho**, no la ortografía de la llamada.
 
 ## Evidence
 
