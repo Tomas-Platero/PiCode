@@ -535,67 +535,170 @@ body {
 }
 
 /*
- * The skills list: one plain row per discovered skill, name over description over
- * origin, with the switch that belongs to the packages table. Only `--vscode-*`
- * variables, so it reads in every theme.
+ * The skills table: the same table the packages list draws, over the discovered
+ * skills. A painter of its own while the two tables are still separate, so the
+ * rules are its own too. Only `--vscode-*` variables, so it reads in every theme.
  */
-.skill-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.skill-summary {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
 }
 
-.skill-row {
+.skill-filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
+  gap: 8px;
+}
+
+.skill-filters input.settings-search-input {
+  flex: 1;
+  width: auto;
+  min-width: 160px;
+}
+
+.skill-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.skill-table-wrapper {
+  overflow-x: auto;
+}
+
+.skill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.skill-table th,
+.skill-table td {
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.skill-table th {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.skill-table tbody td {
   border-bottom: 1px solid var(--vscode-panel-border, transparent);
 }
 
-.skill-row:last-child {
-  border-bottom: none;
+.skill-table tbody tr:hover {
+  background: var(--vscode-list-hoverBackground, transparent);
 }
 
 /*
- * A skill that is off is dimmed the way a paused package row is: the two lists
+ * A skill that is off is dimmed the way a paused package row is: the two tables
  * describe the same kind of thing, so "off" should read the same in both.
  */
-.skill-row-off {
+.skill-table tbody tr.skill-row-off {
   opacity: 0.6;
 }
 
-.skill-text {
-  flex: 1;
-  min-width: 0;
+.skill-table th.active {
+  color: var(--vscode-foreground);
 }
 
-.skill-name {
-  font-weight: 600;
-}
-
-.skill-description {
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.9em;
-  margin-top: 2px;
-}
-
-.skill-origin {
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.85em;
-  margin-top: 2px;
-}
-
-.skill-control {
-  display: flex;
+.skill-table-sort {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.skill-table-sort:hover {
+  color: var(--vscode-foreground);
+}
+
+.skill-table-sort-indicator {
+  font-size: 0.8em;
+  opacity: 0;
+}
+
+.skill-table th.active .skill-table-sort-indicator {
+  opacity: 1;
+}
+
+.skill-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  flex: 0 0 auto;
 }
 
 /*
- * The problems a partial discovery reported, stacked beside the list it could not
+ * The footer and the empty state are hidden with the `hidden` attribute, and an
+ * element whose class sets `display` is not hidden by it: the author rule wins
+ * over the browser's own. So the hiding is spelled out here too.
+ */
+.skill-pagination[hidden],
+.skill-table-wrapper[hidden],
+.skill-empty[hidden] {
+  display: none;
+}
+
+.skill-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.skill-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.skill-pagination button {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.skill-pagination button:hover:not(:disabled) {
+  background: var(--vscode-list-hoverBackground, transparent);
+}
+
+.skill-pagination button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.skill-pagination span {
+  padding: 0 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.skill-empty {
+  margin: 12px 0;
+}
+
+/*
+ * The problems a partial discovery reported, stacked below the table it could not
  * fully fill. The line itself is `.settings-error`; only the stack is new.
  */
 .skill-problems {
@@ -603,8 +706,4 @@ body {
   flex-direction: column;
   gap: 4px;
   margin-top: 8px;
-}
-
-.skills-empty {
-  margin: 0;
 }

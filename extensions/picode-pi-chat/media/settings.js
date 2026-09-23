@@ -32,6 +32,20 @@
     // the only side that knows whether a package skill is on in that scope.
     skills: [],
     skillProblems: [],
+    // The skills table keeps its page, its filters and its sort here, in module
+    // state, and never in its own DOM: flipping a switch makes the host re-post
+    // `state`, this script rebuilds the whole content pane, and anything remembered
+    // in an element would lose the page, the query and the filters on that flip.
+    skillTable: {
+      page: 1,
+      // The default comes from the pure module, so the first page and the page-size
+      // selector cannot disagree about how many rows a page holds.
+      pageSize: skillRows.DEFAULT_PAGE_SIZE,
+      query: "",
+      origin: "all",
+      state: "all",
+      sort: { key: "name", direction: "asc" },
+    },
     // The packages table keeps its page, its filters and its sort here, in module
     // state, and never in its own DOM: the host re-posts `state` after every write
     // and this script rebuilds the whole content pane, so anything remembered in
@@ -314,18 +328,36 @@
     return wrapper;
   }
 
-  // --- the skills list ----------------------------------------------------
+  // --- the skills table ---------------------------------------------------
 
   /*
-   * The skills list: one plain row per discovered skill, in the order the discovery
-   * returned them. Filters, sorting and pagination are the next task, so this draws
-   * exactly what the host sent and nothing else.
+   * The skills table: a summary line, a filter bar, the table itself and the
+   * pagination footer, over the rows `skill-rows.js` derives.
    *
-   * The rows themselves come from `skill-rows.js`, the pure module the suite covers,
-   * so the origin label here is the one the tests assert and cannot drift. The switch
-   * is the packages table's own markup: a skill is a resource of a package, and the
-   * two switches write the same kind of thing.
+   * It is a painter of its own and not the packages one on purpose: refactoring the
+   * working packages table inside the same change was the risk that sank two earlier
+   * attempts, so the migration onto one shared painter stays its own unit. The shape
+   * it copies is still the packages table's, down to the rule that only the summary,
+   * the body and the footer repaint: the host re-posts `state` after every write and
+   * this script rebuilds the whole pane, so the page and the filters have to survive
+   * in `state.skillTable` and never in the table's own DOM.
    */
+
+  // The filter values are the routes `skill-rows.js` puts in `row.origin`, so a
+  // filter compares equal to the column it filters and never needs a translation
+  // table the two sides could drift apart on.
+  var SKILL_ORIGIN_FILTER_OPTIONS = [
+    { value: "all", label: "Todos" },
+    { value: "pi", label: "pi" },
+    { value: "package", label: "Paquetes" },
+    { value: "project", label: "Proyecto" },
+  ];
+
+  var SKILL_STATE_FILTER_OPTIONS = [
+    { value: "all", label: "Todos" },
+    { value: "on", label: "Activadas" },
+    { value: "off", label: "Desactivadas" },
+  ];
 
   /** Why a skill that cannot be switched is not switched, in one short line. */
   function skillReason(row) {
@@ -338,70 +370,295 @@
     return "Esta skill no se puede activar ni desactivar.";
   }
 
-  function renderSkillRow(row) {
-    var item = createElement("div", "skill-row");
-    if (!row.enabled) {
-      item.classList.add("skill-row-off");
-    }
-
-    var text = createElement("div", "skill-text");
-    text.appendChild(createElement("div", "skill-name", row.name));
-    if (row.description !== "") {
-      text.appendChild(createElement("div", "skill-description", row.description));
-    }
-    text.appendChild(createElement("div", "skill-origin", row.originLabel));
-    item.appendChild(text);
-
-    var control = createElement("div", "skill-control");
-    if (row.canToggle) {
-      var toggle = createElement("label", "toggle");
-      var checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = row.enabled;
-      checkbox.setAttribute("aria-label", row.enabled ? "Desactivar" : "Activar");
-      checkbox.addEventListener("change", function () {
-        // The message names the skill by its filter pattern and its package, never by
-        // its index: the host rebuilds that package's entry from what pi stores, so
-        // the webview never recomputes a filter and never has to know the package's
-        // other patterns.
-        send({
-          type: "toggleSkill",
-          scope: state.scope,
-          pattern: row.pattern,
-          packageSource: row.skill.packageSource,
-          enabled: checkbox.checked,
-        });
-      });
-      toggle.appendChild(checkbox);
-      toggle.appendChild(createElement("span", "toggle-slider"));
-      control.appendChild(toggle);
-    } else {
-      control.appendChild(
-        createElement("span", "setting-readonly", row.enabled ? "Activada" : "Desactivada"),
-      );
-      control.appendChild(createElement("span", "setting-note", skillReason(row)));
-    }
-    item.appendChild(control);
-    return item;
-  }
-
   function renderSkills(wrapper) {
-    var rows = skillRows.buildRows(state.skills);
+    var view = state.skillTable;
 
-    if (rows.length === 0) {
-      wrapper.appendChild(
-        createElement("p", "skills-empty settings-empty", "No se encontraron skills."),
-      );
-    } else {
-      var list = createElement("div", "skill-list");
-      for (var index = 0; index < rows.length; index += 1) {
-        list.appendChild(renderSkillRow(rows[index]));
+    var summary = createElement("div", "skill-summary");
+
+    var filters = createElement("div", "skill-filters");
+    var search = document.createElement("input");
+    search.type = "text";
+    search.className = "settings-search-input";
+    search.placeholder = "Buscar skills";
+    search.spellcheck = false;
+    search.value = view.query;
+    search.addEventListener("input", function () {
+      view.query = search.value;
+      // A different set of rows starts at its first page: staying on page 3 of the
+      // previous search shows an empty table and reads as a broken pane.
+      view.page = 1;
+      paint();
+    });
+    var originSelect = createSelect(
+      "setting-select",
+      SKILL_ORIGIN_FILTER_OPTIONS,
+      view.origin,
+      function (value) {
+        view.origin = value;
+        view.page = 1;
+        paint();
+      },
+    );
+    var stateSelect = createSelect(
+      "setting-select",
+      SKILL_STATE_FILTER_OPTIONS,
+      view.state,
+      function (value) {
+        view.state = value;
+        view.page = 1;
+        paint();
+      },
+    );
+    filters.appendChild(search);
+    filters.appendChild(createLabel("Origen", originSelect));
+    filters.appendChild(createLabel("Estado", stateSelect));
+
+    var tableWrapper = createElement("div", "skill-table-wrapper");
+    var table = createElement("table", "skill-table");
+    var tableHead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    var sortCells = {};
+
+    function addHeader(label, key) {
+      var cell = document.createElement("th");
+      if (key === null) {
+        cell.textContent = label;
+      } else {
+        var button = createElement("button", "skill-table-sort");
+        button.type = "button";
+        button.appendChild(document.createTextNode(label));
+        var sortIndicator = createElement("span", "skill-table-sort-indicator", "▲");
+        button.appendChild(sortIndicator);
+        button.addEventListener("click", function () {
+          // A second click on the same header reverses it; another header starts
+          // ascending, the order a freshly opened table is in.
+          if (view.sort.key === key) {
+            view.sort.direction = view.sort.direction === "asc" ? "desc" : "asc";
+          } else {
+            view.sort.key = key;
+            view.sort.direction = "asc";
+          }
+          // The rows are reordered, so the old page number means nothing.
+          view.page = 1;
+          paint();
+        });
+        cell.appendChild(button);
+        sortCells[key] = { cell: cell, indicator: sortIndicator };
       }
-      wrapper.appendChild(list);
+      headRow.appendChild(cell);
     }
+
+    addHeader("Nombre", "name");
+    addHeader("Descripción", null);
+    addHeader("Origen", "origin");
+    addHeader("Estado", "state");
+
+    tableHead.appendChild(headRow);
+    table.appendChild(tableHead);
+    var body = document.createElement("tbody");
+    table.appendChild(body);
+    tableWrapper.appendChild(table);
+
+    var empty = createElement("p", "skill-empty settings-empty", "No se encontraron skills.");
+    empty.hidden = true;
+
+    var footer = createElement("div", "skill-pagination");
+    // The default page size is one of the sizes the module offers, so the selector
+    // is built from the list alone and always shows the size the table is in use
+    // with.
+    var sizeOptions = skillRows.PAGE_SIZES.slice();
+    var sizeSelect = createSelect(
+      "setting-select",
+      sizeOptions.map(function (size) {
+        return { value: String(size), label: String(size) };
+      }),
+      String(view.pageSize),
+      function (value) {
+        view.pageSize = Number(value);
+        // The rows per page changed, so the previous page number means nothing.
+        view.page = 1;
+        paint();
+      },
+    );
+
+    var current = null;
+
+    function createPageButton(glyph, title, onClick) {
+      var button = createElement("button", null, glyph);
+      button.type = "button";
+      button.title = title;
+      button.addEventListener("click", onClick);
+      return button;
+    }
+
+    function goToPage(target) {
+      view.page = target;
+      paint();
+      // Paging moves the table out of sight; it comes back into view at its top.
+      tableWrapper.scrollIntoView({ block: "start" });
+    }
+
+    var pager = document.createElement("div");
+    var indicator = createElement("span");
+    indicator.title = "Página actual";
+    var first = createPageButton("«", "Primera página", function () {
+      goToPage(1);
+    });
+    var previous = createPageButton("‹", "Anterior", function () {
+      goToPage(view.page - 1);
+    });
+    var next = createPageButton("›", "Siguiente", function () {
+      goToPage(view.page + 1);
+    });
+    var lastButton = createPageButton("»", "Última página", function () {
+      goToPage(current.pageCount);
+    });
+    pager.appendChild(first);
+    pager.appendChild(previous);
+    pager.appendChild(indicator);
+    pager.appendChild(next);
+    pager.appendChild(lastButton);
+    footer.appendChild(createLabel("Por página", sizeSelect));
+    footer.appendChild(pager);
+
+    /** The rows the filters and the sort leave, in the order the table shows them. */
+    function visibleRows() {
+      var rows = skillRows.buildRows(state.skills);
+      var visible = skillRows.filterRows(rows, {
+        query: view.query,
+        origin: view.origin,
+        state: view.state,
+      });
+      return skillRows.sortRows(visible, { key: view.sort.key, direction: view.sort.direction });
+    }
+
+    function paintSummary(visible) {
+      var counts = skillRows.summarize(visible);
+      summary.textContent =
+        counts.on + " activadas · " + counts.off + " desactivadas de " + counts.total + " totales";
+    }
+
+    /** Marks which header the table is sorted by, and in which direction. */
+    function paintSort() {
+      for (var key in sortCells) {
+        var entry = sortCells[key];
+        var active = view.sort.key === key;
+        entry.cell.setAttribute(
+          "aria-sort",
+          active ? (view.sort.direction === "asc" ? "ascending" : "descending") : "none",
+        );
+        entry.cell.classList.toggle("active", active);
+        entry.indicator.textContent = view.sort.direction === "asc" ? "▲" : "▼";
+      }
+    }
+
+    function paintRows(page) {
+      body.textContent = "";
+      // No rows to show means no table: an empty table body with a header row looks
+      // like a loading failure, so the table gives way to the empty-state line.
+      var isEmpty = page.items.length === 0;
+      tableWrapper.hidden = isEmpty;
+      empty.hidden = !isEmpty;
+
+      for (var index = 0; index < page.items.length; index += 1) {
+        body.appendChild(renderSkillRow(page.items[index]));
+      }
+    }
+
+    function paintFooter(page) {
+      // One page of rows needs no footer: the page-size selector goes with it,
+      // because a single-page selector is noise.
+      footer.hidden = !page.paged;
+      indicator.textContent = "Página " + page.page + " de " + page.pageCount;
+      first.disabled = page.page <= 1;
+      previous.disabled = page.page <= 1;
+      next.disabled = page.page >= page.pageCount;
+      lastButton.disabled = page.page >= page.pageCount;
+    }
+
+    function paint() {
+      var visible = visibleRows();
+      current = skillRows.paginate(visible, { page: view.page, pageSize: view.pageSize });
+      // paginate clamps: keeping the clamped page means a filter that shrinks the
+      // table lands on the last page that exists, not on an empty one.
+      view.page = current.page;
+      paintSummary(visible);
+      paintSort();
+      paintRows(current);
+      paintFooter(current);
+    }
+
+    function renderSkillRow(row) {
+      var tableRow = document.createElement("tr");
+      // A skill that is off is dimmed the way a paused package row is: the two tables
+      // describe the same kind of thing, so "off" should read the same in both.
+      if (!row.enabled) {
+        tableRow.classList.add("skill-row-off");
+      }
+
+      var name = document.createElement("td");
+      name.textContent = row.name;
+      tableRow.appendChild(name);
+
+      var description = document.createElement("td");
+      description.textContent = row.description;
+      tableRow.appendChild(description);
+
+      var origin = document.createElement("td");
+      // The label comes from `skill-rows.js`, never from the raw route: a package
+      // with no reported name has to read as the spec a human can match to the
+      // packages table, and that fallback lives in the pure module alone.
+      origin.textContent = row.originLabel;
+      tableRow.appendChild(origin);
+
+      tableRow.appendChild(renderStateCell(row));
+      return tableRow;
+    }
+
+    function renderStateCell(row) {
+      var cell = document.createElement("td");
+      if (row.canToggle) {
+        var toggle = createElement("label", "toggle");
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = row.enabled;
+        checkbox.setAttribute("aria-label", row.enabled ? "Desactivar" : "Activar");
+        checkbox.addEventListener("change", function () {
+          // The message names the skill by its filter pattern and its package, never by
+          // its index: the host rebuilds that package's entry from what pi stores, so
+          // the webview never recomputes a filter and never has to know the package's
+          // other patterns. The page, the query and the filters stay in module state,
+          // so the repaint this write triggers shows the same rows as before.
+          send({
+            type: "toggleSkill",
+            scope: state.scope,
+            pattern: row.pattern,
+            packageSource: row.skill.packageSource,
+            enabled: checkbox.checked,
+          });
+        });
+        toggle.appendChild(checkbox);
+        toggle.appendChild(createElement("span", "toggle-slider"));
+        cell.appendChild(toggle);
+      } else {
+        // A skill pi cannot switch still shows its state, plus the reason in Spanish
+        // instead of a control that would do nothing.
+        cell.appendChild(
+          createElement("span", "setting-readonly", row.enabled ? "Activada" : "Desactivada"),
+        );
+        cell.appendChild(createElement("span", "setting-note", skillReason(row)));
+      }
+      return cell;
+    }
+
+    wrapper.appendChild(summary);
+    wrapper.appendChild(filters);
+    wrapper.appendChild(tableWrapper);
+    wrapper.appendChild(empty);
+    wrapper.appendChild(footer);
 
     // A partial listing still shows what was found; the problems go beside it, the
-    // way the discovery was designed to report them, instead of blanking the list.
+    // way the discovery was designed to report them, instead of blanking the table.
     if (state.skillProblems.length > 0) {
       var problems = createElement("div", "skill-problems");
       for (var p = 0; p < state.skillProblems.length; p += 1) {
@@ -409,6 +666,8 @@
       }
       wrapper.appendChild(problems);
     }
+
+    paint();
   }
 
   // --- the packages table -------------------------------------------------
