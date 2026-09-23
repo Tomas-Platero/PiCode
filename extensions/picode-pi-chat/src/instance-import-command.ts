@@ -20,15 +20,27 @@
  * `instanceAgentDir` resolves, and the flow refuses when the two ends overlap,
  * because a copy whose source is also its destination would put a write path under
  * the owner's own profile.
+ *
+ * T3c adds the two steps that make the copy usable, and they belong to this same flow:
+ * the packages the copy left configured are installed through the existing install path,
+ * into the very directory the copy wrote — never through the resolver's guard, which
+ * would answer with the machine's profile while PiCode's own is still credential-less;
+ * and the flow closes by offering a window reload, because the running agent was built at
+ * startup and would otherwise keep using the other profile while the panel reads this
+ * one. When no credentials came across, the closing says so instead of offering a reload
+ * that would change nothing.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
   instanceAgentDir,
+  parseCredentials,
+  parsePackages,
   scanProfile,
   type DirectoryInventory,
+  type JsonValue,
   type ProfileInventory,
 } from "./instance";
 import {
@@ -39,6 +51,7 @@ import {
   type ImportReport,
   type ImportSelection,
 } from "./instance-import";
+import { installSources, type PiMenuDeps } from "./menu";
 import { resolveAgentDir } from "./transcription";
 
 /** The command the palette runs. Declared in package.json and registered once. */
@@ -273,6 +286,93 @@ export function importRefusal(
 }
 
 /* ------------------------------------------------------------------ *
+ * What the target holds — pure over the files' own text
+ * ------------------------------------------------------------------ */
+
+/** A JSON file's value, or `undefined` when the text is absent or is not JSON. */
+function parseJson(text: string | undefined): JsonValue | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as JsonValue;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The package sources a `settings.json` text configures.
+ *
+ * Pure over the text on purpose: the flow reads the **target** profile's file — what
+ * actually landed, not what the source held — and that reading has to be exercisable
+ * without a profile. The shape is parsed by the scan's own `parsePackages`, so the list
+ * installed here and the list the inventory showed cannot drift apart, and a settings
+ * file that is missing or malformed simply has no packages to install.
+ */
+export function packageSourcesFromSettings(text: string | undefined): string[] {
+  return parsePackages(parseJson(text)).sources;
+}
+
+/**
+ * The providers an `auth.json` text names.
+ *
+ * Reads the top-level keys and nothing else, exactly as the scan does, so a credential
+ * value cannot travel out of the file even while deciding whether one is there.
+ */
+export function credentialProvidersFromAuth(text: string | undefined): string[] {
+  return parseCredentials(parseJson(text)).providers;
+}
+
+/**
+ * The environment the package install runs with: the import's own target, explicitly.
+ *
+ * `instanceAgentDir(uri, "managed")` is the **unguarded** answer and it is the one that
+ * belongs here. `selectedAgentDir()` is for readers: it follows the anti-mute guard, and
+ * that guard answers with the machine's profile the instant PiCode's own profile has no
+ * credentials. The owner may have chosen not to bring credentials, so a guarded answer
+ * would install the packages somewhere other than the directory the files were just
+ * copied into. The install belongs to the import, so it targets the copy's own target.
+ */
+export function importProfileEnv(target: string): Record<string, string> {
+  return { PI_CODING_AGENT_DIR: target };
+}
+
+/* ------------------------------------------------------------------ *
+ * The closing step
+ * ------------------------------------------------------------------ */
+
+/** The button that reloads the window after the import, in the owner's words. */
+export const RELOAD_WINDOW_LABEL = "Recargar la ventana";
+
+/**
+ * The two closing messages, one per state of the profile the import just filled.
+ *
+ * They are the flow's last word, so they say the one thing this screen must never get
+ * wrong: which profile the editor is actually on. The facts the panel shows are re-read on
+ * every refresh, but the agent's client is built once at startup, so right after a copy
+ * the panel would read PiCode's own profile while the running agent still uses the
+ * machine's — the reload is what closes that gap, and it is offered only when the profile
+ * can actually carry the instance. Without credentials it cannot, nothing will switch
+ * yet, and the honest message says so rather than let the owner believe the import
+ * changed the editor.
+ */
+export const CLOSING_TEXTS = {
+  ready:
+    "El perfil propio de PiCode ya tiene lo que trajiste. El agente que está corriendo " +
+    "todavía usa el perfil de tu equipo, así que recarga la ventana para que use el nuevo.",
+  withoutCredentials:
+    "El perfil propio de PiCode se llenó, pero no tiene credenciales, así que todavía no " +
+    "puede hablar con ningún modelo y nada ha cambiado: el editor sigue usando el perfil " +
+    "de tu equipo. Vuelve a importar marcando las credenciales para encenderlo.",
+} as const;
+
+/** The closing message for whether the target profile now holds credentials. */
+export function closingText(hasCredentials: boolean): string {
+  return `PiCode: ${hasCredentials ? CLOSING_TEXTS.ready : CLOSING_TEXTS.withoutCredentials}`;
+}
+
+/* ------------------------------------------------------------------ *
  * The editor flow
  * ------------------------------------------------------------------ */
 
@@ -334,9 +434,13 @@ function chooseEntries(entries: ImportEntry[]): Promise<ImportEntry[] | undefine
  * otherwise — and the target is the internal instance's profile. Both are resolved
  * before anything is shown or written, and the flow stops at the first refusal. The
  * copy is a one-shot: nothing here is scheduled, watched or repeated.
+ *
+ * `deps` is the menu the editor already built, because the install of the copied
+ * packages goes through that same path (`installSources`) rather than a second one.
  */
 export async function importProfileIntoInstance(
   context: vscode.ExtensionContext,
+  deps: PiMenuDeps,
 ): Promise<void> {
   const from = resolveAgentDir();
   const to = instanceAgentDir(context.extensionUri, "managed");
@@ -398,11 +502,56 @@ export async function importProfileIntoInstance(
   );
 
   // The report is the only thing that says what happened: the notification repeats
-  // it line by line rather than summarizing into a claim the report does not make.
-  void vscode.window.showInformationMessage("PiCode: importación terminada", {
+  // it line by line rather than summarizing into a claim the report does not make. It
+  // is awaited so it is dismissed before the install confirmation opens underneath it.
+  await vscode.window.showInformationMessage("PiCode: importación terminada", {
     modal: true,
     detail: reportLines(report).join("\n"),
   });
+
+  // The packages the copy left configured are installed into the import's own target,
+  // read back from the target so an import that did not bring settings — or brought
+  // them in an earlier pass — installs what is actually there. `installSources` owns
+  // the confirmation and the progress; its own restart offer is suppressed because
+  // this flow offers the reload once, at the end, when it can actually mean something.
+  const targetSettings = readTextIfPresent(path.join(to, "settings.json"));
+  const sources = packageSourcesFromSettings(targetSettings);
+  if (sources.length > 0) {
+    await installSources(
+      {
+        ...deps,
+        profileEnv: () => importProfileEnv(to),
+        offerRestart: () => {},
+      },
+      sources,
+    );
+  }
+
+  // The reload is the closing step, and the credentials check is what makes it honest:
+  // without them the profile cannot carry the instance, the guard keeps every reader and
+  // every spawn on the machine's profile, and a reload would change nothing at all.
+  const hasCredentials =
+    credentialProvidersFromAuth(readTextIfPresent(path.join(to, "auth.json"))).length > 0;
+  if (!hasCredentials) {
+    void vscode.window.showInformationMessage(closingText(false));
+    return;
+  }
+  const choice = await vscode.window.showInformationMessage(
+    closingText(true),
+    RELOAD_WINDOW_LABEL,
+  );
+  if (choice === RELOAD_WINDOW_LABEL) {
+    await vscode.commands.executeCommand("workbench.action.reloadWindow");
+  }
+}
+
+/** A file's text, or `undefined` when it is missing or cannot be read. */
+function readTextIfPresent(file: string): string | undefined {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
 }
 
 /** The progress line for one item, read from the same table the report uses. */

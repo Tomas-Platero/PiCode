@@ -224,6 +224,88 @@ async function main() {
     lines[5],
   );
 
+  // --- reading the target's own files, pure over their text -------------------
+
+  const settingsText = JSON.stringify({
+    packages: ["npm:pi-lens", { source: "git:github.com/x/y" }, "", { source: "" }, 7, null],
+  });
+  const sources = api.packageSourcesFromSettings(settingsText);
+  check(
+    "the package list is read from the settings text, both source shapes",
+    sources.length === 2 && sources[0] === "npm:pi-lens" && sources[1] === "git:github.com/x/y",
+    JSON.stringify(sources),
+  );
+  check(
+    "a missing, broken or non-object settings text names no packages",
+    api.packageSourcesFromSettings(undefined).length === 0 &&
+      api.packageSourcesFromSettings("{ not json").length === 0 &&
+      api.packageSourcesFromSettings("[1,2]").length === 0 &&
+      api.packageSourcesFromSettings(JSON.stringify({ packages: "npm:x" })).length === 0,
+    JSON.stringify([
+      api.packageSourcesFromSettings(undefined),
+      api.packageSourcesFromSettings("{ not json"),
+      api.packageSourcesFromSettings("[1,2]"),
+      api.packageSourcesFromSettings(JSON.stringify({ packages: "npm:x" })),
+    ]),
+  );
+
+  const authText = JSON.stringify({
+    anthropic: { type: "api_key", key: "SECRET-VALUE" },
+    nan: { type: "api_key", key: "OTHER-SECRET" },
+  });
+  const providers = api.credentialProvidersFromAuth(authText);
+  check(
+    "the credentials are read as provider names, never values",
+    providers.join(",") === "anthropic,nan" &&
+      providers.every((name) => !name.includes("SECRET")),
+    JSON.stringify(providers),
+  );
+  check(
+    "a missing, broken or non-object auth text names no providers",
+    api.credentialProvidersFromAuth(undefined).length === 0 &&
+      api.credentialProvidersFromAuth("nope").length === 0 &&
+      api.credentialProvidersFromAuth('[1,2]').length === 0,
+    JSON.stringify([
+      api.credentialProvidersFromAuth(undefined),
+      api.credentialProvidersFromAuth("nope"),
+      api.credentialProvidersFromAuth('[1,2]'),
+    ]),
+  );
+
+  // --- the install's environment and the closing -----------------------------
+
+  const target = path.join(os.tmpdir(), "picode-import-cmd-target");
+  const env = api.importProfileEnv(target);
+  check(
+    "the install runs with the import's own target, explicitly",
+    Object.keys(env).length === 1 && env.PI_CODING_AGENT_DIR === target,
+    JSON.stringify(env),
+  );
+
+  const closingReady = api.closingText(true);
+  const closingNoCredentials = api.closingText(false);
+  check(
+    "the closing text is chosen from the profile's credentials",
+    closingReady === `PiCode: ${api.CLOSING_TEXTS.ready}` &&
+      closingNoCredentials === `PiCode: ${api.CLOSING_TEXTS.withoutCredentials}`,
+    JSON.stringify({ closingReady, closingNoCredentials }),
+  );
+  check(
+    "the two closing texts say different things",
+    closingReady !== closingNoCredentials &&
+      closingReady.length > 0 &&
+      closingNoCredentials.length > 0,
+    JSON.stringify({ closingReady, closingNoCredentials }),
+  );
+  check(
+    "only the ready closing offers the reload, and it names the reload button",
+    closingReady.includes("recarga la ventana") &&
+      closingNoCredentials.includes("no tiene credenciales") &&
+      closingNoCredentials.includes("nada ha cambiado") &&
+      api.RELOAD_WINDOW_LABEL === "Recargar la ventana",
+    JSON.stringify({ closingReady, closingNoCredentials, reload: api.RELOAD_WINDOW_LABEL }),
+  );
+
   // --- the three refusals -----------------------------------------------------
 
   const fromDir = path.join(os.tmpdir(), "picode-import-cmd-from");
@@ -299,6 +381,13 @@ async function main() {
   for (const line of lines) {
     console.log(line);
   }
+  console.log("--- target reads (pure over the files' text) ---");
+  console.log(`packages from settings -> ${JSON.stringify(sources)}`);
+  console.log(`providers from auth -> ${JSON.stringify(providers)}`);
+  console.log(`install environment -> ${JSON.stringify(env)}`);
+  console.log("--- closing texts ---");
+  console.log(`[${api.RELOAD_WINDOW_LABEL}] ${closingReady}`);
+  console.log(`[no button] ${closingNoCredentials}`);
   console.log("--- refusals ---");
   console.log(missing);
   console.log(withoutContent);

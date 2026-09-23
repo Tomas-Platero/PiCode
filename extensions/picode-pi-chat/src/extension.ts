@@ -362,9 +362,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // The one-shot import from the machine's own profile. Registered on its own so the
   // block above — which every other command shares — is not touched by this feature.
+  // It receives the same menu the settings tab's install rows use, because installing
+  // the copied packages is that same install path and not a second one.
   context.subscriptions.push(
     vscode.commands.registerCommand(IMPORT_PROFILE_COMMAND, () =>
-      importProfileIntoInstance(context),
+      importProfileIntoInstance(context, menu),
     ),
   );
 
