@@ -13,6 +13,12 @@
  *
  * The exact JSON printed at the end is what the client writes to pi's stdin.
  *
+ * The embedded client's login is checked at the source and by shape, because it
+ * cannot be run without a real SDK and a provider: what is pinned is that the
+ * profile it fills is a required parameter (so a caller cannot inherit the wrong
+ * one by saying nothing) and that it is PiCode's own profile rather than the
+ * guarded directory the readers use.
+ *
  * Run with: npm test
  */
 const path = require("node:path");
@@ -334,6 +340,145 @@ async function main() {
     /createAgentSessionServices\(\{\s*cwd\s*,\s*agentDir\s*\}\)/.test(sdkSource),
     "createAgentSessionServices({ cwd, agentDir }) not found",
   );
+
+  // --- the login's target profile, required and named ----------------------
+
+  // The login cannot be run here (no editor, no provider, no SDK). What is proved
+  // is the shape that makes inheriting the wrong profile impossible: the profile
+  // is a required parameter, so a caller that stays silent does not compile, and
+  // the runtime that owns the credential is built from that very parameter.
+  const sdkClientPath = path.join(EXTENSION_ROOT, "out", "pi-sdk-client.js");
+  const sdkClient = await import(pathToFileURL(sdkClientPath).href);
+
+  // A rule stated in prose is not a call: the doc comment deliberately names the
+  // reader guard in order to forbid it, so only the code is searched for it.
+  const codeOnly = (source) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const sdkCode = codeOnly(sdkSource);
+
+  check(
+    "the login declares the target profile as a required fourth parameter",
+    /login\(\s*providerId: string,\s*type: AuthType,\s*interaction: AuthInteraction,\s*agentDir: string,\s*\)/.test(
+      sdkSource,
+    ),
+    "login(providerId, type, interaction, agentDir: string) with no optional or defaulted fourth parameter not found",
+  );
+  check(
+    "the login really takes the profile at runtime, not three arguments",
+    sdkClient.PiSdkClient.prototype.login.length === 4,
+    `login.length is ${sdkClient.PiSdkClient.prototype.login.length}`,
+  );
+  check(
+    "the login names PiCode's own profile as the target it fills",
+    sdkSource.includes('instanceAgentDir(extensionUri, "managed")'),
+    'instanceAgentDir(extensionUri, "managed") is not named by the login',
+  );
+  check(
+    "the login never derives its target from the readers' guarded directory",
+    !sdkCode.includes("selectedAgentDir"),
+    "selectedAgentDir( is used outside a comment in pi-sdk-client.ts",
+  );
+  check(
+    "the credential's paths are built from the profile the caller named",
+    /authPath:\s*path\.join\(agentDir,\s*"auth\.json"\)/.test(sdkCode) &&
+      /modelsPath:\s*path\.join\(agentDir,\s*"models\.json"\)/.test(sdkCode),
+    "the runtime is not built over a target/\"auth.json\" and target/\"models.json\" pair",
+  );
+  check(
+    "a target that is the client's own directory reuses the session runtime",
+    /isSameDirectory\(this\.ownAgentDir\(\),\s*agentDir\)/.test(sdkCode) &&
+      sdkCode.includes("return session.modelRuntime;"),
+    "no same-directory reuse of the session's model runtime",
+  );
+
+  // The pure half of that decision: same directory written two ways is one
+  // profile, and two different directories are two. Without it the login would
+  // build a second runtime over the same auth.json.
+  const ownProfileDir = path.resolve(EXTENSION_ROOT, "data", "pi-agent");
+  check(
+    "a profile named with a trailing separator is the same profile",
+    sdkClient.isSameDirectory(ownProfileDir, ownProfileDir + path.sep) === true,
+    `${ownProfileDir} vs ${ownProfileDir + path.sep}`,
+  );
+  check(
+    "a different directory is not the client's own profile",
+    sdkClient.isSameDirectory(
+      ownProfileDir,
+      path.join(ownProfileDir, "..", "other-profile"),
+    ) === false,
+  );
+
+  // --- the login's target, executed against a fake SDK ---------------------
+
+  // The real login cannot run here — it needs a provider and a browser — but the
+  // directory it writes to can: a fake SDK records which profile each runtime is
+  // built over, and it never touches a real profile (it writes nothing at all).
+  // The assertion is the whole point of the change: the paths come from the
+  // directory the caller named, never from the one the client was built with.
+  const namedProfileDir = path.resolve(EXTENSION_ROOT, "data", "pi-agent-imported");
+  const builtRuntimes = [];
+  const fakeRuntime = {
+    login: async () => ({ type: "api_key" }),
+    getModel: () => undefined,
+    getAvailable: async () => [],
+  };
+  const fakeSession = {
+    modelRuntime: fakeRuntime,
+    sessionId: "fake-session",
+    subscribe: () => () => {},
+    dispose: () => {},
+    bindExtensions: async () => {},
+  };
+  const emptyLoader = {
+    getExtensions: () => ({ extensions: [] }),
+    getSkills: () => ({ skills: [] }),
+    getPrompts: () => ({ prompts: [] }),
+    getThemes: () => ({ themes: [] }),
+  };
+  const fakeSdk = {
+    createAgentSessionServices: async () => ({ resourceLoader: emptyLoader }),
+    createAgentSessionFromServices: async () => ({ session: fakeSession }),
+    SessionManager: { create: () => ({}), open: () => ({}) },
+    getAgentDir: () => ownProfileDir,
+    ModelRuntime: {
+      create: async (options) => {
+        builtRuntimes.push(options);
+        return { ...fakeRuntime };
+      },
+    },
+  };
+  const fakeInteraction = { prompt: async () => "", notify: () => {} };
+  const client = new sdkClient.PiSdkClient({
+    entry: "unused",
+    cwd: EXTENSION_ROOT,
+    agentDir: ownProfileDir,
+    load: async () => fakeSdk,
+  });
+  await client.start();
+  await client.login("omni", "api_key", fakeInteraction, namedProfileDir);
+  check(
+    "a login aimed at another profile writes over that profile's own files",
+    builtRuntimes.length === 1 &&
+      builtRuntimes[0].authPath === path.join(namedProfileDir, "auth.json") &&
+      builtRuntimes[0].modelsPath === path.join(namedProfileDir, "models.json"),
+    JSON.stringify(builtRuntimes),
+  );
+  check(
+    "the login does not fall back to the directory the client was built with",
+    builtRuntimes.every(
+      (options) => options.authPath !== path.join(ownProfileDir, "auth.json"),
+    ),
+    JSON.stringify(builtRuntimes),
+  );
+
+  builtRuntimes.length = 0;
+  await client.login("omni", "api_key", fakeInteraction, ownProfileDir);
+  check(
+    "a login aimed at the client's own profile builds no second runtime",
+    builtRuntimes.length === 0,
+    JSON.stringify(builtRuntimes),
+  );
+  client.stop();
 
   console.log("\nthe three response shapes, as written to pi's stdin:");
   for (const shape of shapes) {

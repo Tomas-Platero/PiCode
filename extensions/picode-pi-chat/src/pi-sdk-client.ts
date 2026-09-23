@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vscode from "vscode";
 import type { AuthInteraction } from "./pi-ui-bridge";
@@ -35,6 +36,30 @@ export interface SdkModule {
   createAgentSessionFromServices(options: SdkFromServicesOptions): Promise<SdkSessionResult>;
   SessionManager: SdkSessionManager;
   getAgentDir(): string;
+  /**
+   * The SDK's `ModelRuntime`, the class that owns one profile's `auth.json`.
+   * Optional because an older pi entry need not export it; `login` is the only
+   * caller and it refuses with a message the owner can read instead of failing
+   * on a property of `undefined`.
+   */
+  ModelRuntime?: SdkModelRuntimeFactory;
+}
+
+/** The factory side of `ModelRuntime`: one runtime per profile directory. */
+export interface SdkModelRuntimeFactory {
+  create(options: SdkModelRuntimePaths): Promise<SdkModelRuntime>;
+}
+
+/**
+ * The two files that decide which profile a runtime reads and writes.
+ *
+ * This is the exact pair `createAgentSessionServices` builds its own runtime
+ * with (`authPath` and `modelsPath` under the profile), quoted here because the
+ * SDK is ESM-only and loaded by URL, so it cannot be imported for typing.
+ */
+export interface SdkModelRuntimePaths {
+  authPath: string;
+  modelsPath: string;
 }
 
 export interface SdkServicesOptions {
@@ -314,7 +339,8 @@ export class PiSdkClient implements PiClient {
   }
 
   /**
-   * Logs a provider in from inside the editor and persists its credential.
+   * Logs a provider in from inside the editor and persists its credential into
+   * the profile named by `agentDir`.
    *
    * The ability is here because the RPC transport cannot do it: `/login` is
    * interactive-mode only and there is no login command in the RPC union, and
@@ -323,19 +349,26 @@ export class PiSdkClient implements PiClient {
    * credential-less on the next reload and PiCode's anti-mute guard keeps
    * saying the instance is not usable.
    *
-   * This call is the one that persists. `createAgentSessionServices({ agentDir })`
-   * builds its `ModelRuntime` with `authPath: join(agentDir, "auth.json")`, and
-   * `createAgentSessionFromServices` hands that same runtime to the session, so
-   * the directory `login` writes to is exactly the client's `agentDir`.
+   * `agentDir` is the profile this call **fills**, and it is required with no
+   * default on purpose, so the compiler refuses an omission instead of letting a
+   * future caller inherit the wrong profile by saying nothing. Callers pass the
+   * **unguarded writer's answer** — `instanceAgentDir(extensionUri, "managed")`,
+   * the same answer the import's package install uses. `selectedAgentDir()` is
+   * for readers: it follows the anti-mute guard, which answers the machine's
+   * profile while PiCode's own is still empty, and that empty profile is exactly
+   * what a first login exists to fill. Defaulting to the client's read directory
+   * would therefore write the owner's own `~/.pi/agent/auth.json` on the first
+   * login — PiCode writing a profile it does not own, the one thing this feature
+   * may never do.
    *
-   * Finding, because it is not the profile the first-run wizard needs: the
-   * client is built with `selectedAgentDir()`, and that resolver follows the
-   * anti-mute guard -- it answers the internal profile only while that profile
-   * already holds a credential, and the machine profile otherwise. So on the
-   * empty internal profile this ability exists to fill, `login` writes to the
-   * machine's `auth.json` and the internal one stays empty. The wizard must wire
-   * this through `instanceAgentDir()` (the unguarded writer's answer, the same
-   * one the package install already uses), not through `selectedAgentDir()`.
+   * The write goes through a runtime whose `auth.json` is the target's.
+   * `createAgentSessionServices({ agentDir })` builds its `ModelRuntime` with
+   * `authPath: join(agentDir, "auth.json")`, and the session keeps that same
+   * runtime, so the session's runtime owns one directory and no other. When the
+   * target is that directory it is reused; when the two differ, a runtime is
+   * built for the target the same way the SDK builds its own (see
+   * `runtimeForLogin`). A credential written elsewhere is not live in this
+   * session until the client is rebuilt — the same reload the import asks for.
    *
    * pi resolves once the provider's catalog and availability are locally
    * consistent. When the credential was committed but that synchronization
@@ -344,8 +377,14 @@ export class PiSdkClient implements PiClient {
    * `credential` fields are there to inspect and the mutation must never be
    * retried blindly.
    */
-  login(providerId: string, type: AuthType, interaction: AuthInteraction): Promise<SdkCredential> {
-    const runtime = this.requireSession().modelRuntime;
+  async login(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+    agentDir: string,
+  ): Promise<SdkCredential> {
+    const session = this.requireSession();
+    const runtime = await this.runtimeForLogin(session, agentDir);
     if (typeof runtime.login !== "function") {
       throw new Error(
         "Este pi no sabe iniciar sesión desde el SDK. Actualiza el pi integrado.",
@@ -623,9 +662,59 @@ export class PiSdkClient implements PiClient {
     return this.sdk;
   }
 
+  /**
+   * The runtime whose `auth.json` lives in `agentDir`.
+   *
+   * The session's runtime belongs to the directory the client was built with, so
+   * it is the right one only when the target is that same directory; building a
+   * second runtime over the same files would be a second writer of one profile.
+   * For any other target the runtime is built the way the SDK builds its own, by
+   * handing it the profile's two files, because that pair is what decides where a
+   * credential is read and written.
+   */
+  private async runtimeForLogin(
+    session: SdkAgentSession,
+    agentDir: string,
+  ): Promise<SdkModelRuntime> {
+    if (isSameDirectory(this.ownAgentDir(), agentDir)) {
+      return session.modelRuntime;
+    }
+    const factory = this.requireSdk().ModelRuntime;
+    if (factory === undefined || typeof factory.create !== "function") {
+      throw new Error(
+        "Este pi no sabe escribir credenciales en el perfil de PiCode. Actualiza el pi integrado.",
+      );
+    }
+    return factory.create({
+      authPath: path.join(agentDir, "auth.json"),
+      modelsPath: path.join(agentDir, "models.json"),
+    });
+  }
+
+  /**
+   * The profile directory this client was built with, whichever way it was
+   * chosen (`options.agentDir`, or pi's own default).
+   */
+  private ownAgentDir(): string {
+    return this.options.agentDir ?? this.requireSdk().getAgentDir();
+  }
+
   private log(message: string): void {
     this.options.output?.appendLine(`[pi-sdk] ${message}`);
   }
+}
+
+/**
+ * Whether two paths name the same profile directory.
+ *
+ * `login` uses this to decide whether the session's runtime already owns the
+ * target's `auth.json`. A trailing separator or a `.` segment must not read as
+ * "another profile", or the directory that is already the session's would get a
+ * second runtime writing the same file. Case is deliberately not folded: both
+ * values come from the same resolver on the same machine.
+ */
+export function isSameDirectory(a: string, b: string): boolean {
+  return path.resolve(a) === path.resolve(b);
 }
 
 /** Splits a `provider/model-id` reference, or undefined when there is no such pair. */
