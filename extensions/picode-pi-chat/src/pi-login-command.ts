@@ -318,6 +318,28 @@ export function loginFailureText(provider: string, message: string): string {
 }
 
 /**
+ * The ending for a provider the target runtime does not know, which is not a failure to
+ * retry but a missing package to bring in.
+ *
+ * The list is read from the profile in force — that is where the owner's installed
+ * packages register their providers — but the credential lands in PiCode's own profile.
+ * The two can therefore disagree on exactly one provider: the owner picks his own, and
+ * PiCode's own profile has not installed the package that declares it, so pi's
+ * `Models.login` throws `Unknown provider: <id>`.
+ *
+ * The way forward is the import, and the sentence names it in the row's own words
+ * («Importar el perfil de tu pi») instead of restating the instruction in a fourth
+ * phrasing: importing is the step that copies that package list into PiCode's own profile.
+ */
+export function unknownProviderText(provider: string): string {
+  return (
+    `El proveedor ${provider} lo aporta un paquete que el perfil propio de PiCode todavía ` +
+    "no tiene, y ahí es donde se guardan las credenciales. Usa «Importar el perfil de tu " +
+    "pi» para traer ese paquete, y vuelve a intentarlo."
+  );
+}
+
+/**
  * The provider and the operation carried by a `CredentialSynchronizationError`, or
  * `undefined` for any other error.
  *
@@ -343,6 +365,40 @@ export function synchronizationFailure(error: unknown): SynchronizationFailure |
     return undefined;
   }
   return { providerId: record.providerId, operation: record.operation };
+}
+
+/**
+ * The provider pi does not know, or `undefined` for any other failure.
+ *
+ * `Models.login` (pi-ai's `models.js`) throws a `ModelsError` when the requested
+ * provider is not registered in the runtime it is called on. Its shape is exact and is
+ * what is matched here: `name === "ModelsError"`, `code === "provider"`, and a message
+ * that begins `Unknown provider: ` followed by the id. The class is loaded at runtime,
+ * so it can neither be imported for typing nor checked with `instanceof`; the fields are
+ * read by name, exactly as `synchronizationFailure` does above.
+ *
+ * The message prefix is checked on purpose, and it is the only prose matched anywhere in
+ * this module. The `code` alone would not be enough: pi throws other `ModelsError`s with
+ * `code === "provider"` (an unsupported deferred response, for one), and swallowing one
+ * of those as "unknown provider" would hide a real failure. Conversely, a pi that renames
+ * this message makes the match fail and the owner sees today's generic ending — the safe
+ * direction for an unrecognised error, never a different failure dressed as this one. The
+ * id is returned rather than only a boolean so the exact value matched is observable in a
+ * test.
+ */
+export function unknownProvider(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const record = error as Record<string, unknown>;
+  if (record.name !== "ModelsError" || record.code !== "provider") {
+    return undefined;
+  }
+  const prefix = "Unknown provider: ";
+  if (typeof record.message !== "string" || !record.message.startsWith(prefix)) {
+    return undefined;
+  }
+  return record.message.slice(prefix.length);
 }
 
 /* ------------------------------------------------------------------ *
@@ -575,6 +631,15 @@ export async function loginProvider(
       void vscode.window.showErrorMessage(
         `PiCode: ${loginSyncFailureText(chosen.label, synchronization.operation)}`,
       );
+      return;
+    }
+    // Also checked before the generic failure, and only for the exact shape pi's
+    // `Models.login` throws when the target profile does not register the provider: the
+    // list came from the profile in force, the write goes to PiCode's own, and the import
+    // is what reconciles them. Every other error still falls through to the generic
+    // ending below.
+    if (unknownProvider(error) !== undefined) {
+      void vscode.window.showErrorMessage(`PiCode: ${unknownProviderText(chosen.label)}`);
       return;
     }
     void vscode.window.showErrorMessage(

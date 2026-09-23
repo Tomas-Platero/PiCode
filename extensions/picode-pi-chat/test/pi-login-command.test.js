@@ -5,11 +5,10 @@
  * The command itself is never run here: it would load the real pi, ask the machine for a
  * provider list and then offer to log in, and it must never touch any profile on this
  * machine. What is checked instead is everything that decides what the owner reads — the
- * provider list rows, the key-versus-subscription decision, and the wording of the four
- * endings — plus the catalogue's source, exercised over fake runtimes so no profile is
- * built: with a live session the list comes from it and the target profile is not built at
- * all, and with no session the fallback builds it exactly once. Three source-level guards
- * close the rest:
+ * provider list rows, the key-versus-subscription decision, and the wording of the endings —
+ * plus the catalogue's source, exercised over fake runtimes so no profile is built: with a
+ * live session the list comes from it and the target profile is not built at all, and with
+ * no session the fallback builds it exactly once. Three source-level guards close the rest:
  *
  * - `pi-login-command.ts` resolves its target through `instanceAgentDir(` and never
  *   through the guarded readers' `selectedAgentDir`, because on an empty internal profile
@@ -253,11 +252,57 @@ async function main() {
     ]),
   );
 
+  // --- the unknown-provider error, read by its shape -------------------------
+
+  // pi-ai's `Models.login` throws `ModelsError("provider", "Unknown provider: <id>")`
+  // when the runtime has no provider by that id. The match is by the error's shape — the
+  // class `name` and the `code` — plus the message prefix, because other `ModelsError`s
+  // share the `provider` code and must keep flowing to the generic ending. These checks
+  // execute both directions: the exact shape is recognised, and every near miss is not.
+  const unknownShape = { name: "ModelsError", code: "provider", message: "Unknown provider: omni" };
+  check(
+    "pi's Unknown provider error is recognised and its id read",
+    api.unknownProvider(unknownShape) === "omni",
+    JSON.stringify(api.unknownProvider(unknownShape)),
+  );
+  check(
+    "another failure is not swallowed as an unknown provider",
+    api.unknownProvider(new Error("boom")) === undefined &&
+      api.unknownProvider(undefined) === undefined &&
+      api.unknownProvider("Unknown provider: omni") === undefined &&
+      api.unknownProvider({ name: "Error", code: "provider", message: "Unknown provider: omni" }) === undefined &&
+      api.unknownProvider({
+        name: "ModelsError",
+        code: "auth",
+        message: "Zhipu does not support api_key login",
+      }) === undefined &&
+      api.unknownProvider({
+        name: "ModelsError",
+        code: "provider",
+        message: "Provider omni does not support deferred responses",
+      }) === undefined &&
+      api.unknownProvider({ name: "ModelsError", code: "provider" }) === undefined,
+    JSON.stringify([
+      api.unknownProvider(new Error("boom")),
+      api.unknownProvider(undefined),
+      api.unknownProvider("Unknown provider: omni"),
+      api.unknownProvider({ name: "Error", code: "provider", message: "Unknown provider: omni" }),
+      api.unknownProvider({ name: "ModelsError", code: "auth", message: "Zhipu does not support api_key login" }),
+      api.unknownProvider({
+        name: "ModelsError",
+        code: "provider",
+        message: "Provider omni does not support deferred responses",
+      }),
+      api.unknownProvider({ name: "ModelsError", code: "provider" }),
+    ]),
+  );
+
   // --- the four endings ------------------------------------------------------
 
   const profile = path.join("C:", "PiCode", "data", "pi-agent");
   const success = api.loginSuccessText("Zhipu", profile);
   const syncFailure = api.loginSyncFailureText("Zhipu", "login");
+  const unknownProvider = api.unknownProviderText("Zhipu");
 
   check(
     "the refusal says PiCode owns no profile and points at the row that changes it",
@@ -316,6 +361,31 @@ async function main() {
     api.operationText("somethingNew") === "somethingNew",
     api.operationText("somethingNew"),
   );
+  check(
+    "the unknown-provider ending explains the missing package and points at the import in the row's words",
+    unknownProvider.includes("Zhipu") &&
+      unknownProvider.includes("paquete") &&
+      unknownProvider.includes("perfil propio de PiCode") &&
+      unknownProvider.includes("Importar el perfil de tu pi"),
+    unknownProvider,
+  );
+  check(
+    "the unknown-provider ending is not the generic failure ending",
+    unknownProvider !== api.loginFailureText("Zhipu", "Unknown provider: zhipu"),
+    unknownProvider,
+  );
+  check(
+    "the unknown-provider ending is its own sentence, not one of the others",
+    new Set([
+      api.LOGIN_TEXTS.ownerInstance,
+      api.LOGIN_TEXTS.noSdk,
+      api.LOGIN_TEXTS.cancelled,
+      success,
+      syncFailure,
+      unknownProvider,
+    ]).size === 6,
+    JSON.stringify([unknownProvider]),
+  );
 
   // --- the target profile, checked at the source -----------------------------
 
@@ -354,6 +424,13 @@ async function main() {
       ) &&
       !/catalogue\.login\(/.test(commandSource),
     "the login call is not anchored to the target profile's own runtime",
+  );
+  check(
+    "the flow recognises the unknown-provider shape before the generic ending",
+    /if \(unknownProvider\(error\) !== undefined\) \{/.test(commandSource) &&
+      commandSource.indexOf("unknownProvider(error)") <
+        commandSource.indexOf("loginFailureText(chosen.label, asErrorMessage(error))"),
+    "the unknown-provider branch is missing or comes after the generic failure",
   );
 
   const sdkSource = fs.readFileSync(path.join(SOURCE_ROOT, "pi-sdk-client.ts"), "utf8");
@@ -410,6 +487,7 @@ async function main() {
   console.log(`[cancel]   ${api.LOGIN_TEXTS.cancelled}`);
   console.log(`[success]  ${success}`);
   console.log(`[sync]     ${syncFailure}`);
+  console.log(`[unknown]  ${unknownProvider}`);
   console.log("---");
 
   // --- report ------------------------------------------------------------------
