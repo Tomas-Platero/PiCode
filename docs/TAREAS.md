@@ -20,6 +20,12 @@
 | **El conector, con casa en git** | Sus ficheros los crea `patches/picode/12-picode-connector.patch`: hasta ahora solo existían dentro de `vscode/`, y cualquier regeneración de parches se los llevaba por delante |
 | **Los proveedores, declarados en los ajustes** | La cadena de cuatro ventanas, borrada; una línea por proveedor con sus campos en la fila de Proveedores, y once comprobaciones ejecutadas contra un endpoint local (la lista, la clave, los ficheros de pi) |
 
+| **Los proveedores, en un formulario** | Una fila por proveedor con sus cuatro campos (nombre, dirección, dialecto, clave), pintada por un widget del núcleo: añadir, editar y borrar en su sitio, sin ventanas |
+| **La lista de suscripciones** | ChatGPT Plus/Pro, Claude Pro/Max, Copilot, Grok, Kimi… los ocho que el pi instalado sabe conectar con OAuth (medido: 41 proveedores, 8 con suscripción), ordenados por los más usados y con los ya conectados marcados |
+| **Proveedores, en su nodo** | `Settings > Chat > Providers`, con `picode.providers`; el nodo `pi` se queda para los ajustes de pi |
+| **La integración de pi con el chat** | El modelo del selector es el que corre pi (y lo cambia en caliente), el nivel de pensamiento, el contexto del editor viajando con el mensaje, el razonamiento cuando se pide, y el progreso diciendo *qué* hace la herramienta |
+| **Los ajustes de pi, en `Settings > Chat > Pi`** | Tres ajustes que hacen algo: cuánto piensa, si enseña el razonamiento y si el contexto del editor viaja. Los cinco que ya no aplican quedan dichos, con su porqué, en el papel de la tarea |
+
 ## Lo que está a medias
 
 | A medias | Qué falta |
@@ -36,13 +42,12 @@
 | # | Tarea | Tamaño | Qué desbloquea |
 | --- | --- | --- | --- |
 | 1 | **Que tus modelos salgan en la ventana del editor** | 🟡 | Es lo que hoy hace que `@pi` diga «Language model unavailable». La puerta del editor para registrar modelos es **estable**, y el catálogo de pi ya se lee |
-| 2 | **Conectar proveedores desde el Chat** | 🟡 | Que la fila de Proveedores funcione: elegir ChatGPT, Claude, DeepSeek… y conectarlo **con cuenta o con clave** |
 | 3 | **La clase del host que une sesión y traducción** | 🔴 | Es la pieza más grande. Con ella, pi responde **con su propio bucle** y sus herramientas |
 | 4 | **Registrar el host y apagar los otros agentes** | 🟢 | Que pi sea **el único** agente del editor. Va **después** del 3: apagarlos antes deja el selector vacío |
 | 5 | **El asistente de primer arranque** | 🟡 | Preguntar qué hacer, con las tres opciones: pi de dentro · conectar uno externo · traerse la configuración |
 | 6 | **Conectar a un pi externo / migrar su configuración** | 🟡 | Lo que el usuario puede elegir; nada se escribe fuera |
 | 7 | **Las habilidades de los paquetes de Gentle-AI** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus 13 habilidades |
-| 8 | **Recuperar lo que valía del panel viejo** | 🔴 | Contexto del editor (proyecto, fichero, selección), estadísticas de pi, sus comandos y las sesiones — **dentro del Chat** |
+| 8 | **Recuperar lo que valía del panel viejo** | 🟡 | Estadísticas de pi, sus comandos y las sesiones — dentro del Chat. El contexto del editor ya viaja con cada mensaje |
 | 9 | **La nube** | 🔴 | Subir y bajar **el perfil como una unidad** |
 | 10 | **Limpiar** | 🟢 | Borrar el archivo de cuarentena cuando ya no haga falta, quitar el paso del panel en la vía del ZIP (`distribution/apply-picode.ps1`) y retirar los papeles viejos |
 
