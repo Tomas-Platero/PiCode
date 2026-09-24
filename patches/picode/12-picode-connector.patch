@@ -117,17 +117,19 @@ index 00000000000..59274edffea
 +}
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
 new file mode 100644
-index 00000000000..25b57c366ef
+index 00000000000..4d61305100a
 --- /dev/null
 +++ b/extensions/picode/src/agent.ts
-@@ -0,0 +1,293 @@
+@@ -0,0 +1,290 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
 + *--------------------------------------------------------------------------------------------*/
 +
 +import * as vscode from 'vscode';
-+import { CONTEXT_MAX_CHARS, CONTEXT_MAX_LINES, readPiChatSettings } from './piConfig';
++import { contextBlock, withContext, type EditorContext } from './context';
++import { readPiChatSettings } from './piConfig';
++import { toolProgress } from './progress';
 +import { loadPiSdk } from './piSdk';
 +import { modelRefOf } from './providerIds';
 +import { VENDOR } from './providers';
@@ -175,6 +177,7 @@ index 00000000000..25b57c366ef
 +	readonly message?: { readonly role?: unknown; readonly errorMessage?: unknown };
 +	readonly assistantMessageEvent?: PiDelta;
 +	readonly toolName?: string;
++	readonly args?: unknown;
 +	readonly isError?: boolean;
 +}
 +
@@ -211,48 +214,40 @@ index 00000000000..25b57c366ef
 +}
 +
 +/** pi's entry, loaded and checked for the two methods an agent turn needs. */
-+async function loadSdk(distributionRoot: string): Promise<PiSdk | undefined> {
++async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdk | undefined> {
 +	const loaded = await loadPiSdk<Partial<PiSdk>>(distributionRoot);
-+	return typeof loaded?.createAgentSessionServices === 'function' && typeof loaded.createAgentSessionFromServices === 'function'
-+		? (loaded as PiSdk)
++	if ('problem' in loaded) {
++		log(loaded.problem);
++		return undefined;
++	}
++	return typeof loaded.sdk?.createAgentSessionServices === 'function' && typeof loaded.sdk.createAgentSessionFromServices === 'function'
++		? (loaded.sdk as PiSdk)
 +		: undefined;
 +}
 +
-+/* ------------------------------------------------------------------ *
-+ * The prompt, with the editor's own context
-+ * ------------------------------------------------------------------ */
-+
 +/**
-+ * What the owner is looking at, written for pi.
++ * The editor as the context block wants it: the folder, the file and the selection.
 + *
-+ * The point is that "arregla esto" needs no explanation: the folder, the file and the selection
-+ * are the ones he sees. The selection is capped — in characters and in lines — because a whole
-+ * file pasted into every prompt is a bill, not context, and pi can read the file itself when it
-+ * needs the rest.
++ * Read here rather than passed around, because this is the only place that knows about the
++ * editor's own objects; what is written from them is decided in `context.ts`, where it can be
++ * exercised.
 + */
-+export function contextBlock(editor: vscode.TextEditor | undefined, folder: string | undefined): string | undefined {
-+	const parts: string[] = [];
-+	if (folder !== undefined) {
-+		parts.push(`- Workspace: ${folder}`);
++function editorContext(folder: string | undefined): EditorContext {
++	const editor = vscode.window.activeTextEditor;
++	if (editor === undefined || editor.document.uri.scheme !== 'file') {
++		return { ...(folder === undefined ? {} : { folder }) };
 +	}
-+	if (editor !== undefined && editor.document.uri.scheme === 'file') {
-+		parts.push(`- File the owner has open: ${editor.document.uri.fsPath}`);
-+		if (!editor.selection.isEmpty) {
-+			const selected = editor.document.getText(editor.selection);
-+			const capped = selected.split('\n').slice(0, CONTEXT_MAX_LINES).join('\n').slice(0, CONTEXT_MAX_CHARS);
-+			parts.push(`- Selected in it (${editor.selection.end.line - editor.selection.start.line + 1} line(s), capped):`);
-+			parts.push('```\n' + capped + '\n```');
-+		}
-+	}
-+	if (parts.length === 0) {
-+		return undefined;
-+	}
-+	return `Context from the editor, as it is right now:\n\n${parts.join('\n')}\n`;
-+}
-+
-+/** The prompt pi is asked with: the context first when it is on, then what the owner wrote. */
-+export function withContext(prompt: string, context: string | undefined): string {
-+	return context === undefined ? prompt : `${context}\n---\n\n${prompt}`;
++	const selection = editor.selection.isEmpty
++		? undefined
++		: {
++			text: editor.document.getText(editor.selection),
++			lines: editor.selection.end.line - editor.selection.start.line + 1,
++		};
++	return {
++		...(folder === undefined ? {} : { folder }),
++		file: editor.document.uri.fsPath,
++		...(selection === undefined ? {} : { selection }),
++	};
 +}
 +
 +/* ------------------------------------------------------------------ *
@@ -294,7 +289,9 @@ index 00000000000..25b57c366ef
 +				return;
 +			}
 +			if (event.type === 'tool_execution_start' && typeof event.toolName === 'string') {
-+				stream.progress(event.toolName);
++				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
++				// "read" is not.
++				stream.progress(toolProgress(event.toolName, event.args));
 +				return;
 +			}
 +			if (event.type === 'message_end') {
@@ -352,7 +349,7 @@ index 00000000000..25b57c366ef
 +	let services: PiServices | undefined;
 +
 +	const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
-+		const sdk = await loadSdk(deps.distributionRoot);
++		const sdk = await loadSdk(deps.distributionRoot, deps.log);
 +		if (sdk === undefined) {
 +			stream.markdown('PiCode: this editor has no pi to talk to. Reinstall it so the agent can answer.');
 +			return {};
@@ -394,7 +391,7 @@ index 00000000000..25b57c366ef
 +				}
 +			}
 +
-+			const context = settings.attachContext ? contextBlock(vscode.window.activeTextEditor, folder) : undefined;
++			const context = settings.attachContext ? contextBlock(editorContext(folder)) : undefined;
 +			await runTurn(session, withContext(request.prompt, context), stream, token, settings.showReasoning);
 +		} catch (error) {
 +			const message = error instanceof Error ? error.message : String(error);
@@ -413,6 +410,70 @@ index 00000000000..25b57c366ef
 +		}),
 +	);
 +	return participant;
++}
+diff --git a/extensions/picode/src/context.ts b/extensions/picode/src/context.ts
+new file mode 100644
+index 00000000000..b034306d508
+--- /dev/null
++++ b/extensions/picode/src/context.ts
+@@ -0,0 +1,58 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { CONTEXT_MAX_CHARS, CONTEXT_MAX_LINES } from './piConfig';
++
++/**
++ * What the owner is looking at, written for pi.
++ *
++ * The point is that *"arregla esto"* needs no explaining: the folder, the file and the selection
++ * are the ones he sees. The selection is capped — in lines and in characters — because a whole
++ * file pasted into every prompt is a bill rather than context, and pi can read the file itself
++ * when it needs the rest.
++ *
++ * This module takes a plain description of the editor instead of a `vscode.TextEditor`, so what
++ * is written — which is the part with a decision in it — can be exercised by running it.
++ */
++
++/** The editor, reduced to the three facts that travel with a prompt. */
++export interface EditorContext {
++	/** The workspace folder, when one is open. */
++	readonly folder?: string;
++	/** The file the owner has open, when it is a real file on disk. */
++	readonly file?: string;
++	/** What is selected in it, when something is. */
++	readonly selection?: { readonly text: string; readonly lines: number };
++}
++
++/**
++ * The context block, or `undefined` when there is nothing to say.
++ *
++ * `undefined` rather than an empty block: a prompt with a header and nothing under it is noise
++ * that pi has to read on every single message.
++ */
++export function contextBlock(context: EditorContext): string | undefined {
++	const parts: string[] = [];
++	if (context.folder !== undefined && context.folder.length > 0) {
++		parts.push(`- Workspace: ${context.folder}`);
++	}
++	if (context.file !== undefined && context.file.length > 0) {
++		parts.push(`- File the owner has open: ${context.file}`);
++	}
++	if (context.selection !== undefined && context.selection.text.trim().length > 0) {
++		const capped = context.selection.text.split('\n').slice(0, CONTEXT_MAX_LINES).join('\n').slice(0, CONTEXT_MAX_CHARS);
++		parts.push(`- Selected in it (${context.selection.lines} line(s), capped):`);
++		parts.push('```\n' + capped + '\n```');
++	}
++	if (parts.length === 0) {
++		return undefined;
++	}
++	return `Context from the editor, as it is right now:\n\n${parts.join('\n')}\n`;
++}
++
++/** The prompt pi is asked with: the context first when there is one, then what the owner wrote. */
++export function withContext(prompt: string, context: string | undefined): string {
++	return context === undefined ? prompt : `${context}\n---\n\n${prompt}`;
 +}
 diff --git a/extensions/picode/src/declarations.ts b/extensions/picode/src/declarations.ts
 new file mode 100644
@@ -887,10 +948,10 @@ index 00000000000..421fb0a8d75
 +}
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
 new file mode 100644
-index 00000000000..2984225f52d
+index 00000000000..920244d03d5
 --- /dev/null
 +++ b/extensions/picode/src/extension.ts
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,610 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -903,6 +964,7 @@ index 00000000000..2984225f52d
 +import { fetchModelIds } from './endpoint';
 +import { splitModelId } from './providerIds';
 +import { connectSubscription } from './login';
++import { loadPiSdk } from './piSdk';
 +import {
 +	CONNECT_PROVIDER_COMMAND,
 +	declarationFrom,
@@ -1092,8 +1154,105 @@ index 00000000000..2984225f52d
 + */
 +const onDidChangeModels = new vscode.EventEmitter<void>();
 +
++/**
++ * A model as **pi's** catalogue describes it, reduced to what a row of the editor's list needs.
++ *
++ * This is the other half of "connect a subscription": logging in gives pi a credential, and the
++ * models that credential unlocks are pi's to know — its catalogue carries the context window, the
++ * token budget and the dialect, none of which is written down here.
++ */
++interface PiRuntimeModel {
++	readonly id: string;
++	readonly name?: string;
++	readonly contextWindow?: number;
++	readonly maxTokens?: number;
++}
++
++interface PiRuntimeProvider {
++	readonly id: string;
++	readonly name?: string;
++}
++
++interface PiRuntimeServices {
++	readonly modelRuntime: {
++		getProviders?(): readonly PiRuntimeProvider[];
++		getModels?(providerId?: string): readonly PiRuntimeModel[];
++		hasConfiguredAuth?(providerId: string): boolean;
++	};
++}
++
++interface PiRuntimeSdk {
++	createAgentSessionServices(options: { cwd: string; agentDir: string }): Promise<PiRuntimeServices>;
++}
++
++/**
++ * pi's runtime for one folder, kept between listings.
++ *
++ * Building it loads extensions, skills and the model catalogue, which is far more work than a model
++ * list is worth on every open of the picker — and the editor asks for the list often. It is
++ * dropped when the folder changes and whenever a credential changes, because those are the two
++ * things that change what the catalogue answers.
++ */
++let runtimeCache: { readonly cwd: string; readonly agentDir: string; readonly services: PiRuntimeServices } | undefined;
++
++/** Forgets the cached runtime, so the next listing reads credentials as they are now. */
++export function forgetPiRuntime(): void {
++	runtimeCache = undefined;
++}
++
++/**
++ * The models of the providers **with a credential**, read from pi.
++ *
++ * Without this, connecting a subscription would leave the model list empty: those providers have no
++ * address and no `models.json` entry, and their models exist only in pi's own catalogue. A provider
++ * without a credential is skipped — listing models that cannot be used would put rows in the picker
++ * that fail the moment they are chosen.
++ */
++async function subscriptionModels(distributionRoot: string, profile: string, cwd: string): Promise<vscode.LanguageModelChatInformation[]> {
++	const loaded = await loadPiSdk<PiRuntimeSdk>(distributionRoot);
++	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
++		return [];
++	}
++	const sdk = loaded.sdk;
++
++	try {
++		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== profile) {
++			runtimeCache = { cwd, agentDir: profile, services: await sdk.createAgentSessionServices({ cwd, agentDir: profile }) };
++		}
++	} catch {
++		// A runtime that cannot be built is "no models from pi": the declared providers are still
++		// listed, and the reason is nothing the owner could act on from here.
++		return [];
++	}
++
++	const runtime = runtimeCache.services.modelRuntime;
++	const models: vscode.LanguageModelChatInformation[] = [];
++	for (const provider of runtime.getProviders?.() ?? []) {
++		if (typeof runtime.hasConfiguredAuth === 'function' && !runtime.hasConfiguredAuth(provider.id)) {
++			continue;
++		}
++		for (const model of runtime.getModels?.(provider.id) ?? []) {
++			if (typeof model.id !== 'string' || model.id.length === 0) {
++				continue;
++			}
++			models.push({
++				id: `${provider.id}/${model.id}`,
++				name: model.name ?? model.id,
++				family: provider.id,
++				version: '1',
++				maxInputTokens: model.contextWindow ?? 128000,
++				maxOutputTokens: model.maxTokens ?? 16384,
++				detail: provider.id,
++				capabilities: { toolCalling: true },
++			});
++		}
++	}
++	return models;
++}
++
 +const provider: vscode.LanguageModelChatProvider = {
 +	onDidChangeLanguageModelChatInformation: onDidChangeModels.event,
++
 +
 +	async provideLanguageModelChatInformation(options, _token) {
 +		const profile = profileDirectory(requireProfileUri());
@@ -1121,8 +1280,14 @@ index 00000000000..2984225f52d
 +
 +		const models = readModelsFile(profile);
 +		const fromProfile = models === undefined ? [] : toChatInformation(models);
++		const fromSubscriptions = await subscriptionModels(distributionRoot(requireProfileUri()), profile, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd());
 +		const configuredIds = new Set(configuredModels.map(info => info.id));
-+		return [...configuredModels, ...fromProfile.filter(info => !configuredIds.has(info.id))];
++		const profileIds = new Set(fromProfile.map(info => info.id));
++		return [
++			...configuredModels,
++			...fromProfile.filter(info => !configuredIds.has(info.id)),
++			...fromSubscriptions.filter(info => !configuredIds.has(info.id) && !profileIds.has(info.id)),
++		];
 +	},
 +
 +	/**
@@ -1383,7 +1548,12 @@ index 00000000000..2984225f52d
 +			connectSubscription({
 +				distributionRoot: distributionRoot(context.extensionUri),
 +				profileDir: profileDirectory(context.extensionUri),
-+				refreshModels: () => onDidChangeModels.fire(),
++				refreshModels: () => {
++					// A new credential changes what pi's catalogue answers, so the cached runtime — and with
++					// it the model list the editor is about to ask for — is dropped.
++					forgetPiRuntime();
++					onDidChangeModels.fire();
++				},
 +			}),
 +		),
 +	);
@@ -1394,10 +1564,10 @@ index 00000000000..2984225f52d
 +}
 diff --git a/extensions/picode/src/login.ts b/extensions/picode/src/login.ts
 new file mode 100644
-index 00000000000..01e7c1a49df
+index 00000000000..d2be4d69555
 --- /dev/null
 +++ b/extensions/picode/src/login.ts
-@@ -0,0 +1,164 @@
+@@ -0,0 +1,166 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1504,11 +1674,13 @@ index 00000000000..01e7c1a49df
 + * the list or one of pi's prompts.
 + */
 +export async function connectSubscription(deps: ConnectSubscriptionDeps): Promise<void> {
-+	const sdk = await loadPiSdk<PiLoginSdk>(deps.distributionRoot);
-+	if (sdk === undefined || typeof sdk.createAgentSessionServices !== 'function') {
-+		void vscode.window.showErrorMessage('PiCode: the pi that ships with this editor could not be loaded, so no subscription can be connected from here.');
++	const loaded = await loadPiSdk<PiLoginSdk>(deps.distributionRoot);
++	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
++		const why = 'problem' in loaded ? loaded.problem : 'the pi that loaded has no session services';
++		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
 +		return;
 +	}
++	const sdk = loaded.sdk;
 +
 +	let runtime: PiModelRuntime;
 +	try {
@@ -1636,10 +1808,10 @@ index 00000000000..c95efa0dd40
 +}
 diff --git a/extensions/picode/src/piSdk.ts b/extensions/picode/src/piSdk.ts
 new file mode 100644
-index 00000000000..795e9ab77de
+index 00000000000..ce2222dd67a
 --- /dev/null
 +++ b/extensions/picode/src/piSdk.ts
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,83 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1652,15 +1824,32 @@ index 00000000000..795e9ab77de
 +/**
 + * Finding pi, and loading it.
 + *
-+ * One place, because two modules need it for two different things: the agent needs
-+ * `createAgentSession`, and connecting a subscription needs `createAgentSessionServices` to
-+ * reach pi's provider catalogue and its login. A second copy of the candidate paths would be a
-+ * second answer to "where is the pi of this editor", and the product only has one.
++ * One place, because three modules need it for three different things: the agent needs
++ * `createAgentSessionFromServices`, connecting a subscription and listing its models need
++ * `createAgentSessionServices`. A second copy of the candidate paths would be a second answer to
++ * "where is the pi of this editor", and the product only has one.
 + *
-+ * pi is **not** a dependency of the editor's build: it is loaded by URL at runtime, and only
-+ * the members actually used are declared structurally by each caller. That is why the load is
-+ * generic here and typed by whoever asks.
++ * pi is **not** a dependency of the editor's build: it is loaded by URL at runtime, and only the
++ * members actually used are declared structurally by each caller. That is why the load is generic
++ * here and typed by whoever asks.
++ *
++ * ## The one thing that must not be written as a plain `import()`
++ *
++ * This module compiles to CommonJS, and TypeScript turns a dynamic `import(expression)` into
++ * `Promise.resolve(...).then(s => require(s))` under that target. `require()` **cannot load an
++ * ESM package**, and pi publishes its entry as ESM — so the failure is not "pi is missing", it is
++ * `ERR_REQUIRE_ESM` for a pi that is sitting right there. That is exactly what happened once: the
++ * check found the file, the load failed, and the owner was told "this editor has no pi to talk to"
++ * while pi was installed and working.
++ *
++ * Building the import at runtime keeps it a genuine dynamic `import()`, which is what loads ESM.
++ * The reason a load failed is **returned rather than swallowed**, because the sentence the owner
++ * reads has to be true: "pi is not installed" and "pi is installed and could not be loaded" are
++ * different problems with different fixes.
 + */
++
++/** What a load produced: the module, or why there is none. */
++export type PiSdkLoad<T> = { readonly sdk: T } | { readonly problem: string };
 +
 +/** The candidate places pi can live, most-PiCode-first. */
 +export function sdkCandidates(distributionRoot: string): string[] {
@@ -1685,23 +1874,94 @@ index 00000000000..795e9ab77de
 +}
 +
 +/**
-+ * Loads pi's entry, or `undefined` when there is none to load or it cannot be imported.
++ * The genuine dynamic import, built at runtime.
 + *
-+ * `import()` of a **built** specifier on purpose: TypeScript rewrites a literal dynamic import
-+ * to `require()` when the module target is CommonJS, and pi publishes its entry as ESM that
-+ * `require()` cannot load. Building the import at runtime keeps it a genuine dynamic import.
++ * `new Function` and not `import(...)` in the source: see the module comment. This is the same
++ * reason pi's own SDK client does it.
 + */
-+export async function loadPiSdk<T>(distributionRoot: string): Promise<T | undefined> {
-+	const entry = firstExisting(sdkCandidates(distributionRoot));
++const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>;
++
++/** Loads pi's entry, or says why it could not. */
++export async function loadPiSdk<T>(distributionRoot: string): Promise<PiSdkLoad<T>> {
++	const candidates = sdkCandidates(distributionRoot);
++	const entry = firstExisting(candidates);
 +	if (entry === undefined) {
-+		return undefined;
++		return { problem: `pi is not installed in this editor (looked in ${candidates.join(' and ')})` };
 +	}
++
 +	try {
-+		const imported = (await import(pathToFileURL(entry).href)) as T;
-+		return imported;
-+	} catch {
++		return { sdk: (await dynamicImport(pathToFileURL(entry).href)) as T };
++	} catch (error) {
++		return { problem: `pi is installed but could not be loaded: ${error instanceof Error ? error.message : String(error)}` };
++	}
++}
+diff --git a/extensions/picode/src/progress.ts b/extensions/picode/src/progress.ts
+new file mode 100644
+index 00000000000..bc64f41b905
+--- /dev/null
++++ b/extensions/picode/src/progress.ts
+@@ -0,0 +1,62 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * What pi is doing, said in one line.
++ *
++ * The chat shows a progress line while a tool runs, and "read" says much less than
++ * "read src/app.ts". The arguments are already there in the event, so the line is built from
++ * them — but carefully: a progress line is a hint, not a transcript, so each tool contributes
++ * the one argument that identifies what it is working on, and anything unexpected is dropped
++ * rather than rendered as `[object Object]`.
++ *
++ * No `vscode` import: it is wording, and wording can be exercised by running it.
++ */
++
++/** The fields a tool's arguments may carry, tried in this order for each tool. */
++function firstString(args: unknown, keys: readonly string[]): string | undefined {
++	if (typeof args !== 'object' || args === null) {
 +		return undefined;
 +	}
++	const record = args as Record<string, unknown>;
++	for (const key of keys) {
++		const value = record[key];
++		if (typeof value === 'string' && value.trim().length > 0) {
++			return value.trim();
++		}
++	}
++	return undefined;
++}
++
++/** The argument that identifies the work, per tool; tools pi adds later fall through to none. */
++const IDENTIFYING_ARGUMENT: Readonly<Record<string, readonly string[]>> = {
++	read: ['path', 'file_path', 'filePath'],
++	write: ['path', 'file_path', 'filePath'],
++	edit: ['path', 'file_path', 'filePath'],
++	ls: ['path'],
++	find: ['pattern', 'path'],
++	grep: ['pattern', 'query'],
++	bash: ['command'],
++	powershell: ['command'],
++};
++
++/** The longest a single argument is shown: a progress line is not a place for a whole command. */
++const MAX_ARGUMENT_CHARS = 80;
++
++/**
++ * One line for the chat, built from the tool's name and its arguments.
++ *
++ * A tool with no identifying argument keeps its bare name: a blank after it would look like the
++ * line failed to load.
++ */
++export function toolProgress(toolName: string, args: unknown): string {
++	const keys = IDENTIFYING_ARGUMENT[toolName];
++	const argument = keys === undefined ? undefined : firstString(args, keys);
++	if (argument === undefined) {
++		return toolName;
++	}
++	const shown = argument.length > MAX_ARGUMENT_CHARS ? `${argument.slice(0, MAX_ARGUMENT_CHARS - 1)}…` : argument;
++	return `${toolName} ${shown}`;
 +}
 diff --git a/extensions/picode/src/providerIds.ts b/extensions/picode/src/providerIds.ts
 new file mode 100644
