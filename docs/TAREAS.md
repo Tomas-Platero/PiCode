@@ -25,6 +25,7 @@
 | **Proveedores, en su nodo** | `Settings > Chat > Providers`, con `picode.providers`; el nodo `pi` se queda para los ajustes de pi |
 | **La integración de pi con el chat** | El modelo del selector es el que corre pi (y lo cambia en caliente), el nivel de pensamiento, el contexto del editor viajando con el mensaje, el razonamiento cuando se pide, y el progreso diciendo *qué* hace la herramienta |
 | **Los ajustes de pi, en `Settings > Chat > Pi`** | Tres ajustes que hacen algo: cuánto piensa, si enseña el razonamiento y si el contexto del editor viaja. Los cinco que ya no aplican quedan dichos, con su porqué, en el papel de la tarea |
+| **Fuera la ventana de agentes de VS Code** | Sus seis acciones no se registran: se acaban el botón «Open in Agents» de la barra, la entrada del menú del chat, el atajo `Ctrl+Shift+A`, los comandos de la paleta y el cartel de bienvenida. Sus dos consejos también fuera |
 
 ## Lo que está a medias
 
