@@ -427,7 +427,7 @@ foreach ($fix in $nameFixes) {
 # ---------------------------------------------------------------------------
 # Step 6 - the icons inside the application
 # ---------------------------------------------------------------------------
-Write-Section "Step 6 - iconos dentro de la aplicación"
+Write-Section "Step 6 - icons inside the application"
 
 # The executable's own icon is set separately, because it needs a PE resource tool; see
 # docs/DISTRIBUTION.md section 9. This step is the other half: VS Code ships its own logo
@@ -481,8 +481,8 @@ if (-not (Test-Path -LiteralPath $markSource)) {
     }
 
     # The watermarks: what an empty editor — and the agent sessions surface one view further
-    # in — draws behind their hints ("mostrar todos los comandos", "abrir configuración",
-    # "alternar terminal"). They take the line drawing rather than the icon mark.
+    # in — draws behind their hints ("Show All Commands", "Open Settings", "Toggle
+    # Terminal"). They take the line drawing rather than the icon mark.
     foreach ($relative in @(
         "out\media\letterpress-dark.svg",
         "out\media\letterpress-light.svg",

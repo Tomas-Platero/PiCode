@@ -1,0 +1,79 @@
+diff --git a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerActionItem.ts b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerActionItem.ts
+index 973051a3..2ff7efba 100644
+--- a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerActionItem.ts
++++ b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerActionItem.ts
+@@ -189,7 +189,7 @@ export class ModelPickerActionItem extends BaseActionViewItem {
+ 			return localize('chat.modelPicker.restrictedHover', "{0} • Unavailable while in Restricted mode. Trust Workspace to enable models.", label);
+ 		}
+ 		if (this._pickerWidget.isSetupRequired()) {
+-			return localize('chat.modelPicker.setupRequiredHover', "{0} • Sign in to GitHub Copilot to choose a model.", label);
++			return localize('chat.modelPicker.setupRequiredHover', "{0} • Configure a model provider to choose one.", label);
+ 		}
+ 		const { statusIcon, tooltip } = this._pickerWidget.selectedModel?.metadata || {};
+ 		return statusIcon && tooltip ? `${label} • ${tooltip}` : label;
+diff --git a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemPrimitives.ts b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemPrimitives.ts
+index ab53effb..15c597d0 100644
+--- a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemPrimitives.ts
++++ b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemPrimitives.ts
+@@ -225,9 +225,9 @@ export function createUnavailableModelItem(
+ 	if (reason === 'upgrade') {
+ 		hoverContent = new MarkdownString('', { isTrusted: true, supportThemeIcons: true });
+ 		if (chatEntitlementService.entitlement === ChatEntitlement.Pro) {
+-			hoverContent.appendMarkdown(localize('chat.modelPicker.upgradeHoverProPlus', "[Upgrade to GitHub Copilot Pro+](command:workbench.action.chat.upgradePlan \" \") to use the best models."));
++			hoverContent.appendMarkdown(localize('chat.modelPicker.upgradeHoverProPlus', "Configure a model provider to use the best models available."));
+ 		} else {
+-			hoverContent.appendMarkdown(localize('chat.modelPicker.upgradeHover', "[Upgrade to GitHub Copilot Pro](command:workbench.action.chat.upgradePlan \" \") to use the best models."));
++			hoverContent.appendMarkdown(localize('chat.modelPicker.upgradeHover', "Configure a model provider to use the best models available."));
+ 		}
+ 	} else if (reason === 'update') {
+ 		hoverContent = getUpdateHoverContent(updateStateType);
+diff --git a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemSections.ts b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemSections.ts
+index b9d20cb1..bd84a002 100644
+--- a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemSections.ts
++++ b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerItemSections.ts
+@@ -62,19 +62,19 @@ export function buildUnavailableStateItems(options: IBuildModelPickerItemsOption
+ 	if (setupRequired) {
+ 		const enabled = !!options.actions.onRequestSetup;
+ 		const items: IActionListItem<IActionWidgetDropdownAction>[] = [
+-			{ kind: ActionListItemKind.Header, label: localize('chat.modelPicker.setupRequired', "Sign in to use Copilot") },
++			{ kind: ActionListItemKind.Header, label: localize('chat.modelPicker.setupRequired', "Models") },
+ 			{
+ 				item: {
+ 					id: SETUP_REQUIRED_SIGN_IN_ACTION_ID,
+ 					enabled,
+ 					checked: false,
+ 					class: undefined,
+-					tooltip: localize('chat.modelPicker.setupRequired.signInTooltip', "Sign in to GitHub Copilot to choose a model."),
+-					label: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot..."),
++					tooltip: localize('chat.modelPicker.setupRequired.signInTooltip', "Configure a model provider to be able to choose one."),
++					label: localize('chat.modelPicker.setupRequired.signIn', "Configure models…"),
+ 					run: () => options.actions.onRequestSetup?.(),
+ 				},
+ 				kind: ActionListItemKind.Action,
+-				label: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot..."),
++				label: localize('chat.modelPicker.setupRequired.signIn', "Configure models…"),
+ 				group: { title: '', icon: ThemeIcon.fromId(Codicon.signIn.id) },
+ 				disabled: !enabled,
+ 				hideIcon: false,
+@@ -107,7 +107,7 @@ export function buildUnavailableStateItems(options: IBuildModelPickerItemsOption
+ 		? new MarkdownString(localize('chat.modelPicker.upgradeLink', "[Upgrade](command:workbench.action.chat.upgradePlan \" \")"), { isTrusted: true })
+ 		: undefined;
+ 	const hover = canUpgrade ? new MarkdownString('', { isTrusted: true, supportThemeIcons: true }) : undefined;
+-	hover?.appendMarkdown(localize('chat.modelPicker.upgradeHover', "[Upgrade to GitHub Copilot Pro](command:workbench.action.chat.upgradePlan \" \") to use the best models."));
++	hover?.appendMarkdown(localize('chat.modelPicker.upgradeHover', "Configure a model provider to use the best models available."));
+ 	return [{
+ 		item: {
+ 			id: 'noModels',
+diff --git a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerWidget.ts b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerWidget.ts
+index ac63192d..a69ffa79 100644
+--- a/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerWidget.ts
++++ b/src/vs/workbench/contrib/chat/browser/widget/input/modelPicker/modelPickerWidget.ts
+@@ -620,7 +620,7 @@ export class ModelPickerWidget extends Disposable {
+ 		const ariaLabel = restrictedMode
+ 			? localize('chat.modelPicker.ariaLabelRestricted', "Models, unavailable while in Restricted mode")
+ 			: setupRequired
+-				? localize('chat.modelPicker.ariaLabelSetupRequired', "Models, sign in to use Copilot")
++				? localize('chat.modelPicker.ariaLabelSetupRequired', "Models, configure a model provider")
+ 				: localize('chat.modelPicker.ariaLabel', "Models, {0}", modelLabel);
+ 		this._domNode.ariaLabel = ariaLabel;
+ 		this._nameButton.ariaLabel = ariaLabel;

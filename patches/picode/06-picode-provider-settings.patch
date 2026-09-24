@@ -1,0 +1,48 @@
+diff --git a/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
+new file mode 100644
+index 00000000000..a5f32d8f391
+--- /dev/null
++++ b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
+@@ -0,0 +1,42 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { localize } from '../../../../nls.js';
++import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
++import { Registry } from '../../../../platform/registry/common/platform.js';
++
++/**
++ * PiCode's provider surface, declared by the core and not by PiCode's own extension.
++ *
++ * That is not a stylistic choice. The Settings tree is built by matching `tocData`
++ * (`settingsLayout.ts`) against **core** configuration groups only
++ * (`settingsEditor2.ts`), while an extension's settings are always filed under
++ * `Extensions > <extension name>` by `createTocTreeForExtensionSettings` and never see
++ * `tocData` at all. So a setting that has to appear inside a core node — like the Chat
++ * node `patches/picode/04-pi-settings-under-chat.patch` extends — has to be declared here.
++ *
++ * The value is PiCode's own record of what was connected, and it is written by the
++ * extension. It is not a duplicate of anything pi keeps: pi stores the credential in
++ * `auth.json` and says nothing about which providers the owner connected on purpose. The
++ * row's description carries the two commands that do the connecting, because a Settings
++ * row is a value, not a button, and a markdown command link is how the editor puts an
++ * action in one.
++ */
++Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
++	id: 'picode',
++	title: 'PiCode',
++	properties: {
++		'picode.pi.providers': {
++			type: 'array',
++			items: { type: 'string' },
++			default: [],
++			scope: ConfigurationScope.APPLICATION,
++			markdownDescription: localize(
++				'picode.pi.providers',
++				"Model providers connected in PiCode's own profile. [Connect one](command:picode.connectProvider): asks for the endpoint address and its key, asks that endpoint which models it has, and leaves them ready to pick in the chat."
++			)
++		}
++	}
++});
