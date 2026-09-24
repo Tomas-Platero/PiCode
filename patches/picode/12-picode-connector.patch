@@ -17,7 +17,7 @@ index 00000000000..8ee2b1b9165
 +node_modules/**
 diff --git a/extensions/picode/package.json b/extensions/picode/package.json
 new file mode 100644
-index 00000000000..84c0fe78ec3
+index 00000000000..85b42b59a4f
 --- /dev/null
 +++ b/extensions/picode/package.json
 @@ -0,0 +1,94 @@
@@ -102,7 +102,7 @@ index 00000000000..84c0fe78ec3
 +    "commands": [
 +      {
 +        "command": "picode.connectProvider",
-+        "title": "Connect a model provider",
++        "title": "Manage model providers",
 +        "category": "PiCode"
 +      }
 +    ]
@@ -324,12 +324,440 @@ index 00000000000..9421dcc8bcc
 +	);
 +	return participant;
 +}
+diff --git a/extensions/picode/src/declarations.ts b/extensions/picode/src/declarations.ts
+new file mode 100644
+index 00000000000..26a6864ebde
+--- /dev/null
++++ b/extensions/picode/src/declarations.ts
+@@ -0,0 +1,347 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import type { ProviderConfiguration } from './providers';
++
++/**
++ * The providers the owner declares **in the editor's own settings**.
++ *
++ * This is the surface the request came from: *"no quiero la ventanita de arriba, quiero añadir
++ * items abajo con sus campos necesarios"*. A settings row can hold a list of lines, and that is
++ * what this is — one provider per line, with its own fields, added in place with the editor's
++ * own list widget. Nothing is asked in a floating window, and there is no dialog of ours
++ * anywhere in the flow.
++ *
++ * The editor cannot render an array of *objects* as a form (measured: `arrayItemType` is only
++ * derived for scalar items, and the array widget accepts strings, enums and numbers), so the
++ * fields share one line instead of four boxes:
++ *
++ *     omni | https://endpoint.example/v1 | openai-completions | $OMNI_KEY
++ *     id   |  the address                |  the dialect        |  the key (optional)
++ *
++ * Only the id and the address are required. The dialect defaults to the OpenAI-compatible one,
++ * which is what almost every endpoint speaks, and the key may be left out when the provider
++ * needs none.
++ *
++ * ## Why this module has no `vscode` import
++ *
++ * Everything that decides what a line means, and everything that decides what pi's files then
++ * hold, is here and is pure apart from reading and writing two files — so it can be exercised
++ * by running it, without an editor in the way. What touches the editor (the settings read, the
++ * provider the model list asks about) lives in `providers.ts`.
++ */
++
++/** One provider, as one line of the settings list declares it. */
++export interface ProviderDeclaration {
++	readonly id: string;
++	readonly baseUrl: string;
++	readonly api: string;
++	/**
++	 * The credential, in pi's own three forms: a literal, `$NAME` for an environment variable,
++	 * or `!command`. Left out when the endpoint needs none.
++	 *
++	 * The environment-variable form is what the owner's own note recommends, and a literal is
++	 * accepted because it is his file on his machine — but a literal here is a key in
++	 * `settings.json`, not in the file pi keeps credentials in, so the reader is told.
++	 */
++	readonly key?: string;
++}
++
++/** The dialects the editor's providers speak, keyed by the short names a person would type. */
++const DIALECTS: Readonly<Record<string, string>> = {
++	openai: 'openai-completions',
++	completions: 'openai-completions',
++	'openai-completions': 'openai-completions',
++	responses: 'openai-responses',
++	'openai-responses': 'openai-responses',
++	anthropic: 'anthropic-messages',
++	messages: 'anthropic-messages',
++	'anthropic-messages': 'anthropic-messages',
++	google: 'google-generative-ai',
++	gemini: 'google-generative-ai',
++	'google-generative-ai': 'google-generative-ai',
++};
++
++/** What almost every endpoint speaks, and what a line that does not say gets. */
++export const DEFAULT_DIALECT = 'openai-completions';
++
++/** The id shape the rest of the connector builds model ids from, so it cannot carry a slash. */
++function isProviderId(value: string): boolean {
++	return /^[a-z0-9][a-z0-9._-]*$/i.test(value) && !value.includes('/');
++}
++
++function isAddress(value: string): boolean {
++	return /^https?:\/\/\S+$/.test(value);
++}
++
++/**
++ * One line of the settings list, read as a provider — or `undefined` when it does not describe
++ * one.
++ *
++ * Tolerant by design: the fields are separated by `|` and may be written in any case, with or
++ * without spaces, because this is typed by hand in a settings box. A line that cannot describe
++ * a provider is skipped rather than guessed at, and the ones that can still connect.
++ */
++export function parseProviderDeclaration(line: string): ProviderDeclaration | undefined {
++	if (typeof line !== 'string') {
++		return undefined;
++	}
++	const fields = line.split('|').map(field => field.trim());
++	const id = fields[0] ?? '';
++	const baseUrl = fields[1] ?? '';
++	if (!isProviderId(id) || !isAddress(baseUrl)) {
++		return undefined;
++	}
++
++	const declared = (fields[2] ?? '').toLowerCase();
++	const api = declared.length === 0 ? DEFAULT_DIALECT : DIALECTS[declared];
++	if (api === undefined) {
++		// An unknown dialect is refused rather than defaulted: silently sending one dialect to
++		// an endpoint that speaks another is a 404 or a 400, which reads as "the provider is
++		// broken" instead of "the line says something the field does not accept".
++		return undefined;
++	}
++
++	const key = fields.slice(3).join('|').trim();
++	return {
++		id: id.toLowerCase(),
++		baseUrl: baseUrl.replace(/\/$/, ''),
++		api,
++		...(key.length === 0 ? {} : { key }),
++	};
++}
++
++/**
++ * Every provider the settings row declares, in the order it declares them.
++ *
++ * The row is a list of strings; anything else (a value somebody edited by hand into a shape the
++ * schema does not allow) is read as "nothing declared" rather than as a crash on a settings
++ * read that happens during activation.
++ */
++export function declarationsFromSetting(raw: unknown): ProviderDeclaration[] {
++	if (!Array.isArray(raw)) {
++		return [];
++	}
++	const declarations: ProviderDeclaration[] = [];
++	const seen = new Set<string>();
++	for (const line of raw) {
++		const declaration = typeof line === 'string' ? parseProviderDeclaration(line) : undefined;
++		if (declaration === undefined || seen.has(declaration.id)) {
++			continue;
++		}
++		seen.add(declaration.id);
++		declarations.push(declaration);
++	}
++	return declarations;
++}
++
++/* ------------------------------------------------------------------ *
++ * The shapes pi's own files use, and the merge that keeps every other provider
++ * ------------------------------------------------------------------ */
++
++/** One provider as pi's `models.json` declares it. */
++export interface ProviderDraft {
++	readonly id: string;
++	readonly baseUrl: string;
++	readonly api: string;
++	/**
++	 * Where the key is read from when it is not in `auth.json`.
++	 *
++	 * Only pi's own interpolations (`$NAME`, `!command`) are written here: a literal key goes to
++	 * `auth.json`, the file pi keeps credentials in and the one it consults before this field.
++	 * pi's documentation is explicit about the order — "Omit it when auth is provided by
++	 * `/login`/`auth.json`" — so writing a literal here as well would put the same credential in
++	 * two files, one of them the settings file that gets shared and synchronized.
++	 */
++	readonly apiKey?: string;
++	/**
++	 * Tells pi to send `Authorization: Bearer <key>`.
++	 *
++	 * Documented as the switch that makes the header appear, so a provider whose key was given
++	 * sets it: without it, pi has a credential and does not present it, and the endpoint
++	 * answers 401 while everything looks configured.
++	 */
++	readonly authHeader?: boolean;
++}
++
++/** One model as pi's `models.json` declares it. */
++export interface ModelDraft {
++	readonly id: string;
++	readonly name?: string;
++}
++
++/**
++ * A JSON object, for the two readers of values written by hand (a settings line, a file).
++ *
++ * Exported because `endpoint.ts` reads an endpoint's answer with the same guard: two spellings
++ * of "is this an object" would be two places for it to be wrong.
++ */
++export function isRecord(value: unknown): value is Record<string, unknown> {
++	return typeof value === 'object' && value !== null && !Array.isArray(value);
++}
++
++/**
++ * `models.json` with this provider written into it, keeping every other provider.
++ *
++ * A merge and not a replacement: the owner may have several connected, and rewriting the file
++ * from one form would silently drop the rest. An existing entry for the same id is replaced,
++ * because that is what "connect this provider" means when it is already there.
++ */
++export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models: readonly ModelDraft[]): Record<string, unknown> {
++	const root = isRecord(existing) ? { ...existing } : {};
++	const providers = isRecord(root.providers) ? { ...root.providers } : {};
++	providers[draft.id] = {
++		baseUrl: draft.baseUrl,
++		api: draft.api,
++		...(draft.apiKey === undefined || draft.apiKey.length === 0 ? {} : { apiKey: draft.apiKey }),
++		...(draft.authHeader === true ? { authHeader: true } : {}),
++		models: models.map(model => ({ id: model.id, ...(model.name === undefined ? {} : { name: model.name }) })),
++	};
++	root.providers = providers;
++	return root;
++}
++
++/**
++ * `auth.json` with this provider's key stored, keeping every other credential.
++ *
++ * pi's own shape for an API key: `{ "<provider>": { type: "api_key", key } }`. The key is
++ * written **here** rather than in `models.json` when the owner gave one, because that is the
++ * file pi keeps credentials in and the one it can rotate without touching the model list.
++ */
++export function authFileWith(existing: unknown, providerId: string, key: string): Record<string, unknown> {
++	const root = isRecord(existing) ? { ...existing } : {};
++	root[providerId] = { type: 'api_key', key };
++	return root;
++}
++
++/* ------------------------------------------------------------------ *
++ * The projection: what a declaration means to pi
++ * ------------------------------------------------------------------ */
++
++/** Reads one of pi's own files, treating "missing or broken" as "nothing there yet". */
++function readJson(file: string): unknown {
++	try {
++		return JSON.parse(fs.readFileSync(file, 'utf8'));
++	} catch {
++		// A missing file is the first run; a broken one is a file somebody edited by hand, and
++		// refusing to project anything because of it would leave the owner with no way back but a
++		// text editor.
++		return undefined;
++	}
++}
++
++/** Writes one of pi's files the way pi writes them: two-space indentation and a final newline. */
++function writeJson(file: string, value: unknown): void {
++	fs.mkdirSync(path.dirname(file), { recursive: true });
++	// `mode` is what keeps a credential out of other users' hands on a shared machine. pi does
++	// the same with `auth.json`, and a copy created here has no business being wider.
++	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
++}
++
++/** Whether a key is one of pi's own interpolations (`$NAME`, `!command`) rather than a literal. */
++function isInterpolated(key: string): boolean {
++	return key.startsWith('$') || key.startsWith('!');
++}
++
++/**
++ * Writes a file only when what it holds would change.
++ *
++ * The editor asks for its model list often — every time the picker opens — and each of those
++ * asks projects the declarations again. Rewriting two files on every one of them would be
++ * churn on the owner's disk for nothing, so an identical write is skipped.
++ */
++function writeIfChanged(file: string, value: unknown): void {
++	const text = `${JSON.stringify(value, null, 2)}\n`;
++	try {
++		if (fs.readFileSync(file, 'utf8') === text) {
++			return;
++		}
++	} catch {
++		// No file yet, which is the first run and not a failure.
++	}
++	writeJson(file, value);
++}
++
++/**
++ * The declaration as pi's `models.json` entry.
++ *
++ * The credential is **not** written here when it is a literal: pi's documentation says to omit
++ * `apiKey` when the credential lives in `auth.json`, which is where the projection puts it, and
++ * `authHeader` is set so pi presents it — without that switch an endpoint answers 401 while
++ * everything looks configured.
++ *
++ * `$NAME` and `!command` are the exception, and they stay here: they are pi's own
++ * interpolations, and the file that reads them is this one.
++ */
++function draftFrom(id: string, baseUrl: string, api: string, key: string | undefined): ProviderDraft {
++	const literal = key !== undefined && key.length > 0 && !isInterpolated(key);
++	return {
++		id,
++		baseUrl: baseUrl.replace(/\/$/, ''),
++		api,
++		...(key !== undefined && key.length > 0 && isInterpolated(key) ? { apiKey: key } : {}),
++		...(literal ? { authHeader: true } : {}),
++	};
++}
++
++/**
++ * Projects one declaration into the profile, so that **pi itself knows the provider**.
++ *
++ * pi reads two files: `models.json` for what a provider is and which models it has, and
++ * `auth.json` for a credential. A provider the editor can list but pi cannot use would be a
++ * model row that fails the moment the agent picks it — and the agent, not the editor, is what
++ * runs here. Everything already in either file is kept: the profile is shared by every
++ * provider the owner has.
++ */
++export function projectDeclaration(
++	profileDir: string,
++	declaration: ProviderDeclaration,
++	modelIds: readonly string[],
++): void {
++	const modelsFile = path.join(profileDir, 'models.json');
++	writeIfChanged(
++		modelsFile,
++		mergeModelsFile(
++			readJson(modelsFile),
++			draftFrom(declaration.id, declaration.baseUrl, declaration.api, declaration.key),
++			modelIds.map(id => ({ id })),
++		),
++	);
++
++	if (declaration.key !== undefined && declaration.key.length > 0 && !isInterpolated(declaration.key)) {
++		const authFile = path.join(profileDir, 'auth.json');
++		writeIfChanged(authFile, authFileWith(readJson(authFile), declaration.id, declaration.key));
++	}
++}
++
++/**
++ * The same projection for the provider the owner filled in the **editor's own provider form**.
++ *
++ * That form hands its values over at listing time (`options.configuration`), with the key read
++ * back from the editor's secret storage, and they mean exactly what a declared line means: an
++ * address, a dialect, a credential. Projecting both through one place keeps the two ways in
++ * from drifting apart.
++ */
++export function projectConfiguration(
++	profileDir: string,
++	config: ProviderConfiguration,
++	modelIds: readonly string[],
++): void {
++	if (config.endpoint === undefined) {
++		return;
++	}
++	projectDeclaration(
++		profileDir,
++		{
++			id: config.id ?? 'pi',
++			baseUrl: config.endpoint,
++			api: config.api ?? DEFAULT_DIALECT,
++			...(config.apiKey === undefined ? {} : { key: config.apiKey }),
++		},
++		modelIds,
++	);
++}
+diff --git a/extensions/picode/src/endpoint.ts b/extensions/picode/src/endpoint.ts
+new file mode 100644
+index 00000000000..421fb0a8d75
+--- /dev/null
++++ b/extensions/picode/src/endpoint.ts
+@@ -0,0 +1,69 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * Asking a provider what models it has.
++ *
++ * A provider's own list is the only list worth having: an endpoint that answers knows its own
++ * catalogue, the owner does not, and a hand-written list goes stale the day the provider adds a
++ * model. So the endpoint is asked, and what it answers is what gets written.
++ *
++ * This module has no `vscode` import on purpose. Nothing here decides anything about the
++ * editor, and keeping it out means the two shapes an endpoint can answer with — and the
++ * refusal to invent a list when it answers with neither — can be exercised by running them.
++ */
++
++import { isRecord } from './declarations';
++
++/**
++ * The model ids an endpoint answers with.
++ *
++ * Two shapes are accepted because both are found in the wild and neither is wrong: the
++ * documented `{ data: [{ id }] }` and a plain `{ models: [{ id }] }`. Anything else yields an
++ * empty list rather than a guess — a made-up model id would be a row in the editor that fails
++ * the moment it is used.
++ */
++export function parseModelIds(payload: unknown): string[] {
++	const list = isRecord(payload)
++		? Array.isArray(payload.data)
++			? payload.data
++			: Array.isArray(payload.models)
++				? payload.models
++				: undefined
++		: undefined;
++	if (list === undefined) {
++		return [];
++	}
++	const ids: string[] = [];
++	for (const entry of list) {
++		const id = typeof entry === 'string' ? entry : isRecord(entry) ? entry.id : undefined;
++		if (typeof id === 'string' && id.length > 0) {
++			ids.push(id);
++		}
++	}
++	// Sorted and deduplicated, so the file does not depend on the endpoint's mood.
++	return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
++}
++
++/**
++ * Asks the endpoint for its own model list.
++ *
++ * A failure is returned as `undefined` and never thrown at the caller: an endpoint that does
++ * not answer is a fact to tell the owner about, not a reason to stop serving the models the
++ * profile already has.
++ */
++export async function fetchModelIds(baseUrl: string, apiKey: string | undefined): Promise<string[] | undefined> {
++	try {
++		const response = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
++			headers: apiKey === undefined || apiKey.length === 0 ? {} : { authorization: `Bearer ${apiKey}` },
++		});
++		if (!response.ok) {
++			return undefined;
++		}
++		return parseModelIds(await response.json());
++	} catch {
++		return undefined;
++	}
++}
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
 new file mode 100644
-index 00000000000..04e6621bf68
+index 00000000000..b276b7aea37
 --- /dev/null
 +++ b/extensions/picode/src/extension.ts
-@@ -0,0 +1,428 @@
+@@ -0,0 +1,493 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -338,9 +766,12 @@ index 00000000000..04e6621bf68
 +import * as vscode from 'vscode';
 +import * as fs from 'node:fs';
 +import * as path from 'node:path';
++import { declarationsFromSetting, projectDeclaration } from './declarations';
++import { fetchModelIds } from './endpoint';
 +import {
 +	CONNECT_PROVIDER_COMMAND,
-+	connectProvider,
++	MANAGE_PROVIDERS_COMMAND,
++	declarationFrom,
 +	modelsForConfiguration,
 +	readConfiguration,
 +	type ProviderConfiguration,
@@ -364,11 +795,16 @@ index 00000000000..04e6621bf68
 + * ## What this first piece does
 + *
 + * It makes **pi's models appear in the editor's own model list** — the window that until now
-+ * only knew about Copilot's. The models come from the profile PiCode owns (`models.json`),
-+ * which is where the provider the owner connected (their router, with its 163 models) wrote
-+ * them.
++ * only knew about Copilot's. Providers get there two ways, and both end in the profile PiCode
++ * owns (`data/pi-agent`), which is what makes the editor's list and pi's own runtime agree:
 + *
-+ * It does not draw anything: no panel, no tab, no settings of its own.
++ * - the **lines the owner writes in the settings list** under Chat (`omni | <address> |
++ *   <dialect> | <key>`), declared in place with the editor's own list widget, and
++ * - the **editor's own provider form**, whose fields are the ones the manifest declares and
++ *   whose key the editor keeps as a secret.
++ *
++ * It does not draw anything: no panel, no tab, no settings of its own — and no chain of
++ * dialogs either, which is what the first version of this flow had.
 + */
 +
 +/** The vendor this extension registers with the editor. */
@@ -481,21 +917,76 @@ index 00000000000..04e6621bf68
 +		: { providerId: qualified.slice(0, cut), modelId: qualified.slice(cut + 1) };
 +}
 +
++/**
++ * The credential as **this process** can use it, for asking an endpoint its own model list.
++ *
++ * `$NAME` is pi's interpolation, so it is read from the environment here. `!command` is left to
++ * pi — running a command to list models would be a side effect nobody asked for — and the
++ * endpoint is then asked without a key, which is what an endpoint that needs none expects.
++ */
++function resolveKey(key: string | undefined): string | undefined {
++	if (key === undefined || key.length === 0) {
++		return undefined;
++	}
++	if (key.startsWith('$')) {
++		return process.env[key.slice(1).replace(/^\{|\}$/g, '')];
++	}
++	if (key.startsWith('!')) {
++		return undefined;
++	}
++	return key;
++}
++
++/**
++ * The providers the settings row declares, projected into the profile.
++ *
++ * The row is the surface; the profile is where pi finds them. Both are needed: the editor can
++ * list a model from its own file, and only pi can run it, so a declaration that was not
++ * projected would be a model row that fails the moment the agent picks it.
++ *
++ * An endpoint that does not answer keeps whatever the profile already had for it. A provider
++ * whose list came back empty because the network was down must not vanish from the editor and
++ * take its models with it.
++ */
++async function projectDeclaredProviders(profile: string): Promise<void> {
++	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('pi.providers'));
++	for (const declaration of declared) {
++		const ids = await fetchModelIds(declaration.baseUrl, resolveKey(declaration.key));
++		if (ids !== undefined && ids.length > 0) {
++			projectDeclaration(profile, declaration, ids);
++		}
++	}
++}
++
 +const provider: vscode.LanguageModelChatProvider = {
 +	async provideLanguageModelChatInformation(options, _token) {
-+		// The provider's own configuration first: it is what the owner fills in the editor's own
-+		// settings, and the only surface they should have to touch. Declared in the manifest,
-+		// rendered by the editor, with the key stored as a secret.
++		const profile = profileDirectory(requireProfileUri());
++
++		// The editor's **own provider form**, when the owner filled it in: it is the surface that
++		// renders the declared fields, with the key stored as a secret. Kept from the last listing
++		// because the request that follows carries the model but not the configuration.
 +		const configured = readConfiguration(options.configuration);
-+		if (configured.endpoint !== undefined) {
++		const configuredModels =
++			configured.endpoint === undefined ? [] : await modelsForConfiguration(configured);
++		if (configured.endpoint === undefined) {
++			lastConfiguration = undefined;
++		} else {
 +			lastConfiguration = configured;
-+			return modelsForConfiguration(configured);
++			const declaration = declarationFrom(configured);
++			if (declaration !== undefined) {
++				projectDeclaration(profile, declaration, configuredModels.map(info => splitId(info.id).modelId));
++			}
 +		}
 +
-+		// Otherwise, whatever the connecting command wrote into PiCode's own profile. That path
-+		// is kept so an already-connected provider does not stop working.
-+		const models = readModelsFile(profileDirectory(requireProfileUri()));
-+		return models === undefined ? [] : toChatInformation(models);
++		// The **lines the owner writes in the settings list**, projected so pi knows them too, and
++		// then the profile read back: it now holds both of the above plus every provider an earlier
++		// version of the connecting flow wrote there.
++		await projectDeclaredProviders(profile);
++
++		const models = readModelsFile(profile);
++		const fromProfile = models === undefined ? [] : toChatInformation(models);
++		const configuredIds = new Set(configuredModels.map(info => info.id));
++		return [...configuredModels, ...fromProfile.filter(info => !configuredIds.has(info.id))];
 +	},
 +
 +	/**
@@ -521,15 +1012,17 @@ index 00000000000..04e6621bf68
 +	},
 +
 +	async provideLanguageModelChatResponse(model, messages, _options, progress, token) {
-+		// The configured provider, when there is one, is the whole answer: it was set in the
-+		// editor's settings and it is the one the model list came from.
-+		if (lastConfiguration?.endpoint !== undefined) {
-+			const { modelId: configuredModel } = splitId(model.id);
++		// The configured provider answers only for **its own** models: a declared provider's models
++		// are routed from the profile, or every request would be sent to whichever endpoint the
++		// owner last filled in the editor's form.
++		const { providerId, modelId } = splitId(model.id);
++		const configuredId = lastConfiguration?.endpoint === undefined ? undefined : lastConfiguration.id ?? 'pi';
++		if (lastConfiguration !== undefined && configuredId === providerId) {
 +			return sendToEndpoint(
-+				lastConfiguration.endpoint,
++				lastConfiguration.endpoint!,
 +				lastConfiguration.api ?? 'openai-completions',
 +				lastConfiguration.apiKey,
-+				configuredModel,
++				modelId,
 +				messages,
 +				progress,
 +				token,
@@ -537,7 +1030,6 @@ index 00000000000..04e6621bf68
 +		}
 +
 +		const models = readModelsFile(profileDirectory(requireProfileUri()));
-+		const { providerId, modelId } = splitId(model.id);
 +		const entry = models?.providers?.[providerId];
 +		if (entry === undefined || typeof entry.baseUrl !== 'string') {
 +			throw new Error(
@@ -745,12 +1237,13 @@ index 00000000000..04e6621bf68
 +		log: line => console.error(`[pi] ${line}`),
 +	});
 +
-+	// Connecting a provider writes into PiCode's own profile. It is a command and not a
-+	// surface: the dialogs it uses are the editor's, and the settings row under Chat links
-+	// here instead of owning a form of its own.
++	// Managing providers goes to the **editor's own surface**, which is where the declared fields
++	// are rendered and where a key is kept as a secret. PiCode asks nothing in a window of its
++	// own: the chain of four dialogs this command used to run is gone, and with it the last
++	// reason to have one.
 +	context.subscriptions.push(
 +		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>
-+			connectProvider(profileDirectory(requireProfileUri())),
++			vscode.commands.executeCommand(MANAGE_PROVIDERS_COMMAND),
 +		),
 +	);
 +}
@@ -760,165 +1253,56 @@ index 00000000000..04e6621bf68
 +}
 diff --git a/extensions/picode/src/providers.ts b/extensions/picode/src/providers.ts
 new file mode 100644
-index 00000000000..59ab15f9d86
+index 00000000000..d2fb12f781b
 --- /dev/null
 +++ b/extensions/picode/src/providers.ts
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,122 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
 + *--------------------------------------------------------------------------------------------*/
 +
 +import * as vscode from 'vscode';
-+import * as fs from 'node:fs';
-+import * as path from 'node:path';
++import { DEFAULT_DIALECT, isRecord, type ProviderDeclaration } from './declarations';
++import { fetchModelIds } from './endpoint';
 +
 +/**
-+ * Connecting a model provider **into PiCode's own profile**.
++ * The editor's side of connecting a model provider.
 + *
-+ * This is the owner's chosen road: PiCode's pi is the one that connects, and what it
-+ * connects is kept in PiCode's own profile (`data/pi-agent`). Nothing is written to the
-+ * machine's pi, ever.
++ * What a provider **is** and where pi finds it lives elsewhere: `declarations.ts` owns the
++ * lines the owner writes in the settings list and the projection of those lines into pi's own
++ * files, and `endpoint.ts` owns asking an endpoint what models it has. What is left here is
++ * the part that needs the editor — the provider the editor's model list asks about, and the
++ * one command that opens the editor's own provider surface.
 + *
-+ * The flow is the editor's own dialogs — the picker, the input boxes — and this module draws
-+ * nothing of its own: no panel, no tab, no settings page. The editor's chat is the surface,
-+ * and this is the machinery behind it.
++ * ## The two ways in, and why the dialogs are gone
 + *
-+ * ## Why the models are fetched instead of typed
++ * The first version of this flow asked four questions in four floating boxes (name, address,
++ * dialect, key). The owner's answer was blunt: *"no quiero la ventanita de arriba, quiero
++ * añadir items abajo con sus campos necesarios"*. So:
 + *
-+ * An endpoint like a router answers with its own list at `GET <baseUrl>/models`. Asking the
-+ * owner to type 163 model ids by hand would be absurd, and asking them to remember which ones
-+ * exist would be worse: the endpoint knows, so the endpoint is asked. If it does not answer,
-+ * the flow says so and offers to write the provider anyway with no models, rather than
-+ * inventing a list.
++ * - the **settings list** under Chat holds one line per provider with its fields, added in
++ *   place with the editor's own list widget (`declarations.ts` reads it), and
++ * - the **editor's own provider form** is where the same fields are filled in a form, with the
++ *   key kept as a secret — the values arrive here as `options.configuration`.
++ *
++ * Neither asks PiCode to draw anything, and neither is a dialog of ours.
 + */
 +
++/**
++ * The row under Chat links to this id, so the id stays: what changed is what it does.
++ *
++ * It is where the owner goes to **manage** his providers. The editor's own provider surface is
++ * the one that shows the declared fields, so the command opens it rather than asking the same
++ * four questions in floating boxes of our own.
++ */
 +export const CONNECT_PROVIDER_COMMAND = 'picode.connectProvider';
++
++/** The command that opens the editor's own model-provider surface. */
++export const MANAGE_PROVIDERS_COMMAND = 'workbench.action.chat.manage';
 +
 +/** The vendor pi and the editor both use for this product. */
 +const VENDOR = 'picode';
-+
-+/* ------------------------------------------------------------------ *
-+ * The shapes that get written
-+ * ------------------------------------------------------------------ */
-+
-+/** One provider as pi's `models.json` declares it. */
-+export interface ProviderDraft {
-+	readonly id: string;
-+	readonly baseUrl: string;
-+	readonly api: string;
-+	/**
-+	 * Where the key is read from when it is not in `auth.json`.
-+	 *
-+	 * Left **unset** by the connect flow on purpose. pi's own documentation is explicit: "Omit
-+	 * it when auth is provided by `/login`/`auth.json`" — and the key this flow collects goes
-+	 * to `auth.json`, which pi consults before this field. Writing a `$NAME` here as well would
-+	 * point at an environment variable nobody set, and would be read only if the credential
-+	 * were missing.
-+	 */
-+	readonly apiKey?: string;
-+	/**
-+	 * Tells pi to send `Authorization: Bearer <key>`.
-+	 *
-+	 * Documented as the switch that makes the header appear, so a provider whose key was given
-+	 * sets it: without it, pi has a credential and does not present it, and the endpoint
-+	 * answers 401 while everything looks configured.
-+	 */
-+	readonly authHeader?: boolean;
-+}
-+
-+/** One model as pi's `models.json` declares it. */
-+export interface ModelDraft {
-+	readonly id: string;
-+	readonly name?: string;
-+}
-+
-+function isRecord(value: unknown): value is Record<string, unknown> {
-+	return typeof value === 'object' && value !== null && !Array.isArray(value);
-+}
-+
-+/**
-+ * The model ids an OpenAI-compatible endpoint answers with.
-+ *
-+ * Two shapes are accepted because both are found in the wild and neither is wrong: the
-+ * documented `{ data: [{ id }] }` and a plain `{ models: [{ id }] }`. Anything else yields an
-+ * empty list rather than a guess — a made-up model id would be a row in the editor that fails
-+ * the moment it is used.
-+ */
-+export function parseModelIds(payload: unknown): string[] {
-+	const list = isRecord(payload)
-+		? Array.isArray(payload.data)
-+			? payload.data
-+			: Array.isArray(payload.models)
-+				? payload.models
-+				: undefined
-+		: undefined;
-+	if (list === undefined) {
-+		return [];
-+	}
-+	const ids: string[] = [];
-+	for (const entry of list) {
-+		const id = typeof entry === 'string' ? entry : isRecord(entry) ? entry.id : undefined;
-+		if (typeof id === 'string' && id.length > 0) {
-+			ids.push(id);
-+		}
-+	}
-+	// Sorted and deduplicated, so the file does not depend on the endpoint's mood.
-+	return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
-+}
-+
-+/**
-+ * `models.json` with this provider written into it, keeping every other provider.
-+ *
-+ * A merge and not a replacement: the owner may have several connected, and rewriting the file
-+ * from one form would silently drop the rest. An existing entry for the same id is replaced,
-+ * because that is what "connect this provider" means when it is already there.
-+ */
-+export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models: readonly ModelDraft[]): Record<string, unknown> {
-+	const root = isRecord(existing) ? { ...existing } : {};
-+	const providers = isRecord(root.providers) ? { ...root.providers } : {};
-+	providers[draft.id] = {
-+		baseUrl: draft.baseUrl,
-+		api: draft.api,
-+		...(draft.apiKey === undefined || draft.apiKey.length === 0 ? {} : { apiKey: draft.apiKey }),
-+		...(draft.authHeader === true ? { authHeader: true } : {}),
-+		models: models.map(model => ({ id: model.id, ...(model.name === undefined ? {} : { name: model.name }) })),
-+	};
-+	root.providers = providers;
-+	return root;
-+}
-+
-+/**
-+ * `auth.json` with this provider's key stored, keeping every other credential.
-+ *
-+ * pi's own shape for an API key: `{ "<provider>": { type: "api_key", key } }`. The key is
-+ * written **here** rather than in `models.json` when the owner gave one, because that is the
-+ * file pi keeps credentials in and the one it can rotate without touching the model list.
-+ */
-+export function authFileWith(existing: unknown, providerId: string, key: string): Record<string, unknown> {
-+	const root = isRecord(existing) ? { ...existing } : {};
-+	root[providerId] = { type: 'api_key', key };
-+	return root;
-+}
-+
-+/* ------------------------------------------------------------------ *
-+ * Reading and writing the profile
-+ * ------------------------------------------------------------------ */
-+
-+function readJson(file: string): unknown {
-+	try {
-+		return JSON.parse(fs.readFileSync(file, 'utf8'));
-+	} catch {
-+		// Missing or broken means "nothing there yet", which is the first run's answer and not
-+		// an error worth stopping for.
-+		return undefined;
-+	}
-+}
-+
-+function writeJson(file: string, value: unknown): void {
-+	fs.mkdirSync(path.dirname(file), { recursive: true });
-+	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-+}
 +
 +/* ------------------------------------------------------------------ *
 + * The editor's own configuration
@@ -927,9 +1311,9 @@ index 00000000000..59ab15f9d86
 +/**
 + * What the owner fills in, in the editor's own configuration for this provider.
 + *
-+ * This is the surface the owner asked for: the fields are **declared in the contribution**
-+ * and the editor renders them itself — with the key marked as a secret, so it is stored
-+ * encrypted and never shown back. No dialog of ours is involved.
++ * These are the fields **declared in the contribution**, which the editor renders itself — with
++ * the key marked as a secret, so it is stored encrypted and never shown back. No dialog of ours
++ * is involved, which is the whole reason this path exists.
 + */
 +export interface ProviderConfiguration {
 +	readonly id?: string;
@@ -955,18 +1339,31 @@ index 00000000000..59ab15f9d86
 +	};
 +}
 +
++/** One edge of the configuration, as the projection reads it: a declaration without id rules. */
++export function declarationFrom(config: ProviderConfiguration): ProviderDeclaration | undefined {
++	if (config.endpoint === undefined) {
++		return undefined;
++	}
++	return {
++		id: (config.id ?? 'pi').toLowerCase(),
++		baseUrl: config.endpoint.replace(/\/$/, ''),
++		api: config.api ?? DEFAULT_DIALECT,
++		...(config.apiKey === undefined ? {} : { key: config.apiKey }),
++	};
++}
++
 +/**
 + * The models the configured endpoint answers with, in the editor's model shape.
 + *
-+ * The configured provider comes first and is the one that matters: when the endpoint is set
-+ * there, the models are read from **it**. `models.json` is only consulted for the providers
-+ * written by the connection command, so that path keeps working while this one replaces it.
++ * Read from the endpoint itself and not from the profile, because this is the one path where
++ * the owner just typed the address: a list of models read from a file written by a different
++ * flow is exactly the confusion this path exists to remove.
 + */
 +export async function modelsForConfiguration(config: ProviderConfiguration): Promise<vscode.LanguageModelChatInformation[]> {
 +	if (config.endpoint === undefined) {
 +		return [];
 +	}
-+	const id = config.id ?? 'pi';
++	const id = (config.id ?? 'pi').toLowerCase();
 +	const ids = (await fetchModelIds(config.endpoint, config.apiKey)) ?? [];
 +	return ids.map(model => ({
 +		id: `${id}/${model}`,
@@ -978,138 +1375,6 @@ index 00000000000..59ab15f9d86
 +		detail: id,
 +		capabilities: { toolCalling: true },
 +	}));
-+}
-+
-+/* ------------------------------------------------------------------ *
-+ * The flow
-+ * ------------------------------------------------------------------ */
-+
-+/** The dialects the editor can send and pi can speak; the first is the common one. */
-+const DIALECTS: readonly { readonly label: string; readonly value: string }[] = [
-+	{ label: 'OpenAI (compatible): the usual one', value: 'openai-completions' },
-+	{ label: 'OpenAI (responses)', value: 'openai-responses' },
-+	{ label: 'Anthropic (messages)', value: 'anthropic-messages' },
-+	{ label: 'Google (generative AI)', value: 'google-generative-ai' },
-+];
-+
-+/**
-+ * Asks the endpoint for its own model list.
-+ *
-+ * A failure is returned as `undefined` and never thrown at the caller: an endpoint that does
-+ * not answer is a fact to tell the owner about, not a reason to abort a connection they may
-+ * still want.
-+ */
-+async function fetchModelIds(baseUrl: string, apiKey: string | undefined): Promise<string[] | undefined> {
-+	try {
-+		const response = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
-+			headers: apiKey === undefined || apiKey.length === 0 ? {} : { authorization: `Bearer ${apiKey}` },
-+		});
-+		if (!response.ok) {
-+			return undefined;
-+		}
-+		return parseModelIds(await response.json());
-+	} catch {
-+		return undefined;
-+	}
-+}
-+
-+/**
-+ * The command: connects one provider into PiCode's own profile.
-+ *
-+ * Every step is a dialog the editor already has, and every answer is used as given. The
-+ * profile directory is passed in rather than resolved here, so there is exactly one place
-+ * that decides where PiCode's profile is.
-+ */
-+export async function connectProvider(profileDir: string): Promise<void> {
-+	const id = await vscode.window.showInputBox({
-+		title: 'PiCode: connect a model provider',
-+		prompt: 'A short name for this provider, with no spaces (for example `omni`).',
-+		placeHolder: 'omni',
-+		validateInput: value => (/^[a-z0-9][a-z0-9-]*$/i.test(value.trim()) ? undefined : 'Letters, numbers and hyphens only.'),
-+	});
-+	if (id === undefined || id.trim().length === 0) {
-+		return;
-+	}
-+
-+	const baseUrl = await vscode.window.showInputBox({
-+		title: `PiCode: ${id.trim()}`,
-+		prompt: 'The endpoint address, ending in `/v1` when the provider asks for one.',
-+		placeHolder: 'https://openrouter.ai/api/v1',
-+		validateInput: value => (/^https?:\/\/\S+$/.test(value.trim()) ? undefined : 'It has to start with http:// or https://'),
-+	});
-+	if (baseUrl === undefined || baseUrl.trim().length === 0) {
-+		return;
-+	}
-+
-+	const dialect = await vscode.window.showQuickPick([...DIALECTS], {
-+		title: `PiCode: ${id.trim()}`,
-+		placeHolder: 'Which dialect does this endpoint speak?',
-+	});
-+	if (dialect === undefined) {
-+		return;
-+	}
-+
-+	const apiKey = await vscode.window.showInputBox({
-+		title: `PiCode: ${id.trim()}`,
-+		prompt: 'The provider key. It is stored in PiCode\'s own profile, never outside it. Leave it empty when none is needed.',
-+		password: true,
-+	});
-+
-+	const trimmedKey = (apiKey ?? '').trim();
-+	// The models are **asked of the endpoint**, never typed by hand: an endpoint that answers
-+	// knows its own catalogue and the owner does not, and a hand-written list is stale the day
-+	// the provider adds a model. If it does not answer, nothing is written at all — a provider
-+	// saved with no models is a configuration that looks connected and can use nothing.
-+	const models = await vscode.window.withProgress(
-+		// Wording matters here: this is PiCode reading a list, not a form. "Asking X which models it
-+		// has" was read as a question aimed at the owner, which is exactly what this flow exists to
-+		// stop asking.
-+		{ location: vscode.ProgressLocation.Notification, title: `PiCode: reading ${id.trim()}'s model list…` },
-+		async () => fetchModelIds(baseUrl.trim(), trimmedKey === '' ? undefined : trimmedKey),
-+	);
-+
-+	if (models === undefined) {
-+		void vscode.window.showErrorMessage(
-+			`PiCode: ${id.trim()} did not answer with its model list at ${baseUrl.trim().replace(/\/$/, '')}/models, so nothing was saved. ` +
-+				'Check the address (many providers want it ending in `/v1`) and, when a key is needed, that it is the right one.',
-+		);
-+		return;
-+	}
-+
-+	const hasKey = trimmedKey !== '';
-+
-+	// The provider entry, with **no `apiKey`**: pi's documentation says to omit it when the
-+	// credential lives in `auth.json`, which is where the next step puts it. `authHeader` is
-+	// set when there is a key, because it is the documented switch that makes pi present it.
-+	const modelsFile = path.join(profileDir, 'models.json');
-+	writeJson(
-+		modelsFile,
-+		mergeModelsFile(
-+			readJson(modelsFile),
-+			{
-+				id: id.trim(),
-+				baseUrl: baseUrl.trim(),
-+				api: dialect.value,
-+				...(hasKey ? { authHeader: true } : {}),
-+			},
-+			models.map(model => ({ id: model })),
-+		),
-+	);
-+
-+	// The key goes to `auth.json`, the file pi keeps credentials in and the one it reads before
-+	// any other source. Nothing is written outside PiCode's own profile.
-+	if (hasKey) {
-+		const authFile = path.join(profileDir, 'auth.json');
-+		writeJson(authFile, authFileWith(readJson(authFile), id.trim(), trimmedKey));
-+	}
-+
-+	const reload = await vscode.window.showInformationMessage(
-+		`PiCode: ${id.trim()} connected with ${models.length} model(s).`,
-+		'Reload Window',
-+	);
-+	if (reload === 'Reload Window') {
-+		await vscode.commands.executeCommand('workbench.action.reloadWindow');
-+	}
 +}
 +
 +/** The vendor the editor's model list groups these under. */
