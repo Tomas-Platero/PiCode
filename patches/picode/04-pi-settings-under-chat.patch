@@ -1,0 +1,35 @@
+diff --git a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
+index 2c363f1517f..5c7124f4901 100644
+--- a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
++++ b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
+@@ -181,6 +181,30 @@ export const tocData: ITOCEntry<string> = {
+ 			id: 'chat',
+ 			label: localize('chat', "Chat"),
+ 			children: [
++				// PiCode: the model providers are their **own node**, beside `pi` (owner, 2026-09-25:
++				// "la parte de proveedores en Settings > Chat > Providers (muevelo de pi)"). Two
++				// nodes and not one, because they answer two questions: this one is *which providers
++				// exist*, and `pi` is *how pi itself behaves*.
++				{
++					id: 'chat/providers',
++					label: localize('chatProviders', "Providers"),
++					settings: ['picode.providers']
++				},
++				// PiCode: pi's own settings live here, inside the Chat node, because pi is the
++				// agent this product ships — there is no PiCode panel any more, and the editor's
++				// settings are the surface (owner, 2026-09-24).
++				//
++				// **One node, globbed on `picode.pi.*`**, and not one node per category: the
++				// categories that were here before pointed at settings the *extension* declared,
++				// and extension settings never reach `tocData` (`settingsEditor2.ts` builds this
++				// tree from core groups only), so every one of those nodes rendered empty. A
++				// glob also means the next pi setting declared in the core lands here without
++				// touching this file again.
++				{
++					id: 'chat/picode',
++					label: localize('chatPicode', "pi"),
++					settings: ['picode.pi.*', 'picode.context.*']
++				},
+ 				{
+ 					id: 'chat/agent',
+ 					label: localize('chatAgent', "Agent"),

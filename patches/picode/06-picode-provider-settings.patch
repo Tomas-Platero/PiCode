@@ -1,9 +1,9 @@
 diff --git a/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
 new file mode 100644
-index 00000000000..14a60080a45
+index 00000000000..5541f9806aa
 --- /dev/null
 +++ b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,116 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -14,35 +14,109 @@ index 00000000000..14a60080a45
 +import { Registry } from '../../../../platform/registry/common/platform.js';
 +
 +/**
-+ * PiCode's provider surface, declared by the core and not by PiCode's own extension.
++ * PiCode's settings, declared by the core and not by PiCode's own extension.
 + *
 + * That is not a stylistic choice. The Settings tree is built by matching `tocData`
 + * (`settingsLayout.ts`) against **core** configuration groups only
 + * (`settingsEditor2.ts`), while an extension's settings are always filed under
 + * `Extensions > <extension name>` by `createTocTreeForExtensionSettings` and never see
-+ * `tocData` at all. So a setting that has to appear inside a core node — like the Chat
-+ * node `patches/picode/04-pi-settings-under-chat.patch` extends — has to be declared here.
++ * `tocData` at all. So a setting that has to appear inside a core node — like the Chat node
++ * `patches/picode/04-pi-settings-under-chat.patch` extends — has to be declared here.
 + *
-+ * The value is PiCode's own record of what was connected, and it is written by the
-+ * extension. It is not a duplicate of anything pi keeps: pi stores the credential in
-+ * `auth.json` and says nothing about which providers the owner connected on purpose. The
-+ * row's description carries the two commands that do the connecting, because a Settings
-+ * row is a value, not a button, and a markdown command link is how the editor puts an
-+ * action in one.
++ * The keys are what decide where each row appears, because the tree matches nodes by key
++ * pattern: `picode.providers` is its own node under Chat (`Settings > Chat > Providers`, the
++ * owner's request) and `picode.pi.*` is the `pi` node beside it, with `picode.context.*` landing
++ * there too through its own glob later if it needs one.
 + */
++export const PICODE_PROVIDERS_SETTING = 'picode.providers';
++
++/** How hard pi thinks, as the setting offers it. `default` leaves pi's own setting alone. */
++export const PICODE_THINKING_LEVEL_SETTING = 'picode.pi.thinkingLevel';
++
++/** Whether the model's thinking is written into the chat. */
++export const PICODE_REASONING_SETTING = 'picode.pi.reasoning';
++
++/** Whether the editor's context travels with every prompt. */
++export const PICODE_CONTEXT_ATTACH_SETTING = 'picode.context.attach';
++
 +Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 +	id: 'picode',
 +	title: 'PiCode',
 +	properties: {
-+		'picode.pi.providers': {
++		[PICODE_PROVIDERS_SETTING]: {
 +			type: 'array',
-+			items: { type: 'string' },
++			items: {
++				type: 'object',
++				required: ['id', 'endpoint'],
++				properties: {
++					id: {
++						type: 'string',
++						description: localize('picode.providers.id', "A short name for this provider, with no spaces (for example omni). The model list shows it in front of every model of this provider."),
++					},
++					endpoint: {
++						type: 'string',
++						description: localize('picode.providers.endpoint', "The provider's address, ending in /v1 when it asks for one."),
++					},
++					api: {
++						type: 'string',
++						enum: ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'],
++						enumDescriptions: [
++							localize('picode.providers.api.openai', "OpenAI (compatible): the usual one."),
++							localize('picode.providers.api.responses', "OpenAI (responses)."),
++							localize('picode.providers.api.anthropic', "Anthropic (messages)."),
++							localize('picode.providers.api.google', "Google (generative AI)."),
++						],
++						description: localize('picode.providers.api.description', "The dialect that endpoint speaks."),
++					},
++					key: {
++						type: 'string',
++						description: localize('picode.providers.key', "The credential, or a `$NAME` that names the environment variable holding it. Leave it empty when the endpoint needs none."),
++					},
++				},
++			},
 +			default: [],
 +			scope: ConfigurationScope.APPLICATION,
 +			markdownDescription: localize(
-+				'picode.pi.providers',
-+				"PiCode's model providers. One line per provider: `id | address | dialect | key`, for example `omni | https://endpoint.example/v1 | openai-completions | $OMNI_KEY`. The dialect defaults to the OpenAI-compatible one and the key may be left out. [Manage providers](command:picode.connectProvider) opens the editor's own provider screen, where the same fields are filled in a form and the key is kept as a secret."
-+			)
-+		}
-+	}
++				'picode.providers',
++				"Model providers for PiCode. Each row is one provider: its name, its address, the dialect it speaks and its key. [Connect a subscription](command:picode.connectProvider) opens the providers pi can log in with your own account (ChatGPT, Claude, Copilot…)."
++			),
++		},
++
++		// pi itself: how hard it thinks, whether its thinking is shown, and whether the editor's
++		// context travels with what he writes. Everything the retired extension had that answered
++		// *which* pi runs, how it is talked to, or what its panel did with voice is deliberately
++		// absent: those questions no longer exist here, and a setting that changes nothing is a
++		// surface that lies.
++		[PICODE_THINKING_LEVEL_SETTING]: {
++			type: 'string',
++			enum: ['default', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
++			enumDescriptions: [
++				localize('picode.pi.thinkingLevel.default', "Whatever pi itself is set to."),
++				localize('picode.pi.thinkingLevel.off', "No thinking at all."),
++				localize('picode.pi.thinkingLevel.minimal', "Barely any thinking: the fastest."),
++				localize('picode.pi.thinkingLevel.low', "A little thinking."),
++				localize('picode.pi.thinkingLevel.medium', "pi's own default."),
++				localize('picode.pi.thinkingLevel.high', "More thinking, for harder work."),
++				localize('picode.pi.thinkingLevel.xhigh', "A lot of thinking. Slow and thorough."),
++				localize('picode.pi.thinkingLevel.max', "As much as the model allows. The slowest."),
++			],
++			default: 'default',
++			markdownDescription: localize('picode.pi.thinkingLevel', "How hard pi thinks before answering. Its own setting is used when this is left alone."),
++		},
++		[PICODE_REASONING_SETTING]: {
++			type: 'string',
++			enum: ['hide', 'show'],
++			enumDescriptions: [
++				localize('picode.pi.reasoning.hide', "Only the answer."),
++				localize('picode.pi.reasoning.show', "The thinking first, quoted above the answer."),
++			],
++			default: 'hide',
++			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
++		},
++		[PICODE_CONTEXT_ATTACH_SETTING]: {
++			type: 'boolean',
++			default: true,
++			markdownDescription: localize('picode.context.attach', "Send the folder, the file you have open and what is selected in it with every message, so \"fix this\" needs no explaining. The selection is capped: pi can read the rest of the file itself when it needs it."),
++		},
++	},
 +});
