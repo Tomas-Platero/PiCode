@@ -18,6 +18,7 @@
 | **La extensión vieja, fuera del producto** | No se compila ni se empaqueta; su material está archivado |
 | **La copia del producto, en inglés** | Traducidas las cadenas del conector, las del ajuste de Proveedores y las del selector de modelos; el editor construido se barrió y no queda copia nuestra en español |
 | **El conector, con casa en git** | Sus ficheros los crea `patches/picode/12-picode-connector.patch`: hasta ahora solo existían dentro de `vscode/`, y cualquier regeneración de parches se los llevaba por delante |
+| **Los proveedores, declarados en los ajustes** | La cadena de cuatro ventanas, borrada; una línea por proveedor con sus campos en la fila de Proveedores, y once comprobaciones ejecutadas contra un endpoint local (la lista, la clave, los ficheros de pi) |
 
 ## Lo que está a medias
 
