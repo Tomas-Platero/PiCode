@@ -335,3 +335,44 @@ against upstream.
 layout moves the product file or the built-in extension scan path, or if a
 required change falls inside minified core. At that point ADR-008's deferred fork
 build becomes the only route, and its toolchain blockers must be revisited.
+
+## ADR-012 — The product's own copy is English; other languages are language packs
+
+**Status:** accepted.
+
+**Context:** The product was written with all of its user-facing copy in Spanish — dialog
+prompts, notifications, command titles, settings descriptions, and the labels the chat shows
+for pi's tools. That made every piece of PiCode's own surface Spanish while the editor it
+lives in stayed English, so a single dialog could come out half in each: the prompt in
+Spanish with VS Code's own `(Press 'Enter' to confirm or 'Escape' to cancel)` appended by the
+platform, untranslatable from the extension because it is not our string.
+
+The owner's correction (2026-09-25): *"todo ha de estar en inglés, tú me hablas en español,
+ya construiremos paquetes de lenguajes para todos los demás idiomas. Pero a priori en
+inglés."*
+
+**Decision:** Every string the product shows is English. Spanish stays where it is the
+conversation rather than the product: what is said to the owner, and the records that are
+his (`AGENTS.md`, `odd/tasks/`). Other languages are reached later by **language packs**,
+which is the editor's own mechanism: a separate layer keyed by localize key over the English
+source text, added without editing the sources.
+
+**Consequences:** The product reads as one language, and a language pack can be added,
+removed or turned off without touching a single source string. The cost accepted: the
+existing Spanish copy had to be translated in the connector, in the settings contribution and
+in the core patches that replace the editor's Copilot wording, and a language pack is now the
+only supported way to get a different language on screen.
+
+**Rejected alternatives:**
+
+- **Shipping the Spanish language pack and setting `locale: es` by default** — measured
+  working (the pack translates 22 052 of this editor's 24 625 messages, including the quick
+  input suffix), and rejected: it makes the whole editor Spanish, which is not a decision
+  this product gets to make for whoever uses it. The pack belongs in a later, opt-in step.
+- **Leaving the copy in Spanish and accepting the mixed dialog** — the mix is not a cosmetic
+  difference: the platform appends its own text to our prompts and no extension can translate
+  or suppress it.
+
+**Reversal trigger:** this decision stops paying for itself if a language pack cannot be
+built or loaded for the platforms PiCode targets — at that point the sources would have to
+carry translations again.

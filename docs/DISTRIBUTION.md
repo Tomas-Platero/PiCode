@@ -8,6 +8,13 @@ by ADR-011, and its full text remains in git history.
 Conventions: **verified** means a repository file, an upstream file, or a read-only
 probe; **measured** means executed on this machine and observed.
 
+> **Note (2026-09-23) — the source path.** There is also a path that compiles PiCode from the
+> VS Code source with VSCodium's model (`docs/howto-build.md`). It is **additive**: this
+> document keeps describing the binary/ZIP path unchanged, which is the one that is
+> published and the one someone uses when they only want to use PiCode. The source path does
+> lift the "minified core" limit of section 3: there the product is applied *before*
+> compiling.
+
 ## 1. What PiCode is on this path
 
 PiCode **owns its editor tree**. The VSCodium archive is extracted at the repository
@@ -81,6 +88,10 @@ product key cannot remove it, because it lives in minified core.
 **Minified core is not patchable on this path.** `product.json` carries a `checksums`
 map over ten bundle files, so editing the bundle would break the integrity check. A
 change that must happen inside core is a fork, not a patch.
+
+> **Note:** this holds for the binary path. On the **source path**
+> (`docs/howto-build.md`) the limit does not exist: the TypeScript is patched before
+> compiling and the `checksums` are computed over the finished product.
 
 ## 4. The portable profile
 

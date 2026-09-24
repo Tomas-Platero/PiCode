@@ -156,10 +156,18 @@ because a passing unit test says nothing about whether the editor loads the resu
 
 ## Language
 
-All user-facing copy is Spanish: the panel, the popup, notifications, command titles and
-setting descriptions. Code, comments, commit messages and the diagnostic output channel
-stay English, because the channel is a developer surface and mixing languages inside one
-log is worse than either choice alone.
+All user-facing copy is **English**: the panel, the popup, notifications, command titles,
+setting descriptions and the labels the chat shows for pi's tools. Code, comments, commit
+messages and the diagnostic output channel stay English as well, because the channel is a
+developer surface and mixing languages inside one log is worse than either choice alone.
+
+The conversation with the owner is **Spanish**, and so are the records that are his —
+`AGENTS.md` (his own words) and the papers in `odd/tasks/`. That is the whole of it: the
+product speaks English, and the person spoken to is Spanish.
+
+Other languages are reached later through **language packs** — a separate layer over the
+shipped text, never a translation of the sources in place. ADR-012 records the change; the
+rule used to be the opposite, and `AGENTS.md` keeps the correction with the owner's words.
 
 ## Non-goals
 

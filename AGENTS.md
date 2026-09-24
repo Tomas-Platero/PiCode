@@ -64,31 +64,70 @@ En la práctica:
 - El pi que corre dentro del editor no es una versión congelada a mano: se actualiza
   **desde el propio editor**, sin editar ficheros ni reinstalar el editor.
 - Su perfil —ajustes, credenciales, modelos, paquetes, skills, **MCPs** y memoria— vive
-  **dentro de PiCode**, no en `~/.pi/agent`. El pi del PATH y el del editor dejan de compartir
-  carpeta: lo que se configure en uno no toca al otro.
-- Si usa el pi propio de PiCode, **todo es propio**: paquetes, skills, MCPs, credenciales y
-  memoria. Nada se lee ni se escribe fuera de PiCode, ni siquiera para consultarlo.
-- Y desde ahí se puede **importar** lo del pi del PATH cuando el dueño lo pida. No se copia
-  solo, y nada se sobreescribe sin decirlo: importar credenciales es una decisión, no un
-  efecto colateral de abrir el editor.
-- **Regla de seguridad, no de estilo**: el perfil interno no se activa si queda sin
-  credenciales. Un perfil propio y vacío deja el editor sin poder hablar con ningún modelo,
-  y eso no es aislamiento, es una avería. Primero se importa —o el dueño decide
-  conscientemente empezar de cero—, y solo después se cambia la carpeta.
+  **dentro de PiCode**.
+- **Nada se lee ni se escribe fuera de PiCode.**
+
+> **Lo que decían antes estas frases ya no es la regla**, y se conservan como registro: «el pi
+> del PATH y el del editor dejan de compartir carpeta», «se puede importar lo del pi del
+> PATH», y la regla de seguridad que activaba el perfil solo con credenciales. Las tres
+> suponían **dos pi**, uno dentro y otro en el PATH. Ver la frase del final de esta sección,
+> que las sustituye.
 
 > "necesito que en la config de modelos también podamos conectar proveedores, y
 > modelos y tal para cualqueir pi ya sea para el interno o el externo."
 
 En la práctica:
 
+> **Superada por la frase del final de la sección.** No hay «instancia elegida»: hay un solo
+> pi, el de PiCode, y su configuración se conecta ahí.
+
 - La configuración de modelos conecta proveedores y declara endpoints y modelos propios
-  (`models.json`) para **la instancia elegida**: el pi propio de PiCode, o el del PATH.
-- Con el **pi del PATH** elegido, escribir en su perfil **es configurar ese pi**, y es lo
-  que el dueño ha pedido. Ese perfil también lo usan los demás pi de la máquina, así que la
-  escritura se anuncia antes: un diálogo dice en qué perfil se va a guardar.
-- Con el **pi propio** elegido se escribe el perfil propio de PiCode, aunque todavía esté
-  vacío: un inicio de sesión existe precisamente para llenarlo, y por eso esa escritura no
-  sigue la guarda que entretanto responde el perfil de la máquina.
+  (`models.json`) **dentro de PiCode**.
+> "Pi vive dentro de PiCode (Vscodium), es el HOST, el que maneja todo, agents, skills, etc.
+> NUNCA vamos a añadir nada del path, yo tengo otro pi aquí para desarrollar esta app, que
+> eres tú cacho cabezón."
+>
+> "Mete esto en el Agents.md olvidate del pi del path"
+
+- **Hay un solo pi: el que vive dentro de PiCode.** Es el **host**: el que maneja todo
+  —agentes, skills, proveedores, memoria—. No hay un segundo pi con el que comparar,
+  elegir ni sincronizar.
+- **Nada se escribe nunca en el pi externo.** Ni configuración, ni credenciales, ni skills,
+  ni sesiones. Esto es lo absoluto, y es lo que las frases de abajo protegen.
+- **Pero conectarse a él sí es una opción que el usuario puede elegir.** PiCode usa su pi
+  integrado por defecto —es el host—, y si alguien quiere, puede **conectarse a un pi
+  externo** (por RPC, por WebSocket o por lo que pi exponga) para usar **sus datos y su
+  configuración**, que viven fuera de PiCode. Conectarse no es copiar: los datos se usan
+  donde están.
+- **Y en un caso puntual, se puede ofrecer migrar** toda la configuración del pi del PATH al
+  interno. Es una **oportunidad que se ofrece**, nunca algo que pasa solo ni por defecto.
+- La diferencia con lo que se retiró es el matiz: no es que esté prohibido mirar fuera, es que
+  **nada sale de PiCode hacia fuera, y nada entra sin que el dueño lo pida**.
+- Consecuencia práctica: lo que se configure **vive en el perfil de PiCode**, y el editor
+  corre su propio pi salvo que el usuario decida otra cosa.
+
+> "lo que si OLVIDATE de una extensión, todo ha de vivir en el núcleo."
+
+- **No hay extensión propia de PiCode, y no la habrá.** Todo vive en el **núcleo del
+  editor**: el chat, los proveedores, los modelos, los ajustes, las habilidades y los
+  agentes. Una extensión al lado es justo lo que hay que evitar, aunque funcione.
+- La superficie que exista es **la del editor**: Chat y Agente. No una pestaña, ni un panel,
+  ni unos ajustes aparte.
+- Consecuencia para cualquier trabajo: si algo hay que construirlo «en la extensión», está
+  mal planteado. La pregunta correcta es dónde va **dentro del núcleo**.
+
+> "y no ha de guardar NADA en el pi externo, si no en el interno, olvidate de la carpeta
+> /.pi/ que hay en tapla"
+
+- **Se escribe siempre en el perfil propio de PiCode, sin excepciones.** Da igual qué pi
+  esté elegido para ejecutar: la carpeta del pi del PATH (`~/.pi/`) **no se toca**, ni para
+  guardar ni para leer. Esto **corrige** lo que decía antes este mismo punto —«con el pi del
+  PATH elegido, escribir en su perfil es configurar ese pi»—: era la decisión de entonces y
+  ya no lo es.
+- **El pi del PATH no lo ejecuta el producto.** Existe para desarrollar PiCode y no es una
+  pieza del editor: el editor corre su propio pi, el del núcleo.
+- Esto refuerza lo de abajo (la nube): la unidad que se sube y se baja es el perfil propio,
+  y un perfil compartido con la máquina no se puede subir ni sobreescribir desde un producto.
 - Las claves de un endpoint se guardan como **variable de entorno** —lo recomendado— o como
   valor; nunca se enseñan de vuelta en pantalla.
 
@@ -150,9 +189,47 @@ En la práctica:
 
 > "En español."
 
+- *(Acotado el 2026-09-25: esto es para **lo que yo le hablo a él** y para los papeles que son
+  suyos. La copia del producto se fue a inglés; ver «El idioma del producto», más abajo.)*
 - Todo lo que el dueño lee —respuestas, paneles, mensajes de la interfaz, este
   fichero— va en español. Quedan en inglés solo las cosas que el proyecto exige así:
   mensajes de commit, comentarios de código e identificadores.
+
+## El idioma del producto
+
+> "NOno a ver todo ha de estar en ingles, tu me hablas en español, ya costruiremos paquete
+> sde lenguajes para todos los demás idiomas. Pero a priori en inglés."
+
+En la práctica:
+
+- **Lo que enseña el producto va en inglés.** Ventanas, avisos, títulos de comandos,
+  descripciones de ajustes y las etiquetas con las que el chat cuenta lo que hacen las
+  herramientas de pi. Una sola lengua en pantalla, y es inglés.
+- **Él y yo seguimos en español**: las respuestas, los reportes y los papeles de
+  `odd/tasks/` y este fichero, que son suyos.
+- **Los demás idiomas vendrán después, como paquetes de idioma.** Traduciendo la capa de
+  encima, nunca las cadenas de origen: así se puede añadir, quitar o apagar un idioma sin
+  tocar el producto. Por eso no se mezclan: una ventana no puede salir medio en un idioma y
+  medio en otro.
+
+## Háblame fácil
+
+> "necesito que me expliques a partir de ahora todo muy sencillo, no necesito nada
+técnico, quiero hablarte y que me hables funcional y fácil."
+
+En la práctica:
+
+- Se cuenta **qué hace y qué cambia para él**, no cómo está hecho por dentro. Nada de
+  nombres de ficheros, de funciones, de tipos ni de siglas internas.
+- Frases cortas y al grano. Si una explicación necesita un esquema para entenderse, está
+  mal contada.
+- Lo técnico **no desaparece: se muda**. Vive en los ficheros de `odd/tasks/`, que siguen
+  llevando el detalle completo. En la conversación solo se dice lo que el dueño necesita
+  para decidir o para saber si funciona.
+- Cuando algo falla se explica **qué significa** —«no se pudo conectar», «falta esto»—, no
+  por qué en términos de código.
+- Los reportes de cierre también van así: cortos, en cristiano, y con lo que falta dicho
+  con la misma claridad que lo que está hecho.
 
 ## Un aviso sobre quién ve qué
 
@@ -173,3 +250,13 @@ En la práctica:
   instancia elegida, con la frase de esta sesión.
 - 2026-09-23 · añadido el punto de elegir el tema del editor desde el catálogo, con la frase
   de esta sesión y la corrección de qué es vscodethemes.com.
+- 2026-09-24 · añadido el punto de hablarle fácil: explicaciones sencillas y funcionales,
+  y el detalle técnico mudado a los ficheros de tareas.
+- 2026-09-24 · **pi vive dentro de PiCode y es el host**. Del pi del PATH no se **escribe**
+  nada nunca; conectarse a él y migrar su configuración sí son **opciones a petición**
+  (aclarado por el dueño).
+- 2026-09-24 · **no hay extensión propia**: todo vive en el núcleo del editor.
+- 2026-09-25 · **el producto habla inglés**. La copia que ve el usuario se traduce del
+  español al inglés; el español queda para lo que yo le hablo a él y para los papeles suyos.
+  Los demás idiomas, más adelante, como paquetes de idioma. Acota el punto «En español»,
+  que hablaba de «mensajes de la interfaz».
