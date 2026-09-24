@@ -1,0 +1,1148 @@
+diff --git a/extensions/picode/.vscodeignore b/extensions/picode/.vscodeignore
+new file mode 100644
+index 00000000000..8ee2b1b9165
+--- /dev/null
++++ b/extensions/picode/.vscodeignore
+@@ -0,0 +1,11 @@
++# What does NOT travel inside the editor.
++#
++# The source is compiled to `out/` by `dev/build-connector.sh` before packing, and the editor
++# only ever loads `out/extension.js`. Shipping the TypeScript as well would put a copy of the
++# source inside every installation for no reader, and would let a stale `.ts` disagree with
++# the `.js` the editor actually runs.
++src/**
++tsconfig.json
++**/*.ts
++**/*.map
++node_modules/**
+diff --git a/extensions/picode/package.json b/extensions/picode/package.json
+new file mode 100644
+index 00000000000..84c0fe78ec3
+--- /dev/null
++++ b/extensions/picode/package.json
+@@ -0,0 +1,94 @@
++{
++  "name": "picode",
++  "publisher": "picode",
++  "displayName": "PiCode",
++  "description": "The bridge between the editor and pi: providers, models and the agent's own runtime.",
++  "version": "1.0.0",
++  "license": "MIT",
++  "engines": {
++    "vscode": "^1.90.0"
++  },
++  "categories": [
++    "Other"
++  ],
++  "main": "./out/extension.js",
++  "capabilities": {
++    "virtualWorkspaces": false,
++    "untrustedWorkspaces": {
++      "supported": true
++    }
++  },
++  "enabledApiProposals": [
++    "defaultChatParticipant",
++    "chatProvider"
++  ],
++  "activationEvents": [
++    "onLanguageModelChatProvider:picode",
++    "onChatParticipant:picode.pi"
++  ],
++  "contributes": {
++    "chatParticipants": [
++      {
++        "id": "picode.pi",
++        "name": "pi",
++        "fullName": "pi",
++        "description": "PiCode's agent: reads and edits your code with your own models.",
++        "isDefault": true,
++        "isSticky": true,
++        "modes": [
++          "ask",
++          "agent",
++          "edit"
++        ]
++      }
++    ],
++    "languageModelChatProviders": [
++      {
++        "vendor": "picode",
++        "displayName": "pi",
++        "configuration": {
++          "properties": {
++            "endpoint": {
++              "type": "string",
++              "description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
++            },
++            "api": {
++              "type": "string",
++              "enum": [
++                "openai-completions",
++                "openai-responses",
++                "anthropic-messages",
++                "google-generative-ai"
++              ],
++              "default": "openai-completions",
++              "description": "The dialect that endpoint speaks."
++            },
++            "apiKey": {
++              "type": "string",
++              "secret": true,
++              "description": "The provider's key. It is stored encrypted and never shown again."
++            },
++            "id": {
++              "type": "string",
++              "description": "A short name for this provider, with no spaces (for example omni)."
++            }
++          }
++        }
++      }
++    ],
++    "commands": [
++      {
++        "command": "picode.connectProvider",
++        "title": "Connect a model provider",
++        "category": "PiCode"
++      }
++    ]
++  },
++  "scripts": {
++    "compile": "gulp compile-extension:picode",
++    "watch": "gulp watch-extension:picode"
++  },
++  "devDependencies": {
++    "@types/node": "24.x"
++  }
++}
+diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
+new file mode 100644
+index 00000000000..9421dcc8bcc
+--- /dev/null
++++ b/extensions/picode/src/agent.ts
+@@ -0,0 +1,203 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as vscode from 'vscode';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { pathToFileURL } from 'node:url';
++
++/**
++ * `@pi` inside the editor's own chat.
++ *
++ * This is what makes the chat exist at all. The editor only shows its chat when it has an
++ * agent to talk to — with Copilot gone and nobody registered, it hides the view. Registering
++ * here supplies that agent, and it is supplied the way this product wants it: **as the
++ * editor's agent**, not as a panel, a tab or a window of our own. Nothing is drawn by this
++ * file; the conversation happens in Chat.
++ *
++ * The owner's requirement behind it is blunt and it is the shape of this module: *"quiero que
++ * esté funcional, no quiero tener yo que configurar más cosas más allá del proveedor"*. So
++ * nothing here asks the owner anything. It finds pi by itself, opens a session by itself, and
++ * the only thing the owner ever fills in is which provider to talk to.
++ */
++
++/** The participant's id. It is the agent id the editor routes to. */
++export const PI_PARTICIPANT = 'picode.pi';
++
++/**
++ * The pi types this module calls, typed structurally.
++ *
++ * pi is loaded at runtime and is not a dependency of the editor's build, exactly as
++ * `piSession` does it on the core side: only the handful of members actually used are
++ * declared, so the build carries no dependency it would have to lock.
++ */
++interface PiDelta {
++	readonly type: string;
++	readonly contentIndex?: number;
++	readonly delta?: string;
++}
++
++interface PiEvent {
++	readonly type: string;
++	readonly message?: { readonly role?: unknown; readonly errorMessage?: unknown };
++	readonly assistantMessageEvent?: PiDelta;
++	readonly toolName?: string;
++}
++
++interface PiSession {
++	readonly sessionId: string;
++	readonly isStreaming: boolean;
++	prompt(text: string): Promise<void>;
++	abort(): Promise<void>;
++	subscribe(listener: (event: PiEvent) => void): () => void;
++	dispose(): void;
++}
++
++interface PiSdk {
++	createAgentSession(options: { cwd: string; agentDir?: string }): Promise<{ session: PiSession }>;
++}
++
++/* ------------------------------------------------------------------ *
++ * Finding pi, without asking anybody
++ * ------------------------------------------------------------------ */
++
++/** The candidate places pi can live, most-PiCode-first. */
++function sdkCandidates(distributionRoot: string): string[] {
++	return [
++		// PiCode's own runtime, where it installs its pinned pi.
++		path.join(distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'index.js'),
++		// A pi already present for this machine. Not the product's own profile — only the
++		// code — so nothing of the owner's configuration is read or written from here.
++		path.join(distributionRoot, 'resources', 'app', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'index.js'),
++	];
++}
++
++function firstExisting(candidates: readonly string[]): string | undefined {
++	return candidates.find(candidate => {
++		try {
++			return fs.statSync(candidate).isFile();
++		} catch {
++			return false;
++		}
++	});
++}
++
++async function loadSdk(distributionRoot: string): Promise<PiSdk | undefined> {
++	const entry = firstExisting(sdkCandidates(distributionRoot));
++	if (entry === undefined) {
++		return undefined;
++	}
++	try {
++		const loaded = (await import(pathToFileURL(entry).href)) as Partial<PiSdk>;
++		return typeof loaded.createAgentSession === 'function' ? (loaded as PiSdk) : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++/* ------------------------------------------------------------------ *
++ * The turn, as the editor's chat wants it
++ * ------------------------------------------------------------------ */
++
++/**
++ * Answers one request by running one pi turn.
++ *
++ * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about
++ * to retry, and not `prompt()` resolving, which only means the order was accepted.
++ */
++async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<void> {
++	await new Promise<void>((resolve, reject) => {
++		let settled = false;
++		const subscription = session.subscribe(event => {
++			if (event.type === 'message_update') {
++				const delta = event.assistantMessageEvent;
++				if (delta?.type === 'text_delta' && typeof delta.delta === 'string') {
++					stream.markdown(delta.delta);
++				}
++				return;
++			}
++			if (event.type === 'tool_execution_start' && typeof event.toolName === 'string') {
++				stream.progress(event.toolName);
++				return;
++			}
++			if (event.type === 'message_end') {
++				const message = event.message;
++				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
++					stream.markdown(`\n\n> PiCode: ${message.errorMessage}\n`);
++				}
++				return;
++			}
++			if (event.type === 'agent_settled' && !settled) {
++				settled = true;
++				// What `subscribe` returns is the unsubscribe function itself, not a disposable.
++				subscription();
++				resolve();
++			}
++		});
++
++		const cancellation = token.onCancellationRequested(() => {
++			// Cancelling at pi is what makes the turn end; a host-side timeout would invent an
++			// ending pi never had.
++			void session.abort().catch(() => undefined);
++		});
++
++		session.prompt(prompt).catch(reject);
++		void cancellation;
++	});
++}
++
++/* ------------------------------------------------------------------ *
++ * Registration
++ * ------------------------------------------------------------------ */
++
++export interface AgentDeps {
++	/** The distribution root, so pi and the profile can be found without configuration. */
++	readonly distributionRoot: string;
++	/** PiCode's own profile. Nothing outside it is ever read or written. */
++	readonly profileDir: string;
++	readonly log: (line: string) => void;
++}
++
++/**
++ * Registers `@pi` and returns the participant.
++ *
++ * A single session is kept for the workspace: pi binds a session to a working directory, and
++ * the editor's chat is one conversation in one place.
++ */
++export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
++	let session: PiSession | undefined;
++
++	const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
++		const sdk = await loadSdk(deps.distributionRoot);
++		if (sdk === undefined) {
++			stream.markdown('PiCode: this editor has no pi to talk to. Reinstall it so the agent can answer.');
++			return {};
++		}
++
++		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
++		try {
++			if (session === undefined) {
++				const created = await sdk.createAgentSession({ cwd, agentDir: deps.profileDir });
++				session = created.session;
++			}
++			await runTurn(session, request.prompt, stream, token);
++		} catch (error) {
++			const message = error instanceof Error ? error.message : String(error);
++			deps.log(`turn failed: ${message}`);
++			stream.markdown(`\n\n> PiCode: ${message}\n`);
++		}
++		return {};
++	};
++
++	const participant = vscode.chat.createChatParticipant(PI_PARTICIPANT, handler);
++	context.subscriptions.push(
++		participant,
++		new vscode.Disposable(() => {
++			session?.dispose();
++			session = undefined;
++		}),
++	);
++	return participant;
++}
+diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
+new file mode 100644
+index 00000000000..04e6621bf68
+--- /dev/null
++++ b/extensions/picode/src/extension.ts
+@@ -0,0 +1,428 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as vscode from 'vscode';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import {
++	CONNECT_PROVIDER_COMMAND,
++	connectProvider,
++	modelsForConfiguration,
++	readConfiguration,
++	type ProviderConfiguration,
++} from './providers';
++import { registerPiAgent } from './agent';
++
++/**
++ * PiCode's bridge, living **inside the core**.
++ *
++ * ## Why this is an extension at all, and why that is not a contradiction
++ *
++ * The rule is that PiCode has no extension of its own — no surface beside the editor. This
++ * is not that: everything under `vscode/extensions/` **is** the core. These extensions are
++ * compiled with the editor, ship inside the binary, and are how VS Code itself puts
++ * anything that needs Node in its place (`git`, `github-authentication`, …).
++ *
++ * That is the problem this file solves. The workbench renderer has no Node, so it cannot
++ * read pi's profile or call a provider's API; the extension host has Node and is part of the
++ * build. So the *runtime* side of pi lives here, while every **surface** stays in Chat.
++ *
++ * ## What this first piece does
++ *
++ * It makes **pi's models appear in the editor's own model list** — the window that until now
++ * only knew about Copilot's. The models come from the profile PiCode owns (`models.json`),
++ * which is where the provider the owner connected (their router, with its 163 models) wrote
++ * them.
++ *
++ * It does not draw anything: no panel, no tab, no settings of its own.
++ */
++
++/** The vendor this extension registers with the editor. */
++const VENDOR = 'picode';
++
++/* ------------------------------------------------------------------ *
++ * Where pi's profile is
++ * ------------------------------------------------------------------ */
++
++/**
++ * PiCode's own profile directory.
++ *
++ * Derived from this extension's location rather than configured, because there is only one
++ * answer and a wrong one would read somebody else's models: the extension lives at
++ * `<root>/resources/app/extensions/picode`, so four levels up is the distribution, and the
++ * profile is `<root>/data/pi-agent` — the same directory `instance.ts` resolves for the
++ * host. **Nothing outside PiCode is ever read.**
++ */
++/** The distribution root: four levels up from `resources/app/extensions/picode`. */
++function distributionRoot(extensionUri: vscode.Uri): string {
++	return path.resolve(extensionUri.fsPath, '..', '..', '..', '..');
++}
++
++function profileDirectory(extensionUri: vscode.Uri): string {
++	return path.join(distributionRoot(extensionUri), 'data', 'pi-agent');
++}
++
++/* ------------------------------------------------------------------ *
++ * pi's models, as the editor needs to see them
++ * ------------------------------------------------------------------ */
++
++/** One model as pi's `models.json` declares it. */
++interface PiModelEntry {
++	readonly id: string;
++	readonly name?: string;
++	readonly contextWindow?: number;
++	readonly maxTokens?: number;
++	readonly reasoning?: boolean;
++}
++
++/** One provider as pi's `models.json` declares it. */
++interface PiProviderEntry {
++	readonly baseUrl?: string;
++	readonly api?: string;
++	readonly apiKey?: string;
++	readonly models?: readonly PiModelEntry[];
++}
++
++interface PiModelsFile {
++	readonly providers?: Record<string, PiProviderEntry>;
++}
++
++function readModelsFile(profile: string): PiModelsFile | undefined {
++	try {
++		const text = fs.readFileSync(path.join(profile, 'models.json'), 'utf8');
++		const parsed: unknown = JSON.parse(text);
++		return typeof parsed === 'object' && parsed !== null ? (parsed as PiModelsFile) : undefined;
++	} catch {
++		// A missing or broken file is "no models", not a crash: the first run has no file at
++		// all, and the editor asks for models before anybody has connected anything.
++		return undefined;
++	}
++}
++
++/**
++ * pi's models, in the shape the editor's model list wants.
++ *
++ * The id is qualified with the provider (`omni/anthropic/claude-sonnet-4`) because two
++ * providers can offer the same model name, and the response call has to know which one to
++ * reach. `family` is what the editor groups by, so it carries the provider too.
++ */
++function toChatInformation(models: PiModelsFile): vscode.LanguageModelChatInformation[] {
++	const out: vscode.LanguageModelChatInformation[] = [];
++	for (const [providerId, provider] of Object.entries(models.providers ?? {})) {
++		for (const model of provider.models ?? []) {
++			if (typeof model.id !== 'string' || model.id.length === 0) {
++				continue;
++			}
++			out.push({
++				id: `${providerId}/${model.id}`,
++				name: model.name ?? model.id,
++				family: providerId,
++				version: '1',
++				// pi's own defaults when the entry does not say, so the editor's budget is never
++				// zero — a zero budget is read as "cannot be used".
++				maxInputTokens: model.contextWindow ?? 128000,
++				maxOutputTokens: model.maxTokens ?? 16384,
++				detail: providerId,
++				capabilities: { toolCalling: true },
++			});
++		}
++	}
++	return out;
++}
++
++/* ------------------------------------------------------------------ *
++ * The provider
++ * ------------------------------------------------------------------ */
++
++/**
++ * Splits a qualified id back into the provider and the model.
++ *
++ * Only the first segment is the provider: model ids contain slashes themselves
++ * (`anthropic/claude-sonnet-4` inside the `omni` provider).
++ */
++function splitId(qualified: string): { providerId: string; modelId: string } {
++	const cut = qualified.indexOf('/');
++	return cut === -1
++		? { providerId: '', modelId: qualified }
++		: { providerId: qualified.slice(0, cut), modelId: qualified.slice(cut + 1) };
++}
++
++const provider: vscode.LanguageModelChatProvider = {
++	async provideLanguageModelChatInformation(options, _token) {
++		// The provider's own configuration first: it is what the owner fills in the editor's own
++		// settings, and the only surface they should have to touch. Declared in the manifest,
++		// rendered by the editor, with the key stored as a secret.
++		const configured = readConfiguration(options.configuration);
++		if (configured.endpoint !== undefined) {
++			lastConfiguration = configured;
++			return modelsForConfiguration(configured);
++		}
++
++		// Otherwise, whatever the connecting command wrote into PiCode's own profile. That path
++		// is kept so an already-connected provider does not stop working.
++		const models = readModelsFile(profileDirectory(requireProfileUri()));
++		return models === undefined ? [] : toChatInformation(models);
++	},
++
++	/**
++	 * How many tokens a piece of text is worth, for the editor's context budget.
++	 *
++	 * An **estimate**, and said as such: the real count needs the provider's own tokeniser,
++	 * which none of these endpoints exposes, and pi reports its own real usage after every
++	 * turn anyway. Four characters per token is the usual rule of thumb, and it errs on the
++	 * safe side for the one thing this number decides — how much room is left. It is never
++	 * shown to the owner as a fact.
++	 */
++	provideTokenCount(_model, text, _token): Thenable<number> {
++		let length = 0;
++		if (typeof text === 'string') {
++			length = text.length;
++		} else {
++			length = text.content.reduce<number>(
++				(sum, part) => sum + (part instanceof vscode.LanguageModelTextPart ? part.value.length : 0),
++				0,
++			);
++		}
++		return Promise.resolve(Math.ceil(length / 4));
++	},
++
++	async provideLanguageModelChatResponse(model, messages, _options, progress, token) {
++		// The configured provider, when there is one, is the whole answer: it was set in the
++		// editor's settings and it is the one the model list came from.
++		if (lastConfiguration?.endpoint !== undefined) {
++			const { modelId: configuredModel } = splitId(model.id);
++			return sendToEndpoint(
++				lastConfiguration.endpoint,
++				lastConfiguration.api ?? 'openai-completions',
++				lastConfiguration.apiKey,
++				configuredModel,
++				messages,
++				progress,
++				token,
++			);
++		}
++
++		const models = readModelsFile(profileDirectory(requireProfileUri()));
++		const { providerId, modelId } = splitId(model.id);
++		const entry = models?.providers?.[providerId];
++		if (entry === undefined || typeof entry.baseUrl !== 'string') {
++			throw new Error(
++				`Model ${model.id} points at a provider that is not declared in PiCode's profile.`,
++			);
++		}
++
++		// The key is kept in `auth.json` for providers connected through pi's own login, and
++		// in `models.json` for an endpoint declared by hand. Both are read; the value never
++		// leaves this process and is never shown.
++		return sendToEndpoint(
++			entry.baseUrl,
++			entry.api,
++			resolveApiKey(entry, providerId),
++			modelId,
++			messages,
++			progress,
++			token,
++		);
++	},
++};
++
++/**
++ * Sends one request to an endpoint and streams the answer back.
++ *
++ * Shared by the two ways a provider can be known — the editor's own configuration and the
++ * `models.json` the connecting command writes — because the request is the same HTTP call in
++ * both cases and a second copy of it would be a second place to keep right.
++ */
++async function sendToEndpoint(
++	baseUrl: string,
++	api: string | undefined,
++	apiKey: string | undefined,
++	modelId: string,
++	messages: readonly vscode.LanguageModelChatRequestMessage[],
++	progress: vscode.Progress<vscode.LanguageModelResponsePart>,
++	token: vscode.CancellationToken,
++): Promise<void> {
++	const body = buildRequestBody(api, modelId, messages);
++	const url = `${baseUrl.replace(/\/$/, '')}${api === 'openai-responses' ? '/responses' : '/chat/completions'}`;
++
++	const response = await fetch(url, {
++		method: 'POST',
++		headers: {
++			'content-type': 'application/json',
++			...(apiKey === undefined || apiKey.length === 0 ? {} : { authorization: `Bearer ${apiKey}` }),
++		},
++		body: JSON.stringify(body),
++		// Cancelling the editor's request has to cancel the one in flight; otherwise the answer
++		// keeps arriving for a question nobody is waiting for any more.
++		signal: token.isCancellationRequested ? AbortSignal.abort() : undefined,
++	});
++
++	if (!response.ok || response.body === null) {
++		throw new Error(`the provider answered ${response.status}`);
++	}
++
++	await streamInto(response.body, api, progress, token);
++}
++
++/** How a provider's key is found: the entry's own, or the profile's `auth.json`. */
++function resolveApiKey(entry: PiProviderEntry, providerId: string): string | undefined {
++	const declared = entry.apiKey;
++	if (typeof declared === 'string' && declared.length > 0) {
++		// pi's forms: a literal, `$NAME` for an environment variable, or `!command`.
++		if (declared.startsWith('$')) {
++			return process.env[declared.slice(1).replace(/^\{|\}$/g, '')];
++		}
++		if (!declared.startsWith('!')) {
++			return declared;
++		}
++	}
++	try {
++		const file = path.join(profileDirectory(requireProfileUri()), 'auth.json');
++		const auth: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
++		const record =
++			typeof auth === 'object' && auth !== null
++				? (auth as Record<string, { key?: unknown }>)[providerId]
++				: undefined;
++		return typeof record?.key === 'string' ? record.key : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++/** The request body, in the dialect the provider declares. */
++function buildRequestBody(api: string | undefined, modelId: string, messages: readonly vscode.LanguageModelChatRequestMessage[]): unknown {
++	const converted = messages.map(message => ({
++		role: message.role === vscode.LanguageModelChatMessageRole.User ? 'user' : 'assistant',
++		content: message.content
++			.map(part => (part instanceof vscode.LanguageModelTextPart ? part.value : ''))
++			.join(''),
++	}));
++	// The two shapes the editor's own providers use; anything else is sent as chat
++	// completions, which is what a compatible endpoint expects by default.
++	return api === 'openai-responses'
++		? { model: modelId, input: converted, stream: true }
++		: { model: modelId, messages: converted, stream: true };
++}
++
++/**
++ * Reads the provider's stream and forwards the text as it arrives.
++ *
++ * Server-sent events: lines beginning `data:` carry a JSON object, and `[DONE]` ends it. The
++ * two dialects differ only in which field holds the text, so they are handled together
++ * instead of duplicating the whole loop.
++ */
++async function streamInto(
++	body: ReadableStream<Uint8Array>,
++	api: string | undefined,
++	progress: vscode.Progress<vscode.LanguageModelResponsePart>,
++	token: vscode.CancellationToken,
++): Promise<void> {
++	const reader = body.getReader();
++	const decoder = new TextDecoder();
++	let buffer = '';
++	while (!token.isCancellationRequested) {
++		const chunk = await reader.read();
++		if (chunk.done) {
++			break;
++		}
++		buffer += decoder.decode(chunk.value, { stream: true });
++		const lines = buffer.split('\n');
++		buffer = lines.pop() ?? '';
++		for (const line of lines) {
++			const trimmed = line.trim();
++			if (!trimmed.startsWith('data:')) {
++				continue;
++			}
++			const payload = trimmed.slice(5).trim();
++			if (payload === '[DONE]') {
++				return;
++			}
++			const text = extractText(payload, api);
++			if (text !== undefined && text.length > 0) {
++				progress.report(new vscode.LanguageModelTextPart(text));
++			}
++		}
++	}
++}
++
++/** Where each dialect puts the text of one streamed event. */
++function extractText(payload: string, api: string | undefined): string | undefined {
++	let event: any;
++	try {
++		event = JSON.parse(payload);
++	} catch {
++		return undefined;
++	}
++	if (api === 'openai-responses') {
++		// `response.output_text.delta`; every other event type is ignored on purpose.
++		return event?.type === 'response.output_text.delta' && typeof event.delta === 'string'
++			? event.delta
++			: undefined;
++	}
++	return typeof event?.choices?.[0]?.delta?.content === 'string' ? event.choices[0].delta.content : undefined;
++}
++
++/* ------------------------------------------------------------------ *
++ * Activation
++ * ------------------------------------------------------------------ */
++
++/**
++ * This extension's own location, resolved once at activation.
++ *
++ * Module state on purpose: the provider's methods are called by the editor with no context
++ * of ours, and resolving the path on every model listing would be a filesystem walk per
++ * keystroke in the picker.
++ */
++let profileUri: vscode.Uri | undefined;
++
++/**
++ * The provider the owner configured in the editor's own settings, kept from the last time the
++ * editor asked for models.
++ *
++ * Kept because the request that follows carries the model but not the configuration: the
++ * editor asks for the model list first and then sends into one of those models, so the
++ * configuration read at listing time is the one that belongs to the request.
++ */
++let lastConfiguration: ProviderConfiguration | undefined;
++
++/**
++ * That location, or a refusal.
++ *
++ * Read through a function so an early call — the editor can ask for models before
++ * activation has run — fails with a sentence instead of dereferencing nothing.
++ */
++function requireProfileUri(): vscode.Uri {
++	if (profileUri === undefined) {
++		throw new Error('PiCode: the connector has not activated yet, so it does not know where pi\'s profile is.');
++	}
++	return profileUri;
++}
++
++export function activate(context: vscode.ExtensionContext): void {
++	profileUri = context.extensionUri;
++	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
++
++	// `@pi` in the editor's own chat. This is what makes the chat exist: the editor hides its
++	// chat when there is no agent to talk to, and this supplies one — the editor's agent, not a
++	// surface of ours. Nothing to configure: it finds pi and its profile by itself.
++	registerPiAgent(context, {
++		distributionRoot: distributionRoot(context.extensionUri),
++		profileDir: profileDirectory(context.extensionUri),
++		log: line => console.error(`[pi] ${line}`),
++	});
++
++	// Connecting a provider writes into PiCode's own profile. It is a command and not a
++	// surface: the dialogs it uses are the editor's, and the settings row under Chat links
++	// here instead of owning a form of its own.
++	context.subscriptions.push(
++		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>
++			connectProvider(profileDirectory(requireProfileUri())),
++		),
++	);
++}
++
++export function deactivate(): void {
++	// The provider is registered as a subscription and released with it.
++}
+diff --git a/extensions/picode/src/providers.ts b/extensions/picode/src/providers.ts
+new file mode 100644
+index 00000000000..59ab15f9d86
+--- /dev/null
++++ b/extensions/picode/src/providers.ts
+@@ -0,0 +1,350 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as vscode from 'vscode';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++
++/**
++ * Connecting a model provider **into PiCode's own profile**.
++ *
++ * This is the owner's chosen road: PiCode's pi is the one that connects, and what it
++ * connects is kept in PiCode's own profile (`data/pi-agent`). Nothing is written to the
++ * machine's pi, ever.
++ *
++ * The flow is the editor's own dialogs — the picker, the input boxes — and this module draws
++ * nothing of its own: no panel, no tab, no settings page. The editor's chat is the surface,
++ * and this is the machinery behind it.
++ *
++ * ## Why the models are fetched instead of typed
++ *
++ * An endpoint like a router answers with its own list at `GET <baseUrl>/models`. Asking the
++ * owner to type 163 model ids by hand would be absurd, and asking them to remember which ones
++ * exist would be worse: the endpoint knows, so the endpoint is asked. If it does not answer,
++ * the flow says so and offers to write the provider anyway with no models, rather than
++ * inventing a list.
++ */
++
++export const CONNECT_PROVIDER_COMMAND = 'picode.connectProvider';
++
++/** The vendor pi and the editor both use for this product. */
++const VENDOR = 'picode';
++
++/* ------------------------------------------------------------------ *
++ * The shapes that get written
++ * ------------------------------------------------------------------ */
++
++/** One provider as pi's `models.json` declares it. */
++export interface ProviderDraft {
++	readonly id: string;
++	readonly baseUrl: string;
++	readonly api: string;
++	/**
++	 * Where the key is read from when it is not in `auth.json`.
++	 *
++	 * Left **unset** by the connect flow on purpose. pi's own documentation is explicit: "Omit
++	 * it when auth is provided by `/login`/`auth.json`" — and the key this flow collects goes
++	 * to `auth.json`, which pi consults before this field. Writing a `$NAME` here as well would
++	 * point at an environment variable nobody set, and would be read only if the credential
++	 * were missing.
++	 */
++	readonly apiKey?: string;
++	/**
++	 * Tells pi to send `Authorization: Bearer <key>`.
++	 *
++	 * Documented as the switch that makes the header appear, so a provider whose key was given
++	 * sets it: without it, pi has a credential and does not present it, and the endpoint
++	 * answers 401 while everything looks configured.
++	 */
++	readonly authHeader?: boolean;
++}
++
++/** One model as pi's `models.json` declares it. */
++export interface ModelDraft {
++	readonly id: string;
++	readonly name?: string;
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++	return typeof value === 'object' && value !== null && !Array.isArray(value);
++}
++
++/**
++ * The model ids an OpenAI-compatible endpoint answers with.
++ *
++ * Two shapes are accepted because both are found in the wild and neither is wrong: the
++ * documented `{ data: [{ id }] }` and a plain `{ models: [{ id }] }`. Anything else yields an
++ * empty list rather than a guess — a made-up model id would be a row in the editor that fails
++ * the moment it is used.
++ */
++export function parseModelIds(payload: unknown): string[] {
++	const list = isRecord(payload)
++		? Array.isArray(payload.data)
++			? payload.data
++			: Array.isArray(payload.models)
++				? payload.models
++				: undefined
++		: undefined;
++	if (list === undefined) {
++		return [];
++	}
++	const ids: string[] = [];
++	for (const entry of list) {
++		const id = typeof entry === 'string' ? entry : isRecord(entry) ? entry.id : undefined;
++		if (typeof id === 'string' && id.length > 0) {
++			ids.push(id);
++		}
++	}
++	// Sorted and deduplicated, so the file does not depend on the endpoint's mood.
++	return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
++}
++
++/**
++ * `models.json` with this provider written into it, keeping every other provider.
++ *
++ * A merge and not a replacement: the owner may have several connected, and rewriting the file
++ * from one form would silently drop the rest. An existing entry for the same id is replaced,
++ * because that is what "connect this provider" means when it is already there.
++ */
++export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models: readonly ModelDraft[]): Record<string, unknown> {
++	const root = isRecord(existing) ? { ...existing } : {};
++	const providers = isRecord(root.providers) ? { ...root.providers } : {};
++	providers[draft.id] = {
++		baseUrl: draft.baseUrl,
++		api: draft.api,
++		...(draft.apiKey === undefined || draft.apiKey.length === 0 ? {} : { apiKey: draft.apiKey }),
++		...(draft.authHeader === true ? { authHeader: true } : {}),
++		models: models.map(model => ({ id: model.id, ...(model.name === undefined ? {} : { name: model.name }) })),
++	};
++	root.providers = providers;
++	return root;
++}
++
++/**
++ * `auth.json` with this provider's key stored, keeping every other credential.
++ *
++ * pi's own shape for an API key: `{ "<provider>": { type: "api_key", key } }`. The key is
++ * written **here** rather than in `models.json` when the owner gave one, because that is the
++ * file pi keeps credentials in and the one it can rotate without touching the model list.
++ */
++export function authFileWith(existing: unknown, providerId: string, key: string): Record<string, unknown> {
++	const root = isRecord(existing) ? { ...existing } : {};
++	root[providerId] = { type: 'api_key', key };
++	return root;
++}
++
++/* ------------------------------------------------------------------ *
++ * Reading and writing the profile
++ * ------------------------------------------------------------------ */
++
++function readJson(file: string): unknown {
++	try {
++		return JSON.parse(fs.readFileSync(file, 'utf8'));
++	} catch {
++		// Missing or broken means "nothing there yet", which is the first run's answer and not
++		// an error worth stopping for.
++		return undefined;
++	}
++}
++
++function writeJson(file: string, value: unknown): void {
++	fs.mkdirSync(path.dirname(file), { recursive: true });
++	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
++}
++
++/* ------------------------------------------------------------------ *
++ * The editor's own configuration
++ * ------------------------------------------------------------------ */
++
++/**
++ * What the owner fills in, in the editor's own configuration for this provider.
++ *
++ * This is the surface the owner asked for: the fields are **declared in the contribution**
++ * and the editor renders them itself — with the key marked as a secret, so it is stored
++ * encrypted and never shown back. No dialog of ours is involved.
++ */
++export interface ProviderConfiguration {
++	readonly id?: string;
++	readonly endpoint?: string;
++	readonly api?: string;
++	readonly apiKey?: string;
++}
++
++/** The declared fields, read defensively: these values are typed by a person. */
++export function readConfiguration(raw: unknown): ProviderConfiguration {
++	if (!isRecord(raw)) {
++		return {};
++	}
++	const text = (key: string): string | undefined => {
++		const value = raw[key];
++		return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
++	};
++	return {
++		...(text('id') === undefined ? {} : { id: text('id') }),
++		...(text('endpoint') === undefined ? {} : { endpoint: text('endpoint') }),
++		...(text('api') === undefined ? {} : { api: text('api') }),
++		...(text('apiKey') === undefined ? {} : { apiKey: text('apiKey') }),
++	};
++}
++
++/**
++ * The models the configured endpoint answers with, in the editor's model shape.
++ *
++ * The configured provider comes first and is the one that matters: when the endpoint is set
++ * there, the models are read from **it**. `models.json` is only consulted for the providers
++ * written by the connection command, so that path keeps working while this one replaces it.
++ */
++export async function modelsForConfiguration(config: ProviderConfiguration): Promise<vscode.LanguageModelChatInformation[]> {
++	if (config.endpoint === undefined) {
++		return [];
++	}
++	const id = config.id ?? 'pi';
++	const ids = (await fetchModelIds(config.endpoint, config.apiKey)) ?? [];
++	return ids.map(model => ({
++		id: `${id}/${model}`,
++		name: model,
++		family: id,
++		version: '1',
++		maxInputTokens: 128000,
++		maxOutputTokens: 16384,
++		detail: id,
++		capabilities: { toolCalling: true },
++	}));
++}
++
++/* ------------------------------------------------------------------ *
++ * The flow
++ * ------------------------------------------------------------------ */
++
++/** The dialects the editor can send and pi can speak; the first is the common one. */
++const DIALECTS: readonly { readonly label: string; readonly value: string }[] = [
++	{ label: 'OpenAI (compatible): the usual one', value: 'openai-completions' },
++	{ label: 'OpenAI (responses)', value: 'openai-responses' },
++	{ label: 'Anthropic (messages)', value: 'anthropic-messages' },
++	{ label: 'Google (generative AI)', value: 'google-generative-ai' },
++];
++
++/**
++ * Asks the endpoint for its own model list.
++ *
++ * A failure is returned as `undefined` and never thrown at the caller: an endpoint that does
++ * not answer is a fact to tell the owner about, not a reason to abort a connection they may
++ * still want.
++ */
++async function fetchModelIds(baseUrl: string, apiKey: string | undefined): Promise<string[] | undefined> {
++	try {
++		const response = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
++			headers: apiKey === undefined || apiKey.length === 0 ? {} : { authorization: `Bearer ${apiKey}` },
++		});
++		if (!response.ok) {
++			return undefined;
++		}
++		return parseModelIds(await response.json());
++	} catch {
++		return undefined;
++	}
++}
++
++/**
++ * The command: connects one provider into PiCode's own profile.
++ *
++ * Every step is a dialog the editor already has, and every answer is used as given. The
++ * profile directory is passed in rather than resolved here, so there is exactly one place
++ * that decides where PiCode's profile is.
++ */
++export async function connectProvider(profileDir: string): Promise<void> {
++	const id = await vscode.window.showInputBox({
++		title: 'PiCode: connect a model provider',
++		prompt: 'A short name for this provider, with no spaces (for example `omni`).',
++		placeHolder: 'omni',
++		validateInput: value => (/^[a-z0-9][a-z0-9-]*$/i.test(value.trim()) ? undefined : 'Letters, numbers and hyphens only.'),
++	});
++	if (id === undefined || id.trim().length === 0) {
++		return;
++	}
++
++	const baseUrl = await vscode.window.showInputBox({
++		title: `PiCode: ${id.trim()}`,
++		prompt: 'The endpoint address, ending in `/v1` when the provider asks for one.',
++		placeHolder: 'https://openrouter.ai/api/v1',
++		validateInput: value => (/^https?:\/\/\S+$/.test(value.trim()) ? undefined : 'It has to start with http:// or https://'),
++	});
++	if (baseUrl === undefined || baseUrl.trim().length === 0) {
++		return;
++	}
++
++	const dialect = await vscode.window.showQuickPick([...DIALECTS], {
++		title: `PiCode: ${id.trim()}`,
++		placeHolder: 'Which dialect does this endpoint speak?',
++	});
++	if (dialect === undefined) {
++		return;
++	}
++
++	const apiKey = await vscode.window.showInputBox({
++		title: `PiCode: ${id.trim()}`,
++		prompt: 'The provider key. It is stored in PiCode\'s own profile, never outside it. Leave it empty when none is needed.',
++		password: true,
++	});
++
++	const trimmedKey = (apiKey ?? '').trim();
++	// The models are **asked of the endpoint**, never typed by hand: an endpoint that answers
++	// knows its own catalogue and the owner does not, and a hand-written list is stale the day
++	// the provider adds a model. If it does not answer, nothing is written at all — a provider
++	// saved with no models is a configuration that looks connected and can use nothing.
++	const models = await vscode.window.withProgress(
++		// Wording matters here: this is PiCode reading a list, not a form. "Asking X which models it
++		// has" was read as a question aimed at the owner, which is exactly what this flow exists to
++		// stop asking.
++		{ location: vscode.ProgressLocation.Notification, title: `PiCode: reading ${id.trim()}'s model list…` },
++		async () => fetchModelIds(baseUrl.trim(), trimmedKey === '' ? undefined : trimmedKey),
++	);
++
++	if (models === undefined) {
++		void vscode.window.showErrorMessage(
++			`PiCode: ${id.trim()} did not answer with its model list at ${baseUrl.trim().replace(/\/$/, '')}/models, so nothing was saved. ` +
++				'Check the address (many providers want it ending in `/v1`) and, when a key is needed, that it is the right one.',
++		);
++		return;
++	}
++
++	const hasKey = trimmedKey !== '';
++
++	// The provider entry, with **no `apiKey`**: pi's documentation says to omit it when the
++	// credential lives in `auth.json`, which is where the next step puts it. `authHeader` is
++	// set when there is a key, because it is the documented switch that makes pi present it.
++	const modelsFile = path.join(profileDir, 'models.json');
++	writeJson(
++		modelsFile,
++		mergeModelsFile(
++			readJson(modelsFile),
++			{
++				id: id.trim(),
++				baseUrl: baseUrl.trim(),
++				api: dialect.value,
++				...(hasKey ? { authHeader: true } : {}),
++			},
++			models.map(model => ({ id: model })),
++		),
++	);
++
++	// The key goes to `auth.json`, the file pi keeps credentials in and the one it reads before
++	// any other source. Nothing is written outside PiCode's own profile.
++	if (hasKey) {
++		const authFile = path.join(profileDir, 'auth.json');
++		writeJson(authFile, authFileWith(readJson(authFile), id.trim(), trimmedKey));
++	}
++
++	const reload = await vscode.window.showInformationMessage(
++		`PiCode: ${id.trim()} connected with ${models.length} model(s).`,
++		'Reload Window',
++	);
++	if (reload === 'Reload Window') {
++		await vscode.commands.executeCommand('workbench.action.reloadWindow');
++	}
++}
++
++/** The vendor the editor's model list groups these under. */
++export { VENDOR };
+diff --git a/extensions/picode/tsconfig.json b/extensions/picode/tsconfig.json
+new file mode 100644
+index 00000000000..9b165c84a4b
+--- /dev/null
++++ b/extensions/picode/tsconfig.json
+@@ -0,0 +1,26 @@
++{
++	"extends": "../tsconfig.base.json",
++	"compilerOptions": {
++		"rootDir": "./src",
++		"outDir": "./out",
++		"types": [
++			"node"
++		],
++		"typeRoots": [
++			"../../node_modules/@types"
++		],
++		// A proposal file refers to types declared in other proposals, and listing every one of
++		//them would drag half the set in for a field. `git` does the same: the check that
++		// matters is this connector's own code, which is still the one being compiled.
++		"skipLibCheck": true
++	},
++	"include": [
++		"src/**/*",
++		"../../src/vscode-dts/vscode.d.ts",
++		// The proposal this connector declares in `enabledApiProposals`. Without it here the
++		// compiler sees only the stable surface, which does not carry the provider's
++		// `configuration` — and the whole point of this connector is to read the configuration
++		// the owner fills in.
++		"../../src/vscode-dts/vscode.proposed.chatProvider.d.ts"
++	]
++}
