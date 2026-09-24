@@ -117,10 +117,10 @@ index 00000000000..59274edffea
 +}
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
 new file mode 100644
-index 00000000000..4d61305100a
+index 00000000000..3b4ab2a26a0
 --- /dev/null
 +++ b/extensions/picode/src/agent.ts
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,297 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -130,6 +130,7 @@ index 00000000000..4d61305100a
 +import { contextBlock, withContext, type EditorContext } from './context';
 +import { readPiChatSettings } from './piConfig';
 +import { toolProgress } from './progress';
++import { THINKING_HEADER, quotedThinking } from './thinking';
 +import { loadPiSdk } from './piSdk';
 +import { modelRefOf } from './providerIds';
 +import { VENDOR } from './providers';
@@ -264,6 +265,9 @@ index 00000000000..4d61305100a
 +	await new Promise<void>((resolve, reject) => {
 +		let settled = false;
 +		let thinking = false;
++		// The chat appends what is streamed, token by token, so the quote marker belongs where a
++		// line *starts*: prefixing every token renders "The> user> asks". See `thinking.ts`.
++		let atLineStart = true;
 +		const subscription = session.subscribe(event => {
 +			if (event.type === 'message_update') {
 +				const delta = event.assistantMessageEvent;
@@ -281,9 +285,12 @@ index 00000000000..4d61305100a
 +				if (delta?.type === 'thinking_delta' && typeof delta.delta === 'string' && showReasoning) {
 +					if (!thinking) {
 +						thinking = true;
-+						stream.markdown('\n> **Thinking**\n>\n');
++						stream.markdown(THINKING_HEADER);
++						atLineStart = true;
 +					}
-+					stream.markdown('> ' + delta.delta.replace(/\n/g, '\n> '));
++					const quoted = quotedThinking(delta.delta, atLineStart);
++					atLineStart = quoted.atLineStart;
++					stream.markdown(quoted.text);
 +					return;
 +				}
 +				return;
@@ -413,10 +420,10 @@ index 00000000000..4d61305100a
 +}
 diff --git a/extensions/picode/src/context.ts b/extensions/picode/src/context.ts
 new file mode 100644
-index 00000000000..b034306d508
+index 00000000000..052d9d3c8f0
 --- /dev/null
 +++ b/extensions/picode/src/context.ts
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,71 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -471,9 +478,22 @@ index 00000000000..b034306d508
 +	return `Context from the editor, as it is right now:\n\n${parts.join('\n')}\n`;
 +}
 +
-+/** The prompt pi is asked with: the context first when there is one, then what the owner wrote. */
++/**
++ * Who the agent is, said on every message.
++ *
++ * Because it is not obvious from inside a session. pi is a general agent, and it is also the
++ * tool the owner develops PiCode **with**: with this very repository open, its own `AGENTS.md`
++ * is discovered as project context and says exactly that ("yo tengo otro pi aquí para desarrollar
++ * esta app"). The model read it and answered as the *development* agent — which is a different
++ * pi, on a different machine, in a terminal. One sentence that it is the editor's agent is what
++ * keeps the two apart, and it costs a line.
++ */
++export const AGENT_FRAME = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.';
++
++/** The prompt pi is asked with: who it is, the editor's context when there is one, then the request. */
 +export function withContext(prompt: string, context: string | undefined): string {
-+	return context === undefined ? prompt : `${context}\n---\n\n${prompt}`;
++	const head = context === undefined ? AGENT_FRAME : `${AGENT_FRAME}\n\n${context}`;
++	return `${head}\n\n---\n\n${prompt}`;
 +}
 diff --git a/extensions/picode/src/declarations.ts b/extensions/picode/src/declarations.ts
 new file mode 100644
@@ -2341,6 +2361,54 @@ index 00000000000..a935a6e4bd7
 +		case 'progress':
 +			return { message: event.message };
 +	}
++}
+diff --git a/extensions/picode/src/thinking.ts b/extensions/picode/src/thinking.ts
+new file mode 100644
+index 00000000000..35a5d3220d9
+--- /dev/null
++++ b/extensions/picode/src/thinking.ts
+@@ -0,0 +1,42 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * pi's thinking, written as a quoted block in the chat.
++ *
++ * The chat appends what a participant streams, and it appends it **as it arrives**: pi sends its
++ * thinking in tokens, so each delta is a few characters. A quote therefore cannot be prefixed
++ * blindly — `> The` followed by `> user` renders as `> The> user`, which is exactly how this
++ * looked the first time. The marker belongs where a line *starts* and nowhere else.
++ *
++ * So this module keeps the one bit of state that decides it: whether the next character opens a
++ * line. Small, and worth its own home, because getting it wrong is visible on screen and can be
++ * exercised by running it.
++ */
++
++/** The line that opens the block, emitted once and before the first delta. */
++export const THINKING_HEADER = '\n> **Thinking**\n>\n';
++
++/** One delta, quoted for the position it arrives in. */
++export interface QuotedDelta {
++	/** What to append, exactly as the chat should receive it. */
++	readonly text: string;
++	/** Whether the **next** delta opens a line. */
++	readonly atLineStart: boolean;
++}
++
++/**
++ * Quotes one delta.
++ *
++ * A delta that is the only thing on the line gets the marker; a delta that continues a line is
++ * appended as it came, which is what joins a word to the word before it.
++ */
++export function quotedThinking(delta: string, atLineStart: boolean): QuotedDelta {
++	const lines = delta.split('\n');
++	const quoted = lines
++		.map((line, index) => (index === 0 && !atLineStart ? line : `> ${line}`))
++		.join('\n');
++	return { text: quoted, atLineStart: lines[lines.length - 1].length === 0 };
 +}
 diff --git a/extensions/picode/tsconfig.json b/extensions/picode/tsconfig.json
 new file mode 100644
