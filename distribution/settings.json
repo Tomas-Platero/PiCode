@@ -13,11 +13,9 @@
   "files.insertFinalNewline": true,
   "files.eol": "\n",
   "telemetry.telemetryLevel": "off",
-  "chat.disableAIFeatures": true,
+  "chat.disableAIFeatures": false,
   "agents.voice.enabled": false,
   "agents.voice.backendUrl": "",
   "security.workspace.trust.enabled": true,
-  "terminal.integrated.defaultProfile.windows": "PowerShell",
-  "picode.pi.executablePath": "pi",
-  "picode.pi.extraArgs": []
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
 }

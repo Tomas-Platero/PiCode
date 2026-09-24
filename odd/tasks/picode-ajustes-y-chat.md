@@ -69,6 +69,19 @@ El cambio de clave (`picode.pi.providers` → `picode.providers`) es lo que hace
 
 ## Lo que queda
 
+- **La clase del host que une la sesión y la traducción: sigue sin existir, y es lo más gordo que
+  falta del núcleo.** Medido en esta sesión: `src/vs/platform/agentHost/node/pi/piSession.ts` y
+  `piActionMapping.ts` (parches 09 y 10) están escritos, y **nada los usa** — no hay una sola
+  referencia fuera de su propia carpeta. Es decir: la sesión de pi y la traducción de sus eventos
+  existen, pero no hay quien las una con lo que el editor pide a un agente del host. Hoy la
+  integración real es el participante `@pi` del conector (`agent.ts`), que es otra vía — la que
+  hace que el chat funcione — y no la del *agent host* del editor.
+- **El chat tiene que ser visible**: upstream (`code-oss`) trae `chat.disableAIFeatures` en
+  **`true`**, y ese ajuste **oculta** las vistas y acciones del chat
+  (`ContextKeyExpr.has('config.chat.disableAIFeatures').negate()` en `chatParticipant.contribution.ts`
+  y `chatActions.ts`). Con el valor heredado, pi no tiene superficie. Se pone a `false` en
+  `distribution/settings.json` y en su perfil, y se le quitan las claves muertas del pi de dos
+  instancias (`picode.pi.executablePath`, `picode.pi.extraArgs`, que ya no lee nadie).
 - **Los ajustes de pi que pi ya tiene** (`~/.pi/agent/settings.json`: caché, compactación,
   reintentos, confianza de proyecto…) no se duplican en el editor a propósito: son de pi, y pi los
   edita con su propio `/settings`. Si el dueño quiere tocarlos desde aquí, es una decisión aparte
