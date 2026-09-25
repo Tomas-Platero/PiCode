@@ -37,6 +37,19 @@ It is idempotent, refuses to run outside a VSCodium root, and backs up
 - `PiCode.exe`, `bin/picode.cmd`, `bin/picode`, `PiCode.VisualElementsManifest.xml` — renamed
   from VSCodium's names, and the two shims and the manifest have their text updated to match
 
+## Publishing an update feed
+
+The editor's updater reads a static JSON per platform, not the GitHub Releases API. After
+`gh release create` uploads the asset, write that document and commit it:
+
+```bash
+node dev/update-feed.mjs --version <v> --commit <sha> --url <asset-url> \
+  --sha256 <hex> --platform win32 --arch x64 --installed <previous-version>
+```
+
+The layout, the URL template and the version-numbering dependency are in
+[`updates/README.md`](../updates/README.md).
+
 ## Changing the product
 
 Edit `product-delta.json` and run the script. Two rules this file has already learned
