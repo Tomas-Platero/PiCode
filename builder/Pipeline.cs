@@ -392,6 +392,41 @@ public sealed class Pipeline
 		}
 	}
 
+	/// <summary>
+	/// Builds a copy of this program that runs on its own, with nothing installed beside it.
+	///
+	/// `dotnet build` already produces an executable, but that one needs the .NET runtime on the machine
+	/// that runs it. Publishing self-contained does not, which is what makes it something to give away.
+	/// It goes to `builder/dist` and never over `builder/bin`: the file that is running cannot be
+	/// overwritten, and publishing on top of itself is the one way this can fail.
+	/// </summary>
+	public static (bool Ok, string Message) PublishBuilder()
+	{
+		// The script is the only publisher. It publishes, trims what this program never uses and packs
+		// the zip, and calling it from here means the button and the terminal cannot disagree about what
+		// "building the builder" produces.
+		var script = Path.Combine(RepoRoot, "builder", "publish.cmd");
+		var result = Run("cmd.exe", $"/c \"{script}\"", Path.Combine(RepoRoot, "builder"), 1800000);
+		if (!result.Ok)
+		{
+			var why = result.Errors.Trim();
+			if (why.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+				|| result.Output.Contains("being used by another process", StringComparison.OrdinalIgnoreCase))
+			{
+				return (false, "The copy in dist is running: close it and press this again.");
+			}
+			return (false, "publish failed: " + (why.Length > 0 ? why.Split('\n')[0] : "see the log"));
+		}
+
+		var zip = Path.Combine(RepoRoot, "builder", "PiCodeBuilder.zip");
+		if (!File.Exists(zip))
+		{
+			return (false, "the publish finished but no zip appeared");
+		}
+		var megabytes = Math.Round(new FileInfo(zip).Length / (1024.0 * 1024.0));
+		return (true, $"Built: builder\\PiCodeBuilder.zip, {megabytes} MB, and it needs nothing installed.");
+	}
+
 	public static void OpenEditor()
 	{
 		if (!EditorExists)

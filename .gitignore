@@ -90,4 +90,6 @@ legacy/
 # Any build output of the C# builder, whatever it is called: bin, bin2, bin-tmp. `dotnet build` writes
 # them, and a scratch folder used while testing must not end up in the repository either.
 /builder/bin*/
+/builder/dist*/
+/builder/PiCodeBuilder.zip
 /builder/obj*/

@@ -150,6 +150,12 @@
                                     <TextBlock Name="TargetLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                     <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock Margin="0,10,0,0" Text="Building this builder"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                               Text="Produces one executable in builder\dist that runs on its own, with nothing installed beside it. That is the copy to give away; the one in bin needs .NET on the machine that runs it."/>
+                                    <Button Name="PublishButton" Content="Build the builder (.exe)" Click="OnPublishBuilder"/>
+                                    <TextBlock Name="PublishLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

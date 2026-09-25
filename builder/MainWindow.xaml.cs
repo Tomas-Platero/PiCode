@@ -206,6 +206,15 @@ public sealed partial class MainWindow : Window
 		Refresh();
 	}
 
+	private async void OnPublishBuilder(object sender, RoutedEventArgs e)
+	{
+		PublishButton.IsEnabled = false;
+		PublishLine.Text = "Building... this takes a minute.";
+		var result = await System.Threading.Tasks.Task.Run(Pipeline.PublishBuilder);
+		PublishLine.Text = result.Message;
+		PublishButton.IsEnabled = true;
+	}
+
 	private void OnStop(object sender, RoutedEventArgs e)
 	{
 		if (!Pipeline.IsBuildRunning(_target))
