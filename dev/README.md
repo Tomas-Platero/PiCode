@@ -21,7 +21,7 @@ who only wants to use PiCode.
 | 3 | VSCodium patches | `dev/prepare_vscode.sh patches-vscodium`: `*.json` removal actions, then `*.patch`, then `insider/` (insider only), then `${OS_NAME}/`, then `user/`. |
 | 4 | PiCode patches | `dev/prepare_vscode.sh patches-picode`: the same order, over `patches/picode/`. |
 | 5 | product delta | `node distribution/apply-product-delta.mjs --target picode-source/product.json --delta distribution/product-delta.json --write`. |
-| 6 | dependencies | `npm ci` in `./picode-source` (up to five attempts, as VSCodium does). |
+| 6 | dependencies | `npm ci` in `./picode-source` (up to five attempts, as VSCodium does). With `PICODE_FAST_INSTALL=yes` (CI only) it reuses a cached `node_modules` when VS Code's recorded install state is current; otherwise it runs `npm ci`. |
 | 7 | compile and pack | `npm run gulp vscode-min-prepack`, the RTF/EULA resource, the win32 group-policy definitions, `npm run gulp vscode-win32-x64-min-packing`. |
 | 8 | stage | `dev/stage-distribution.sh`: the distribution layer onto `./PiCode-Win32-x64`. |
 
@@ -62,6 +62,10 @@ build resumes at phase 6. That is the split VSCodium's `SKIP_SOURCE` provides.
 `!!RELEASE_VERSION!!` placeholders expand to. A release build sets it in the
 environment (it must be `X.Y.Z`); a build from a bare pin therefore stamps the VS
 Code revision it was built from.
+
+The automatic watch over these pins — the quick patch check on every push, the
+weekly pin-update pull request, the nightly full build and the cache map — lives
+in [`docs/CI.md`](../docs/CI.md).
 
 ## Where PiCode's identity lives
 

@@ -330,28 +330,49 @@ fi
 # is finished. `dev/builtin-extension.sh` was deleted with this step; restoring it is how
 # the old surface comes back if the migration has to be paused.
 echo ""
-echo "== phase 6/8 - npm ci"
+echo "== phase 6/8 - dependencies"
 
 cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-node build/npm/preinstall.ts
-
-for i in {1..5}; do # try 5 times
-  if npm ci; then
-    break
+# Cache-aware fast path, used only by CI (see .github/workflows/full-build.yml).
+# VS Code records the dependency state it installed in
+# `node_modules/.postinstall-state` and compares it against the current
+# package.json/package-lock/.npmrc (build/npm/installStateHash.ts).
+# `PICODE_FAST_INSTALL=yes` reuses a `node_modules` restored from cache only
+# when that recorded state is current; every other case runs `npm ci` exactly
+# as before, so a partial or stale cache can never be trusted silently.
+reuse_node_modules="no"
+if [[ "${PICODE_FAST_INSTALL}" == "yes" && -f node_modules/.postinstall-state ]]; then
+  if node build/npm/installStateHash.ts \
+      | jq -e '.saved != null
+               and .current.nodeVersion == .saved.nodeVersion
+               and .current.fileHashes == .saved.fileHashes' > /dev/null; then
+    reuse_node_modules="yes"
   fi
+fi
 
-  if [[ $i == 5 ]]; then
-    echo "Npm install failed too many times" >&2
-    exit 1
-  fi
-  echo "Npm install failed $i, trying again..."
+if [[ "${reuse_node_modules}" == "yes" ]]; then
+  echo "reusing node_modules: the recorded install state matches this tree"
+else
+  node build/npm/preinstall.ts
 
-  sleep $(( 15 * (i + 1) ))
-done
+  for i in {1..5}; do # try 5 times
+    if npm ci; then
+      break
+    fi
+
+    if [[ $i == 5 ]]; then
+      echo "Npm install failed too many times" >&2
+      exit 1
+    fi
+    echo "Npm install failed $i, trying again..."
+
+    sleep $(( 15 * (i + 1) ))
+  done
+fi
 
 cd ..
 

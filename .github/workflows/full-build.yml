@@ -1,0 +1,114 @@
+# Periodic real compilation. The quick check (`pin-check.yml`) only fetches and
+# patches; this workflow runs the full `dev/build.sh` so compile errors the
+# preparation cannot see are caught. It runs nightly and whenever the pin moves
+# (a push that touches `upstream/**`).
+#
+# The compile runs on Linux (`ubuntu-latest`): the fastest and cheapest runner,
+# and TypeScript compile errors are platform-independent. The Windows-only
+# patch set is still validated on every push by `pin-check.yml`. To compile the
+# shipped Windows target too, add `windows-latest` to the matrix below.
+name: Full build
+
+on:
+  schedule:
+    # Daily, 03:41 UTC.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - Master
+      - main
+    paths:
+      - "upstream/stable.json"
+      - "upstream/vscodium.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-build
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    name: full build (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # A full VS Code build writes several GB; the stock runner needs room.
+      - name: Free disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
+          sudo rm -rf /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+
+      - name: Read the pinned commit
+        id: pin
+        shell: bash
+        run: |
+          jq -r '"commit=" + .commit' upstream/stable.json >> "$GITHUB_OUTPUT"
+
+      - name: Locate the npm cache
+        id: npm
+        shell: bash
+        run: echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+
+      # The object database is ~320 MB and is keyed by the pinned commit.
+      - name: Cache the pinned VS Code source objects
+        uses: actions/cache@v4
+        with:
+          path: picode-source/.git
+          key: vscode-git-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          restore-keys: |
+            vscode-git-${{ runner.os }}-
+
+      # Reused only when VS Code's own install state proves it current (see
+      # PICODE_FAST_INSTALL in dev/build.sh); otherwise `npm ci` runs.
+      - name: Cache the installed dependencies
+        uses: actions/cache@v4
+        with:
+          path: picode-source/node_modules
+          key: vscode-deps-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          restore-keys: |
+            vscode-deps-${{ runner.os }}-
+
+      - name: Cache npm tarballs and node headers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.npm.outputs.dir }}
+            ~/.cache/node-gyp
+          key: npm-cache-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          restore-keys: |
+            npm-cache-${{ runner.os }}-
+
+      - name: Fetch the pinned source (incremental on a cache hit)
+        shell: bash
+        run: bash dev/get_repo.sh --fetch
+
+      - name: Full build (compile and pack)
+        shell: bash
+        env:
+          # Reuse the cached node_modules only when its recorded install state
+          # matches this tree; otherwise dev/build.sh runs `npm ci` as usual.
+          PICODE_FAST_INSTALL: "yes"
+        run: ./dev/build.sh
+
+      - name: Verify the packed tree exists
+        shell: bash
+        run: |
+          pack_dir="$( ls -d PiCode-linux-* 2>/dev/null | head -1 )"
+          if [[ -z "${pack_dir}" ]]; then
+            echo "::error::dev/build.sh left no PiCode-linux-* tree"
+            exit 1
+          fi
+          echo "packed tree: ${pack_dir}"

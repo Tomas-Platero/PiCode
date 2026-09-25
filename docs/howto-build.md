@@ -189,6 +189,11 @@ la nota de que volver a fijar VS Code sin moverlo es un defecto.
 `RELEASE_VERSION` sale del `tag` de `upstream/stable.json` (una release real lo fija en el
 entorno y debe ser `X.Y.Z`). Ese valor es con lo que se expande `!!RELEASE_VERSION!!`.
 
+El vigilante semanal de CI abre solo la PR que mueve `upstream/stable.json`: la pareja
+con VSCodium y el re-vendorizado siguen siendo un paso humano. La política (seguridad →
+en pocos días; versión normal → cuando convenga) y los tres workflows están en
+[`docs/CI.md`](CI.md).
+
 ## Cómo compilar
 
 ```bash

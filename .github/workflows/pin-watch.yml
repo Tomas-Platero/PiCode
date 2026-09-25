@@ -1,0 +1,268 @@
+# Weekly watchdog for the VS Code pin (`upstream/stable.json`).
+#
+# On a schedule (and on demand) it:
+#   1. asks Microsoft for the latest stable version;
+#   2. asks GitHub for the security advisories published on
+#      `microsoft/vscode` since the pinned version was released;
+#   3. when the pin is behind, opens (or refreshes) a pull request that moves
+#      it to the new tag/commit, labels it `security` when an advisory is
+#      behind the update, and dispatches `pin-check.yml` on the new branch so
+#      the pull request shows pass/fail and names the patch that broke.
+#
+# What it does NOT touch: `upstream/vscodium.json`. That pin is a **VSCodium**
+# revision, and moving it means re-vendoring `patches/vscodium/**` and
+# `dev/vscodium-product.json` from a real revision. The pull request body
+# carries the standing reminder; see `docs/CI.md` and `docs/howto-build.md`.
+name: Pin watchdog
+
+on:
+  schedule:
+    # Mondays, 06:17 UTC.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+  security-events: read
+
+concurrency:
+  group: pin-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Detect the latest stable and the advisories
+        id: detect
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          pin_tag="$( jq -r '.tag' upstream/stable.json )"
+          pin_commit="$( jq -r '.commit' upstream/stable.json )"
+
+          source_api="https://update.code.visualstudio.com/api/update"
+          source_api="${source_api}/win32-x64/stable"
+          latest="$( curl --silent --show-error --fail \
+            --retry 3 --retry-all-errors \
+            "${source_api}/0000000000000000000000000000000000000000" )"
+          new_tag="$( jq -r '.name' <<<"${latest}" )"
+          new_commit="$( jq -r '.version' <<<"${latest}" )"
+
+          gh_api="https://api.github.com/repos/microsoft/vscode"
+
+          # Advisories published after the pinned version was released. The
+          # release date is the honest anchor; the commit date is the fallback
+          # when that tag has no GitHub release.
+          anchor="$( curl --silent --show-error --fail \
+            --retry 3 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "${gh_api}/releases/tags/${pin_tag}" \
+            | jq -r '.published_at // empty' )" || true
+
+          if [[ -z "${anchor}" ]]; then
+            anchor="$( curl --silent --show-error --fail \
+              --retry 3 --retry-all-errors \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              "${gh_api}/commits/${pin_commit}" \
+              | jq -r '.commit.committer.date' )"
+          fi
+
+          advisories="$( curl --silent --show-error --fail \
+            --retry 3 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${gh_api}/security-advisories?state=published&per_page=100" \
+            | jq -c --arg anchor "${anchor}" \
+              '[ .[] | select(.published_at != null and .published_at > $anchor)
+                     | { ghsa_id, cve_id, severity, summary, html_url } ]' )"
+
+          security="false"
+          if [[ "$( jq 'length' <<<"${advisories}" )" -gt 0 ]]; then
+            security="true"
+          fi
+
+          update="false"
+          if [[ "${new_commit}" != "${pin_commit}" ]]; then
+            update="true"
+          fi
+
+          {
+            echo "pin_tag=${pin_tag}"
+            echo "pin_commit=${pin_commit}"
+            echo "new_tag=${new_tag}"
+            echo "new_commit=${new_commit}"
+            echo "anchor=${anchor}"
+            echo "update=${update}"
+            echo "security=${security}"
+            echo "advisories<<PICODE_ADVISORIES"
+            echo "${advisories}"
+            echo "PICODE_ADVISORIES"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Report the outcome
+        shell: bash
+        env:
+          UPDATE: ${{ steps.detect.outputs.update }}
+          SECURITY: ${{ steps.detect.outputs.security }}
+          PIN_TAG: ${{ steps.detect.outputs.pin_tag }}
+          NEW_TAG: ${{ steps.detect.outputs.new_tag }}
+        run: |
+          if [[ "${UPDATE}" == "true" ]]; then
+            echo "pin is behind: ${PIN_TAG} -> ${NEW_TAG}"
+            echo "security advisory behind the update: ${SECURITY}"
+          elif [[ "${SECURITY}" == "true" ]]; then
+            echo "pin is current (${PIN_TAG}) but advisories exist"
+          else
+            echo "pin is current: ${PIN_TAG}"
+          fi
+
+      - name: Open or refresh the pin-update pull request
+        if: steps.detect.outputs.update == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
+          PIN_TAG: ${{ steps.detect.outputs.pin_tag }}
+          NEW_TAG: ${{ steps.detect.outputs.new_tag }}
+          NEW_COMMIT: ${{ steps.detect.outputs.new_commit }}
+          SECURITY: ${{ steps.detect.outputs.security }}
+          ADVISORIES: ${{ steps.detect.outputs.advisories }}
+        run: |
+          set -euo pipefail
+
+          branch="pin/vscode-${NEW_TAG}"
+
+          git config user.name "picode-pin-watch"
+          git config user.email "picode-pin-watch@users.noreply.github.com"
+          git switch --force-create "${branch}"
+
+          tmp="$( mktemp )"
+          jq --arg tag "${NEW_TAG}" --arg commit "${NEW_COMMIT}" \
+            '.tag = $tag | .commit = $commit' \
+            upstream/stable.json > "${tmp}"
+          mv "${tmp}" upstream/stable.json
+
+          git add upstream/stable.json
+          if git diff --cached --quiet; then
+            echo "upstream/stable.json already carries ${NEW_TAG}"
+          else
+            git commit -m "chore(pin): move VS Code to ${NEW_TAG}"
+          fi
+
+          git push --force origin "${branch}"
+
+          # Create the labels the first time; a second run is a no-op.
+          gh label create pin-update --color 0e8a16 \
+            --description "Automated VS Code pin update" 2>/dev/null || true
+          gh label create security --color b60205 \
+            --description "Security-driven update" 2>/dev/null || true
+
+          title="chore(pin): move VS Code to ${NEW_TAG}"
+          if [[ "${SECURITY}" == "true" ]]; then
+            title="fix(security): move VS Code to ${NEW_TAG}"
+          fi
+
+          body="$( mktemp )"
+          {
+            echo "Moves the VS Code pin from \`${PIN_TAG}\` to"
+            echo "\`${NEW_TAG}\` (\`${NEW_COMMIT}\`)."
+            echo
+            echo "Opened by the pin watchdog. See \`docs/CI.md\`."
+            echo
+            if [[ "${SECURITY}" == "true" ]]; then
+              echo "### Security advisories since \`${PIN_TAG}\`"
+              echo
+              jq -r '.[] | "- **\(.severity | ascii_upcase)** — "
+                  + "\(.ghsa_id)"
+                  + (if .cve_id then " (\(.cve_id))" else "" end)
+                  + ": \(.summary)\n  \(.html_url)"' <<<"${ADVISORIES}"
+              echo
+            fi
+            echo "### Before merging"
+            echo
+            echo "- [ ] The \`pin-check (phases 1-5)\` status is green."
+            echo "- [ ] \`upstream/vscodium.json\` and the vendored"
+            echo "      \`patches/vscodium/**\` were reviewed. That pin is a"
+            echo "      **VSCodium** revision; moving it means re-vendoring"
+            echo "      patches and \`dev/vscodium-product.json\` from a real"
+            echo "      revision (\`docs/howto-build.md\`, Los dos pins)."
+            echo
+            echo "### Next"
+            echo
+            echo "The full build runs on the next nightly, or on demand from"
+            echo "**Actions**."
+          } > "${body}"
+
+          if gh pr view "${branch}" > /dev/null 2>&1; then
+            gh pr edit "${branch}" --title "${title}" --body-file "${body}"
+          else
+            gh pr create --base "${BASE}" --head "${branch}" \
+              --title "${title}" --body-file "${body}"
+          fi
+
+          gh pr edit "${branch}" --add-label pin-update
+          if [[ "${SECURITY}" == "true" ]]; then
+            gh pr edit "${branch}" --add-label security
+          fi
+
+          # A pull request opened with GITHUB_TOKEN does not trigger
+          # `pull_request` runs, so the quick check is dispatched explicitly
+          # on the new branch. workflow_dispatch is the documented exception
+          # GITHUB_TOKEN may trigger, and its run writes the commit status
+          # the pull request shows.
+          head_sha="$( git rev-parse HEAD )"
+          gh workflow run pin-check.yml --ref "${branch}" \
+            -f "report_sha=${head_sha}"
+
+      - name: Open an issue when an advisory has no fix to move to
+        if: >-
+          steps.detect.outputs.update != 'true' &&
+          steps.detect.outputs.security == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN_TAG: ${{ steps.detect.outputs.pin_tag }}
+          ADVISORIES: ${{ steps.detect.outputs.advisories }}
+        run: |
+          set -euo pipefail
+
+          title="Security advisory affects pinned VS Code ${PIN_TAG}"
+
+          existing="$( gh issue list --state open --limit 100 \
+            --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" )"
+          if [[ -n "${existing}" ]]; then
+            echo "issue #${existing} already tracks this"
+            exit 0
+          fi
+
+          gh label create security --color b60205 \
+            --description "Security-driven update" 2>/dev/null || true
+
+          body="$( mktemp )"
+          {
+            echo "Advisories exist since \`${PIN_TAG}\` was released, but"
+            echo "Microsoft has not published a newer stable release."
+            echo
+            jq -r '.[] | "- **\(.severity | ascii_upcase)** — "
+                + "\(.ghsa_id)"
+                + (if .cve_id then " (\(.cve_id))" else "" end)
+                + ": \(.summary)\n  \(.html_url)"' <<<"${ADVISORIES}"
+          } > "${body}"
+
+          gh issue create --title "${title}" \
+            --label security --body-file "${body}"
