@@ -425,3 +425,40 @@ declare Copilot por defecto exige además un cambio en `distribution/`, que est�
 PiCode es una distribución de VSCodium, que es a su vez un build de la fuente MIT de VS
 Code. Este camino reproduce esa cadena; las licencias y atribuciones de upstream se
 conservan y se documentan en [`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+## Otros sistemas: Linux, y Windows con WSL
+
+La cadena entiende **Windows y Linux**. macOS no está puesto todavía: necesita su propio nombre de
+carpeta en `build/gulpfile.vscode.ts` (el mismo cambio de una línea que 16 y 17) y un caso más en la
+tabla de `dev/build.sh`; el resto valdría igual.
+
+El sistema se deduce del entorno (`OSTYPE`) y decide tres cosas: qué parches se aplican
+(`patches/*/${OS_NAME}/`), qué tarea empaqueta (`vscode-<sistema>-<arch>-min-packing`) y **cómo se
+llama la carpeta que sale**:
+
+| Sistema | Carpeta del paquete |
+| --- | --- |
+| Windows | `PiCode-Win32-x64` |
+| Linux | `PiCode-linux-x64` |
+
+### Construir en Linux
+
+Los mismos pasos que arriba, con `jq`, `python3` y Git instalados. Lo que cambia es poco y está
+resuelto: el paquete se llama PiCode, el icono de la ventana se saca de `distribution/picode.ico`
+(que ya lleva PNGs dentro), y los binarios del pi se podan a los de la plataforma que se construye.
+
+**Una build de Linux hay que hacerla en Linux.** Los módulos nativos (la terminal, el vigía de
+ficheros) se compilan para la máquina donde compilas: no se puede cruzar desde Windows.
+
+### Con WSL, desde Windows
+
+WSL es un Linux de verdad, así que sirve. Dos cosas, en este orden:
+
+1. `wsl --install` **en una terminal como administrador**, y reiniciar. (Pide permisos: la
+   instalación de WSL es una característica de Windows.)
+2. **El repositorio, dentro del disco de Linux** (`~/PiCode`), no sobre `/mnt/d/...`: compilar sobre
+   el disco de Windows con miles de ficheros pequeños es varias veces más lento. El resultado es un
+   paquete para Linux, que se saca copiándolo.
+
+Con WSL 2 en Windows 11 (WSLg) incluso se puede **abrir el editor resultante** y verlo en el
+escritorio, para probarlo sin cambiar de máquina.

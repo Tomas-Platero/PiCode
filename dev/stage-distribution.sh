@@ -68,7 +68,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 1 - the product delta
 # ---------------------------------------------------------------------------
-echo "--- step 1/6 - product delta in resources/app/product.json"
+echo "--- step 1/8 - product delta in resources/app/product.json"
 
 set +e
 node "${APPLIER}" --target "${PRODUCT_JSON}" --delta "${DELTA}" --check
@@ -96,7 +96,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 2 - the portable profile
 # ---------------------------------------------------------------------------
-echo "--- step 2/6 - portable profile in data/"
+echo "--- step 2/8 - portable profile in data/"
 
 for dir in "user-data" "extensions" "tmp"; do
   if [[ -d "${PACK_DIR}/data/${dir}" ]]; then
@@ -110,7 +110,7 @@ done
 # ---------------------------------------------------------------------------
 # Step 3 - first-run defaults
 # ---------------------------------------------------------------------------
-echo "--- step 3/6 - first-run defaults"
+echo "--- step 3/8 - first-run defaults"
 
 SETTINGS_TARGET="${PACK_DIR}/data/user-data/User/settings.json"
 
@@ -130,7 +130,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 4 - the agent panel as a built-in extension
 # ---------------------------------------------------------------------------
-echo "--- step 4/6 - retired: PiCode's own panel is no longer shipped"
+echo "--- step 4/8 - retired: PiCode's own panel is no longer shipped"
 
 # The owner removed PiCode's own chat on 2026-09-24: the editor's chat is the surface, and
 # the panel this step staged belongs to the extension being migrated into the core. The
@@ -200,7 +200,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 5 - the names Windows shows
 # ---------------------------------------------------------------------------
-echo "--- step 5/6 - visible names"
+echo "--- step 5/8 - visible names"
 
 # The pack output names the executable after `product.nameShort`, which the
 # product delta makes "PiCode" *before* packing, so this normally finds the name
@@ -280,10 +280,32 @@ fix_text "${PACK_DIR}/PiCode.VisualElementsManifest.xml" 'ShortDisplayName="VSCo
 # ---------------------------------------------------------------------------
 # Step 6 - the icons inside the application
 # ---------------------------------------------------------------------------
-echo "--- step 6/6 - icons inside the application"
+# ---------------------------------------------------------------------------
+# Step 5b - the icon Linux uses
+# ---------------------------------------------------------------------------
+# Windows wants an `.ico` (step 6) and Linux wants a PNG, and Linux takes it from `resources/linux/`:
+# with VS Code's logo there, the window and the launcher of a PiCode build wear somebody else's face.
+# The drawing is the same one, and the `.ico` already carries PNG frames inside it, so nothing else
+# is needed to produce it.
+if [[ "${OS_NAME:-windows}" == "linux" ]]; then
+  LINUX_ICONS_DIR="${PACK_DIR}/resources/app/resources/linux"
+  if [[ -d "${LINUX_ICONS_DIR}" ]]; then
+    for candidate in code.png code-oss.png; do
+      if [[ -f "${LINUX_ICONS_DIR}/${candidate}" ]]; then
+        if node dev/ico-to-png.mjs ./distribution/picode.ico "${LINUX_ICONS_DIR}/${candidate}"; then
+          echo "drew ${candidate} with the PiCode mark"
+        fi
+      fi
+    done
+  else
+    echo "skipped: there is no resources/linux in this pack"
+  fi
+fi
 
-MARK_SOURCE="${EXTENSION_SOURCE}/media/picode-icon.svg"
-WATERMARK_SOURCE="${EXTENSION_SOURCE}/media/picode.svg"
+echo "--- step 6/8 - icons inside the application"
+
+MARK_SOURCE="./distribution/picode-icon.svg"
+WATERMARK_SOURCE="./distribution/picode.svg"
 
 if [[ ! -f "${MARK_SOURCE}" ]]; then
   echo "warning: no mark at ${MARK_SOURCE}; the icons inside the application were left alone." >&2

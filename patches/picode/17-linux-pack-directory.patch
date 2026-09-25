@@ -1,0 +1,30 @@
+diff --git a/build/gulpfile.vscode.linux.ts b/build/gulpfile.vscode.linux.ts
+--- a/build/gulpfile.vscode.linux.ts
++++ b/build/gulpfile.vscode.linux.ts
+@@ -34,7 +34,7 @@
+ }
+ 
+ function prepareDebPackage(arch: string) {
+-	const binaryDir = '../VSCode-linux-' + arch;
++	const binaryDir = '../PiCode-linux-' + arch;
+ 	const debArch = getDebPackageArch(arch);
+ 	const destination = '.build/linux/deb/' + debArch + '/' + product.applicationName + '-' + debArch;
+ 
+@@ -144,7 +144,7 @@
+ }
+ 
+ function prepareRpmPackage(arch: string) {
+-	const binaryDir = '../VSCode-linux-' + arch;
++	const binaryDir = '../PiCode-linux-' + arch;
+ 	const rpmArch = getRpmPackageArch(arch);
+ 	const stripBinary = process.env['STRIP'] ?? '/usr/bin/strip';
+ 
+@@ -231,7 +231,7 @@
+ }
+ 
+ function prepareSnapPackage(arch: string) {
+-	const binaryDir = '../VSCode-linux-' + arch;
++	const binaryDir = '../PiCode-linux-' + arch;
+ 	const destination = getSnapBuildPath(arch);
+ 
+ 	return function () {

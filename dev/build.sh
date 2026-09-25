@@ -117,7 +117,25 @@ else
   export VSCODE_ARCH="x64"
 fi
 
-PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}"
+# The pack directory, named for the product and for the system being packed. The task that writes it
+# is `vscode-<platform>-<arch>-min-packing`, and the directory name is set in the gulpfiles
+# (`patches/picode/16` and `17`), so the two have to agree: this is the same table.
+case "${OS_NAME}" in
+  windows)
+    PACK_PLATFORM="win32"
+    PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}"
+    ;;
+  linux)
+    PACK_PLATFORM="linux"
+    PACK_DIR="./PiCode-linux-${VSCODE_ARCH}"
+    ;;
+  *)
+    echo "error: packing for OS_NAME='${OS_NAME}' is not set up yet." >&2
+    echo "       Windows and Linux are; macOS needs its own buildPath in build/gulpfile.vscode.ts" >&2
+    echo "       (the same one-line rename) and then a case here." >&2
+    exit 2
+    ;;
+esac
 
 echo "OS_NAME=\"${OS_NAME}\""
 echo "VSCODE_ARCH=\"${VSCODE_ARCH}\""
@@ -337,7 +355,7 @@ cd vscode || { echo "'vscode' dir not found"; exit 1; }
 # Phase 7 - compile and pack
 # ---------------------------------------------------------------------------
 echo ""
-echo "== phase 7/8 - compile and pack (vscode-win32-${VSCODE_ARCH}-min-packing)"
+echo "== phase 7/8 - compile and pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
 
 export VSCODE_PUBLISH_COUNTER=1
 
@@ -356,10 +374,14 @@ export VSCODE_PUBLISH_COUNTER=1
 # by `build/win32/code.iss`, the Inno installer, and PiCode builds no installer.
 npm run gulp vscode-min-prepack
 
-npm run copy-policy-dto --prefix build
-node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc win32
+# The policy files are per system: the DTO copies are Windows' (read by Windows tooling), and the
+# generator writes the data the editor itself carries, for the platform being packed.
+if [[ "${PACK_PLATFORM}" == "win32" ]]; then
+  npm run copy-policy-dto --prefix build
+fi
+node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc "${PACK_PLATFORM}"
 
-npm run gulp "vscode-win32-${VSCODE_ARCH}-min-packing"
+npm run gulp "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
 
 cd ..
 
