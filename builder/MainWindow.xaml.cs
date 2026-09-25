@@ -226,12 +226,26 @@ public sealed partial class MainWindow : Window
 		_blockers = _requirements.Checks.Where(check => !check.Ok && !check.Optional).ToList();
 
 		Checks.Children.Clear();
+		RailChecks.Children.Clear();
+
+		// The Linux list is asked for inside Linux, which is the machine that would do the work. With no
+		// distribution there is nothing to ask, and an empty list explains nothing: this says what is
+		// missing and what to do about it.
+		if (_target == BuildTarget.Linux && !_linuxAvailable)
+		{
+			Checks.Children.Add(Note("The checks for Linux are asked inside WSL, and there is no distribution yet. " + _linuxReason));
+			RailChecks.Children.Add(Note("WSL is not ready"));
+			RailCheckCount.Text = "";
+			RailCheckSummary.Visibility = Visibility.Collapsed;
+			BuildButton.IsEnabled = false;
+			BuildButtonText.Text = "Build PiCode (Linux needs WSL)";
+			return;
+		}
+
 		foreach (var check in _requirements.Checks)
 		{
 			Checks.Children.Add(CheckRow(check, withButton: true));
 		}
-
-		RailChecks.Children.Clear();
 		foreach (var check in _requirements.Checks)
 		{
 			RailChecks.Children.Add(CheckRow(check, withButton: false));
@@ -253,6 +267,14 @@ public sealed partial class MainWindow : Window
 		BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
 		BuildButtonText.Text = _blockers.Count > 0 ? "Build PiCode (something is missing)" : "Build PiCode";
 	}
+
+	/// <summary>A line that only says something, for when there is nothing to list.</summary>
+	private static TextBlock Note(string text) => new()
+	{
+		Text = text,
+		TextWrapping = TextWrapping.Wrap,
+		Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+	};
 
 	/// <summary>One check: a mark, its name, what was found, and - where it is fixed - its button.</summary>
 	private UIElement CheckRow(Requirement check, bool withButton)

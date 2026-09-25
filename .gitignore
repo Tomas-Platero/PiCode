@@ -85,8 +85,9 @@ desktop.ini
 # termine — por eso tampoco se revisa.
 legacy/
 
-# The C# builder: what it compiles, never what it is written from.
-/builder/bin/
-/builder/obj/
-/builder/bin2/
-/builder/bin-temp/
+# The C# builder: what it compiles, never what it is written from. `dotnet build` writes both, and
+# neither is ever committed: the source is the .csproj and the files beside it.
+# Any build output of the C# builder, whatever it is called: bin, bin2, bin-tmp. `dotnet build` writes
+# them, and a scratch folder used while testing must not end up in the repository either.
+/builder/bin*/
+/builder/obj*/

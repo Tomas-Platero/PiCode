@@ -106,6 +106,23 @@ PowerShell will not run them.
 | **Rustup** | Compiles some of VS Code's native modules. It rewrites `PATH`: restart the shell when it is done. | `winget install --id Rustlang.Rustup -e` |
 | **7-Zip** | Only to produce the release `.zip`. **Not** needed to compile or to pack the tree. |
 
+### Building the builder
+
+The window in [`builder/`](builder/README.md) is a C# application, and it needs nothing installed beyond the
+.NET SDK - the Windows App SDK arrives as a package the first time you build it:
+
+```bash
+cd builder
+.uild.cmd          # double-click it, or run it: it builds this and opens it
+dotnet run           # the same thing
+dotnet build         # compile only
+```
+
+It is a way of pressing a button, not a second pipeline: it starts the same scripts in `dev/` and reads
+the same `dev/build-requirements.mjs` and `dev/build-progress.mjs` that a terminal reads. It can build for
+Windows or for Linux through WSL, and the editor's task list carries it as **PiCode: build the builder**
+and **PiCode: run the builder**.
+
 **The checks themselves live in one place**: [`dev/build-requirements.mjs`](dev/build-requirements.mjs).
 Run it to see this machine's answer, and read it to see which of these are required and which are only
 recommended — Rust is recommended, for instance, and its absence does not stop a build. This table says
