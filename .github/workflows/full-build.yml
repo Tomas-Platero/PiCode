@@ -105,15 +105,17 @@ jobs:
     needs: gate
     if: needs.gate.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
+    # Hard ceilings well under anything that could look hung: a healthy build
+    # needs ~45 min (Linux) or ~70 (Windows) with warm caches.
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            timeout: 180
+            timeout: 75
           - os: windows-latest
-            timeout: 240
+            timeout: 110
     steps:
       - name: Check out
         uses: actions/checkout@v7
