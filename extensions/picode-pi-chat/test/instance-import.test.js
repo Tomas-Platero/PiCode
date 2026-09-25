@@ -66,6 +66,7 @@ function sourceProfile() {
   writeFile(path.join(dir, "skills", "alpha", "SKILL.md"), "---\nname: alpha\n---\n");
   writeFile(path.join(dir, "skills", "beta", "SKILL.md"), "---\nname: beta\n---\n");
   writeFile(path.join(dir, "memory", "one.md"), "remembered\n");
+  writeFile(path.join(dir, "sessions", "2026-01-01.json"), "{}\n");
   return dir;
 }
 
@@ -100,13 +101,14 @@ async function main() {
       mcp: true,
       skills: true,
       memory: true,
+      sessions: true,
       credentials: false,
     },
   });
 
   check(
     "an empty target receives every chosen item as copied",
-    ["settings", "models", "mcp", "skills", "memory"].every(
+    ["settings", "models", "mcp", "skills", "memory", "sessions"].every(
       (name) => itemOf(emptyReport, name).status === "copied",
     ),
     JSON.stringify(emptyReport),
@@ -118,7 +120,7 @@ async function main() {
   );
   check(
     "the counts add up to the number of items",
-    emptyReport.counts.copied === 5 &&
+    emptyReport.counts.copied === 6 &&
       emptyReport.counts.declined === 1 &&
       emptyReport.counts.absent === 0 &&
       emptyReport.counts.failed === 0,

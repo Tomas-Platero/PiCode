@@ -43,7 +43,11 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import type { Uri } from "vscode";
 import { managedRoot, type RuntimeMode } from "./runtime";
-import { resolveAgentDir } from "./transcription";
+
+// `resolveAgentDir` — the machine's profile — is deliberately no longer imported here. It is
+// still the right answer for the one-time import, which is the only act that is about the
+// external pi; any other reader or writer following it would be reading or writing `~/.pi/`,
+// which the owner has ruled out.
 
 /* ------------------------------------------------------------------ *
  * The resolver
@@ -82,8 +86,10 @@ function internalAgentDir(extensionUri: Uri): string {
  * profile — the only way to fill it — impossible. The guard belongs in
  * `instanceProfile()`, which is what every spawner and every reader follows.
  */
-export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): string | undefined {
-  return runtime === "managed" ? internalAgentDir(extensionUri) : undefined;
+export function instanceAgentDir(extensionUri: Uri, _runtime: RuntimeMode): string {
+  // PiCode's own profile, always. See `instanceProfileDir` for why the mode no longer
+  // changes the answer, and why the parameter is still here (unused, and named so).
+  return internalAgentDir(extensionUri);
 }
 
 /**
@@ -97,33 +103,29 @@ export function instanceAgentDir(extensionUri: Uri, runtime: RuntimeMode): strin
  * wrong here: a login exists to fill PiCode's own profile while it is still empty, and
  * the guard answers the machine's profile precisely then.
  *
- * So the mapping is total: PiCode's own profile for the `managed` instance, and for
- * `path`/`custom` the profile the owner's pi reads — `PI_CODING_AGENT_DIR` when the
- * owner set it, otherwise `~/.pi/agent`, which is what pi resolves by itself.
+ * So the mapping is total, and it is now **the same directory for every instance**:
+ * PiCode's own. An earlier decision wrote into the owner's profile when his pi was the
+ * selected instance — «es configurar ese pi» — and the owner reversed it: nothing is saved
+ * in the external pi. `~/.pi/` is not written, and reading it is only ever the explicit
+ * import.
  *
- * PiCode writes the owner's profile here because the owner asked it to: with his own pi
- * selected, the provider login and the custom-endpoint row configure *that* pi, the way
- * its own `/login` would. That reverses the read-only rule the two-instances feature
- * set for the owner's profile, and the reversal is recorded in
- * `odd/tasks/picode-models-providers.md`. The surfaces that write it say which profile
- * they are writing, because it also belongs to every other pi tool on the machine.
+ * `resolveAgentDir()` is therefore no longer reachable from here. It is still the right
+ * answer for the import, which is the one act that is *about* the machine's profile.
  */
-export function instanceProfileDir(extensionUri: Uri, runtime: RuntimeMode): string {
-  return runtime === "managed" ? internalAgentDir(extensionUri) : resolveAgentDir();
+export function instanceProfileDir(extensionUri: Uri, _runtime: RuntimeMode): string {
+  return internalAgentDir(extensionUri);
 }
 
 /**
  * The profile a write went into, said in words instead of by path.
  *
- * A surface that writes a profile has to tell the owner *which* profile it wrote, and
- * the answer is one of exactly two: PiCode's own profile when PiCode owns the target,
- * the owner's own when his pi is the selected instance. Both names live here because
- * three surfaces need them — the provider login, the custom-endpoint rows and the
- * settings panel — and a second copy of the wording would let one of them start
- * describing the same directory differently.
+ * There is only one possible answer now — PiCode's own profile — so the parameter is gone.
+ * It is kept as a function rather than a constant because three surfaces read it (the
+ * provider login, the custom-endpoint rows and the settings panel) and one wording is what
+ * stops them describing the same directory differently.
  */
-export function profileNameFor(ownsProfile: boolean): string {
-  return ownsProfile ? "el perfil propio de PiCode" : "el perfil de tu pi";
+export function profileNameFor(): string {
+  return "el perfil propio de PiCode";
 }
 
 /* ------------------------------------------------------------------ *
@@ -158,10 +160,13 @@ export interface InternalProfileFacts {
  */
 export interface InstanceProfile {
   /**
-   * The profile directory of the selected instance, or `undefined` when pi resolves
-   * its own. `undefined` is the fact a spawner reads as "set nothing".
+   * PiCode's own profile directory: always a directory, never `undefined`.
+   *
+   * It used to be optional, and `undefined` meant "let pi resolve its own" — which sent
+   * every write into `~/.pi/`. With one pi and one profile there is nothing to resolve, so
+   * the type says so instead of leaving a caller to remember it.
    */
-  agentDir: string | undefined;
+  agentDir: string;
   /** True only when the selected instance is PiCode's own and its profile is usable. */
   owned: boolean;
   /** What PiCode's own profile holds, read in the same pass as this answer. */
@@ -199,13 +204,16 @@ function readInternalProfile(agentDir: string): { usable: boolean; facts: Intern
  * (an `undefined` `agentDir`) with `owned: false`, so every spawn and every reader
  * keeps following today's behaviour and the switch cannot be left half flipped.
  */
-export function instanceProfile(extensionUri: Uri, runtime: RuntimeMode): InstanceProfile {
+export function instanceProfile(extensionUri: Uri, _runtime: RuntimeMode): InstanceProfile {
   const internalDir = internalAgentDir(extensionUri);
   const internal = readInternalProfile(internalDir);
-  const owned = runtime === "managed" && internal.usable;
   return {
-    agentDir: owned ? internalDir : undefined,
-    owned,
+    // Always PiCode's own. The anti-mute guard no longer diverts to the machine's profile:
+    // the owner asked for the internal one and only the internal one. What the guard found
+    // is still reported, in `internal`, because the surfaces that explain an unusable
+    // profile still need it — the fallback was the part that had to go, not the reading.
+    agentDir: internalDir,
+    owned: true,
     internal: internal.facts,
   };
 }
@@ -214,21 +222,16 @@ export function instanceProfile(extensionUri: Uri, runtime: RuntimeMode): Instan
  * The environment additions that point a spawned program at the selected instance's
  * profile: the variable, or an empty object.
  *
- * The rule is asymmetric on purpose, and that is the whole reason it lives here. For
- * PiCode's own instance the variable is set explicitly, to PiCode's own profile. For
- * the owner's instance **nothing is set — not even the value pi would resolve by
- * itself** — so the child resolves its default exactly as it does when the owner runs
- * `pi` from a terminal. Setting it to that same value looks equivalent and is not: it
- * would pin the profile pi saw at spawn time, so a `PI_CODING_AGENT_DIR` the owner
- * exports in a shell profile, or a home that changes, would silently stop applying to
- * the pi PiCode runs.
+ * The variable is now set for **every** instance, to PiCode's own profile. It used to be
+ * left unset for the owner's pi so that pi resolved its own default — which is precisely
+ * what must not happen any more: an unset variable sends every write (settings, sessions,
+ * credentials) into `~/.pi/`, and the owner asked for nothing to be saved there.
  *
- * Returning an empty object keeps that decision in one place, instead of a conditional
- * at each of the spawn sites, where the safe default is easy to write the wrong way
- * round.
+ * Setting it always also removes the asymmetry the old rule needed, which is one less
+ * branch at the spawn sites.
  */
 export function instanceProfileEnv(profile: InstanceProfile): Record<string, string> {
-  return profile.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: profile.agentDir };
+  return { PI_CODING_AGENT_DIR: profile.agentDir };
 }
 
 /* ------------------------------------------------------------------ *
@@ -238,21 +241,14 @@ export function instanceProfileEnv(profile: InstanceProfile): Record<string, str
 /**
  * The concrete profile directory the selected instance is actually using.
  *
- * A reader cannot pass `undefined` on: the embedded transport, the settings service and
- * the skills discovery all take a directory, and the one that received `undefined`
- * would compose a fallback of its own — which is how a reader ends up watching a
- * different profile than the process it reads for. So the fallback is composed once,
- * here: PiCode's own profile while the guard says it can carry an instance, and the
- * machine's profile otherwise.
- *
- * It asks `instanceProfile()` and not `instanceAgentDir()`, and that is the whole
- * point. `instanceAgentDir()` names PiCode's own profile even while it is empty, which
- * is what the import needs; a reader that followed it would switch to the internal
- * profile the moment the import fills it, while the spawns were still on the machine's
- * one. Reading the guarded answer is what keeps the switch from being half flipped.
+ * There is no fallback any more: the answer is PiCode's own profile, so it agrees with the
+ * spawns and with the writes by construction. The old version fell back to the machine's
+ * profile while the guard said the internal one could not carry an instance, and that is
+ * the behaviour the owner reversed — nothing may be read from `~/.pi/` either, because a
+ * reader following it would report a profile the editor is not using.
  */
 export function selectedAgentDir(extensionUri: Uri, runtime: RuntimeMode): string {
-  return instanceProfile(extensionUri, runtime).agentDir ?? resolveAgentDir();
+  return instanceProfile(extensionUri, runtime).agentDir;
 }
 
 /* ------------------------------------------------------------------ *

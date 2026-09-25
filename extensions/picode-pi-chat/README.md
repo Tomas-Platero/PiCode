@@ -1,45 +1,33 @@
-# PiCode: pi Agent
+# EN MIGRACIÓN AL CORE — este directorio NO se compila ni se empaqueta
 
-The agent layer of PiCode. It spawns the [`pi`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
-coding agent in RPC mode (`pi --mode rpc`) as a child process and renders a
-streaming chat panel inside the editor.
+> Decisión del dueño, 2026-09-24: **«todo ha de ir en el core de vscode, integrado en su
+> núcleo. Quita esa extensión.»**
 
-The extension host owns the process; the webview is presentation only. stdout is
-framed as strict LF-delimited JSONL (Unicode line separators are legal inside
-JSON strings, so `readline` is not protocol compliant), commands are correlated
-by id, and `message_update` deltas are accumulated by `contentIndex` with
-`message_end` treated as the authoritative message.
+A partir de esa fecha:
 
-## Requirements
+- `dev/build.sh` **ya no** copia esta extensión al editor. Un build no la contiene.
+- `dev/builtin-extension.sh`, que hacía esa copia, fue **borrado**.
+- Este directorio se queda en el repositorio **solo como el código que se está migrando**.
+  No es una superficie viva del producto: es el material de origen.
 
-- The `pi` CLI on `PATH` (`npm install -g @earendil-works/pi-coding-agent`),
-  or an explicit path via `picode.pi.executablePath`.
-- pi 0.86.1 or newer (the RPC protocol used here was verified against 0.86.1).
+**Por qué no se ha borrado todavía, y no es pereza.** Su código —incluido lo escrito en esta
+misma sesión, como el catálogo de proveedores con las dos vías de conexión— **está sin
+commitear**. Borrar el directorio ahora lo perdería para siempre, sin historial del que
+recuperarlo. Se borra cuando la migración haya copiado lo que sirve.
 
-## Commands
+## A dónde va cada cosa
 
-| Command | Purpose |
+| Aquí | Va a |
 | --- | --- |
-| `PiCode: Open pi Chat` | Start the agent if needed and reveal the chat panel |
-| `PiCode: New pi Session` | Start a fresh session in the running agent |
-| `PiCode: Abort pi Run` | Stop the current run |
-| `PiCode: Restart pi Process` | Kill and respawn the agent (also re-reads settings) |
+| Proveedores, login, `models.json` | El core: Chat y el sistema de agentes del editor |
+| Descubrimiento de habilidades | El core (el host de agentes ya descubre personalizaciones) |
+| Ajustes de PiCode | El core (`contrib/picode`, ya empezado) |
+| Sesión de pi y traducción de eventos | Ya migrado: `src/platform/agentHost/node/pi/` |
+| El panel y su chat | **Se borra.** El chat es el del editor |
 
-## Settings
+## Qué está roto mientras tanto, dicho claro
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `picode.pi.executablePath` | `pi` | Path to the pi CLI. On Windows a bare name resolves to the npm `.cmd` shim, which is launched through the system shell. |
-| `picode.pi.extraArgs` | `[]` | Extra arguments appended to `pi --mode rpc`. |
-
-Diagnostics are written to the **PiCode** output channel.
-
-## Development
-
-```bash
-npm install
-npm run compile
-```
-
-There are no runtime dependencies and no bundler: plain `tsc` emits `out/`, and
-`media/main.js` + `media/main.css` are loaded directly by the webview.
+El editor construido **no tiene forma de hablar con ningún modelo**: ni chat, ni login de
+proveedores. Es el precio aceptado de quitar la extensión antes de terminar el proveedor de
+pi en el core. Si hubiera que pausar la migración, restaurar el paso del build es lo que
+devuelve la superficie vieja (el script está en el historial de git).

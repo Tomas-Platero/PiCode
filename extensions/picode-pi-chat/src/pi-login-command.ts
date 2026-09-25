@@ -47,7 +47,7 @@
 
 import { pathToFileURL } from "node:url";
 import * as vscode from "vscode";
-import { instanceAgentDir, instanceProfileDir, profileNameFor } from "./instance";
+import { instanceProfileDir, profileNameFor } from "./instance";
 import { RELOAD_WINDOW_LABEL } from "./instance-import-command";
 import {
   AuthPromptCancelled,
@@ -182,28 +182,43 @@ export interface ProviderEntry {
 }
 
 /**
- * Which login pi will run for a provider, or `undefined` when it cannot log one in.
+ * Every way into a provider, in the order the list should offer them.
  *
- * A provider with neither an interactive key login nor an OAuth login is left out rather
- * than offered and then failing. The current credential decides first (`isUsingOAuth`
- * and `isUsingSubscription` answer that, and a subscription is the more specific of the
- * two), and only then do the provider's declared methods decide: a key when one is on
- * offer, and OAuth when a subscription is the only way in.
+ * A provider is **not** one choice. Seven of pi's own providers (`anthropic`,
+ * `github-copilot`, `kimi-coding`, `meta`, `openrouter`, `radius`, `xai`) accept both a
+ * subscription and a key, and collapsing them into a single row is what made "connect
+ * Claude with a Pro/Max account" impossible here even though pi supports it: the key was
+ * checked first and the subscription never appeared.
+ *
+ * The order is a decision, not an accident. A credential that is already stored leads, so
+ * the row that is in force is the first one read. Then the subscription, because it is
+ * the narrower and more deliberate way in and the one that is otherwise invisible. The
+ * key comes last, which is where it belongs: it always applies, so it needs no help being
+ * found.
+ *
+ * A provider with neither method is left out rather than offered and then failing, which
+ * is why this returns an empty list for one.
  */
-export function loginType(facts: ProviderFacts): AuthType | undefined {
-  if (facts.usingSubscription) {
-    return "oauth";
-  }
-  if (facts.usingOAuth) {
-    return "oauth";
-  }
-  if (facts.keyLogin) {
-    return "api_key";
+export function providerOffers(facts: ProviderFacts): AuthType[] {
+  const offers: AuthType[] = [];
+  if (facts.usingSubscription || facts.usingOAuth) {
+    offers.push("oauth");
   }
   if (facts.subscriptionLogin) {
-    return "oauth";
+    offers.push("oauth");
   }
-  return undefined;
+  if (facts.keyLogin) {
+    offers.push("api_key");
+  }
+  return [...new Set(offers)];
+}
+
+/**
+ * The login pi will run when the owner does not pick one, or `undefined` when it cannot
+ * log the provider in at all. It is the first offer, so the two can never disagree.
+ */
+export function loginType(facts: ProviderFacts): AuthType | undefined {
+  return providerOffers(facts)[0];
 }
 
 /**
@@ -233,10 +248,51 @@ export function providerEntry(facts: ProviderFacts): ProviderEntry | undefined {
  * catalogue is written down here. A provider that cannot be logged in is skipped, which
  * is why this list is usually shorter than the catalogue.
  */
+/**
+ * The providers nearly everybody comes for, in the order they are offered.
+ *
+ * pi ships 41 of them and the list came out alphabetical, which buried Claude, ChatGPT,
+ * DeepSeek and Copilot under whichever provider happened to start with an early letter. This
+ * is a curated **order**, not a filter: everything else is still offered, below these.
+ *
+ * The ids are pi's own (`anthropic`, `openai-codex`…), because that is what the runtime
+ * answers with and what the login is performed against.
+ */
+export const FEATURED_PROVIDERS: readonly string[] = [
+  "anthropic",
+  "openai-codex",
+  "openai",
+  "google",
+  "deepseek",
+  "xai",
+  "openrouter",
+  "github-copilot",
+  "mistral",
+  "groq",
+];
+
+/**
+ * The list's order: the featured providers first, in their curated order, and everything
+ * else after them in the owner's alphabetical order.
+ *
+ * Pure, and it sorts by name and not by kind, so a provider that offers both ways in keeps
+ * the order `providerOffers` chose for it — the subscription row continues to lead.
+ */
+export function sortProviderEntries(entries: readonly ProviderEntry[]): ProviderEntry[] {
+  const rank = (id: string): number => {
+    const index = FEATURED_PROVIDERS.indexOf(id);
+    return index === -1 ? FEATURED_PROVIDERS.length : index;
+  };
+  return [...entries].sort((left, right) => {
+    const byRank = rank(left.id) - rank(right.id);
+    return byRank !== 0 ? byRank : left.label.localeCompare(right.label);
+  });
+}
+
 export function providerEntries(runtime: LoginRuntime): ProviderEntry[] {
   const entries: ProviderEntry[] = [];
   for (const provider of runtime.getProviders()) {
-    const entry = providerEntry({
+    const facts: ProviderFacts = {
       id: provider.id,
       name: provider.name,
       keyLogin: typeof provider.auth.apiKey?.login === "function",
@@ -244,12 +300,106 @@ export function providerEntries(runtime: LoginRuntime): ProviderEntry[] {
       usingOAuth: runtime.isUsingOAuth(provider.id),
       usingSubscription: runtime.isUsingSubscription(provider.id),
       configured: runtime.hasConfiguredAuth(provider.id),
-    });
-    if (entry !== undefined) {
-      entries.push(entry);
+    };
+
+    // One row **per way in**, not per provider. A provider that offers two logins gets
+    // two rows, which is the whole point: they are two different decisions for the owner
+    // (a Claude subscription and an Anthropic key are not the same thing) and pi runs a
+    // different flow for each. A provider with none gets no row at all.
+    for (const type of providerOffers(facts)) {
+      entries.push({
+        id: facts.id,
+        label: facts.name,
+        description: PROVIDER_KINDS[type],
+        detail: facts.configured ? PROVIDER_MARKERS.configured : PROVIDER_MARKERS.missing,
+        type,
+      });
     }
   }
-  return entries.sort((left, right) => left.label.localeCompare(right.label));
+  // The featured ones first so they are not buried, everything else alphabetical below.
+  return sortProviderEntries(entries);
+}
+
+/** One row as the list paints it: a title, the kind or the state, and the state. */
+export interface ProviderRow {
+  label: string;
+  description: string;
+  detail: string | undefined;
+}
+
+/**
+ * How the entries become rows.
+ *
+ * A provider that offers both ways in contributes two rows with the same name, and a
+ * repeated name would make the owner read the same word twice to tell them apart. When a
+ * name repeats, the way in becomes part of the label and the kind is not printed a second
+ * time underneath, so each row says what it is once and what it is missing once. Pure, so
+ * the wording is pinned by a test instead of by the widget.
+ */
+export function providerRows(entries: readonly ProviderEntry[]): ProviderRow[] {
+  const nameCounts = new Map<string, number>();
+  for (const entry of entries) {
+    nameCounts.set(entry.label, (nameCounts.get(entry.label) ?? 0) + 1);
+  }
+  return entries.map((entry) => {
+    const repeated = (nameCounts.get(entry.label) ?? 0) > 1;
+    return {
+      label: repeated ? `${entry.label} — ${entry.description}` : entry.label,
+      description: repeated ? entry.detail : entry.description,
+      detail: repeated ? undefined : entry.detail,
+    };
+  });
+}
+
+/**
+ * The record Settings shows, with one provider added.
+ *
+ * Pure over the list so the merge is testable without an editor, a profile or a runtime.
+ * A provider is recorded **once**: a second login of the same provider replaces its entry
+ * instead of adding a line, because the row reports which providers are connected, not how
+ * many times they were. Sorted, so the row's order does not depend on the order of logins.
+ */
+export function withConnectedProvider(
+  current: readonly string[],
+  provider: string,
+  type: AuthType,
+): string[] {
+  const label = providerLabel(provider, type);
+  const others = current.filter((value) => !value.startsWith(`${provider}${PROVIDER_LABEL_SEPARATOR}`));
+  return [...others, label].sort((left, right) => left.localeCompare(right));
+}
+
+/** How one connected provider is written down: the provider and the way in. */
+export const PROVIDER_LABEL_SEPARATOR = " — ";
+
+export function providerLabel(provider: string, type: AuthType): string {
+  return `${provider}${PROVIDER_LABEL_SEPARATOR}${PROVIDER_KINDS[type]}`;
+}
+
+/**
+ * Writes that record where Settings reads it.
+ *
+ * The write is the whole reason the core declares the setting: a Settings row is a value,
+ * and the extension is what keeps it true. It never throws at the caller — the credential
+ * is already in place and a bookkeeping write must not turn a successful login into a
+ * failure — so a refusal lands in the output channel instead.
+ */
+async function rememberConnectedProvider(provider: string, type: AuthType): Promise<void> {
+  const configuration = vscode.workspace.getConfiguration("picode.pi");
+  const current = configuration.get<string[]>("providers", []);
+  try {
+    await configuration.update(
+      "providers",
+      withConnectedProvider(current, provider, type),
+      vscode.ConfigurationTarget.Global,
+    );
+  } catch (error) {
+    // Deliberately not rethrown, and this is the only place in this file that swallows:
+    // the credential is already committed, so failing the whole flow over the row that
+    // reports it would be worse than a stale row. It is still reported as an error, which
+    // is where a failure of this kind belongs.
+    console.error(`picode: could not record the connected provider: ${asErrorMessage(error)}`);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -266,12 +416,6 @@ export function providerEntries(runtime: LoginRuntime): ProviderEntry[] {
  * answer he gives decides whether the credential may go there.
  */
 export const LOGIN_TEXTS = {
-  ownerProfileConfirm:
-    "La credencial se va a guardar en el perfil de tu pi, el mismo que usa tu pi instalado en " +
-    "el equipo. El pi que ejecuta el editor es el tuyo, así que ahí es donde este inicio de " +
-    "sesión tiene efecto.",
-  ownerProfileContinue: "Guardar en el perfil de mi pi",
-  ownerProfileDeclined: "No se inició sesión: no se escribió nada en el perfil de tu pi.",
   noSdk: "Este pi no sabe iniciar sesión desde el SDK. Actualiza el pi integrado.",
   noCatalogue:
     "No se pudieron leer los proveedores de este pi, así que no se puede iniciar sesión desde aquí.",
@@ -350,23 +494,18 @@ export function loginFailureText(provider: string, message: string): string {
  * this command is enough to reach it, and so is importing a package into the target
  * profile after the session started.
  *
- * The way forward depends on **which** profile is missing the package, and that is why the
- * sentence takes `ownsProfile` rather than naming PiCode's own profile outright. For
- * PiCode's own profile the step is the import, in the row's own words («Importar el perfil
- * de tu pi») instead of a fourth phrasing. For the owner's own profile the import is the
- * wrong door — it copies *into* PiCode's profile — while the extensions tab installs with
- * the very pi the editor runs, which is the pi that owns the profile the credential is
- * heading for.
+ * There is one profile and one door. The sentence used to branch on whose profile was
+ * missing the package, and one of the two branches pointed at importing the machine's pi;
+ * that import is gone (the owner ruled it out: nothing is taken from the PATH pi), so the
+ * single way forward is installing the package in the pi the editor runs.
  */
-export function unknownProviderText(provider: string, ownsProfile: boolean): string {
-  const missing =
-    `El proveedor ${provider} lo aporta un paquete que ${profileNameFor(ownsProfile)} todavía ` +
-    "no tiene, y ahí es donde se guardan las credenciales. ";
-  return ownsProfile
-    ? missing + "Usa «Importar el perfil de tu pi» para traer ese paquete, y vuelve a intentarlo."
-    : missing +
-        "Instala ese paquete en tu pi —la pestaña de extensiones instala con el mismo pi que " +
-        "ejecuta el editor— y vuelve a intentarlo.";
+export function unknownProviderText(provider: string): string {
+  return (
+    `El proveedor ${provider} lo aporta un paquete que ${profileNameFor()} todavía ` +
+    "no tiene, y ahí es donde se guardan las credenciales. " +
+    "Instala ese paquete —la pestaña de extensiones instala con el mismo pi que ejecuta el " +
+    "editor— y vuelve a intentarlo."
+  );
 }
 
 /**
@@ -514,11 +653,11 @@ function chooseProvider(entries: ProviderEntry[]): Promise<ProviderEntry | undef
     quickPick.title = "PiCode: iniciar sesión en un proveedor";
     quickPick.placeholder = "Elige el proveedor con el que quieres conectar.";
     quickPick.ignoreFocusOut = true;
-    quickPick.items = entries.map((entry) => ({
-      entry,
-      label: entry.label,
-      description: entry.description,
-      detail: entry.detail,
+    quickPick.items = providerRows(entries).map((row, index) => ({
+      entry: entries[index],
+      label: row.label,
+      description: row.description,
+      detail: row.detail,
     }));
 
     // `accepted` is read in `onDidHide`, which is where every close ends, so the
@@ -555,19 +694,10 @@ export async function loginProvider(
   context: vscode.ExtensionContext,
   liveRuntime: LiveLoginRuntime,
 ): Promise<void> {
-  // One total mapping, and the same one every other surface follows. The writer's answer
-  // is what names it, unguarded: PiCode's own profile for its own pi — named even while it
-  // is still empty, because filling it is what a first login is for — and the profile the
-  // owner's installed pi reads when his pi is the selected instance. The guarded readers'
-  // answer is deliberately not consulted, because on an empty internal profile it names
-  // the machine's profile instead of the one being filled.
+  // One profile, and it is PiCode's own — the same one every other surface reads and writes.
+  // A credential is left here and nowhere else: nothing is saved in the machine's pi.
   const runtimeMode = resolveRuntime(context.extensionUri).mode;
   const target = instanceProfileDir(context.extensionUri, runtimeMode);
-  // Who the target belongs to, which is a different question from where it is: the
-  // unguarded reader is `undefined` exactly when the selected instance is the owner's own
-  // pi. It is asked here, once, and answers the confirmation below and the wording of the
-  // success ending.
-  const ownsProfile = instanceAgentDir(context.extensionUri, runtimeMode) !== undefined;
 
   const entry = resolveSdkEntry(context.extensionUri);
   if (entry === undefined) {
@@ -636,23 +766,6 @@ export async function loginProvider(
     return;
   }
 
-  // The owner's profile is not PiCode's to write. It is the one his installed pi reads,
-  // so a credential written there is one every other pi tool on the machine can see, and
-  // only he can say whether that is where he wants this login to take effect. Asked with a
-  // modal, after the provider was chosen and before anything is written or started, so the
-  // answer decides a write that has not happened yet.
-  if (!ownsProfile) {
-    const proceed = await vscode.window.showWarningMessage(
-      `PiCode: ${LOGIN_TEXTS.ownerProfileConfirm}`,
-      { modal: true },
-      LOGIN_TEXTS.ownerProfileContinue,
-    );
-    if (proceed !== LOGIN_TEXTS.ownerProfileContinue) {
-      void vscode.window.showInformationMessage(`PiCode: ${LOGIN_TEXTS.ownerProfileDeclined}`);
-      return;
-    }
-  }
-
   // The write never runs on the running session's runtime: that runtime owns the profile
   // in force at spawn time, which the row may have moved away from since, and a credential
   // written through it would land in the profile the row no longer points at. It keeps its
@@ -687,14 +800,12 @@ export async function loginProvider(
       return;
     }
     // Also checked before the generic failure, and only for the exact shape pi's
-    // `Models.login` throws when the target profile does not register the provider: the
-    // list came from the profile in force at spawn time, the write goes to the profile the
-    // selection names now, and the import is what reconciles them. Every other error still
-    // falls through to the generic ending below.
+    // `Models.login` throws when the profile does not register the provider: the list came
+    // from the profile in force at spawn time and the write goes to the one selected now,
+    // and installing the package that provides it is what reconciles the two. Every other
+    // error still falls through to the generic ending below.
     if (unknownProvider(error) !== undefined) {
-      void vscode.window.showErrorMessage(
-        `PiCode: ${unknownProviderText(chosen.label, ownsProfile)}`,
-      );
+      void vscode.window.showErrorMessage(`PiCode: ${unknownProviderText(chosen.label)}`);
       return;
     }
     void vscode.window.showErrorMessage(
@@ -703,11 +814,17 @@ export async function loginProvider(
     return;
   }
 
+  // Settings shows which providers are connected, so the row is written here, where a
+  // login has just been committed against a known profile. Deliberately **after** the
+  // write: recording a provider whose credential failed to land would make the row the
+  // one part of this flow that lies.
+  await rememberConnectedProvider(chosen.label, chosen.type);
+
   // The credential is in the profile's `auth.json`, but the running agent was built at
   // startup and keeps the runtime it was built with, so the reload is what makes it use
   // the new credential. It is offered rather than promised.
   const choice = await vscode.window.showInformationMessage(
-    `PiCode: ${loginSuccessText(chosen.label, profileNameFor(ownsProfile))}`,
+    `PiCode: ${loginSuccessText(chosen.label, profileNameFor())}`,
     RELOAD_WINDOW_LABEL,
   );
   if (choice === RELOAD_WINDOW_LABEL) {

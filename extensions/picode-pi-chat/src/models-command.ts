@@ -262,7 +262,7 @@ export function refusedText(
  * The two decisions this makes are the ones the feature turns on, and both are the
  * login's: the target is `instanceProfileDir(uri, mode)` — PiCode's own profile for its
  * own pi even while it is empty, the owner's profile for his — and the name is
- * `profileNameFor(owned)`, so there is one copy of each of the two profile names in the
+ * `profileNameFor()`, so there is one copy of each of the two profile names in the
  * product. Nothing here throws: a missing file is an empty list, and a file that does not
  * parse is a problem the caller refuses on.
  *
@@ -279,7 +279,7 @@ export function readModelsProviders(extensionUri: vscode.Uri): ModelsProvidersSt
   // otherwise leave this surface writing one profile while the login writes another.
   const owned = instanceAgentDir(extensionUri, mode) !== undefined;
   const profileDir = instanceProfileDir(extensionUri, mode);
-  const profileName = profileNameFor(owned);
+  const profileName = profileNameFor();
   const deferred = instanceProfile(extensionUri, mode).agentDir !== profileDir;
 
   const read = readModelsFile(path.join(profileDir, MODELS_FILE_NAME));

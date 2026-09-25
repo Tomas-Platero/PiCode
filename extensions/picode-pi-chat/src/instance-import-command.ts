@@ -72,6 +72,7 @@ export const ITEM_LABELS: Record<ImportItem, string> = {
   mcp: "Servidores MCP",
   skills: "Skills",
   memory: "Memoria",
+  sessions: "Sesiones",
   credentials: "Credenciales",
 };
 
@@ -175,6 +176,7 @@ export function inventoryEntries(inventory: ProfileInventory): ImportEntry[] {
   const mcpSelectable = mcp.count > 0;
   const skillsSelectable = inventory.skills > 0;
   const memorySelectable = inventory.memory.exists && inventory.memory.count !== 0;
+  const sessionsSelectable = inventory.sessions.exists && inventory.sessions.count !== 0;
   const credentialsSelectable = credentials.count > 0;
 
   return [
@@ -205,6 +207,7 @@ export function inventoryEntries(inventory: ProfileInventory): ImportEntry[] {
       skillsSelectable ? counted(inventory.skills, "skill", "skills") : "sin skills instaladas",
     ),
     entry("memory", memorySelectable, describeDirectory(inventory.memory)),
+    entry("sessions", sessionsSelectable, describeDirectory(inventory.sessions)),
     // Credentials name their providers because that is the whole of the decision:
     // which providers come along. Their values are never read, so they cannot be shown.
     entry(

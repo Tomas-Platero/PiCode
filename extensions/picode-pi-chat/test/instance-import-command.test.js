@@ -81,6 +81,7 @@ function completeProfile() {
   writeFile(path.join(dir, "skills", "beta", "SKILL.md"), "---\nname: beta\n---\n");
   writeFile(path.join(dir, "memory", "one.md"), "a\n");
   writeFile(path.join(dir, "memory", "two.md"), "b\n");
+  writeFile(path.join(dir, "sessions", "2026-01-01.json"), "{}\n");
   return dir;
 }
 
@@ -95,6 +96,7 @@ function fiveStatusReport() {
       { item: "mcp", status: "absent", path: "destino/mcp.json" },
       { item: "skills", status: "overwritten", path: "destino/skills", files: 2 },
       { item: "memory", status: "declined", path: "destino/memory" },
+      { item: "sessions", status: "copied", path: "destino/sessions", files: 3 },
       {
         item: "credentials",
         status: "failed",
@@ -102,7 +104,7 @@ function fiveStatusReport() {
         reason: "el origen no es JSON válido",
       },
     ],
-    counts: { copied: 1, overwritten: 2, absent: 1, declined: 1, failed: 1 },
+    counts: { copied: 2, overwritten: 2, absent: 1, declined: 1, failed: 1 },
   };
 }
 
@@ -137,12 +139,12 @@ async function main() {
   check(
     "every item has a row, in the copy's own order",
     fullEntries.map((entry) => entry.item).join(",") ===
-      "settings,models,mcp,skills,memory,credentials",
+      "settings,models,mcp,skills,memory,sessions,credentials",
     fullEntries.map((entry) => entry.item).join(","),
   );
   check(
     "a section the scan found content for is selectable",
-    ["settings", "models", "mcp", "skills", "memory", "credentials"].every(
+    ["settings", "models", "mcp", "skills", "memory", "sessions", "credentials"].every(
       (item) => byItem[item].selectable === true,
     ),
     JSON.stringify(fullEntries),
@@ -179,7 +181,7 @@ async function main() {
   const emptyEntries = api.inventoryEntries(instance.scanProfile(empty));
   check(
     "an empty profile still shows every row, none of them selectable",
-    emptyEntries.length === 6 && emptyEntries.every((entry) => entry.selectable === false),
+    emptyEntries.length === 7 && emptyEntries.every((entry) => entry.selectable === false),
     JSON.stringify(emptyEntries),
   );
   check(
@@ -218,10 +220,10 @@ async function main() {
   );
   check(
     "a failure carries the reason the report gave and nothing more",
-    lines[5].startsWith(
+    lines[6].startsWith(
       `${api.ITEM_LABELS.credentials}: ${api.STATUS_TEXTS.failed} —`,
-    ) && lines[5].includes(report.items[5].reason),
-    lines[5],
+    ) && lines[6].includes(report.items[6].reason),
+    lines[6],
   );
 
   // --- reading the target's own files, pure over their text -------------------

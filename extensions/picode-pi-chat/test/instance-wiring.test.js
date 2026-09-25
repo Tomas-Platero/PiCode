@@ -41,17 +41,18 @@ const SOURCE_ROOT = path.join(EXTENSION_ROOT, "src");
 /**
  * Every file allowed to call `resolveAgentDir(`, with the reason it is allowed.
  *
+ * The list shrank to **one** entry, and that is the change worth recording: `instance.ts`
+ * used to hold the single fallback from PiCode's own profile to the machine's, and the owner
+ * removed the fallback — pi lives inside PiCode, and nothing is read from or written to the
+ * machine's pi. What is left is the one act that is genuinely *about* that profile.
+ *
  * Deliberately not sorted by hand: the check sorts both sides, so the list stays a
  * list of reasons rather than an ordering puzzle.
  */
 const PINNED = [
   {
     file: "instance-import-command.ts",
-    why: "the import's origin: reading the machine's profile on purpose, as the one-shot source of the copy, is the feature itself",
-  },
-  {
-    file: "instance.ts",
-    why: "the resolver itself: composing PiCode's own profile with the machine's default is where the single fallback belongs, so no reader has to build one",
+    why: "the import's origin: reading the machine's profile on purpose, as the one-shot source of the copy. NOTE: this flow is now superseded — see AGENTS.md, «del pi del PATH no se añade NADA» — so this entry goes when the import surfaces do",
   },
 ];
 

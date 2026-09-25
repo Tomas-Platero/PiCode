@@ -128,15 +128,15 @@ async function main() {
     managed,
   );
 
+  // One pi, one profile. There is no longer an instance whose answer is `undefined` —
+  // "let pi resolve its own" is exactly what sent every write into `~/.pi/`, and the owner
+  // ruled that out: pi lives inside PiCode and is the host.
   check(
-    "the path instance asks pi to resolve its own default",
-    instance.instanceAgentDir(extensionUri, "path") === undefined,
-    String(instance.instanceAgentDir(extensionUri, "path")),
-  );
-  check(
-    "the custom instance asks pi to resolve its own default",
-    instance.instanceAgentDir(extensionUri, "custom") === undefined,
-    String(instance.instanceAgentDir(extensionUri, "custom")),
+    "every instance answers PiCode's own profile, whatever pi is running",
+    instance.instanceAgentDir(extensionUri, "path") === managed &&
+      instance.instanceAgentDir(extensionUri, "custom") === managed,
+    `${instance.instanceAgentDir(extensionUri, "path")} / ` +
+      `${instance.instanceAgentDir(extensionUri, "custom")}`,
   );
 
   // --- the writer's answer: always a directory, and never the guard ----------
@@ -155,23 +155,18 @@ async function main() {
     String(instance.instanceProfileDir(extensionUri, "managed")),
   );
 
+  // The writer's answer does not consult the environment any more. It used to follow
+  // `PI_CODING_AGENT_DIR` — the variable the *machine's* pi reads — which is the profile
+  // nothing may be written to now. Set or unset, the answer is PiCode's own.
   const agentDirBefore = process.env.PI_CODING_AGENT_DIR;
-  const ownerProfile = path.join(os.tmpdir(), "picode-owner-profile-fixture");
-  process.env.PI_CODING_AGENT_DIR = ownerProfile;
-  check(
-    "with the owner's pi selected, the writable profile is the one that pi reads",
-    instance.instanceProfileDir(extensionUri, "path") === ownerProfile &&
-      instance.instanceProfileDir(extensionUri, "custom") === ownerProfile,
-    `${instance.instanceProfileDir(extensionUri, "path")} / ` +
-      `${instance.instanceProfileDir(extensionUri, "custom")}`,
-  );
-
+  process.env.PI_CODING_AGENT_DIR = path.join(os.tmpdir(), "picode-owner-profile-fixture");
+  const writerWithVariable = instance.instanceProfileDir(extensionUri, "path");
   delete process.env.PI_CODING_AGENT_DIR;
+  const writerWithoutVariable = instance.instanceProfileDir(extensionUri, "custom");
   check(
-    "without the variable, the owner's profile is pi's own default directory",
-    instance.instanceProfileDir(extensionUri, "path") ===
-      path.join(os.homedir(), ".pi", "agent"),
-    String(instance.instanceProfileDir(extensionUri, "path")),
+    "the writable profile ignores the machine's variable and stays PiCode's own",
+    writerWithVariable === expectedProfile && writerWithoutVariable === expectedProfile,
+    `${writerWithVariable} / ${writerWithoutVariable}`,
   );
   if (agentDirBefore === undefined) {
     delete process.env.PI_CODING_AGENT_DIR;
@@ -216,12 +211,16 @@ async function main() {
     JSON.stringify(instance.instanceProfileEnv(usableProfile)),
   );
 
-  // The owner's instance never carries PiCode's profile, whatever that profile holds.
+  // There is no fallback to the machine's profile any more, and that is the whole point of
+  // the change: an internal profile that is empty is a profile that has not been filled
+  // yet, not a reason to start reading and writing `~/.pi/`. What the guard *found* is still
+  // reported — the surfaces that explain an unusable profile need it — so each fixture below
+  // pins both facts: the answer is PiCode's own, and the facts say why it may be empty.
   const externalProfile = instance.instanceProfile(usableDistribution.extensionUri, "path");
   check(
-    "the owner's instance is never owned, even when the internal profile is usable",
-    externalProfile.agentDir === undefined &&
-      externalProfile.owned === false &&
+    "every instance resolves to PiCode's own profile, not the machine's",
+    externalProfile.agentDir === usableDistribution.internalProfile &&
+      externalProfile.owned === true &&
       externalProfile.internal.providers === 1,
     JSON.stringify(externalProfile),
   );
@@ -229,16 +228,17 @@ async function main() {
   const absentDistribution = distribution("picode-dist-absent-");
   const absentProfile = instance.instanceProfile(absentDistribution.extensionUri, "managed");
   check(
-    "anti-mute: an absent internal profile answers the machine's, with owned false",
-    absentProfile.agentDir === undefined &&
-      absentProfile.owned === false &&
+    "an absent internal profile is still the answer, with the reason reported",
+    absentProfile.agentDir === absentDistribution.internalProfile &&
+      absentProfile.owned === true &&
       absentProfile.internal.exists === false &&
       absentProfile.internal.providers === 0,
     JSON.stringify(absentProfile),
   );
   check(
-    "anti-mute: an absent internal profile sets no variable, so pi resolves the machine's",
-    Object.keys(instance.instanceProfileEnv(absentProfile)).length === 0,
+    "and the spawn environment still points pi at it, so nothing lands in ~/.pi/",
+    instance.instanceProfileEnv(absentProfile).PI_CODING_AGENT_DIR ===
+      absentDistribution.internalProfile,
     JSON.stringify(instance.instanceProfileEnv(absentProfile)),
   );
 
@@ -249,9 +249,8 @@ async function main() {
     "managed",
   );
   check(
-    "anti-mute: an internal profile with no credentials answers the machine's",
-    credentiallessProfile.agentDir === undefined &&
-      credentiallessProfile.owned === false &&
+    "an internal profile with no credentials is still the answer, and says so",
+    credentiallessProfile.agentDir === credentiallessDistribution.internalProfile &&
       credentiallessProfile.internal.exists === true &&
       credentiallessProfile.internal.providers === 0,
     JSON.stringify(credentiallessProfile),
@@ -259,15 +258,14 @@ async function main() {
 
   const unreadableDistribution = distribution("picode-dist-unreadable-");
   // `auth.json` is a directory, so reading it as a file fails the same way a
-  // corrupted or locked file does: no credentials to report, and no usable profile.
+  // corrupted or locked file does: no credentials to report.
   fs.mkdirSync(path.join(unreadableDistribution.internalProfile, "auth.json"), {
     recursive: true,
   });
   const unreadableProfile = instance.instanceProfile(unreadableDistribution.extensionUri, "managed");
   check(
-    "anti-mute: an unreadable auth.json answers the machine's profile too",
-    unreadableProfile.agentDir === undefined &&
-      unreadableProfile.owned === false &&
+    "an unreadable auth.json is still the answer, and reports no credentials",
+    unreadableProfile.agentDir === unreadableDistribution.internalProfile &&
       unreadableProfile.internal.exists === true &&
       unreadableProfile.internal.providers === 0,
     JSON.stringify(unreadableProfile),

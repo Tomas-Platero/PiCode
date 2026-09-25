@@ -112,6 +112,167 @@ async function main() {
     String(api.loginType(keyFacts({ keyLogin: false, subscriptionLogin: false }))),
   );
 
+  // --- a provider that offers both ways in ------------------------------------
+  //
+  // Seven of pi's own providers accept both a subscription and a key, and this is what
+  // makes "connect Claude with a Pro/Max account" reachable at all: before, the key was
+  // checked first and the subscription never became a row. Every provider in the fixtures
+  // above offered only one method, which is why the collapse went unnoticed.
+
+  const dual = keyFacts({ id: "anthropic", name: "Anthropic", keyLogin: true, subscriptionLogin: true });
+  check(
+    "a provider that offers both ways in offers both, subscription first",
+    api.providerOffers(dual).join(",") === "oauth,api_key",
+    JSON.stringify(api.providerOffers(dual)),
+  );
+  check(
+    "a stored credential still leads the offers",
+    api.providerOffers({ ...dual, usingSubscription: true, usingOAuth: true }).join(",") ===
+      "oauth,api_key",
+    JSON.stringify(api.providerOffers({ ...dual, usingSubscription: true, usingOAuth: true })),
+  );
+  check(
+    "the single-login decision is the first offer, so the two cannot disagree",
+    api.loginType(dual) === api.providerOffers(dual)[0],
+    `${api.loginType(dual)} vs ${api.providerOffers(dual)[0]}`,
+  );
+
+  const dualRuntime = {
+    getProviders: () => [
+      { id: "anthropic", name: "Anthropic", auth: { apiKey: { login: () => {} }, oauth: {} } },
+    ],
+    isUsingOAuth: () => false,
+    isUsingSubscription: () => false,
+    hasConfiguredAuth: () => false,
+    login: async () => ({}),
+  };
+  const dualEntries = api.providerEntries(dualRuntime);
+  check(
+    "the list carries one row per way in, not one per provider",
+    dualEntries.length === 2 &&
+      dualEntries.map((entry) => entry.type).join(",") === "oauth,api_key" &&
+      dualEntries.every((entry) => entry.label === "Anthropic"),
+    JSON.stringify(dualEntries),
+  );
+
+  // --- how those rows read in the list ---------------------------------------
+
+  const rows = api.providerRows(dualEntries);
+  check(
+    "a repeated provider name carries the way in, so the two rows are not twins",
+    rows.length === 2 &&
+      rows[0].label === `Anthropic — ${api.PROVIDER_KINDS.oauth}` &&
+      rows[1].label === `Anthropic — ${api.PROVIDER_KINDS.api_key}`,
+    JSON.stringify(rows),
+  );
+  check(
+    "a row whose name repeats does not print the kind twice",
+    rows.every(
+      (row) => row.description !== api.PROVIDER_KINDS.oauth && row.description !== api.PROVIDER_KINDS.api_key,
+    ) &&
+      rows.every((row) => row.detail === undefined && typeof row.description === "string"),
+    JSON.stringify(rows),
+  );
+
+  const singleRows = api.providerRows([
+    { id: "zhipu", label: "Zhipu", description: api.PROVIDER_KINDS.api_key, detail: api.PROVIDER_MARKERS.missing, type: "api_key" },
+  ]);
+  check(
+    "a name that does not repeat keeps the provider and the kind in their own columns",
+    singleRows.length === 1 &&
+      singleRows[0].label === "Zhipu" &&
+      singleRows[0].description === api.PROVIDER_KINDS.api_key &&
+      singleRows[0].detail === api.PROVIDER_MARKERS.missing,
+    JSON.stringify(singleRows),
+  );
+
+  // --- the record Settings shows ---------------------------------------------
+
+  const first = api.withConnectedProvider([], "Anthropic", "oauth");
+  check(
+    "a login is written down with the provider and the way in",
+    first.length === 1 && first[0] === api.providerLabel("Anthropic", "oauth"),
+    JSON.stringify(first),
+  );
+  check(
+    "connecting the same provider again replaces its entry instead of adding a line",
+    api.withConnectedProvider(first, "Anthropic", "oauth").length === 1,
+    JSON.stringify(api.withConnectedProvider(first, "Anthropic", "oauth")),
+  );
+  check(
+    "switching a provider from key to subscription leaves one entry, not two",
+    (() => {
+      const both = api.withConnectedProvider(first, "Anthropic", "api_key");
+      return both.length === 1 && both[0] === api.providerLabel("Anthropic", "api_key");
+    })(),
+    JSON.stringify(api.withConnectedProvider(first, "Anthropic", "api_key")),
+  );
+  check(
+    "the record keeps a stable order whatever order the logins came in",
+    (() => {
+      const left = api.withConnectedProvider(api.withConnectedProvider([], "Zhipu", "api_key"), "Anthropic", "oauth");
+      const right = api.withConnectedProvider(api.withConnectedProvider([], "Anthropic", "oauth"), "Zhipu", "api_key");
+      return left.join("|") === right.join("|");
+    })(),
+    JSON.stringify(api.withConnectedProvider(api.withConnectedProvider([], "Zhipu", "api_key"), "Anthropic", "oauth")),
+  );
+  check(
+    "a provider whose name starts like another does not clobber it",
+    api.withConnectedProvider(
+      api.withConnectedProvider([], "OpenAI", "api_key"),
+      "OpenAI Codex",
+      "oauth",
+    ).length === 2,
+    JSON.stringify(
+      api.withConnectedProvider(
+        api.withConnectedProvider([], "OpenAI", "api_key"),
+        "OpenAI Codex",
+        "oauth",
+      ),
+    ),
+  );
+
+  // --- the order: the most-used ones first -----------------------------------
+
+  const ordered = api.providerEntries({
+    getProviders: () => [
+      { id: "zhipu", name: "Zhipu", auth: { apiKey: { login: () => {} } } },
+      { id: "deepseek", name: "DeepSeek", auth: { apiKey: { login: () => {} } } },
+      { id: "amazon-bedrock", name: "Amazon Bedrock", auth: { apiKey: { login: () => {} } } },
+      { id: "anthropic", name: "Anthropic", auth: { apiKey: { login: () => {} }, oauth: {} } },
+    ],
+    isUsingOAuth: () => false,
+    isUsingSubscription: () => false,
+    hasConfiguredAuth: () => false,
+  });
+  // Per provider, not per row: a provider that offers both ways in contributes two rows,
+  // and what the order is about is which provider comes first.
+  const order = ordered
+    .filter((entry, index) => ordered.findIndex((other) => other.id === entry.id) === index)
+    .map((entry) => entry.id);
+  check(
+    "the most-used providers lead the list instead of the alphabet",
+    order[0] === "anthropic" && order[1] === "deepseek",
+    JSON.stringify(order),
+  );
+  check(
+    "everything else still follows, in alphabetical order",
+    order.slice(2).join(",") === "amazon-bedrock,zhipu",
+    JSON.stringify(order),
+  );
+  check(
+    "a featured provider with two ways in still leads with the subscription",
+    ordered.filter((entry) => entry.id === "anthropic").map((entry) => entry.type).join(",") ===
+      "oauth,api_key",
+    JSON.stringify(ordered.filter((entry) => entry.id === "anthropic").map((entry) => entry.type)),
+  );
+  check(
+    "Copilot is offered as one more provider, next to the others",
+    api.FEATURED_PROVIDERS.includes("github-copilot") &&
+      api.FEATURED_PROVIDERS.indexOf("github-copilot") > api.FEATURED_PROVIDERS.indexOf("openai"),
+    JSON.stringify(api.FEATURED_PROVIDERS),
+  );
+
   // --- how a provider entry reads --------------------------------------------
 
   const subscriptionEntry = api.providerEntry(
@@ -310,33 +471,31 @@ async function main() {
 
   // --- the four endings ------------------------------------------------------
 
-  const successOwn = api.loginSuccessText("Zhipu", instance.profileNameFor(true));
-  const successOwner = api.loginSuccessText("Zhipu", instance.profileNameFor(false));
+  const successOwn = api.loginSuccessText("Zhipu", instance.profileNameFor());
   const syncFailure = api.loginSyncFailureText("Zhipu", "login");
-  const unknownProvider = api.unknownProviderText("Zhipu", true);
-  const unknownProviderOwner = api.unknownProviderText("Zhipu", false);
+  const unknownProvider = api.unknownProviderText("Zhipu");
 
+  // The confirmation to write into the machine's pi is gone with the profile it asked about,
+  // and so is the second profile name: a credential goes to PiCode's own profile and nowhere
+  // else (AGENTS.md: «del pi del PATH no se añade NADA»).
   check(
-    "the confirmation says where the credential goes and whose profile that is",
-    api.LOGIN_TEXTS.ownerProfileConfirm.includes("el perfil de tu pi") &&
-      api.LOGIN_TEXTS.ownerProfileConfirm.includes("el mismo que usa tu pi instalado en ") &&
-      api.LOGIN_TEXTS.ownerProfileConfirm.includes("El pi que ejecuta el editor es el tuyo") &&
-      !/no se puede|no tiene un perfil/i.test(api.LOGIN_TEXTS.ownerProfileConfirm),
-    api.LOGIN_TEXTS.ownerProfileConfirm,
+    "the table no longer carries the confirmation for the machine's profile",
+    api.LOGIN_TEXTS.ownerProfileConfirm === undefined &&
+      api.LOGIN_TEXTS.ownerProfileContinue === undefined &&
+      api.LOGIN_TEXTS.ownerProfileDeclined === undefined &&
+      api.LOGIN_TEXTS.ownerInstance === undefined,
+    JSON.stringify(api.LOGIN_TEXTS),
   );
   check(
-    "the confirmation is one button and one honest refusal, and neither reads as a failure",
-    api.LOGIN_TEXTS.ownerProfileContinue.includes("perfil de mi pi") &&
-      api.LOGIN_TEXTS.ownerProfileDeclined.includes("no se escribió nada") &&
-      api.LOGIN_TEXTS.ownerProfileDeclined.includes("No se inició sesión") &&
-      !/error|fall/i.test(api.LOGIN_TEXTS.ownerProfileDeclined),
-    `${api.LOGIN_TEXTS.ownerProfileContinue} / ${api.LOGIN_TEXTS.ownerProfileDeclined}`,
+    "one profile means one name, and it is PiCode's own",
+    instance.profileNameFor() === "el perfil propio de PiCode",
+    instance.profileNameFor(),
   );
   check(
-    "the old refusal to log in with the owner's pi selected is gone from the table",
-    api.LOGIN_TEXTS.ownerInstance === undefined &&
-      !Object.values(api.LOGIN_TEXTS).some((text) => /Cambia la fila/.test(text)),
-    JSON.stringify(api.LOGIN_TEXTS.ownerInstance),
+    "no ending sends the owner to import the machine's pi",
+    !Object.values(api.LOGIN_TEXTS).some((text) => /Importar el perfil/.test(text)) &&
+      !unknownProvider.includes("Importar el perfil"),
+    `${JSON.stringify(api.LOGIN_TEXTS)} / ${unknownProvider}`,
   );
   check(
     "the no-SDK ending says the update is the way out",
@@ -358,25 +517,9 @@ async function main() {
     successOwn,
   );
   check(
-    "the success ending prints no path, whichever profile it wrote",
-    !successOwn.includes("/") &&
-      !successOwn.includes("\\") &&
-      !successOwner.includes("/") &&
-      !successOwner.includes("\\"),
-    `${successOwn} / ${successOwner}`,
-  );
-  check(
-    "with the owner's pi selected the success ending names his profile instead",
-    successOwner.includes("el perfil de tu pi") &&
-      !successOwner.includes("perfil propio de PiCode") &&
-      successOwner.includes("Recarga la ventana"),
-    successOwner,
-  );
-  check(
-    "the two profile names are the two the writer may have written into",
-    instance.profileNameFor(true) === "el perfil propio de PiCode" &&
-      instance.profileNameFor(false) === "el perfil de tu pi",
-    `${instance.profileNameFor(true)} / ${instance.profileNameFor(false)}`,
+    "the success ending prints no path, only the profile's name",
+    !successOwn.includes("/") && !successOwn.includes("\\"),
+    successOwn,
   );
   check(
     "the synchronisation ending names the provider and the operation, in the owner's words",
@@ -388,40 +531,23 @@ async function main() {
     syncFailure,
   );
   check(
-    "the endings are as many different sentences as there are endings",
+    "every ending is its own sentence, with no two saying the same",
     new Set([
-      api.LOGIN_TEXTS.ownerProfileConfirm,
-      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
       api.LOGIN_TEXTS.noCatalogue,
       api.LOGIN_TEXTS.noProviders,
       api.LOGIN_TEXTS.cancelled,
       successOwn,
-      successOwner,
       syncFailure,
-    ]).size === 9,
+    ]).size === 6,
     JSON.stringify([
-      api.LOGIN_TEXTS.ownerProfileConfirm,
-      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
       api.LOGIN_TEXTS.noCatalogue,
       api.LOGIN_TEXTS.noProviders,
       api.LOGIN_TEXTS.cancelled,
       successOwn,
-      successOwner,
       syncFailure,
     ]),
-  );
-  check(
-    "the confirmation's button is a label, not one of the sentences",
-    ![
-      api.LOGIN_TEXTS.ownerProfileConfirm,
-      api.LOGIN_TEXTS.ownerProfileDeclined,
-      successOwn,
-      successOwner,
-    ].includes(api.LOGIN_TEXTS.ownerProfileContinue) &&
-      api.LOGIN_TEXTS.ownerProfileContinue.length < api.LOGIN_TEXTS.ownerProfileConfirm.length,
-    api.LOGIN_TEXTS.ownerProfileContinue,
   );
   check(
     "an unknown operation is passed through instead of guessed at",
@@ -429,19 +555,12 @@ async function main() {
     api.operationText("somethingNew"),
   );
   check(
-    "the unknown-provider ending explains the missing package and points at the import in the row's words",
+    "the unknown-provider ending explains the missing package and the one door there is",
     unknownProvider.includes("Zhipu") &&
       unknownProvider.includes("paquete") &&
-      unknownProvider.includes("Importar el perfil de tu pi"),
+      unknownProvider.includes("pestaña de extensiones") &&
+      !unknownProvider.includes("Importar el perfil"),
     unknownProvider,
-  );
-  check(
-    "for the owner's own profile the same ending names his profile and the door that works there",
-    unknownProviderOwner.includes("el perfil de tu pi") &&
-      unknownProviderOwner.includes("paquete") &&
-      unknownProviderOwner.includes("pestaña de extensiones") &&
-      !unknownProviderOwner.includes("Importar el perfil de tu pi"),
-    unknownProviderOwner,
   );
   check(
     "the unknown-provider ending is not the generic failure ending",
@@ -451,15 +570,12 @@ async function main() {
   check(
     "the unknown-provider ending is its own sentence, not one of the others",
     new Set([
-      api.LOGIN_TEXTS.ownerProfileConfirm,
-      api.LOGIN_TEXTS.ownerProfileDeclined,
       api.LOGIN_TEXTS.noSdk,
       api.LOGIN_TEXTS.cancelled,
       successOwn,
-      successOwner,
       syncFailure,
       unknownProvider,
-    ]).size === 8,
+    ]).size === 5,
     JSON.stringify([unknownProvider]),
   );
 
@@ -608,14 +724,11 @@ async function main() {
   console.log("--- the endings, verbatim ---");
   console.log(`[confirm]  ${api.LOGIN_TEXTS.ownerProfileConfirm}`);
   console.log(`[button]   ${api.LOGIN_TEXTS.ownerProfileContinue}`);
-  console.log(`[declined] ${api.LOGIN_TEXTS.ownerProfileDeclined}`);
   console.log(`[no sdk]   ${api.LOGIN_TEXTS.noSdk}`);
   console.log(`[cancel]   ${api.LOGIN_TEXTS.cancelled}`);
   console.log(`[success]  ${successOwn}`);
-  console.log(`[success]  ${successOwner}`);
   console.log(`[sync]     ${syncFailure}`);
   console.log(`[unknown]  ${unknownProvider}`);
-  console.log(`[unknown-owner]  ${unknownProviderOwner}`);
   console.log("---");
 
   // --- report ------------------------------------------------------------------

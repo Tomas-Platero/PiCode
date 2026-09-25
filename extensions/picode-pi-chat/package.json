@@ -18,12 +18,64 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "enabledApiProposals": [
+    "defaultChatParticipant"
+  ],
   "activationEvents": [
     "onView:picode.piChat",
     "onView:picode.ajustes",
-    "onView:picode.gentle"
+    "onView:picode.gentle",
+    "onChatParticipant:picode.pi",
+    "onLanguageModelTool:picode_pi_status",
+    "onLanguageModelTool:picode_ask_pi"
   ],
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "picode.pi",
+        "name": "pi",
+        "fullName": "pi",
+        "description": "El agente pi de PiCode, con tu instancia, tus modelos y tu memoria. No necesita Copilot.",
+        "isDefault": true,
+        "isSticky": true,
+        "modes": [
+          "ask",
+          "agent",
+          "edit"
+        ],
+        "sampleRequest": "Explica este proyecto y propón por dónde empezar."
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "picode_pi_status",
+        "displayName": "Estado de pi",
+        "modelDescription": "Read which pi instance PiCode runs, which profile is in force, and which model the live session is on.",
+        "toolReferenceName": "piStatus",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "picode_ask_pi",
+        "displayName": "Preguntar a pi",
+        "modelDescription": "Hand a self-contained task or question to the pi coding agent and return its answer. pi runs its own file, terminal and memory tools inside the turn.",
+        "toolReferenceName": "askPi",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The task or question to hand to pi."
+            }
+          },
+          "required": ["prompt"]
+        }
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -164,6 +216,22 @@
         "command": "picode.piChat.selectTheme",
         "title": "PiCode: Elegir el tema del editor",
         "category": "PiCode"
+      },
+      {
+        "command": "picode.piChat.migrateMcp",
+        "title": "PiCode: Migrar los servidores MCP al espacio de trabajo",
+        "category": "PiCode"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "workbench.action.chat.open",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i",
+        "args": {
+          "query": "@pi ",
+          "isPartialQuery": true
+        }
       }
     ],
     "menus": {
@@ -261,7 +329,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node test/runtime.test.js && node test/instance.test.js && node test/instance-wiring.test.js && node test/instance-import.test.js && node test/instance-import-command.test.js && node test/pi-login-command.test.js && node test/models-config.test.js && node test/models-command.test.js && node test/theme-catalog.test.js && node test/theme-preview.test.js && node test/theme-service.test.js && node test/theme-view.test.js && node test/theme-gallery.test.js && node test/onboarding.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js && node test/pi-sdk-protocol.test.js && node test/pi-ui-bridge.test.js && node test/markdown.test.js && node test/package-rows.test.js && node test/catalog.test.js && node test/skill-rows.test.js && node test/pi-settings.test.js && node test/skills.test.js && node test/attachments.test.js && node test/video.test.js && node test/transcription.test.js && node test/webview-html.test.js && node test/stats.test.js && node test/sessions.test.js && node test/usage.test.js && node test/gentle.test.js && node test/gentle-versions.test.js && node test/settings-view.test.js",
+    "test": "npm run compile && node test/chat-participant.test.js && node test/runtime.test.js && node test/instance.test.js && node test/instance-wiring.test.js && node test/instance-import.test.js && node test/instance-import-command.test.js && node test/pi-login-command.test.js && node test/models-config.test.js && node test/models-command.test.js && node test/theme-catalog.test.js && node test/theme-preview.test.js && node test/theme-service.test.js && node test/theme-view.test.js && node test/theme-gallery.test.js && node test/onboarding.test.js && node test/panel-dom.test.js && node test/pi-list.test.js && node test/menu-rows.test.js && node test/pi-sdk-protocol.test.js && node test/pi-ui-bridge.test.js && node test/markdown.test.js && node test/package-rows.test.js && node test/catalog.test.js && node test/skill-rows.test.js && node test/pi-settings.test.js && node test/skills.test.js && node test/attachments.test.js && node test/video.test.js && node test/transcription.test.js && node test/webview-html.test.js && node test/stats.test.js && node test/sessions.test.js && node test/usage.test.js && node test/gentle.test.js && node test/gentle-versions.test.js && node test/settings-view.test.js",
     "test:live": "node test/rpc.live.js",
     "test:sdk": "npm run compile && node test/sdk.live.js",
     "vscode:prepublish": "npm run compile",

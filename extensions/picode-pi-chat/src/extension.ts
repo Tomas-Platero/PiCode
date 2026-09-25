@@ -103,6 +103,9 @@ import {
 } from "./pi-login-command";
 import { SELECT_THEME_COMMAND, selectTheme, themeServiceFor } from "./theme-view";
 import type { ThemeRow, ThemeService } from "./theme-service";
+import { registerPiChatParticipant } from "./chat-participant";
+import { registerPiTools, type PiInstanceStatus } from "./pi-tools";
+import { MIGRATE_MCP_COMMAND, migrateMcpToWorkspace } from "./mcp-command";
 
 let client: PiClient | undefined;
 let view: ChatView | undefined;
@@ -467,6 +470,30 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(SELECT_THEME_COMMAND, () => selectTheme(context)),
   );
+
+  // The workspace's own `.vscode/mcp.json`, filled from the selected instance's pi
+  // configuration so the servers show up in the editor's MCP picker. Registered on its own
+  // because it is the only surface that writes inside the workspace on purpose.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(MIGRATE_MCP_COMMAND, () =>
+      migrateMcpToWorkspace(context.extensionUri),
+    ),
+  );
+
+  // `@pi` in the editor's own chat. It shares the client the panel uses, so there is one
+  // pi process, one instance and one transport however many surfaces are open.
+  registerPiChatParticipant(context, {
+    ensureClient: () => ensureClient(context.extensionUri),
+    log: (line) => outputChannel?.appendLine(`[pi] ${line}`),
+  });
+
+  // pi's capabilities as Language Model Tools, so the editor's own agent surfaces can
+  // read the instance's status or hand a sub-task to pi.
+  registerPiTools(context, {
+    ensureClient: () => ensureClient(context.extensionUri),
+    status: () => describeInstanceStatus(context.extensionUri),
+    log: (line) => outputChannel?.appendLine(`[pi] ${line}`),
+  });
 
   // First run. Deliberately not awaited: the resolution probes a process, and
   // activation must not wait on I/O to finish. The wizard opens only when there is no
@@ -2088,4 +2115,47 @@ function reportCommandFailure(action: string, error: unknown): void {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The facts the `picode_pi_status` tool reports.
+ *
+ * No absolute path travels here: the tool's answer is read by a model and shown to the
+ * owner, and which profile and which pi are in force is the decision, not where they sit
+ * on disk. The live session's facts are read only when a client exists and is up, and a
+ * read that fails leaves them absent rather than inventing a session.
+ */
+async function describeInstanceStatus(extensionUri: vscode.Uri): Promise<PiInstanceStatus> {
+  const runtime = await describeRuntime(extensionUri);
+  const profile = instanceProfile(extensionUri, runtime.mode);
+
+  let model: string | undefined;
+  let sessionName: string | undefined;
+  if (client?.isRunning === true) {
+    try {
+      const state = await client.getState();
+      model = state.model?.name ?? state.model?.id;
+      sessionName = state.sessionName;
+    } catch {
+      // Left absent on purpose: the tool says "sin sesión activa" rather than reporting
+      // a model from a state it could not read.
+    }
+  }
+
+  const display =
+    runtime.mode === "managed"
+      ? "el pi propio de PiCode"
+      : runtime.mode === "custom"
+        ? "el ejecutable indicado en los ajustes"
+        : runtime.version === undefined
+          ? "el pi del PATH"
+          : `el pi del PATH (${runtime.version})`;
+
+  return {
+    mode: runtime.mode,
+    display,
+    profile: profile.owned ? "el perfil propio de PiCode" : "el perfil del pi del PATH",
+    ...(model === undefined ? {} : { model }),
+    ...(sessionName === undefined ? {} : { sessionName }),
+  };
 }

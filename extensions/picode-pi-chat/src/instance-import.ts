@@ -11,8 +11,10 @@
  *
  * - The caller chooses the items one flag at a time. `settings` is the profile's
  *   `settings.json`, which carries the package list, and is the reason to replicate a
- *   profile at all. Sessions are deliberately not an item: a session belongs to the
- *   profile that made it, and moving them is a separate decision.
+ *   profile at all. Sessions are an item like any other, and the wizard's "migrate
+ *   everything" answer is what selects them: a session belongs to the profile that made
+ *   it, which is exactly why moving them has to be asked for rather than assumed. The
+ *   source is still only ever read — the owner's pi keeps every session it had.
  * - Credentials are their own decision and never a side effect. A false flag reports
  *   `declined`, not `absent`, so "you chose not to bring this" stays distinguishable
  *   from "there was nothing to bring".
@@ -41,7 +43,14 @@ import * as path from "node:path";
  * ------------------------------------------------------------------ */
 
 /** One thing the caller may bring across; each maps to a file or a directory. */
-export type ImportItem = "settings" | "models" | "mcp" | "skills" | "memory" | "credentials";
+export type ImportItem =
+  | "settings"
+  | "models"
+  | "mcp"
+  | "skills"
+  | "memory"
+  | "sessions"
+  | "credentials";
 
 /**
  * What comes across, one flag each. A falsy flag is a decision, not an omission:
@@ -54,6 +63,7 @@ export interface ImportSelection {
   mcp?: boolean;
   skills?: boolean;
   memory?: boolean;
+  sessions?: boolean;
   credentials?: boolean;
 }
 
@@ -122,6 +132,7 @@ const ITEMS: ItemSpec[] = [
   { item: "mcp", kind: "file", fileName: "mcp.json" },
   { item: "skills", kind: "directory", dirName: "skills" },
   { item: "memory", kind: "directory", dirName: "memory" },
+  { item: "sessions", kind: "directory", dirName: "sessions" },
   { item: "credentials", kind: "file", fileName: "auth.json" },
 ];
 
