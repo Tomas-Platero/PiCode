@@ -496,6 +496,28 @@ public sealed class Pipeline
 		return total;
 	}
 
+	/// <summary>
+	/// Starts installing WSL and its distribution, in a terminal of its own: the installer asks
+	/// questions and asks for a reboot, and those have to be seen to be answered.
+	/// </summary>
+	public static bool InstallWsl()
+	{
+		try
+		{
+			Process.Start(new ProcessStartInfo
+			{
+				FileName = "cmd.exe",
+				Arguments = "/k wsl --install -d Ubuntu",
+				UseShellExecute = true,
+			});
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
 	public static void OpenEditor()
 	{
 		if (!EditorExists)

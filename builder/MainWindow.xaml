@@ -145,6 +145,8 @@
                                     <TextBlock Name="TargetLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                     <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                    <Button Name="InstallWslButton" Content="Install WSL and Ubuntu" Click="OnInstallWsl"
+                                            Visibility="Collapsed" HorizontalAlignment="Left"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -212,10 +214,7 @@
                                 <TextBlock Grid.Column="1" Name="RailCheckCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </Grid>
                             <StackPanel Name="RailChecks" Spacing="8"/>
-                            <Border Name="RailCheckSummary" CornerRadius="6" Padding="10" Visibility="Collapsed"
-                                    Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}">
-                                <TextBlock Name="RailCheckSummaryText" TextWrapping="Wrap"/>
-                            </Border>
+
                         </StackPanel>
                     </Border>
 

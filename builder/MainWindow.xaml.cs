@@ -115,6 +115,7 @@ public sealed partial class MainWindow : Window
 		App.WriteCrashLog("bash: " + Pipeline.BashDescription);
 		_linuxAvailable = Pipeline.LinuxAvailable(out _linuxReason);
 		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
+		InstallWslButton.Visibility = _linuxAvailable ? Visibility.Collapsed : Visibility.Visible;
 
 		Nav.SelectedItem = Nav.MenuItems[0];
 		GripArea.PointerPressed += OnGripPressed;
@@ -222,6 +223,18 @@ public sealed partial class MainWindow : Window
 		Refresh();
 	}
 
+	private void OnInstallWsl(object sender, RoutedEventArgs e)
+	{
+		if (Pipeline.InstallWsl())
+		{
+			AppendNote("WSL is installing in its own window. Reboot when it asks, then press Check again.");
+		}
+		else
+		{
+			AppendNote("WSL could not be started for install. Run \"wsl --install -d Ubuntu\" from a terminal.");
+		}
+	}
+
 	private async void OnClean(object sender, RoutedEventArgs e)
 	{
 		var answer = new ContentDialog
@@ -268,10 +281,17 @@ public sealed partial class MainWindow : Window
 		// missing and what to do about it.
 		if (_target == BuildTarget.Linux && !_linuxAvailable)
 		{
-			Checks.Children.Add(Note("The checks for Linux are asked inside WSL, and there is no distribution yet. " + _linuxReason));
+			// The one thing that fixes it, offered where the problem is: install WSL and its distribution
+			// from here, reboot when the installer asks, and this panel fills with the Linux checks.
+			var installRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+			installRow.Children.Add(Note("The Linux checks are asked inside WSL, and there is no distribution yet. " + _linuxReason));
+			var install = new Button { Content = "Install WSL and Ubuntu" };
+			install.Click += OnInstallWsl;
+			installRow.Children.Add(install);
+			Checks.Children.Add(installRow);
+			Checks.Children.Add(Note("After installing, reboot, then come back here."));
 			RailChecks.Children.Add(Note("WSL is not ready"));
 			RailCheckCount.Text = "";
-			RailCheckSummary.Visibility = Visibility.Collapsed;
 			BuildButton.IsEnabled = false;
 			BuildButtonText.Text = "Build PiCode (Linux needs WSL)";
 			return;
@@ -291,7 +311,6 @@ public sealed partial class MainWindow : Window
 		if (_requirements.Checks.Length == 0)
 		{
 			RailCheckCount.Text = "";
-			RailCheckSummary.Visibility = Visibility.Collapsed;
 			Checks.Children.Add(Note("The checks could not be read: the repository was not found from where this program is running."));
 			RailChecks.Children.Add(Note("The checks could not be read"));
 			BuildButton.IsEnabled = false;
@@ -300,10 +319,7 @@ public sealed partial class MainWindow : Window
 		}
 
 		RailCheckCount.Text = $"{required - _blockers.Count} / {required} ready";
-		RailCheckSummary.Visibility = _blockers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-		RailCheckSummaryText.Text = _blockers.Count == 0
-			? "All requirements satisfied"
-			: $"{_blockers.Count} thing(s) need attention: open System Check";
+
 
 		if (_blockers.Count > 0 && !_missingSeen)
 		{

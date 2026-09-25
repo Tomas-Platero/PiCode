@@ -105,7 +105,7 @@ checks.push({
 	name: 'jq',
 	ok: jq !== '',
 	found: jq === '' ? 'not found' : jq,
-	missing: isWindows ? 'jq is missing' : 'jq is missing. On Debian and Ubuntu: sudo apt install -y jq',
+	missing: isWindows ? 'jq is missing' : 'jq is missing. Install with: sudo apt install -y jq',
 	install: isWindows ? 'jqlang.jq' : '',
 	url: 'https://jqlang.github.io/jq/download/',
 	note: 'the pipeline reads the product and the patches with it'
@@ -118,7 +118,7 @@ checks.push({
 	name: 'Python 3',
 	ok: python !== '',
 	found: python === '' ? 'not found' : python,
-	missing: isWindows ? 'Python 3 is missing' : 'Python 3 is missing. On Debian and Ubuntu: sudo apt install -y python3',
+	missing: isWindows ? 'Python 3 is missing' : 'Python 3 is missing. Install with: sudo apt install -y python3',
 	install: isWindows ? 'Python.Python.3.12' : '',
 	url: 'https://www.python.org/downloads/',
 	note: 'the native modules are compiled with it'
@@ -162,15 +162,44 @@ if (isWindows) {
 	let found = `${gcc} and ${make}`;
 	if (gcc === '') { found = 'not found'; }
 	else if (make === '') { found = `${gcc}, but make is missing`; }
+
+	// The editor's native modules link against X11, keymap, libsecret and krb5: without these headers
+	// the compile stops in npm ci, minutes in. dpkg says what is installed; on a distribution without
+	// dpkg the check says it could not look instead of guessing.
+	const libraries = ['libx11-dev', 'libxkbfile-dev', 'libsecret-1-dev', 'libkrb5-dev'];
+	const hasDpkg = run('dpkg', ['--version']) !== '';
+	const missingLibs = hasDpkg
+		? libraries.filter(name => run('dpkg', ['-s', name]) === '')
+		: [];
+	const libsOk = hasDpkg && missingLibs.length === 0;
+	let libsFound = libraries.join(', ');
+	if (!hasDpkg) { libsFound = 'could not be checked (no dpkg on this distribution)'; }
+	else if (missingLibs.length > 0) { libsFound = `missing: ${missingLibs.join(', ')}`; }
+
+	const aptLibs = ['build-essential', ...libraries].join(' ');
+	const aptCommand = `sudo apt install -y ${aptLibs}`;
+
 	checks.push({
 		id: 'cplusplus',
 		name: 'A C++ compiler and make',
 		ok: gcc !== '' && make !== '',
 		found,
-		missing: 'Compiling needs both. On Debian and Ubuntu: sudo apt install -y build-essential',
+		missing: `Compiling needs both. Install with: ${aptCommand}`,
 		install: '',
 		url: '',
 		note: 'node-gyp compiles the native modules with them'
+	});
+
+	checks.push({
+		id: 'native-headers',
+		name: 'Native module headers',
+		optional: !hasDpkg,
+		ok: libsOk,
+		found: libsFound,
+		missing: `Missing: ${missingLibs.join(', ')}. Install with: ${aptCommand}`,
+		install: '',
+		url: '',
+		note: 'the editor\u2019s native modules link against X11, keymap, libsecret and krb5'
 	});
 }
 
@@ -240,7 +269,9 @@ if (json) {
 	}, null, '\t') + '\n');
 } else {
 	for (const check of checks) {
-		const mark = check.ok ? 'OK  ' : (check.optional ? '--  ' : 'NO  ');
+		// The mark: fine, only recommended and missing, or missing.
+		let mark = 'OK  ';
+		if (!check.ok) { mark = check.optional ? '--  ' : 'NO  '; }
 		process.stdout.write(`${mark}${(check.optional ? check.name + ' (rec.)' : check.name).padEnd(32)} ${check.ok ? check.found : check.missing}\n`);
 	}
 	process.stdout.write(blockers.length === 0 ? 'nothing is missing\n' : `${blockers.length} thing(s) to fix\n`);
