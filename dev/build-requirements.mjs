@@ -69,6 +69,7 @@ if (nodeVersion === '') {
 
 checks.push({
 	id: 'node',
+	icon: 'nodedotjs',
 	name: 'Node.js',
 	ok: nodeVersion !== '' && nodeVersion.split('.')[0] === wanted,
 	found: nodeVersion === '' ? 'not found' : `v${nodeVersion} (the build wants ${wanted})`,
@@ -87,6 +88,7 @@ if (hasBash) {
 }
 checks.push({
 	id: 'git',
+	icon: 'git',
 	name: isWindows ? 'Git for Windows' : 'Git and a shell',
 	ok: git !== '' && hasBash,
 	found: git === '' ? 'not found' : `${git}${shellNote}`,
@@ -99,6 +101,7 @@ checks.push({
 const jq = run('jq', ['--version']);
 checks.push({
 	id: 'jq',
+	icon: 'json',
 	name: 'jq',
 	ok: jq !== '',
 	found: jq === '' ? 'not found' : jq,
@@ -111,6 +114,7 @@ checks.push({
 const python = run('python3', ['--version']) || run('python', ['--version']);
 checks.push({
 	id: 'python',
+	icon: 'python',
 	name: 'Python 3',
 	ok: python !== '',
 	found: python === '' ? 'not found' : python,
@@ -175,6 +179,7 @@ if (isWindows) {
 const cargo = run('cargo', ['--version']);
 checks.push({
 	id: 'rust',
+	icon: 'rust',
 	name: 'Rust',
 	optional: true,
 	ok: cargo !== '',
@@ -209,6 +214,7 @@ if (isWindows) {
 	}
 	checks.push({
 		id: 'editor-closed',
+		icon: 'picode',
 		name: 'PiCode closed',
 		ok: !running,
 		found: running ? 'PiCode is running' : 'nothing is using the folder it is built into',

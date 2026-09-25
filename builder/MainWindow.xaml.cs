@@ -88,6 +88,12 @@ public sealed partial class MainWindow : Window
 				Logo.Source = new SvgImageSource(new Uri(logo));
 			}
 
+			var tux = Pipeline.BrandIcon("linux");
+			if (tux is not null)
+			{
+				LinuxMark.Source = new SvgImageSource(new Uri(tux));
+			}
+
 			// The background is the owner's drawing, and it is optional on purpose: whoever clones the
 			// repository does not need it to build anything.
 			var background = Path.Combine(Pipeline.RepoRoot, "builder", "Assets", "picode-builder-background.svg");
@@ -257,15 +263,29 @@ public sealed partial class MainWindow : Window
 		line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 		line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-		var mark = new TextBlock
+		// The tool's own mark where there is one, and the plain tick where there is not: several of these
+		// tools are trademarks with no freely distributable icon, and pretending otherwise would show a
+		// wrong logo. The tooltip still names what was found.
+		var brand = Pipeline.BrandIcon(check.Icon);
+		if (brand is not null)
 		{
-			Text = check.Ok ? "\u2713" : "\u2717",
-			VerticalAlignment = VerticalAlignment.Center,
-			Foreground = (Brush)Application.Current.Resources[
-				check.Ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
-		};
-		Grid.SetColumn(mark, 0);
-		line.Children.Add(mark);
+			var icon = new Image { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+			icon.Source = new SvgImageSource(new Uri(brand));
+			Grid.SetColumn(icon, 0);
+			line.Children.Add(icon);
+		}
+		else
+		{
+			var mark = new TextBlock
+			{
+				Text = check.Ok ? "\u2713" : "\u2717",
+				VerticalAlignment = VerticalAlignment.Center,
+				Foreground = (Brush)Application.Current.Resources[
+					check.Ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
+			};
+			Grid.SetColumn(mark, 0);
+			line.Children.Add(mark);
+		}
 
 		var name = new TextBlock { Text = check.Name, VerticalAlignment = VerticalAlignment.Center };
 		if (!string.IsNullOrEmpty(check.Note))

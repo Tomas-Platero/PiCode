@@ -25,6 +25,7 @@ public enum BuildTarget
 public sealed class Requirement
 {
 	public string Id { get; set; } = "";
+	public string Icon { get; set; } = "";
 	public bool Optional { get; set; }
 	public string Name { get; set; } = "";
 	public bool Ok { get; set; }
@@ -111,6 +112,22 @@ public sealed class Pipeline
 	public static string PackDirectory => Path.Combine(RepoRoot, "PiCode-Win32-x64");
 
 	public static string EditorExecutable => Path.Combine(PackDirectory, "PiCode.exe");
+
+	/// <summary>
+	/// The brand marks, in the folder beside this program. Where one is missing the window falls back to
+	/// the plain mark, which is why a clone without them still shows every check.
+	/// </summary>
+	public static string? BrandIcon(string name)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			return null;
+		}
+		var path = name == "picode"
+			? Path.Combine(RepoRoot, "distribution", "picode-icon.svg")
+			: Path.Combine(RepoRoot, "builder", "Assets", "brands", name + ".svg");
+		return File.Exists(path) ? path : null;
+	}
 
 	public static bool EditorExists => File.Exists(EditorExecutable);
 

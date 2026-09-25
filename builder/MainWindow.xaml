@@ -192,7 +192,7 @@
                                 <Button Grid.Column="1" Name="TargetLinuxButton" Tag="linux"
                                         HorizontalAlignment="Stretch" Click="OnTargetClicked">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xEC4E;" FontSize="14"/>
+                                        <Image Name="LinuxMark" Width="14" Height="14"/>
                                         <TextBlock Text="Linux (WSL)"/>
                                     </StackPanel>
                                 </Button>
