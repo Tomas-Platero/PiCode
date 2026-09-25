@@ -116,10 +116,10 @@ index 00000000000..7a72463d001
 +}
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
 new file mode 100644
-index 00000000000..3b4ab2a26a0
+index 00000000000..59a28662eef
 --- /dev/null
 +++ b/extensions/picode/src/agent.ts
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,329 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -128,6 +128,8 @@ index 00000000000..3b4ab2a26a0
 +import * as vscode from 'vscode';
 +import { contextBlock, withContext, type EditorContext } from './context';
 +import { readPiChatSettings } from './piConfig';
++import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
++import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 +import { toolProgress } from './progress';
 +import { THINKING_HEADER, quotedThinking } from './thinking';
 +import { loadPiSdk } from './piSdk';
@@ -209,6 +211,8 @@ index 00000000000..3b4ab2a26a0
 +		sessionManager: unknown;
 +		model?: PiModel;
 +		thinkingLevel?: string;
++		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
++		customTools?: unknown[];
 +	}): Promise<{ session: PiSession }>;
 +	SessionManager: { create(cwd: string): unknown };
 +}
@@ -353,8 +357,24 @@ index 00000000000..3b4ab2a26a0
 +	let sessionFolder: string | undefined;
 +	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
 +	let services: PiServices | undefined;
++	/**
++	 * The session's store, kept across a rebuild so the conversation survives one.
++	 *
++	 * A rebuild happens when the editor's MCP servers change, because pi registers custom tools
++	 * when a session is created and cannot add one later. Reusing the manager is what makes that
++	 * rebuild invisible: the transcript is in the manager, not in the session.
++	 */
++	let sessionManager: unknown;
++	/** The MCP tool set the running session was built with. */
++	let mcpSignature = '';
++
++	/** What the editor's MCP servers offer right now, as a signature to compare. */
++	const currentMcpSignature = () => toolSetSignature(mcpTools(vscode.lm.tools as readonly EditorToolInfo[]));
++	/** The chat request in flight, which is where an MCP call gets its invocation token. */
++	const toolToken: ToolTokenHolder = {};
 +
 +	const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
++		toolToken.current = request.toolInvocationToken;
 +		const sdk = await loadSdk(deps.distributionRoot, deps.log);
 +		if (sdk === undefined) {
 +			stream.markdown('PiCode: this editor has no pi to talk to. Reinstall it so the agent can answer.');
@@ -368,20 +388,32 @@ index 00000000000..3b4ab2a26a0
 +
 +		try {
 +			const selected = modelRefOf(request.model, VENDOR);
-+			if (session === undefined || sessionFolder !== cwd) {
++			const signature = currentMcpSignature();
++			// Rebuilt when the folder changes — a session belongs to a working directory — and when
++			// the editor's MCP servers do, which is the one thing a session cannot take later.
++			const folderChanged = sessionFolder !== cwd;
++			const toolsChanged = signature !== mcpSignature;
++			if (session === undefined || folderChanged || toolsChanged) {
 +				session?.dispose();
 +				services = await sdk.createAgentSessionServices({ cwd, agentDir: deps.profileDir });
++				if (folderChanged || sessionManager === undefined) {
++					sessionManager = sdk.SessionManager.create(cwd);
++				}
 +				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
 +				const created = await sdk.createAgentSessionFromServices({
 +					services,
-+					sessionManager: sdk.SessionManager.create(cwd),
++					sessionManager,
 +					// pi's own default when the chat is on a model that is not ours: better pi's choice
 +					// than a guess at one of ours.
 +					...(model === undefined ? {} : { model }),
 +					...(settings.thinkingLevel === undefined ? {} : { thinkingLevel: settings.thinkingLevel }),
++					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
++					// because a server added a minute ago has to be there on the next message.
++					customTools: piToolsFromEditor(toolToken),
 +				});
 +				session = created.session;
 +				sessionFolder = cwd;
++				mcpSignature = signature;
 +			} else {
 +				// The model picked in the chat between two turns is followed here: a session that
 +				// answered with the previous model while the picker said otherwise is the defect this
@@ -1753,6 +1785,232 @@ index 00000000000..d2be4d69555
 +function messageOf(error: unknown): string {
 +	return error instanceof Error ? error.message : String(error);
 +}
+diff --git a/extensions/picode/src/mcp.ts b/extensions/picode/src/mcp.ts
+new file mode 100644
+index 00000000000..60e67f3357c
+--- /dev/null
++++ b/extensions/picode/src/mcp.ts
+@@ -0,0 +1,96 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as vscode from 'vscode';
++import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './mcpTools';
++
++/**
++ * The MCP servers of the editor, given to pi as tools of its own.
++ *
++ * pi has **no MCP**, and it says so itself: its README lists "MCP server integration" among the
++ * things it deliberately leaves out ("**No MCP.** Build CLI tools with READMEs, or build an
++ * extension that adds MCP support"). What pi does have is `customTools`: tools a host registers
++ * for a session. And the editor *does* have MCP — its own servers, its own screen to add them,
++ * its own permissions — and it exposes every MCP tool as a language model tool.
++ *
++ * So this module is the bridge the owner asked for: *"hay una que es 'MCP' necesito que esas
++ * opciones puedan usarse para conectar los MCP con el PI interno de PiCode."* The editor keeps
++ * owning the servers (adding, enabling, authenticating, confirming), and pi gets their tools and
++ * runs them through the editor with `lm.invokeTool` — which means the editor's confirmation and
++ * permission rules apply, instead of a second set of ours.
++ *
++ * Only the tools the editor marks as MCP are taken (`mcp_` prefix, `mcpTypes.ts`): the rest of
++ * `lm.tools` is the editor's own tooling, and pi already has its own tools for reading, editing
++ * and running things.
++ *
++ * The parts that decide *what* a tool is and *what* comes back are pure, so they can be exercised
++ * by running them; what needs the editor is the call itself.
++ */
++
++/**
++ * The token that ties a tool invocation to the chat request in flight.
++ *
++ * `lm.invokeTool` needs it, and the *only* way to get one is from a chat request — so it cannot be
++ * captured when the tools are built (they are built with the session, and the session outlives the
++ * request). This holder is what the tools read at call time: `agent.ts` puts the current request's
++ * token in it before every turn. Without it there would be no confirmation inline in the chat and
++ * no progress shown for a server that takes a while.
++ */
++export interface ToolTokenHolder {
++	current?: vscode.ChatParticipantToolToken;
++}
++
++/** The MCP tools of the editor, as pi tool definitions. */
++export function piToolsFromEditor(token: ToolTokenHolder): unknown[] {
++	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token));
++}
++
++/**
++ * One pi tool definition that runs the editor's tool.
++ *
++ * `lm.invokeTool` is the editor's own door: the server, its credentials, its confirmation and its
++ * permissions all stay where the owner configured them, and this adds no second path to the same
++ * server. A failure is thrown rather than encoded in the result, which is what pi's tool contract
++ * asks for and what makes the reason visible in the chat.
++ */
++function editorTool(tool: McpTool, token: ToolTokenHolder): unknown {
++	return {
++		name: tool.name,
++		label: tool.label,
++		description: tool.description,
++		// pi lists the tools it has in the system prompt with this line; without it a custom tool is
++		// left out of that list and the model never learns it exists.
++		promptSnippet: `${tool.name}: ${tool.description}`,
++		parameters: tool.parameters,
++		execute: async (_toolCallId: string, params: unknown, signal?: AbortSignal): Promise<unknown> => {
++			const result = await vscode.lm.invokeTool(
++				tool.name,
++				{ input: (params ?? {}) as object, toolInvocationToken: token.current },
++				abortSignalFor(signal),
++			);
++			return { content: [{ type: 'text', text: toolResultText(result.content) }], details: undefined };
++		},
++	};
++}
++
++/**
++ * A cancellation token that follows pi's abort signal.
++ *
++ * `lm.invokeTool` takes a token, and pi hands the tool an `AbortSignal`. Without this, cancelling
++ * a turn in the chat would leave the MCP call running — and the server busy — while the answer was
++ * already abandoned.
++ */
++function abortSignalFor(signal: AbortSignal | undefined): vscode.CancellationToken | undefined {
++	if (signal === undefined) {
++		return undefined;
++	}
++	const source = new vscode.CancellationTokenSource();
++	if (signal.aborted) {
++		source.cancel();
++	} else {
++		signal.addEventListener('abort', () => source.cancel(), { once: true });
++	}
++	return source.token;
++}
+diff --git a/extensions/picode/src/mcpTools.ts b/extensions/picode/src/mcpTools.ts
+new file mode 100644
+index 00000000000..ffa0d280528
+--- /dev/null
++++ b/extensions/picode/src/mcpTools.ts
+@@ -0,0 +1,118 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * What an MCP tool is, and what comes back from one — the parts of the bridge that decide
++ * something.
++ *
++ * No `vscode` import, so the filtering, the schema and the result can be exercised by running
++ * them; `mcp.ts` is the part that calls the editor.
++ */
++
++/** The prefix the editor gives the tools of an MCP server (`mcpTypes.ts`: `Prefix = 'mcp_'`). */
++export const MCP_TOOL_PREFIX = 'mcp_';
++
++/** A tool as the editor describes it, reduced to the fields this bridge reads. */
++export interface EditorToolInfo {
++	readonly name: string;
++	readonly description?: string;
++	readonly inputSchema?: unknown;
++}
++
++/** One MCP tool, in the shape a pi tool definition wants. */
++export interface McpTool {
++	readonly name: string;
++	readonly label: string;
++	readonly description: string;
++	readonly parameters: Record<string, unknown>;
++}
++
++/** Whether the editor's tool is one of an MCP server's. */
++export function isMcpTool(tool: EditorToolInfo): boolean {
++	return typeof tool.name === 'string' && tool.name.startsWith(MCP_TOOL_PREFIX) && tool.name.length > MCP_TOOL_PREFIX.length;
++}
++
++/**
++ * The parameter schema, as pi can validate it.
++ *
++ * An MCP server declares its input as JSON Schema, and pi validates with TypeBox — which *is*
++ * JSON Schema at runtime, so an object schema is passed through as it came. Anything else (a
++ * schema for a non-object, or one this bridge cannot read) becomes a permissive object: a tool
++ * that accepts anything and complains when it is called is better than a tool that cannot be
++ * registered at all.
++ */
++export function toolParameters(schema: unknown): Record<string, unknown> {
++	if (typeof schema === 'object' && schema !== null) {
++		const record = schema as Record<string, unknown>;
++		if (record.type === 'object' || typeof record.properties === 'object') {
++			return record;
++		}
++	}
++	return { type: 'object', properties: {}, additionalProperties: true };
++}
++
++/**
++ * The tool's name as the **model** should see it.
++ *
++ * The editor's name carries its own prefix (`mcp_github_search`); it is kept, because that is
++ * also the name the call has to be made with, and two names for one thing is how a rename turns
++ * into a bug. The label is the same name for the screen, which is what pi shows while it works.
++ */
++export function mcpTools(tools: readonly EditorToolInfo[]): McpTool[] {
++	const found: McpTool[] = [];
++	for (const tool of tools ?? []) {
++		if (!isMcpTool(tool)) {
++			continue;
++		}
++		found.push({
++			name: tool.name,
++			label: tool.name,
++			description: typeof tool.description === 'string' && tool.description.trim().length > 0
++				? tool.description.trim()
++				: `Tool of an MCP server (${tool.name}).`,
++			parameters: toolParameters(tool.inputSchema),
++		});
++	}
++	return found;
++}
++
++/**
++ * What the editor's tool returned, as pi wants it: text parts, and anything else written out.
++ *
++ * The editor's result is a list of parts (`LanguageModelTextPart`, prompt-TSX, data), and pi's
++ * tool result is text and images. A part that is not text is not dropped — it is turned into its
++ * JSON, because a model that receives `[object Object]` learns nothing, and a part that is
++ * silently missing is worse: it looks like the tool returned nothing.
++ */
++export function toolResultText(content: unknown): string {
++	if (!Array.isArray(content)) {
++		return typeof content === 'string' ? content : '';
++	}
++	const pieces: string[] = [];
++	for (const part of content) {
++		if (typeof part === 'string') {
++			pieces.push(part);
++			continue;
++		}
++		const value = (part as { value?: unknown } | null)?.value;
++		if (typeof value === 'string') {
++			pieces.push(value);
++			continue;
++		}
++		if (value !== undefined) {
++			pieces.push(JSON.stringify(value));
++		}
++	}
++	return pieces.join('\n');
++}
++
++/** A signature of the tool set, to notice when the servers behind it changed. */
++export function toolSetSignature(tools: readonly McpTool[]): string {
++	return [...tools].map(tool => tool.name).sort().join('|');
++}
++
++/* ------------------------------------------------------------------ *
++ * What needs the editor
++ * ------------------------------------------------------------------ */
 diff --git a/extensions/picode/src/piConfig.ts b/extensions/picode/src/piConfig.ts
 new file mode 100644
 index 00000000000..c95efa0dd40
