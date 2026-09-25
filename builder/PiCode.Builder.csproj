@@ -5,6 +5,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>PiCode.Builder</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- PiCode's own icon, baked into the executable: the window sets one at runtime too, but
+         this is the one Explorer and a shortcut show, and they read it from inside the file.
+         The path leaves this folder on purpose: the icon lives with the distribution's art. -->
+    <ApplicationIcon>..\distribution\picode.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <!-- Self-contained needs the architecture said one way, not as a list: it is the difference
