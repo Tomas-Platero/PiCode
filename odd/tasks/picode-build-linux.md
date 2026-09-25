@@ -47,3 +47,27 @@ demuestra es aplicarlo sobre una copia del fichero *sin* el cambio.
 
 - 2026-09-25 · pedido por el dueño («¿se podría compilar para linux también?» y, después, «añade la
   build de linux también»).
+
+## Estado ahora mismo (2026-09-25, tarde)
+
+En esta máquina: las dos piezas de Windows que WSL necesita (`Microsoft-Windows-Subsystem-Linux` y
+`VirtualMachinePlatform`) están **activadas** y el **WSL de la tienda está instalado**. Falta
+**reiniciar** (lo piden las piezas de Windows, no es opcional).
+
+**Lo que sigue, después del reinicio** (todo desde una sesión con permisos de administrador, que es
+como se activaron):
+
+1. `wsl --install -d Ubuntu` (o `wsl --install` para la que venga por defecto) y crear el usuario.
+2. Dentro de Linux: `sudo apt update && sudo apt install -y jq python3 git build-essential` + node 24
+   (el `.nvmrc` dice la versión; en Ubuntu, con nvm o con el paquete de NodeSource).
+3. **El repositorio, dentro del disco de Linux** (`~/PiCode`), no sobre `/mnt/d/…`: compilar sobre el
+   disco de Windows con miles de ficheros pequeños es varias veces más lento. Y el `./vscode` (el
+   clon de VS Code, 1 GB) también va ahí.
+4. `bash dev/build.sh` (o `dev/build-live.sh` para ver la barra). Lo esperado: la carpeta
+   `PiCode-linux-x64`, con el icono de PiCode, la copia reescrita y los binarios del pi podados a
+   Linux.
+5. Lo que falle, se arregla: es la primera vez que este camino se ejecuta de verdad.
+
+**Y lo que sigue pendiente y no depende de nada de esto**: la build de **Windows**, que el dueño
+quería lanzar él (`devuild-window.cmd` o `bash dev/build-live.sh`), y que ahora sale como
+`PiCode-Win32-x64`.
