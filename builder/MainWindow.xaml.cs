@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
+using System.Runtime.InteropServices;
 
 namespace PiCode.Builder;
 
@@ -72,6 +73,7 @@ public sealed partial class MainWindow : Window
 		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
 
 		Nav.SelectedItem = Nav.MenuItems[0];
+		GripArea.PointerPressed += OnGripPressed;
 
 		_timer.Interval = TimeSpan.FromSeconds(1);
 		_timer.Tick += (_, _) => Refresh();
@@ -79,6 +81,27 @@ public sealed partial class MainWindow : Window
 
 		RefreshFacts();
 		Refresh();
+	}
+
+	private const int WM_NCLBUTTONDOWN = 0x00A1;
+	private const int HTBOTTOMRIGHT = 17;
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr ReleaseCapture();
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+	/// <summary>
+	/// Starts a real resize. The window follows Windows and Windows no longer draws a grip, so this is
+	/// drawn back - and a grip that does not grip would be a control that lies. Handing the press to the
+	/// system's own border handling is how every custom handle does it.
+	/// </summary>
+	private void OnGripPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+	{
+		var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+		ReleaseCapture();
+		SendMessage(handle, WM_NCLBUTTONDOWN, (IntPtr)HTBOTTOMRIGHT, IntPtr.Zero);
 	}
 
 	private void OnNavChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

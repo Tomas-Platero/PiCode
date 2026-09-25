@@ -213,11 +213,23 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Name="FooterVersion" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 <TextBlock Grid.Column="1" Name="FooterPath" Margin="24,0" TextAlignment="Center"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Grid.Column="2" Name="FooterTarget" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Column="2" Name="FooterTarget" Margin="0,0,12,0"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                <!-- Windows stopped drawing the resize grip years ago and this window follows Windows,
+                     so the corner would be empty. It is drawn back, and it is not decoration: pressing
+                     it hands the drag to the system, which resizes the window as it always did. -->
+                <Border Grid.Column="3" Name="GripArea" Width="18" Height="18" Padding="3,3,0,0"
+                        Background="Transparent" ToolTipService.ToolTip="Drag to resize">
+                    <Path Name="Grip" Stroke="{ThemeResource TextFillColorSecondaryBrush}" StrokeThickness="1"
+                          Opacity="0.6" Stretch="None"
+                          Data="M 11,1 L 1,11 M 11,5 L 5,11 M 11,9 L 9,11"/>
+                </Border>
             </Grid>
         </Border>
     </Grid>
