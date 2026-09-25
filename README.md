@@ -26,6 +26,7 @@ into PiCode:
 | `patches/` | The two patch sets the source build applies: `vscodium/` (vendored verbatim from VSCodium) and `picode/` (PiCode's own). |
 | `upstream/` | The pins: which VS Code commit, and which VSCodium revision the patches were vendored from. |
 | `dev/` | The pipeline itself: fetch, prepare, patch, compile, pack, stage — plus the build window and the progress viewer. |
+| `builder/` | The C# application that presses the button: it drives the same pipeline, natively on Windows and through WSL for Linux. |
 | `extensions/picode-pi-chat/` | The **retired** agent extension. Nothing compiles it or ships it; it stays until its migration into the editor's core finishes (see `odd/tasks/picode-migrar-al-core.md`). |
 | `distribution/` | The modification layer as data: `product-delta.json` (branding, gallery, removed endpoints), `settings.json` (first-run defaults), the icon, and `apply-picode.ps1` which applies the delta, creates the portable profile and stages the built extension into the tree. |
 | `odd/tasks/` | The **ODD** feature records: one document per feature, with the decisions taken, the checks observed, the defects found and the commits that carry them. This is where the reasoning lives. |

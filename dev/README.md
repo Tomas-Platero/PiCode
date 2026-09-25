@@ -199,3 +199,10 @@ reads with comments allowed — this explanation lives here so the file stays re
 tool). The default task is the live build, the one with the bar. Two builds in one tree fight over
 `node_modules` and over the directory they pack into — one of those left a half-installed tree
 behind — so the lock is checked before starting, never after.
+
+## The window is also an application now
+
+`dev/build-window.cmd` is the PowerShell window, and it works. There is also a C# application in
+[`builder/`](../builder/README.md) with the same job - `cd builder && dotnet run` - which builds for
+Windows natively and for Linux through WSL. It reads the same scripts this folder holds and the same
+`dev/build-requirements.mjs` and `dev/build-progress.mjs`, so nothing about the pipeline lives in it.

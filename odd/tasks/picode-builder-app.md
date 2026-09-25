@@ -103,7 +103,7 @@ franja inferior— y pide «algo así con el logo de picode».
 ## Tareas (revisadas)
 
 - [x] B1 **Comprobado**: la vía sin administrador vale y no se instaló nada.
-- [ ] B2 **El shell**: barra lateral, páginas, tarjetas y el logo. Con el tema y el acento del sistema.
-- [ ] B3 **La build en marcha**: pasos como línea de tiempo, porcentaje grande, y el botón de parar.
+- [x] B2 **El shell**: barra lateral, páginas, tarjetas y el logo. Con el tema y el acento del sistema.
+- [x] B3 **La build en marcha**: pasos como línea de tiempo, porcentaje grande, y el botón de parar.
 - [ ] B4 **Ejecutarla y mirarla** en los dos objetivos (Linux espera al reinicio).
-- [ ] B5 **Los documentos**.
+- [x] B5 **Los documentos**: `builder/README.md` (cómo construirla y ejecutarla, y qué necesita: nada), `dev/README.md` y el mapa del `README.md` apuntan a ella, y las tareas del editor («PiCode: build the builder» y «PiCode: run the builder»). Comprobado que `dotnet run` levanta la ventana.

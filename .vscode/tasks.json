@@ -68,6 +68,38 @@
 				"clear": true
 			},
 			"problemMatcher": []
+		},
+		{
+			"label": "PiCode: build the builder",
+			"detail": "Compiles the C# builder in builder/ (needs only the .NET SDK)",
+			"type": "shell",
+			"command": "dotnet build builder/PiCode.Builder.csproj",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "PiCode: run the builder",
+			"detail": "Compiles and opens the builder window",
+			"type": "shell",
+			"command": "dotnet run --project builder/PiCode.Builder.csproj",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
 		}
 	]
 }
