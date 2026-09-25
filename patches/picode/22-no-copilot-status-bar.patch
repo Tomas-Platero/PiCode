@@ -1,0 +1,20 @@
+diff --git a/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts b/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+index f0a3f827..238e45f9 100644
+--- a/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
++++ b/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+@@ -205,7 +205,6 @@ import { ChatQuotaNotificationContribution } from './chatQuotaNotification.js';
+ import { ChatRepoInfoContribution } from './chatRepoInfo.js';
+ import { ChatSetupContribution, ChatTeardownContribution } from './chatSetup/chatSetupContributions.js';
+ import { ChatSessionOptionSlashCommandsContribution, ChatSlashCommandsContribution } from './chatSlashCommands.js';
+-import { ChatStatusBarEntry } from './chatStatus/chatStatusEntry.js';
+ import { ChatTipService, IChatTipService } from './chatTipService.js';
+ import { ChatWindowNotifier } from './chatWindowNotifier.js';
+ import { AgentPluginRecommendations } from './claudePluginRecommendations.js';
+@@ -3060,7 +3059,6 @@ registerWorkbenchContribution2(ChatQuotaNotificationContribution.ID, ChatQuotaNo
+ registerWorkbenchContribution2(ChatPromoNotificationContribution.ID, ChatPromoNotificationContribution, WorkbenchPhase.AfterRestored);
+ registerWorkbenchContribution2(HasByokModelsContribution.ID, HasByokModelsContribution, WorkbenchPhase.BlockRestore);
+ registerWorkbenchContribution2(ChatTeardownContribution.ID, ChatTeardownContribution, WorkbenchPhase.AfterRestored);
+-registerWorkbenchContribution2(ChatStatusBarEntry.ID, ChatStatusBarEntry, WorkbenchPhase.BlockRestore);
+ registerWorkbenchContribution2(BuiltinToolsContribution.ID, BuiltinToolsContribution, WorkbenchPhase.Eventually);
+ registerWorkbenchContribution2(ClientToolSetsContribution.ID, ClientToolSetsContribution, WorkbenchPhase.Eventually);
+ registerWorkbenchContribution2(UsagesToolContribution.ID, UsagesToolContribution, WorkbenchPhase.BlockRestore);

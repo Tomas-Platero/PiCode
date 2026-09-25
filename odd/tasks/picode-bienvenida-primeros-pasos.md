@@ -104,6 +104,15 @@ de extensiones para instalar temas nuevos. La galería completa de la extensión
 - [ ] **T7 — Cierre.** Commits de unidad de trabajo, informe.
 
 ## Evidence
+- **Defecto del dueño, encontrado en su máquina (2026-09-25): la clave del runtime.**
+  "Unable to write to User Settings because picode:picode.pi.runtime is not a registered
+  configuration". La causa era mía: la escritura (y la lectura) usaban la clave **completa**
+  (`picode.pi.runtime`) sobre una configuración **de sección** (`picode`), así que la clave
+  real era `picode.picode.pi.runtime` — no registrada. Corregido en el puente: la clave
+  completa sobre la configuración raíz, en lectura y escritura.
+- **Barra de estado (2026-09-25): fuera «Copilot Status».** La contribución
+  `ChatStatusBarEntry` aparecía porque el propio agente de PiCode mantiene el chat vivo;
+  anunciaba Copilot, que este producto retiró. Registro e import eliminados (parche 22).
 
 - **T1–T5 (código).** Escritos y compilando: el conector pasa su `tsc` propio estricto
   (`extensions/picode/tsconfig.json`, `--noEmit`, 0 errores) con todo dentro —
