@@ -1,0 +1,49 @@
+{
+	// PiCode's own build, runnable from the editor so its progress can be watched in a terminal.
+	//
+	// It is the same command the operator runs by hand (`./dev/build.sh`), with `-s` because the
+	// source tree is already prepared: the phases that fetch and patch VS Code are skipped and the
+	// build resumes at the dependencies, which is what a rebuild after a source change needs.
+	//
+	// One at a time: two builds in the same tree fight over `node_modules` and over the platform
+	// directory they pack into, and the loser leaves a half-installed tree behind (that happened).
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "PiCode: build the editor",
+			"detail": "Compiles the core, the connector, and packs the distribution into VSCode-win32-x64",
+			"type": "shell",
+			"command": "bash dev/build.sh -s",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "PiCode: prepare the source tree",
+			"detail": "Fetches the pinned VS Code source and applies every patch, without compiling",
+			"type": "shell",
+			"command": "bash dev/build.sh -o",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
+		}
+	]
+}
