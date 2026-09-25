@@ -768,7 +768,7 @@ index e97fa180..c278ab2b 100644
  				this.setSlide('categories');
  				this.container.focus();
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-index c2622705..06d219bd 100644
+index c2622705..9c2aa5de 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 @@ -109,34 +109,32 @@
@@ -1208,12 +1208,82 @@ index c2622705..06d219bd 100644
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
  	grid-area: right-column;
  }
+@@ -1146,3 +1521,69 @@
+ .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlide .getting-started-checkbox {
+ 	border-color: var(--vscode-checkbox-border) !important;
+ }
++
++/* --- PiCode setup wizard: head, foot, steps ------------------------------ */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-head {
++	display: flex;
++	align-items: center;
++	gap: 10px;
++	margin-bottom: 10px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-dots {
++	display: flex;
++	gap: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-dot {
++	width: 8px;
++	height: 8px;
++	border-radius: 50%;
++	background: var(--vscode-widget-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.4)));
++	transition: background-color 0.15s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-dot.on {
++	background: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-label {
++	font-size: .9em;
++	opacity: .8;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-body {
++	/* the single card of the step gets the width the three used to share */
++	max-width: none;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-foot {
++	display: flex;
++	align-items: center;
++	gap: 14px;
++	margin-top: 12px;
++	padding-top: 10px;
++	border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-foot-spacer {
++	flex: 1;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-foot .picode-button.disabled,
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-foot .picode-option-card.disabled {
++	opacity: .5;
++	pointer-events: none;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-not-now {
++	font-size: .88em;
++	opacity: .8;
++}
++
++/* with one card per step the gallery can breathe: wider columns */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-body .picode-theme-grid {
++	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
++}
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
 new file mode 100644
-index 00000000..10980291
+index 00000000..f64ae433
 --- /dev/null
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,772 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1307,6 +1377,15 @@ index 00000000..10980291
 +	private appliedThemeId: string | undefined;
 +	/** True while an action runs, so a second click cannot start it twice. */
 +	private busy = false;
++
++	/* The wizard: which step is on screen, and what the owner has done in it. */
++	private step: 0 | 1 | 2 = 0;
++	/** Step 1's Next stays disabled until an option card is clicked at least once. */
++	private piChosen = false;
++	/** The wizard ran to the end. */
++	private finished = false;
++	/** The owner chose "Not now": the whole setup steps aside until reopened. */
++	private skipped = false;
 +	private readonly disposables = this._register(new DisposableStore());
 +	/** The grid's own store: repainting the grid must not unbind the rest of the cards. */
 +	private readonly gridDisposables = this._register(new DisposableStore());
@@ -1330,7 +1409,7 @@ index 00000000..10980291
 +		const [state] = await Promise.all([this.resolveState(), this.resolveThemes()]);
 +		if (this._store.isDisposed) { return; }
 +		this.state = state;
-+		this.renderCards(state);
++		this.renderWizard(state);
 +	}
 +
 +	private async resolveState(): Promise<SetupState | undefined> {
@@ -1355,26 +1434,119 @@ index 00000000..10980291
 +	 * The cards
 +	 * ------------------------------------------------------------------ */
 +
-+	private renderCards(state: SetupState | undefined): void {
++	private renderWizard(state: SetupState | undefined): void {
 +		this.disposables.clear();
 +		clearNode(this.container);
 +
 +		if (state === undefined) {
 +			const note = $('p.picode-note', {}, localize('picodeSetup.unavailable', "The setup is not available yet — it will appear in a moment."));
-+			reset(this.container, note);
++			reset(this.container as HTMLElement, note);
++			return;
++		}
++		if (this.skipped) {
++			reset(this.container as HTMLElement, $('.picode-card', {},
++				$('p', {}, localize('picodeSetup.skipped', "Setup skipped. Reopen it any time: run 'PiCode: Set up PiCode' from the command palette, or Help > Welcome.")),
++				$('.picode-gentle-actions', {},
++					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); })),
++			));
++			return;
++		}
++		if (this.finished) {
++			reset(this.container as HTMLElement, $('.picode-card', {},
++				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > Chat, or by running this setup again.")),
++				$('.picode-gentle-actions', {},
++					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); })),
++			));
 +			return;
 +		}
 +
-+		this.note = $('p.picode-note');
-+		reset(
-+			this.container as HTMLElement,
-+			this.renderPiCard(state),
++		const body = this.step === 0
++			? this.renderPiCard(state)
 +			// Gentle AI lives in PiCode's own profile — the internal pi's — so with the
 +			// external pi chosen the question is asked dimmed, with the reason as its tooltip.
-+			this.renderGentleCard(state, state.runtime !== 'internal'),
-+			this.renderThemeCard(),
-+			this.note,
++			: this.step === 1
++				? this.renderGentleCard(state, state.runtime !== 'internal')
++				: this.renderThemeCard();
++
++		reset(
++			this.container as HTMLElement,
++			this.renderWizardHead(),
++			$('.picode-step-body', {}, body),
++			this.renderWizardFoot(state),
 +		);
++	}
++
++	/** The three dots and the "1 of 3 — pi" line. */
++	private renderWizardHead(): HTMLElement {
++		const names = [
++			localize('picodeSetup.step.pi', "pi"),
++			localize('picodeSetup.step.gentle', "Gentle AI"),
++			localize('picodeSetup.step.theme', "Theme"),
++		];
++		const dots = $('.picode-step-dots', {});
++		for (let i = 0; i < 3; i += 1) {
++			dots.appendChild($('.picode-dot' + (i === this.step ? '.on' : '')));
++		}
++		return $('.picode-wizard-head', {},
++			dots,
++			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 3 — {1}", String(this.step + 1), names[this.step])),
++		);
++	}
++
++	/**
++	 * Back / Next / Skip, the same three on every step, plus "Not now" at the far right.
++	 *
++	 * Step 1's Next is disabled until an option card is clicked. Step 3 has no Skip (there
++	 * is nothing after it) and its Next is "Done".
++	 */
++	private renderWizardFoot(state: SetupState): HTMLElement {
++		const back = this.navButton('picode-wizard-back', localize('picodeSetup.nav.back', "Back"), this.step > 0,
++			() => this.goTo((this.step - 1) as 0 | 1 | 2));
++		const next = this.navButton(
++			'picode-wizard-next',
++			this.step === 2 ? localize('picodeSetup.nav.done', "Done") : localize('picodeSetup.nav.next', "Next"),
++			this.step < 2 || this.piChosen,
++			() => this.step === 2 ? this.finish() : this.goTo((this.step + 1) as 0 | 1 | 2),
++		);
++		if (this.step === 0 && !this.piChosen) {
++			next.classList.add('disabled');
++			next.title = localize('picodeSetup.nav.chooseFirst', "Choose a pi first — click one of the two options above.");
++		}
++		const foot = $('.picode-wizard-foot', {}, back, next);
++		if (this.step < 2) {
++			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.goTo((this.step + 1) as 0 | 1 | 2)));
++		}
++		foot.append($('.picode-foot-spacer', {}),
++			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll()));
++		return foot;
++	}
++
++	/** A footer button; `enabled === false` renders it inert until something re-renders. */
++	private navButton(id: string, label: string, enabled: boolean, onClick: () => void): HTMLElement {
++		const button = this.button(id, label, enabled ? onClick : () => { /* disabled */ });
++		if (!enabled) {
++			button.classList.add('disabled');
++		}
++		return button;
++	}
++
++	private goTo(step: 0 | 1 | 2): void {
++		this.step = step;
++		this.renderWizard(this.state);
++	}
++
++	/** Reaching the end marks the setup as done, so the first-run nudge stays quiet. */
++	private finish(): void {
++		this.finished = true;
++		this.services.commandService.executeCommand('picode.setup.complete');
++		this.renderWizard(this.state);
++	}
++
++	/** "Not now" steps the whole wizard aside; it is reopenable from the same card. */
++	private skipAll(): void {
++		this.skipped = true;
++		this.services.commandService.executeCommand('picode.setup.complete');
++		this.renderWizard(this.state);
 +	}
 +
 +	private renderPiCard(state: SetupState): HTMLElement {
@@ -1759,12 +1931,15 @@ index 00000000..10980291
 +	 * ------------------------------------------------------------------ */
 +
 +	private async applyRuntime(mode: 'internal' | 'external'): Promise<void> {
-+		if (this.busy || this.state === undefined || mode === this.state.runtime) { return; }
++		if (this.busy || this.state === undefined) { return; }
 +		if (mode === 'external' && !this.state.externalAvailable) { return; }
 +		this.busy = true;
-+		this.setNote(localize('picodeSetup.pi.switching', "Switching pi…"), false);
++		// Clicking the option already in force also counts as the choice — it is what
++		// unlocks the wizard's Next on a setup that was finished long ago.
++		this.setNote(mode !== this.state.runtime ? localize('picodeSetup.pi.switching', "Switching pi…") : '', false);
 +		try {
 +			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.applyRuntime', mode);
++			this.piChosen = true;
 +		} catch (error) {
 +			this.setNote(messageOf(error), true);
 +			this.busy = false;
