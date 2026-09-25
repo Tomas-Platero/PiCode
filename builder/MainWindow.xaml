@@ -26,7 +26,7 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE73E;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Build Logs" Tag="logs">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;"/></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE756;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Settings" Tag="settings">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;"/></NavigationViewItem.Icon>
@@ -87,8 +87,12 @@
                                             <TextBlock Name="StageLine" TextWrapping="Wrap"/>
                                             <TextBlock Name="Timing" Opacity="0.75" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                        <Button Grid.Column="1" Name="StopButton" Content="Stop build" VerticalAlignment="Center"
-                                                Visibility="Collapsed" Click="OnStop"/>
+                                        <Button Grid.Column="1" Name="StopButton" VerticalAlignment="Center" Click="OnStop">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE71A;" FontSize="12"/>
+                                                <TextBlock Text="Stop build"/>
+                                            </StackPanel>
+                                        </Button>
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -97,7 +101,10 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1" CornerRadius="8" Padding="20">
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="Build steps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE71D;" FontSize="14"/>
+                                <TextBlock Text="Build steps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
                                     <StackPanel Name="Steps" Spacing="0"/>
                                 </StackPanel>
                             </Border>
@@ -135,10 +142,7 @@
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Settings" Style="{StaticResource SubtitleTextBlockStyle}"/>
                                     <TextBlock Text="Where the build runs" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                    <ComboBox Name="TargetBox" MinWidth="240" SelectionChanged="OnTargetChanged">
-                                        <ComboBoxItem Content="Windows"/>
-                                        <ComboBoxItem Content="Linux (WSL)"/>
-                                    </ComboBox>
+                                    <TextBlock Name="TargetLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                     <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                 </StackPanel>
@@ -160,11 +164,34 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1" CornerRadius="8" Padding="16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                            <ComboBox Name="TargetBoxRail" HorizontalAlignment="Stretch" SelectionChanged="OnTargetChanged">
-                                <ComboBoxItem Content="Windows"/>
-                                <ComboBoxItem Content="Linux (WSL)"/>
-                            </ComboBox>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE7F4;" FontSize="14"/>
+                                <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Windows' icon font has a desktop and a server; it has no Windows logo
+                                     and no Tux. The four panes are drawn, which is unmistakable, and the
+                                     server is the closest the font comes for the other side. -->
+                                <Button Grid.Column="0" Name="TargetWindowsButton" Tag="windows"
+                                        HorizontalAlignment="Stretch" Click="OnTargetClicked">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Path Width="13" Height="13" Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                              Data="M0,0 H6 V6 H0 Z M7,0 H13 V6 H7 Z M0,7 H6 V13 H0 Z M7,7 H13 V13 H7 Z"/>
+                                        <TextBlock Text="Windows"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="1" Name="TargetLinuxButton" Tag="linux"
+                                        HorizontalAlignment="Stretch" Click="OnTargetClicked">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xEC4E;" FontSize="14"/>
+                                        <TextBlock Text="Linux (WSL)"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
                             <TextBlock Name="RailArchitecture" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
@@ -178,7 +205,10 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="System Check" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE73E;" FontSize="14"/>
+                                    <TextBlock Text="System Check" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                </StackPanel>
                                 <TextBlock Grid.Column="1" Name="RailCheckCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </Grid>
                             <StackPanel Name="RailChecks" Spacing="8"/>
@@ -193,15 +223,23 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1" CornerRadius="8" Padding="16">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Last Build" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8A5;" FontSize="14"/>
+                                <TextBlock Text="Last Build" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            </StackPanel>
                             <StackPanel Name="LastBuild" Spacing="4"/>
                         </StackPanel>
                     </Border>
 
                     </StackPanel>
                     </ScrollViewer>
-                    <Button Grid.Row="1" Name="BuildButton" Content="Build PiCode" Style="{StaticResource AccentButtonStyle}"
-                            HorizontalAlignment="Stretch" Height="42" Click="OnBuild"/>
+                    <Button Grid.Row="1" Name="BuildButton" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch" Height="42" Click="OnBuild">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE768;" FontSize="14"/>
+                            <TextBlock Name="BuildButtonText" Text="Build PiCode"/>
+                        </StackPanel>
+                    </Button>
                 </Grid>
             </Grid>
         </NavigationView>

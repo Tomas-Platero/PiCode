@@ -33,7 +33,6 @@ public sealed partial class MainWindow : Window
 	private bool _missingSeen;
 	private bool _linuxAvailable;
 	private string _linuxReason = "";
-	private bool _syncingTargets;
 
 	public MainWindow()
 	{
@@ -67,8 +66,7 @@ public sealed partial class MainWindow : Window
 			// The window is here to run a build, not to fail over its own decoration.
 		}
 
-		TargetBox.SelectedIndex = 0;
-		TargetBoxRail.SelectedIndex = 0;
+		PaintTargets();
 		_linuxAvailable = Pipeline.LinuxAvailable(out _linuxReason);
 		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
 
@@ -118,25 +116,29 @@ public sealed partial class MainWindow : Window
 		PageSettings.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
 	}
 
-	private void OnTargetChanged(object sender, SelectionChangedEventArgs e)
+	private void OnTargetClicked(object sender, RoutedEventArgs e)
 	{
-		if (_syncingTargets)
-		{
-			return;
-		}
-		var index = ReferenceEquals(sender, TargetBoxRail) ? TargetBoxRail.SelectedIndex : TargetBox.SelectedIndex;
-		// Both boxes say the same thing: one is on the page, one is in the rail, and a setting with two
-		// controls that disagree is worse than one control.
-		_syncingTargets = true;
-		TargetBox.SelectedIndex = index;
-		TargetBoxRail.SelectedIndex = index;
-		_syncingTargets = false;
-
-		_target = index == 1 ? BuildTarget.Linux : BuildTarget.Windows;
-		FooterTarget.Text = _target == BuildTarget.Linux ? "Linux (WSL)" : "Windows";
+		var tag = (sender as FrameworkElement)?.Tag as string;
+		_target = tag == "linux" ? BuildTarget.Linux : BuildTarget.Windows;
+		PaintTargets();
 		_ticks = 0;
 		RefreshFacts();
 		Refresh();
+	}
+
+	/// <summary>
+	/// The two buttons say which machine the build runs on, and the chosen one is the filled one. The
+	/// setting lives here and nowhere else: a second control for the same thing is two things to keep
+	/// in step, and one of them always ends up out of step.
+	/// </summary>
+	private void PaintTargets()
+	{
+		var windows = _target == BuildTarget.Windows;
+		TargetWindowsButton.Style = (Style)Application.Current.Resources[windows ? "AccentButtonStyle" : "DefaultButtonStyle"];
+		TargetLinuxButton.Style = (Style)Application.Current.Resources[windows ? "DefaultButtonStyle" : "AccentButtonStyle"];
+		TargetLine.Text = windows ? "Windows" : "Linux through WSL";
+		RailArchitecture.Text = windows ? "Win32 x64" : "the same pipeline, in WSL";
+		FooterTarget.Text = windows ? "Windows" : "Linux (WSL)";
 	}
 
 	private void OnBuild(object sender, RoutedEventArgs e)
@@ -176,7 +178,7 @@ public sealed partial class MainWindow : Window
 	private void RefreshFacts()
 	{
 		_requirements = Pipeline.ReadRequirements(_target);
-		_blockers = _requirements.Checks.Where(check => !check.Ok).ToList();
+		_blockers = _requirements.Checks.Where(check => !check.Ok && !check.Optional).ToList();
 
 		Checks.Children.Clear();
 		foreach (var check in _requirements.Checks)
@@ -189,7 +191,8 @@ public sealed partial class MainWindow : Window
 		{
 			RailChecks.Children.Add(CheckRow(check, withButton: false));
 		}
-		RailCheckCount.Text = $"{_requirements.Checks.Length - _blockers.Count} / {_requirements.Checks.Length} ready";
+		var required = _requirements.Required > 0 ? _requirements.Required : _requirements.Checks.Length;
+		RailCheckCount.Text = $"{required - _blockers.Count} / {required} ready";
 		RailCheckSummary.Visibility = _blockers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 		RailCheckSummaryText.Text = _blockers.Count == 0
 			? "All requirements satisfied"
@@ -203,7 +206,7 @@ public sealed partial class MainWindow : Window
 
 		// A build that cannot work is not offered, and the reason is on the page that lists it.
 		BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
-		BuildButton.Content = _blockers.Count > 0 ? "Build PiCode (something is missing)" : "Build PiCode";
+		BuildButtonText.Text = _blockers.Count > 0 ? "Build PiCode (something is missing)" : "Build PiCode";
 	}
 
 	/// <summary>One check: a mark, its name, what was found, and - where it is fixed - its button.</summary>

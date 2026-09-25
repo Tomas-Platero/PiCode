@@ -25,6 +25,7 @@ public enum BuildTarget
 public sealed class Requirement
 {
 	public string Id { get; set; } = "";
+	public bool Optional { get; set; }
 	public string Name { get; set; } = "";
 	public bool Ok { get; set; }
 	public string Found { get; set; } = "";
@@ -38,6 +39,7 @@ public sealed class Requirements
 {
 	public string Platform { get; set; } = "";
 	public bool Ready { get; set; }
+	public int Required { get; set; }
 	public string[] Blockers { get; set; } = Array.Empty<string>();
 	public Requirement[] Checks { get; set; } = Array.Empty<Requirement>();
 

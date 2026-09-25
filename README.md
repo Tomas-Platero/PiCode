@@ -104,7 +104,13 @@ PowerShell will not run them.
 | **Visual Studio 2022** with *Desktop development with C++* **and the Spectre libraries** | `node-gyp` compiles the native modules with MSBuild. **Without the Spectre libraries the build stops** with `error MSB8040`. | Visual Studio Installer → *Modify* → *Individual components* → tick **MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)** |
 | **Python 3.11** | VS Code's build system asks for it for `node-gyp`. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compiles some of VS Code's native modules. It rewrites `PATH`: restart the shell when it is done. | `winget install --id Rustlang.Rustup -e` |
-| **7-Zip** | Only to produce the release `.zip`. **Not** needed to compile or to pack the tree. | `winget install --id 7zip.7zip -e` |
+| **7-Zip** | Only to produce the release `.zip`. **Not** needed to compile or to pack the tree. |
+
+**The checks themselves live in one place**: [`dev/build-requirements.mjs`](dev/build-requirements.mjs).
+Run it to see this machine's answer, and read it to see which of these are required and which are only
+recommended — Rust is recommended, for instance, and its absence does not stop a build. This table says
+what each one is *for*; that file decides what is missing. Two lists that both claim to be the truth is
+how one of them ends up stale. `winget install --id 7zip.7zip -e` |
 
 After installing, **open a new terminal**: `PATH` is updated for new processes, not for the ones
 already open. From Git Bash:
