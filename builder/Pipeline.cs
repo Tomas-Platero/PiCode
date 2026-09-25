@@ -90,12 +90,21 @@ public sealed class Pipeline
 		{
 			if (File.Exists(Path.Combine(directory.FullName, "dev", "build.sh")))
 			{
+				Found = true;
 				return directory.FullName;
 			}
 			directory = directory.Parent;
 		}
-		throw new InvalidOperationException("The repository root could not be found from " + AppContext.BaseDirectory);
+
+		// Not found: the executable was copied somewhere on its own. The window still opens, says so,
+		// and offers nothing it cannot do - which is better than closing without a word, which is what
+		// this did before, and what made a crash look like a problem with the theme.
+		Found = false;
+		return AppContext.BaseDirectory;
 	}
+
+	/// <summary>Whether the repository was found. A window that says "not here" beats one that vanishes.</summary>
+	public static bool Found { get; private set; }
 
 	public static string RepoRoot => LazyRoot.Value;
 

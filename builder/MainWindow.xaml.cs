@@ -40,9 +40,36 @@ public sealed partial class MainWindow : Window
 
 		// WinUI takes the size and the icon from code, not from the markup.
 		AppWindow.Resize(new SizeInt32(1080, 720));
+
+		// The title bar is drawn by Windows, not by us, so following the system would leave a white bar
+		// over a dark window when Windows is light. It is painted to match instead.
+		try
+		{
+			if (AppWindow.TitleBar is not null)
+			{
+				var bar = AppWindow.TitleBar;
+				bar.BackgroundColor = Windows.UI.Color.FromArgb(255, 8, 11, 20);
+				bar.ForegroundColor = Windows.UI.Color.FromArgb(255, 230, 230, 230);
+				bar.InactiveBackgroundColor = Windows.UI.Color.FromArgb(255, 8, 11, 20);
+				bar.InactiveForegroundColor = Windows.UI.Color.FromArgb(255, 150, 150, 150);
+				bar.ButtonBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+				bar.ButtonForegroundColor = Windows.UI.Color.FromArgb(255, 230, 230, 230);
+				bar.ButtonHoverBackgroundColor = Windows.UI.Color.FromArgb(40, 255, 255, 255);
+				bar.ButtonHoverForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+				bar.ButtonPressedBackgroundColor = Windows.UI.Color.FromArgb(60, 255, 255, 255);
+				bar.ButtonPressedForegroundColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+			}
+		}
+		catch
+		{
+			// A window whose title bar cannot be painted is still a window.
+		}
 		FooterVersion.Text = $"PiCode Builder v{BuilderVersion}";
 		FooterPath.Text = Pipeline.RepoRoot;
-		HeroLine.Text = "Build PiCode for Windows, or for Linux through WSL. Same pipeline either way.";
+		HeroLine.Text = Pipeline.Found
+			? "Build PiCode for Windows, or for Linux through WSL. Same pipeline either way."
+			: $"The PiCode repository was not found from here ({Pipeline.RepoRoot}). Put this executable inside the repository, under builder/bin.";
+		BuildButton.IsEnabled = Pipeline.Found;
 		ArchitectureLine.Text = $"Architecture: Win32 x64 (the pipeline builds win-x64 and nothing else)";
 		RailArchitecture.Text = "Win32 x64";
 
@@ -358,12 +385,36 @@ public sealed partial class MainWindow : Window
 				Padding = new Thickness(12, 6, 0, 6),
 			};
 			var inner = new StackPanel { Spacing = 2 };
-			var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-			header.Children.Add(new TextBlock { Text = mark, Width = 16, Foreground = brush });
+			var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+
+			// The mark sits in a circle, which is what the reference shows and what makes a list of
+			// steps read as a path rather than as rows.
+			var badge = new Border
+			{
+				Width = 22,
+				Height = 22,
+				CornerRadius = new CornerRadius(11),
+				BorderThickness = new Thickness(1),
+				BorderBrush = brush,
+				Background = (Brush)Application.Current.Resources[
+					index < done ? "SystemFillColorSuccessBackgroundBrush" : "SubtleFillColorTransparentBrush"],
+				VerticalAlignment = VerticalAlignment.Center,
+			};
+			badge.Child = new TextBlock
+			{
+				Text = mark,
+				FontSize = 12,
+				Foreground = brush,
+				HorizontalAlignment = HorizontalAlignment.Center,
+				VerticalAlignment = VerticalAlignment.Center,
+			};
+			header.Children.Add(badge);
+
 			header.Children.Add(new TextBlock
 			{
 				Text = stage.Label,
 				Foreground = brush,
+				VerticalAlignment = VerticalAlignment.Center,
 				FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
 			});
 			inner.Children.Add(header);

@@ -88,3 +88,5 @@ legacy/
 # The C# builder: what it compiles, never what it is written from.
 /builder/bin/
 /builder/obj/
+/builder/bin2/
+/builder/bin-temp/

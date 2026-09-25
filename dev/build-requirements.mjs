@@ -60,12 +60,19 @@ const checks = [];
 // Node runs the build's own tasks. The major version is what matters: any 24.x will do.
 const nodeVersion = run('node', ['--version']).replace(/^v/, '');
 const wanted = wantedNode();
+// What to say when node is not the one the build wants. Linux installs it with nvm, and the pin in
+// .nvmrc is what matters there.
+let nodeMissing = `Node.js ${wanted} is what the build uses; this machine has v${nodeVersion}`;
+if (nodeVersion === '') {
+	nodeMissing = `Node.js ${wanted} is missing (on Linux install it with nvm, following .nvmrc)`;
+}
+
 checks.push({
 	id: 'node',
 	name: 'Node.js',
 	ok: nodeVersion !== '' && nodeVersion.split('.')[0] === wanted,
 	found: nodeVersion === '' ? 'not found' : `v${nodeVersion} (the build wants ${wanted})`,
-	missing: nodeVersion === '' ? `Node.js ${wanted} is missing` : `Node.js ${wanted} is what the build uses; this machine has v${nodeVersion}`,
+		missing: nodeMissing,
 	install: 'OpenJS.NodeJS',
 	url: 'https://nodejs.org/en/download',
 	note: 'runs npm and the build tasks'
@@ -95,7 +102,7 @@ checks.push({
 	name: 'jq',
 	ok: jq !== '',
 	found: jq === '' ? 'not found' : jq,
-	missing: 'jq is missing',
+	missing: isWindows ? 'jq is missing' : 'jq is missing. On Debian and Ubuntu: sudo apt install -y jq',
 	install: isWindows ? 'jqlang.jq' : '',
 	url: 'https://jqlang.github.io/jq/download/',
 	note: 'the pipeline reads the product and the patches with it'
@@ -107,7 +114,7 @@ checks.push({
 	name: 'Python 3',
 	ok: python !== '',
 	found: python === '' ? 'not found' : python,
-	missing: 'Python 3 is missing',
+	missing: isWindows ? 'Python 3 is missing' : 'Python 3 is missing. On Debian and Ubuntu: sudo apt install -y python3',
 	install: isWindows ? 'Python.Python.3.12' : '',
 	url: 'https://www.python.org/downloads/',
 	note: 'the native modules are compiled with it'
@@ -147,15 +154,19 @@ if (isWindows) {
 	});
 } else {
 	const gcc = run('g++', ['--version']) || run('clang++', ['--version']);
+	const make = run('make', ['--version']);
+	let found = `${gcc} and ${make}`;
+	if (gcc === '') { found = 'not found'; }
+	else if (make === '') { found = `${gcc}, but make is missing`; }
 	checks.push({
 		id: 'cplusplus',
-		name: 'A C++ compiler',
-		ok: gcc !== '',
-		found: gcc === '' ? 'not found' : gcc,
-		missing: 'A C++ compiler (g++ or clang++) is missing',
+		name: 'A C++ compiler and make',
+		ok: gcc !== '' && make !== '',
+		found,
+		missing: 'Compiling needs both. On Debian and Ubuntu: sudo apt install -y build-essential',
 		install: '',
 		url: '',
-		note: 'node-gyp compiles the native modules with it'
+		note: 'node-gyp compiles the native modules with them'
 	});
 }
 
