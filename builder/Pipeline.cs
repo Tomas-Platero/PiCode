@@ -294,7 +294,13 @@ public sealed class Pipeline
 
 	public static Progress? ReadProgress(BuildTarget target)
 	{
-		var (exe, args) = Node(target, "dev/build-progress.mjs --json .scratch/build-live.log");
+		// The newest evidence wins: a build started by hand through dev/build.sh writes no live log, so
+		// pinning this argument meant command-line builds were invisible to the window. With no argument
+		// the module picks the newest log it finds; the runner's verdict file is read on top of that.
+		var arguments = File.Exists(LogFile)
+			? "dev/build-progress.mjs --json .scratch/build-live.log"
+			: "dev/build-progress.mjs --json";
+		var (exe, args) = Node(target, arguments);
 		var result = Run(exe, args, RepoRoot, 30000);
 		if (!result.Ok || string.IsNullOrWhiteSpace(result.Output))
 		{

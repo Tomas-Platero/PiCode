@@ -29,7 +29,7 @@ function newestLog() {
 	const scratch = path.join(REPO, '.scratch');
 	try {
 		const logs = fs.readdirSync(scratch)
-			.filter(name => /^build\d*\.log$/.test(name))
+			.filter(name => /^(build-live|build\d*)\.log$/.test(name))
 			.map(name => path.join(scratch, name))
 			.sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
 		return logs[0];
@@ -214,6 +214,21 @@ if (logFile === undefined || !fs.existsSync(logFile)) {
 // every second, so "elapsed" was always about a second).
 const logStat = fs.statSync(logFile);
 /** The runner's own verdict, when it has finished. The log is only a fallback for a run still going. */
+/**
+ * Whether the log belongs to an older build than the verdict file. A build started by hand through
+ * dev/build.sh writes a verdict but no live log, so the log on disk can be the previous run's - and
+ * mixing its stages and elapsed time with a fresh verdict told one build's story with another's clock.
+ */
+function logIsStale() {
+	try {
+		const status = fs.statSync(path.join(REPO, '.scratch', 'build.status'));
+		const log = fs.statSync(logFile);
+		return status.mtimeMs > log.mtimeMs;
+	} catch {
+		return false;
+	}
+}
+
 function readVerdict() {
 	try {
 		const code = fs.readFileSync(path.join(REPO, '.scratch', 'build.status'), 'utf8').trim();
@@ -229,23 +244,30 @@ let lastDrawn = '';
 let ended = false;
 
 function draw() {
+	// The verdict first: a build started by hand writes no live log, so a stale log must not tell this
+	// build's story with another build's clock.
+	const verdict = readVerdict();
+	if (verdict !== undefined && logIsStale()) {
+		if (verdict === 'ok') {
+			process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in PiCode-Win32-x64          \n`);
+		} else {
+			process.stdout.write(`\r  failed ${bar(100)} ???  -  the last build failed: see its own log          \n`);
+		}
+		return true;
+	}
+
 	const text = fs.readFileSync(logFile, 'utf8');
 	const state = readLog(text);
-	// The runner's answer beats the log's: it is the exit code, not a reading of the last few lines.
-	// The runner's exit code is the authority, not the log: the build prints its own "== done" before
-	// the staging step runs, so a log that says done over an exit code of 1 is a build that failed
-	// afterwards - which is exactly what happened to the owner's build.
-	const verdict = readVerdict();
-	if (verdict !== undefined) { state.done = verdict; }
+	if (state.done === undefined && verdict !== undefined) { state.done = verdict; }
 	const index = state.index ?? 1;
 	const now = Date.now();
 
 	if (state.done === 'ok') {
-		process.stdout.write(`\r  done   ${bar(100)} 100%  ·  the build finished, in PiCode-Win32-x64ó bien, con el editor en PiCode-Win32-x64          \n`);
+		process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in PiCode-Win32-x64          \n`);
 		return true;
 	}
 	if (state.done === 'failed') {
-		process.stdout.write(`\r  failed ${bar(100)} ???  ·  the build failed: see the last line belowó: mira la última línea del registro          \n`);
+		process.stdout.write(`\r  failed ${bar(100)} ???  -  the build failed: see the last line below          \n`);
 		process.stdout.write(`  ${state.lastLine}\n`);
 		return true;
 	}
@@ -253,7 +275,7 @@ function draw() {
 	const percentage = percentageFor(index, startedAt, now);
 	const elapsed = (now - startedAt) / 1000;
 	const remaining = percentage > 2 ? (elapsed / percentage) * (100 - percentage) : undefined;
-	const line = `\r  ${bar(percentage)} ${String(Math.round(percentage)).padStart(3)}%  ·  ${STAGES[index].label}  ·  ${clock(elapsed)}` +
+	const line = `\r  ${bar(percentage)} ${String(Math.round(percentage)).padStart(3)}%  -  ${STAGES[index].label}  -  ${clock(elapsed)}` +
 		(remaining === undefined ? '' : `, about ${clock(remaining)}`) + '   ';
 
 	if (line !== lastDrawn) {
@@ -266,16 +288,33 @@ function draw() {
 if (args.includes('--stages')) {
 	// Just the steps, for an interface that wants to show what the build is going to do before it has
 	// ever run. One source of truth: the window does not carry its own copy of this list.
-process.stdout.write(JSON.stringify(STAGES.map(stage => ({ label: stage.label, detail: stage.detail }))) + '\n');
+	process.stdout.write(JSON.stringify(STAGES.map(stage => ({ label: stage.label, detail: stage.detail }))) + '\n');
 	process.exit(0);
 }
 
 if (asJson) {
-	// One line, for a caller that draws its own interface: the little window asks every second.
+	// One object, for a caller that draws its own interface: the window asks every second.
+	const verdict = readVerdict();
+	// A stale log - the verdict came from a newer build that wrote no live log - must not lend its
+	// stages or its clock to this verdict. The verdict alone is what is true.
+	if (verdict !== undefined && logIsStale()) {
+		process.stdout.write(JSON.stringify({
+			percentage: verdict === 'ok' ? 100 : 0,
+			stage: '',
+			stageDetail: '',
+			stageIndex: -1,
+			stages: STAGES.map(stage => ({ label: stage.label, detail: stage.detail })),
+			elapsedSeconds: 0,
+			remainingSeconds: 0,
+			done: verdict,
+			lastLine: '',
+		}) + '\n');
+		process.exit(0);
+	}
+
 	const text = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
 	const state = readLog(text);
-	const verdict = readVerdict();
-	if (verdict !== undefined) { state.done = verdict; }
+	if (state.done === undefined && verdict !== undefined) { state.done = verdict; }
 	const now = Date.now();
 	const index = state.index ?? 1;
 	const percentage = state.done === 'ok' ? 100 : percentageFor(index, startedAt, now);
@@ -293,6 +332,7 @@ if (asJson) {
 	}) + '\n');
 	process.exit(0);
 }
+
 
 if (once) {
 	draw();

@@ -163,6 +163,12 @@ require_tool node "The product delta is applied by node, and the build runs npm.
 # ---------------------------------------------------------------------------
 # Is ./picode-source already a prepared tree?
 # ---------------------------------------------------------------------------
+# Whatever happens, this script leaves its verdict behind: builds started by hand - not through
+# dev/build-run.sh, which writes the same file - are the ones the window and the terminal viewer read.
+# Without this, a successful command-line build was invisible to every front-end.
+mkdir -p .scratch
+trap 'printf "%s" "$?" > .scratch/build.status' EXIT
+
 TREE_PREPARED="no"
 
 # An existing tree is finished work. With no flags it is reused: fetching it again is now something to
