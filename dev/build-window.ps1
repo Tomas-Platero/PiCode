@@ -145,15 +145,39 @@ function Get-Requirements {
 # Is a build running, and how is it going
 # ---------------------------------------------------------------------------
 
+<#
+    Is the process the runner wrote into the lock still alive?
+
+    bash answers this, not Windows: the number in the lock is bash's own pid, and Windows' process list
+    has never contained it (bash reports two different numbers: 2473 here, 14172 to Windows). Asking
+    Windows is what made this window declare a build dead while it was in its last phase, with its log
+    being written underneath. `kill -0` is the same test the runner itself trusts.
+#>
+function Test-BuildAlive([string]$id) {
+    if (-not $id) { return $false }
+    try {
+        $answer = & bash -c "kill -0 $id 2>/dev/null && echo alive || echo gone" 2>$null
+        return (($answer | Select-Object -First 1) -eq 'alive')
+    } catch {
+        return $false
+    }
+}
+
 function Get-BuildState {
     $running = $false
     $buildPid = $null
+    $staleLock = $false
     if (Test-Path $LockFile) {
-        $raw = (Get-Content $LockFile -Raw -ErrorAction SilentlyContinue)
-        if ($raw) {
-            # Not `$pid`: that is PowerShell's own process id and it is read-only.
-            $buildPid = $raw.Trim()
-            $running = [bool](Get-Process -Id $buildPid -ErrorAction SilentlyContinue)
+        # A lock that exists is a build that is running: the runner writes it at the start and removes
+        # it when it ends, and the log below it is being written right now. The process check is a
+        # second opinion, never the answer - the number bash writes is bash's own, and that one is not
+        # always a number Windows knows. Asking Windows about it made this window say "nothing is
+        # running" over a build in its last phase, with the live log in plain sight underneath.
+        $lines = @(Get-Content $LockFile -ErrorAction SilentlyContinue | Where-Object { $_ -match '\d' })
+        if ($lines.Count -gt 0) {
+            $buildPid = $lines[0].Trim()
+            $running = Test-BuildAlive $buildPid
+            if (-not $running) { $staleLock = $true }
         }
     }
     $progress = $null
@@ -165,7 +189,7 @@ function Get-BuildState {
             $progress = $null
         }
     }
-    return [pscustomobject]@{ Running = $running; Pid = $buildPid; Progress = $progress }
+    return [pscustomobject]@{ Running = $running; Pid = $buildPid; Progress = $progress; StaleLock = $staleLock }
 }
 
 if ($Check) {
@@ -221,8 +245,8 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PiCode" Width="560" MinHeight="240" MaxHeight="780" SizeToContent="Height"
-        WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize"
+        Title="PiCode" Width="980" Height="700" MinWidth="760" MinHeight="480"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanResize"
         Background="#1e1e1e" Foreground="#e6e6e6" FontFamily="Segoe UI" FontSize="13">
   <Grid Margin="20">
     <Grid.RowDefinitions>
@@ -232,45 +256,53 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
       <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
     <!-- What is missing, in a person's words. Nothing at all when nothing is. -->
-    <StackPanel Grid.Row="0" Name="Readiness" Margin="0,0,0,18"/>
+    <StackPanel Grid.Row="0" Name="Readiness" Margin="0,0,0,16"/>
 
     <StackPanel Grid.Row="1" Margin="0,0,0,16">
       <TextBlock Name="Headline" Text="ready" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"/>
       <TextBlock Name="Explain" Margin="0,5,0,0" Opacity="0.72" TextWrapping="Wrap"/>
     </StackPanel>
 
-    <StackPanel Grid.Row="2" Name="ProgressBlock" Margin="0,0,0,16" Visibility="Collapsed">
+    <!-- The build's steps, in plain words: what it is doing, what it already did, what is left. -->
+    <StackPanel Grid.Row="2" Name="Steps" Margin="0,0,0,16"/>
+
+    <StackPanel Grid.Row="3" Name="ProgressBlock" Margin="0,0,0,16" Visibility="Collapsed">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <ProgressBar Grid.Column="0" Name="Bar" Height="8" Minimum="0" Maximum="100"
+        <ProgressBar Grid.Column="0" Name="Bar" Height="10" Minimum="0" Maximum="100"
                      Foreground="#3d8bfd" Background="#2f2f2f" BorderThickness="0"/>
-        <TextBlock Grid.Column="1" Name="Percent" Text="0%" Width="48" Margin="12,0,0,0"
-                   TextAlignment="Right" VerticalAlignment="Center" Opacity="0.75"/>
+        <TextBlock Grid.Column="1" Name="Percent" Text="0%" Width="54" Margin="12,0,0,0"
+                   TextAlignment="Right" VerticalAlignment="Center"/>
       </Grid>
-      <TextBlock Name="StageLine" Margin="0,8,0,0" Opacity="0.85" TextWrapping="Wrap"/>
+      <TextBlock Name="Timing" Margin="0,8,0,0" Opacity="0.72"/>
     </StackPanel>
 
-    <StackPanel Grid.Row="3" Orientation="Horizontal">
-      <Button Name="Primary" Content="Build PiCode" MinWidth="140" Height="32" FontWeight="SemiBold" Padding="16,0,16,0"/>
-      <Button Name="Secondary" Content="Build again" MinWidth="120" Height="32" Margin="8,0,0,0" Padding="16,0,16,0" Visibility="Collapsed"/>
-      <Button Name="Stop" Content="Stop" MinWidth="90" Height="32" Margin="8,0,0,0" Padding="16,0,16,0" Visibility="Collapsed"/>
+    <StackPanel Grid.Row="4" Orientation="Horizontal">
+      <Button Name="Primary" Content="Build PiCode" MinWidth="150" Height="34" FontWeight="SemiBold" Padding="18,0,18,0"/>
+      <Button Name="Secondary" Content="Build it again" MinWidth="130" Height="34" Margin="8,0,0,0" Padding="18,0,18,0" Visibility="Collapsed"/>
+      <Button Name="Stop" Content="Stop" MinWidth="96" Height="34" Margin="8,0,0,0" Padding="18,0,18,0" Visibility="Collapsed"/>
     </StackPanel>
 
-    <Button Grid.Row="4" Name="DetailsToggle" Content="Details" HorizontalAlignment="Left"
+    <Button Grid.Row="5" Name="ChecksToggle" Content="Checks" HorizontalAlignment="Left"
             Margin="0,14,0,0" Padding="14,6,14,6"/>
 
-    <StackPanel Grid.Row="5" Name="DetailsPanel" Visibility="Collapsed" Margin="0,12,0,0">
-      <StackPanel Name="Tools" Margin="0,0,0,10"/>
-      <TextBox Name="Log" Height="230" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
-               Background="#141414" Foreground="#cfcfcf" BorderBrush="#333"
-               VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+    <StackPanel Grid.Row="6" Name="ChecksPanel" Visibility="Collapsed" Margin="0,10,0,0">
+      <StackPanel Name="Tools"/>
     </StackPanel>
+
+    <!-- What the build said, always in view: watching it is the point of this window. -->
+    <TextBox Grid.Row="7" Name="Log" MinHeight="180" Margin="0,14,0,0" IsReadOnly="True"
+             FontFamily="Consolas" FontSize="12"
+             Background="#141414" Foreground="#cfcfcf" BorderBrush="#333"
+             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
   </Grid>
 </Window>
 '@
@@ -292,12 +324,13 @@ $explainText = $window.FindName('Explain')
 $progressBlock = $window.FindName('ProgressBlock')
 $bar = $window.FindName('Bar')
 $percentText = $window.FindName('Percent')
-$stageLine = $window.FindName('StageLine')
+$stepsPanel = $window.FindName('Steps')
+$timingText = $window.FindName('Timing')
 $primaryButton = $window.FindName('Primary')
 $secondaryButton = $window.FindName('Secondary')
 $stopButton = $window.FindName('Stop')
-$detailsToggle = $window.FindName('DetailsToggle')
-$detailsPanel = $window.FindName('DetailsPanel')
+$checksToggle = $window.FindName('ChecksToggle')
+$checksPanel = $window.FindName('ChecksPanel')
 $toolsPanel = $window.FindName('Tools')
 $logBox = $window.FindName('Log')
 
@@ -308,7 +341,6 @@ $script:palette = Get-WindowPalette (Test-LightTheme)
 $window.Background = $script:palette.Background
 $window.Foreground = $script:palette.Foreground
 $explainText.Foreground = $script:palette.Dim
-$stageLine.Foreground = $script:palette.Dim
 $percentText.Foreground = $script:palette.Dim
 $logBox.Background = $script:palette.LogBackground
 $logBox.Foreground = $script:palette.LogForeground
@@ -340,6 +372,101 @@ function Add-Log([string]$line) {
 # ---------------------------------------------------------------------------
 # The window
 # ---------------------------------------------------------------------------
+
+<# Plain M:SS, for "how long has this been going". #>
+function Format-Clock([int]$seconds) {
+    if ($seconds -le 0) { return '0:00' }
+    return "$([math]::Floor($seconds / 60)):$('{0:d2}' -f ($seconds % 60))"
+}
+
+<# One step: a mark, its name, and - for the one in flight - the sentence that says what it is doing. #>
+function New-StepRow([string]$mark, [string]$colour, [string]$label, [string]$detail, [string]$tooltip, [bool]$bold) {
+    $row = New-Object System.Windows.Controls.StackPanel
+    $row.Margin = '0,2,0,2'
+
+    $line = New-Object System.Windows.Controls.StackPanel
+    $line.Orientation = 'Horizontal'
+
+    $glyph = New-Object System.Windows.Controls.TextBlock
+    $glyph.Text = $mark
+    $glyph.Foreground = $colour
+    $glyph.Width = 20
+    $glyph.VerticalAlignment = 'Center'
+    $line.Children.Add($glyph) | Out-Null
+
+    $text = New-Object System.Windows.Controls.TextBlock
+    $text.Text = $label
+    $text.Foreground = $colour
+    if ($bold) { $text.FontWeight = 'SemiBold' }
+    $text.VerticalAlignment = 'Center'
+    $line.Children.Add($text) | Out-Null
+
+    $row.Children.Add($line) | Out-Null
+    if ($tooltip) { $row.ToolTip = $tooltip }
+
+    if ($detail) {
+        $sub = New-Object System.Windows.Controls.TextBlock
+        $sub.Text = $detail
+        $sub.Foreground = $script:palette.Dim
+        $sub.Margin = '20,2,0,4'
+        $sub.MaxWidth = 820
+        $sub.TextWrapping = 'Wrap'
+        $row.Children.Add($sub) | Out-Null
+    }
+    return $row
+}
+
+<#
+    The build's steps, in plain words. A tick for what is done, a dot and a sentence for what is
+    happening now, a circle for what is left - and with nothing running they are the map of what the
+    button does, every one still explaining itself when the pointer rests on it.
+#>
+<# The step list, from the one file that knows it: the window does not carry its own copy. #>
+function Read-Stages {
+    try {
+        $json = & node (Join-Path $PSScriptRoot 'build-progress.mjs') '--stages' 2>$null
+        $script:stageList = @()
+        # Copied one by one: `@($json | ConvertFrom-Json)` around a JSON array lands as a single
+        # nested element in Windows PowerShell, and every count after that is a lie.
+        foreach ($stage in ($json | ConvertFrom-Json)) { $script:stageList += $stage }
+    } catch {
+        $script:stageList = @()
+    }
+}
+
+function Show-Steps($progress, [bool]$running) {
+    $stepsPanel.Children.Clear()
+    $stages = if ($script:stageList) { $script:stageList } else { @() }
+    if ($stages.Count -eq 0) { return }
+
+    $done = if ($progress -and $progress.done -eq 'ok') { $stages.Count } else { 0 }
+    $current = -1
+    $failed = $false
+    if ($progress -and -not $done) {
+        $current = [int]$progress.stageIndex
+        $failed = ($progress.done -eq 'failed')
+        if ($running) { } elseif (-not $failed) { $current = -1 }
+    }
+
+    for ($i = 0; $i -lt $stages.Count; $i++) {
+        $spec = $stages[$i]
+        $mark = [string][char]0x25CB
+        $colour = $script:palette.Dim
+        $detail = ''
+        $bold = $false
+        if ($i -lt $done) {
+            $mark = [string][char]0x2713
+            $colour = $script:palette.Good
+        } elseif ($i -eq $current) {
+            $mark = if ($failed) { [string][char]0x2717 } else { [string][char]0x25CF }
+            $colour = if ($failed) { $script:palette.Bad } else { $script:palette.Foreground }
+            $bold = $true
+            if ($running) { $detail = $spec.detail }
+        }
+        $stepsPanel.Children.Add((New-StepRow $mark $colour $spec.label $detail $spec.detail $bold)) | Out-Null
+    }
+}
+
 
 <#
     One line, with a mark and whatever has to be done about it. Used by both the readiness panel and
@@ -443,10 +570,10 @@ function Start-Build {
 }
 
 <# Open or close what was checked and what the build said, and say so on the button. #>
-function Set-Details([bool]$open) {
-    $script:detailsOpen = $open
-    $detailsPanel.Visibility = if ($open) { $visible } else { $collapsed }
-    $detailsToggle.Content = if ($open) { 'Hide details' } else { 'Details' }
+function Set-Checks([bool]$open) {
+    $script:checksOpen = $open
+    $checksPanel.Visibility = if ($open) { $visible } else { $collapsed }
+    $checksToggle.Content = if ($open) { 'Hide checks' } else { 'Checks' }
 }
 
 function Show-Log {
@@ -463,7 +590,8 @@ function Show-Log {
 $script:ticks = 0
 $script:blockers = @()
 $script:primaryAction = 'build'
-$script:detailsOpen = $false
+$script:checksOpen = $false
+$script:stageList = @()
 $script:failedSeen = $false
 
 <# Re-reads everything that was checked: a tool installed in the terminal turns green by itself. #>
@@ -481,6 +609,8 @@ function Update-View {
     $state = Get-BuildState
     Show-Log
 
+    Show-Steps $state.Progress $false
+
     $built = Test-Path (Join-Path $PackDir 'PiCode.exe')
     $lastCode = if (Test-Path $StatusFile) { (Get-Content $StatusFile -Raw).Trim() } else { $null }
     $lastFailed = (-not $state.Running) -and $lastCode -and ($lastCode -ne '0')
@@ -493,16 +623,19 @@ function Update-View {
         $secondaryButton.Visibility = $collapsed
         $stopButton.Visibility = $visible
         $stopButton.IsEnabled = $true
-        if ($state.Progress) {
-            $bar.Value = [math]::Min(100, [math]::Max(0, $state.Progress.percentage))
-            $percentText.Text = "$([math]::Round($state.Progress.percentage))%"
-            $stageLine.Text = $state.Progress.stage
-            if ($state.Progress.remainingSeconds -gt 0) {
-                $stageLine.Text += " - about $([math]::Floor($state.Progress.remainingSeconds / 60)):$('{0:d2}' -f ($state.Progress.remainingSeconds % 60)) left"
+        $progress = $state.Progress
+        if ($progress) {
+            $bar.Value = [math]::Min(100, [math]::Max(0, $progress.percentage))
+            $percentText.Text = "$([math]::Round($progress.percentage))%"
+            $timingText.Text = "$(Format-Clock $progress.elapsedSeconds) in"
+            if ($progress.remainingSeconds -gt 0) {
+                $timingText.Text += ", about $(Format-Clock $progress.remainingSeconds) left"
             }
         } else {
-            $stageLine.Text = 'starting...'
+            $percentText.Text = ''
+            $timingText.Text = 'starting...'
         }
+        Show-Steps $progress $true
         return
     }
 
@@ -513,7 +646,7 @@ function Update-View {
         # Whatever it said is the only thing worth reading now, so it is opened rather than hinted at.
         $headlineText.Text = 'The build did not finish'
         $explainText.Text = 'What it said is below. Building it again keeps whatever was already done, so it does not start from the beginning.'
-        if (-not $script:failedSeen) { Set-Details $true }
+        if (-not $script:failedSeen) { Set-Checks $true }
         $script:primaryAction = 'build'
         $primaryButton.Content = 'Build it again'
         $primaryButton.Visibility = $visible
@@ -547,17 +680,26 @@ $primaryButton.Add_Click({
 })
 $secondaryButton.Add_Click({ Start-Build })
 
-$detailsToggle.Add_Click({ Set-Details (-not $script:detailsOpen) })
+$checksToggle.Add_Click({ Set-Checks (-not $script:checksOpen) })
 
 $stopButton.Add_Click({
     $state = Get-BuildState
     if (-not $state.Running) { return }
+    if (-not $state.Pid) {
+        # A lock with nothing behind it is a build that died: the runner clears it on its next run,
+        # and here is the other way to clear it.
+        Add-Log 'that build is no longer running: clearing the lock it left behind'
+        Remove-Item $LockFile -ErrorAction SilentlyContinue
+        Update-View
+        return
+    }
     $answer = [System.Windows.MessageBox]::Show(
         "Stop the build?`n`nThe tree may be left half-built, and the next build will redo what it was doing.",
         'PiCode', 'YesNo', 'Warning')
     if ($answer -eq 'Yes') {
-        # The whole tree of processes: a build is a chain of shell, node and npm.
-        & taskkill /PID $state.Pid /T /F | Out-Null
+        # bash ends it, so the runner's own cleanup runs and the lock goes with it. It is a polite
+        # stop: the tree may be left half-built, which is what the warning above says.
+        & bash -c "kill -TERM $($state.Pid) 2>/dev/null" | Out-Null
         Remove-Item $LockFile -ErrorAction SilentlyContinue
         Add-Log "stopped (pid $($state.Pid))"
         Update-View
@@ -569,12 +711,13 @@ $timer.Interval = [TimeSpan]::FromSeconds(1)
 $timer.Add_Tick({ Update-View })
 $timer.Start()
 
+Read-Stages
 Read-Facts
 Update-View
 
 if ($SelfTest) {
-    $names = @('Readiness', 'Headline', 'Explain', 'ProgressBlock', 'Bar', 'Percent', 'StageLine',
-               'Primary', 'Secondary', 'Stop', 'DetailsToggle', 'DetailsPanel', 'Tools', 'Log')
+    $names = @('Readiness', 'Headline', 'Explain', 'Steps', 'ProgressBlock', 'Bar', 'Percent',
+               'Timing', 'Primary', 'Secondary', 'Stop', 'ChecksToggle', 'ChecksPanel', 'Tools', 'Log')
     $missing = @()
     foreach ($name in $names) {
         if ($null -eq $window.FindName($name)) { $missing += $name }
@@ -597,6 +740,16 @@ if ($SelfTest) {
     if ($readinessPanel.Children.Count -ne $expected) {
         $problems += "the readiness panel has $($readinessPanel.Children.Count) lines, expected $expected"
     }
+    # The steps are what explains the build, so they have to be there: one row per step the module
+    # knows about, from the module itself.
+    if ($script:stageList.Count -gt 0) {
+        if ($stepsPanel.Children.Count -ne $script:stageList.Count) {
+            $problems += "the steps panel has $($stepsPanel.Children.Count) rows, expected $($script:stageList.Count)"
+        }
+    } else {
+        $problems += 'the step list did not arrive from dev/build-progress.mjs'
+    }
+
     # Details lists every check, present or not.
     if ($toolsPanel.Children.Count -ne $rows.Count) {
         $problems += "Details lists $($toolsPanel.Children.Count) checks, expected $($rows.Count)"
@@ -624,7 +777,7 @@ if ($SelfTest) {
         }
         # A failure opens what it said; a clean state keeps the log out of the way.
         $wantOpen = [bool]$lastFailed
-        $isOpen = [bool]$script:detailsOpen
+        $isOpen = [bool]$script:checksOpen
         if ($isOpen -ne $wantOpen) {
             $problems += "the details panel is $(if ($isOpen) { 'open' } else { 'closed' }), expected $(if ($wantOpen) { 'open after a failure' } else { 'closed' })"
         }
@@ -632,7 +785,7 @@ if ($SelfTest) {
 
     Write-Output "window built: $($rows.Count) checks, $($blockers.Count) of them asking for something"
     Write-Output "state: $(if ($state.Running) { 'building' } elseif ($lastFailed) { 'the last build failed' } elseif ($built) { 'built' } else { 'not built yet' })"
-    Write-Output "details after four ticks: $(if ($script:detailsOpen) { 'open' } else { 'closed' })"
+    Write-Output "checks after four ticks: $(if ($script:checksOpen) { 'open' } else { 'closed' })"
     Write-Output "theme: $(if (Test-LightTheme) { 'light' } else { 'dark' })"
 
     # Both palettes have to be readable, not just the one this machine happens to use: the same file

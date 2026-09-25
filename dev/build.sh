@@ -57,19 +57,24 @@ export NODE_OPTIONS="--max-old-space-size=8192"
 
 REUSE_TREE="no"
 SKIP_COMPILE="no"
+FRESH_TREE="no"
 
 usage() {
   cat <<'EOF' >&2
-usage: ./dev/build.sh [-s] [-o]
+usage: ./dev/build.sh [-f] [-s] [-o]
 
-  (no flag)  fetch the pinned VS Code source, prepare it, install, compile, stage
+  (no flag)  use ./picode-source if it is there, and fetch it if it is not
+  -f         fetch it fresh: the tree that is there is removed and downloaded again
   -s         reuse the existing ./picode-source instead of fetching it
   -o         stop after the preparation (phase 5); no npm install, no compile
 EOF
 }
 
-while getopts ":soh" opt; do
+while getopts ":fsoh" opt; do
   case "$opt" in
+    f)
+      FRESH_TREE="yes"
+      ;;
     s)
       REUSE_TREE="yes"
       ;;
@@ -159,6 +164,15 @@ require_tool node "The product delta is applied by node, and the build runs npm.
 # Is ./picode-source already a prepared tree?
 # ---------------------------------------------------------------------------
 TREE_PREPARED="no"
+
+# An existing tree is finished work. With no flags it is reused: fetching it again is now something to
+# ask for with -f. Deleting it unasked is how twenty minutes of a prepared tree, dependencies and all,
+# disappeared, because the documentation said the flagless build reused what was already there while
+# the script removed it.
+if [[ "${REUSE_TREE}" != "yes" && "${FRESH_TREE}" != "yes" && -d "./picode-source/.git" ]]; then
+  echo "note: ./picode-source is already here and is being reused (-f fetches it again)"
+  REUSE_TREE="yes"
+fi
 
 if [[ "${REUSE_TREE}" == "yes" && -d "./picode-source/.git" ]]; then
   if [[ -n "$( git -C ./picode-source status --porcelain )" ]]; then

@@ -22,7 +22,7 @@ import * as path from 'node:path';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const PACK = path.join(REPO, 'PiCode-Win32-x64');
-const NODE_MODULES = path.join(REPO, 'vscode', 'node_modules');
+const NODE_MODULES = path.join(REPO, 'picode-source', 'node_modules');
 
 /** The newest build log, which is the run the owner is watching. */
 function newestLog() {
@@ -51,14 +51,31 @@ const logFile = args.find(argument => !argument.startsWith('--')) ?? newestLog()
  * bar move inside a stage that has no marker of its own.
  */
 const STAGES = [
-	{ id: 'prepare', label: 'preparando el código de VS Code', weight: 4, expectedSeconds: 60 },
-	{ id: 'dependencies', label: 'instalando dependencias', weight: 30, expectedSeconds: 300 },
-	{ id: 'connector', label: 'compilando el conector', weight: 3, expectedSeconds: 20 },
-	{ id: 'core', label: 'compilando el núcleo', weight: 27, expectedSeconds: 120 },
-	{ id: 'pack', label: 'empaquetando el editor', weight: 30, expectedSeconds: 300 },
-	{ id: 'stage', label: 'sellando la distribución', weight: 6, expectedSeconds: 60 },
+	{
+		id: 'prepare', label: 'Preparing the source', weight: 4, expectedSeconds: 60,
+		detail: 'Fetching the pinned VS Code source and applying every patch. Nothing is compiled yet.'
+	},
+	{
+		id: 'dependencies', label: 'Getting the pieces it needs', weight: 30, expectedSeconds: 300,
+		detail: 'Downloading and installing the packages the editor is built with. This is the longest step.'
+	},
+	{
+		id: 'connector', label: 'Compiling the connector', weight: 3, expectedSeconds: 20,
+		detail: 'Building the piece that talks to pi, so the editor can reach a model.'
+	},
+	{
+		id: 'core', label: 'Compiling the editor', weight: 27, expectedSeconds: 120,
+		detail: 'Turning the source into the program. The screen stays quiet for minutes here, and that is normal.'
+	},
+	{
+		id: 'pack', label: 'Packing it', weight: 30, expectedSeconds: 300,
+		detail: 'Copying everything into the folder the editor runs from. Also quiet, also minutes.'
+	},
+	{
+		id: 'stage', label: 'Finishing it off', weight: 6, expectedSeconds: 60,
+		detail: 'Naming it PiCode, drawing its icons and writing its defaults. Almost there.'
+	},
 ];
-
 const stageStarts = STAGES.map((_, index) => STAGES.slice(0, index).reduce((sum, stage) => sum + stage.weight, 0));
 
 /**
@@ -192,7 +209,11 @@ if (logFile === undefined || !fs.existsSync(logFile)) {
 	process.exit(2);
 }
 
-const startedAt = fs.statSync(logFile).mtimeMs;
+// When the build started. The runner truncates the log before it starts, so the file's own age is
+// the answer; the last write is not, and taking it made every estimate nonsense (the log is written
+// every second, so "elapsed" was always about a second).
+const logStat = fs.statSync(logFile);
+const startedAt = (logStat.birthtimeMs && logStat.birthtimeMs <= Date.now()) ? logStat.birthtimeMs : logStat.mtimeMs;
 let lastDrawn = '';
 let ended = false;
 
@@ -203,11 +224,11 @@ function draw() {
 	const now = Date.now();
 
 	if (state.done === 'ok') {
-		process.stdout.write(`\r  listo  ${bar(100)} 100%  ·  la build terminó bien, con el editor en PiCode-Win32-x64          \n`);
+		process.stdout.write(`\r  done   ${bar(100)} 100%  ·  the build finished, in PiCode-Win32-x64ó bien, con el editor en PiCode-Win32-x64          \n`);
 		return true;
 	}
 	if (state.done === 'failed') {
-		process.stdout.write(`\r  fallo  ${bar(100)} ???  ·  la build falló: mira la última línea del registro          \n`);
+		process.stdout.write(`\r  failed ${bar(100)} ???  ·  the build failed: see the last line belowó: mira la última línea del registro          \n`);
 		process.stdout.write(`  ${state.lastLine}\n`);
 		return true;
 	}
@@ -216,13 +237,20 @@ function draw() {
 	const elapsed = (now - startedAt) / 1000;
 	const remaining = percentage > 2 ? (elapsed / percentage) * (100 - percentage) : undefined;
 	const line = `\r  ${bar(percentage)} ${String(Math.round(percentage)).padStart(3)}%  ·  ${STAGES[index].label}  ·  ${clock(elapsed)}` +
-		(remaining === undefined ? '' : `, quedan ~${clock(remaining)}`) + '   ';
+		(remaining === undefined ? '' : `, about ${clock(remaining)}`) + '   ';
 
 	if (line !== lastDrawn) {
 		lastDrawn = line;
 		process.stdout.write(line);
 	}
 	return false;
+}
+
+if (args.includes('--stages')) {
+	// Just the steps, for an interface that wants to show what the build is going to do before it has
+	// ever run. One source of truth: the window does not carry its own copy of this list.
+process.stdout.write(JSON.stringify(STAGES.map(stage => ({ label: stage.label, detail: stage.detail }))) + '\n');
+	process.exit(0);
 }
 
 if (asJson) {
@@ -236,6 +264,9 @@ if (asJson) {
 	process.stdout.write(JSON.stringify({
 		percentage: Math.round(percentage * 10) / 10,
 		stage: STAGES[index].label,
+		stageDetail: STAGES[index].detail,
+		stageIndex: index,
+		stages: STAGES.map(stage => ({ label: stage.label, detail: stage.detail })),
 		elapsedSeconds: Math.round(elapsed),
 		remainingSeconds: state.done === undefined && percentage > 2 ? Math.round((elapsed / percentage) * (100 - percentage)) : 0,
 		done: state.done ?? null,

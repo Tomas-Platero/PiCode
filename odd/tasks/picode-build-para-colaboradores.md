@@ -155,3 +155,51 @@ botón pasó de no funcionar en un árbol recién bajado a destruir el árbol ya
 - 2026-09-25 · la interfaz se rehace porque era técnica de más.
 - 2026-09-25 · **defecto grave**: la build sin banderas borra el árbol preparado, y la documentación
   decía lo contrario. Arreglo decidido, pendiente de aplicar.
+
+## Defecto: el empaquetado escribía en una carpeta y todo lo demás en otra (2026-09-25)
+
+**Lo que pasó**: la build del dueño compiló, empaquetó (55 s) e instaló el motor de pi, y se paró al
+final: `error: a required file is missing: /d/repositorios/PiCode/PiCode-Win32-x64/resources/app/product.json`.
+El paquete estaba entero, pero en **`VSCode-win32-x64/`**, con `PiCode.exe` dentro.
+
+**La raíz**: el nombre de la carpeta de salida lo pone el gulpfile **genérico**,
+`build/gulpfile.vscode.ts:647`:
+
+```js
+const destinationFolderName = `VSCode${dashed(platform)}${dashed(arch)}`;
+```
+
+Los parches 16 y 17 renombraron la salida en los gulpfiles **de Windows y de Linux**, que tienen su
+propio `buildPath`, pero no este, que es el compartido. De ahí que el ejecutable se llamara PiCode (eso
+sale de `product.json`) y la carpeta no.
+
+**Consecuencia, y llevaba ahí desde el principio**: ninguna build había llegado a sellar un editor.
+El aviso de la ventana —«editor built: not built yet»— era **cierto** y señalaba esto mismo sin que
+nadie leyera por qué.
+
+**Arreglo**: `patches/picode/18-pack-output-name.patch`, con una línea, verificado **aplicándolo sobre
+el fichero limpio del repositorio de VS Code** (y comprobando además que no pisa a los parches 16 y 17,
+que tocan otros ficheros). En el árbol que ya estaba preparado se aplicó a mano, que es lo que permite
+que su siguiente build —con reutilización— empaquete en el sitio correcto sin volver a descargar nada.
+
+**Rescate**: como el paquete estaba entero y solo estaba mal de sitio, se fundió `VSCode-win32-x64/`
+dentro de `PiCode-Win32-x64/`, conservando lo que la fase 8 ya había puesto (el motor de pi y su perfil
+de 442 ficheros) y se volvió a lanzar **solo el sellado**. Terminó en **0**: quita 306 MB de mapas,
+deja los idiomas en 2 MB y deja `PiCode.exe` de 221 MB con el producto diciendo PiCode. Veinte minutos
+de compilación no se repitieron.
+
+## Defecto: la ventana no veía las builds (2026-09-25)
+
+El cerrojo guarda el número de proceso de **bash**, y bash reporta dos números distintos: 2473 para sí
+mismo y 14172 para Windows. La ventana preguntaba a **Windows** si ese proceso vivía, le decían que no,
+y concluía «no pasa nada» **con el registro de la build creciendo debajo**. Ahora la comprobación se la
+hace a **bash** (`kill -0`, la misma que usa el lanzador), y parar la build es `kill` desde bash, con lo
+que el propio lanzador recoge el cerrojo. Se probó también el truco de `/proc/<pid>/winpid`: **aquí no
+sirve**, Windows tampoco reconoce ese número.
+
+## La bandera que borraba el árbol
+
+`dev/build.sh` gana `-f`: sin banderas, si hay árbol, **se reutiliza** y lo dice; borrarlo y descargarlo
+otra vez hay que pedirlo. Verificado: sin banderas ahora imprime
+`note: ./picode-source is already here and is being reused (-f fetches it again)` donde antes imprimía
+`removing ./picode-source`.
