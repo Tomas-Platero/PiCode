@@ -84,8 +84,8 @@ function readLog(text) {
 		{ index: 0, pattern: /== phase 1\/8|== phases 2-5/ },
 		{ index: 1, pattern: /== phase 6\/8|npm ci|Installing dependencies/ },
 		{ index: 2, pattern: /== phase 6b\/8|connector compiled/ },
-		{ index: 3, pattern: /Starting compile-src|Finished compile-src|Starting .*compilation/ },
-		{ index: 4, pattern: /Bundled extension:/ },
+		{ index: 3, pattern: /Starting compile-src|Starting .*compilation/ },
+		{ index: 4, pattern: /Finished compile-src|Bundled extension:|Packing/ },
 		{ index: 5, pattern: /== phase 8\/8|--- step [0-9]\/6|staging complete/ },
 	];
 
