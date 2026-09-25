@@ -94,11 +94,6 @@ function readLog(text) {
 	if (/== done/.test(text)) {
 		return { index: 5, done: 'ok', lastLine };
 	}
-	// The tail only: a build that recovered from a warning is not a failed build.
-	const tail = lines.slice(-8).join('\n');
-	if (/errored|error TS|Error: |(^|\n)\s*error:|exited with code [1-9]|command not found/i.test(tail)) {
-		return { index: 5, done: 'failed', lastLine };
-	}
 
 	const markers = [
 		{ index: 0, pattern: /== phase 1\/8|== phases 2-5/ },
@@ -117,6 +112,13 @@ function readLog(text) {
 		if (lines.some(line => marker.pattern.test(line))) {
 			index = Math.max(index, marker.index);
 		}
+	}
+	const tail = lines.slice(-8).join('\n');
+	// The tail only, and only now that the furthest stage is known: a failure used to report
+	// the LAST stage always, so a compile error in the connector showed as a failure in staging.
+	// The build failed where it stopped, not wherever the failure branch hardcoded.
+	if (/errored|error TS|Error: |(^|\n)\s*error:|exited with code [1-9]|command not found/i.test(tail)) {
+		return { index, done: 'failed', lastLine };
 	}
 	return { index, done: undefined, lastLine };
 }
