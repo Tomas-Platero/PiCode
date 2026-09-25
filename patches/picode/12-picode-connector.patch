@@ -17,10 +17,10 @@ index 00000000000..8ee2b1b9165
 +node_modules/**
 diff --git a/extensions/picode/package.json b/extensions/picode/package.json
 new file mode 100644
-index 00000000000..59274edffea
+index 00000000000..7a72463d001
 --- /dev/null
 +++ b/extensions/picode/package.json
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,93 @@
 +{
 +  "name": "picode",
 +  "publisher": "picode",
@@ -57,7 +57,6 @@ index 00000000000..59274edffea
 +        "fullName": "pi",
 +        "description": "PiCode's agent: reads and edits your code with your own models.",
 +        "isDefault": true,
-+        "isSticky": true,
 +        "modes": [
 +          "ask",
 +          "agent",

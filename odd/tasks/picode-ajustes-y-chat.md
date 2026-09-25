@@ -88,6 +88,18 @@ El cambio de clave (`picode.pi.providers` → `picode.providers`) es lo que hace
   (y sería leer y escribir el fichero de pi, no inventar ajustes nuevos).
 - **La voz** (transcripción) no existe en esta arquitectura: el Chat del editor trae el suyo.
 
+## 4. El cartelito `@pi` en la caja de escribir
+
+El dueño: «No me gusta que en el chat salta "@pi" … podríamos ocultarlo cuando vaya a hablar con
+él?». Lo pone el editor, no nosotros: el manifiesto del participante tenía
+`"isSticky": true`, y con esa marca el núcleo **repuebla** la caja con `@pi ` cada vez que se
+envía un mensaje y la caja queda vacía (`chatInputEditorContrib.ts`, cuando
+`agent.metadata.isSticky`).
+
+Se quita **esa marca** y se deja `"isDefault": true`, que es lo que hace que pi sea el agente que
+responde: el chat sigue hablándole sin que haga falta nombrarlo, y ya no aparece el cartelito. La
+marca venía copiada del manifiesto de la extensión retirada, que era otra superficie.
+
 ## Registro
 
 - 2026-09-25 · pedido y hecho en la misma sesión, después de los proveedores.
