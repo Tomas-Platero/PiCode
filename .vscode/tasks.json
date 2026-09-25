@@ -1,25 +1,57 @@
 {
 	// PiCode's own build, runnable from the editor so its progress can be watched in a terminal.
 	//
-	// It is the same command the operator runs by hand (`./dev/build.sh`), with `-s` because the
-	// source tree is already prepared: the phases that fetch and patch VS Code are skipped and the
-	// build resumes at the dependencies, which is what a rebuild after a source change needs.
+	// The default task is the **live** one: it runs the same build and draws a line with the stage,
+	// a bar and how much is left, because the long phases (installing dependencies, packing) print
+	// nothing for minutes and a silent log cannot be told apart from a stuck one.
 	//
 	// One at a time: two builds in the same tree fight over `node_modules` and over the platform
-	// directory they pack into, and the loser leaves a half-installed tree behind (that happened).
+	// directory they pack into, and one of those left a half-installed tree behind (that happened).
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "PiCode: build the editor",
-			"detail": "Compiles the core, the connector, and packs the distribution into VSCode-win32-x64",
+			"label": "PiCode: build the editor (con progreso)",
+			"detail": "Compila el núcleo y el conector, y empaqueta el editor, con la barra de progreso",
 			"type": "shell",
-			"command": "bash dev/build.sh -s",
+			"command": "bash dev/build-live.sh -s",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
 			"group": {
 				"kind": "build",
 				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "PiCode: seguir la build que ya está en marcha",
+			"detail": "Solo el visor: lee el registro de la build en curso y dibuja el progreso",
+			"type": "shell",
+			"command": "node dev/build-progress.mjs",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "PiCode: build the editor (salida cruda)",
+			"detail": "La build sin visor, con toda la salida tal cual",
+			"type": "shell",
+			"command": "bash dev/build.sh -s",
+			"options": {
+				"cwd": "${workspaceFolder}"
 			},
 			"presentation": {
 				"echo": true,
