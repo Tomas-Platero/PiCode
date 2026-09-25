@@ -68,7 +68,9 @@ const stageStarts = STAGES.map((_, index) => STAGES.slice(0, index).reduce((sum,
  * marker appears last is the one the build is in.
  */
 function readLog(text) {
-	const lines = text.split('\n');
+	// The build's output carries colour codes (`Finished \u001b[32mcompile-src\u001b[39m`), and left in
+	// they hide the words a marker looks for: `Finished compile-src` is never actually contiguous.
+	const lines = text.replace(/\u001b\[[0-9;]*m/g, '').split('\n');
 	const lastLine = lines.filter(line => line.trim().length > 0).pop() ?? '';
 
 	if (/== done/.test(text)) {
