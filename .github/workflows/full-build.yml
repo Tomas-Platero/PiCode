@@ -49,30 +49,54 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A tag and a manual dispatch always build. A push builds only when
+          # the pin moved. The nightly builds only when something relevant
+          # changed since the last successful build — compiling an unchanged
+          # tree every night discovers nothing and costs an hour.
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]] \
-             || [[ "${GITHUB_EVENT_NAME}" != "push" ]]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          before="${GITHUB_EVENT_BEFORE}"
-          zero=0000000000000000000000000000000000000000
-          if [[ -z "${before}" || "${before}" == "${zero}" ]]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # The compare answers which files the push touched; a compare that
-          # cannot be computed is treated as "no pin move" — the nightly
-          # catches whatever it misses. The decision is printed, and the
-          # output is written exactly once.
-          compare="repos/${GITHUB_REPOSITORY}/compare"
-          files="$( gh api "${compare}/${before}...${GITHUB_SHA}" \
-            --jq '[.files[].filename] | join(" ")' 2>/dev/null )" \
-            || files=""
-          decision="false"
-          if [[ "${files}" == *"upstream/"* ]]; then
+             || [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             decision="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            decision="false"
+            before="${GITHUB_EVENT_BEFORE}"
+            zero=0000000000000000000000000000000000000000
+            if [[ -z "${before}" || "${before}" == "${zero}" ]]; then
+              decision="true"
+            else
+              compare="repos/${GITHUB_REPOSITORY}/compare"
+              files="$( gh api "${compare}/${before}...${GITHUB_SHA}" \
+                --jq '[.files[].filename] | join(" ")' 2>/dev/null )" \
+                || files=""
+              if [[ "${files}" == *"upstream/"* ]]; then
+                decision="true"
+              fi
+            fi
+          else
+            decision="true"
+            runs="actions/workflows/full-build.yml/runs"
+            last="$( gh api \
+              "repos/${GITHUB_REPOSITORY}/${runs}?status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha // ""' 2>/dev/null )" \
+              || last=""
+            if [[ -z "${last}" ]]; then
+              : # no successful build yet: build
+            elif [[ "${last}" == "${GITHUB_SHA}" ]]; then
+              decision="false" # nothing new since it
+            else
+              compare="repos/${GITHUB_REPOSITORY}/compare"
+              changed="$( gh api "${compare}/${last}...${GITHUB_SHA}" \
+                --jq '[.files[].filename] | join(" ")' 2>/dev/null )"
+              if [[ -n "${changed}" ]]; then
+                decision="false"
+                for prefix in upstream/ patches/ dev/ distribution/ .nvmrc; do
+                  if [[ "${changed}" == *"${prefix}"* ]]; then
+                    decision="true"
+                  fi
+                done
+              fi
+              # an empty or failed compare keeps decision=true: fail safe
+            fi
           fi
-          echo "compare saw: ${files:-<nothing or compare failed>}"
           echo "decision: build=${decision}"
           echo "build=${decision}" >> "$GITHUB_OUTPUT"
 

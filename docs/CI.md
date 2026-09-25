@@ -74,7 +74,10 @@ documentada que el `GITHUB_TOKEN` sí puede disparar. Ese run escribe el estado
 
 ## 3. Build completo y releases — `.github/workflows/full-build.yml`
 
-**Cuándo:** cada noche a las 03:41 UTC; cuando un `push` mueve `upstream/stable.json` o
+**Cuándo:** cada noche a las 03:41 UTC — pero solo si algo relevante cambió
+desde la última build exitosa (`upstream/`, `patches/`, `dev/`,
+`distribution/`, `.nvmrc`); compilar un árbol sin cambios no descubre nada.
+También cuando un `push` mueve `upstream/stable.json` o
 `upstream/vscodium.json`; a mano desde *Actions*; y al empujar un tag `v*`.
 
 **Qué hace:** `./dev/build.sh` completo (compilación y empaquetado reales) en
