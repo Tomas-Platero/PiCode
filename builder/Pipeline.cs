@@ -381,8 +381,15 @@ public sealed class Pipeline
 			process.Start();
 			return true;
 		}
-		catch
+		catch (Exception error)
 		{
+			// A start that fails in silence is a button that appears to do nothing, which is exactly
+			// what the owner saw once. Say it where the window's own log can show it.
+			try
+			{
+				App.WriteCrashLog("StartBuild failed: " + error.Message);
+			}
+			catch { }
 			return false;
 		}
 	}
