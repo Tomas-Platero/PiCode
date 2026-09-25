@@ -61,15 +61,20 @@ jobs:
             exit 0
           fi
           # The compare answers which files the push touched; a compare that
-          # cannot be computed (a force-push, say) fails safe to building.
+          # cannot be computed is treated as "no pin move" — the nightly
+          # catches whatever it misses. The decision is printed, and the
+          # output is written exactly once.
           compare="repos/${GITHUB_REPOSITORY}/compare"
-          if gh api "${compare}/${before}...${GITHUB_SHA}" \
-              --jq '[.files[].filename] | any(startswith("upstream/"))' \
-              | grep -q true; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi || echo "build=true" >> "$GITHUB_OUTPUT"
+          files="$( gh api "${compare}/${before}...${GITHUB_SHA}" \
+            --jq '[.files[].filename] | join(" ")' 2>/dev/null )" \
+            || files=""
+          decision="false"
+          if [[ "${files}" == *"upstream/"* ]]; then
+            decision="true"
+          fi
+          echo "compare saw: ${files:-<nothing or compare failed>}"
+          echo "decision: build=${decision}"
+          echo "build=${decision}" >> "$GITHUB_OUTPUT"
 
   build:
     name: full build (${{ matrix.os }})
