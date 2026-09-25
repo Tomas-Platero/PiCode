@@ -42,7 +42,6 @@
     Paths this script touches when -Apply is passed:
 
       - resources/app/product.json                 the product delta (backed up first)
-      - resources/app/extensions/picode-pi-chat/    the agent panel, shipped as a built-in extension
       - data/user-data/                            portable user data
       - data/extensions/                           portable extension directory
       - data/tmp/                                  portable temp, used by the editor
@@ -66,7 +65,7 @@ $RepoRoot       = Split-Path -Parent $PSScriptRoot
 if (-not $RepoRoot) { $RepoRoot = (Get-Location).Path }
 
 $Executable     = Join-Path $RepoRoot "VSCodium.exe"
-# Step 5 renames the executable, so a second run of this script has to accept either
+# Step 4 renames the executable, so a second run of this script has to accept either
 # name as proof that this is a VSCodium root.
 $RenamedExe     = Join-Path $RepoRoot "PiCode.exe"
 $ProductJson    = Join-Path $RepoRoot "resources\app\product.json"
@@ -79,12 +78,6 @@ $SettingsTarget = Join-Path $UserDataDir "User\settings.json"
 $DeltaPath      = Join-Path $PSScriptRoot "product-delta.json"
 $ApplierPath    = Join-Path $PSScriptRoot "apply-product-delta.mjs"
 $SettingsSource = Join-Path $PSScriptRoot "settings.json"
-
-# The agent panel is delivered as a built-in extension: because PiCode owns the
-# VSCodium tree, the editor scans resources/app/extensions at startup, so no
-# install step and no compiled-in extension list are needed.
-$ExtensionSource = Join-Path $RepoRoot "extensions\picode-pi-chat"
-$ExtensionTarget = Join-Path $RepoRoot "resources\app\extensions\picode-pi-chat"
 
 # Exit codes of apply-product-delta.mjs, mirrored here because Windows
 # PowerShell 5.1 does not throw on a non-zero native exit code.
@@ -253,113 +246,9 @@ if (Test-Path -LiteralPath $SettingsTarget) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4 - the agent panel as a built-in extension
+# Step 4 - the names Windows shows
 # ---------------------------------------------------------------------------
-Write-Section "Step 4 - built-in extension resources/app/extensions/picode-pi-chat"
-
-# What ships is the built package, mirrored from .vscodeignore: sources, the
-# toolchain, maps and packaging state never reach the editor tree.
-$excludedPatterns = @(
-    '^(src|test|node_modules|\.atl|\.vscode)[\\/]',
-    '\.map$',
-    '\.vsix$'
-)
-$excludedNames = @('.gitignore', '.vscodeignore', 'package-lock.json', 'tsconfig.json')
-
-function Get-RelativePath([string]$Root, [string]$Full) {
-    return $Full.Substring($Root.Length).TrimStart('\', '/')
-}
-
-function Get-StageableFiles([string]$Root) {
-    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
-    if (-not (Test-Path -LiteralPath $Root)) { return $files }
-
-    foreach ($file in (Get-ChildItem -LiteralPath $Root -Recurse -File)) {
-        $relative = Get-RelativePath $Root $file.FullName
-        if ($excludedNames -contains $file.Name) { continue }
-
-        $skip = $false
-        foreach ($pattern in $excludedPatterns) {
-            if ($relative -match $pattern) { $skip = $true; break }
-        }
-        if (-not $skip) { $files.Add($file) }
-    }
-    return $files
-}
-
-$extensionReady = (Test-Path -LiteralPath (Join-Path $ExtensionSource "package.json")) -and
-                  (Test-Path -LiteralPath (Join-Path $ExtensionSource "out\extension.js"))
-
-if (-not $extensionReady) {
-    Write-Warn "The panel is not built: expected package.json and out/extension.js under $ExtensionSource"
-    Write-Note "Build it with:"
-    Write-Note "  cd extensions/picode-pi-chat; npm install; npm run compile"
-    $Skipped.Add("built-in extension not staged (build missing)")
-    $Next.Add("Build the panel, then re-run this script to stage it as a built-in extension")
-} else {
-    $sourceFiles = Get-StageableFiles $ExtensionSource
-    $changed = [System.Collections.Generic.List[string]]::new()
-    $stale = [System.Collections.Generic.List[string]]::new()
-
-    foreach ($file in $sourceFiles) {
-        $relative = Get-RelativePath $ExtensionSource $file.FullName
-        $destination = Join-Path $ExtensionTarget $relative
-
-        if (-not (Test-Path -LiteralPath $destination)) {
-            $changed.Add($relative)
-            continue
-        }
-        $sourceHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-        if ($sourceHash -ne $destinationHash) { $changed.Add($relative) }
-    }
-
-    # A renamed module would otherwise leave its old build output behind, and the
-    # editor would keep loading it.
-    if (Test-Path -LiteralPath $ExtensionTarget) {
-        foreach ($file in (Get-ChildItem -LiteralPath $ExtensionTarget -Recurse -File)) {
-            $relative = Get-RelativePath $ExtensionTarget $file.FullName
-            $stillShipped = $false
-            foreach ($source in $sourceFiles) {
-                if ((Get-RelativePath $ExtensionSource $source.FullName) -eq $relative) {
-                    $stillShipped = $true
-                    break
-                }
-            }
-            if (-not $stillShipped) { $stale.Add($relative) }
-        }
-    }
-
-    if ($changed.Count -eq 0 -and $stale.Count -eq 0) {
-        Write-Skip "the built-in extension is already current ($($sourceFiles.Count) files)"
-    } else {
-        Write-Note "$($sourceFiles.Count) files ship; $($changed.Count) need writing, $($stale.Count) are stale"
-        Write-Act "Stage the agent panel into $ExtensionTarget"
-
-        if ($isPreview) {
-            Write-Note "Preview: nothing was copied."
-        } else {
-            foreach ($relative in $stale) {
-                Remove-Item -LiteralPath (Join-Path $ExtensionTarget $relative) -Force
-            }
-            foreach ($file in $sourceFiles) {
-                $relative = Get-RelativePath $ExtensionSource $file.FullName
-                $destination = Join-Path $ExtensionTarget $relative
-                $parent = Split-Path -Parent $destination
-                if (-not (Test-Path -LiteralPath $parent)) {
-                    New-Item -ItemType Directory -Path $parent -Force | Out-Null
-                }
-                Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
-            }
-            $Done.Add("staged the agent panel into $ExtensionTarget")
-        }
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Step 5 - the names Windows shows
-# ---------------------------------------------------------------------------
-Write-Section "Step 5 - nombre visible del binario"
+Write-Section "Step 4 - the visible name of the binary"
 
 # The product keys handled in Step 1 cover the window title and the About dialog. What
 # is left is the file names: the executable itself, the two CLI shims that name it in
@@ -425,16 +314,24 @@ foreach ($fix in $nameFixes) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 6 - the icons inside the application
+# Step 5 - the icons inside the application
 # ---------------------------------------------------------------------------
-Write-Section "Step 6 - icons inside the application"
+Write-Section "Step 5 - icons inside the application"
 
 # The executable's own icon is set separately, because it needs a PE resource tool; see
 # docs/DISTRIBUTION.md section 9. This step is the other half: VS Code ships its own logo
 # files, and those are what the interface draws. They are deliberately not covered by the
 # product checksums, which is what makes replacing them safe.
-$markSource = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode-icon.svg"
-$markPng    = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode-icon.png"
+# The marks live in `distribution/` beside this script, where the owner put them; the chat
+# extension they used to live in is gone. The tile PNG is not stored anywhere: it is pulled out
+# of the .ico's own largest frame by the same tool the Linux icon uses, so there is one drawing
+# and no second copy to keep in step.
+$markSource  = Join-Path $PSScriptRoot "picode-icon.svg"
+$icoForTiles = Join-Path $PSScriptRoot "picode.ico"
+$markPng     = Join-Path ([System.IO.Path]::GetTempPath()) "picode-tiles.png"
+if (Test-Path -LiteralPath $icoForTiles) {
+    & node (Join-Path $RepoRoot "dev\ico-to-png.mjs") $icoForTiles $markPng | Out-Null
+}
 
 if (-not (Test-Path -LiteralPath $markSource)) {
     Write-Warn "No mark found at $markSource; the icons inside the application were left alone."
@@ -451,7 +348,7 @@ if (-not (Test-Path -LiteralPath $markSource)) {
     # behind its hints: there, the plate becomes a dark block sitting on the editor's own
     # surface. `picode.svg` is the same family drawn as strokes only, so it stays a mark at
     # any size instead of a rectangle.
-    $watermarkSource = Join-Path $RepoRoot "extensions\picode-pi-chat\media\picode.svg"
+    $watermarkSource = Join-Path $PSScriptRoot "picode.svg"
     $watermark = if (Test-Path -LiteralPath $watermarkSource) {
         Get-Content -LiteralPath $watermarkSource -Raw
     } else {

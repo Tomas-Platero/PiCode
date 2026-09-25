@@ -50,9 +50,6 @@ DELTA="./distribution/product-delta.json"
 APPLIER="./distribution/apply-product-delta.mjs"
 SETTINGS_SOURCE="./distribution/settings.json"
 
-EXTENSION_SOURCE="./extensions/picode-pi-chat"
-EXTENSION_TARGET="${PACK_DIR}/resources/app/extensions/picode-pi-chat"
-
 for required in "${PRODUCT_JSON}" "${DELTA}" "${APPLIER}" "${SETTINGS_SOURCE}"; do
   if [[ ! -e "${required}" ]]; then
     echo "error: a required file is missing: ${required}" >&2
@@ -68,7 +65,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 1 - the product delta
 # ---------------------------------------------------------------------------
-echo "--- step 1/8 - product delta in resources/app/product.json"
+echo "--- step 1/7 - product delta in resources/app/product.json"
 
 set +e
 node "${APPLIER}" --target "${PRODUCT_JSON}" --delta "${DELTA}" --check
@@ -96,7 +93,7 @@ fi
 # ---------------------------------------------------------------------------
 # Step 2 - the portable profile
 # ---------------------------------------------------------------------------
-echo "--- step 2/8 - portable profile in data/"
+echo "--- step 2/7 - portable profile in data/"
 
 for dir in "user-data" "extensions" "tmp"; do
   if [[ -d "${PACK_DIR}/data/${dir}" ]]; then
@@ -110,7 +107,7 @@ done
 # ---------------------------------------------------------------------------
 # Step 3 - first-run defaults
 # ---------------------------------------------------------------------------
-echo "--- step 3/8 - first-run defaults"
+echo "--- step 3/7 - first-run defaults"
 
 SETTINGS_TARGET="${PACK_DIR}/data/user-data/User/settings.json"
 
@@ -128,79 +125,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4 - the agent panel as a built-in extension
+# Step 4 - the names Windows shows
 # ---------------------------------------------------------------------------
-echo "--- step 4/8 - retired: PiCode's own panel is no longer shipped"
-
-# The owner removed PiCode's own chat on 2026-09-24: the editor's chat is the surface, and
-# the panel this step staged belongs to the extension being migrated into the core. The
-# branch below is deliberately unreachable — `if true` and not a missing file, so that a
-# half-built tree cannot fall into it — and it stays only until the migration deletes it
-# along with the rest of the extension. Nothing here copies the panel any more.
-if true; then
-  echo "skipped: the panel was retired; the editor's own chat is the surface now"
-else
-  # The same exclusion rules as `distribution/apply-picode.ps1` (and the
-  # extension's .vscodeignore): sources, tests, the toolchain and packaging state
-  # never reach the editor tree.
-  ships() {
-    local relative="$1"
-
-    case "${relative}" in
-      src/* | test/* | node_modules/* | .atl/* | .vscode/*) return 1 ;;
-      .gitignore | .vscodeignore | package-lock.json | tsconfig.json) return 1 ;;
-      *.map | *.vsix) return 1 ;;
-    esac
-    return 0
-  }
-
-  SHIPPED=0
-  CHANGED=0
-  STALE=0
-
-  if [[ -d "${EXTENSION_TARGET}" ]]; then
-    while IFS= read -r existing; do
-      relative="${existing#"${EXTENSION_TARGET}/"}"
-      if ! ships "${relative}" || [[ ! -f "${EXTENSION_SOURCE}/${relative}" ]]; then
-        rm -f "${existing}"
-        STALE=$(( STALE + 1 ))
-      fi
-    done < <( find "${EXTENSION_TARGET}" -type f )
-  fi
-
-  while IFS= read -r source; do
-    relative="${source#"${EXTENSION_SOURCE}/"}"
-
-    if ! ships "${relative}"; then
-      continue
-    fi
-
-    SHIPPED=$(( SHIPPED + 1 ))
-
-    if [[ ! -f "${EXTENSION_TARGET}/${relative}" ]] || ! cmp -s "${source}" "${EXTENSION_TARGET}/${relative}"; then
-      mkdir -p "$( dirname "${EXTENSION_TARGET}/${relative}" )"
-      cp -f "${source}" "${EXTENSION_TARGET}/${relative}"
-      CHANGED=$(( CHANGED + 1 ))
-    fi
-  done < <( find "${EXTENSION_SOURCE}" -type f )
-
-  if [[ "${CHANGED}" -eq 0 && "${STALE}" -eq 0 ]]; then
-    echo "skipped: the built-in extension is already current (${SHIPPED} files)"
-  else
-    echo "staged ${CHANGED} file(s) of ${SHIPPED}; removed ${STALE} stale file(s)"
-  fi
-
-  # A built-in extension that still carries sources would be caught above by the
-  # exclusion rules; this is the guard that they were not silently skipped.
-  if [[ -d "${EXTENSION_TARGET}/src" || -d "${EXTENSION_TARGET}/node_modules" ]]; then
-    echo "warning: sources or node_modules are still present in ${EXTENSION_TARGET}" >&2
-  fi
-fi
-
-# ---------------------------------------------------------------------------
-# Step 5 - the names Windows shows
-# ---------------------------------------------------------------------------
-echo "--- step 5/8 - visible names"
+echo "--- step 4/7 - visible names"
 
 # The pack output names the executable after `product.nameShort`, which the
 # product delta makes "PiCode" *before* packing, so this normally finds the name
@@ -278,10 +205,10 @@ fix_text "${PACK_DIR}/bin/picode" 'NAME="VSCodium"' 'NAME="PiCode"'
 fix_text "${PACK_DIR}/PiCode.VisualElementsManifest.xml" 'ShortDisplayName="VSCodium"' 'ShortDisplayName="PiCode"'
 
 # ---------------------------------------------------------------------------
-# Step 6 - the icons inside the application
+# Step 5 - the icons inside the application
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
-# Step 5b - the icon Linux uses
+# Step 4b - the icon Linux uses
 # ---------------------------------------------------------------------------
 # Windows wants an `.ico` (step 6) and Linux wants a PNG, and Linux takes it from `resources/linux/`:
 # with VS Code's logo there, the window and the launcher of a PiCode build wear somebody else's face.
@@ -302,7 +229,7 @@ if [[ "${OS_NAME:-windows}" == "linux" ]]; then
   fi
 fi
 
-echo "--- step 6/8 - icons inside the application"
+echo "--- step 5/7 - icons inside the application"
 
 MARK_SOURCE="./distribution/picode-icon.svg"
 WATERMARK_SOURCE="./distribution/picode.svg"
@@ -413,9 +340,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 7 - the editor's own copy says PiCode
+# Step 6 - the editor's own copy says PiCode
 # ---------------------------------------------------------------------------
-echo "--- step 7/8 - PiCode, in the editor's own text"
+echo "--- step 6/7 - PiCode, in the editor's own text"
 
 # The editor is built from VS Code's source and its text says so: measured, 196 of its 24,697
 # strings name VS Code or VSCodium, and those are the ones a person reads in the settings, in the
@@ -423,9 +350,9 @@ echo "--- step 7/8 - PiCode, in the editor's own text"
 node dev/brand-copy.mjs "${PACK_DIR}"
 
 # ---------------------------------------------------------------------------
-# Step 8 - the weight that is not the product
+# Step 7 - the weight that is not the product
 # ---------------------------------------------------------------------------
-echo "--- step 8/8 - maps and locales"
+echo "--- step 7/7 - maps and locales"
 
 # The editor's source maps are for debugging the code that ships already bundled: measured, 307 MB
 # of the 366 MB the packed `out` weighs, in thirty files. This repository builds from the source, so

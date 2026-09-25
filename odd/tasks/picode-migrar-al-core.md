@@ -63,8 +63,15 @@ origen hasta que la migración copie lo que sirve.
       la tabla de directorios no sabe expresar `~/.pi/agent/npm/node_modules/<paquete>/skills`.
 - [ ] M5 **El asistente de primer arranque**, en el core.
 - [ ] M6 **Borrar `extensions/picode-pi-chat`** cuando no quede nada por migrar.
-- [ ] M7 **Quitar el escalón de la vía ZIP**: `distribution/apply-picode.ps1` y
+- [x] M7 **Quitar el escalón de la vía ZIP**: `distribution/apply-picode.ps1` y
       `dev/stage-distribution.sh` siguen metiendo la extensión en el árbol empaquetado.
+      **Hecho el 2026-09-25**: se quitaron los dos pasos 4 (y el bloque muerto que quedaba en el
+      empaquetado), se renumeraron los pasos a 1..7 y 1..5, y se borraron las variables y los
+      comentarios que ya no usaba nadie. De paso, el paso del icono del ZIP **seguía leyendo el
+      dibujo de dentro de la extensión retirada** — ahora lo saca del propio `.ico` con
+      `dev/ico-to-png.mjs`, así que no hay una segunda copia que se quede atrás. El material de
+      la extensión entró en el historial en `e705f4f` (1.947 líneas que solo existían en el
+      `.tar.gz` de `legacy/`), que es lo que el papel pedía antes de borrarla.
 
 ## Lo que está roto y se acepta
 
