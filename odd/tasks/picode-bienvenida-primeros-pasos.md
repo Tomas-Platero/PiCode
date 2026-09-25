@@ -51,11 +51,12 @@ de extensiones para instalar temas nuevos. La galería completa de la extensión
 | Decisión | Elección | Razón |
 | --- | --- | --- |
 | Logo en la bienvenida | El **dibujo de trazos** (`distribution/picode.svg`), inline en el DOM con `currentColor` | La regla del marcador de agua: a ese tamaño la placa se ve como un bloque; `currentColor` lo pinta del color del tema (claro u oscuro) sin SVGs duplicados |
-| El asistente, ¿webview o QuickInput? | **QuickInput nativo** | No crea superficie nueva (la regla del núcleo), es lo que el editor ya usa para sus propios flujos, y el paso de tema necesita cerrar y reabrir el foco de todas formas |
+| El asistente, ¿webview, QuickInput o en la página? | **Dentro de la propia página de bienvenida** (corrección del dueño: "El setup no puede ser interactivo en la misma ventana? sin tener que abrir popups o modals?") | La página renderiza las opciones y llama por comandos al conector; sin quick inputs ni modales. La primera versión con QuickInput se retiró con esta corrección |
+| Gentle AI y el pi externo | **No se pregunta**: con el pi externo elegido, la fila de Gentle AI no aparece (corrección del dueño: "el gentle-ai que se instala deberá ser para el pi interno solamente y solo se lo preguntas para él") | Gentle AI vive en el perfil interno; el perfil externo no es del editor |
 | Elección de pi | Ajuste nuevo `picode.pi.runtime`: `internal` (por defecto) \| `external` | Son las palabras del dueño («si interno o externo»); el conector del core hoy resuelve solo el interno, y el externo necesita un resolvedor propio |
 | Qué significa «externo» | El pi del PATH **y su perfil** (`~/.pi/agent`, que pi resuelve solo): PiCode lo **lee**, nunca escribe | La regla del AGENTS: nada sale de PiCode hacia fuera; la instancia externa es de solo lectura |
 | Gentle AI | Estado = los paquetes instalados o no en el perfil **interno** (`pi install` / `pi remove npm:gentle-pi npm:gentle-engram`); con pi externo el paso explica y no toca nada | El perfil externo es de solo lectura; los paquetes viven en el perfil, no en el editor |
-| Paso de tema | El selector nativo (`workbench.action.selectTheme`, vista previa viva) + «instalar más temas» que abre la galería de extensiones (`@category:themes`); el asistente avanza cuando `workbench.colorTheme` cambia | Reusar la superficie del editor en vez de portar la galería webview; la galería completa es la feature M pendiente |
+| Paso de tema | Lista de temas instalados dentro de la propia sección (se aplica al pulsar) + «Browse more themes…» que abre la galería de extensiones | Reusar las superficies del editor en la misma página; la galería con miniaturas es la feature M pendiente |
 | Cuándo se abre solo | Primer arranque: sin marca `picode.onboarding.done` **y** sin proveedores configurados **y** perfil interno sin credenciales. Nunca encima de una configuración que funciona | La regla ya escrita en `picode-ui-program.md` (tarea 10) |
 | Repetible | Sí: comando `PiCode: Set up PiCode` y el botón de la bienvenida, siempre | El dueño pidió poder cambiar de pi / Gentle AI / tema después |
 
@@ -103,23 +104,41 @@ de extensiones para instalar temas nuevos. La galería completa de la extensión
 
 - **T1–T5 (código).** Escritos y compilando: el conector pasa su `tsc` propio estricto
   (`extensions/picode/tsconfig.json`, `--noEmit`, 0 errores) con todo dentro —
-  `piLocate.ts`, `runtime.ts`, `onboarding.ts`, y los cambios en `piSdk.ts`, `agent.ts`,
-  `login.ts`, `extension.ts`. El chequeo de tipos del workbench completo (`src/tsconfig.json`)
-  cubre la bienvenida y el registro del ajuste.
+  `piLocate.ts`, `runtime.ts`, `onboarding.ts` (hoy puente de comandos del setup), y los
+  cambios en `piSdk.ts`, `agent.ts`, `login.ts`, `extension.ts`. El chequeo de tipos del
+  workbench completo (`src/tsconfig.json`) cubre la bienvenida, la sección de setup y el
+  registro del ajuste: **0 errores**.
 - **Defecto latente arreglado de paso:** las llamadas al CLI de pi desde el host de
   extensiones no ponían `ELECTRON_RUN_AS_NODE=1` — `process.execPath` es el ejecutable de
   Electron y sin la bandera intenta abrir una app en vez de ejecutar el script. Estaba así
   en la instalación del adaptador MCP del conector; corregido en ambos sitios.
+- **Corrección 1 (dueño, 2026-09-25): los ojos del logo.** El fallo era mío: los círculos
+  del SVG fuente llevan `stroke="none"`, y yo quitaba el atributo en vez de ponerlo, así
+  que heredaban el trazo de 84 unidades del grupo y salían como manchas (los ojos ocupaban
+  la cara entera). Corregido: `stroke="none"` explícito, igual que en el SVG fuente.
+- **Corrección 2 (dueño, 2026-09-25): el setup dentro de la página.** La primera versión
+  usaba QuickInput (popups). Rehecha: la página de bienvenida renderiza las secciones (pi,
+  Gentle AI, tema) y llama a comandos del conector (`picode.setup.getState`,
+  `applyRuntime`, `applyGentle`, `complete`); cada acción re-renderiza con el estado que el
+  comando responde. Sin popups ni modales.
+- **Corrección 3 (dueño, 2026-09-25): Gentle AI solo para el pi interno.** Con el pi
+  externo elegido, la fila de Gentle AI no se renderiza; el puente tampoco permite
+  instalarla ahí (la acción responde con la explicación si alguien la llama).
 - **T6 — Verificación.**
   - `extensions/picode/tsconfig.json` (`--noEmit`, estricto): **0 errores** con todo el
     conector nuevo dentro.
   - `src/tsconfig.json` completo (el núcleo entero, `--noEmit`): **0 errores** con la
     bienvenida y el ajuste nuevo.
   - Los parches se generaron con el pase acumulativo (reset → baseline → aceptar en el
-    índice → diff), el mismo mecanismo de `dev/update_patches.sh`: el parche 19 nace del
-    estado tras el parche 18, y el 20 del estado tras el 19. Por construcción aplican
-    limpios en el siguiente build.
+    índice → diff), el mismo mecanismo de `dev/update_patches.sh`. **Defecto del proceso,
+    encontrado y corregido:** regenerar un parche que ya está en la carpeta hace que la fase
+    de baseline lo aplique, y el resultado sale como un delta que no puede aplicarse solo.
+    La regeneración correcta saca los parches en edición de la carpeta antes del baseline
+    (hecho en la segunda regeneración; los parches quedaron verificados como diff completo
+    contra el estado de los parches 01–18).
   - Compilación y empaquetado completos (`dev/build.sh -s`): en marcha al cerrar esta
     sesión; el resultado queda en `PiCode-win32-x64/`.
-- **Commits.** `81a160b` (T1, parche 19) y `a6859d9` (T2–T5, parche 20), sobre `Master`
-  como el resto del historial del repositorio.
+- **Commits.** `81a160b` (T1, parche 19 v1) y `a6859d9` (T2–T5, parche 20 v1); tras las
+  correcciones del dueño, `b07fdb9` (ojos del logo + regeneración del parche 19 sobre línea
+  base limpia) y `d5c97c1` (setup dentro de la página + Gentle AI solo para el interno +
+  regeneración del parche 20). Todos sobre `Master`, como el resto del historial.
