@@ -26,6 +26,21 @@ builder\bin\Debug\net10.0-windows10.0.19041.0\win-x64\PiCode.Builder.exe
 
 Both are also in the editor's task list: **PiCode: build the builder** and **PiCode: run the builder**.
 
+## Where it has to live
+
+**Inside the repository.** It drives the scripts in `dev/`, so it finds the tree by looking upwards from
+where the executable is: keep it anywhere under the repository and everything it needs is found from
+there. `publish.cmd` writes it to `builder/dist`, which is inside, so the published file works where it
+lands.
+
+Copied somewhere outside, it opens window and says the repository was not found. It does not guess, and
+it does not build the wrong thing.
+
+Being able to point it at a repository from outside was tried and abandoned: with a repository
+remembered, the window opened and then died while drawing, before a single line of its own refresh code
+ran. It is not offered, because a door that crashes is worse than no door. The state that works is the
+one that is shipped.
+
 ## What it needs on the machine
 
 **Nothing installed.** The .NET SDK is the only requirement, and the Windows App SDK arrives as a NuGet
