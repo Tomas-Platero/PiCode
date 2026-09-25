@@ -38,9 +38,9 @@ coherent tool.
 
 | | Project | What it brings to PiCode |
 | --- | --- | --- |
-| 🖥️ | **[VSCodium](https://github.com/VSCodium/vscodium)** / [VS Code — MIT source](https://github.com/microsoft/vscode) | The editor itself: the base every surface in PiCode is built on. |
-| 🤖 | **[Pi](https://pi.dev)** ([`earendil-works/pi`](https://github.com/earendil-works/pi), by Mario Zechner) | The coding agent: chat, tools, providers, models, packages and skills. |
-| 🧠 | **[Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)** & **[Engram](https://github.com/Gentleman-Programming/engram)** (Gentleman Programming) | Persistent memory, Spec-Driven Development workflow and curated skills on top of Pi. |
+| <img src="./assets/vscodium.svg" width="26" alt="VSCodium" /> | **[VSCodium](https://github.com/VSCodium/vscodium)** / [VS Code — MIT source](https://github.com/microsoft/vscode) | The editor itself: the base every surface in PiCode is built on. |
+| <img src="./assets/pi.svg" width="26" alt="Pi" /> | **[Pi](https://pi.dev)** ([`earendil-works/pi`](https://github.com/earendil-works/pi), by Mario Zechner) | The coding agent: chat, tools, providers, models, packages and skills. |
+| <img src="./assets/gentle-ai.png" width="22" alt="Gentle AI" /> | **[Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)** & **[Engram](https://github.com/Gentleman-Programming/engram)** (Gentleman Programming) | Persistent memory, Spec-Driven Development workflow and curated skills on top of Pi. |
 
 All three are MIT-licensed. Full attribution and upstream licenses are preserved and
 documented in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) — see [License](#license) below.
@@ -130,6 +130,11 @@ it and you get a clean PiCode.
 
 ### To build the core from source
 
+**The way to build is through the builder** — the desktop app in [`builder/`](builder/README.md)
+that drives this whole pipeline with one button, for Windows natively and for Linux through
+WSL. The manual chain below is documented because it is what the builder runs, and what CI
+runs; use it when you need to see the steps, not when you just want a build.
+
 There is also a **source path**, for whoever needs to change or audit the core: clone VS Code at
 the pinned commit, apply the patch set inherited from VSCodium, apply PiCode's own patches, apply
 the product layer and compile `PiCode.exe`. It is an **additional** path, meant for collaborators:
@@ -159,7 +164,7 @@ PowerShell will not run them.
 
 ### Building the builder
 
-The window in [`builder/`](builder/README.md) is a C# application, and it needs nothing installed beyond the
+This is the way to build. The window in [`builder/`](builder/README.md) is a C# application, and it needs nothing installed beyond the
 .NET SDK - the Windows App SDK arrives as a package the first time you build it:
 
 ```bash
@@ -169,7 +174,7 @@ dotnet run           # the same thing
 dotnet build         # compile only
 ```
 
-It is a way of pressing a button, not a second pipeline: it starts the same scripts in `dev/` and reads
+It presses the same buttons the manual chain presses: it starts the same scripts in `dev/` and reads
 the same `dev/build-requirements.mjs` and `dev/build-progress.mjs` that a terminal reads. It can build for
 Windows or for Linux through WSL, and the editor's task list carries it as **PiCode: build the builder**
 and **PiCode: run the builder**.
@@ -243,20 +248,18 @@ where the detail lives. Change a dependency and both places have to move.
 
 ## Continuous integration
 
-Three workflows guard the pin — the VS Code commit in [`upstream/stable.json`](upstream/stable.json)
-— and none of them ever commits Microsoft's source: the tree is fetched into `picode-source/`,
-which git ignores.
+CI guards the source build, and none of it ever commits Microsoft's source: the tree is
+fetched into `picode-source/`, which git ignores.
 
-| Workflow | When | What it tells you |
-| --- | --- | --- |
-| [**Pin check**](https://github.com/TomasPlatero/PiCode/actions/workflows/pin-check.yml) | every push and pull request | The patch set still applies to the pinned commit. It runs the preparation only (phases 1-5, no compile) on **Linux and Windows**, and a failure names the patch that broke. |
-| [**Pin watchdog**](https://github.com/TomasPlatero/PiCode/actions/workflows/pin-watch.yml) | weekly, and on demand | Opens a pull request that moves the pin to the latest stable. If a **security advisory** was published since the pinned release, the PR is labelled `security` and lists the advisories; otherwise it is a plain `pin-update`. The quick check runs on the PR's branch. |
-| [**Full build**](https://github.com/TomasPlatero/PiCode/actions/workflows/full-build.yml) | nightly, on demand, and whenever a push moves the pin | The real compile on Linux — the errors the preparation cannot see. |
+- **Pin check** (every push and pull request) runs the preparation only — fetch, patches,
+  product layer, no compile — on **Linux and Windows**. If it goes red, a patch no longer
+  applies to the pinned VS Code commit, and the log names it: the repair process is in
+  [`docs/howto-build.md`](docs/howto-build.md).
+- **Full build** (nightly, and whenever the pin moves) compiles the real thing on Linux, so
+  compile errors surface even when the patches compose.
 
-The pin policy is short: **security advisories get merged within days**; a regular new version
-is merged whenever it is convenient, with no deadline. The two pins form a pair — the watchdog
-moves only the VS Code pin, and merging its PR includes deciding whether the vendored
-VSCodium patches need re-vendoring. That decision, the cache map and the failure modes are
+The two badges at the top of this file are those workflows, live. The watch over the pin
+itself — version bumps, security advisories, the cache map — is maintainer territory and is
 documented in [`docs/CI.md`](docs/CI.md).
 
 <br />
