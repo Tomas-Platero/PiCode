@@ -1,4 +1,4 @@
-# Feature: la build, fácil para cualquiera (y visible)
+﻿# Feature: la build, fácil para cualquiera (y visible)
 
 ## Goal
 
@@ -65,11 +65,12 @@ Ejecutada, sin abrir la ventana:
 
 | Qué | Cómo | Resultado |
 | --- | --- | --- |
-| El estado de la máquina | `powershell -File dev/build-window.ps1 -Check` | Las diez filas, con la versión de cada herramienta |
-| La ventana se construye | `-SelfTest` | Construye la ventana y comprueba que están sus once controles (requisitos, pasos, barra, registro) |
-| Ofrece instalar lo que falta | `-SelfTest` con `jq` **quitado del PATH** | `missing: jq` y **2 botones** (instalar y página), que es lo esperado |
-| Y no ofrece nada cuando no falta nada | `-SelfTest` normal | 0 botones, 0 esperados |
-| El paso que arregla cada cosa | `-Check` con `node` fuera del PATH | `NO node … — winget install OpenJS.NodeJS.LTS` |
+| El estado de la máquina | `powershell -File dev/build-window.ps1 -Check` | Las seis comprobaciones, con la razón de cada una que falle |
+| La ventana se construye | `-SelfTest` | Construye la ventana y comprueba sus catorce controles, además de lo que se enseña |
+| Ofrece instalar lo que falta | `-SelfTest` con `jq` **quitado del PATH** | Una linea de veredicto y otra con el `jq` que falta, con su botón, y **el botón de construir apagado** |
+| Y no ofrece nada cuando no falta nada | `-SelfTest` normal | Una sola línea, cero botones de instalación, cero problemas |
+| Lo que se enseña es lo que toca | `-SelfTest`, que **simula cuatro tics** antes de mirar | Cierra los detalles cuando no ha fallado nada y los abre cuando sí, porque una sola mirada al primer fotograma no ve lo que estropea el reloj |
+| Las dos paletas se leen | `-SelfTest` | Calcula el contraste de la paleta clara y de la oscura, y dice cuál ha elegido |
 | La barra avanza de verdad | `node dev/build-progress.mjs --once` contra una build en marcha | Fase y porcentaje correctos (corregidos dos fallos: la marca de fin de compilación y los **códigos de color**, que escondían las palabras que busca) |
 
 Un aviso: el analizador de PowerShell de la herramienta de revisión marca tres llaves sin cerrar en
@@ -80,3 +81,25 @@ oficial de PowerShell dice `PARSE OK` sobre el fichero, que además se ejecuta e
 
 - 2026-09-25 · pedido y hecho en la misma sesión, después de que una build se colgara siete horas sin
   decirlo.
+- 2026-09-25 · **la ventana se rehace porque era técnica de más** («la veo muy técnica, quiero algo más
+  funcional»). Lo que estaba mal y lo que se hizo:
+  - **Los tres pasos salían tres veces** (la fila «Steps», un botón en cada fila de requisitos y los de
+    la derecha): se quedan **en un solo botón**, porque la build, sin banderas, ya descarga lo que
+    falta, prepara, instala, compila y empaqueta, y salta lo que ya está hecho. Un botón que hace lo
+    correcto vale más que tres que obligan a elegir.
+  - **Se enseñaban versiones y nombres internos** (`git version 2.55.0.windows.3`, «not installed (or
+    half done)», `winget install …`). Ahora **solo aparece lo que se desvía**, en una frase que se
+    puede accionar ("Python 3 is missing") con el botón que lo resuelve; los que están bien no ocupan una
+    línea. Las versiones y el porqué de cada comprobación viven en **Details**.
+  - **El registro vacío ocupaba media ventana** para decir que todo iba bien: ahora está detrás de un
+    botón que dice qué hace ("Details" / "Hide details") y **se abre solo cuando una build ha
+    fallado**, que es cuando su contenido vale algo.
+  - **El botón de construir estaba siempre disponible**, aunque faltara Python o hubiera un editor
+    abierto: ahora **se apaga cuando algo falta** y la razón está en la línea de encima. El aviso de
+    "Close PiCode" dejó de ser una ventana emergente: es una fila más, con su motivo.
+  - **La ventana se ciñe al contenido** (560 × 276 con los detalles cerrados) y **sigue el tema de
+    Windows**: oscura en un escritorio oscuro, clara en uno claro, con `PICODE_BUILD_WINDOW_THEME`
+    para forzarla. Los botones se quedan con el dibujo propio del sistema, que es el que se ve bien en
+    los dos temas.
+  - Verificado **mirando la ventana de verdad**, no solo construyéndola: se abrió y se fotografiaron
+    los cuatro estados (normal, fallo, tema claro, tema oscuro).
