@@ -345,7 +345,7 @@ function Add-Log([string]$line) {
     One line, with a mark and whatever has to be done about it. Used by both the readiness panel and
     the Details list, so a row looks the same wherever it appears.
 #>
-function New-Line([string]$mark, [string]$text, [string]$colour, $row) {
+function New-Line([string]$mark, [string]$text, [string]$colour, $row, [string]$value) {
     $line = New-Object System.Windows.Controls.StackPanel
     $line.Orientation = 'Horizontal'
     $line.Margin = '0,0,0,6'
@@ -364,6 +364,15 @@ function New-Line([string]$mark, [string]$text, [string]$colour, $row) {
     $label.MaxWidth = 400
     if ($row -and $row.Note) { $label.ToolTip = $row.Note }
     $line.Children.Add($label) | Out-Null
+
+    if ($value) {
+        $valueText = New-Object System.Windows.Controls.TextBlock
+        $valueText.Text = $value
+        $valueText.Foreground = $script:palette.Dim
+        $valueText.VerticalAlignment = 'Center'
+        $valueText.Margin = '16,0,0,0'
+        $line.Children.Add($valueText) | Out-Null
+    }
 
     if ($row -and (-not $row.Ok) -and ($row.Install -or $row.Url)) {
         $button = New-Object System.Windows.Controls.Button
@@ -403,8 +412,9 @@ function Show-Tools($rows) {
     foreach ($row in $rows) {
         $mark = if ($row.Ok) { [string][char]0x2713 } else { [string][char]0x2717 }
         $colour = if ($row.Ok) { $script:palette.Good } else { $script:palette.Bad }
-        $text = "$($row.Name) - $($row.Detail)"
-        $toolsPanel.Children.Add((New-Line $mark $text $colour $null)) | Out-Null
+        $line = New-Line $mark $row.Name $colour $null $row.Detail
+        if ($row.Note) { $line.ToolTip = $row.Note }
+        $toolsPanel.Children.Add($line) | Out-Null
     }
 }
 
@@ -502,10 +512,10 @@ function Update-View {
     if ($lastFailed) {
         # Whatever it said is the only thing worth reading now, so it is opened rather than hinted at.
         $headlineText.Text = 'The build did not finish'
-        $explainText.Text = 'What it said is below. Trying again keeps whatever was already done, so it does not start from the beginning.'
+        $explainText.Text = 'What it said is below. Building it again keeps whatever was already done, so it does not start from the beginning.'
         if (-not $script:failedSeen) { Set-Details $true }
         $script:primaryAction = 'build'
-        $primaryButton.Content = 'Try again'
+        $primaryButton.Content = 'Build it again'
         $primaryButton.Visibility = $visible
         $secondaryButton.Visibility = $collapsed
     } elseif ($built) {
@@ -608,7 +618,7 @@ if ($SelfTest) {
 
     if (-not $state.Running) {
         $wanted = 'Build PiCode'
-        if ($lastFailed) { $wanted = 'Try again' } elseif ($built) { $wanted = 'Open PiCode' }
+        if ($lastFailed) { $wanted = 'Build it again' } elseif ($built) { $wanted = 'Open PiCode' }
         if ($primaryButton.Content -ne $wanted) {
             $problems += "the button says '$($primaryButton.Content)', expected '$wanted'"
         }
