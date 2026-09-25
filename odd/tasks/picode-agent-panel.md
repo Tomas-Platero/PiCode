@@ -1,4 +1,31 @@
-# Feature: PiCode agent panel
+# Feature: PiCode agent panel — **SUPERADO**
+
+> **Cerrada como superada el 2026-09-24, por decisión del dueño.**
+>
+> Esta feature pedía **construir un panel propio** —«un chat nuevo, no el mismo que el de VS
+> Code»— con la extensión como dueña de la superficie. El dueño ha decidido lo contrario:
+> **pi es el host de agentes del core** y la extensión se retira (ver
+> `picode-pi-agent-host.md`). Construir este panel sería hacer justo lo que hay que
+desmontar.
+>
+> **Lo que NO se pierde, porque no era de la superficie sino del producto.** Los requisitos
+> de abajo siguen queriéndose; cambia **dónde** viven:
+>
+> | Requisito de esta feature | Dónde va ahora |
+> | --- | --- |
+> | Contexto del editor (proyecto, fichero abierto, selección, problemas, diff) | El chat del core |
+> | Estadísticas de pi (modelo, tokens, coste, presión de contexto) | El chat del core |
+> | Comandos de pi y de gentle-pi como acciones | El chat del core |
+> | Sesiones: listar, retomar, bifurcar, compactar | El chat del core |
+> | La interfaz de referencia con estimación de coste y quitables | El chat del core |
+>
+> Las tareas sin marcar de abajo **no se hacen aquí**: se trasladan. Quedan sin marcar a
+> propósito, para que se lea que nunca se hicieron *como panel*, no para que alguien las
+> retome en la extensión.
+>
+> Y una nota de precisión sobre la dirección vieja: decía que el chat del editor «este
+> producto lo vacía». Eso ya no es cierto — el chat nativo **es** pi. Es exactamente la
+> suposición que esta decisión invierte.
 
 ## Goal
 

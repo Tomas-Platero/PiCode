@@ -110,6 +110,35 @@ with one work-unit commit on the feature branch, recorded here as evidence.
   otra familia de extensiones: fuera de esta feature.
 - El tema de la propia **TUI de pi** (terminal) es otra cosa y ya existe en pi; no se toca.
 
+## Independent verification
+
+Read-only pass (`gentle-ai-verify`) over the theme feature, on the commits that were already
+pushed. It found **four reachable defects**, all fixed in `a10968`, plus two dead pieces:
+
+1. **The gallery opened a new tab on every invocation.** `selectTheme` built a fresh view on
+   each call, so the guard that was supposed to reveal the open panel never held: the palette,
+   the popup entry and the Aspecto row each opened another "Temas". It is one panel again,
+   released when its tab closes — and it is checked through a stub editor with real panels,
+   because every line was correct on its own and no reading of the source would have caught it.
+2. **A message could apply a theme it had not named.** The lookup fell back to the row's first
+   theme, so an arbitrary id applied that theme while the sentence described the one asked for.
+   Exact match now, and `applied` is a comparison against what the editor reports rather than an
+   assumption — a theme fixed at a nearer scope no longer reads as applied.
+3. **A preview could hang on "Leyendo el tema…" for ever.** A failing network rejected out of
+   the reader and nobody above it caught it, and a package whose theme could not be read was
+   **cached before validation**, so that theme failed identically for good. The reader answers
+   `undefined` now, both surfaces answer with a reason, and the cache is written only once the
+   theme has actually been read.
+4. **The panel queried the gallery before drawing anything**, so a slow connection showed an
+   empty list for rows it was already holding. The installed rows go out first, and the
+   gallery's replace them when they arrive.
+
+Dead things removed with them: an `if`/`else` whose branches were identical, and a
+pass-through wrapper. What the same pass checked and found **sound**: the URL allow-list
+(23 hostile forms, no bypass), the ZIP reader's error paths, the cache staying inside
+`globalStorage/themes`, the single settings write, and the renderer's use of `textContent`
+with colours arriving already normalised.
+
 ## Evidence
 
 - Work-unit commits, `npm test` green with per-suite counts on each.

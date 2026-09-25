@@ -21,7 +21,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const REPO = path.resolve(import.meta.dirname, '..');
-const PACK = path.join(REPO, 'VSCode-win32-x64');
+const PACK = path.join(REPO, 'PiCode-Win32-x64');
 const NODE_MODULES = path.join(REPO, 'vscode', 'node_modules');
 
 /** The newest build log, which is the run the owner is watching. */
@@ -203,7 +203,7 @@ function draw() {
 	const now = Date.now();
 
 	if (state.done === 'ok') {
-		process.stdout.write(`\r  listo  ${bar(100)} 100%  ·  la build terminó bien, con el editor en VSCode-win32-x64          \n`);
+		process.stdout.write(`\r  listo  ${bar(100)} 100%  ·  la build terminó bien, con el editor en PiCode-Win32-x64          \n`);
 		return true;
 	}
 	if (state.done === 'failed') {

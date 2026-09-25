@@ -1,0 +1,35 @@
+diff --git a/src/vs/workbench/services/accounts/browser/defaultAccount.ts b/src/vs/workbench/services/accounts/browser/defaultAccount.ts
+index 73c4245b8d6..0b0d6a60117 100644
+--- a/src/vs/workbench/services/accounts/browser/defaultAccount.ts
++++ b/src/vs/workbench/services/accounts/browser/defaultAccount.ts
+@@ -88,7 +88,29 @@ interface IMcpRegistryResponse {
+ 	readonly mcp_registries: ReadonlyArray<IMcpRegistryProvider>;
+ }
+ 
+-function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent): IDefaultAccountConfig {
++function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent | undefined): IDefaultAccountConfig {
++	// PiCode: this product ships no default chat agent, and both call sites below run from a
++	// constructor during service construction. `IDefaultChatAgent` is typed as required, so
++	// without this guard the window fails to build its account services instead of simply
++	// having no preferred account provider. An absent agent is a product that offers no such
++	// provider, which is exactly what the empty shape says.
++	if (!defaultChatAgent) {
++		return {
++			preferredExtensions: [],
++			authenticationProvider: {
++				default: { id: '', name: '' },
++				enterprise: { id: '', name: '' },
++				enterpriseProviderConfig: '',
++				enterpriseProviderUriSetting: '',
++				scopes: [],
++			},
++			tokenEntitlementUrl: '',
++			entitlementUrl: '',
++			mcpRegistryDataUrl: '',
++			managedSettingsUrl: '',
++		};
++	}
++
+ 	return {
+ 		preferredExtensions: [
+ 			defaultChatAgent.chatExtensionId,

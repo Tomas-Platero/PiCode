@@ -1,0 +1,31 @@
+--- a/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts
++++ b/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts
+@@ -129,6 +129,14 @@
+ 		{ path: ['.github', 'instructions'], recursive: true, type: DiscoveredType.Instruction, name: '.github' },
+ 		{ path: ['.github', 'hooks'], recursive: true, type: DiscoveredType.Hook, name: '.github' },
+ 
++		// PiCode: pi's own project conventions. This product's agent is pi, so the
++		// customizations it loads have to be discoverable in the core; without these the
++		// table only knows Copilot's and Claude's directories (`.github`, `.claude`,
++		// `.agents`) and a pi project's own agents and skills are invisible to the hub.
++		// `.pi/prompts` is deliberately absent: this table has no `Prompt` kind, and filing
++		// prompt templates as instructions would say something false about them.
++		{ path: ['.pi', 'agents'], type: DiscoveredType.Agent, name: '.pi' },
++		{ path: ['.pi', 'skills'], recursive: true, type: DiscoveredType.Skill, name: '.pi' },
+ 	],
+ 	user: [
+ 		{ path: ['.copilot', 'agents'], type: DiscoveredType.Agent, name: '~/.copilot' },
+@@ -136,6 +144,13 @@
+ 		{ path: ['.copilot', 'skills'], recursive: true, type: DiscoveredType.Skill, name: '~/.copilot' },
+ 		{ path: ['.copilot', 'instructions'], recursive: true, type: DiscoveredType.Instruction, name: '~/.copilot' },
+ 		{ path: ['.copilot', 'hooks'], recursive: true, type: DiscoveredType.Hook, name: '~/.copilot' },
++
++		// PiCode: pi's own user profile, which is `~/.pi/agent` (see
++		// `environment-variables.md`, `PI_CODING_AGENT_DIR`). This is also where
++		// gentle-ai's own installer puts its subagents, so listing this directory is what
++		// brings the whole harness into the hub without an extension doing it.
++		{ path: ['.pi', 'agent', 'agents'], type: DiscoveredType.Agent, name: '~/.pi/agent' },
++		{ path: ['.pi', 'agent', 'skills'], recursive: true, type: DiscoveredType.Skill, name: '~/.pi/agent' },
+ 	],
+ };
+ 

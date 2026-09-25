@@ -23,7 +23,7 @@ import * as path from 'node:path';
 const REPO = path.resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
 const packFlag = args.indexOf('--pack');
-const PACK = packFlag === -1 ? path.join(REPO, 'VSCode-win32-x64') : path.resolve(args[packFlag + 1]);
+const PACK = packFlag === -1 ? path.join(REPO, 'PiCode-Win32-x64') : path.resolve(args[packFlag + 1]);
 
 const DATA = path.join(PACK, 'data');
 const BACKUP = path.join(REPO, '.scratch', 'payload-data-backup');

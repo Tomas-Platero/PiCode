@@ -1,0 +1,58 @@
+diff --git a/build/gulpfile.extensions.ts b/build/gulpfile.extensions.ts
+index 5a9e831..5bdc20c 100644
+--- a/build/gulpfile.extensions.ts
++++ b/build/gulpfile.extensions.ts
+@@ -98,7 +98,7 @@ const compilations = [
+ 	'.vscode/extensions/vscode-pr-pinger/tsconfig.json',
+ ];
+ 
+-const getBaseUrl = (out: string) => `https://github.com/VSCodium/sourcemaps/releases/download/${product.quality}-${commit}/extensions-${out.replaceAll('/', '-')}`;
++const getBaseUrl = (out: string) => `sourcemaps/extensions-${out.replaceAll('/', '-')}`;
+ 
+ function rewriteTsgoSourceMappingUrlsIfNeeded(build: boolean, out: string, baseUrl: string): Promise<void> {
+ 	if (!build) {
+diff --git a/build/gulpfile.reh.ts b/build/gulpfile.reh.ts
+index 81fcc0a..e818ff8 100644
+--- a/build/gulpfile.reh.ts
++++ b/build/gulpfile.reh.ts
+@@ -596,7 +596,7 @@ function tweakProductForServerWeb(product: typeof import('../product.json')) {
+ 	const minifyTask = task.define(`minify-vscode-${type}`, task.series(
+ 		bundleTask,
+ 		util.rimraf(`out-vscode-${type}-min`),
+-		optimize.minifyTask(`out-vscode-${type}`, `https://github.com/VSCodium/sourcemaps/releases/download/${product.quality}-${commit}/core`)
++		optimize.minifyTask(`out-vscode-${type}`, 'sourcemaps/core')
+ 	));
+ 	task.task(minifyTask);
+ 
+diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
+index e55ea61..d1148d9 100644
+--- a/build/gulpfile.vscode.ts
++++ b/build/gulpfile.vscode.ts
+@@ -180,7 +180,7 @@ const bundleVSCodeTask = task.define('bundle-vscode', task.series(
+ ));
+ task.task(bundleVSCodeTask);
+ 
+-const sourceMappingURLBase = `https://github.com/VSCodium/sourcemaps/releases/download/${product.quality}-${commit}`;
++const sourceMappingURLBase = 'sourcemaps';
+ const isCI = !!process.env['CI'] || !!process.env['BUILD_ARTIFACTSTAGINGDIRECTORY'] || !!process.env['GITHUB_WORKSPACE'];
+ const useCdnSourceMapsForPackagingTasks = isCI;
+ const stripSourceMapsInPackagingTasks = isCI;
+diff --git a/build/gulpfile.vscode.web.ts b/build/gulpfile.vscode.web.ts
+index b10fa4d..ef7b5ed 100644
+--- a/build/gulpfile.vscode.web.ts
++++ b/build/gulpfile.vscode.web.ts
+@@ -165,12 +165,12 @@ const bundleVSCodeWebTask = task.define('bundle-vscode-web-OLD', task.series(
+ const minifyVSCodeWebTask = task.define('minify-vscode-web-OLD', task.series(
+ 	bundleVSCodeWebTask,
+ 	util.rimraf('out-vscode-web-min'),
+-	optimize.minifyTask('out-vscode-web', `https://github.com/VSCodium/sourcemaps/releases/download/${product.quality}-${commit}/core`)
++	optimize.minifyTask('out-vscode-web', 'sourcemaps/core')
+ ));
+ task.task(minifyVSCodeWebTask);
+ 
+ // esbuild-based tasks (new)
+-const sourceMappingURLBase = `https://github.com/VSCodium/sourcemaps/releases/download/${product.quality}-${commit}`;
++const sourceMappingURLBase = 'sourcemaps';
+ const esbuildBundleVSCodeWebTask = task.define('esbuild-vscode-web', () => runEsbuildBundle('out-vscode-web', false, true));
+ const esbuildBundleVSCodeWebMinTask = task.define('esbuild-vscode-web-min', () => runEsbuildBundle('out-vscode-web-min', true, true, `${sourceMappingURLBase}/core`));
+ 

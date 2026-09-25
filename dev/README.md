@@ -23,7 +23,7 @@ who only wants to use PiCode.
 | 5 | product delta | `node distribution/apply-product-delta.mjs --target vscode/product.json --delta distribution/product-delta.json --write`. |
 | 6 | dependencies | `npm ci` in `./vscode` (up to five attempts, as VSCodium does). |
 | 7 | compile and pack | `npm run gulp vscode-min-prepack`, the RTF/EULA resource, the win32 group-policy definitions, `npm run gulp vscode-win32-x64-min-packing`. |
-| 8 | stage | `dev/stage-distribution.sh`: the distribution layer onto `./VSCode-win32-x64`. |
+| 8 | stage | `dev/stage-distribution.sh`: the distribution layer onto `./PiCode-Win32-x64`. |
 
 `-o` stops after phase 5 with exit code 0 and compiles nothing. It exists so the
 preparation can be verified in a minute rather than after a full build.
@@ -150,7 +150,7 @@ which is exactly what the shipped `resources/app/product.json` carries.
     `build/next/index.ts` and never checked against the packed tree, and it is wrong.
 - **The staging step duplicates logic from `distribution/apply-picode.ps1`.** The
   PowerShell script derives its root from its own location, so it can only run
-  against the tree at the repository root; pointing it at `./VSCode-win32-x64`
+  against the tree at the repository root; pointing it at `./PiCode-Win32-x64`
   would mean moving the pack output onto the frozen release tree. The bash
   version mirrors its steps 1–6 and both must be kept in sync.
 - **No CI.** Declared out of scope.

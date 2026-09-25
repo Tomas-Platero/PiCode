@@ -1,4 +1,4 @@
-﻿<#
+﻿﻿<#
 .SYNOPSIS
     PiCode's build, in a small window: what is missing, a way to get it, and how much is left.
 
@@ -31,7 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$PackDir = Join-Path $RepoRoot 'VSCode-win32-x64'
+$PackDir = Join-Path $RepoRoot 'PiCode-Win32-x64'
 $Scratch = Join-Path $RepoRoot '.scratch'
 $LockFile = Join-Path $Scratch 'build.lock'
 $StatusFile = Join-Path $Scratch 'build.status'
@@ -143,7 +143,7 @@ function Get-Requirements {
     $rows.Add([pscustomobject]@{
         Name = 'editor built'
         Ok = $editor
-        Detail = if ($editor) { 'VSCode-win32-x64\PiCode.exe' } else { 'not built yet' }
+        Detail = if ($editor) { 'PiCode-Win32-x64\PiCode.exe' } else { 'not built yet' }
         Action = 'build'
         Note = 'compile the core and pack the editor'
     })
@@ -154,7 +154,7 @@ function Get-Requirements {
         Ok = -not $editorRunning
         Detail = if ($editorRunning) { 'PiCode is running' } else { 'nothing is using the folder to be packed' }
         Url = ''
-        Note = 'the pack replaces VSCode-win32-x64 and Windows refuses to delete the files of a running program: close the editor before building'
+        Note = 'the pack replaces PiCode-Win32-x64 and Windows refuses to delete the files of a running program: close the editor before building'
     })
 
     $driveLetter = [System.IO.Path]::GetPathRoot($RepoRoot).TrimEnd(':', '\')
@@ -471,7 +471,7 @@ function Update-View {
         $remaining = if ($state.Progress.remainingSeconds -gt 0) { " - about $([math]::Floor($state.Progress.remainingSeconds / 60)):$('{0:d2}' -f ($state.Progress.remainingSeconds % 60)) left" } else { '' }
         $stageText.Text = "$($state.Progress.stage)$remaining"
         if ($state.Progress.done -eq 'failed') { $stageText.Text = 'the build failed - see the log above' }
-        if ($state.Progress.done -eq 'ok') { $stageText.Text = 'the build finished - the editor is in VSCode-win32-x64' }
+        if ($state.Progress.done -eq 'ok') { $stageText.Text = 'the build finished - the editor is in PiCode-Win32-x64' }
     } elseif ($busy) {
         $stageText.Text = 'starting...'
     } else {

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1091
+#
+# Puts PiCode's own pi inside the editor that was just built.
+#
+# Why this step exists: the build compiles the **editor**, but pi is a separate package that
+# has to be fetched. Until this script existed, nothing fetched it — it was the old
+# extension that installed pi on demand, and taking that extension out left every freshly
+# built editor without a pi to talk to. The connector could find it and could not say
+# anything but "no encuentro el pi de este editor".
+#
+# The owner's rule is what shapes it: *"quiero que esté funcional, no quiero tener yo que
+# configurar más cosas más allá del proveedor"*. So the runtime ships installed, at a pinned
+# version, and no human step is involved.
+#
+# The version is pinned in `distribution/runtime.json` and not taken from `latest`: an editor
+# built today must behave the same in six months.
+#
+# Run from the repository root, by `dev/build.sh` (phase 8), not by hand.
+
+set -eo pipefail
+
+PACK_DIR="${1:?usage: dev/pi-runtime.sh <pack dir>}"
+PIN="./distribution/runtime.json"
+
+if [[ ! -f "${PIN}" ]]; then
+  echo "error: ${PIN} is missing; it carries the pinned pi version." >&2
+  exit 2
+fi
+
+PACKAGE=$( jq -r '.package' "${PIN}" )
+VERSION=$( jq -r '.version' "${PIN}" )
+
+if [[ -z "${PACKAGE}" || "${PACKAGE}" == "null" || -z "${VERSION}" || "${VERSION}" == "null" ]]; then
+  echo "error: ${PIN} must declare a package and a version." >&2
+  exit 2
+fi
+
+TARGET="${PACK_DIR}/resources/pi-runtime"
+ENTRY="${TARGET}/node_modules/${PACKAGE}/dist/index.js"
+
+# The pruning is idempotent and cheap, so it also runs on a tree that already has pi: a build that
+# found pi installed would otherwise keep the other platforms' binaries for ever.
+prune_platforms() {
+  node dev/prune-platform-binaries.mjs "${TARGET}/node_modules" "${OS_NAME_PLATFORM:-}" "${VSCODE_ARCH:-}"
+}
+
+if [[ -f "${ENTRY}" ]]; then
+  echo "pi ${VERSION} is already in ${TARGET}"
+  prune_platforms
+  exit 0
+fi
+
+# The package names its platform the way node does (`win32`), not the way the build script does
+# (`windows`).
+case "${OS_NAME:-windows}" in
+  windows) OS_NAME_PLATFORM="win32" ;;
+  osx) OS_NAME_PLATFORM="darwin" ;;
+  *) OS_NAME_PLATFORM="linux" ;;
+esac
+
+echo "installing ${PACKAGE}@${VERSION} into ${TARGET}"
+mkdir -p "${TARGET}"
+
+# `--prefix` and not a `cd`: the install belongs to that directory and nothing about the
+# caller's working directory should leak into it. npm's own cache means a second build does
+# not download it again.
+npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error "${PACKAGE}@${VERSION}"
+
+# The check that matters: the connector looks for this exact file, and a runtime that
+# installed "successfully" without it would leave the editor saying it cannot find pi.
+if [[ ! -f "${ENTRY}" ]]; then
+  echo "error: ${ENTRY} is missing after installing; the editor would have no pi to run." >&2
+  exit 1
+fi
+
+prune_platforms
+
+echo "pi ${VERSION} in place: ${ENTRY}"
