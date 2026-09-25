@@ -60,6 +60,18 @@ public sealed partial class MainWindow : Window
 			{
 				Logo.Source = new SvgImageSource(new Uri(logo));
 			}
+
+			// The background is the owner's drawing, and it is optional on purpose: whoever clones the
+			// repository does not need it to build anything.
+			var background = Path.Combine(Pipeline.RepoRoot, "builder", "Assets", "picode-builder-background.svg");
+			if (File.Exists(background))
+			{
+				BackgroundArt.Source = new SvgImageSource(new Uri(background));
+			}
+			else
+			{
+				BackgroundArt.Visibility = Visibility.Collapsed;
+			}
 		}
 		catch
 		{

@@ -15,6 +15,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- The owner's own background, behind everything. The cards are opaque, so the text stays on a
+             surface and only the space around it carries the drawing. It is optional: if the file is not
+             there, the window keeps the colour above and nothing else changes. -->
+        <Image Name="BackgroundArt" Stretch="UniformToFill" Opacity="0.85"/>
+
         <NavigationView Grid.Row="0" Name="Nav" PaneDisplayMode="Left" OpenPaneLength="210"
                         IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
                         SelectionChanged="OnNavChanged">
