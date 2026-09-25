@@ -103,3 +103,55 @@ oficial de PowerShell dice `PARSE OK` sobre el fichero, que además se ejecuta e
     los dos temas.
   - Verificado **mirando la ventana de verdad**, no solo construyéndola: se abrió y se fotografiaron
     los cuatro estados (normal, fallo, tema claro, tema oscuro).
+
+## Defecto grave: la build sin banderas borra el árbol preparado (2026-09-25)
+
+**Lo que pasó**: el dueño lanzó `dev/build.sh` sin banderas y la salida dijo `removing ./picode-source`:
+se le borró el árbol preparado —con las dependencias ya instaladas— y tuvo que volver a descargarlo,
+parchearlo e instalarlo todo.
+
+**Por qué**: es la lógica heredada de VSCodium, que sigue en `dev/build.sh`:
+
+```bash
+for stale in ./picode-source ./PiCode-* ./VSCode-* ./vscode-*; do
+  if [[ -e "${stale}" ]]; then echo "removing ${stale}"; rm -rf -- "${stale}"; fi
+done
+```
+
+Sin `-s`, el árbol viejo se considera material de descarte: la build se hace **limpia**. La línea
+original (con `./vscode`) hacía lo mismo, así que el comportamiento **no es nuevo**.
+
+**La culpa del estropicio es de la documentación, y es mía.** Dos cosas juntas:
+
+1. Quité `-s` del botón de la ventana porque **`-s` fallaba** cuando no había árbol que reutilizar
+   (`error: ./vscode does not exist, so it cannot be reused`). El botón pasó a lanzar la build **sin
+   banderas**.
+2. Y luego **describí la build sin banderas como la que reutiliza** lo que ya está: así está en el
+   `README.md` («reuses a prepared tree on its own»), en el texto de la ventana («keeps whatever was
+   already done») y en el mensaje del commit `d2fc374`.
+
+Las dos frases son falsas: reutilizar es lo que hace `-s`, y sin banderas borra. El dueño hizo
+exactamente lo que la documentación le decía que hiciera.
+
+**Arreglo decidido** (pendiente de aplicar):
+
+- Sin banderas, si hay árbol, **se reutiliza** (se prepara si está limpio, se salta si ya está
+  preparado). Es lo que hoy hace `-s`, y `-s` queda como alias para no romper lo ya escrito.
+- **Borrar el árbol pasa a ser explícito**: una bandera nueva (`--fresh`) hace la descarga limpia, y
+  cuando borra **lo dice y avisa** de lo que se pierde (el árbol y sus dependencias).
+- `-o` y `-DepsOnly` no cambian.
+
+**No se aplica mientras la build del dueño está corriendo**: bash lee el script según avanza, y editar
+un guion que se está ejecutando puede corromper la ejecución. Hay que esperar a que termine.
+
+**Lección**: una bandera que significa «reutiliza el árbol» **no puede ser lo único que decide si el
+árbol se borra o no**. Quitar una bandera que fallaba movió el fallo de sitio en vez de arreglarlo: el
+botón pasó de no funcionar en un árbol recién bajado a destruir el árbol ya preparado.
+
+## Registro
+
+- 2026-09-25 · pedido y hecho en la misma sesión, después de que una build se colgara siete horas sin
+  decirlo.
+- 2026-09-25 · la interfaz se rehace porque era técnica de más.
+- 2026-09-25 · **defecto grave**: la build sin banderas borra el árbol preparado, y la documentación
+  decía lo contrario. Arreglo decidido, pendiente de aplicar.
