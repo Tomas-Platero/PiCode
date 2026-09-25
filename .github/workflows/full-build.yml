@@ -46,28 +46,30 @@ jobs:
       - name: Decide whether the build is warranted
         id: decide
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]] \
              || [[ "${GITHUB_EVENT_NAME}" != "push" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git init -q .
-          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          git fetch -q origin "${GITHUB_SHA}"
           before="${GITHUB_EVENT_BEFORE}"
           zero=0000000000000000000000000000000000000000
           if [[ -z "${before}" || "${before}" == "${zero}" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git fetch -q origin "${before}" 2>/dev/null || true
-          if git diff --name-only "${before}" "${GITHUB_SHA}" \
-              -- upstream/ | grep -q .; then
+          # The compare answers which files the push touched; a compare that
+          # cannot be computed (a force-push, say) fails safe to building.
+          compare="repos/${GITHUB_REPOSITORY}/compare"
+          if gh api "${compare}/${before}...${GITHUB_SHA}" \
+              --jq '[.files[].filename] | any(startswith("upstream/"))' \
+              | grep -q true; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
+          fi || echo "build=true" >> "$GITHUB_OUTPUT"
 
   build:
     name: full build (${{ matrix.os }})
