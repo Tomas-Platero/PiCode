@@ -422,9 +422,13 @@ npm run gulp vscode-min-prepack
 
 # The policy files are per system: the DTO copies are Windows' (read by Windows tooling), and the
 # generator writes the data the editor itself carries, for the platform being packed.
-if [[ "${PACK_PLATFORM}" == "win32" ]]; then
-  npm run copy-policy-dto --prefix build
-fi
+# The policy DTO is a build-time copy from src/vs/workbench/contrib/policyExport/
+# (it is not in the VS Code source), and the generator below imports it on EVERY
+# platform — so the copy cannot stay behind the win32 branch. Measured in CI: the
+# linux build compiled for 33 minutes and died here with ERR_MODULE_NOT_FOUND for
+# build/lib/policies/policyDto.ts. The generated data is still per-platform: that
+# is what the PACK_PLATFORM argument selects.
+node build/lib/policies/copyPolicyDto.ts
 node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc "${PACK_PLATFORM}"
 
 npm run gulp "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
