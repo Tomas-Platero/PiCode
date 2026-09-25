@@ -10,7 +10,7 @@ Cuatro cosas que el dueño pidió mirando `Settings > Chat`:
 
 ## 1. Los nombres y el orden
 
-En el árbol de ajustes (parche `14`):
+En el árbol de ajustes (parche `04`):
 
 | Antes | Ahora |
 | --- | --- |
@@ -36,7 +36,7 @@ cualquiera; luego cómo se comporta pi), y las del editor se quedan en el orden 
   servidor MCP aparece en `vscode.lm.tools` con el prefijo `mcp_` (`mcpTypes.ts`: `Prefix = 'mcp_'`),
   y se invocan con `vscode.lm.invokeTool` — API **estable**, sin propuesta que habilitar.
 
-## Decisión
+## 3. Decisión
 
 **El editor manda sobre los servidores; pi los usa.** Los servidores se siguen añadiendo,
 autenticando y gobernando donde ya se hacía (su pantalla de MCP y su `mcp.json`), y PiCode traduce
@@ -56,7 +56,27 @@ admite añadir ninguna después. Por eso, cuando el conjunto de herramientas de 
 o se quita un servidor), **la sesión se reconstruye** — reutilizando su `SessionManager`, que es
 donde vive la transcripción, para que la conversación no se pierda.
 
-## Hecho
+## 4. Dónde se añaden los servidores, y por qué no hay pantalla propia
+
+El dueño preguntó si el puente usa el `mcp.json` de VS Code, y si convendría una interfaz para
+crearlos a mano. Medido, la respuesta es **sí, y esa interfaz ya existe**:
+
+- El puente **no lee `mcp.json`**. Lee la lista de herramientas que el editor tiene registradas
+  (`lm.tools`), y esa lista sale de la configuración MCP del editor: su `mcp.json` de **usuario**,
+  el del **proyecto** (`.vscode/mcp.json`) y lo que aporten extensiones. O sea: sí, lo que escribas
+  ahí es lo que pi recibe — pero pasando por el editor, que es quien sabe de credenciales,
+  confianza y permisos.
+- El editor trae **pantalla de servidores MCP** (añadir a mano, catálogo, encender/apagar,
+  confianza, credenciales) y el **JSON con esquema** (autocompletado y validación) para editarlo.
+- Así que **no se hace una segunda pantalla de MCP**: duplicarla sería inventar un segundo camino al
+  mismo `mcp.json`, y el editor ya cubre más de lo que cubriría la nuestra (credenciales, sandbox,
+  galería, confianza). Lo que sí faltaba era **llegar desde donde él mira**.
+
+Añadido por eso: una fila en `Settings > PiCode > MCP` — **«Give pi the tools of your MCP servers»**,
+encendida por defecto — que es un interruptor de verdad (apagada, pi no recibe ninguna herramienta
+de MCP) y cuya descripción lleva los tres accesos: añadir uno, verlos, y editar el `mcp.json`.
+
+## 5. Hecho
 
 - `mcpTools.ts` (puro, sin `vscode`): qué es una herramienta de MCP, qué esquema se le pasa a pi
   (el JSON Schema de MCP **es** lo que pi valida, así que se pasa tal cual; lo que no sea un objeto
@@ -68,6 +88,9 @@ donde vive la transcripción, para que la conversación no se pierda.
   (cancelar en el chat cancela la llamada al servidor).
 - `agent.ts`: las herramientas de MCP viajan en cada sesión, y la sesión se reconstruye sola cuando
   cambian los servidores.
+- `picode.mcp.enabled`, en `Settings > PiCode > MCP`: el interruptor que decide si pi recibe esas
+  herramientas (encendido por defecto), con los tres accesos al lado — añadir un servidor, verlos y
+  editar el `mcp.json`.
 
 ## Verificación
 
@@ -82,6 +105,7 @@ Ejecutada, no leída. `.scratch/verificar-mcp.cjs`, trece comprobaciones contra 
 | Una herramienta sin descripción dice qué es | OK |
 | El texto de la respuesta se junta; lo que no es texto se escribe en JSON; vacío no rompe | OK |
 | La firma del conjunto no depende del orden, y cambia cuando aparece un servidor | OK |
+| El interruptor: encendido por defecto, se apaga con `false` y no se apaga con basura | OK |
 
 Y el editor construido, con las comprobaciones de siempre (`.scratch/verificar-editor-construido.cjs`)
 más la build completa: el conector viaja con `mcp.js` y `mcpTools.js`, y los nodos se llaman

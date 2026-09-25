@@ -3,14 +3,14 @@
 # The build, with a line that says how much is left.
 #
 # The plain build prints its phases, but the long ones go quiet for minutes and there is no way to
-# tell "working" from "stuck". This runs it exactly as `dev/build.sh` does — same flags, same log
-# file, same exit code — and puts `dev/build-progress.mjs` in front, drawing one line with the
-# stage and the percentage while the build works.
+# tell "working" from "stuck". This runs the same build — through `dev/build-run.sh`, so the lock,
+# the log, the exit code and the owner's profile are all handled the same way the window handles
+# them — and puts `dev/build-progress.mjs` in front, drawing one line with the stage, a bar and an
+# estimate of what is left.
 #
-# Usage: dev/build-live.sh [build.sh flags...]        (default: -s, the resume-a-prepared-tree build)
+# Usage: dev/build-live.sh [build.sh flags...]        (default: -s, a rebuild of a prepared tree)
 #
-# The log is written to `.scratch/build-live.log` so the viewer can read it, and the build's own
-# output is not lost: it is in that file.
+# The log is `.scratch/build-live.log`; the same file the window reads.
 
 set -eo pipefail
 
@@ -19,17 +19,13 @@ if (( ${#FLAGS[@]} == 0 )); then
   FLAGS=(-s)
 fi
 
-LOG=".scratch/build-live.log"
 mkdir -p .scratch
-: > "${LOG}"
 
-# The build in the background, its output going to the log the viewer reads.
-bash dev/build.sh "${FLAGS[@]}" > "${LOG}" 2>&1 &
+bash dev/build-run.sh "${FLAGS[@]}" &
 BUILD_PID=$!
 
-# The viewer in the foreground, until the build ends. It redraws one line; when the build is
-# finished it says so and returns.
-node dev/build-progress.mjs "${LOG}"
+# The viewer in the foreground, until the build ends and the log says so.
+node dev/build-progress.mjs .scratch/build-live.log || true
 
 wait "${BUILD_PID}"
 STATUS=$?
@@ -37,12 +33,12 @@ STATUS=$?
 echo ""
 if [[ "${STATUS}" -eq 0 ]]; then
   echo "== build terminada bien"
-  echo "   editor: ${PACK_DIR:-./VSCode-win32-x64}/PiCode.exe"
-  echo "   registro: ${LOG}"
+  echo "   editor: ./VSCode-win32-x64/PiCode.exe"
+  echo "   registro: .scratch/build-live.log"
 else
   echo "== la build falló (código ${STATUS})"
-  echo "   mira ${LOG}, y sus últimas líneas:"
-  tail -20 "${LOG}"
+  echo "   mira .scratch/build-live.log, y sus últimas líneas:"
+  tail -20 .scratch/build-live.log
 fi
 
 exit "${STATUS}"

@@ -40,6 +40,7 @@ function newestLog() {
 
 const args = process.argv.slice(2);
 const once = args.includes('--once');
+const asJson = args.includes('--json');
 const logFile = args.find(argument => !argument.startsWith('--')) ?? newestLog();
 
 /**
@@ -222,6 +223,25 @@ function draw() {
 		process.stdout.write(line);
 	}
 	return false;
+}
+
+if (asJson) {
+	// One line, for a caller that draws its own interface: the little window asks every second.
+	const text = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
+	const state = readLog(text);
+	const now = Date.now();
+	const index = state.index ?? 1;
+	const percentage = state.done === 'ok' ? 100 : percentageFor(index, startedAt, now);
+	const elapsed = (now - startedAt) / 1000;
+	process.stdout.write(JSON.stringify({
+		percentage: Math.round(percentage * 10) / 10,
+		stage: STAGES[index].label,
+		elapsedSeconds: Math.round(elapsed),
+		remainingSeconds: state.done === undefined && percentage > 2 ? Math.round((elapsed / percentage) * (100 - percentage)) : 0,
+		done: state.done ?? null,
+		lastLine: state.lastLine.replace(/\u001b\[[0-9;]*m/g, '').trim(),
+	}) + '\n');
+	process.exit(0);
 }
 
 if (once) {
