@@ -194,18 +194,29 @@ index 7a72463d..b704a86f 100644
 +	}
  }
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
-index 8b734e44..0f8f17e5 100644
+index 8b734e44..36267389 100644
 --- a/extensions/picode/src/agent.ts
 +++ b/extensions/picode/src/agent.ts
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,8 @@
  import * as vscode from 'vscode';
  import { contextBlock, withContext, type EditorContext } from './context';
  import { readPiChatSettings } from './piConfig';
-+import { sdkEntryCandidates } from './runtime';
++import { chatAgentDir, sdkEntryCandidates } from './runtime';
++import * as path from 'node:path';
  import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
  import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
  import { toolProgress } from './progress';
-@@ -97,7 +98,7 @@ interface PiSdk {
+@@ -92,12 +94,16 @@ interface PiSdk {
+ 		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
+ 		customTools?: unknown[];
+ 	}): Promise<{ session: PiSession }>;
+-	SessionManager: { create(cwd: string): unknown };
++	SessionManager: {
++		// `sessionDir` is pi's optional override; without it pi resolves the machine's
++		// default, which is right for the external pi and a leak for the internal one.
++		create(cwd: string, sessionDir?: string): unknown;
++	};
+ }
  
  /** pi's entry, loaded and checked for the two methods an agent turn needs. */
  async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdk | undefined> {
@@ -214,31 +225,62 @@ index 8b734e44..0f8f17e5 100644
  	if ('problem' in loaded) {
  		log(loaded.problem);
  		return undefined;
-@@ -218,8 +219,11 @@ export const PI_PARTICIPANT = 'picode.pi';
+@@ -218,8 +224,6 @@ export const PI_PARTICIPANT = 'picode.pi';
  export interface AgentDeps {
  	/** The distribution root, so pi and the profile can be found without configuration. */
  	readonly distributionRoot: string;
 -	/** PiCode's own profile. Nothing outside it is ever read or written. */
 -	readonly profileDir: string;
-+	/**
-+	 * The profile the chat's pi runs against: PiCode's own for the internal pi, `undefined`
-+	 * for the external one (which means "let pi resolve its own", see `runtime.ts`).
-+	 */
-+	readonly agentDir: string | undefined;
  	readonly log: (line: string) => void;
  }
  
-@@ -275,7 +279,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -233,6 +237,8 @@ export interface AgentDeps {
+ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
+ 	let session: PiSession | undefined;
+ 	let sessionFolder: string | undefined;
++	/** The profile the live session was built against, so a runtime switch rebuilds it. */
++	let sessionAgentDir: string | undefined;
+ 	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
+ 	let services: PiServices | undefined;
+ 	/**
+@@ -269,15 +275,21 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+ 		try {
+ 			const selected = modelRefOf(request.model, VENDOR);
+ 			const signature = mcpEnabled() ? currentMcpSignature() : '';
+-			// Rebuilt when the folder changes — a session belongs to a working directory — and when
+-			// the editor's MCP servers do, which is the one thing a session cannot take later.
++			// The profile is resolved PER REQUEST, not once at activation: the runtime can be
++			// switched while the window is open, and a session built against the previous
++			// profile would answer from credentials it does not have ("No API key found").
++			const agentDir = chatAgentDir(deps.distributionRoot);
++			// Rebuilt when the folder changes — a session belongs to a working directory — when
++			// the editor's MCP servers do, and when the chosen pi's profile changes, which is
++			// the same conversation pointed at a different pi.
+ 			const folderChanged = sessionFolder !== cwd;
  			const toolsChanged = signature !== mcpSignature;
- 			if (session === undefined || folderChanged || toolsChanged) {
+-			if (session === undefined || folderChanged || toolsChanged) {
++			const profileChanged = sessionAgentDir !== agentDir;
++			if (session === undefined || folderChanged || toolsChanged || profileChanged) {
  				session?.dispose();
 -				services = await sdk.createAgentSessionServices({ cwd, agentDir: deps.profileDir });
-+				services = await sdk.createAgentSessionServices({ cwd, ...(deps.agentDir === undefined ? {} : { agentDir: deps.agentDir }) });
- 				if (folderChanged || sessionManager === undefined) {
- 					sessionManager = sdk.SessionManager.create(cwd);
+-				if (folderChanged || sessionManager === undefined) {
+-					sessionManager = sdk.SessionManager.create(cwd);
++				services = await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
++				if (folderChanged || sessionManager === undefined || profileChanged) {
++					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
  				}
+ 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
+ 				const created = await sdk.createAgentSessionFromServices({
+@@ -293,6 +305,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+ 				});
+ 				session = created.session;
+ 				sessionFolder = cwd;
++				sessionAgentDir = agentDir;
+ 				mcpSignature = signature;
+ 			} else {
+ 				// The model picked in the chat between two turns is followed here: a session that
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
-index b9e7e83d..c82312a1 100644
+index b9e7e83d..c5e3f6b0 100644
 --- a/extensions/picode/src/extension.ts
 +++ b/extensions/picode/src/extension.ts
 @@ -20,6 +20,8 @@ import {
@@ -325,19 +367,18 @@ index b9e7e83d..c82312a1 100644
  		const configuredIds = new Set(configuredModels.map(info => info.id));
  		const profileIds = new Set(fromProfile.map(info => info.id));
  		return [
-@@ -670,7 +680,10 @@ export function activate(context: vscode.ExtensionContext): void {
+@@ -670,7 +680,9 @@ export function activate(context: vscode.ExtensionContext): void {
  	// surface of ours. Nothing to configure: it finds pi and its profile by itself.
  	registerPiAgent(context, {
  		distributionRoot: distributionRoot(context.extensionUri),
 -		profileDir: profileDirectory(context.extensionUri),
-+		// The chat's pi runs against the profile of the chosen runtime: PiCode's own for the
-+		// internal pi, pi's own for the external one (see `runtime.ts`). What PiCode projects
-+		// for pi keeps going to PiCode's profile either way.
-+		agentDir: chatAgentDir(distributionRoot(context.extensionUri)),
++		// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
++		// runtime switch takes effect without a window reload. What PiCode projects for pi
++		// keeps going to PiCode's own profile either way.
  		log: line => console.error(`[pi] ${line}`),
  	});
  
-@@ -689,6 +702,15 @@ export function activate(context: vscode.ExtensionContext): void {
+@@ -689,6 +701,15 @@ export function activate(context: vscode.ExtensionContext): void {
  	// says which of its providers can be logged in with an account the owner already pays for,
  	// and the editor's own quick pick is where he chooses. The endpoints with an address and a
  	// dialect have their own form in the settings row, and never come through here.
