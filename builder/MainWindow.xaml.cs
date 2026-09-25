@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
 
 namespace PiCode.Builder;
@@ -17,28 +20,58 @@ public sealed partial class MainWindow : Window
 	private const string BuilderVersion = "1.0.0";
 
 	private readonly DispatcherTimer _timer = new();
-	private BuildTarget _target = BuildTarget.Windows;
+	private readonly List<string> _notes = new();
 
+	private BuildTarget _target = BuildTarget.Windows;
 	private Requirements _requirements = new();
 	private List<Requirement> _blockers = new();
 	private Progress? _progress;
+	private string? _buildLog;
 	private int _ticks;
 	private bool _failedSeen;
+	private bool _missingSeen;
 	private bool _linuxAvailable;
 	private string _linuxReason = "";
+	private bool _syncingTargets;
 
 	public MainWindow()
 	{
 		InitializeComponent();
 
-		TitleText.Text = $"PiCode Builder v{BuilderVersion}";
+		// WinUI takes the size and the icon from code, not from the markup.
+		AppWindow.Resize(new SizeInt32(1080, 720));
+		FooterVersion.Text = $"PiCode Builder v{BuilderVersion}";
+		FooterPath.Text = Pipeline.RepoRoot;
+		HeroLine.Text = "Build PiCode for Windows, or for Linux through WSL. Same pipeline either way.";
+		ArchitectureLine.Text = $"Architecture: Win32 x64 (the pipeline builds win-x64 and nothing else)";
+		RailArchitecture.Text = "Win32 x64";
+
+		try
+		{
+			var icon = Path.Combine(Pipeline.RepoRoot, "distribution", "picode.ico");
+			if (File.Exists(icon))
+			{
+				AppWindow.SetIcon(icon);
+			}
+			// PiCode's own mark, the drawing the distribution ships. WinUI reads SVG, so the file is
+			// used as it is and there is no second copy to keep in step.
+			var logo = Path.Combine(Pipeline.RepoRoot, "distribution", "picode-icon.svg");
+			if (File.Exists(logo))
+			{
+				Logo.Source = new SvgImageSource(new Uri(logo));
+			}
+		}
+		catch
+		{
+			// The window is here to run a build, not to fail over its own decoration.
+		}
+
 		TargetBox.SelectedIndex = 0;
-
-		// WinUI takes the size from code, not from the markup.
-		AppWindow.Resize(new SizeInt32(980, 700));
-		Title = "PiCode Builder";
-
+		TargetBoxRail.SelectedIndex = 0;
 		_linuxAvailable = Pipeline.LinuxAvailable(out _linuxReason);
+		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
+
+		Nav.SelectedItem = Nav.MenuItems[0];
 
 		_timer.Interval = TimeSpan.FromSeconds(1);
 		_timer.Tick += (_, _) => Refresh();
@@ -48,9 +81,36 @@ public sealed partial class MainWindow : Window
 		Refresh();
 	}
 
+	private void OnNavChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+	{
+		var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
+		ShowPage(tag);
+	}
+
+	private void ShowPage(string tag)
+	{
+		PageHome.Visibility = tag == "home" ? Visibility.Visible : Visibility.Collapsed;
+		PageCheck.Visibility = tag == "check" ? Visibility.Visible : Visibility.Collapsed;
+		PageLogs.Visibility = tag == "logs" ? Visibility.Visible : Visibility.Collapsed;
+		PageSettings.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+	}
+
 	private void OnTargetChanged(object sender, SelectionChangedEventArgs e)
 	{
-		_target = TargetBox.SelectedIndex == 1 ? BuildTarget.Linux : BuildTarget.Windows;
+		if (_syncingTargets)
+		{
+			return;
+		}
+		var index = ReferenceEquals(sender, TargetBoxRail) ? TargetBoxRail.SelectedIndex : TargetBox.SelectedIndex;
+		// Both boxes say the same thing: one is on the page, one is in the rail, and a setting with two
+		// controls that disagree is worse than one control.
+		_syncingTargets = true;
+		TargetBox.SelectedIndex = index;
+		TargetBoxRail.SelectedIndex = index;
+		_syncingTargets = false;
+
+		_target = index == 1 ? BuildTarget.Linux : BuildTarget.Windows;
+		FooterTarget.Text = _target == BuildTarget.Linux ? "Linux (WSL)" : "Windows";
 		_ticks = 0;
 		RefreshFacts();
 		Refresh();
@@ -64,26 +124,16 @@ public sealed partial class MainWindow : Window
 		}
 		if (_target == BuildTarget.Linux && !_linuxAvailable)
 		{
-			AppendLog("Linux builds need WSL with a distribution: " + _linuxReason);
+			AppendNote("Linux builds need WSL with a distribution: " + _linuxReason);
 			return;
 		}
-		AppendLog("starting the build");
-		BuildPanel.Visibility = Visibility.Visible;
+		AppendNote("starting the build");
+		BuildingCard.Visibility = Visibility.Visible;
+		BusyRing.IsActive = true;
 		Bar.Value = 0;
 		Percent.Text = "0%";
-		Timing.Text = "starting...";
 		Pipeline.StartBuild(_target);
 		Refresh();
-	}
-
-	private void OnOpen(object sender, RoutedEventArgs e)
-	{
-		if (Pipeline.EditorExists)
-		{
-			Pipeline.OpenEditor();
-			return;
-		}
-		AppendLog("there is no editor built yet");
 	}
 
 	private void OnStop(object sender, RoutedEventArgs e)
@@ -95,7 +145,7 @@ public sealed partial class MainWindow : Window
 			return;
 		}
 		Pipeline.StopBuild(_target);
-		AppendLog("stop asked for: the tree may be left half-built");
+		AppendNote("stop asked for: the tree may be left half-built");
 		Refresh();
 	}
 
@@ -105,71 +155,73 @@ public sealed partial class MainWindow : Window
 		_requirements = Pipeline.ReadRequirements(_target);
 		_blockers = _requirements.Checks.Where(check => !check.Ok).ToList();
 
-		Dependencies.Children.Clear();
+		Checks.Children.Clear();
 		foreach (var check in _requirements.Checks)
 		{
-			Dependencies.Children.Add(Row(check));
+			Checks.Children.Add(CheckRow(check, withButton: true));
 		}
 
-		// What is missing shows itself where it is fixed: on the fold's own label, in red and counted,
-		// and the fold opens once so the line and its button are in front of the person.
-		var missing = _blockers.Count;
-		var header = new TextBlock
+		RailChecks.Children.Clear();
+		foreach (var check in _requirements.Checks)
 		{
-			Text = missing > 0 ? $"Dependencies ({missing} missing)" : "Dependencies",
-		};
-		if (missing > 0)
-		{
-			header.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+			RailChecks.Children.Add(CheckRow(check, withButton: false));
 		}
-		DependenciesExpander.Header = header;
+		RailCheckCount.Text = $"{_requirements.Checks.Length - _blockers.Count} / {_requirements.Checks.Length} ready";
+		RailCheckSummary.Visibility = _blockers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+		RailCheckSummaryText.Text = _blockers.Count == 0
+			? "All requirements satisfied"
+			: $"{_blockers.Count} thing(s) need attention: open System Check";
 
-		if (missing > 0 && !_missingSeen)
+		if (_blockers.Count > 0 && !_missingSeen)
 		{
 			_missingSeen = true;
-			DependenciesExpander.IsExpanded = true;
+			Nav.SelectedItem = Nav.MenuItems[1];
 		}
 
-		// A build that cannot work is not offered, and the reason is on the button that fixes it.
-		BuildButton.IsEnabled = missing == 0;
+		// A build that cannot work is not offered, and the reason is on the page that lists it.
+		BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
+		BuildButton.Content = _blockers.Count > 0 ? "Build PiCode (something is missing)" : "Build PiCode";
 	}
 
-	private bool _missingSeen;
-
-	private UIElement Row(Requirement check)
+	/// <summary>One check: a mark, its name, what was found, and - where it is fixed - its button.</summary>
+	private UIElement CheckRow(Requirement check, bool withButton)
 	{
-		var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+		var line = new Grid { ColumnSpacing = 10 };
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+		line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-		line.Children.Add(new TextBlock
+		var mark = new TextBlock
 		{
 			Text = check.Ok ? "\u2713" : "\u2717",
-			Width = 18,
 			VerticalAlignment = VerticalAlignment.Center,
 			Foreground = (Brush)Application.Current.Resources[
 				check.Ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
-		});
-
-		var label = new TextBlock
-		{
-			Text = check.Name,
-			VerticalAlignment = VerticalAlignment.Center,
-			MinWidth = 150,
 		};
+		Grid.SetColumn(mark, 0);
+		line.Children.Add(mark);
+
+		var name = new TextBlock { Text = check.Name, VerticalAlignment = VerticalAlignment.Center };
 		if (!string.IsNullOrEmpty(check.Note))
 		{
-			ToolTipService.SetToolTip(label, check.Note);
+			ToolTipService.SetToolTip(name, check.Note);
 		}
-		line.Children.Add(label);
+		Grid.SetColumn(name, 1);
+		line.Children.Add(name);
 
-		line.Children.Add(new TextBlock
+		var value = new TextBlock
 		{
 			Text = check.Ok ? check.Found : check.Missing,
 			VerticalAlignment = VerticalAlignment.Center,
-			Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
 			TextWrapping = TextWrapping.Wrap,
-		});
+			Foreground = (Brush)Application.Current.Resources[
+				check.Ok ? "TextFillColorSecondaryBrush" : "SystemFillColorCriticalBrush"],
+		};
+		Grid.SetColumn(value, 2);
+		line.Children.Add(value);
 
-		if (!check.Ok && (!string.IsNullOrEmpty(check.Install) || !string.IsNullOrEmpty(check.Url)))
+		if (withButton && !check.Ok && (!string.IsNullOrEmpty(check.Install) || !string.IsNullOrEmpty(check.Url)))
 		{
 			var install = new Button
 			{
@@ -178,6 +230,7 @@ public sealed partial class MainWindow : Window
 			};
 			var captured = check;
 			install.Click += (_, _) => Pipeline.Install(captured);
+			Grid.SetColumn(install, 3);
 			line.Children.Add(install);
 		}
 
@@ -185,9 +238,9 @@ public sealed partial class MainWindow : Window
 	}
 
 	/// <summary>
-	/// The build's steps, in plain words: a tick for what is done, a dot and a sentence for what is
-	/// happening now, a circle for what is left. Everything before the step it is on is done, whether
-	/// it is still working or stopped there.
+	/// The build's steps as a timeline: a tick for what is done, a dot and a sentence for what is
+	/// happening, a circle for what is left. Everything before the step it is on is done, whether it is
+	/// still working or stopped there.
 	/// </summary>
 	private void ShowSteps(Progress? progress, bool running)
 	{
@@ -195,6 +248,18 @@ public sealed partial class MainWindow : Window
 		var stages = progress?.Stages ?? Array.Empty<Step>();
 		if (stages.Length == 0)
 		{
+			foreach (var text in new[]
+			{
+				"No build yet. Press Build PiCode and its steps appear here.",
+			})
+			{
+				Steps.Children.Add(new TextBlock
+				{
+					Text = text,
+					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+					TextWrapping = TextWrapping.Wrap,
+				});
+			}
 			return;
 		}
 
@@ -227,6 +292,7 @@ public sealed partial class MainWindow : Window
 			var brush = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
 			var detail = "";
 			var bold = false;
+			var connector = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"];
 
 			if (index < done)
 			{
@@ -245,17 +311,30 @@ public sealed partial class MainWindow : Window
 				}
 			}
 
-			var row = new StackPanel { Spacing = 2 };
-			var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-			line.Children.Add(new TextBlock { Text = mark, Width = 16, Foreground = brush });
-			line.Children.Add(new TextBlock { Text = stage.Label, Foreground = brush, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal });
-			row.Children.Add(line);
+			// The line down the left is the timeline: a border on each row, which costs nothing and
+			// joins up without a control per gap.
+			var row = new Border
+			{
+				BorderThickness = new Thickness(2, 0, 0, 0),
+				BorderBrush = connector,
+				Padding = new Thickness(12, 6, 0, 6),
+			};
+			var inner = new StackPanel { Spacing = 2 };
+			var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+			header.Children.Add(new TextBlock { Text = mark, Width = 16, Foreground = brush });
+			header.Children.Add(new TextBlock
+			{
+				Text = stage.Label,
+				Foreground = brush,
+				FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+			});
+			inner.Children.Add(header);
 			if (!string.IsNullOrEmpty(detail))
 			{
-				row.Children.Add(new TextBlock
+				inner.Children.Add(new TextBlock
 				{
 					Text = detail,
-					Margin = new Thickness(24, 0, 0, 4),
+					Margin = new Thickness(24, 0, 0, 0),
 					TextWrapping = TextWrapping.Wrap,
 					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
 				});
@@ -264,13 +343,64 @@ public sealed partial class MainWindow : Window
 			{
 				ToolTipService.SetToolTip(row, stage.Detail);
 			}
+			row.Child = inner;
 			Steps.Children.Add(row);
 		}
 	}
 
-	private readonly List<string> _notes = new();
+	/// <summary>What the last build did, and when. No per-step times: the module does not measure them.</summary>
+	private void ShowLastBuild(string? exit, Progress? progress)
+	{
+		LastBuild.Children.Clear();
+		if (exit is null && progress is null)
+		{
+			LastBuild.Children.Add(new TextBlock
+			{
+				Text = "Nothing built on this machine yet.",
+				Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+			});
+			return;
+		}
 
-	private void AppendLog(string line)
+		var ok = exit == "0";
+		var mark = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+		mark.Children.Add(new TextBlock
+		{
+			Text = ok ? "\u2713" : "\u2717",
+			Foreground = (Brush)Application.Current.Resources[ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
+		});
+		mark.Children.Add(new TextBlock { Text = ok ? "Successful" : "Did not finish" });
+		LastBuild.Children.Add(mark);
+
+		try
+		{
+			var status = Path.Combine(Pipeline.RepoRoot, ".scratch", "build.status");
+			if (File.Exists(status))
+			{
+				var when = File.GetLastWriteTime(status);
+				var took = progress is not null && progress.ElapsedSeconds > 0
+					? $" - {Clock(progress.ElapsedSeconds)}"
+					: "";
+				LastBuild.Children.Add(new TextBlock
+				{
+					Text = $"{when:yyyy-MM-dd HH:mm}{took}",
+					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+				});
+			}
+		}
+		catch (IOException)
+		{
+		}
+
+		LastBuild.Children.Add(new TextBlock
+		{
+			Text = Pipeline.EditorExists ? "PiCode.exe is in PiCode-Win32-x64" : "No editor in place yet",
+			TextWrapping = TextWrapping.Wrap,
+			Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+		});
+	}
+
+	private void AppendNote(string line)
 	{
 		_notes.Add("[window] " + line);
 		if (_notes.Count > 40)
@@ -291,8 +421,6 @@ public sealed partial class MainWindow : Window
 		}
 	}
 
-	private string? _buildLog;
-
 	private void Refresh()
 	{
 		_ticks++;
@@ -305,66 +433,78 @@ public sealed partial class MainWindow : Window
 		}
 
 		var running = Pipeline.IsBuildRunning(_target);
-		var built = Pipeline.EditorExists;
 		var exit = Pipeline.LastExitCode(_target);
 		var failed = !running && exit is not null && exit != "0";
 
 		if (running)
 		{
-			BuildPanel.Visibility = Visibility.Visible;
-			BuildButton.Visibility = Visibility.Collapsed;
-			OpenButton.Visibility = Visibility.Collapsed;
+			BuildingCard.Visibility = Visibility.Visible;
+			BusyRing.IsActive = true;
 			StopButton.Visibility = Visibility.Visible;
+			BuildButton.IsEnabled = false;
 
 			_progress = Pipeline.ReadProgress(_target);
 			if (_progress is not null)
 			{
 				Bar.Value = Math.Clamp(_progress.Percentage, 0, 100);
 				Percent.Text = $"{Math.Round(_progress.Percentage)}%";
+				BuildHeadline.Text = "Building PiCode";
+				StageLine.Text = _progress.Stage;
 				Timing.Text = $"{Clock(_progress.ElapsedSeconds)} in" +
 					(_progress.RemainingSeconds > 0 ? $", about {Clock(_progress.RemainingSeconds)} left" : "");
 			}
 			else
 			{
+				BusyRing.IsActive = true;
 				Percent.Text = "";
-				Timing.Text = "starting...";
+				StageLine.Text = "starting...";
+				Timing.Text = "";
 			}
 			ShowSteps(_progress, true);
 		}
 		else
 		{
-			BuildButton.Visibility = Visibility.Visible;
-			OpenButton.Visibility = Visibility.Visible;
 			StopButton.Visibility = Visibility.Collapsed;
-			OpenButton.IsEnabled = built;
 			BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
 
 			_progress = Pipeline.ReadProgress(_target);
 			if (_progress is not null)
 			{
-				BuildPanel.Visibility = Visibility.Visible;
+				BuildingCard.Visibility = Visibility.Visible;
+				BusyRing.IsActive = false;
 				var value = _progress.Done == "ok" ? 100 : Math.Clamp(_progress.Percentage, 0, 100);
 				Bar.Value = value;
 				Percent.Text = $"{Math.Round(value)}%";
-				Timing.Text = _progress.Done switch
+				BuildHeadline.Text = _progress.Done switch
 				{
-					"ok" => "the build finished, in PiCode-Win32-x64",
-					"failed" => "the build stopped here. What it said is in the log below.",
-					_ => $"{Clock(_progress.ElapsedSeconds)} in",
+					"ok" => "The build finished",
+					"failed" => "The build did not finish",
+					_ => "The last build",
 				};
-				ShowSteps(_progress, false);
+				StageLine.Text = _progress.Done switch
+				{
+					"ok" => "The editor is in PiCode-Win32-x64.",
+					"failed" => "It stopped at the step marked below. What it said is in Build Logs.",
+					_ => _progress.Stage,
+				};
+				Timing.Text = $"{Clock(_progress.ElapsedSeconds)} in";
 			}
+			else
+			{
+				BuildingCard.Visibility = Visibility.Collapsed;
+			}
+			ShowSteps(_progress, false);
 		}
 
-		_buildLog = Pipeline.ReadLog(_target);
+		ShowLastBuild(exit, _progress);
+		_buildLog = Pipeline.ReadLog(_target, 400);
 		RenderLog();
 
-		// Whatever a failed build said is the only thing worth reading then, so it is opened rather
-		// than hinted at.
+		// Whatever a failed build said is worth reading then, so it is opened rather than hinted at.
 		if (failed && !_failedSeen)
 		{
 			_failedSeen = true;
-			LogExpander.IsExpanded = true;
+			Nav.SelectedItem = Nav.MenuItems[2];
 		}
 	}
 

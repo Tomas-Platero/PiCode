@@ -7,72 +7,218 @@
     mc:Ignorable="d"
     Title="PiCode Builder">
 
-    <!-- The theme is the system's: WinUI follows Windows by itself, so there is no palette here and
-         nothing to keep in step. -->
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Padding="20" RowSpacing="14">
+    <!-- No colours and no theme of our own: WinUI follows Windows, including its accent colour, which
+         is what makes this look native on any machine instead of looking like this one. -->
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- What this is, and which machine it is building for. -->
-        <Grid Grid.Row="0" ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Name="TitleText" Text="PiCode Builder v1.0.0" Style="{StaticResource SubtitleTextBlockStyle}"/>
-            </StackPanel>
-            <ComboBox Grid.Column="1" Name="TargetBox" MinWidth="190" VerticalAlignment="Center"
-                      SelectionChanged="OnTargetChanged" ToolTipService.ToolTip="Which machine the build runs on">
-                <ComboBoxItem Content="Windows"/>
-                <ComboBoxItem Content="Linux (WSL)"/>
-            </ComboBox>
-        </Grid>
+        <NavigationView Grid.Row="0" Name="Nav" PaneDisplayMode="Left" OpenPaneLength="210"
+                        IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
+                        SelectionChanged="OnNavChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Home" Tag="home">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;"/></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="System Check" Tag="check">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE73E;"/></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Build Logs" Tag="logs">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;"/></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE713;"/></NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
 
-        <!-- Build, open, stop. The labels do not move. -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-            <Button Name="BuildButton" Content="Build PiCode" Style="{StaticResource AccentButtonStyle}"
-                    MinWidth="150" Click="OnBuild"/>
-            <Button Name="OpenButton" Content="Open PiCode" MinWidth="140" Click="OnOpen"/>
-            <Button Name="StopButton" Content="Stop" MinWidth="90" Visibility="Collapsed" Click="OnStop"/>
-        </StackPanel>
+            <Grid Padding="20" ColumnSpacing="18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="330"/>
+                </Grid.ColumnDefinitions>
 
-        <!-- What the build needs, folded away until it is wanted, with a button on what is missing. -->
-        <Expander Grid.Row="2" Name="DependenciesExpander" HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Stretch">
-            <StackPanel Name="Dependencies" Spacing="6"/>
-        </Expander>
+                <!-- The pages. One is on screen at a time; the column on the right is shared, so the
+                     same control never has to exist twice. -->
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <StackPanel Name="PageHome" Spacing="14">
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Image Grid.Column="0" Name="Logo" Width="52" Height="52" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="PiCode Builder" Style="{StaticResource TitleTextBlockStyle}"/>
+                                        <TextBlock Name="HeroLine" Style="{StaticResource BodyTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
-        <!-- The build's steps and its bar. This is what pressing Build opens. -->
-        <StackPanel Grid.Row="3" Name="BuildPanel" Spacing="12" Visibility="Collapsed">
-            <StackPanel Name="Steps" Spacing="2"/>
-            <StackPanel Spacing="6">
-                <Grid ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <ProgressBar Grid.Column="0" Name="Bar" Minimum="0" Maximum="100" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Name="Percent" Text="0%" MinWidth="52" TextAlignment="Right"
-                               VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <Border Name="BuildingCard" Visibility="Collapsed"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                            <ProgressRing Name="BusyRing" IsActive="True" Width="20" Height="20"/>
+                                            <TextBlock Name="BuildHeadline" Text="Building PiCode" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Name="Percent" Text="0%" Style="{StaticResource TitleTextBlockStyle}"/>
+                                    </Grid>
+                                    <ProgressBar Name="Bar" Minimum="0" Maximum="100"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="2">
+                                            <TextBlock Name="StageLine" TextWrapping="Wrap"/>
+                                            <TextBlock Name="Timing" Opacity="0.75" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Name="StopButton" Content="Stop build" VerticalAlignment="Center"
+                                                Visibility="Collapsed" Click="OnStop"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Build steps" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <StackPanel Name="Steps" Spacing="0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Name="PageCheck" Spacing="14" Visibility="Collapsed">
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="System Check" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                    <StackPanel Name="Checks" Spacing="10"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Name="PageLogs" Spacing="14" Visibility="Collapsed">
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Build Logs" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                    <TextBox Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                                             FontFamily="Consolas" FontSize="12" Height="460"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Name="PageSettings" Spacing="14" Visibility="Collapsed">
+                            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Settings" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                    <TextBlock Text="Where the build runs" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <ComboBox Name="TargetBox" MinWidth="240" SelectionChanged="OnTargetChanged">
+                                        <ComboBoxItem Content="Windows"/>
+                                        <ComboBoxItem Content="Linux (WSL)"/>
+                                    </ComboBox>
+                                    <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- The rail: what machine, whether it can be built, what happened last, and the one
+                     button that does the work. -->
+                <Grid Grid.Column="1" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="14">
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <ComboBox Name="TargetBoxRail" HorizontalAlignment="Stretch" SelectionChanged="OnTargetChanged">
+                                <ComboBoxItem Content="Windows"/>
+                                <ComboBoxItem Content="Linux (WSL)"/>
+                            </ComboBox>
+                            <TextBlock Name="RailArchitecture" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="System Check" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock Grid.Column="1" Name="RailCheckCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </Grid>
+                            <StackPanel Name="RailChecks" Spacing="8"/>
+                            <Border Name="RailCheckSummary" CornerRadius="6" Padding="10" Visibility="Collapsed"
+                                    Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}">
+                                <TextBlock Name="RailCheckSummaryText" TextWrapping="Wrap"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Last Build" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                            <StackPanel Name="LastBuild" Spacing="4"/>
+                        </StackPanel>
+                    </Border>
+
+                    </StackPanel>
+                    </ScrollViewer>
+                    <Button Grid.Row="1" Name="BuildButton" Content="Build PiCode" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch" Height="42" Click="OnBuild"/>
                 </Grid>
-                <TextBlock Name="Timing" Opacity="0.75" TextWrapping="Wrap"/>
-            </StackPanel>
-        </StackPanel>
+            </Grid>
+        </NavigationView>
 
-        <!-- What the build said. Expandable, so it can be out of the way. -->
-        <Expander Grid.Row="4" Name="LogExpander" Header="Log" IsExpanded="True"
-                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Stretch">
-            <TextBox Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                     FontFamily="Consolas" FontSize="12" MinHeight="160"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     Background="{ThemeResource LayerFillColorDefaultBrush}"/>
-        </Expander>
+        <Border Grid.Row="1" Padding="20,8" BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Name="FooterVersion" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock Grid.Column="1" Name="FooterPath" Margin="24,0" TextAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="2" Name="FooterTarget" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
