@@ -148,6 +148,15 @@ function Get-Requirements {
         Note = 'compile the core and pack the editor'
     })
 
+    $editorRunning = [bool](Get-Process -Name 'PiCode' -ErrorAction SilentlyContinue)
+    $rows.Add([pscustomobject]@{
+        Name = 'editor closed'
+        Ok = -not $editorRunning
+        Detail = if ($editorRunning) { 'PiCode is running' } else { 'nothing is using the folder to be packed' }
+        Url = ''
+        Note = 'the pack replaces VSCode-win32-x64 and Windows refuses to delete the files of a running program: close the editor before building'
+    })
+
     $driveLetter = [System.IO.Path]::GetPathRoot($RepoRoot).TrimEnd(':', '\')
     $free = [math]::Round((Get-PSDrive -Name $driveLetter).Free / 1GB, 1)
     $rows.Add([pscustomobject]@{
@@ -412,6 +421,15 @@ function Start-Build([string[]]$flags) {
     $state = Get-BuildState
     if ($state.Running) {
         Add-Log "a build is already running (pid $($state.Pid))"
+        return
+    }
+    # The steps that pack cannot run while the editor is open, and finding that out after eight
+    # minutes — inside the pack, as an EBUSY nobody can read — is what this window exists to avoid.
+    if ((Get-Process -Name 'PiCode' -ErrorAction SilentlyContinue) -and -not ($flags -contains '-o') -and -not ($flags -contains '-DepsOnly')) {
+        Add-Log 'PiCode is running: close the editor before building (the pack replaces its folder)'
+        [System.Windows.MessageBox]::Show(
+            "Close PiCode first.`n`nThe build replaces the folder the editor runs from, and Windows will not delete the files of a running program.",
+            'PiCode - build', 'OK', 'Information') | Out-Null
         return
     }
     Remove-Item $LogFile -ErrorAction SilentlyContinue

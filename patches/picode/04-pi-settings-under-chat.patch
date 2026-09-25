@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
-index 2c363f1517f..d335d8cc05e 100644
+index 2c363f1517f..65bcc921e59 100644
 --- a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
 +++ b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
 @@ -179,8 +179,39 @@ export const tocData: ITOCEntry<string> = {
@@ -48,7 +48,7 @@ index 2c363f1517f..d335d8cc05e 100644
  					id: 'chat/mcp',
  					label: localize('chatMcp', "MCP"),
 -					settings: ['mcp', 'chat.mcp.*', 'mcp.*']
-+					settings: ['mcp', 'chat.mcp.*', 'mcp.*', 'picode.mcp.*']
++					settings: ['picode.mcp.*']
  				},
  				{
  					id: 'chat/context',

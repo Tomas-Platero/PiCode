@@ -1,30 +1,43 @@
 diff --git a/src/vs/workbench/contrib/preferences/browser/media/settingsWidgets.css b/src/vs/workbench/contrib/preferences/browser/media/settingsWidgets.css
-index 946683f7f4c..2be68deb501 100644
+index 946683f7f4c..1c99dcb08d0 100644
 --- a/src/vs/workbench/contrib/preferences/browser/media/settingsWidgets.css
 +++ b/src/vs/workbench/contrib/preferences/browser/media/settingsWidgets.css
-@@ -389,3 +389,50 @@
+@@ -389,3 +389,63 @@
  .settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .setting-list-row.invalid-key .setting-list-object-key {
  	color: var(--vscode-list-errorForeground);
  }
 +
-+/* PiCode's provider form: a provider is four fields, so its edit row is a form and not a line. */
++/* PiCode's forms (providers, MCP servers): a record is a few fields, so its edit row is a small
++   form and not a line. Two fields per row, labels that never wrap, and the message across the
++   whole width underneath -- a single column of five fields is a wall, and in a row they overlap. */
 +
-+.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-edit {
-+	display: flex;
-+	flex-direction: column;
-+	gap: 4px;
-+	padding: 6px 0 8px 0;
++.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-edit,
++.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-mcp-edit {
++	display: grid;
++	grid-template-columns: repeat(2, minmax(220px, 1fr));
++	gap: 6px 14px;
++	align-items: center;
++	padding: 8px 0 10px 0;
 +}
 +
 +.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-field {
-+	display: flex;
++	display: grid;
++	grid-template-columns: max-content minmax(0, 1fr);
 +	align-items: center;
 +	gap: 8px;
++	min-width: 0;
 +}
 +
 +.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-label {
-+	min-width: 72px;
 +	opacity: 0.9;
++	white-space: nowrap;
++}
++
++.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-message:not(:empty),
++.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-edit .setting-list-ok-button,
++.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-mcp-edit .setting-list-ok-button {
++	grid-column: 1 / -1;
++	justify-self: start;
 +}
 +
 +.settings-editor > .settings-body .settings-tree-container .setting-item.setting-item-list .picode-provider-input,

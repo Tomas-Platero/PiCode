@@ -43,6 +43,19 @@ if [[ -f "${LOCK}" ]]; then
   rm -f "${LOCK}"
 fi
 
+# The pack deletes the platform directory before writing it, and Windows refuses to delete the
+# files of a program that is running: an editor open from that folder turns a build into an EBUSY
+# inside the pack, minutes after it started. Checked here, where it is one line and one second.
+RUNNING_EDITOR=$( tasklist //FI "IMAGENAME eq PiCode.exe" 2>/dev/null | grep -c "PiCode.exe" || true )
+if [[ "${RUNNING_EDITOR}" -gt 0 && "${FLAGS[0]}" != "-DepsOnly" ]]; then
+  if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]]; then
+    echo "error: PiCode is running, and the build has to replace VSCode-win32-x64." >&2
+    echo "       Close the editor first (the pack cannot delete a folder in use), or" >&2
+    echo "       set PICODE_BUILD_ANYWAY=1 to try anyway." >&2
+    exit 4
+  fi
+fi
+
 echo $$ > "${LOCK}"
 rm -f "${STATUS}"
 : > "${LOG}"
