@@ -141,7 +141,7 @@ mientras GitHub conserve el objeto.
 
 ## Límites conocidos
 
-- Las `actions` están fijadas a su etiqueta mayor (`@v4`). Si se quiere el
+- Las `actions` están fijadas a su etiqueta mayor (`checkout@v7`, `setup-node@v7`, `cache@v6`, todas sobre Node 24). Si se quiere el
   pin más estricto, se fijan al SHA del commit; el coste es mantenerlas a mano.
 - El check rápido en Windows instala `jq` con `choco`; es el único paso de
   preparación que no trae el runner.

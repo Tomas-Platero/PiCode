@@ -36,10 +36,10 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node (.nvmrc)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -64,7 +64,7 @@ jobs:
 
       # The object database is ~320 MB and is keyed by the pinned commit.
       - name: Cache the pinned VS Code source objects
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: picode-source/.git
           key: vscode-git-${{ runner.os }}-${{ steps.pin.outputs.commit }}
@@ -74,7 +74,7 @@ jobs:
       # Reused only when VS Code's own install state proves it current (see
       # PICODE_FAST_INSTALL in dev/build.sh); otherwise `npm ci` runs.
       - name: Cache the installed dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: picode-source/node_modules
           key: vscode-deps-${{ runner.os }}-${{ steps.pin.outputs.commit }}
@@ -82,7 +82,7 @@ jobs:
             vscode-deps-${{ runner.os }}-
 
       - name: Cache npm tarballs and node headers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ steps.npm.outputs.dir }}

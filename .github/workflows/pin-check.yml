@@ -47,10 +47,10 @@ jobs:
           - windows-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node (.nvmrc)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -72,7 +72,7 @@ jobs:
       # push that does not move the pin reuses it instead of re-downloading the
       # VS Code tree.
       - name: Cache the pinned VS Code source objects
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: picode-source/.git
           key: vscode-git-${{ runner.os }}-${{ steps.pin.outputs.commit }}
