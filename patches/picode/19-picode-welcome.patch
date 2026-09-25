@@ -768,7 +768,7 @@ index e97fa180..c278ab2b 100644
  				this.setSlide('categories');
  				this.container.focus();
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-index c2622705..9c2aa5de 100644
+index c2622705..b5ce04e2 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 @@ -109,34 +109,32 @@
@@ -795,14 +795,14 @@ index c2622705..9c2aa5de 100644
 +.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
  	grid-template-columns: 1fr;
 -	grid-template-areas: "header" "left-column" "right-column" "footer";
--}
--
--.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
--	grid-template-rows: auto minmax(min-content, auto) min-content;
--	grid-template-areas: "header" "left-column right-column" "footer footer";
 +	grid-template-areas: "header" "left-column" "footer";
  }
  
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
+-	grid-template-rows: auto minmax(min-content, auto) min-content;
+-	grid-template-areas: "header" "left-column right-column" "footer footer";
+-}
+-
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: min-content minmax(min-content, auto) min-content;
 -	grid-template-columns: 1fr;
@@ -824,7 +824,7 @@ index c2622705..9c2aa5de 100644
  }
  
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories li.showWalkthroughsEntry {
-@@ -165,6 +163,383 @@
+@@ -165,6 +163,421 @@
  	grid-area: left-column;
  }
  
@@ -927,8 +927,46 @@ index c2622705..9c2aa5de 100644
 +}
 +
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button {
-+	padding: 2px 0;
-+	text-align: left;
++	padding: 5px 16px;
++	border: 1px solid transparent;
++	border-radius: 4px;
++	cursor: pointer;
++	font-size: .95em;
++	text-align: center;
++	background: var(--vscode-button-secondaryBackground);
++	color: var(--vscode-button-secondaryForeground);
++	transition: background-color 0.12s ease-out, opacity 0.12s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button:hover {
++	background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground));
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.primary {
++	background: var(--vscode-button-background);
++	color: var(--vscode-button-foreground);
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.primary:hover {
++	background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.quiet {
++	background: transparent;
++	color: var(--vscode-foreground);
++	opacity: .75;
++	padding: 5px 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.quiet:hover {
++	opacity: 1;
++	text-decoration: underline;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.disabled {
++	opacity: .45;
++	pointer-events: none;
 +}
 +
 +/* visible keyboard focus, everywhere in the setup */
@@ -1208,7 +1246,7 @@ index c2622705..9c2aa5de 100644
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
  	grid-area: right-column;
  }
-@@ -1146,3 +1521,69 @@
+@@ -1146,3 +1559,68 @@
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlide .getting-started-checkbox {
  	border-color: var(--vscode-checkbox-border) !important;
  }
@@ -1262,7 +1300,6 @@ index c2622705..9c2aa5de 100644
 +	flex: 1;
 +}
 +
-+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-foot .picode-button.disabled,
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-wizard-foot .picode-option-card.disabled {
 +	opacity: .5;
 +	pointer-events: none;
@@ -1280,10 +1317,10 @@ index c2622705..9c2aa5de 100644
 +}
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
 new file mode 100644
-index 00000000..f64ae433
+index 00000000..0d943830
 --- /dev/null
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
-@@ -0,0 +1,772 @@
+@@ -0,0 +1,778 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1447,7 +1484,7 @@ index 00000000..f64ae433
 +			reset(this.container as HTMLElement, $('.picode-card', {},
 +				$('p', {}, localize('picodeSetup.skipped', "Setup skipped. Reopen it any time: run 'PiCode: Set up PiCode' from the command palette, or Help > Welcome.")),
 +				$('.picode-gentle-actions', {},
-+					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); })),
++					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
 +			));
 +			return;
 +		}
@@ -1455,7 +1492,7 @@ index 00000000..f64ae433
 +			reset(this.container as HTMLElement, $('.picode-card', {},
 +				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > Chat, or by running this setup again.")),
 +				$('.picode-gentle-actions', {},
-+					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); })),
++					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
 +			));
 +			return;
 +		}
@@ -1507,23 +1544,28 @@ index 00000000..f64ae433
 +			this.step === 2 ? localize('picodeSetup.nav.done', "Done") : localize('picodeSetup.nav.next', "Next"),
 +			this.step < 2 || this.piChosen,
 +			() => this.step === 2 ? this.finish() : this.goTo((this.step + 1) as 0 | 1 | 2),
++			'primary',
 +		);
 +		if (this.step === 0 && !this.piChosen) {
 +			next.classList.add('disabled');
 +			next.title = localize('picodeSetup.nav.chooseFirst', "Choose a pi first — click one of the two options above.");
 +		}
-+		const foot = $('.picode-wizard-foot', {}, back, next);
++		// The wizard convention: Back on the left, the way forward on the right, and "Not
++		// now" as the quiet way out beside the primary button.
++		const foot = $('.picode-wizard-foot', {}, back, $('.picode-foot-spacer', {}));
 +		if (this.step < 2) {
 +			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.goTo((this.step + 1) as 0 | 1 | 2)));
 +		}
-+		foot.append($('.picode-foot-spacer', {}),
-+			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll()));
++		foot.append(
++			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
++			next,
++		);
 +		return foot;
 +	}
 +
 +	/** A footer button; `enabled === false` renders it inert until something re-renders. */
-+	private navButton(id: string, label: string, enabled: boolean, onClick: () => void): HTMLElement {
-+		const button = this.button(id, label, enabled ? onClick : () => { /* disabled */ });
++	private navButton(id: string, label: string, enabled: boolean, onClick: () => void, style: 'primary' | 'secondary' | 'quiet' = 'secondary'): HTMLElement {
++		const button = this.button(id, label, enabled ? onClick : () => { /* disabled */ }, style);
 +		if (!enabled) {
 +			button.classList.add('disabled');
 +		}
@@ -1659,7 +1701,7 @@ index 00000000..f64ae433
 +				this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Also bring my provider logins (auth.json)")),
 +			),
 +			$('.picode-import-actions', {},
-+				this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => this.runImport(preview)),
++				this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => this.runImport(preview), 'primary'),
 +				this.button('picode-import-cancel', localize('picodeSetup.import.cancel', "Cancel"), () => {
 +					if (this.importPreviewBox) { this.importPreviewBox.hidden = true; }
 +				}),
@@ -1721,13 +1763,13 @@ index 00000000..f64ae433
 +		} else if (state.gentleInstalled) {
 +			status = localize('picodeSetup.gentle.on', "Installed");
 +			actions.append(
-+				this.button('picode-gentle-update', localize('picodeSetup.gentle.update', "Update"), () => this.applyGentle('update')),
++				this.button('picode-gentle-update', localize('picodeSetup.gentle.update', "Update"), () => this.applyGentle('update'), 'secondary'),
 +				this.button('picode-gentle-remove', localize('picodeSetup.gentle.remove', "Remove — use plain pi"), () => this.applyGentle('remove')),
 +			);
 +		} else {
 +			status = localize('picodeSetup.gentle.off', "Not installed");
 +			actions.append(
-+				this.button('picode-gentle-install', localize('picodeSetup.gentle.install', "Install Gentle AI"), () => this.applyGentle('install')),
++				this.button('picode-gentle-install', localize('picodeSetup.gentle.install', "Install Gentle AI"), () => this.applyGentle('install'), 'primary'),
 +			);
 +		}
 +
@@ -1973,8 +2015,9 @@ index 00000000..f64ae433
 +	 * Small builders
 +	 * ------------------------------------------------------------------ */
 +
-+	private button(id: string, label: string, onClick: () => void): HTMLElement {
-+		const button = $('button.picode-button.button-link', { 'type': 'button', 'id': id }, label);
++	private button(id: string, label: string, onClick: () => void, style: 'primary' | 'secondary' | 'quiet' = 'secondary'): HTMLElement {
++		const kind = style === 'primary' ? '.primary' : style === 'quiet' ? '.quiet' : '';
++		const button = $('button.picode-button' + kind, { 'type': 'button', 'id': id }, label);
 +		this.disposables.add(addDisposableListener(button, 'click', event => {
 +			event.preventDefault();
 +			onClick();
