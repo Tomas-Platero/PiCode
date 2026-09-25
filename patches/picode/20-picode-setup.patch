@@ -387,10 +387,10 @@ index d2be4d69..e905eb5a 100644
  		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
 diff --git a/extensions/picode/src/onboarding.ts b/extensions/picode/src/onboarding.ts
 new file mode 100644
-index 00000000..c2cb3e02
+index 00000000..09dada57
 --- /dev/null
 +++ b/extensions/picode/src/onboarding.ts
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,348 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -535,10 +535,33 @@ index 00000000..c2cb3e02
 +				return { ...state(), error: 'Gentle AI follows the internal pi. Your external pi keeps its own profile, which this editor never writes to.' };
 +			}
 +			const want = enable === 'update' ? 'update' : enable === true || enable === 'install' ? 'install' : 'remove';
-+			const args = want === 'update' ? ['update', ...GENTLE_PACKAGES] : [want, ...GENTLE_PACKAGES];
++			// Two facts the hard way, both measured against the shipped runtime:
++			// - pi's command line takes ONE source per command; passing both packages at
++			//   once is rejected with "Unexpected argument" and exit 0, which is exactly
++			//   the "it started and stopped" the wizard showed.
++			// - npm's install-script gate leaves gentle-pi's postinstall — the step that
++			//   fetches the Gentle AI binary — pending until the package is approved. The
++			//   approval only sticks once the package exists, and `npm rebuild` then runs
++			//   the pending script. install -> approve-scripts -> rebuild is the sequence
++			//   that leaves node_modules/gentle-pi/.gentle-ai/<version>/gentle-ai(.exe).
 +			await vscode.window.withProgress(
 +				{ location: vscode.ProgressLocation.Notification, title: want === 'install' ? 'Installing Gentle AI…' : want === 'update' ? 'Updating Gentle AI…' : 'Removing Gentle AI…' },
-+				() => runPiCli(deps, args),
++				async () => {
++					for (const pkg of GENTLE_PACKAGES) {
++						await runPiCli(deps, [want, pkg]);
++						if (want === 'remove') {
++							continue;
++						}
++						try {
++							await runNpm(deps, ['approve-scripts', pkg.replace(/^npm:/, '')]);
++							await runNpm(deps, ['rebuild', pkg.replace(/^npm:/, '')]);
++						} catch {
++							// An npm too old for approve-scripts, or a rebuild hiccup, leaves the
++							// install script pending rather than broken: the disk check below
++							// reports the honest state, and the error line names the outcome.
++						}
++					}
++				},
 +			);
 +			markDone();
 +			const after = state();
@@ -689,6 +712,28 @@ index 00000000..c2cb3e02
 +			{
 +				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: deps.profileDir },
 +				windowsHide: true,
++			},
++			error => (error === null ? resolve() : reject(error)),
++		);
++	});
++}
++
++/**
++ * Runs the npm on PATH inside the profile's npm project — the directory where pi
++ * installs packages and the one whose `package.json` carries the install-script
++ * approvals. The shell lets Windows resolve `npm` to `npm.cmd`, which is also how
++ * pi's own package manager runs the npm on the PATH.
++ */
++export function runNpm(deps: SetupDeps, args: readonly string[]): Promise<void> {
++	return new Promise<void>((resolve, reject) => {
++		execFile(
++			'npm',
++			[...args],
++			{
++				cwd: path.join(deps.profileDir, 'npm'),
++				env: { ...process.env, PI_CODING_AGENT_DIR: deps.profileDir },
++				windowsHide: true,
++				shell: true,
 +			},
 +			error => (error === null ? resolve() : reject(error)),
 +		);
