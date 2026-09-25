@@ -222,15 +222,6 @@ public sealed partial class MainWindow : Window
 		Refresh();
 	}
 
-	private async void OnPublishBuilder(object sender, RoutedEventArgs e)
-	{
-		PublishButton.IsEnabled = false;
-		PublishLine.Text = "Building... this takes a minute.";
-		var result = await System.Threading.Tasks.Task.Run(Pipeline.PublishBuilder);
-		PublishLine.Text = result.Message;
-		PublishButton.IsEnabled = true;
-	}
-
 	private async void OnClean(object sender, RoutedEventArgs e)
 	{
 		var answer = new ContentDialog
@@ -569,8 +560,7 @@ public sealed partial class MainWindow : Window
 				LastBuild.Children.Add(VerdictLine(true, "Built"));
 				LastBuild.Children.Add(new TextBlock
 				{
-					Text = "PiCode.exe is in PiCode-Win32-x64. When a build runs, its verdict is written here.",
-					TextWrapping = TextWrapping.Wrap,
+					Text = "PiCode.exe is in PiCode-Win32-x64",
 					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
 				});
 			}

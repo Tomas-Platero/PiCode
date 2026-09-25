@@ -231,6 +231,20 @@ En la práctica:
 - Los reportes de cierre también van así: cortos, en cristiano, y con lo que falta dicho
   con la misma claridad que lo que está hecho.
 
+## La pantalla enseña lo que pasa, no cómo está hecho
+
+> "para que quiero eso, omg"
+
+En la práctica:
+
+- Lo que expone la maquinaria —qué ficheros se escriben, dónde se guarda cada cosa, cuándo se calcula
+  cada número— **no entra en pantalla**. Eso vive en la documentación y en los papeles de tareas, que es
+  donde lo busca quien lo necesita.
+- La pantalla dice **qué hay y qué puedes hacer**: *Built*, *Stop build*, *Clean*. Nada de "esto se
+  escribe aquí cuando pasa aquello".
+- Si un texto de interfaz se lee como una explicación de funcionamiento interno, está mal puesto: se
+  quita o se muda a la documentación.
+
 ## Un aviso sobre quién ve qué
 
 > "Me sigue saliendo el logo de vscodium..."
@@ -256,6 +270,9 @@ En la práctica:
   nada nunca; conectarse a él y migrar su configuración sí son **opciones a petición**
   (aclarado por el dueño).
 - 2026-09-24 · **no hay extensión propia**: todo vive en el núcleo del editor.
+- 2026-09-25 · **la pantalla enseña lo que pasa, no cómo está hecho**. Fuera de la interfaz las
+  explicaciones de maquinaria interna (del tipo "esto se escribe aquí cuando pasa aquello"); van a la
+  documentación. Añadido con la frase de la sección nueva.
 - 2026-09-25 · **el producto habla inglés**. La copia que ve el usuario se traduce del
   español al inglés; el español queda para lo que yo le hablo a él y para los papeles suyos.
   Los demás idiomas, más adelante, como paquetes de idioma. Acota el punto «En español»,
