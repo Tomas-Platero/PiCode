@@ -96,7 +96,7 @@ function readLog(text) {
 	}
 	// The tail only: a build that recovered from a warning is not a failed build.
 	const tail = lines.slice(-8).join('\n');
-	if (/errored|error TS|Error: |exited with code [1-9]|command not found/i.test(tail)) {
+	if (/errored|error TS|Error: |(^|\n)\s*error:|exited with code [1-9]|command not found/i.test(tail)) {
 		return { index: 5, done: 'failed', lastLine };
 	}
 
@@ -109,15 +109,13 @@ function readLog(text) {
 		{ index: 5, pattern: /== phase 8\/8|--- step [0-9]\/6|staging complete/ },
 	];
 
-	// The marker that appears latest in the text wins; ties go to the later stage, because a stage
-	// that has started is further along than one that ended.
+	// The furthest stage that has left its mark wins. Not the marker that appears latest in the text:
+	// the log is cumulative, "npm ci" comes back around in later phases, and a build that reached
+	// phase 8 was being reported as if it were still on its first step.
 	let index = 0;
-	let lastAt = -1;
 	for (const marker of markers) {
-		const at = lines.reduce((found, line, position) => (marker.pattern.test(line) ? position : found), -1);
-		if (at > lastAt) {
-			lastAt = at;
-			index = marker.index;
+		if (lines.some(line => marker.pattern.test(line))) {
+			index = Math.max(index, marker.index);
 		}
 	}
 	return { index, done: undefined, lastLine };
@@ -213,6 +211,17 @@ if (logFile === undefined || !fs.existsSync(logFile)) {
 // the answer; the last write is not, and taking it made every estimate nonsense (the log is written
 // every second, so "elapsed" was always about a second).
 const logStat = fs.statSync(logFile);
+/** The runner's own verdict, when it has finished. The log is only a fallback for a run still going. */
+function readVerdict() {
+	try {
+		const code = fs.readFileSync(path.join(REPO, '.scratch', 'build.status'), 'utf8').trim();
+		if (code === '') { return undefined; }
+		return code === '0' ? 'ok' : 'failed';
+	} catch {
+		return undefined;
+	}
+}
+
 const startedAt = (logStat.birthtimeMs && logStat.birthtimeMs <= Date.now()) ? logStat.birthtimeMs : logStat.mtimeMs;
 let lastDrawn = '';
 let ended = false;
@@ -220,6 +229,12 @@ let ended = false;
 function draw() {
 	const text = fs.readFileSync(logFile, 'utf8');
 	const state = readLog(text);
+	// The runner's answer beats the log's: it is the exit code, not a reading of the last few lines.
+	// The runner's exit code is the authority, not the log: the build prints its own "== done" before
+	// the staging step runs, so a log that says done over an exit code of 1 is a build that failed
+	// afterwards - which is exactly what happened to the owner's build.
+	const verdict = readVerdict();
+	if (verdict !== undefined) { state.done = verdict; }
 	const index = state.index ?? 1;
 	const now = Date.now();
 
@@ -257,6 +272,8 @@ if (asJson) {
 	// One line, for a caller that draws its own interface: the little window asks every second.
 	const text = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
 	const state = readLog(text);
+	const verdict = readVerdict();
+	if (verdict !== undefined) { state.done = verdict; }
 	const now = Date.now();
 	const index = state.index ?? 1;
 	const percentage = state.done === 'ok' ? 100 : percentageFor(index, startedAt, now);
