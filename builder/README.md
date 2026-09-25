@@ -5,10 +5,16 @@ is: the engine, runnable without any of this, from a terminal and from CI.
 
 ## Building and running it
 
+**Double-click `build.cmd`.** That is the whole thing: it builds this and opens it. If something goes
+wrong the window stays open with the message instead of vanishing with it.
+
+Or from a terminal:
+
 ```bash
 cd builder
-dotnet build                     # compile
-dotnet run                       # compile and open it
+.uild.cmd                      # same thing
+dotnet build                     # compile only
+dotnet run                       # compile and open
 dotnet run -c Release            # the smaller, faster one
 ```
 
