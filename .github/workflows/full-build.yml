@@ -168,7 +168,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config
 
-      - name: Verify the Spectre libraries (Windows)
+      - name: Verify the Spectre libraries and point the build at VS (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -176,12 +176,18 @@ jobs:
           vsw="${vsroot}/Installer/vswhere.exe"
           spectre=Microsoft.VisualStudio.Component.VC.Runtimes
           spectre="${spectre}.x86.x64.Spectre"
-          if ! "$vsw" -latest -products '*' \
-              -requires "${spectre}" \
-              -property installationPath | grep -q .; then
+          installation="$( "$vsw" -latest -products '*' \
+            -requires "${spectre}" \
+            -property installationPath )"
+          if [[ -z "${installation}" ]]; then
             echo "::error::the Spectre-mitigated libraries are missing"
             exit 1
           fi
+          # VS Code's preinstall looks for Visual Studio in hardcoded
+          # year-folder paths, which the runner's layout does not match;
+          # vs2022_install is the override it honours first.
+          echo "vs2022_install=${installation}" >> "$GITHUB_ENV"
+          echo "Visual Studio: ${installation}"
 
       - name: Fetch the pinned source (incremental on a cache hit)
         shell: bash
