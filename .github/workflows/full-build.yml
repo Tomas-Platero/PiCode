@@ -1,12 +1,19 @@
-# Periodic real compilation. The quick check (`pin-check.yml`) only fetches and
-# patches; this workflow runs the full `dev/build.sh` so compile errors the
-# preparation cannot see are caught. It runs nightly and whenever the pin moves
-# (a push that touches `upstream/**`).
+# Periodic real compilation and the release pipeline.
 #
-# The compile runs on Linux (`ubuntu-latest`): the fastest and cheapest runner,
-# and TypeScript compile errors are platform-independent. The Windows-only
-# patch set is still validated on every push by `pin-check.yml`. To compile the
-# shipped Windows target too, add `windows-latest` to the matrix below.
+# The quick check (`pin-check.yml`) only fetches and patches; this workflow
+# runs the full `dev/build.sh` so compile errors the preparation cannot see
+# are caught. It runs on BOTH platforms: Linux validates the pipeline cheaply,
+# and Windows is what the published binary ships from.
+#
+# When it runs:
+#   - nightly, and whenever the pin moves (a push touching upstream/**);
+#   - on demand from Actions;
+#   - on a push of a tag `v*` — and then the packed trees are published as a
+#     release with both binaries attached.
+#
+# GitHub does not allow `paths` and `tags` filters in the same push trigger,
+# so the push trigger fires on every push to the default branch and the tiny
+# `gate` job decides whether the expensive build is warranted.
 name: Full build
 
 on:
@@ -18,22 +25,64 @@ on:
     branches:
       - Master
       - main
-    paths:
-      - "upstream/stable.json"
-      - "upstream/vscodium.json"
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: full-build
   cancel-in-progress: false
 
 jobs:
-  compile:
-    name: full build (linux)
+  gate:
+    # The only job a regular push runs: does this push move the pin? A tag,
+    # the nightly and a manual dispatch always build.
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - name: Decide whether the build is warranted
+        id: decide
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]] \
+             || [[ "${GITHUB_EVENT_NAME}" != "push" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git init -q .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch -q origin "${GITHUB_SHA}"
+          before="${GITHUB_EVENT_BEFORE}"
+          zero=0000000000000000000000000000000000000000
+          if [[ -z "${before}" || "${before}" == "${zero}" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch -q origin "${before}" 2>/dev/null || true
+          if git diff --name-only "${before}" "${GITHUB_SHA}" \
+              -- upstream/ | grep -q .; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: full build (${{ matrix.os }})
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            timeout: 180
+          - os: windows-latest
+            timeout: 240
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -43,31 +92,44 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # A full VS Code build writes several GB; the stock runner needs room.
+      - name: Provide jq (Windows only; Linux runners ship it)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v jq > /dev/null 2>&1; then
+            choco install jq -y --no-progress
+          fi
+
+      # A full VS Code build writes several GB; the Linux runner needs room.
       - name: Free disk space
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android
           sudo rm -rf /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo apt-get clean
 
-      - name: Read the pinned commit
-        id: pin
+      - name: Read the product and pin versions
+        id: versions
         shell: bash
         run: |
-          jq -r '"commit=" + .commit' upstream/stable.json >> "$GITHUB_OUTPUT"
-
-      - name: Locate the npm cache
-        id: npm
-        shell: bash
-        run: echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+          jq -r '"commit=" + .commit' upstream/stable.json \
+            >> "$GITHUB_OUTPUT"
+          app_version="$( jq -r '.set.version' \
+            distribution/product-delta.json )"
+          echo "version=${app_version}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "pkg_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "pkg_version=${app_version}" >> "$GITHUB_OUTPUT"
+          fi
 
       # The object database is ~320 MB and is keyed by the pinned commit.
       - name: Cache the pinned VS Code source objects
         uses: actions/cache@v6
         with:
           path: picode-source/.git
-          key: vscode-git-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          key: vscode-git-${{ runner.os }}-${{ steps.versions.outputs.commit }}
           restore-keys: |
             vscode-git-${{ runner.os }}-
 
@@ -77,7 +139,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: picode-source/node_modules
-          key: vscode-deps-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          key: vscode-deps-${{ runner.os }}-${{ steps.versions.outputs.commit }}
           restore-keys: |
             vscode-deps-${{ runner.os }}-
 
@@ -85,18 +147,34 @@ jobs:
         uses: actions/cache@v6
         with:
           path: |
-            ${{ steps.npm.outputs.dir }}
+            $(npm config get cache)
             ~/.cache/node-gyp
-          key: npm-cache-${{ runner.os }}-${{ steps.pin.outputs.commit }}
+          key: npm-cache-${{ runner.os }}-${{ steps.versions.outputs.commit }}
           restore-keys: |
             npm-cache-${{ runner.os }}-
 
       - name: Install the native build dependencies (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config
+
+      - name: Verify the Spectre libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          vsroot="/c/Program Files (x86)/Microsoft Visual Studio"
+          vsw="${vsroot}/Installer/vswhere.exe"
+          spectre=Microsoft.VisualStudio.Component.VC.Runtimes
+          spectre="${spectre}.x86.x64.Spectre"
+          if ! "$vsw" -latest -products '*' \
+              -requires "${spectre}" \
+              -property installationPath | grep -q .; then
+            echo "::error::the Spectre-mitigated libraries are missing"
+            exit 1
+          fi
 
       - name: Fetch the pinned source (incremental on a cache hit)
         shell: bash
@@ -110,12 +188,65 @@ jobs:
           PICODE_FAST_INSTALL: "yes"
         run: ./dev/build.sh
 
-      - name: Verify the packed tree exists
+      - name: Package the portable tree
+        id: package
         shell: bash
+        env:
+          PKG_VERSION: ${{ steps.versions.outputs.pkg_version }}
         run: |
-          pack_dir="$( ls -d PiCode-linux-* 2>/dev/null | head -1 )"
-          if [[ -z "${pack_dir}" ]]; then
-            echo "::error::dev/build.sh left no PiCode-linux-* tree"
-            exit 1
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            pack_dir="$( ls -d PiCode-linux-* | head -1 )"
+            tar -czf "PiCode-${PKG_VERSION}-linux-x64.tar.gz" \
+              "${pack_dir}"
+            sha256sum "PiCode-${PKG_VERSION}-linux-x64.tar.gz" \
+              >> SHA256SUMS.txt
+            echo "artifact=PiCode-${PKG_VERSION}-linux" \
+              >> "$GITHUB_OUTPUT"
+          else
+            pack_dir="$( ls -d PiCode-win32-* | head -1 )"
+            powershell -NoProfile -Command \
+              "Compress-Archive -Path '${pack_dir}' \
+              -DestinationPath 'PiCode-${PKG_VERSION}-win-x64.zip' -Force"
+            sha256sum "PiCode-${PKG_VERSION}-win-x64.zip" \
+              >> SHA256SUMS.txt
+            echo "artifact=PiCode-${PKG_VERSION}-win" >> "$GITHUB_OUTPUT"
           fi
-          echo "packed tree: ${pack_dir}"
+
+      - name: Upload the packed binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: |
+            PiCode-*-linux-x64.tar.gz
+            PiCode-*-win-x64.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    # Only a tag push publishes: the nightly and the pin-move builds keep
+    # their artifacts for 14 days, enough to pull a binary by hand.
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download both binaries
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat dist/SHA256SUMS.txt
+          gh release create "${TAG}" dist/PiCode-* \
+            --title "PiCode ${TAG#v} — full binaries" \
+            --notes "Portable build from the pinned VS Code source (see
+          upstream/stable.json). Unzip (Windows) or untar (Linux) and run
+          the binary; a data/ folder is created next to it on first run.
+          SHA256SUMS.txt carries the checksums of both archives."

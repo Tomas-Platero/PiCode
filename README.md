@@ -255,8 +255,10 @@ fetched into `picode-source/`, which git ignores.
   product layer, no compile — on **Linux and Windows**. If it goes red, a patch no longer
   applies to the pinned VS Code commit, and the log names it: the repair process is in
   [`docs/howto-build.md`](docs/howto-build.md).
-- **Full build** (nightly, and whenever the pin moves) compiles the real thing on Linux, so
-  compile errors surface even when the patches compose.
+- **Full build** (nightly, whenever the pin moves, and on a `v*` tag) compiles
+  the real thing on **Linux and Windows** — compile errors surface even when
+  the patches compose, and a tag publishes a release with both portable
+  binaries.
 
 The two badges at the top of this file are those workflows, live. The watch over the pin
 itself — version bumps, security advisories, the cache map — is maintainer territory and is

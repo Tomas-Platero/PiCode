@@ -72,22 +72,30 @@ GitHub no dispara los workflows de `pull_request` cuando el PR lo abre el
 documentada que el `GITHUB_TOKEN` sí puede disparar. Ese run escribe el estado
 `pin-check (phases 1-5)` sobre el commit de la PR.
 
-## 3. Build completo periódico — `.github/workflows/full-build.yml`
+## 3. Build completo y releases — `.github/workflows/full-build.yml`
 
-**Cuándo:** cada noche a las 03:41 UTC; también cuando un `push` mueve
-`upstream/stable.json` o `upstream/vscodium.json` (es decir, al fusionar la PR
-del punto 2), y a mano desde *Actions*.
+**Cuándo:** cada noche a las 03:41 UTC; cuando un `push` mueve `upstream/stable.json` o
+`upstream/vscodium.json`; a mano desde *Actions*; y al empujar un tag `v*`.
 
-**Qué hace:** `./dev/build.sh` completo (compilación y empaquetado reales), y
-comprueba que quedó el árbol empaquetado. Es el que pilla errores de
-compilación que las fases 1-5 no ven.
+**Qué hace:** `./dev/build.sh` completo (compilación y empaquetado reales) en
+**Linux y en Windows** — es el que pilla errores de compilación que las fases 1-5 no
+ven, y el que produce los binarios. Cada ejecución sube los dos árboles empaquetados
+como artefactos (14 días de retención, con `SHA256SUMS.txt`).
 
-**Corre en Linux (`ubuntu-latest`).** Es el runner más rápido y barato, y los
-errores de compilación de TypeScript no dependen del sistema; el juego de
-patches de Windows ya lo valida el check rápido en cada push. Para compilar
-también el objetivo de Windows que se publica, basta añadir `windows-latest` a
-la matriz (a ~2× de coste). Efecto secundario útil: es la primera build real de
-Linux que el proyecto tiene pendiente.
+**Releases:** al empujar un tag `v*` (por ejemplo `git tag v0.1.2 && git push origin
+v0.1.2`), los dos binarios portables se publican como release con su nombre
+canónico — `PiCode-<versión>-win-x64.zip` y `PiCode-<versión>-linux-x64.tar.gz` — y
+sus checksums. El nombre del fichero sale del tag (sin la `v`); los builds que no
+son de tag usan la versión del producto (`distribution/product-delta.json`).
+
+**Corre en ambos sistemas.** Linux es el más rápido y barato; Windows es el sistema
+que se publica, así que compila también en CI. El runner de GitHub trae las
+librerías Spectre de Visual Studio; el workflow lo verifica con `vswhere` y falla
+con un mensaje claro si no estuvieran.
+
+Nota técnica: GitHub no permite combinar filtros `paths` y `tags` en un mismo
+disparador `push`, así que el push normal ejecuta un job mínimo (`gate`) que
+decide si el push movió el pin; solo entonces arranca la matriz de compilación.
 
 ## Caché
 
