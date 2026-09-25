@@ -1,0 +1,1883 @@
+diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution.ts
+index acf75a6e..3c397cdd 100644
+--- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution.ts
++++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.contribution.ts
+@@ -314,13 +314,9 @@ configurationRegistry.registerConfiguration({
+ 			default: true,
+ 			description: localize('workbench.welcomePage.walkthroughs.openOnInstall', "When enabled, an extension's walkthrough will open upon install of the extension.")
+ 		},
+-		'workbench.welcomePage.extraAnnouncements': {
+-			scope: ConfigurationScope.MACHINE,
+-			type: 'boolean',
+-			default: true,
+-			description: localize('workbench.welcomePage.extraAnnouncements', "When enabled, the get started page loads additional announcements from PiCode's repository."),
+-			tags: ['usesOnlineServices']
+-		},
++		// `workbench.welcomePage.extraAnnouncements` is deliberately absent: the welcome page no
++		// longer carries announcements at all, and a setting that changes nothing is a surface
++		// that lies.
+ 		'workbench.startupEditor': {
+ 			'scope': ConfigurationScope.RESOURCE,
+ 			'type': 'string',
+diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
+index e97fa180..c278ab2b 100644
+--- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
++++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
+@@ -15,9 +15,7 @@ import { coalesce, equals } from '../../../../base/common/arrays.js';
+ import { Delayer, Throttler } from '../../../../base/common/async.js';
+ import { CancellationToken } from '../../../../base/common/cancellation.js';
+ import { Codicon } from '../../../../base/common/codicons.js';
+-import { onUnexpectedError } from '../../../../base/common/errors.js';
+ import { KeyCode } from '../../../../base/common/keyCodes.js';
+-import { splitRecentLabel } from '../../../../base/common/labels.js';
+ import { DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+ import { ILink, LinkedText } from '../../../../base/common/linkedText.js';
+ import { parse } from '../../../../base/common/marshalling.js';
+@@ -34,24 +32,20 @@ import { localize } from '../../../../nls.js';
+ import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
+ import { ICommandService } from '../../../../platform/commands/common/commands.js';
+ import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+-import { ContextKeyExpr, ContextKeyExpression, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
++import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+ import { IFileService } from '../../../../platform/files/common/files.js';
++import { IExtensionResourceLoaderService } from '../../../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
+ import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+ import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+-import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
+ import { INotificationService } from '../../../../platform/notification/common/notification.js';
+ import { Link } from '../../../../platform/opener/browser/link.js';
+ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+ import { IProductService } from '../../../../platform/product/common/productService.js';
+-import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
+ import { IStorageService, StorageScope, StorageTarget, WillSaveStateReason } from '../../../../platform/storage/common/storage.js';
+-import { firstSessionDateStorageKey, ITelemetryService, TelemetryLevel } from '../../../../platform/telemetry/common/telemetry.js';
++import { ITelemetryService, TelemetryLevel } from '../../../../platform/telemetry/common/telemetry.js';
+ import { getTelemetryLevel } from '../../../../platform/telemetry/common/telemetryUtils.js';
+ import { defaultButtonStyles, defaultKeybindingLabelStyles, defaultToggleStyles } from '../../../../platform/theme/browser/defaultStyles.js';
+-import { IWindowOpenable } from '../../../../platform/window/common/window.js';
+ import { IWorkspaceContextService, UNKNOWN_EMPTY_WINDOW_WORKSPACE } from '../../../../platform/workspace/common/workspace.js';
+-import { IRecentFolder, IRecentWorkspace, IRecentlyOpened, IWorkspacesService, isRecentFolder, isRecentWorkspace } from '../../../../platform/workspaces/common/workspaces.js';
+-import { OpenRecentAction } from '../../../browser/actions/windowActions.js';
+ import { OpenFileFolderAction, OpenFolderAction, OpenFolderViaWorkspaceAction } from '../../../browser/actions/workspaceActions.js';
+ import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
+ import { WorkbenchStateContext } from '../../../common/contextkeys.js';
+@@ -59,16 +53,15 @@ import { IEditorOpenContext, IEditorSerializer } from '../../../common/editor.js
+ import { IWebviewElement, IWebviewService } from '../../webview/browser/webview.js';
+ import './gettingStartedColors.js';
+ import { GettingStartedDetailsRenderer } from './gettingStartedDetailsRenderer.js';
++import { PiCodeSetup, renderPiCodeSetup } from './picodeSetup.js';
+ import { gettingStartedCheckedCodicon, gettingStartedUncheckedCodicon } from './gettingStartedIcons.js';
+ import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
+ import { IResolvedWalkthrough, IResolvedWalkthroughStep, IWalkthroughsService, hiddenEntriesConfigurationKey, parseDescription } from './gettingStartedService.js';
+ import { RestoreWalkthroughsConfigurationValue, restoreWalkthroughsConfigurationKey } from './startupPage.js';
+-import { startEntries } from '../common/gettingStartedContent.js';
+ import { GroupsOrder, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../../services/editor/common/editorGroupsService.js';
+ import { IExtensionService } from '../../../services/extensions/common/extensions.js';
+ import { IHostService } from '../../../services/host/browser/host.js';
+ import { IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
+-import { GettingStartedIndexList } from './gettingStartedList.js';
+ import { canShowAgentsBanner, createAgentsBanner } from '../../chat/browser/agentSessions/agentSessionsBanner.js';
+ import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
+ import { AccessibilityVerbositySettingId } from '../../accessibility/browser/accessibilityConfiguration.js';
+@@ -79,29 +72,8 @@ import { ScrollbarVisibility } from '../../../../base/common/scrollable.js';
+ const SLIDE_TRANSITION_TIME_MS = 250;
+ const configurationKey = 'workbench.startupEditor';
+ 
+-export const allWalkthroughsHiddenContext = new RawContextKey<boolean>('allWalkthroughsHidden', false);
+ export const inWelcomeContext = new RawContextKey<boolean>('inWelcome', false);
+ 
+-export interface IWelcomePageStartEntry {
+-	id: string;
+-	title: string;
+-	description: string;
+-	command: string;
+-	order: number;
+-	icon: { type: 'icon'; icon: ThemeIcon };
+-	when: ContextKeyExpression;
+-}
+-
+-const parsedStartEntries: IWelcomePageStartEntry[] = startEntries.map((e, i) => ({
+-	command: e.content.command,
+-	description: e.description,
+-	icon: { type: 'icon', icon: e.icon },
+-	id: e.id,
+-	order: i,
+-	title: e.title,
+-	when: ContextKeyExpr.deserialize(e.when) ?? ContextKeyExpr.true()
+-}));
+-
+ type GettingStartedActionClassification = {
+ 	command: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'The command being executed on the getting started page.' };
+ 	walkthroughId: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'The walkthrough which the command is in' };
+@@ -116,12 +88,70 @@ type GettingStartedActionEvent = {
+ 	argument: string | undefined;
+ };
+ 
+-type RecentEntry = (IRecentFolder | IRecentWorkspace) & { id: string };
+-type AnnouncementEntry = { id: string, title: string, url: string };
+-
+ const REDUCED_MOTION_KEY = 'workbench.welcomePage.preferReducedMotion';
+ 
+-const BUILTIN_ANNOUNCEMENTS: AnnouncementEntry[] = [/* BUILTIN_ANNOUNCEMENTS */];
++/** The setup facts the connector answers with (`picode.setup.getState`). */
++/** The sentence an error carries, whatever threw it. */
++/**
++ * PiCode's mark, drawn as strokes, in the colors of the theme.
++ *
++ * Inlined in the DOM rather than loaded as an image for the same reason the editor's empty
++ * watermark is a stroke drawing: a plated logo at this size reads as a dark block, and an
++ * image with a fixed stroke color cannot follow the theme. The body strokes are
++ * `currentColor` (the theme's foreground), and the accents keep PiCode's own blue on every
++ * theme. No background: only the silhouette is drawn.
++ */
++function buildProductLogo(): HTMLElement {
++	const SVG_NS = 'http://www.w3.org/2000/svg';
++	const ACCENT = '#3B9BFF';
++
++	const svg = document.createElementNS(SVG_NS, 'svg');
++	svg.setAttribute('viewBox', '0 0 1024 1024');
++	svg.setAttribute('aria-hidden', 'true');
++	svg.classList.add('product-logo-svg');
++
++	const group = document.createElementNS(SVG_NS, 'g');
++	group.setAttribute('transform', 'translate(0,92)');
++	group.setAttribute('fill', 'none');
++	group.setAttribute('stroke', 'currentColor');
++	group.setAttribute('stroke-width', '84');
++	group.setAttribute('stroke-linecap', 'round');
++	group.setAttribute('stroke-linejoin', 'round');
++
++	const path = (d: string, width: number, color: string) => {
++		const p = document.createElementNS(SVG_NS, 'path');
++		p.setAttribute('d', d);
++		p.setAttribute('stroke-width', String(width));
++		if (color !== 'currentColor') { p.setAttribute('stroke', color); }
++		group.appendChild(p);
++	};
++	const dot = (cx: number, cy: number, r: number, color: string) => {
++		const c = document.createElementNS(SVG_NS, 'circle');
++		c.setAttribute('cx', String(cx));
++		c.setAttribute('cy', String(cy));
++		c.setAttribute('r', String(r));
++		c.setAttribute('fill', color);
++		// The group carries the stroke, and the dots of the mark are fills: without an explicit
++		// `none` they would inherit the group's 84-unit stroke and render as blobs (the eyes
++		// became the whole face). The source SVG says the same on every circle.
++		c.setAttribute('stroke', 'none');
++		group.appendChild(c);
++	};
++
++	path('M512 200 V152', 60, 'currentColor');
++	dot(512, 112, 48, ACCENT);
++	path('M360 640 V262 Q360 200 422 200 H602 Q664 200 664 262 V640', 84, 'currentColor');
++	path('M268 432 H756', 84, 'currentColor');
++	dot(452, 316, 34, ACCENT);
++	dot(572, 316, 34, ACCENT);
++	path('M424 590 L360 660 L424 730', 84, ACCENT);
++	path('M600 590 L664 660 L600 730', 84, ACCENT);
++
++	svg.appendChild(group);
++	const container = $('div.product-logo');
++	container.appendChild(svg);
++	return container;
++}
+ 
+ export class GettingStartedPage extends EditorPane {
+ 
+@@ -136,7 +166,6 @@ export class GettingStartedPage extends EditorPane {
+ 
+ 	// Ensure that the these are initialized before use.
+ 	// Currently initialized before use in buildCategoriesSlide and scrollToCategory
+-	private recentlyOpened!: Promise<IRecentlyOpened>;
+ 	private gettingStartedCategories!: IResolvedWalkthrough[];
+ 
+ 	private currentWalkthrough: IResolvedWalkthrough | undefined;
+@@ -153,12 +182,6 @@ export class GettingStartedPage extends EditorPane {
+ 
+ 	private contextService: IContextKeyService;
+ 
+-	private readonly recentlyOpenedList = this._register(new MutableDisposable<GettingStartedIndexList<RecentEntry>>());
+-	private readonly startList = this._register(new MutableDisposable<GettingStartedIndexList<IWelcomePageStartEntry>>());
+-	private readonly gettingStartedList = this._register(new MutableDisposable<GettingStartedIndexList<IResolvedWalkthrough>>());
+-	private announcementList?: GettingStartedIndexList<AnnouncementEntry>;
+-	private announcementData?: AnnouncementEntry[];
+-
+ 	private stepsSlide!: HTMLElement;
+ 	private categoriesSlide!: HTMLElement;
+ 	private stepsContent!: HTMLElement;
+@@ -170,7 +193,11 @@ export class GettingStartedPage extends EditorPane {
+ 	private detailsRenderer: GettingStartedDetailsRenderer;
+ 
+ 	private readonly categoriesSlideDisposables: DisposableStore;
+-	private showFeaturedWalkthrough = true;
++
++	/** The container the setup section renders into, kept so an action can re-render it. */
++	private setupContainer: HTMLElement | undefined;
++	/** The setup renderer's handle; disposed before the section is rendered again. */
++	private setupRenderer: PiCodeSetup | undefined;
+ 
+ 	get editorInput(): GettingStartedInput | undefined {
+ 		return this._input as GettingStartedInput | undefined;
+@@ -194,15 +221,13 @@ export class GettingStartedPage extends EditorPane {
+ 		@INotificationService private readonly notificationService: INotificationService,
+ 		@IEditorGroupsService private readonly groupsService: IEditorGroupsService,
+ 		@IContextKeyService contextService: IContextKeyService,
+-		@IQuickInputService private quickInputService: IQuickInputService,
+-		@IWorkspacesService private readonly workspacesService: IWorkspacesService,
+-		@ILabelService private readonly labelService: ILabelService,
+ 		@IHostService private readonly hostService: IHostService,
+ 		@IWebviewService private readonly webviewService: IWebviewService,
+ 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
+ 		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
+ 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
+ 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
++		@IExtensionResourceLoaderService private readonly extensionResourceLoaderService: IExtensionResourceLoaderService,
+ 	) {
+ 
+ 		super(GettingStartedPage.ID, group, telemetryService, themeService, storageService);
+@@ -246,12 +271,6 @@ export class GettingStartedPage extends EditorPane {
+ 		this._register(this.gettingStartedService.onDidAddWalkthrough(rerender));
+ 		this._register(this.gettingStartedService.onDidRemoveWalkthrough(rerender));
+ 
+-		this.recentlyOpened = this.workspacesService.getRecentlyOpened();
+-		this._register(workspacesService.onDidChangeRecentlyOpened(() => {
+-			this.recentlyOpened = workspacesService.getRecentlyOpened();
+-			this.refreshRecentlyOpened();
+-		}));
+-
+ 		this._register(this.gettingStartedService.onDidChangeWalkthrough(category => {
+ 			const ourCategory = this.gettingStartedCategories.find(c => c.id === category.id);
+ 			if (!ourCategory) { return; }
+@@ -442,14 +461,6 @@ export class GettingStartedPage extends EditorPane {
+ 				this.runSkip();
+ 				break;
+ 			}
+-			case 'showMoreRecents': {
+-				this.commandService.executeCommand(OpenRecentAction.ID);
+-				break;
+-			}
+-			case 'seeAllWalkthroughs': {
+-				await this.openWalkthroughSelector();
+-				break;
+-			}
+ 			case 'openFolder': {
+ 				if (this.contextService.contextMatchesRules(ContextKeyExpr.and(WorkbenchStateContext.isEqualTo('workspace')))) {
+ 					this.commandService.executeCommand(OpenFolderViaWorkspaceAction.ID);
+@@ -464,16 +475,6 @@ export class GettingStartedPage extends EditorPane {
+ 				this.gettingStartedService.markWalkthroughOpened(argument);
+ 				break;
+ 			}
+-			case 'selectStartEntry': {
+-				const selected = startEntries.find(e => e.id === argument);
+-				if (selected) {
+-					this.telemetryService.publicLog2<GettingStartedActionEvent, GettingStartedActionClassification>('gettingStarted.ActionExecuted', { command: 'selectStartEntry', argument, walkthroughId: this.currentWalkthrough?.id });
+-					this.runStepCommand(selected.content.command);
+-				} else {
+-					throw Error('could not find start entry with id: ' + argument);
+-				}
+-				break;
+-			}
+ 			case 'hideCategory': {
+ 				this.hideCategory(argument);
+ 				break;
+@@ -516,7 +517,6 @@ export class GettingStartedPage extends EditorPane {
+ 		const selectedCategory = this.gettingStartedCategories.find(category => category.id === categoryId);
+ 		if (!selectedCategory) { throw Error('Could not find category with ID ' + categoryId); }
+ 		this.setHiddenCategories([...this.getHiddenCategories().add(categoryId)]);
+-		this.gettingStartedList.value?.rerender();
+ 	}
+ 
+ 	private markAllStepsComplete() {
+@@ -542,20 +542,6 @@ export class GettingStartedPage extends EditorPane {
+ 		}
+ 	}
+ 
+-	private async openWalkthroughSelector() {
+-		const selection = await this.quickInputService.pick(this.gettingStartedCategories
+-			.filter(c => this.contextService.contextMatchesRules(c.when))
+-			.map(x => ({
+-				id: x.id,
+-				label: x.title,
+-				detail: x.description,
+-				description: x.source,
+-			})), { canPickMany: false, matchOnDescription: true, matchOnDetail: true, title: localize('pickWalkthroughs', "Open Walkthrough...") });
+-		if (selection) {
+-			this.runDispatchCommand('selectCategory', selection.id);
+-		}
+-	}
+-
+ 	private getHiddenCategories(): Set<string> {
+ 		return new Set(JSON.parse(this.storageService.get(hiddenEntriesConfigurationKey, StorageScope.PROFILE, '[]')));
+ 	}
+@@ -930,17 +916,21 @@ export class GettingStartedPage extends EditorPane {
+ 		}));
+ 
+ 		const header = $('.header', {},
++			buildProductLogo(),
+ 			$('h1.product-name.caption', {}, this.productService.nameLong),
+ 			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "Editing evolved"))
+ 		);
+ 
+-		const leftColumn = $('.categories-column.categories-column-left', {},);
+-		const rightColumn = $('.categories-column.categories-column-right', {},);
+-
+-		const startList = this.buildStartList();
+-		const recentList = this.buildRecentlyOpenedList();
+-		const gettingStartedList = this.buildGettingStartedWalkthroughsList();
+-		const announcementList = await this.buildAnnouncementList();
++		// PiCode's welcome is its own, not the inherited start page: the agent is built in, so
++		// the page carries the setup itself — the same window, no popups — and the way into a folder.
++		const setupContainer = this.setupContainer = $('div.setup-section');
++		const welcomeColumn = $('.categories-column.categories-column-left', {},
++			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, Gentle AI, your providers and your themes are all part of it. Set up once and start working — you can change any of this later.")),
++			setupContainer,
++			$('ul.welcome-actions', {},
++				this.welcomeAction('openFolder', 'folder', localize('welcome.openFolder', "Open Folder"), undefined),
++			)
++		);
+ 
+ 		const footerChildren: HTMLElement[] = [];
+ 		if (canShowAgentsBanner(this.chatEntitlementService)) {
+@@ -962,38 +952,12 @@ export class GettingStartedPage extends EditorPane {
+ 
+ 		const footer = $('.footer', {}, ...footerChildren);
+ 
+-		const layoutLists = () => {
+-			if (gettingStartedList.itemCount) {
+-				this.container.classList.remove('noWalkthroughs');
+-				reset(rightColumn, gettingStartedList.getDomElement(), announcementList.getDomElement());
+-			}
+-			else {
+-				this.container.classList.add('noWalkthroughs');
+-				reset(rightColumn, announcementList.getDomElement());
+-			}
+-			setTimeout(() => this.categoriesPageScrollbar?.scanDomNode(), 50);
+-			layoutRecentList();
+-		};
+-
+-		const layoutRecentList = () => {
+-			if (this.container.classList.contains('noWalkthroughs')) {
+-				recentList.setLimit(10);
+-				reset(leftColumn, startList.getDomElement());
+-				reset(rightColumn, recentList.getDomElement());
+-			} else {
+-				recentList.setLimit(5);
+-				reset(leftColumn, startList.getDomElement(), recentList.getDomElement());
+-			}
+-		};
+-
+-		gettingStartedList.onDidChange(layoutLists);
+-		layoutLists();
+-
+-		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, header, leftColumn, rightColumn, footer,));
++		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, header, welcomeColumn, footer,));
+ 		this.categoriesPageScrollbar?.scanDomNode();
+ 
+ 		this.updateCategoryProgress();
+ 		this.registerDispatchListeners();
++		void this.renderSetupSection();
+ 
+ 		const editorInput = this.editorInput;
+ 		if (editorInput?.selectedCategory) {
+@@ -1019,307 +983,41 @@ export class GettingStartedPage extends EditorPane {
+ 			const telemetryNotice = $('p.telemetry-notice');
+ 			this.buildTelemetryFooter(telemetryNotice);
+ 			footer.appendChild(telemetryNotice);
+-		} else if (!this.productService.openToWelcomeMainPage && this.showFeaturedWalkthrough && this.storageService.isNew(StorageScope.APPLICATION) && !this.configurationService.getValue<boolean>('workbench.welcomePage.experimentalOnboarding')) {
+-			const firstSessionDateString = this.storageService.get(firstSessionDateStorageKey, StorageScope.APPLICATION) || new Date().toUTCString();
+-			const daysSinceFirstSession = ((+new Date()) - (+new Date(firstSessionDateString))) / 1000 / 60 / 60 / 24;
+-			const fistContentBehaviour = daysSinceFirstSession < 1 ? 'openToFirstCategory' : 'index';
+-
+-			if (fistContentBehaviour === 'openToFirstCategory') {
+-				const first = this.gettingStartedCategories.filter(c => !c.when || this.contextService.contextMatchesRules(c.when))[0];
+-				if (first && this.editorInput) {
+-					this.currentWalkthrough = first;
+-					this.editorInput.selectedCategory = this.currentWalkthrough?.id;
+-					this.editorInput.walkthroughPageTitle = this.currentWalkthrough.walkthroughPageTitle;
+-					this.buildCategorySlide(this.editorInput.selectedCategory, undefined, preserveFocus);
+-					this.setSlide('details', true /* firstLaunch */);
+-					return;
+-				}
+-			}
+ 		}
+ 
+ 		this.setSlide('categories');
+ 	}
+ 
+-	private buildRecentlyOpenedList(): GettingStartedIndexList<RecentEntry> {
+-		const renderRecent = (recent: RecentEntry) => {
+-			let fullPath: string;
+-			let windowOpenable: IWindowOpenable;
+-			let resourceUri: URI;
+-			if (isRecentFolder(recent)) {
+-				windowOpenable = { folderUri: recent.folderUri };
+-				fullPath = recent.label || this.labelService.getWorkspaceLabel(recent.folderUri, { verbose: Verbosity.LONG });
+-				resourceUri = recent.folderUri;
+-			} else {
+-				fullPath = recent.label || this.labelService.getWorkspaceLabel(recent.workspace, { verbose: Verbosity.LONG });
+-				windowOpenable = { workspaceUri: recent.workspace.configPath };
+-				resourceUri = recent.workspace.configPath;
+-			}
+-
+-			const { name, parentPath } = splitRecentLabel(fullPath);
+-
+-			const li = $('li');
+-			const link = $('button.button-link');
+-
+-			link.innerText = name;
+-			link.title = fullPath;
+-			link.setAttribute('aria-label', localize('welcomePage.openFolderWithPath', "Open folder {0} with path {1}", name, parentPath));
+-			link.addEventListener('click', e => {
+-				this.telemetryService.publicLog2<GettingStartedActionEvent, GettingStartedActionClassification>('gettingStarted.ActionExecuted', { command: 'openRecent', argument: undefined, walkthroughId: this.currentWalkthrough?.id });
+-				this.hostService.openWindow([windowOpenable], {
+-					forceNewWindow: e.ctrlKey || e.metaKey,
+-					remoteAuthority: recent.remoteAuthority || null // local window if remoteAuthority is not set or can not be deducted from the openable
+-				});
+-				e.preventDefault();
+-				e.stopPropagation();
+-			});
+-			li.appendChild(link);
+-
+-			const span = $('span');
+-			span.classList.add('path');
+-			span.classList.add('detail');
+-			span.innerText = parentPath;
+-			span.title = fullPath;
+-			li.appendChild(span);
+-
+-			const deleteButton = $('a.codicon.codicon-close.hide-category-button.recently-opened-delete-button', {
+-				'tabindex': 0,
+-				'role': 'button',
+-				'title': localize('welcomePage.removeRecent', "Remove from Recently Opened"),
+-				'aria-label': localize('welcomePage.removeRecentAriaLabel', "Remove {0} from Recently Opened", name),
+-			});
+-			const handleDelete = async (e: Event) => {
+-				e.preventDefault();
+-				e.stopPropagation();
+-				await this.workspacesService.removeRecentlyOpened([resourceUri]);
+-			};
+-			deleteButton.addEventListener('click', handleDelete);
+-			deleteButton.addEventListener('keydown', async e => {
+-				const event = new StandardKeyboardEvent(e);
+-				if (event.keyCode === KeyCode.Enter || event.keyCode === KeyCode.Space) {
+-					await handleDelete(e);
+-				}
+-			});
+-			li.appendChild(deleteButton);
+-
+-			return li;
+-		};
+-
+-		const recentlyOpenedList = this.recentlyOpenedList.value = new GettingStartedIndexList(
+-			{
+-				title: localize('recent', "Recent"),
+-				klass: 'recently-opened',
+-				limit: 5,
+-				empty: $('.empty-recent', {},
+-					localize('noRecents', "You have no recent folders,"),
+-					$('button.button-link', { 'x-dispatch': 'openFolder' }, localize('openFolder', "open a folder")),
+-					localize('toStart', "to start.")),
+-
+-				more: $('.more', {},
+-					$('button.button-link',
+-						{
+-							'x-dispatch': 'showMoreRecents',
+-							title: localize('show more recents', "Show All Recent Folders {0}", this.getKeybindingLabel(OpenRecentAction.ID))
+-						}, localize('showAll', "More..."))),
+-				renderElement: renderRecent,
+-				contextService: this.contextService
+-			});
+-
+-		recentlyOpenedList.onDidChange(() => this.registerDispatchListeners());
+-		this.recentlyOpened.then(({ workspaces }) => {
+-			const workspacesWithID = this.filterRecentlyOpened(workspaces);
+-
+-			const updateEntries = () => {
+-				recentlyOpenedList.setEntries(workspacesWithID);
+-			};
+-
+-			updateEntries();
+-			recentlyOpenedList.register(this.labelService.onDidChangeFormatters(() => updateEntries()));
+-		}).catch(onUnexpectedError);
+-
+-		return recentlyOpenedList;
+-	}
+-
+-	private filterRecentlyOpened(workspaces: (IRecentFolder | IRecentWorkspace)[]): RecentEntry[] {
+-		return workspaces
+-			.filter(recent => !this.workspaceContextService.isCurrentWorkspace(isRecentWorkspace(recent) ? recent.workspace : recent.folderUri))
+-			.map(recent => ({ ...recent, id: isRecentWorkspace(recent) ? recent.workspace.id : recent.folderUri.toString() }));
+-	}
+-
+-	private refreshRecentlyOpened(): void {
+-		if (!this.recentlyOpenedList.value) {
+-			return;
+-		}
+-
+-		this.recentlyOpened.then(({ workspaces }) => {
+-			const workspacesWithID = this.filterRecentlyOpened(workspaces);
+-			this.recentlyOpenedList.value?.setEntries(workspacesWithID);
+-		}).catch(onUnexpectedError);
+-	}
+-
+-	private async buildAnnouncementList(): Promise<GettingStartedIndexList<AnnouncementEntry>> {
+-		const renderAnnouncement = (announcement: AnnouncementEntry) => {
+-			const { title, url } = announcement;
+-			const li = $('li');
+-
+-			const anchor: HTMLLinkElement = $('a');
+-			anchor.href = url;
+-			anchor.innerText = title;
+-			anchor.target = '_blank';
+-			li.appendChild(anchor);
+-
+-			return li;
+-		};
+-
+-		if (this.announcementList) { this.announcementList.dispose(); }
+-
+-		const announcementList = this.announcementList = new GettingStartedIndexList({
+-			title: localize('announcements', "PiCode Announcements"),
+-			klass: 'announcements',
+-			limit: 5,
+-			empty: $('.empty-recent', {}, localize('noAnnouncements', "There are no current announcements.")),
+-			renderElement: renderAnnouncement,
+-			contextService: this.contextService
+-		});
+-
+-		if (!this.announcementData) {
+-			const showExtras = this.configurationService.getValue<boolean>('workbench.welcomePage.extraAnnouncements');
+-
+-			if (showExtras) {
+-				const branch = this.productService.quality === 'insider' ? 'insider' : 'master';
+-				await fetch(`https://raw.githubusercontent.com/TomasPlatero/PiCode/${branch}/announcements-extra.json`)
+-					.then(async res => {
+-						if (res.ok) {
+-							var extraAnnouncements = await res.json() as AnnouncementEntry[];
+-
+-							this.announcementData = [...extraAnnouncements, ...BUILTIN_ANNOUNCEMENTS];
+-						} else {
+-							this.announcementData = BUILTIN_ANNOUNCEMENTS;
+-						}
+-					})
+-					.catch(err => {
+-						this.announcementData = BUILTIN_ANNOUNCEMENTS;
+-					});
+-			} else {
+-				this.announcementData = BUILTIN_ANNOUNCEMENTS;
+-			}
++	/** One row of the welcome column: what it does, and one line saying what it is. */
++	private welcomeAction(dispatch: string, icon: string, label: string, detail: string | undefined): HTMLElement {
++		const text = $('.welcome-action-text', {}, $('span.welcome-action-label', {}, label));
++		if (detail !== undefined) {
++			text.appendChild($('span.welcome-action-detail', {}, detail));
+ 		}
+-
+-		announcementList.setEntries(this.announcementData);
+-
+-		return announcementList;
+-	}
+-
+-	private buildStartList(): GettingStartedIndexList<IWelcomePageStartEntry> {
+-		const renderStartEntry = (entry: IWelcomePageStartEntry): HTMLElement =>
+-			$('li',
+-				{}, $('button.button-link',
+-					{
+-						'x-dispatch': 'selectStartEntry:' + entry.id,
+-						title: entry.description + ' ' + this.getKeybindingLabel(entry.command),
+-					},
+-					this.iconWidgetFor(entry),
+-					$('span', {}, entry.title)));
+-
+-		const startList = this.startList.value = new GettingStartedIndexList(
+-			{
+-				title: localize('start', "Start"),
+-				klass: 'start-container',
+-				limit: 10,
+-				renderElement: renderStartEntry,
+-				rankElement: e => -e.order,
+-				contextService: this.contextService
+-			});
+-
+-		startList.setEntries(parsedStartEntries);
+-		startList.onDidChange(() => this.registerDispatchListeners());
+-		return startList;
++		return $('li', {},
++			$('button.welcome-action.button-link', { 'x-dispatch': dispatch, 'tabindex': 0, 'title': detail ?? label },
++				$(`span.codicon.codicon-${icon}`),
++				text,
++			)
++		);
+ 	}
+ 
+-	private buildGettingStartedWalkthroughsList(): GettingStartedIndexList<IResolvedWalkthrough> {
+-
+-		const renderGetttingStaredWalkthrough = (category: IResolvedWalkthrough): HTMLElement => {
+-
+-			const renderNewBadge = (category.newItems || category.newEntry) && !category.isFeatured;
+-			const newBadge = $('.new-badge', {});
+-			if (category.newEntry) {
+-				reset(newBadge, $('.new-category', {}, localize('new', "New")));
+-			} else if (category.newItems) {
+-				reset(newBadge, $('.new-items', {}, localize({ key: 'newItems', comment: ['Shown when a list of items has changed based on an update from a remote source'] }, "Updated")));
+-			}
+-
+-			const featuredBadge = $('.featured-badge', {});
+-			const descriptionContent = $('.description-content', {},);
+-
+-			if (category.isFeatured && this.showFeaturedWalkthrough) {
+-				reset(featuredBadge, $('.featured', {}, $('span.featured-icon.codicon.codicon-star-full')));
+-				reset(descriptionContent, ...renderLabelWithIcons(category.description));
+-			}
+-
+-			const titleContent = $('h3.category-title.max-lines-3', { 'x-category-title-for': category.id });
+-			reset(titleContent, ...renderLabelWithIcons(category.title));
+-
+-			return $('button.getting-started-category' + (category.isFeatured && this.showFeaturedWalkthrough ? '.featured' : ''),
+-				{
+-					'x-dispatch': 'selectCategory:' + category.id,
+-					'title': category.description
+-				},
+-				featuredBadge,
+-				$('.main-content', {},
+-					this.iconWidgetFor(category),
+-					titleContent,
+-					renderNewBadge ? newBadge : $('.no-badge'),
+-					$('a.codicon.codicon-close.hide-category-button', {
+-						'tabindex': 0,
+-						'x-dispatch': 'hideCategory:' + category.id,
+-						'title': localize('close', "Hide"),
+-						'role': 'button',
+-						'aria-label': localize('closeAriaLabel', "Hide"),
+-					}),
+-				),
+-				descriptionContent,
+-				$('.category-progress', { 'x-data-category-id': category.id, },
+-					$('.progress-bar-outer', { 'role': 'progressbar' },
+-						$('.progress-bar-inner'))));
+-		};
+-
+-
+-
+-		const rankWalkthrough = (e: IResolvedWalkthrough) => {
+-			let rank: number | null = e.order;
+-
+-			if (e.isFeatured) { rank += 7; }
+-			if (e.newEntry) { rank += 3; }
+-			if (e.newItems) { rank += 2; }
+-			if (e.recencyBonus) { rank += 4 * e.recencyBonus; }
+-
+-			if (this.getHiddenCategories().has(e.id)) { rank = null; }
+-			return rank;
+-		};
+-
+-		const gettingStartedList = this.gettingStartedList.value = new GettingStartedIndexList(
+-			{
+-				title: localize('walkthroughs', "Walkthroughs"),
+-				klass: 'getting-started',
+-				limit: 5,
+-				footer: $('span.button-link.see-all-walkthroughs', { 'x-dispatch': 'seeAllWalkthroughs', 'tabindex': 0 }, localize('showAll', "More...")),
+-				renderElement: renderGetttingStaredWalkthrough,
+-				rankElement: rankWalkthrough,
+-				contextService: this.contextService,
+-			});
+-
+-		gettingStartedList.onDidChange(() => {
+-			const hidden = this.getHiddenCategories();
+-			const someWalkthroughsHidden = hidden.size || gettingStartedList.itemCount < this.gettingStartedCategories.filter(c => this.contextService.contextMatchesRules(c.when)).length;
+-			this.container.classList.toggle('someWalkthroughsHidden', !!someWalkthroughsHidden);
+-			this.registerDispatchListeners();
+-			allWalkthroughsHiddenContext.bindTo(this.contextService).set(gettingStartedList.itemCount === 0);
+-			this.updateCategoryProgress();
+-		});
+-
+-		gettingStartedList.setEntries(this.gettingStartedCategories);
+-		allWalkthroughsHiddenContext.bindTo(this.contextService).set(gettingStartedList.itemCount === 0);
+-
+-		return gettingStartedList;
++	/**
++	 * The setup, rendered into the welcome page itself by its own module.
++	 *
++	 * The page owns the container and the lifecycle; `picodeSetup.ts` owns the cards, the
++	 * facts they show and the calls they make. The previous handle is disposed before a new
++	 * one is made, because this slide can be rebuilt at any time.
++	 */
++	private async renderSetupSection(): Promise<void> {
++		if (this.setupContainer === undefined) { return; }
++		this.setupRenderer?.dispose();
++		this.setupRenderer = this._register(renderPiCodeSetup(this.setupContainer, {
++			commandService: this.commandService,
++			themeService: this.themeService,
++			extensionResourceLoaderService: this.extensionResourceLoaderService,
++		}));
++		this.registerDispatchListeners();
+ 	}
+ 
+ 	layout(size: Dimension) {
+@@ -1328,10 +1026,6 @@ export class GettingStartedPage extends EditorPane {
+ 		this.categoriesPageScrollbar?.scanDomNode();
+ 		this.detailsPageScrollbar?.scanDomNode();
+ 
+-		this.startList.value?.layout(size);
+-		this.gettingStartedList.value?.layout(size);
+-		this.recentlyOpenedList.value?.layout(size);
+-
+ 		if (this.editorInput?.selectedStep && this.currentMediaType) {
+ 			this.mediaDisposables.clear();
+ 			this.stepDisposables.clear();
+@@ -1402,12 +1096,6 @@ export class GettingStartedPage extends EditorPane {
+ 		});
+ 	}
+ 
+-	private iconWidgetFor(category: IResolvedWalkthrough | { icon: { type: 'icon'; icon: ThemeIcon } }) {
+-		const widget = category.icon.type === 'icon' ? $(ThemeIcon.asCSSSelector(category.icon.icon)) : $('img.category-icon', { src: category.icon.path });
+-		widget.classList.add('icon-widget');
+-		return widget;
+-	}
+-
+ 	private focusSideEditorGroup() {
+ 		const fullSize = this.groupsService.getPart(this.group).contentDimension;
+ 		if (!fullSize || fullSize.width <= 700 || this.container.classList.contains('width-constrained') || this.container.classList.contains('width-semi-constrained')) { return; }
+@@ -1725,15 +1413,6 @@ export class GettingStartedPage extends EditorPane {
+ 		parent.append(renderedContents.element);
+ 	}
+ 
+-	private getKeybindingLabel(command: string) {
+-		command = command.replace(/^command:/, '');
+-		const label = this.keybindingService.lookupKeybinding(command)?.getLabel();
+-		if (!label) { return ''; }
+-		else {
+-			return `(${label})`;
+-		}
+-	}
+-
+ 	private getKeyBinding(command: string) {
+ 		command = command.replace(/^command:/, '');
+ 		return this.keybindingService.lookupKeybinding(command);
+@@ -1757,12 +1436,6 @@ export class GettingStartedPage extends EditorPane {
+ 					this.editorInput.walkthroughPageTitle = undefined;
+ 				}
+ 
+-				if (this.gettingStartedCategories.length !== this.gettingStartedList.value?.itemCount) {
+-					// extensions may have changed in the time since we last displayed the walkthrough list
+-					// rebuild the list
+-					this.buildCategoriesSlide();
+-				}
+-
+ 				this.selectStep(undefined);
+ 				this.setSlide('categories');
+ 				this.container.focus();
+diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
+index c2622705..06d219bd 100644
+--- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
++++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
+@@ -109,34 +109,32 @@
+ 	height: 100%;
+ 	max-width: 1200px;
+ 	margin: 0 auto;
+-	grid-template-rows: 25% minmax(min-content, auto) min-content;
+-	grid-template-columns: 1fr 6fr 1fr 6fr 1fr;
++	grid-template-rows: minmax(min-content, auto) minmax(min-content, auto) min-content;
++	grid-template-columns: 1fr 6fr 1fr;
+ 	grid-template-areas:
+-		".  header header header ."
+-		". left-column . right-column ."
+-		". footer footer footer .";
++		".  header ."
++		". left-column ."
++		". footer footer";
+ }
+ 
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
+-	grid-template-rows: auto min-content minmax(min-content, auto) min-content;
++.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
++.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
++.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
+ 	grid-template-columns: 1fr;
+-	grid-template-areas: "header" "left-column" "right-column" "footer";
+-}
+-
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
+-	grid-template-rows: auto minmax(min-content, auto) min-content;
+-	grid-template-areas: "header" "left-column right-column" "footer footer";
++	grid-template-areas: "header" "left-column" "footer";
+ }
+ 
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
+-	grid-template-rows: min-content minmax(min-content, auto) min-content;
+-	grid-template-columns: 1fr;
+-	grid-template-areas: "left-column" "right-column" "footer";
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header .product-logo {
++	height: 128px;
++	width: 128px;
++	color: var(--vscode-foreground);
++	margin-bottom: 16px;
+ }
+ 
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header,
+-.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header {
+-	display: none;
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header .product-logo svg.product-logo-svg {
++	width: 100%;
++	height: 100%;
++	display: block;
+ }
+ 
+ .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories li.showWalkthroughsEntry {
+@@ -165,6 +163,383 @@
+ 	grid-area: left-column;
+ }
+ 
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-intro {
++	margin: 0 0 24px 0;
++	max-width: 480px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left ul.welcome-actions {
++	list-style: none;
++	padding: 0;
++	margin: 0;
++	display: flex;
++	flex-direction: column;
++	gap: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action {
++	display: flex;
++	align-items: flex-start;
++	gap: 8px;
++	padding: 2px 0;
++	text-align: left;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action .codicon {
++	font-size: 16px;
++	margin-top: 2px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action-text {
++	display: flex;
++	flex-direction: column;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action-label {
++	font-size: var(--vscode-font-size, 13px);
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action-detail {
++	opacity: .8;
++}
++
++/* --- PiCode setup: the cards on the welcome page ------------------------ */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup {
++	display: flex;
++	flex-direction: column;
++	gap: 12px;
++	margin: 0 0 16px 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-card {
++	padding: 14px 16px;
++	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	border-radius: 8px;
++	background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
++	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
++	transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-card:hover {
++	border-color: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-card-head {
++	display: flex;
++	align-items: baseline;
++	gap: 8px;
++	margin-bottom: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-card-title {
++	font-size: 1.05em;
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-hint {
++	opacity: .7;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-row-description,
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-detail {
++	opacity: .75;
++	font-size: .92em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-note {
++	margin: 8px 0 0 0;
++	min-height: 1em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-note:empty {
++	margin: 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-error {
++	color: var(--vscode-errorForeground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button {
++	padding: 2px 0;
++	text-align: left;
++}
++
++/* visible keyboard focus, everywhere in the setup */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup button:focus-visible,
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup input:focus-visible {
++	outline: 1px solid var(--vscode-focusBorder);
++	outline-offset: 1px;
++	border-radius: 4px;
++}
++
++/* pi: the two option cards */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-pi-options {
++	display: grid;
++	grid-template-columns: 1fr 1fr;
++	gap: 8px;
++	margin-bottom: 4px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card {
++	display: flex;
++	align-items: flex-start;
++	gap: 8px;
++	padding: 8px 10px;
++	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	border-radius: 6px;
++	text-align: left;
++	cursor: pointer;
++	background: transparent;
++	transition: border-color 0.15s ease-out, background-color 0.15s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card:hover {
++	background: var(--vscode-list-hoverBackground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card.checked {
++	border-color: var(--vscode-focusBorder);
++	background: var(--vscode-list-activeSelectionBackground);
++	color: var(--vscode-list-activeSelectionForeground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card.unavailable {
++	opacity: .55;
++	cursor: default;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card .codicon {
++	margin-top: 2px;
++	color: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-label {
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-pi-meta {
++	opacity: .7;
++	font-size: .9em;
++	margin-top: 2px;
++	overflow: hidden;
++	text-overflow: ellipsis;
++	white-space: nowrap;
++	max-width: 240px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-warn {
++	color: var(--vscode-editorWarning-foreground);
++	white-space: normal;
++}
++
++/* pi: the one-shot import */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-cta {
++	margin-top: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-preview {
++	margin-top: 8px;
++	padding: 10px 12px;
++	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	border-radius: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-counts {
++	display: flex;
++	flex-wrap: wrap;
++	gap: 14px;
++	margin-bottom: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-count {
++	display: flex;
++	flex-direction: column;
++	align-items: center;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-value {
++	font-size: 1.3em;
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-label {
++	font-size: .85em;
++	opacity: .75;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-checkbox-row {
++	display: flex;
++	align-items: center;
++	gap: 6px;
++	margin-bottom: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-actions {
++	display: flex;
++	gap: 12px;
++	margin-bottom: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-note,
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-result {
++	font-size: .88em;
++	opacity: .8;
++}
++
++/* Gentle AI */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-dimmed {
++	opacity: .55;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-actions {
++	display: flex;
++	gap: 12px;
++	margin-top: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-status {
++	margin-top: 4px;
++	font-size: .9em;
++}
++
++/* Theme gallery */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-toolbar {
++	display: flex;
++	gap: 8px;
++	align-items: center;
++	flex-wrap: wrap;
++	margin-bottom: 10px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-search {
++	flex: 1 1 140px;
++	min-width: 120px;
++	padding: 3px 8px;
++	border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
++	border-radius: 4px;
++	background: var(--vscode-input-background);
++	color: var(--vscode-input-foreground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-filters {
++	display: flex;
++	gap: 4px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-filter-chip {
++	padding: 2px 10px;
++	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	border-radius: 999px;
++	cursor: pointer;
++	background: transparent;
++	transition: background-color 0.15s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-filter-chip:hover {
++	background: var(--vscode-list-hoverBackground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-filter-chip.checked {
++	background: var(--vscode-list-activeSelectionBackground);
++	color: var(--vscode-list-activeSelectionForeground);
++	border-color: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-grid {
++	display: grid;
++	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
++	gap: 8px;
++	margin-bottom: 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card {
++	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	border-radius: 6px;
++	overflow: hidden;
++	cursor: pointer;
++	background: transparent;
++	text-align: left;
++	padding: 0;
++	transition: border-color 0.15s ease-out, transform 0.15s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card:hover {
++	transform: translateY(-1px);
++	border-color: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card.checked {
++	border-color: var(--vscode-focusBorder);
++	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-thumb {
++	height: 62px;
++	padding: 4px 6px;
++	overflow: hidden;
++	border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
++	background: var(--vscode-editorWidget-background);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-thumb-line {
++	font-size: 9px;
++	line-height: 1.5;
++	white-space: nowrap;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-thumb-ln {
++	display: inline-block;
++	width: 14px;
++	opacity: .7;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-meta {
++	display: flex;
++	align-items: center;
++	gap: 6px;
++	padding: 5px 8px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-label {
++	overflow: hidden;
++	text-overflow: ellipsis;
++	white-space: nowrap;
++	font-size: .92em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-badge {
++	font-size: .78em;
++	padding: 0 6px;
++	border-radius: 999px;
++	background: var(--vscode-list-activeSelectionBackground);
++	color: var(--vscode-list-activeSelectionForeground);
++	flex-shrink: 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-more {
++	display: flex;
++	gap: 14px;
++}
++
++/* narrow windows: the cards stack instead of squeezing */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-pi-options {
++	grid-template-columns: 1fr;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-grid {
++	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
++}
++
++}
++
+ .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
+ 	grid-area: right-column;
+ }
+diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
+new file mode 100644
+index 00000000..10980291
+--- /dev/null
++++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
+@@ -0,0 +1,667 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { addDisposableListener, $, reset, clearNode } from '../../../../base/browser/dom.js';
++import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
++import { localize } from '../../../../nls.js';
++import { ICommandService } from '../../../../platform/commands/common/commands.js';
++import { IExtensionResourceLoaderService } from '../../../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
++import { editorBackground, editorForeground } from '../../../../platform/theme/common/colors/editorColors.js';
++import { editorLineNumbers } from '../../../../editor/common/core/editorColorRegistry.js';
++import { Color } from '../../../../base/common/color.js';
++import { IWorkbenchColorTheme, IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
++import { ColorThemeData } from '../../../services/themes/common/colorThemeData.js';
++
++/**
++ * The PiCode setup, as **cards on the welcome page**.
++ *
++ * The page owns the questions; this module owns the rendering and the calls. Three cards:
++ *
++ * - **pi** — two option cards with live facts (the internal pi's version; the machine's pi
++ *   probed once for path and version). Choosing one applies it and the note under the cards
++ *   says what the choice loads. When the internal pi runs and the machine's profile holds
++ *   anything, a "Import from my external pi" action appears with the **counts first** and a
++ *   confirm behind them — nothing is ever imported silently.
++ * - **Gentle AI** — asked about only while the internal pi runs (it lives in PiCode's own
++ *   profile). Three states: not installed, working (inline, no popups), installed with its
++ *   version and update/remove.
++ * - **Theme** — a gallery grid: one card per installed theme, a small preview painted from
++ *   the theme's own loaded colors, search and a Dark/Light/High-contrast filter, the active
++ *   theme marked, and **live preview on hover**: the theme is applied with the editor's
++ *   preview target while the pointer or the focus is on the card, and restored on leave.
++ *   Theme data is loaded lazily, page by page, so opening the welcome never pays for every
++ *   theme on disk.
++ *
++ * Everything here talks to the connector through commands (`picode.setup.*`) and to the
++ * editor through its theme service; no webview, no popups, no new dependencies.
++ */
++
++/** The facts the connector answers with (`picode.setup.getState`). */
++interface SetupState {
++	runtime: 'internal' | 'external';
++	externalAvailable: boolean;
++	gentleInstalled: boolean;
++	internalPiVersion?: string;
++	gentleVersion?: string;
++}
++
++/** What the probe answers about the machine's pi. */
++interface ExternalPiInfo {
++	found: boolean;
++	path?: string;
++	version?: string;
++}
++
++/** What the import preview counts, read-only, from the machine's profile. */
++interface ProfilePreview {
++	exists: boolean;
++	packages: number;
++	mcpServers: number;
++	skills: number;
++	sessions: number;
++	hasCredentials: boolean;
++	profile: string;
++}
++
++/** What one import copied, item by item folded into counts. */
++interface ImportReport {
++	copied: number;
++	overwritten: number;
++	absent: number;
++	declined: number;
++	failed: number;
++}
++
++export interface PiCodeSetupServices {
++	readonly commandService: ICommandService;
++	readonly themeService: IWorkbenchThemeService;
++	readonly extensionResourceLoaderService: IExtensionResourceLoaderService;
++}
++
++/** How many theme cards render before the "Show more" button offers the next page. */
++const THEME_PAGE_SIZE = 24;
++
++export class PiCodeSetup extends Disposable {
++
++	private state: SetupState | undefined;
++	private themes: readonly IWorkbenchColorTheme[] | undefined;
++	/** The settingsId the theme service should go back to when a preview ends. */
++	private appliedThemeId: string | undefined;
++	/** True while an action runs, so a second click cannot start it twice. */
++	private busy = false;
++	private readonly disposables = this._register(new DisposableStore());
++	/** The grid's own store: repainting the grid must not unbind the rest of the cards. */
++	private readonly gridDisposables = this._register(new DisposableStore());
++
++	// Live elements, re-created on every render.
++	private importPreviewBox: HTMLElement | undefined;
++	private importResult: HTMLElement | undefined;
++	private note: HTMLElement | undefined;
++	private gentleStatus: HTMLElement | undefined;
++
++	constructor(
++		private readonly container: HTMLElement,
++		private readonly services: PiCodeSetupServices,
++	) {
++		super();
++		this.appliedThemeId = this.services.themeService.getColorTheme().settingsId;
++	}
++
++	/** Fetches the state and paints the three cards; safe to call again after an action. */
++	async render(): Promise<void> {
++		const [state] = await Promise.all([this.resolveState(), this.resolveThemes()]);
++		if (this._store.isDisposed) { return; }
++		this.state = state;
++		this.renderCards(state);
++	}
++
++	private async resolveState(): Promise<SetupState | undefined> {
++		for (let attempt = 0; attempt < 5; attempt += 1) {
++			try {
++				return await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
++			} catch {
++				// The connector activates as the window finishes starting; give it a moment.
++				await new Promise<void>(resolve => setTimeout(resolve, 1500));
++			}
++		}
++		return undefined;
++	}
++
++	private async resolveThemes(): Promise<void> {
++		if (!this.themes) {
++			this.themes = await this.services.themeService.getColorThemes();
++		}
++	}
++
++	/* ------------------------------------------------------------------ *
++	 * The cards
++	 * ------------------------------------------------------------------ */
++
++	private renderCards(state: SetupState | undefined): void {
++		this.disposables.clear();
++		clearNode(this.container);
++
++		if (state === undefined) {
++			const note = $('p.picode-note', {}, localize('picodeSetup.unavailable', "The setup is not available yet — it will appear in a moment."));
++			reset(this.container, note);
++			return;
++		}
++
++		this.note = $('p.picode-note');
++		reset(
++			this.container as HTMLElement,
++			this.renderPiCard(state),
++			// Gentle AI lives in PiCode's own profile — the internal pi's — so with the
++			// external pi chosen the question is asked dimmed, with the reason as its tooltip.
++			this.renderGentleCard(state, state.runtime !== 'internal'),
++			this.renderThemeCard(),
++			this.note,
++		);
++	}
++
++	private renderPiCard(state: SetupState): HTMLElement {
++		const external = this.renderPiOption({
++			checked: state.runtime === 'external',
++			available: state.externalAvailable,
++			label: localize('picodeSetup.pi.external', "The pi on this machine"),
++			detail: localize('picodeSetup.pi.externalDetail', "Your own installation, with its own configuration. PiCode reads it and never writes to it."),
++			icon: 'plug',
++			mode: 'external',
++			meta: localize('picodeSetup.pi.externalUnknown', "Looking for it on the PATH…"),
++		});
++		const internal = this.renderPiOption({
++			checked: state.runtime === 'internal',
++			available: true,
++			label: localize('picodeSetup.pi.internal', "PiCode's internal pi"),
++			detail: localize('picodeSetup.pi.internalDetail', "Kept and updated by PiCode; its configuration lives inside the editor."),
++			icon: 'vm',
++			mode: 'internal',
++			meta: state.internalPiVersion ? localize('picodeSetup.pi.internalVersion', "Version {0}", state.internalPiVersion) : undefined,
++		});
++
++		const card = $('.picode-card.picode-pi-card', {},
++			$('.picode-card-head', {},
++				$('.picode-card-title', {}, localize('picodeSetup.pi.title', "pi")),
++				$('span.picode-hint', {}, state.runtime === 'internal'
++					? localize('picodeSetup.pi.currentInternal', "Internal pi in force")
++					: localize('picodeSetup.pi.currentExternal', "External pi in force")),
++			),
++			$('.picode-pi-options', {}, internal, external),
++			// The import shows only while the internal pi runs and the machine's profile has
++			// something worth bringing; the counts arrive when the card asks for them.
++			$('.picode-import-area'),
++			this.renderNote(localize('picodeSetup.pi.note.internal', "Internal pi loads: its providers, its MCP servers, its profile inside PiCode. Your machine's profile is untouched.")),
++		);
++
++		// The machine's pi is probed once, after the card is on screen: the version needs a
++		// process, and the card should not wait for it.
++		this.services.commandService.executeCommand<ExternalPiInfo>('picode.setup.probeExternal')
++			.then(info => {
++				if (info === undefined || this._store.isDisposed || this.state?.runtime !== state.runtime) { return; }
++				const meta = external.querySelector('.picode-pi-meta');
++				if (!(meta instanceof HTMLElement)) { return; }
++				if (info.found) {
++					meta.textContent = info.version
++						? localize('picodeSetup.pi.externalMeta', "Version {0} · {1}", info.version, info.path ?? '')
++						: info.path ?? '';
++					meta.classList.remove('picode-warn');
++				} else {
++					meta.textContent = localize('picodeSetup.pi.notFound', "No pi found on the PATH — install pi on this machine, or use the internal one.");
++					meta.classList.add('picode-warn');
++				}
++			})
++			.catch(() => { /* the meta line keeps its placeholder; nothing to act on */ });
++
++		// The import offer depends on facts only the connector has; it asks once, lazily.
++		if (state.runtime === 'internal') {
++			this.services.commandService.executeCommand<ProfilePreview>('picode.setup.importPreview')
++				.then(preview => {
++					if (preview === undefined || this._store.isDisposed || this.state?.runtime !== 'internal') { return; }
++					const area = card.querySelector('.picode-import-area');
++					if (!(area instanceof HTMLElement)) { return; }
++					const worth = preview.exists && (preview.packages + preview.mcpServers + preview.skills + preview.sessions) > 0;
++					if (worth) {
++						reset(area, this.renderImportCta(preview));
++					}
++				})
++				.catch(() => { /* no preview, no offer — the import is optional by definition */ });
++		}
++
++		return card;
++	}
++
++	private renderPiOption(options: {
++		checked: boolean; available: boolean; label: string; detail: string; icon: string; mode: 'internal' | 'external'; meta?: string;
++	}): HTMLElement {
++		const card = $('button.picode-option-card' + (options.checked ? '.checked' : '') + (options.available ? '' : '.unavailable'),
++			{
++				'type': 'button',
++				'tabindex': 0,
++				'title': options.available ? undefined : localize('picodeSetup.pi.notFoundTitle', "No pi was found on this machine's PATH."),
++			},
++			$(`span.codicon.codicon-${options.checked ? 'check' : options.icon}.picode-option-icon`),
++			$('.picode-option-text', {},
++				$('.picode-option-label', {}, options.label),
++				$('.picode-option-detail', {}, options.detail),
++				...(options.meta !== undefined || options.mode === 'external'
++					? [$('.picode-pi-meta' + (options.available ? '' : '.picode-warn'), {}, options.meta ?? '')]
++					: []),
++			),
++		);
++		if (options.available) {
++			this.disposables.add(addDisposableListener(card, 'click', () => this.applyRuntime(options.mode)));
++			// Keyboard activation without a pointer: the card is a real button, and Enter and
++			// Space fire click on their own for button elements.
++		}
++		return card;
++	}
++
++	private renderImportCta(preview: ProfilePreview): HTMLElement {
++		this.importResult = undefined;
++		const previewBox = this.importPreviewBox = $('.picode-import-preview', { hidden: true },
++			$('.picode-import-counts', {},
++				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
++				this.importCount(localize('picodeSetup.import.mcps', "MCP servers"), preview.mcpServers),
++				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
++				this.importCount(localize('picodeSetup.import.sessions', "Sessions"), preview.sessions),
++			),
++			$('.picode-import-credentials', {},
++				this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Also bring my provider logins (auth.json)")),
++			),
++			$('.picode-import-actions', {},
++				this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => this.runImport(preview)),
++				this.button('picode-import-cancel', localize('picodeSetup.import.cancel', "Cancel"), () => {
++					if (this.importPreviewBox) { this.importPreviewBox.hidden = true; }
++				}),
++			),
++			$('.picode-import-note', {}, localize('picodeSetup.import.note', "The import copies into PiCode's own profile and merges; nothing in it is deleted. Your external profile stays exactly as it is.")),
++		);
++		const result = this.importResult = $('.picode-import-result');
++
++		return $('.picode-import-cta', {},
++			this.button('picode-import-open', localize('picodeSetup.import.cta', "Import from my external pi"), () => {
++				if (this.importPreviewBox) { this.importPreviewBox.hidden = !this.importPreviewBox.hidden; }
++			}),
++			previewBox,
++			result,
++		);
++	}
++
++	private importCount(label: string, value: number): HTMLElement {
++		return $('.picode-import-count', {},
++			$('span.picode-import-value', {}, String(value)),
++			$('span.picode-import-label', {}, label),
++		);
++	}
++
++	private async runImport(_preview: ProfilePreview): Promise<void> {
++		if (this.busy || !this.importResult) { return; }
++		this.busy = true;
++		this.importResult.textContent = localize('picodeSetup.import.running', "Importing…");
++		this.importResult.classList.remove('picode-error');
++		const credentials = this.container.querySelector<HTMLInputElement>('#picode-import-credentials-box');
++		try {
++			const report = await this.services.commandService.executeCommand<ImportReport>(
++				'picode.setup.importFromExternal',
++				credentials?.checked === true,
++			);
++			if (report === undefined) {
++				throw new Error('the import answered nothing');
++			}
++			if (this.importResult) {
++				this.importResult.textContent = report.failed > 0
++					? localize('picodeSetup.import.doneWithFailures', "Done with problems: {0} copied, {1} overwritten, {2} failed.", report.copied, report.overwritten, report.failed)
++					: localize('picodeSetup.import.done', "Done: {0} copied, {1} overwritten onto existing content.", report.copied, report.overwritten);
++			}
++			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
++		} catch (error) {
++			this.importResult.textContent = messageOf(error);
++			this.importResult.classList.add('picode-error');
++		}
++		this.busy = false;
++	}
++
++	private renderGentleCard(state: SetupState, dimmed: boolean): HTMLElement {
++		const description = localize('picodeSetup.gentle.detail', "The agent layer for pi: subagents, skills and a memory that carries your context between sessions. Only for PiCode's internal pi.");
++
++		const actions = $('.picode-gentle-actions', {});
++		let status: string;
++		if (dimmed) {
++			status = localize('picodeSetup.gentle.external', "Belongs to your external pi");
++		} else if (state.gentleInstalled) {
++			status = localize('picodeSetup.gentle.on', "Installed");
++			actions.append(
++				this.button('picode-gentle-update', localize('picodeSetup.gentle.update', "Update"), () => this.applyGentle('update')),
++				this.button('picode-gentle-remove', localize('picodeSetup.gentle.remove', "Remove — use plain pi"), () => this.applyGentle('remove')),
++			);
++		} else {
++			status = localize('picodeSetup.gentle.off', "Not installed");
++			actions.append(
++				this.button('picode-gentle-install', localize('picodeSetup.gentle.install', "Install Gentle AI"), () => this.applyGentle('install')),
++			);
++		}
++
++		const card = $('.picode-card.picode-gentle-card' + (dimmed ? '.picode-dimmed' : ''),
++			{
++				'title': dimmed
++					? localize('picodeSetup.gentle.externalTooltip', "Gentle AI is installed into PiCode's own profile, which only the internal pi uses. Your external pi keeps its own profile, and this editor never writes to it.")
++					: undefined,
++			},
++			$('.picode-card-head', {},
++				$('.picode-card-title', {}, localize('picodeSetup.gentle.title', "Gentle AI")),
++				$('span.picode-hint', {}, status + (state.gentleVersion && !dimmed ? ` · v${state.gentleVersion}` : '')),
++			),
++			$('.picode-card-body', {}, $('span.picode-row-description', {}, description)),
++			actions,
++		);
++		this.gentleStatus = $('.picode-gentle-status');
++		card.appendChild(this.gentleStatus);
++		return card;
++	}
++
++	private renderThemeCard(): HTMLElement {
++		let query = '';
++		let filter: 'all' | 'dark' | 'light' | 'hc' = 'all';
++		let shown = THEME_PAGE_SIZE;
++
++		const grid = $('.picode-theme-grid');
++		const currentLabel = $('span.picode-hint');
++		const head = $('.picode-card-head', {},
++			$('.picode-card-title', {}, localize('picodeSetup.theme.title', "Theme")),
++			currentLabel,
++		);
++
++		const applyTheme = async (theme: IWorkbenchColorTheme, persist: boolean): Promise<void> => {
++			await this.services.themeService.setColorTheme(theme.settingsId, persist ? undefined : 'preview');
++			if (persist) {
++				this.appliedThemeId = theme.settingsId;
++				this.services.commandService.executeCommand('picode.setup.complete');
++			}
++			this.paintCurrent(head, grid, this.visibleThemes(query, filter).slice(0, shown));
++		};
++
++		const card = $('.picode-card.picode-theme-card', {},
++			head,
++			$('.picode-theme-toolbar', {},
++				this.themeSearch(text => { query = text; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
++				this.themeFilters(kind => { filter = kind; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
++			),
++			grid,
++			$('.picode-theme-more', {},
++				this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
++					shown += THEME_PAGE_SIZE;
++					this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
++				}),
++				this.button('picode-theme-browse', localize('picodeSetup.theme.browse', "Install more from the gallery…"), () => {
++					this.services.commandService.executeCommand('workbench.extensions.search', '@category:themes @sort:installs');
++				}),
++			),
++		);
++
++		this.paintCurrent(head, grid, this.visibleThemes(query, filter).slice(0, shown));
++		// The grid renders once here; the filter/search closures repaint it in place.
++		this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
++		return card;
++	}
++
++	private visibleThemes(query: string, filter: 'all' | 'dark' | 'light' | 'hc'): readonly IWorkbenchColorTheme[] {
++		const themes = this.themes ?? [];
++		const needle = query.trim().toLowerCase();
++		return themes.filter(theme => {
++			if (needle !== '' && !theme.label.toLowerCase().includes(needle)) { return false; }
++			switch (filter) {
++				case 'dark': return theme.type === 'dark';
++				case 'light': return theme.type === 'light';
++				case 'hc': return theme.type === 'hcDark' || theme.type === 'hcLight';
++				default: return true;
++			}
++		});
++	}
++
++	/* ------------------------------------------------------------------ *
++	 * The theme grid
++	 * ------------------------------------------------------------------ */
++
++	private paintCurrent(head: HTMLElement, grid: HTMLElement, visible: readonly IWorkbenchColorTheme[]): void {
++		const applied = visible.find(theme => theme.settingsId === this.appliedThemeId);
++		const existing = head.querySelector('.picode-hint');
++		if (existing instanceof HTMLElement) {
++			existing.textContent = applied?.label ?? localize('picodeSetup.theme.currentOutsidePage', "The theme in force is not in this list");
++		}
++		grid.querySelectorAll('.picode-theme-card').forEach(el => {
++			el.classList.toggle('checked', el.getAttribute('data-theme-id') === this.appliedThemeId);
++		});
++	}
++
++	private paintGrid(grid: HTMLElement, themes: readonly IWorkbenchColorTheme[], applyTheme: (theme: IWorkbenchColorTheme, persist: boolean) => Promise<void>): void {
++		this.gridDisposables.clear();
++		clearNode(grid);
++		const applied = this.appliedThemeId;
++
++		for (const theme of themes) {
++			const thumb = $('.picode-theme-thumb');
++			const card = $('button.picode-theme-card' + (theme.settingsId === applied ? '.checked' : ''),
++				{ 'type': 'button', 'data-theme-id': theme.settingsId, 'tabindex': 0, 'title': theme.label },
++				thumb,
++				$('.picode-theme-meta', {},
++					$('span.picode-theme-label', {}, theme.label),
++					...(theme.settingsId === applied ? [$('span.picode-theme-badge', {}, localize('picodeSetup.theme.current', "Current"))] : []),
++				),
++			);
++
++			// Live preview: the theme is applied with the preview target while the pointer or
++			// the keyboard focus sits on the card, and the theme in force comes back on leave.
++			this.gridDisposables.add(addDisposableListener(card, 'mouseenter', () => { void applyTheme(theme, false); }));
++			this.gridDisposables.add(addDisposableListener(card, 'focusin', () => { void applyTheme(theme, false); }));
++			this.gridDisposables.add(addDisposableListener(card, 'mouseleave', () => { void this.restorePreview(applyTheme); }));
++			this.gridDisposables.add(addDisposableListener(card, 'focusout', () => { void this.restorePreview(applyTheme); }));
++			this.gridDisposables.add(addDisposableListener(card, 'click', () => { void applyTheme(theme, true); }));
++
++			grid.appendChild(card);
++
++			// The thumbnail needs the theme's own colors, which live in its file on disk;
++			// loading happens lazily, one card at a time, after the card is painted.
++			this.loadThumbail(thumb, theme);
++		}
++		this.paintCurrent(grid.closest('.picode-card') as HTMLElement ?? grid, grid, themes);
++	}
++
++	private async restorePreview(applyTheme: (theme: IWorkbenchColorTheme, persist: boolean) => Promise<void>): Promise<void> {
++		const original = (this.themes ?? []).find(theme => theme.settingsId === this.appliedThemeId);
++		if (original) {
++			await applyTheme(original, false);
++		}
++	}
++
++	/**
++	 * Paints one thumbnail from the theme's own data.
++	 *
++	 * The colors are the theme's: the frame comes from its `editor.*` colors once the theme
++	 * data is loaded, and the accents from the first of its token rules that names each
++	 * common scope. A theme that cannot be read keeps a neutral placeholder — never a wrong
++	 * color presented as the theme's.
++	 */
++	private async loadThumbail(thumb: HTMLElement, theme: IWorkbenchColorTheme): Promise<void> {
++		const data = theme as ColorThemeData;
++		try {
++			await data.ensureLoaded(this.services.extensionResourceLoaderService);
++		} catch {
++			return; // placeholder stays
++		}
++		if (this._store.isDisposed || !thumb.isConnected) { return; }
++
++		const bg = data.getColor(editorBackground)?.toString() ?? '#1e1e1e';
++		const fg = data.getColor(editorForeground)?.toString() ?? '#cccccc';
++		const ln = data.getColor(editorLineNumbers)?.toString() ?? '#6e7681';
++		const accents = this.accentColors(data, fg);
++
++		const line = (lnNo: string, tokens: ReadonlyArray<{ text: string; color: 'fg' | 0 | 1 | 2 | 3 }>): HTMLElement =>
++			$('.picode-thumb-line', {},
++				$('span.picode-thumb-ln', { style: `color:${ln}` }, lnNo),
++				...tokens.map(token => $('span.picode-thumb-token',
++					{ style: `color:${token.color === 'fg' ? fg : accents[token.color]}` }, token.text)),
++			);
++
++		reset(thumb,
++			line('1', [{ text: 'const', color: 0 }, { text: ' pi ', color: 'fg' }, { text: '= ', color: 'fg' }, { text: 'await', color: 0 }, { text: ' setup', color: 3 }, { text: '();', color: 'fg' }]),
++			line('2', [{ text: '// your agent is built in', color: 1 }]),
++			line('3', [{ text: 'return', color: 0 }, { text: ' theme', color: 3 }, { text: '(', color: 'fg' }, { text: '"picode"', color: 2 }, { text: ');', color: 'fg' }]),
++			line('4', [{ text: 'import', color: 0 }, { text: ' { work } ', color: 'fg' }, { text: 'from', color: 0 }, { text: ' "pi"', color: 2 }, { text: ';', color: 'fg' }]),
++		);
++		thumb.style.background = bg;
++	}
++
++	/** Four accent colors from the theme's own token rules: keyword, string, comment, function. */
++	private accentColors(data: ColorThemeData, fallback: string): readonly [string, string, string, string] {
++		const wanted: ReadonlyArray<{ key: 0 | 1 | 2 | 3; scope: string }> = [
++			{ key: 0, scope: 'keyword' },
++			{ key: 1, scope: 'string' },
++			{ key: 2, scope: 'comment' },
++			{ key: 3, scope: 'entity.name.function' },
++		];
++		const found: string[] = [fallback, fallback, fallback, fallback];
++		for (const rule of data.tokenColors ?? []) {
++			if (typeof rule.settings?.foreground !== 'string') { continue; }
++			const scopes = typeof rule.scope === 'string' ? [rule.scope] : Array.isArray(rule.scope) ? rule.scope : [];
++			for (const want of wanted) {
++				if (found[want.key] !== fallback) { continue; }
++				if (scopes.some(scope => scope.includes(want.scope))) {
++					const color = Color.fromHex(rule.settings.foreground);
++					if (color !== undefined) {
++						found[want.key] = color.toString();
++					}
++				}
++			}
++		}
++		return found as unknown as readonly [string, string, string, string];
++	}
++
++	/* ------------------------------------------------------------------ *
++	 * Actions
++	 * ------------------------------------------------------------------ */
++
++	private async applyRuntime(mode: 'internal' | 'external'): Promise<void> {
++		if (this.busy || this.state === undefined || mode === this.state.runtime) { return; }
++		if (mode === 'external' && !this.state.externalAvailable) { return; }
++		this.busy = true;
++		this.setNote(localize('picodeSetup.pi.switching', "Switching pi…"), false);
++		try {
++			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.applyRuntime', mode);
++		} catch (error) {
++			this.setNote(messageOf(error), true);
++			this.busy = false;
++			return;
++		}
++		this.busy = false;
++		await this.render();
++	}
++
++	private async applyGentle(action: 'install' | 'update' | 'remove'): Promise<void> {
++		if (this.busy || this.state === undefined || this.state.runtime !== 'internal') { return; }
++		this.busy = true;
++		if (this.gentleStatus) {
++			this.gentleStatus.textContent = action === 'install'
++				? localize('picodeSetup.gentle.installing', "Installing — pi's own installer runs; this can take a moment…")
++				: action === 'update'
++					? localize('picodeSetup.gentle.updating', "Updating…")
++					: localize('picodeSetup.gentle.removing', "Removing…");
++		}
++		try {
++			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.applyGentle', action);
++			this.setNote('', false);
++		} catch (error) {
++			this.setNote(messageOf(error), true);
++		}
++		this.busy = false;
++		await this.render();
++	}
++
++	/* ------------------------------------------------------------------ *
++	 * Small builders
++	 * ------------------------------------------------------------------ */
++
++	private button(id: string, label: string, onClick: () => void): HTMLElement {
++		const button = $('button.picode-button.button-link', { 'type': 'button', 'id': id }, label);
++		this.disposables.add(addDisposableListener(button, 'click', event => {
++			event.preventDefault();
++			onClick();
++		}));
++		return button;
++	}
++
++	private checkbox(id: string, label: string): HTMLElement {
++		const input = $('input.picode-checkbox', { 'type': 'checkbox', 'id': id });
++		// A click on the label toggles the box natively through `for`; the id ties them.
++		const label2 = $('label', { 'for': id }, label);
++		return $('.picode-checkbox-row', {}, input, label2);
++	}
++
++	private themeSearch(onInput: (query: string) => void): HTMLElement {
++		const input = $('input.picode-theme-search', {
++			'type': 'text',
++			'placeholder': localize('picodeSetup.theme.search', "Search themes…"),
++			'aria-label': localize('picodeSetup.theme.searchAria', "Search themes by name"),
++		});
++		this.disposables.add(addDisposableListener(input, 'input', () => onInput((input as HTMLInputElement).value)));
++		// The page around the grid listens for keys (scrolling, shortcuts); the search box
++		// keeps them for typing.
++		this.disposables.add(addDisposableListener(input, 'keydown', event => event.stopPropagation()));
++		return input;
++	}
++
++	private themeFilters(onPick: (kind: 'all' | 'dark' | 'light' | 'hc') => void): HTMLElement {
++		const chips = $('.picode-theme-filters', {});
++		const kinds: ReadonlyArray<{ kind: 'all' | 'dark' | 'light' | 'hc'; label: string }> = [
++			{ kind: 'all', label: localize('picodeSetup.theme.all', "All") },
++			{ kind: 'dark', label: localize('picodeSetup.theme.dark', "Dark") },
++			{ kind: 'light', label: localize('picodeSetup.theme.light', "Light") },
++			{ kind: 'hc', label: localize('picodeSetup.theme.hc', "High contrast") },
++		];
++		for (const kind of kinds) {
++			const chip = $('button.picode-filter-chip' + (kind.kind === 'all' ? '.checked' : ''), { 'type': 'button', 'tabindex': 0 }, kind.label);
++			this.disposables.add(addDisposableListener(chip, 'click', () => {
++				chips.querySelectorAll('.picode-filter-chip').forEach(el => el.classList.remove('checked'));
++				chip.classList.add('checked');
++				onPick(kind.kind);
++			}));
++			chips.appendChild(chip);
++		}
++		return chips;
++	}
++
++	private renderNote(message: string): HTMLElement {
++		this.note = $('p.picode-note', {}, message);
++		return this.note;
++	}
++
++	private setNote(message: string, isError: boolean): void {
++		if (this.note !== undefined) {
++			this.note.innerText = message;
++			this.note.classList.toggle('picode-error', isError);
++		}
++	}
++
++	public override dispose(): void {
++		this.disposables.dispose();
++		super.dispose();
++	}
++}
++
++/** The sentence an error carries, whatever threw it. */
++function messageOf(error: unknown): string {
++	return error instanceof Error ? error.message : String(error);
++}
++
++/**
++ * Renders the setup into the given container and returns the handle that disposes it.
++ *
++ * The welcome page calls this once per rebuild of its slide; the previous handle is
++ * disposed before a new one is made.
++ */
++export function renderPiCodeSetup(container: HTMLElement, services: PiCodeSetupServices): PiCodeSetup {
++	const setup = new PiCodeSetup(container, services);
++	void setup.render();
++	return setup;
++}
