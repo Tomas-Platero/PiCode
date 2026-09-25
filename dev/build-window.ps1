@@ -439,13 +439,24 @@ function Show-Steps($progress, [bool]$running) {
     $stages = if ($script:stageList) { $script:stageList } else { @() }
     if ($stages.Count -eq 0) { return }
 
-    $done = if ($progress -and $progress.done -eq 'ok') { $stages.Count } else { 0 }
+    # Everything before the step it is on is done, whether it is still working or stopped there: the
+    # steps behind a failure ran, and leaving them as circles said the opposite.
+    $done = 0
     $current = -1
     $failed = $false
-    if ($progress -and -not $done) {
-        $current = [int]$progress.stageIndex
-        $failed = ($progress.done -eq 'failed')
-        if ($running) { } elseif (-not $failed) { $current = -1 }
+    if ($progress) {
+        if ($progress.done -eq 'ok') {
+            $done = $stages.Count
+        } else {
+            $current = [int]$progress.stageIndex
+            $failed = ($progress.done -eq 'failed')
+            $done = $current
+            if (-not $running -and -not $failed) {
+                # Nothing is happening and nothing failed: this is only the map of what the button does.
+                $done = 0
+                $current = -1
+            }
+        }
     }
 
     for ($i = 0; $i -lt $stages.Count; $i++) {
@@ -642,7 +653,18 @@ function Update-View {
     $stopButton.Visibility = $collapsed
     $progressBlock.Visibility = $collapsed
 
-    if ($lastFailed) {
+    if ($built -and $lastFailed) {
+        # The editor is there and the last run still ended badly: the thing that exists is the headline,
+        # and what that run said is the note under it, open because it is worth reading.
+        $headlineText.Text = 'PiCode is ready'
+        $explainText.Text = 'The last build did not finish cleanly, so what it said is open below. The editor itself is in place.'
+        if (-not $script:failedSeen) { Set-Checks $true }
+        $script:primaryAction = 'open'
+        $primaryButton.Content = 'Open PiCode'
+        $primaryButton.Visibility = $visible
+        $secondaryButton.Content = 'Build it again'
+        $secondaryButton.Visibility = $visible
+    } elseif ($lastFailed) {
         # Whatever it said is the only thing worth reading now, so it is opened rather than hinted at.
         $headlineText.Text = 'The build did not finish'
         $explainText.Text = 'What it said is below. Building it again keeps whatever was already done, so it does not start from the beginning.'
@@ -771,7 +793,9 @@ if ($SelfTest) {
 
     if (-not $state.Running) {
         $wanted = 'Build PiCode'
-        if ($lastFailed) { $wanted = 'Build it again' } elseif ($built) { $wanted = 'Open PiCode' }
+        # The editor that exists leads: a run that ended badly over one that is in place still leaves
+        # the editor in place, and opening it is what somebody wants next.
+        if ($built) { $wanted = 'Open PiCode' } elseif ($lastFailed) { $wanted = 'Build it again' }
         if ($primaryButton.Content -ne $wanted) {
             $problems += "the button says '$($primaryButton.Content)', expected '$wanted'"
         }
@@ -784,7 +808,7 @@ if ($SelfTest) {
     }
 
     Write-Output "window built: $($rows.Count) checks, $($blockers.Count) of them asking for something"
-    Write-Output "state: $(if ($state.Running) { 'building' } elseif ($lastFailed) { 'the last build failed' } elseif ($built) { 'built' } else { 'not built yet' })"
+    Write-Output "state: $(if ($state.Running) { 'building' } elseif ($built -and $lastFailed) { 'built, and the last run failed' } elseif ($built) { 'built' } elseif ($lastFailed) { 'the last build failed' } else { 'not built yet' })"
     Write-Output "checks after four ticks: $(if ($script:checksOpen) { 'open' } else { 'closed' })"
     Write-Output "theme: $(if (Test-LightTheme) { 'light' } else { 'dark' })"
 
