@@ -14,7 +14,7 @@
 # is still replaced here, but that is now a belt-and-braces copy, not the fix.
 #
 # The icon the executable actually carries is decided by `rcedit` while the source
-# tree is PACKED, from `vscode/resources/win32/code.ico`, and the Start Menu tiles
+# tree is PACKED, from `picode-source/resources/win32/code.ico`, and the Start Menu tiles
 # are copied by the same pack. So the real branding happens in
 # `dev/prepare_vscode.sh` (`brand_windows_icons`, in the `metadata` stage), before
 # phase 7. Replacing anything here cannot change what the executable already has:

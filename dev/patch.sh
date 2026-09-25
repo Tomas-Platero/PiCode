@@ -38,8 +38,8 @@ if [[ $# -ne 1 ]]; then
   exit 2
 fi
 
-if [[ ! -d "./vscode" ]]; then
-  echo "error: ./vscode does not exist; run dev/build.sh once (or dev/build.sh -o) first." >&2
+if [[ ! -d "./picode-source" ]]; then
+  echo "error: ./picode-source does not exist; run dev/build.sh once (or dev/build.sh -o) first." >&2
   exit 2
 fi
 
@@ -51,7 +51,7 @@ fi
 if [[ ! -f "${TARGET}" ]]; then
   echo "error: ${TARGET} does not exist." >&2
   echo "       A new patch starts from the file the pipeline should apply; create it with" >&2
-  echo "       'git diff' inside ./vscode against the prepared tree, then edit it here." >&2
+  echo "       'git diff' inside ./picode-source against the prepared tree, then edit it here." >&2
   exit 2
 fi
 
@@ -64,4 +64,4 @@ picode_regenerate_patch "${TARGET}"
 
 echo ""
 echo "${TARGET} has been regenerated."
-echo "The tree in ./vscode still carries the patch; the next run of this script resets it."
+echo "The tree in ./picode-source still carries the patch; the next run of this script resets it."

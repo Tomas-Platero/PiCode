@@ -36,8 +36,8 @@ trap picode_cleanup_tmp EXIT
 
 OS_NAME="${OS_NAME:-windows}"
 
-if [[ ! -d "./vscode" ]]; then
-  echo "error: ./vscode does not exist; run dev/build.sh once (or dev/build.sh -o) first." >&2
+if [[ ! -d "./picode-source" ]]; then
+  echo "error: ./picode-source does not exist; run dev/build.sh once (or dev/build.sh -o) first." >&2
   exit 2
 fi
 
@@ -85,4 +85,4 @@ done
 
 echo ""
 echo "All PiCode patches were regenerated."
-echo "The tree in ./vscode still carries them; the next run of this script resets it."
+echo "The tree in ./picode-source still carries them; the next run of this script resets it."

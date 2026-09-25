@@ -7,7 +7,7 @@
 # Adapted from VSCodium's `prepare_vscode.sh` at the revision pinned in
 # `upstream/vscodium.json`. What changed, and why:
 #
-#   * VSCodium merges its repository-root `product.json` into `vscode/product.json`
+#   * VSCodium merges its repository-root `product.json` into `picode-source/product.json`
 #     with `jq -s '.[0] * .[1]'`. PiCode has no such root file because the PiCode
 #     identity is data (`distribution/product-delta.json`) applied later, in
 #     `dev/build.sh` phase 5. The one thing that root file carries and no delta key
@@ -49,7 +49,7 @@
 #   dev/prepare_vscode.sh patches-vscodium
 #   dev/prepare_vscode.sh patches-picode
 #
-# It must be run with `./vscode` already fetched.
+# It must be run with `./picode-source` already fetched.
 
 set -e
 
@@ -64,8 +64,8 @@ require_jq
 
 trap picode_cleanup_tmp EXIT
 
-if [[ ! -d "./vscode" ]]; then
-  echo "error: ./vscode does not exist; run dev/get_repo.sh first." >&2
+if [[ ! -d "./picode-source" ]]; then
+  echo "error: ./picode-source does not exist; run dev/get_repo.sh first." >&2
   exit 2
 fi
 
@@ -75,9 +75,9 @@ if [[ ! -f "./dev/vscodium-product.json" ]]; then
 fi
 
 brand_product_json() {
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
-  echo "--- branding vscode/product.json"
+  echo "--- branding picode-source/product.json"
 
   cp product.json{,.bak}
 
@@ -191,7 +191,7 @@ brand_product_json() {
 # stage (prepare_vscode.sh lines 231-247 and 254-255 at the pinned revision); they
 # are not part of the patch set, so a pipeline that only applies patches leaves
 # `Microsoft Corporation` and the upstream version in place. Measured before this
-# existed: `vscode/package.json` stayed at 1.135.0 and `build/lib/electron.ts`
+# existed: `picode-source/package.json` stayed at 1.135.0 and `build/lib/electron.ts`
 # kept `companyName: 'Microsoft Corporation'`.
 #
 # It runs AFTER the patches, unlike the product.json branding: three vendored
@@ -229,10 +229,10 @@ brand_windows_icons() {
     exit 2
   fi
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   if [[ ! -f "resources/win32/code.ico" ]]; then
-    echo "error: vscode/resources/win32/code.ico is missing, so the executable's icon" >&2
+    echo "error: picode-source/resources/win32/code.ico is missing, so the executable's icon" >&2
     echo "       cannot be branded. Upstream may have moved it." >&2
     exit 2
   fi
@@ -343,7 +343,7 @@ brand_package_metadata() {
     exit 2
   fi
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   # The version the product REPORTS is PiCode's own, composed by dev/build.sh as
   # `<VS Code major.minor>.<PiCode release>`; the tag in RELEASE_VERSION is what the
@@ -398,7 +398,7 @@ patch_vscodium() {
     exit 2
   fi
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   echo "--- applying patches/vscodium"
 
@@ -452,7 +452,7 @@ patch_picode() {
     exit 2
   fi
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   echo "--- applying patches/picode"
 

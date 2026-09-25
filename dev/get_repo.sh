@@ -12,7 +12,7 @@
 #     live update API because it tracks Microsoft's releases; a PiCode build
 #     must be reproducible from the repository alone, so the API path is only
 #     reachable through VSCODE_LATEST=yes, which is off by default.
-#   * The clone lands in `./vscode` (the directory VSCodium also uses).
+#   * The clone lands in `./picode-source` (the directory VSCodium also uses).
 #   * `--reuse` derives the same variables from the pin without touching the
 #     network, for `dev/build.sh -s`.
 #
@@ -112,26 +112,26 @@ echo "MS_TAG=\"${MS_TAG}\""
 echo "MS_COMMIT=\"${MS_COMMIT}\""
 
 if [[ "${REUSE_TREE}" == "yes" ]]; then
-  if [[ ! -d "./vscode" ]]; then
-    echo "error: ./vscode does not exist, so it cannot be reused." >&2
+  if [[ ! -d "./picode-source" ]]; then
+    echo "error: ./picode-source does not exist, so it cannot be reused." >&2
     echo "       Run dev/build.sh without -s to fetch the source." >&2
     exit 2
   fi
 
-  if [[ -d "./vscode/.git" ]]; then
-    HEAD_COMMIT=$( git -C ./vscode rev-parse HEAD )
+  if [[ -d "./picode-source/.git" ]]; then
+    HEAD_COMMIT=$( git -C ./picode-source rev-parse HEAD )
     if [[ "${HEAD_COMMIT}" != "${MS_COMMIT}" ]]; then
-      echo "error: ./vscode is at ${HEAD_COMMIT}, but the pin is ${MS_COMMIT}." >&2
+      echo "error: ./picode-source is at ${HEAD_COMMIT}, but the pin is ${MS_COMMIT}." >&2
       echo "       Run dev/build.sh without -s to fetch the pinned commit." >&2
       exit 2
     fi
-    echo "./vscode is at the pinned commit ${MS_COMMIT}"
+    echo "./picode-source is at the pinned commit ${MS_COMMIT}"
   else
-    echo "warning: ./vscode is not a git repository; reusing it as it is." >&2
+    echo "warning: ./picode-source is not a git repository; reusing it as it is." >&2
   fi
 else
-  mkdir -p vscode
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  mkdir -p picode-source
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   git init -q
 
@@ -163,7 +163,7 @@ else
 
   HEAD_COMMIT=$( git rev-parse HEAD )
   if [[ "${HEAD_COMMIT}" != "${MS_COMMIT}" ]]; then
-    echo "error: ./vscode ended up at ${HEAD_COMMIT}, not at the pinned ${MS_COMMIT}." >&2
+    echo "error: ./picode-source ended up at ${HEAD_COMMIT}, not at the pinned ${MS_COMMIT}." >&2
     exit 2
   fi
 

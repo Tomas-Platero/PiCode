@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1091
 #
-# Compiles PiCode's connector — `vscode/extensions/picode` — before the editor is packed.
+# Compiles PiCode's connector — `picode-source/extensions/picode` — before the editor is packed.
 #
 # Why this step exists instead of leaving it to the editor's own extension build: the packing
-# step COLLECTS the extensions under `vscode/extensions/` (that glob is how the connector ends
+# step COLLECTS the extensions under `picode-source/extensions/` (that glob is how the connector ends
 # up inside the binary at all) but it does not run `tsc` for every one of them. A connector
 # packaged without its `out/` is an extension whose `main` points at a file that does not
 # exist: it is inside the editor and it never activates, which is worse than not shipping it,
@@ -18,8 +18,8 @@
 
 set -eo pipefail
 
-CONNECTOR="vscode/extensions/picode"
-TSC="vscode/node_modules/@typescript/native/lib/tsc.js"
+CONNECTOR="picode-source/extensions/picode"
+TSC="picode-source/node_modules/@typescript/native/lib/tsc.js"
 
 if [[ ! -d "./${CONNECTOR}" ]]; then
   echo "error: ${CONNECTOR} does not exist; the connector lives inside the editor's source tree." >&2

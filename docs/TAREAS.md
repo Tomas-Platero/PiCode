@@ -33,7 +33,7 @@
 
 | A medias | Qué falta |
 | --- | --- |
-| **El conector** (`vscode/extensions/picode`) | El contenedor está creado y registrado en la compilación del editor, con su `activate` **vacío a propósito**. Le falta su primer contenido real: el puente de proveedores |
+| **El conector** (`picode-source/extensions/picode`) | El contenedor está creado y registrado en la compilación del editor, con su `activate` **vacío a propósito**. Le falta su primer contenido real: el puente de proveedores |
 | **El host de pi** | La sesión y la traducción están; falta **la clase que las une** con todo lo que el editor pide a un agente |
 | **Los ajustes de pi en Chat** | Solo existe la fila de **Proveedores**; el resto volverá cuando sus funciones existan |
 | **El material viejo** | Archivado en `legacy/picode-pi-chat.tar.gz`, **sin migrar todavía** |

@@ -11,7 +11,7 @@ necesita recompilar.
 
 La diferencia que justifica el trabajo: en el ZIP el producto se parchea sobre un
 `resources/app` ya minificado y con un mapa `checksums` que impide tocar el bundle. Aquí
-el producto se aplica a `vscode/product.json` **antes** de compilar, los `checksums` se
+el producto se aplica a `picode-source/product.json` **antes** de compilar, los `checksums` se
 calculan sobre el resultado, y un cambio de comportamiento se escribe en TypeScript en
 `patches/picode/`.
 
@@ -35,26 +35,26 @@ Cada capa añade algo y ninguna reescribe la anterior. El orden no es negociable
         │
         │  fase 1 · dev/get_repo.sh: clona/fetch del commit y verifica HEAD
         ▼
-  ./vscode                     VS Code sin tocar
+  ./picode-source              VS Code sin tocar
         │
         │  fase 2 · dev/prepare_vscode.sh brand
         │  (identidad base de VSCodium en product.json + dev/vscodium-product.json)
         ▼
-  ./vscode                     listo para los patches heredados
+  ./picode-source              listo para los patches heredados
         │
         │  fase 3 · patches/vscodium/**  (verbatim de upstream/vscodium.json;
         │           acciones .json de borrado, luego *.patch, luego ${OS_NAME}/)
         ▼
-  ./vscode                     con el juego VSCodium aplicado
+  ./picode-source                     con el juego VSCodium aplicado
         │
         │  fase 4 · patches/picode/**    (los cambios propios de fuente)
         ▼
-  ./vscode                     con los cambios propios
+  ./picode-source                     con los cambios propios
         │
         │  fase 5 · distribution/product-delta.json
         │           (node distribution/apply-product-delta.mjs … --write)
         ▼
-  ./vscode/product.json        ya es el producto PiCode
+  ./picode-source/product.json        ya es el producto PiCode
         │
         │  fase 6 · npm ci        (dependencias; hasta 5 intentos)
         │  fase 7 · gulp vscode-min-prepack + recursos + politicas win32
@@ -92,7 +92,7 @@ Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash
 | **Python 3.11** | Lo pide el sistema de build de VS Code para los módulos nativos (`node-gyp`). Medido: con **3.14.7** `node-gyp` llegó hasta MSBuild sin quejarse, así que la versión **no** fue el obstáculo; 3.11 es lo que documenta upstream y lo recomendable. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compila algunos módulos nativos de VS Code. Reescribe el `PATH` al terminar: reinicia el shell. | [rustup.rs](https://rustup.rs/) o `winget install --id Rustlang.Rustup -e` |
 | **7-Zip** | Empaqueta archivos `.zip`. | `winget install --id 7zip.7zip -e` |
-| **Visual Studio 2022** (Community o Build Tools) con *Desktop development with C++* **y las librerías Spectre** | `node-gyp` compila los módulos nativos con MSBuild. **Sin las librerías Spectre el build se para** con `error MSB8040` en `@vscode/deviceid` y `@vscode/windows-registry`. | Ver el comando de abajo |
+| **Visual Studio 2022** (Community o Build Tools) con *Desktop development with C++* **y las librerías Spectre** | `node-gyp` compila los módulos nativos con MSBuild. **Sin las librerías Spectre el build se para** con `error MSB8040` en `@picode-source/deviceid` y `@picode-source/windows-registry`. | Ver el comando de abajo |
 
 El componente Spectre se añade a una instalación existente con el instalador de Visual
 Studio. Hace falta elevación y conviene cerrar Visual Studio antes:
@@ -194,17 +194,17 @@ entorno y debe ser `X.Y.Z`). Ese valor es con lo que se expande `!!RELEASE_VERSI
 ```bash
 ./dev/build.sh          # cadena completa: fetch, preparar, npm ci, compilar, empaquetar, stage
 ./dev/build.sh -o       # solo preparación (fases 1-5): sin npm ci y sin compilar
-./dev/build.sh -s       # reutiliza ./vscode en vez de descargarlo
+./dev/build.sh -s       # reutiliza ./picode-source en vez de descargarlo
 ```
 
 - **`./dev/build.sh`** ejecuta las 8 fases. Necesita las dependencias completas de la
   sección anterior.
 - **`./dev/build.sh -o`** para en la fase 5, sale con código 0 y **no compila nada**. Es la
   forma de verificar la preparación en un minuto en lugar de tras un build largo.
-- **`./dev/build.sh -s`** reutiliza `./vscode`. Si el árbol está limpio (descargado pero
+- **`./dev/build.sh -s`** reutiliza `./picode-source`. Si el árbol está limpio (descargado pero
   nunca preparado) pasa por las fases 2–5; si está sucio, se considera **preparado**, se
   saltan las fases 1–5 y el build continúa en la 6. `-s` verifica además que el `HEAD` de
-  `./vscode` coincide con el commit del pin.
+  `./picode-source` coincide con el commit del pin.
 
 `OS_NAME` se deriva de `OSTYPE` (Git Bash → `windows`) y es **obligatorio**: un `OSTYPE`
 del que no se pueda derivar `windows`, `osx` o `linux` es un error duro, porque el stage de
@@ -215,11 +215,11 @@ arriba dos veces.
 
 | Ruta | Qué es |
 | --- | --- |
-| `./vscode` | El clon de la fuente, ya preparado (fases 1–5). `-o` lo deja así y para. |
+| `./picode-source` | El clon de la fuente, ya preparado (fases 1–5). `-o` lo deja así y para. |
 | `./PiCode-Win32-x64` | La salida del empaquetado (fase 7). |
 | `./PiCode-Win32-x64/PiCode.exe` | El ejecutable construido desde fuente. |
 
-`./vscode` y `./VSCode-*` están en `.gitignore`: la fuente y la salida nunca se versionan.
+`./picode-source` y `./VSCode-*` están en `.gitignore`: la fuente y la salida nunca se versionan.
 
 ### Qué se ha ejecutado y qué no
 
@@ -329,7 +329,7 @@ aplica explícitamente solo si `DISABLE_UPDATE=yes`, que el build por defecto no
 Para autorar uno:
 
 ```bash
-./dev/build.sh -o            # una vez, para tener ./vscode preparado
+./dev/build.sh -o            # una vez, para tener ./picode-source preparado
 ./dev/patch.sh 00-my-change  # resetea, rehace el baseline, aplica, edita, regenera
 ./dev/update_patches.sh      # regenera todos los patches en orden
 ```
@@ -367,7 +367,7 @@ El pipeline avisa: **`patches/**` no se escribe** salvo por `patch.sh` /
 - `./dev/build.sh -o` sale con `exit 0` (tres veces en un clon aparte, más una tras los
   arreglos) y deja el árbol preparado.
 - La marca del `package.json` y los metadatos de electron se aplican de verdad: tras
-  `./dev/build.sh -o`, `vscode/package.json` lleva `version 1.135.0` y `author.name
+  `./dev/build.sh -o`, `picode-source/package.json` lleva `version 1.135.0` y `author.name
   "PiCode"`, `build/lib/electron.ts` lleva `companyName: 'PiCode'` y el copyright con
   `PiCode`, y `resources/server/manifest.json` lleva `name`/`short_name` `PiCode`.
 - La fase 8 sobre una salida de empaquetado sintética sale con `exit 0` y es idempotente.
@@ -377,7 +377,7 @@ El pipeline avisa: **`patches/**` no se escribe** salvo por `patch.sh` /
 - **`./dev/build.sh -s` se paró en la fase 6 (`npm ci`).** No fue por Python ni por Node:
   `node-gyp` invocó MSBuild y este respondió
   `error MSB8040: Spectre-mitigated libraries are required for this project` en
-  `@vscode/deviceid` y `@vscode/windows-registry`. Faltaba el componente
+  `@picode-source/deviceid` y `@picode-source/windows-registry`. Faltaba el componente
   `Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre`. **Instalado, la cadena
   completa termina**; el síntoma y su comprobación están en la tabla de dependencias.
 
@@ -408,7 +408,7 @@ El pipeline avisa: **`patches/**` no se escribe** salvo por `patch.sh` /
 - **Lo único que hay que acertar ANTES de la fase 7 es lo que el empaquetador graba dentro
   de los binarios**: el icono y las cadenas de versión que escribe `rcedit`. Eso sí queda
   grabado a fuego en el `.exe`, y corregirlo después exige volver a ejecutar `rcedit`
-  (`vscode/node_modules/rcedit/rcedit.exe`), no copiar un fichero.
+  (`picode-source/node_modules/rcedit/rcedit.exe`), no copiar un fichero.
 
 **Sobre `defaultChatAgent` y el límite del núcleo minificado:** este camino elimina el
 límite del camino binario, porque el cambio de fuente se escribe en TypeScript antes de

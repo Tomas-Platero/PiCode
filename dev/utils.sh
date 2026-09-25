@@ -46,7 +46,7 @@ fi
 require_jq() {
   if ! command -v jq > /dev/null 2>&1; then
     echo "error: jq was not found on PATH." >&2
-    echo "       The product branding stage rewrites vscode/product.json with jq," >&2
+    echo "       The product branding stage rewrites picode-source/product.json with jq," >&2
     echo "       and the patches/vscodium/*.json removal actions read it too." >&2
     echo "       Install jq (https://jqlang.github.io/jq/download/) and re-run." >&2
     exit 2
@@ -177,10 +177,10 @@ exists() { type -t "$1" &> /dev/null; }
 # `patches/**` is only read, or replaced by the tool the developer asked for.
 # ---------------------------------------------------------------------------
 
-# Brings ./vscode back to the pinned source, discarding the preparation and
+# Brings ./picode-source back to the pinned source, discarding the preparation and
 # anything a previous patch attempt left behind.
 picode_reset_tree() {
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   git add .
   git reset -q --hard HEAD
@@ -194,7 +194,7 @@ picode_reset_tree() {
 picode_prepare_baseline() {
   bash dev/build.sh -o -s
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
   git add -A
   cd ..
 }
@@ -205,7 +205,7 @@ picode_regenerate_patch() {
   local target="$1"
   local tmp
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   picode_tmp_dir
   tmp="${PICODE_TMP_DIR}/$( basename "${target}" )"
@@ -238,7 +238,7 @@ picode_regenerate_patch() {
 picode_apply_for_edit() {
   local target="$1"
 
-  cd vscode || { echo "'vscode' dir not found"; exit 1; }
+  cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
   if [[ ! -f "../${target}" ]]; then
     echo "error: ${target} does not exist." >&2

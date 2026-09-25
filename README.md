@@ -119,19 +119,19 @@ git --version
 ```bash
 ./dev/build.sh          # the whole chain: fetch, prepare, compile, pack, stage
 ./dev/build.sh -o       # the preparation alone, without compiling
-./dev/build.sh -s       # reuse ./vscode instead of fetching it again
+./dev/build.sh -s       # reuse ./picode-source instead of fetching it again
 ```
 
 - `-o` is how to check that the patch set composes **without paying for a whole build**: it takes
   minutes and leaves the tree prepared.
-- `-s` **resumes**. If `./vscode` is already prepared it goes straight into `npm ci` and carries on:
+- `-s` **resumes**. If `./picode-source` is already prepared it goes straight into `npm ci` and carries on:
   that is what you use after a failure you have already fixed. It is not a default anywhere, because
   it fails outright when there is no tree to reuse — `dev/build-live.sh` and
   `dev/build-window.cmd` run the whole chain for that reason.
 - The whole chain takes on the order of **20-45 minutes** (`npm ci` plus the gulp task) and needs a
   few GB of `node_modules`.
 - When it ends, the packed tree is in `./PiCode-Win32-<arch>/` with the `distribution/` layer already
-  applied. `./vscode` and `./PiCode-*` are build outputs: git ignores them and they can be deleted at
+  applied. `./picode-source` and `./PiCode-*` are build outputs: git ignores them and they can be deleted at
   any time.
 
 #### If something fails

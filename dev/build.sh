@@ -6,7 +6,7 @@
 #
 #   ./dev/build.sh        fetch, prepare, install, compile, stage
 #   ./dev/build.sh -o     stop after the preparation (no npm install, no compile)
-#   ./dev/build.sh -s     reuse the existing ./vscode instead of fetching it
+#   ./dev/build.sh -s     reuse the existing ./picode-source instead of fetching it
 #
 # Adapted from VSCodium's `dev/build.sh` at the revision pinned in
 # `upstream/vscodium.json`. Where it differs:
@@ -27,7 +27,7 @@
 #   * `-o` stops after phase 5 and does not compile, so the preparation can be
 #     verified without a 20-minute build.
 #
-# `-s` reuses `./vscode` as it is:
+# `-s` reuses `./picode-source` as it is:
 #   * a clean tree (freshly fetched, never prepared) goes through phases 2-5;
 #   * a dirty tree is a *prepared* tree, so phases 1-5 are skipped and the build
 #     resumes at phase 6, which is what VSCodium's SKIP_SOURCE does.
@@ -63,7 +63,7 @@ usage() {
 usage: ./dev/build.sh [-s] [-o]
 
   (no flag)  fetch the pinned VS Code source, prepare it, install, compile, stage
-  -s         reuse the existing ./vscode instead of fetching it
+  -s         reuse the existing ./picode-source instead of fetching it
   -o         stop after the preparation (phase 5); no npm install, no compile
 EOF
 }
@@ -151,17 +151,17 @@ require_tool() {
   fi
 }
 
-require_tool jq "The product branding stage rewrites vscode/product.json with jq (install jq)."
+require_tool jq "The product branding stage rewrites picode-source/product.json with jq (install jq)."
 require_tool git "The source is fetched and patched with git."
 require_tool node "The product delta is applied by node, and the build runs npm."
 
 # ---------------------------------------------------------------------------
-# Is ./vscode already a prepared tree?
+# Is ./picode-source already a prepared tree?
 # ---------------------------------------------------------------------------
 TREE_PREPARED="no"
 
-if [[ "${REUSE_TREE}" == "yes" && -d "./vscode/.git" ]]; then
-  if [[ -n "$( git -C ./vscode status --porcelain )" ]]; then
+if [[ "${REUSE_TREE}" == "yes" && -d "./picode-source/.git" ]]; then
+  if [[ -n "$( git -C ./picode-source status --porcelain )" ]]; then
     TREE_PREPARED="yes"
   fi
 fi
@@ -173,11 +173,11 @@ echo ""
 echo "== phase 1/8 - fetch the pinned VS Code source"
 
 if [[ "${TREE_PREPARED}" == "yes" ]]; then
-  echo "skipped: ./vscode is already prepared (reused by -s)"
+  echo "skipped: ./picode-source is already prepared (reused by -s)"
 elif [[ "${REUSE_TREE}" == "yes" ]]; then
   . ./dev/get_repo.sh --reuse
 else
-  for stale in ./vscode ./VSCode-* ./vscode-*; do
+  for stale in ./picode-source ./PiCode-* ./VSCode-* ./vscode-*; do
     if [[ -e "${stale}" ]]; then
       echo "removing ${stale}"
       rm -rf -- "${stale}"
@@ -235,13 +235,13 @@ if [[ "${TREE_PREPARED}" == "yes" ]]; then
   # Phases 2-5 are exactly what the tree already carries.
   # -------------------------------------------------------------------------
   echo ""
-  echo "== phases 2-5/8 - skipped: ./vscode is the prepared tree (reused by -s)"
+  echo "== phases 2-5/8 - skipped: ./picode-source is the prepared tree (reused by -s)"
 else
   # -------------------------------------------------------------------------
   # Phase 2 - brand product.json
   # -------------------------------------------------------------------------
   echo ""
-  echo "== phase 2/8 - brand vscode/product.json (jq)"
+  echo "== phase 2/8 - brand picode-source/product.json (jq)"
 
   bash dev/prepare_vscode.sh brand
 
@@ -272,11 +272,11 @@ else
   # Phase 5 - the frozen product delta
   # -------------------------------------------------------------------------
   echo ""
-  echo "== phase 5/8 - apply distribution/product-delta.json to vscode/product.json"
+  echo "== phase 5/8 - apply distribution/product-delta.json to picode-source/product.json"
 
   set +e
   node distribution/apply-product-delta.mjs \
-    --target vscode/product.json \
+    --target picode-source/product.json \
     --delta distribution/product-delta.json \
     --write
   DELTA_EXIT=$?
@@ -291,7 +291,7 @@ fi
 if [[ "${SKIP_COMPILE}" == "yes" ]]; then
   echo ""
   echo "== phase 5/8 reached. -o was given: nothing was compiled."
-  echo "prepared tree:  ./vscode"
+  echo "prepared tree:  ./picode-source"
   echo "pack output:    ${PACK_DIR} (not created yet)"
   echo "next:           ./dev/build.sh -s   to install, compile and stage"
   exit 0
@@ -312,7 +312,7 @@ fi
 echo ""
 echo "== phase 6/8 - npm ci"
 
-cd vscode || { echo "'vscode' dir not found"; exit 1; }
+cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -338,8 +338,8 @@ cd ..
 # ---------------------------------------------------------------------------
 # Phase 6b - the connector
 # ---------------------------------------------------------------------------
-# PiCode's connector (`vscode/extensions/picode`) is compiled **here and not by the packer**:
-# the packing step collects every extension under `vscode/extensions/` — which is how the
+# PiCode's connector (`picode-source/extensions/picode`) is compiled **here and not by the packer**:
+# the packing step collects every extension under `picode-source/extensions/` — which is how the
 # connector gets inside the binary — but it does not run `tsc` for it, and an extension
 # packaged without its `out/` never activates. It runs after `npm ci` because it compiles with
 # the tree's own typings, and before the pack because the pack is what collects it.
@@ -349,7 +349,7 @@ echo "== phase 6b/8 - compile the connector"
 
 bash dev/build-connector.sh
 
-cd vscode || { echo "'vscode' dir not found"; exit 1; }
+cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Phase 7 - compile and pack
@@ -369,7 +369,7 @@ export VSCODE_PUBLISH_COUNTER=1
 # running the phase: the file lives in the *VSCodium repository* (`build/windows/
 # rtf/make.sh`, called by VSCodium as `. ../build/windows/rtf/make.sh`), not in
 # VS Code and not in any patch, so `bash build/windows/rtf/make.sh` from inside
-# `./vscode` aborted the phase with exit 127 -- `./vscode/build/windows/` does not
+# `./picode-source` aborted the phase with exit 127 -- `./picode-source/build/windows/` does not
 # exist. It is also not needed: its only product is `LICENSE.rtf`, which is read
 # by `build/win32/code.iss`, the Inno installer, and PiCode builds no installer.
 npm run gulp vscode-min-prepack
@@ -399,7 +399,7 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 
 echo ""
 echo "== done"
-echo "source:    ./vscode (commit ${MS_COMMIT})"
+echo "source:    ./picode-source (commit ${MS_COMMIT})"
 # The product reports APP_VERSION (PiCode's own release), while RELEASE_VERSION is the
 # VS Code tag the assets are named after. Printing the tag as "the product" would state a
 # version the running editor does not report.

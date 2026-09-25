@@ -25,7 +25,7 @@ integrado como si el editor siempre hubiera sido así.
         │  · Ajustes, bajo Chat                            │    (nada fuera)
         │  · El host de agentes (proceso con Node)         │  · Proveedores y claves
         │                                                  │  · Habilidades y paquetes
-        │  EL CONECTOR  (vscode/extensions/picode)  ───────┤  · Sesiones
+        │  EL CONECTOR  (picode-source/extensions/picode)  ┤  · Sesiones
         │  · Puente a pi: proveedores, SDK, modelos        │
         └──────────────────────────────────────────────────┘
 ```
@@ -55,9 +55,9 @@ Vive **dentro del núcleo**, partido en dos por una razón técnica que conviene
 | Dónde | Qué hace | Por qué ahí |
 | --- | --- | --- |
 | `src/vs/platform/agentHost/node/pi/` | El host de agentes: abrir una sesión de pi y traducir lo que dice y hace a lo que el editor entiende | Es el **proceso del núcleo que sí tiene Node**, y es el mismo sitio donde VS Code pone sus otros agentes |
-| `vscode/extensions/picode/` | El **conector**: catálogo de proveedores, modelos, claves, perfil | Es una **extensión del núcleo** — se compila con el editor y viaja en el binario. Aquí está Node, y aquí van los puentes |
+| `picode-source/extensions/picode/` | El **conector**: catálogo de proveedores, modelos, claves, perfil | Es una **extensión del núcleo** — se compila con el editor y viaja en el binario. Aquí está Node, y aquí van los puentes |
 
-**Esto no es una extensión al lado del editor.** Todo lo que hay bajo `vscode/extensions/`
+**Esto no es una extensión al lado del editor.** Todo lo que hay bajo `picode-source/extensions/`
 *es* el editor: son `git`, `github-authentication`, `markdown-language-features`… y el
 conector es uno más. **No dibuja nada**: ni chat, ni modales, ni ajustes propios. Si algo
 necesita superficie, la superficie va al núcleo.

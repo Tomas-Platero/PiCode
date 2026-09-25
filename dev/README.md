@@ -9,26 +9,26 @@ who only wants to use PiCode.
 ```bash
 ./dev/build.sh          # fetch, prepare, npm ci, compile, pack, stage
 ./dev/build.sh -o       # stop after the preparation (no npm ci, no compile)
-./dev/build.sh -s       # reuse ./vscode instead of fetching it
+./dev/build.sh -s       # reuse ./picode-source instead of fetching it
 ```
 
 ## Phases
 
 | # | Phase | What runs |
 | --- | --- | --- |
-| 1 | fetch | `dev/get_repo.sh`: clone `upstream/stable.json` → `./vscode`, pinned by commit. `dev/version.sh` derives `BUILD_SOURCEVERSION`. |
-| 2 | brand | `dev/prepare_vscode.sh brand`: `jq` rewrites `vscode/product.json`. |
+| 1 | fetch | `dev/get_repo.sh`: clone `upstream/stable.json` → `./picode-source`, pinned by commit. `dev/version.sh` derives `BUILD_SOURCEVERSION`. |
+| 2 | brand | `dev/prepare_vscode.sh brand`: `jq` rewrites `picode-source/product.json`. |
 | 3 | VSCodium patches | `dev/prepare_vscode.sh patches-vscodium`: `*.json` removal actions, then `*.patch`, then `insider/` (insider only), then `${OS_NAME}/`, then `user/`. |
 | 4 | PiCode patches | `dev/prepare_vscode.sh patches-picode`: the same order, over `patches/picode/`. |
-| 5 | product delta | `node distribution/apply-product-delta.mjs --target vscode/product.json --delta distribution/product-delta.json --write`. |
-| 6 | dependencies | `npm ci` in `./vscode` (up to five attempts, as VSCodium does). |
+| 5 | product delta | `node distribution/apply-product-delta.mjs --target picode-source/product.json --delta distribution/product-delta.json --write`. |
+| 6 | dependencies | `npm ci` in `./picode-source` (up to five attempts, as VSCodium does). |
 | 7 | compile and pack | `npm run gulp vscode-min-prepack`, the RTF/EULA resource, the win32 group-policy definitions, `npm run gulp vscode-win32-x64-min-packing`. |
 | 8 | stage | `dev/stage-distribution.sh`: the distribution layer onto `./PiCode-Win32-x64`. |
 
 `-o` stops after phase 5 with exit code 0 and compiles nothing. It exists so the
 preparation can be verified in a minute rather than after a full build.
 
-`-s` reuses `./vscode`. A clean tree (fetched, never prepared) goes through
+`-s` reuses `./picode-source`. A clean tree (fetched, never prepared) goes through
 phases 2–5; a dirty tree is a prepared tree, so phases 1–5 are skipped and the
 build resumes at phase 6. That is the split VSCodium's `SKIP_SOURCE` provides.
 
@@ -69,7 +69,7 @@ There are two mechanisms, and they carry different things:
 
 - `distribution/product-delta.json` owns the PiCode **product** (`nameShort`,
   `nameLong`, `applicationName`, `urlProtocol`, the gallery, the URLs, the
-  removals). Phase 5 applies it to `vscode/product.json` *before* packing, which
+  removals). Phase 5 applies it to `picode-source/product.json` *before* packing, which
   is why the built-in product is PiCode's and why nothing has to be rewritten
   inside `resources/app` afterwards.
 - The `!!APP_NAME!!`-style placeholders own the PiCode **paths and URLs** that
@@ -123,7 +123,7 @@ which is exactly what the shipped `resources/app/product.json` carries.
   so there is nothing to splice.
 - **The Start Menu tiles and the executable's icon are branded before the pack.**
   `dev/prepare_vscode.sh metadata` (function `brand_windows_icons`) writes
-  `vscode/resources/win32/code.ico` from `distribution/picode.ico` and redraws the 70 px
+  `picode-source/resources/win32/code.ico` from `distribution/picode.ico` and redraws the 70 px
   and 150 px tiles with `System.Drawing`. This is **not** an optional tidy-up and it is
   not a phase-8 job: `rcedit` stamps the executable from that file while the tree is
   being packed, so replacing it afterwards changes nothing. Measured: the first full
@@ -158,7 +158,7 @@ which is exactly what the shipped `resources/app/product.json` carries.
 ## What the pipeline never writes
 
 `patches/**` (the templates are expanded into a temporary copy),
-`distribution/**`, `extensions/**` and `.git/**`. `./vscode` and `./VSCode-*` are
+`distribution/**`, `extensions/**` and `.git/**`. `./picode-source` and `./VSCode-*` are
 build outputs and are git-ignored.
 
 ## Building without a terminal

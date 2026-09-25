@@ -79,7 +79,7 @@ if [[ "${FLAGS[0]}" == "-DepsOnly" ]]; then
   # The dependency install on its own: it is the longest phase, and when it fails there is no point
   # compiling anything. Its retries and its flags are the build's own, so both paths behave alike.
   (
-    cd vscode || exit 2
+    cd picode-source || exit 2
     export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
     node build/npm/preinstall.ts
     for attempt in {1..5}; do
