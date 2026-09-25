@@ -194,7 +194,7 @@ index 7a72463d..b704a86f 100644
 +	}
  }
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
-index 8b734e44..36267389 100644
+index 8b734e44..de646244 100644
 --- a/extensions/picode/src/agent.ts
 +++ b/extensions/picode/src/agent.ts
 @@ -6,6 +6,8 @@
@@ -234,8 +234,17 @@ index 8b734e44..36267389 100644
  	readonly log: (line: string) => void;
  }
  
-@@ -233,6 +237,8 @@ export interface AgentDeps {
+@@ -230,9 +234,17 @@ export interface AgentDeps {
+  * the editor's chat is one conversation in one place. The session is rebuilt if the folder
+  * changes, because a session that outlived its directory is a session pi cannot use.
+  */
++/** The live session's reset hook, set by registerPiAgent for `resetChatSession`. */
++let sessionResetter: (() => void) | undefined;
++
  export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
++	// The setup bridge needs to drop the live session when Gentle AI is installed or
++	// removed: its agents, skills and commands load when pi's session is created.
++	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; };
  	let session: PiSession | undefined;
  	let sessionFolder: string | undefined;
 +	/** The profile the live session was built against, so a runtime switch rebuilds it. */
@@ -243,7 +252,7 @@ index 8b734e44..36267389 100644
  	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
  	let services: PiServices | undefined;
  	/**
-@@ -269,15 +275,21 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -269,15 +281,21 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
  		try {
  			const selected = modelRefOf(request.model, VENDOR);
  			const signature = mcpEnabled() ? currentMcpSignature() : '';
@@ -271,7 +280,7 @@ index 8b734e44..36267389 100644
  				}
  				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
  				const created = await sdk.createAgentSessionFromServices({
-@@ -293,6 +305,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -293,6 +311,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
  				});
  				session = created.session;
  				sessionFolder = cwd;
@@ -279,14 +288,25 @@ index 8b734e44..36267389 100644
  				mcpSignature = signature;
  			} else {
  				// The model picked in the chat between two turns is followed here: a session that
+@@ -329,3 +348,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+ 	);
+ 	return participant;
+ }
++
++/** Disposes the chat's live pi session; the next message rebuilds it from scratch. */
++export function resetChatSession(): void {
++	sessionResetter?.();
++}
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
-index b9e7e83d..c5e3f6b0 100644
+index b9e7e83d..5c1b2f35 100644
 --- a/extensions/picode/src/extension.ts
 +++ b/extensions/picode/src/extension.ts
-@@ -20,6 +20,8 @@ import {
+@@ -19,7 +19,9 @@ import {
+ 	readConfiguration,
  	type ProviderConfiguration,
  } from './providers';
- import { registerPiAgent } from './agent';
+-import { registerPiAgent } from './agent';
++import { registerPiAgent, resetChatSession } from './agent';
 +import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
 +import { chatAgentDir, internalProfileDir, sdkEntryCandidates } from './runtime';
  
@@ -378,7 +398,7 @@ index b9e7e83d..c5e3f6b0 100644
  		log: line => console.error(`[pi] ${line}`),
  	});
  
-@@ -689,6 +701,15 @@ export function activate(context: vscode.ExtensionContext): void {
+@@ -689,6 +701,17 @@ export function activate(context: vscode.ExtensionContext): void {
  	// says which of its providers can be logged in with an account the owner already pays for,
  	// and the editor's own quick pick is where he chooses. The endpoints with an address and a
  	// dialect have their own form in the settings row, and never come through here.
@@ -387,6 +407,8 @@ index b9e7e83d..c5e3f6b0 100644
 +		profileDir: profileDirectory(context.extensionUri),
 +		globalState: context.globalState,
 +		forgetRuntime: forgetPiRuntime,
++		// Installing or removing Gentle AI must be visible to the chat immediately.
++		resetChat: resetChatSession,
 +	};
 +	context.subscriptions.push(...registerSetupCommands(setupDeps));
 +	void maybeNudgeFirstRun(setupDeps);
@@ -428,16 +450,16 @@ index d2be4d69..e905eb5a 100644
  		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
 diff --git a/extensions/picode/src/onboarding.ts b/extensions/picode/src/onboarding.ts
 new file mode 100644
-index 00000000..60d3fa0e
+index 00000000..47749e57
 --- /dev/null
 +++ b/extensions/picode/src/onboarding.ts
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,374 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
 + *--------------------------------------------------------------------------------------------*/
 +
-+import { existsSync, readFileSync } from 'node:fs';
++import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 +import * as path from 'node:path';
 +import { execFile } from 'node:child_process';
 +import * as vscode from 'vscode';
@@ -486,6 +508,9 @@ index 00000000..60d3fa0e
 +/** The one-shot copy from the external profile into PiCode's own. */
 +export const IMPORT_COMMAND = 'picode.setup.importFromExternal';
 +
++/** The Gentle install's live output, polled by the page while the install runs. */
++export const GENTLE_LOG_COMMAND = 'picode.setup.gentleLog';
++
 +/** What the probe answers about the machine's pi. */
 +export interface ExternalPiInfo {
 +	readonly found: boolean;
@@ -516,6 +541,8 @@ index 00000000..60d3fa0e
 +	readonly globalState: vscode.Memento;
 +	/** Drops the cached pi runtime, so the editor asks for models again after a pi change. */
 +	readonly forgetRuntime: () => void;
++	/** Disposes the chat's live pi session, so the next message loads what just changed. */
++	readonly resetChat: () => void;
 +}
 +
 +/** What the welcome page renders, and what the actions answer with. */
@@ -533,6 +560,43 @@ index 00000000..60d3fa0e
 +/** The answer of an action that may fail, with the reason for a failed one. */
 +export interface SetupActionError {
 +	readonly error?: string;
++}
++
++/** The Gentle installer's live state, answered to the page's poll. */
++const gentleLog: { running: boolean; lines: string[] } = { running: false, lines: [] };
++
++function logGentle(line: string): void {
++	gentleLog.lines.push(line);
++	if (gentleLog.lines.length > 12) {
++		gentleLog.lines.splice(0, gentleLog.lines.length - 12);
++	}
++}
++
++/**
++ * Adds or removes the two Gentle sources in the profile's `settings.json` — the file pi
++ * reads its package list from. This is what `pi install` / `pi remove` write; doing it
++ * here is what keeps the install inside npm calls we hide, instead of pi's installer
++ * flashing console windows.
++ */
++function editProfilePackages(deps: SetupDeps, add: boolean): void {
++	const file = path.join(deps.profileDir, 'settings.json');
++	let settings: Record<string, unknown> = {};
++	try {
++		const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
++		if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
++			settings = value as Record<string, unknown>;
++		}
++	} catch {
++		// No file yet, or a malformed one: a fresh profile starts from an empty object and
++		// the first write creates it.
++	}
++	const packages = Array.isArray(settings['packages']) ? settings['packages'].filter((p): p is string => typeof p === 'string') : [];
++	const next = add
++		? [...new Set([...packages, ...GENTLE_PACKAGES.map(p => p.replace(/^npm:/, 'npm:'))])]
++		: packages.filter(p => !GENTLE_PACKAGES.some(g => p === g || p === g.replace(/^npm:/, '')));
++	settings['packages'] = next;
++	mkdirSync(deps.profileDir, { recursive: true });
++	writeFileSync(file, JSON.stringify(settings, undefined, '\t') + '\n');
 +}
 +
 +export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
@@ -576,34 +640,39 @@ index 00000000..60d3fa0e
 +				return { ...state(), error: 'Gentle AI follows the internal pi. Your external pi keeps its own profile, which this editor never writes to.' };
 +			}
 +			const want = enable === 'update' ? 'update' : enable === true || enable === 'install' ? 'install' : 'remove';
-+			// Two facts the hard way, both measured against the shipped runtime:
-+			// - pi's command line takes ONE source per command; passing both packages at
-+			//   once is rejected with "Unexpected argument" and exit 0, which is exactly
-+			//   the "it started and stopped" the wizard showed.
-+			// - npm's install-script gate leaves gentle-pi's postinstall — the step that
-+			//   fetches the Gentle AI binary — pending until the package is approved. The
-+			//   approval only sticks once the package exists, and `npm rebuild` then runs
-+			//   the pending script. install -> approve-scripts -> rebuild is the sequence
-+			//   that leaves node_modules/gentle-pi/.gentle-ai/<version>/gentle-ai(.exe).
-+			await vscode.window.withProgress(
-+				{ location: vscode.ProgressLocation.Notification, title: want === 'install' ? 'Installing Gentle AI…' : want === 'update' ? 'Updating Gentle AI…' : 'Removing Gentle AI…' },
-+				async () => {
-+					for (const pkg of GENTLE_PACKAGES) {
-+						await runPiCli(deps, [want, pkg]);
-+						if (want === 'remove') {
-+							continue;
-+						}
-+						try {
-+							await runNpm(deps, ['approve-scripts', pkg.replace(/^npm:/, '')]);
-+							await runNpm(deps, ['rebuild', pkg.replace(/^npm:/, '')]);
-+						} catch {
-+							// An npm too old for approve-scripts, or a rebuild hiccup, leaves the
-+							// install script pending rather than broken: the disk check below
-+							// reports the honest state, and the error line names the outcome.
-+						}
-+					}
-+				},
-+			);
++			// The installer is OURS, not pi's: `pi install` flashes console windows (its own
++			// npm children are spawned without a hidden console) and says nothing until it
++			// ends. What it writes is simple - the two sources in the profile's
++			// `settings.json`, then npm into the profile's npm project - so the steps run
++			// here, hidden, each one logged for the card to show live.
++			gentleLog.running = true;
++			gentleLog.lines = [];
++			try {
++				if (want === 'remove') {
++					logGentle("Removing Gentle AI from pi's configuration…");
++					editProfilePackages(deps, false);
++					logGentle('Removed. New conversations run plain pi.');
++				} else {
++					logGentle("Recording Gentle AI in pi's configuration…");
++					editProfilePackages(deps, true);
++					logGentle('Installing the packages with npm (this downloads the agent)…');
++					await runNpm(deps, ['install', 'gentle-pi', 'gentle-engram']);
++					logGentle('Approving install scripts…');
++					await runNpm(deps, ['approve-scripts', 'gentle-pi']);
++					await runNpm(deps, ['approve-scripts', 'gentle-engram']);
++					logGentle('Rebuilding so the approved script runs (fetches the agent)…');
++					await runNpm(deps, ['rebuild', 'gentle-pi', 'gentle-engram']);
++					logGentle('Checking what landed on disk…');
++				}
++			} catch (error) {
++				gentleLog.running = false;
++				logGentle(messageOf(error));
++				throw error;
++			}
++			gentleLog.running = false;
++			// Gentle's agents, skills and commands load when pi's session is created; the
++			// live session is disposed so the next message rebuilds with them in.
++			deps.resetChat();
 +			markDone();
 +			const after = state();
 +			// The honest answer is what is actually on disk now, not what the command hoped:
@@ -617,6 +686,7 @@ index 00000000..60d3fa0e
 +		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 +		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 +			({ ...scanExternalProfile(), profile: externalProfileDir() })),
++		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[] } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
 +		vscode.commands.registerCommand(IMPORT_COMMAND, (credentials: unknown) => {
 +			// Credentials are the one item whose copy is the owner's own decision: the page asks
 +			// for them behind an unchecked box, and nothing here turns the import into a way of
@@ -674,6 +744,11 @@ index 00000000..60d3fa0e
 +}
 +
 +/** Whether Gentle AI is installed in the given profile. */
++/** The sentence an error carries, whatever threw it. */
++function messageOf(error: unknown): string {
++	return error instanceof Error ? error.message : String(error);
++}
++
 +export function isGentleInstalled(profileDir: string): boolean {
 +	return GENTLE_PACKAGE_DIRS.every(dir => existsSync(path.join(profileDir, 'npm', 'node_modules', dir)));
 +}
@@ -730,33 +805,6 @@ index 00000000..60d3fa0e
 +		});
 +	}
 +	return (externalProbe = { found: true, path: shim, version });
-+}
-+
-+/**
-+ * Runs one pi CLI command against PiCode's own profile.
-+ *
-+ * The CLI is the pinned pi's own entry, run with the editor's binary in Node mode
-+ * (`ELECTRON_RUN_AS_NODE`): the extension host's `process.execPath` is the Electron
-+ * executable, and without the flag it would try to open an app instead of running a script.
-+ * `PI_CODING_AGENT_DIR` points the command at PiCode's profile, so the packages are
-+ * installed where the product can see them and nowhere else.
-+ */
-+export function runPiCli(deps: SetupDeps, args: readonly string[]): Promise<void> {
-+	const entry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
-+	if (!existsSync(entry)) {
-+		return Promise.reject(new Error("pi's command line is not installed in this editor."));
-+	}
-+	return new Promise<void>((resolve, reject) => {
-+		execFile(
-+			process.execPath,
-+			[entry, ...args],
-+			{
-+				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: deps.profileDir },
-+				windowsHide: true,
-+			},
-+			error => (error === null ? resolve() : reject(error)),
-+		);
-+	});
 +}
 +
 +/**

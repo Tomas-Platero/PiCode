@@ -768,7 +768,7 @@ index e97fa180..c278ab2b 100644
  				this.setSlide('categories');
  				this.container.focus();
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-index c2622705..b5ce04e2 100644
+index c2622705..bbb83bb3 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 @@ -109,34 +109,32 @@
@@ -1246,7 +1246,7 @@ index c2622705..b5ce04e2 100644
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
  	grid-area: right-column;
  }
-@@ -1146,3 +1559,68 @@
+@@ -1146,3 +1559,91 @@
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlide .getting-started-checkbox {
  	border-color: var(--vscode-checkbox-border) !important;
  }
@@ -1315,12 +1315,35 @@ index c2622705..b5ce04e2 100644
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-body .picode-theme-grid {
 +	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 +}
++
++/* the Gentle installer's live output, polled while it runs */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log {
++	margin-top: 6px;
++	font-family: var(--monaco-monospace-font);
++	font-size: .85em;
++	opacity: .75;
++	max-height: 74px;
++	overflow: hidden;
++	display: flex;
++	flex-direction: column;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log:empty {
++	margin: 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log-line {
++	white-space: nowrap;
++	overflow: hidden;
++	text-overflow: ellipsis;
++}
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
 new file mode 100644
-index 00000000..0d943830
+index 00000000..afc7c6f5
 --- /dev/null
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
-@@ -0,0 +1,778 @@
+@@ -0,0 +1,796 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1432,6 +1455,8 @@ index 00000000..0d943830
 +	private importResult: HTMLElement | undefined;
 +	private note: HTMLElement | undefined;
 +	private gentleStatus: HTMLElement | undefined;
++	/** The Gentle installer's live output, polled while the install runs. */
++	private gentleLogEl: HTMLElement | undefined;
 +
 +	constructor(
 +		private readonly container: HTMLElement,
@@ -1788,6 +1813,10 @@ index 00000000..0d943830
 +		);
 +		this.gentleStatus = $('.picode-gentle-status');
 +		card.appendChild(this.gentleStatus);
++		// The installer's own output lands here while it runs; a card that talks is a
++		// card that reassures.
++		this.gentleLogEl = $('.picode-gentle-log');
++		card.appendChild(this.gentleLogEl);
 +		return card;
 +	}
 +
@@ -1994,6 +2023,17 @@ index 00000000..0d943830
 +	private async applyGentle(action: 'install' | 'update' | 'remove'): Promise<void> {
 +		if (this.busy || this.state === undefined || this.state.runtime !== 'internal') { return; }
 +		this.busy = true;
++		// The install takes a while; the bridge logs its steps, and this poll paints
++		// them as they happen - a card that talks is a card that reassures.
++		const poll = setInterval(() => {
++			void this.services.commandService
++				.executeCommand<{ running: boolean; lines: string[] }>('picode.setup.gentleLog')
++				.then(log => {
++					if (log === undefined || this.gentleLogEl === undefined || !this.gentleLogEl.isConnected) { return; }
++					reset(this.gentleLogEl, ...log.lines.slice(-4).map(line => $('.picode-gentle-log-line', {}, line)));
++				})
++				.catch(() => { /* the next tick tries again */ });
++		}, 1200);
 +		if (this.gentleStatus) {
 +			this.gentleStatus.textContent = action === 'install'
 +				? localize('picodeSetup.gentle.installing', "Installing — pi's own installer runs; this can take a moment…")
@@ -2007,6 +2047,7 @@ index 00000000..0d943830
 +		} catch (error) {
 +			this.setNote(messageOf(error), true);
 +		}
++		clearInterval(poll);
 +		this.busy = false;
 +		await this.render();
 +	}
