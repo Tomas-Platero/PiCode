@@ -69,3 +69,41 @@ Studio 2022 con el instalador de VS (una sola confirmación de administrador), *
 ## Registro
 
 - 2026-09-25 · pedido, comprobado qué está unificado y elegido WinUI 3 por el dueño.
+
+## El diseño que quiere el dueño (2026-09-25, después de B1)
+
+El dueño manda una referencia visual: un **shell de aplicación** — barra lateral de navegación, tarjetas
+con esquinas redondeadas, cabecera con el logo, línea de tiempo en los pasos, estado a la derecha y una
+franja inferior— y pide «algo así con el logo de picode».
+
+**Qué se copia de la referencia y qué no:**
+
+- **Se copia la estructura**: barra lateral, tarjetas, el paso actual destacado, el porcentaje grande, el
+  botón de parar, el resumen de comprobaciones y el cartel de la última build.
+- **El logo es el suyo**, desde `distribution/picode-icon.svg`, cargado en tiempo de ejecución con
+  `SvgImageSource` (WinUI lo entiende; el SVG no se puede incrustar como los PNG).
+- **El tema y el color de acento son los del sistema.** No se fija ninguno: WinUI sigue a Windows y coge
+  su color de acento, que es lo que pide la skill y hace que la app se vea nativa en cualquier máquina.
+- **NO se copian los tiempos por paso** (00:24, 00:48…): `dev/build-progress.mjs` **no los mide**. Poner
+  un número inventado es mentir en la pantalla que existe para decir la verdad. El total sí se muestra.
+- **NO se copian las montañas** ni el adorno de fondo: no sirve a nada de lo que la ventana hace.
+- **NO se copia el desplegable de arquitectura**: el pipeline construye `win-x64` y nada más. Un
+  desplegable con una sola opción es un botón que no hace nada; va como dato.
+
+**Reparto en páginas** (para no duplicar controles, que en XAML no se pueden tener en dos sitios):
+
+| Página | Qué lleva |
+| --- | --- |
+| Home | El logo y el nombre, el objetivo, el resumen de comprobaciones, la última build y el botón grande de construir |
+| Build | La build en marcha y la línea de tiempo de los pasos, con su barra |
+| System Check | La lista completa, con su botón en lo que falte |
+| Build Logs | Lo que dijo la build |
+| Settings | El sistema de destino y la arquitectura |
+
+## Tareas (revisadas)
+
+- [x] B1 **Comprobado**: la vía sin administrador vale y no se instaló nada.
+- [ ] B2 **El shell**: barra lateral, páginas, tarjetas y el logo. Con el tema y el acento del sistema.
+- [ ] B3 **La build en marcha**: pasos como línea de tiempo, porcentaje grande, y el botón de parar.
+- [ ] B4 **Ejecutarla y mirarla** en los dos objetivos (Linux espera al reinicio).
+- [ ] B5 **Los documentos**.

@@ -2,9 +2,77 @@
     x:Class="PiCode.Builder.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
     Title="PiCode Builder">
-    <StackPanel Padding="24" Spacing="10">
-        <TextBlock Text="PiCode Builder" FontSize="20" FontWeight="SemiBold"/>
-        <TextBlock Text="The environment builds and runs WinUI 3." />
-    </StackPanel>
+
+    <!-- The theme is the system's: WinUI follows Windows by itself, so there is no palette here and
+         nothing to keep in step. -->
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" Padding="20" RowSpacing="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- What this is, and which machine it is building for. -->
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Name="TitleText" Text="PiCode Builder v1.0.0" Style="{StaticResource SubtitleTextBlockStyle}"/>
+            </StackPanel>
+            <ComboBox Grid.Column="1" Name="TargetBox" MinWidth="190" VerticalAlignment="Center"
+                      SelectionChanged="OnTargetChanged" ToolTipService.ToolTip="Which machine the build runs on">
+                <ComboBoxItem Content="Windows"/>
+                <ComboBoxItem Content="Linux (WSL)"/>
+            </ComboBox>
+        </Grid>
+
+        <!-- Build, open, stop. The labels do not move. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <Button Name="BuildButton" Content="Build PiCode" Style="{StaticResource AccentButtonStyle}"
+                    MinWidth="150" Click="OnBuild"/>
+            <Button Name="OpenButton" Content="Open PiCode" MinWidth="140" Click="OnOpen"/>
+            <Button Name="StopButton" Content="Stop" MinWidth="90" Visibility="Collapsed" Click="OnStop"/>
+        </StackPanel>
+
+        <!-- What the build needs, folded away until it is wanted, with a button on what is missing. -->
+        <Expander Grid.Row="2" Name="DependenciesExpander" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch">
+            <StackPanel Name="Dependencies" Spacing="6"/>
+        </Expander>
+
+        <!-- The build's steps and its bar. This is what pressing Build opens. -->
+        <StackPanel Grid.Row="3" Name="BuildPanel" Spacing="12" Visibility="Collapsed">
+            <StackPanel Name="Steps" Spacing="2"/>
+            <StackPanel Spacing="6">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ProgressBar Grid.Column="0" Name="Bar" Minimum="0" Maximum="100" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Name="Percent" Text="0%" MinWidth="52" TextAlignment="Right"
+                               VerticalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                </Grid>
+                <TextBlock Name="Timing" Opacity="0.75" TextWrapping="Wrap"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- What the build said. Expandable, so it can be out of the way. -->
+        <Expander Grid.Row="4" Name="LogExpander" Header="Log" IsExpanded="True"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Stretch">
+            <TextBox Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                     FontFamily="Consolas" FontSize="12" MinHeight="160"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     Background="{ThemeResource LayerFillColorDefaultBrush}"/>
+        </Expander>
+    </Grid>
 </Window>
