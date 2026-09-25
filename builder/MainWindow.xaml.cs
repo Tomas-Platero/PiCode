@@ -112,6 +112,7 @@ public sealed partial class MainWindow : Window
 		}
 
 		PaintTargets();
+		App.WriteCrashLog("bash: " + Pipeline.BashDescription);
 		_linuxAvailable = Pipeline.LinuxAvailable(out _linuxReason);
 		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
 
@@ -186,7 +187,22 @@ public sealed partial class MainWindow : Window
 		FooterTarget.Text = windows ? "Windows" : "Linux (WSL)";
 	}
 
-	private void OnBuild(object sender, RoutedEventArgs e)
+	/// <summary>
+	/// The one button. While a build runs it stops it, and the rest of the time it starts one - a button
+	/// that keeps its name and needs a second button somewhere else for the reverse is two buttons where
+	/// one decision would do.
+	/// </summary>
+	private void OnPrimary(object sender, RoutedEventArgs e)
+	{
+		if (Pipeline.IsBuildRunning(_target))
+		{
+			OnStop(sender, e);
+			return;
+		}
+		StartBuild();
+	}
+
+	private void StartBuild()
 	{
 		if (_blockers.Count > 0 || Pipeline.IsBuildRunning(_target))
 		{
@@ -213,6 +229,25 @@ public sealed partial class MainWindow : Window
 		var result = await System.Threading.Tasks.Task.Run(Pipeline.PublishBuilder);
 		PublishLine.Text = result.Message;
 		PublishButton.IsEnabled = true;
+	}
+
+	private async void OnClean(object sender, RoutedEventArgs e)
+	{
+		var answer = new ContentDialog
+		{
+			Title = "Clean the built files?",
+			Content = "Removes the built editor (PiCode-Win32-x64) and the last build's verdict. The source tree is kept, so the next build reuses it and does not download again.",
+			PrimaryButtonText = "Clean",
+			CloseButtonText = "Cancel",
+			XamlRoot = Content.XamlRoot,
+		};
+		if (await answer.ShowAsync() != ContentDialogResult.Primary)
+		{
+			return;
+		}
+		var (ok, message) = Pipeline.CleanBuild();
+		AppendNote(message);
+		Refresh();
 	}
 
 	private void OnStop(object sender, RoutedEventArgs e)
@@ -593,8 +628,8 @@ public sealed partial class MainWindow : Window
 		{
 			BuildingCard.Visibility = Visibility.Visible;
 			BusyRing.IsActive = true;
-			StopButton.Visibility = Visibility.Visible;
-			BuildButton.IsEnabled = false;
+			BuildButtonText.Text = "Stop build";
+			BuildButton.IsEnabled = true;
 
 			_progress = Pipeline.ReadProgress(_target);
 			if (_progress is not null)
@@ -617,7 +652,7 @@ public sealed partial class MainWindow : Window
 		}
 		else
 		{
-			StopButton.Visibility = Visibility.Collapsed;
+			BuildButtonText.Text = _blockers.Count == 0 ? "Build PiCode" : "Build PiCode (something is missing)";
 			BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
 
 			_progress = Pipeline.ReadProgress(_target);

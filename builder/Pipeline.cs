@@ -177,11 +177,51 @@ public sealed class Pipeline
 		return true;
 	}
 
+	/// <summary>
+	/// Which bash, found once. Asking the PATH is how a running build went unseen: from a terminal the
+	/// PATH resolves `bash` to Git's, but a program opened from Explorer can resolve it to the WSL
+	/// stub in System32, which cannot run Git Bash scripts - and every question asked through it came
+	/// back empty, so the window believed nothing was running over a build that was.
+	/// </summary>
+	private static readonly Lazy<string> BashPath = new(() =>
+	{
+		var candidates = new[]
+		{
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe"),
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "usr", "bin", "bash.exe"),
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Git", "bin", "bash.exe"),
+		};
+		foreach (var candidate in candidates)
+		{
+			if (File.Exists(candidate))
+			{
+				return candidate;
+			}
+		}
+		return "bash";
+	});
+
+	public static string BashDescription => BashPath.Value;
+
+	/// <summary>
+	/// A bash *command* - a string for bash to run, not a script file. This is the call that was broken:
+	/// without -c, bash reads the command as a file name, answers nothing, and the caller believes
+	/// whatever absence means.
+	/// </summary>
+	private static (string Exe, string Args) BashCommand(BuildTarget target, string command)
+	{
+		return target == BuildTarget.Windows
+			? (BashPath.Value, "-c " + Quote(command))
+			: ("wsl.exe", $"-d Ubuntu -- bash -lc {Quote(command)}");
+	}
+
+	private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+
 	/// <summary>The command and arguments that reach bash on the chosen side.</summary>
 	private static (string Exe, string Args) Shell(BuildTarget target, string script)
 	{
 		return target == BuildTarget.Windows
-			? ("bash", script)
+			? (BashPath.Value, script)
 			: ("wsl.exe", $"-d Ubuntu -- bash -lc \"cd {LinuxRepoRoot()} && {script}\"");
 	}
 
@@ -307,7 +347,7 @@ public sealed class Pipeline
 		{
 			return false;
 		}
-		var (exe, args) = Shell(target, $"kill -0 {id} 2>/dev/null && echo alive || echo gone");
+		var (exe, args) = BashCommand(target, $"kill -0 {id} 2>/dev/null && echo alive || echo gone");
 		var result = Run(exe, args, RepoRoot, 20000);
 		return result.Output.Contains("alive", StringComparison.Ordinal);
 	}
@@ -355,7 +395,7 @@ public sealed class Pipeline
 			ClearStaleLock();
 			return false;
 		}
-		var (exe, args) = Shell(target, $"kill -TERM {id} 2>/dev/null; true");
+		var (exe, args) = BashCommand(target, $"kill -TERM {id} 2>/dev/null; true");
 		Run(exe, args, RepoRoot, 20000);
 		return true;
 	}
@@ -433,6 +473,62 @@ public sealed class Pipeline
 		}
 		var megabytes = Math.Round(new FileInfo(zip).Length / (1024.0 * 1024.0));
 		return (true, $"Built: builder\\PiCodeBuilder.zip, {megabytes} MB, and it needs nothing installed.");
+	}
+
+	/// <summary>
+	/// Removes what a build left behind: the packed editor and the runner's verdict. The source tree is
+	/// deliberately not touched - deleting it means downloading and patching again, which is a different
+	/// decision and one this should not make silently. Refuses while a build is running, because
+	/// deleting the folder a build is writing into is how half of it disappears.
+	/// </summary>
+	public static (bool Ok, string Message) CleanBuild()
+	{
+		if (File.Exists(LockFile))
+		{
+			return (false, "A build is running. Stop it first.");
+		}
+
+		long removed = 0;
+		try
+		{
+			if (Directory.Exists(PackDirectory))
+			{
+				removed += DirectorySize(PackDirectory);
+				Directory.Delete(PackDirectory, true);
+			}
+			foreach (var file in new[] { StatusFile, LogFile })
+			{
+				if (File.Exists(file))
+				{
+					removed += new FileInfo(file).Length;
+					File.Delete(file);
+				}
+			}
+		}
+		catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+		{
+			// The usual cause is the editor running from the folder being deleted.
+			return (false, "Could not remove everything - is PiCode running? " + error.Message);
+		}
+
+		var megabytes = Math.Round(removed / (1024.0 * 1024.0));
+		return (true, megabytes > 0 ? $"Removed {megabytes} MB." : "There was nothing to remove.");
+	}
+
+	private static long DirectorySize(string directory)
+	{
+		long total = 0;
+		try
+		{
+			foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+			{
+				try { total += new FileInfo(file).Length; } catch (IOException) { }
+			}
+		}
+		catch (IOException)
+		{
+		}
+		return total;
 	}
 
 	public static void OpenEditor()
