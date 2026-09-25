@@ -1,0 +1,839 @@
+diff --git a/extensions/picode/package.json b/extensions/picode/package.json
+index 7a72463d..b704a86f 100644
+--- a/extensions/picode/package.json
++++ b/extensions/picode/package.json
+@@ -1,93 +1,99 @@
+ {
+-  "name": "picode",
+-  "publisher": "picode",
+-  "displayName": "PiCode",
+-  "description": "The bridge between the editor and pi: providers, models and the agent's own runtime.",
+-  "version": "1.0.0",
+-  "license": "MIT",
+-  "engines": {
+-    "vscode": "^1.90.0"
+-  },
+-  "categories": [
+-    "Other"
+-  ],
+-  "main": "./out/extension.js",
+-  "capabilities": {
+-    "virtualWorkspaces": false,
+-    "untrustedWorkspaces": {
+-      "supported": true
+-    }
+-  },
+-  "enabledApiProposals": [
+-    "defaultChatParticipant",
+-    "chatProvider"
+-  ],
+-  "activationEvents": [
+-    "onLanguageModelChatProvider:picode",
+-    "onChatParticipant:picode.pi"
+-  ],
+-  "contributes": {
+-    "chatParticipants": [
+-      {
+-        "id": "picode.pi",
+-        "name": "pi",
+-        "fullName": "pi",
+-        "description": "PiCode's agent: reads and edits your code with your own models.",
+-        "isDefault": true,
+-        "modes": [
+-          "ask",
+-          "agent",
+-          "edit"
+-        ]
+-      }
+-    ],
+-    "languageModelChatProviders": [
+-      {
+-        "vendor": "picode",
+-        "displayName": "pi",
+-        "configuration": {
+-          "properties": {
+-            "endpoint": {
+-              "type": "string",
+-              "description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
+-            },
+-            "api": {
+-              "type": "string",
+-              "enum": [
+-                "openai-completions",
+-                "openai-responses",
+-                "anthropic-messages",
+-                "google-generative-ai"
+-              ],
+-              "default": "openai-completions",
+-              "description": "The dialect that endpoint speaks."
+-            },
+-            "apiKey": {
+-              "type": "string",
+-              "secret": true,
+-              "description": "The provider's key. It is stored encrypted and never shown again."
+-            },
+-            "id": {
+-              "type": "string",
+-              "description": "A short name for this provider, with no spaces (for example omni)."
+-            }
+-          }
+-        }
+-      }
+-    ],
+-    "commands": [
+-      {
+-        "command": "picode.connectProvider",
+-        "title": "Connect a subscription",
+-        "category": "PiCode"
+-      }
+-    ]
+-  },
+-  "scripts": {
+-    "compile": "gulp compile-extension:picode",
+-    "watch": "gulp watch-extension:picode"
+-  },
+-  "devDependencies": {
+-    "@types/node": "24.x"
+-  }
++	"name": "picode",
++	"publisher": "picode",
++	"displayName": "PiCode",
++	"description": "The bridge between the editor and pi: providers, models and the agent's own runtime.",
++	"version": "1.0.0",
++	"license": "MIT",
++	"engines": {
++		"vscode": "^1.90.0"
++	},
++	"categories": [
++		"Other"
++	],
++	"main": "./out/extension.js",
++	"capabilities": {
++		"virtualWorkspaces": false,
++		"untrustedWorkspaces": {
++			"supported": true
++		}
++	},
++	"enabledApiProposals": [
++		"defaultChatParticipant",
++		"chatProvider"
++	],
++	"activationEvents": [
++		"onLanguageModelChatProvider:picode",
++		"onChatParticipant:picode.pi",
++		"onStartupFinished"
++	],
++	"contributes": {
++		"chatParticipants": [
++			{
++				"id": "picode.pi",
++				"name": "pi",
++				"fullName": "pi",
++				"description": "PiCode's agent: reads and edits your code with your own models.",
++				"isDefault": true,
++				"modes": [
++					"ask",
++					"agent",
++					"edit"
++				]
++			}
++		],
++		"languageModelChatProviders": [
++			{
++				"vendor": "picode",
++				"displayName": "pi",
++				"configuration": {
++					"properties": {
++						"endpoint": {
++							"type": "string",
++							"description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
++						},
++						"api": {
++							"type": "string",
++							"enum": [
++								"openai-completions",
++								"openai-responses",
++								"anthropic-messages",
++								"google-generative-ai"
++							],
++							"default": "openai-completions",
++							"description": "The dialect that endpoint speaks."
++						},
++						"apiKey": {
++							"type": "string",
++							"secret": true,
++							"description": "The provider's key. It is stored encrypted and never shown again."
++						},
++						"id": {
++							"type": "string",
++							"description": "A short name for this provider, with no spaces (for example omni)."
++						}
++					}
++				}
++			}
++		],
++		"commands": [
++			{
++				"command": "picode.connectProvider",
++				"title": "Connect a subscription",
++				"category": "PiCode"
++			},
++			{
++				"command": "picode.setup",
++				"title": "Set up PiCode",
++				"category": "PiCode"
++			}
++		]
++	},
++	"scripts": {
++		"compile": "gulp compile-extension:picode",
++		"watch": "gulp watch-extension:picode"
++	},
++	"devDependencies": {
++		"@types/node": "24.x"
++	}
+ }
+diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
+index 8b734e44..0f8f17e5 100644
+--- a/extensions/picode/src/agent.ts
++++ b/extensions/picode/src/agent.ts
+@@ -6,6 +6,7 @@
+ import * as vscode from 'vscode';
+ import { contextBlock, withContext, type EditorContext } from './context';
+ import { readPiChatSettings } from './piConfig';
++import { sdkEntryCandidates } from './runtime';
+ import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
+ import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
+ import { toolProgress } from './progress';
+@@ -97,7 +98,7 @@ interface PiSdk {
+ 
+ /** pi's entry, loaded and checked for the two methods an agent turn needs. */
+ async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdk | undefined> {
+-	const loaded = await loadPiSdk<Partial<PiSdk>>(distributionRoot);
++	const loaded = await loadPiSdk<Partial<PiSdk>>(sdkEntryCandidates(distributionRoot));
+ 	if ('problem' in loaded) {
+ 		log(loaded.problem);
+ 		return undefined;
+@@ -218,8 +219,11 @@ export const PI_PARTICIPANT = 'picode.pi';
+ export interface AgentDeps {
+ 	/** The distribution root, so pi and the profile can be found without configuration. */
+ 	readonly distributionRoot: string;
+-	/** PiCode's own profile. Nothing outside it is ever read or written. */
+-	readonly profileDir: string;
++	/**
++	 * The profile the chat's pi runs against: PiCode's own for the internal pi, `undefined`
++	 * for the external one (which means "let pi resolve its own", see `runtime.ts`).
++	 */
++	readonly agentDir: string | undefined;
+ 	readonly log: (line: string) => void;
+ }
+ 
+@@ -275,7 +279,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+ 			const toolsChanged = signature !== mcpSignature;
+ 			if (session === undefined || folderChanged || toolsChanged) {
+ 				session?.dispose();
+-				services = await sdk.createAgentSessionServices({ cwd, agentDir: deps.profileDir });
++				services = await sdk.createAgentSessionServices({ cwd, ...(deps.agentDir === undefined ? {} : { agentDir: deps.agentDir }) });
+ 				if (folderChanged || sessionManager === undefined) {
+ 					sessionManager = sdk.SessionManager.create(cwd);
+ 				}
+diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
+index b9e7e83d..c82312a1 100644
+--- a/extensions/picode/src/extension.ts
++++ b/extensions/picode/src/extension.ts
+@@ -20,6 +20,8 @@ import {
+ 	type ProviderConfiguration,
+ } from './providers';
+ import { registerPiAgent } from './agent';
++import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
++import { chatAgentDir, internalProfileDir, sdkEntryCandidates } from './runtime';
+ 
+ /**
+  * PiCode's bridge, living **inside the core**.
+@@ -71,8 +73,13 @@ function distributionRoot(extensionUri: vscode.Uri): string {
+ 	return path.resolve(extensionUri.fsPath, '..', '..', '..', '..');
+ }
+ 
++/**
++ * PiCode's own profile — the only thing this function can mean. It is the write target of
++ * everything PiCode projects for pi, whatever pi is running (see `runtime.ts`); the chat's
++ * agent directory follows the runtime choice instead and comes from `chatAgentDir`.
++ */
+ function profileDirectory(extensionUri: vscode.Uri): string {
+-	return path.join(distributionRoot(extensionUri), 'data', 'pi-agent');
++	return internalProfileDir(distributionRoot(extensionUri));
+ }
+ 
+ /* ------------------------------------------------------------------ *
+@@ -206,7 +213,10 @@ async function ensureMcpAdapter(profile: string): Promise<void> {
+ 		const { execFile } = await import('node:child_process');
+ 		await new Promise<void>((resolve, reject) => {
+ 			execFile(process.execPath, [entry, 'install', MCP_ADAPTER_PACKAGE], {
+-				env: { ...process.env, PI_CODING_AGENT_DIR: profile },
++				// The editor's executable is Electron: without this flag it would try to open an
++				// app instead of running pi's script as Node.
++				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: profile },
++				windowsHide: true,
+ 			}, error => (error === null ? resolve() : reject(error)));
+ 		});
+ 		void vscode.window.showInformationMessage('PiCode: the MCP adapter is installed for pi. Its servers are in Settings > PiCode > MCP.');
+@@ -317,7 +327,7 @@ interface PiRuntimeServices {
+ }
+ 
+ interface PiRuntimeSdk {
+-	createAgentSessionServices(options: { cwd: string; agentDir: string }): Promise<PiRuntimeServices>;
++	createAgentSessionServices(options: { cwd: string; agentDir?: string }): Promise<PiRuntimeServices>;
+ }
+ 
+ /**
+@@ -328,7 +338,7 @@ interface PiRuntimeSdk {
+  * dropped when the folder changes and whenever a credential changes, because those are the two
+  * things that change what the catalogue answers.
+  */
+-let runtimeCache: { readonly cwd: string; readonly agentDir: string; readonly services: PiRuntimeServices } | undefined;
++let runtimeCache: { readonly cwd: string; readonly agentDir: string | undefined; readonly services: PiRuntimeServices } | undefined;
+ 
+ /** Forgets the cached runtime, so the next listing reads credentials as they are now. */
+ export function forgetPiRuntime(): void {
+@@ -343,16 +353,16 @@ export function forgetPiRuntime(): void {
+  * without a credential is skipped — listing models that cannot be used would put rows in the picker
+  * that fail the moment they are chosen.
+  */
+-async function subscriptionModels(distributionRoot: string, profile: string, cwd: string): Promise<vscode.LanguageModelChatInformation[]> {
+-	const loaded = await loadPiSdk<PiRuntimeSdk>(distributionRoot);
++async function subscriptionModels(distributionRoot: string, agentDir: string | undefined, cwd: string): Promise<vscode.LanguageModelChatInformation[]> {
++	const loaded = await loadPiSdk<PiRuntimeSdk>(sdkEntryCandidates(distributionRoot));
+ 	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
+ 		return [];
+ 	}
+ 	const sdk = loaded.sdk;
+ 
+ 	try {
+-		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== profile) {
+-			runtimeCache = { cwd, agentDir: profile, services: await sdk.createAgentSessionServices({ cwd, agentDir: profile }) };
++		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== agentDir) {
++			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
+ 		}
+ 	} catch {
+ 		// A runtime that cannot be built is "no models from pi": the declared providers are still
+@@ -415,7 +425,7 @@ const provider: vscode.LanguageModelChatProvider = {
+ 
+ 		const models = readModelsFile(profile);
+ 		const fromProfile = models === undefined ? [] : toChatInformation(models);
+-		const fromSubscriptions = await subscriptionModels(distributionRoot(requireProfileUri()), profile, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd());
++		const fromSubscriptions = await subscriptionModels(distributionRoot(requireProfileUri()), chatAgentDir(distributionRoot(requireProfileUri())), vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd());
+ 		const configuredIds = new Set(configuredModels.map(info => info.id));
+ 		const profileIds = new Set(fromProfile.map(info => info.id));
+ 		return [
+@@ -670,7 +680,10 @@ export function activate(context: vscode.ExtensionContext): void {
+ 	// surface of ours. Nothing to configure: it finds pi and its profile by itself.
+ 	registerPiAgent(context, {
+ 		distributionRoot: distributionRoot(context.extensionUri),
+-		profileDir: profileDirectory(context.extensionUri),
++		// The chat's pi runs against the profile of the chosen runtime: PiCode's own for the
++		// internal pi, pi's own for the external one (see `runtime.ts`). What PiCode projects
++		// for pi keeps going to PiCode's profile either way.
++		agentDir: chatAgentDir(distributionRoot(context.extensionUri)),
+ 		log: line => console.error(`[pi] ${line}`),
+ 	});
+ 
+@@ -689,6 +702,15 @@ export function activate(context: vscode.ExtensionContext): void {
+ 	// says which of its providers can be logged in with an account the owner already pays for,
+ 	// and the editor's own quick pick is where he chooses. The endpoints with an address and a
+ 	// dialect have their own form in the settings row, and never come through here.
++	const setupDeps = {
++		distributionRoot: distributionRoot(context.extensionUri),
++		profileDir: profileDirectory(context.extensionUri),
++		globalState: context.globalState,
++		forgetRuntime: forgetPiRuntime,
++	};
++	context.subscriptions.push(...registerSetupCommands(setupDeps));
++	void maybeNudgeFirstRun(setupDeps);
++
+ 	context.subscriptions.push(
+ 		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>
+ 			connectSubscription({
+diff --git a/extensions/picode/src/login.ts b/extensions/picode/src/login.ts
+index d2be4d69..e905eb5a 100644
+--- a/extensions/picode/src/login.ts
++++ b/extensions/picode/src/login.ts
+@@ -5,6 +5,7 @@
+ 
+ import * as vscode from 'vscode';
+ import { loadPiSdk } from './piSdk';
++import { readRuntimeMode, sdkEntryCandidates } from './runtime';
+ import {
+ 	LoginCancelled,
+ 	noticeOf,
+@@ -104,7 +105,18 @@ export interface ConnectSubscriptionDeps {
+  * the list or one of pi's prompts.
+  */
+ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promise<void> {
+-	const loaded = await loadPiSdk<PiLoginSdk>(deps.distributionRoot);
++	// The subscription login writes the credential into pi's own profile through pi's login
++	// machinery. With the external pi that profile is the machine's, which PiCode never writes
++	// to — so instead of a credential landing where the running pi cannot see it (or worse,
++	// outside the product), the honest answer is the way that does work.
++	if (readRuntimeMode() === 'external') {
++		void vscode.window.showErrorMessage(
++			'PiCode: the external pi keeps its own credentials, which this editor never writes to. '
++			+ 'Connect your providers with a key in Settings > Chat > Providers, or switch to PiCode\'s internal pi to log in with a subscription.',
++		);
++		return;
++	}
++	const loaded = await loadPiSdk<PiLoginSdk>(sdkEntryCandidates(deps.distributionRoot));
+ 	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
+ 		const why = 'problem' in loaded ? loaded.problem : 'the pi that loaded has no session services';
+ 		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
+diff --git a/extensions/picode/src/onboarding.ts b/extensions/picode/src/onboarding.ts
+new file mode 100644
+index 00000000..cdece7ee
+--- /dev/null
++++ b/extensions/picode/src/onboarding.ts
+@@ -0,0 +1,203 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { existsSync } from 'node:fs';
++import * as path from 'node:path';
++import { execFile } from 'node:child_process';
++import * as vscode from 'vscode';
++import { externalSdkEntry } from './piLocate';
++import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
++
++/**
++ * The first-run setup, as a **bridge** for the welcome page.
++ *
++ * The setup itself lives in the welcome page — the same window, no popups. This module is
++ * the half the workbench renderer cannot do by itself: probing whether an external pi
++ * exists, installing or removing Gentle AI with pi's own CLI, and remembering that the
++ * setup already happened. The page renders the choices and calls these commands; the
++ * commands act and answer with the state that is now true.
++ *
++ * ## Gentle AI follows the internal pi
++ *
++ * Gentle AI is installed into **PiCode's own profile**, which is the internal pi's. The
++ * external pi keeps its own profile on this machine, which this editor never writes to —
++ * so when the external pi is chosen the welcome page does not even ask about Gentle AI,
++ * and this bridge exposes no way to install it there.
++ */
++
++/** Opens the welcome page, where the setup is rendered. */
++export const SETUP_COMMAND = 'picode.setup';
++
++/** The state the welcome page renders: which pi, is it there, is Gentle AI in. */
++export const GET_STATE_COMMAND = 'picode.setup.getState';
++
++/** Applies a runtime choice and answers with the resulting state. */
++export const APPLY_RUNTIME_COMMAND = 'picode.setup.applyRuntime';
++
++/** Installs or removes Gentle AI (internal pi only) and answers with the result. */
++export const APPLY_GENTLE_COMMAND = 'picode.setup.applyGentle';
++
++/** Records that the setup happened (called by the page after a theme choice). */
++export const COMPLETE_COMMAND = 'picode.setup.complete';
++
++/** The "the setup already happened" mark, in this extension's own global state. */
++const DONE_KEY = 'picode.onboarding.done';
++
++/** How many times the gentle first-run nudge may show before it keeps quiet for good. */
++const MAX_NUDGES = 3;
++
++/** The nudge counter, so a user who answers "not now" three times is never asked again. */
++const NAG_KEY = 'picode.onboarding.nudged';
++
++/** The packages Gentle AI is made of, as pi knows them. */
++const GENTLE_PACKAGES = ['npm:gentle-pi', 'npm:gentle-engram'] as const;
++
++/** The directories an installed Gentle AI leaves inside the profile it was installed into. */
++const GENTLE_PACKAGE_DIRS = ['gentle-pi', 'gentle-engram'] as const;
++
++export interface SetupDeps {
++	/** The distribution root: where pi's CLI and the profile live. */
++	readonly distributionRoot: string;
++	/** PiCode's own profile — the write target of every setup action. */
++	readonly profileDir: string;
++	readonly globalState: vscode.Memento;
++	/** Drops the cached pi runtime, so the editor asks for models again after a pi change. */
++	readonly forgetRuntime: () => void;
++}
++
++/** What the welcome page renders, and what the actions answer with. */
++export interface SetupState {
++	readonly runtime: 'internal' | 'external';
++	/** Whether the external pi (the machine's) could be found on the PATH. */
++	readonly externalAvailable: boolean;
++	readonly gentleInstalled: boolean;
++}
++
++/** The answer of an action that may fail, with the reason for a failed one. */
++export interface SetupActionError {
++	readonly error?: string;
++}
++
++export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
++	const state = (): SetupState => ({
++		runtime: readRuntimeMode(),
++		externalAvailable: externalSdkEntry() !== undefined,
++		gentleInstalled: isGentleInstalled(deps.profileDir),
++	});
++
++	const markDone = (): void => {
++		void deps.globalState.update(DONE_KEY, true);
++	};
++
++	return [
++		vscode.commands.registerCommand(SETUP_COMMAND, () => vscode.commands.executeCommand('workbench.action.openWalkthrough')),
++		vscode.commands.registerCommand(GET_STATE_COMMAND, (): SetupState => state()),
++		vscode.commands.registerCommand(APPLY_RUNTIME_COMMAND, async (mode: unknown): Promise<SetupState> => {
++			// An unknown value is ignored rather than guessed at: the page sends only what it
++			// rendered, and anything else is a bug worth surfacing as no-change.
++			if (mode !== 'internal' && mode !== 'external') {
++				throw new Error('PiCode: the runtime must be "internal" or "external".');
++			}
++			if (mode !== readRuntimeMode()) {
++				await vscode.workspace.getConfiguration('picode').update(PICODE_RUNTIME_SETTING, mode, vscode.ConfigurationTarget.Global);
++				// The chosen runtime decides the pi of the next conversation; the caches of the
++				// previous one are dropped so the editor asks for models again.
++				deps.forgetRuntime();
++			}
++			markDone();
++			return state();
++		}),
++		vscode.commands.registerCommand(APPLY_GENTLE_COMMAND, async (enable: unknown): Promise<SetupState & SetupActionError> => {
++			if (typeof enable !== 'boolean') {
++				throw new Error('PiCode: the Gentle AI action needs a boolean.');
++			}
++			// Gentle AI lives in PiCode's own profile — the internal pi's. With the external pi
++			// there is nothing to install into that this editor may write to.
++			if (readRuntimeMode() === 'external') {
++				return { ...state(), error: 'Gentle AI follows the internal pi. Your external pi keeps its own profile, which this editor never writes to.' };
++			}
++			const want = enable ? 'install' : 'remove';
++			await vscode.window.withProgress(
++				{ location: vscode.ProgressLocation.Notification, title: enable ? 'Installing Gentle AI…' : 'Removing Gentle AI…' },
++				() => runPiCli(deps, [want, ...GENTLE_PACKAGES]),
++			);
++			markDone();
++			const after = state();
++			// The honest answer is what is actually on disk now, not what the command hoped:
++			// a failed install is reported as an error line in the page, not as success.
++			return after.gentleInstalled === enable
++				? after
++				: { ...after, error: `pi's command line did not ${want} Gentle AI. See the notification for the reason.` };
++		}),
++		vscode.commands.registerCommand(COMPLETE_COMMAND, (): void => markDone()),
++	];
++}
++
++/**
++ * The first-run nudge, shown once per start at most and at most `MAX_NUDGES` times ever.
++ *
++ * It only speaks when there is genuinely nothing configured yet — no choice made, no
++ * provider declared, no credential and no models in the profile. A working setup is never
++ * interrupted; the welcome page (where the setup lives) is what it offers.
++ */
++export async function maybeNudgeFirstRun(deps: SetupDeps): Promise<void> {
++	if (deps.globalState.get<boolean>(DONE_KEY) === true) {
++		return;
++	}
++	const nudges = deps.globalState.get<number>(NAG_KEY, 0);
++	if (nudges >= MAX_NUDGES) {
++		return;
++	}
++
++	const providers = vscode.workspace.getConfiguration('picode').get<unknown[]>('providers');
++	if (Array.isArray(providers) && providers.length > 0) {
++		return;
++	}
++	if (existsSync(path.join(deps.profileDir, 'auth.json')) || existsSync(path.join(deps.profileDir, 'models.json'))) {
++		return;
++	}
++
++	const answer = await vscode.window.showInformationMessage(
++		'Welcome to PiCode. Set up your pi and your theme?',
++		'Set up…',
++		'Not now',
++	);
++	deps.globalState.update(NAG_KEY, nudges + 1);
++	if (answer === 'Set up…') {
++		await vscode.commands.executeCommand(SETUP_COMMAND);
++	}
++}
++
++/** Whether Gentle AI is installed in the given profile. */
++export function isGentleInstalled(profileDir: string): boolean {
++	return GENTLE_PACKAGE_DIRS.every(dir => existsSync(path.join(profileDir, 'npm', 'node_modules', dir)));
++}
++
++/**
++ * Runs one pi CLI command against PiCode's own profile.
++ *
++ * The CLI is the pinned pi's own entry, run with the editor's binary in Node mode
++ * (`ELECTRON_RUN_AS_NODE`): the extension host's `process.execPath` is the Electron
++ * executable, and without the flag it would try to open an app instead of running a script.
++ * `PI_CODING_AGENT_DIR` points the command at PiCode's profile, so the packages are
++ * installed where the product can see them and nowhere else.
++ */
++export function runPiCli(deps: SetupDeps, args: readonly string[]): Promise<void> {
++	const entry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
++	if (!existsSync(entry)) {
++		return Promise.reject(new Error("pi's command line is not installed in this editor."));
++	}
++	return new Promise<void>((resolve, reject) => {
++		execFile(
++			process.execPath,
++			[entry, ...args],
++			{
++				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: deps.profileDir },
++				windowsHide: true,
++			},
++			error => (error === null ? resolve() : reject(error)),
++		);
++	});
++}
+diff --git a/extensions/picode/src/piLocate.ts b/extensions/picode/src/piLocate.ts
+new file mode 100644
+index 00000000..90d2046c
+--- /dev/null
++++ b/extensions/picode/src/piLocate.ts
+@@ -0,0 +1,92 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { existsSync } from 'node:fs';
++import * as path from 'node:path';
++
++/**
++ * Finding a pi that is not PiCode's own.
++ *
++ * The external pi is the one installed on this machine — the `pi` on the PATH. PiCode runs
++ * it where it lives and never writes to it, so locating it is the whole integration: once
++ * the package's ESM entry is found, the SDK loads it exactly like the internal one.
++ *
++ * Probing is necessary rather than incidental: the package publishes `dist/index.js` under
++ * an `import` condition only, so a CommonJS `require.resolve` rejects it, and the module
++ * system has no supported way to ask where an ESM-only package lives. Walking up covers both
++ * shapes this meets — an npm global shim, which sits beside `node_modules`, and a direct
++ * path into `dist/` — without knowing anything about npm's layout beyond that.
++ */
++
++/** The published package the external entry is looked for in. */
++const PI_PACKAGE = '@earendil-works/pi-coding-agent';
++
++/** The depth bound: from `dist/` inside the package, the entry is four levels up. */
++const MAX_WALK_UP = 10;
++
++/**
++ * Finds an executable on PATH, applying PATHEXT on Windows.
++ *
++ * `spawn` does not resolve `pi` to `pi.cmd` by itself, and reaching for a shell to do it
++ * would put the name through shell parsing. Resolving here keeps the reported path honest.
++ */
++export function resolveOnPath(name: string): string | undefined {
++	if (name.includes('/') || name.includes('\\')) {
++		return existsSync(name) ? name : undefined;
++	}
++
++	const extensions = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
++	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
++		if (directory.length === 0) {
++			continue;
++		}
++		for (const extension of extensions) {
++			const candidate = path.join(directory, `${name}${extension}`);
++			if (existsSync(candidate)) {
++				return candidate;
++			}
++		}
++	}
++	return undefined;
++}
++
++/**
++ * The pi package's ESM entry, found by walking up from a directory.
++ *
++ * Returns the first `node_modules/<pi package>/dist/index.js` (or its nested shape when the
++ * start is already inside the package) that exists on disk, or `undefined` when ten levels
++ * up from the start there is none.
++ */
++export function findSdkEntry(start: string): string | undefined {
++	const nested = path.join('node_modules', ...PI_PACKAGE.split('/'), 'dist', 'index.js');
++	const inside = path.join(...PI_PACKAGE.split('/'), 'dist', 'index.js');
++
++	let current = start;
++	for (let depth = 0; depth < MAX_WALK_UP; depth += 1) {
++		for (const candidate of [path.join(current, nested), path.join(current, inside)]) {
++			if (existsSync(candidate)) {
++				return candidate;
++			}
++		}
++		const parent = path.dirname(current);
++		if (parent === current) {
++			break;
++		}
++		current = parent;
++	}
++	return undefined;
++}
++
++/**
++ * The external pi's SDK entry: the entry of the package behind the `pi` on the PATH.
++ *
++ * `undefined` means the machine has no `pi` on the PATH, or the one it names does not carry
++ * the package — both are "there is no external pi here", and the caller says so rather than
++ * falling back to the internal one in silence.
++ */
++export function externalSdkEntry(): string | undefined {
++	const executable = resolveOnPath('pi');
++	return executable === undefined ? undefined : findSdkEntry(path.dirname(executable));
++}
+diff --git a/extensions/picode/src/piSdk.ts b/extensions/picode/src/piSdk.ts
+index ce2222dd..caf24685 100644
+--- a/extensions/picode/src/piSdk.ts
++++ b/extensions/picode/src/piSdk.ts
+@@ -37,7 +37,10 @@ import { pathToFileURL } from 'node:url';
+ /** What a load produced: the module, or why there is none. */
+ export type PiSdkLoad<T> = { readonly sdk: T } | { readonly problem: string };
+ 
+-/** The candidate places pi can live, most-PiCode-first. */
++/**
++ * The candidate places pi can live, most-PiCode-first. The **internal** pi's candidates;
++ * the external one is resolved by `runtime.ts` (and `piLocate.ts`) and passed directly.
++ */
+ export function sdkCandidates(distributionRoot: string): string[] {
+ 	return [
+ 		// PiCode's own runtime, where it installs its pinned pi.
+@@ -67,12 +70,11 @@ export function firstExisting(candidates: readonly string[]): string | undefined
+  */
+ const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>;
+ 
+-/** Loads pi's entry, or says why it could not. */
+-export async function loadPiSdk<T>(distributionRoot: string): Promise<PiSdkLoad<T>> {
+-	const candidates = sdkCandidates(distributionRoot);
++/** Loads pi's entry, or says why it could not. An empty candidate list is "no pi chosen". */
++export async function loadPiSdk<T>(candidates: readonly string[]): Promise<PiSdkLoad<T>> {
+ 	const entry = firstExisting(candidates);
+ 	if (entry === undefined) {
+-		return { problem: `pi is not installed in this editor (looked in ${candidates.join(' and ')})` };
++		return { problem: `pi could not be found for this editor (looked in ${candidates.length === 0 ? 'nowhere — no pi is installed where the runtime setting points' : candidates.join(' and ')})` };
+ 	}
+ 
+ 	try {
+diff --git a/extensions/picode/src/runtime.ts b/extensions/picode/src/runtime.ts
+new file mode 100644
+index 00000000..96cf0303
+--- /dev/null
++++ b/extensions/picode/src/runtime.ts
+@@ -0,0 +1,65 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as path from 'node:path';
++import * as vscode from 'vscode';
++import { externalSdkEntry } from './piLocate';
++import { sdkCandidates } from './piSdk';
++
++/**
++ * Which pi runs as the editor's agent, and whose configuration it uses.
++ *
++ * One question, one answer. The internal pi is PiCode's own: the program pinned under
++ * `resources/pi-runtime` and the profile inside the distribution (`data/pi-agent`), both
++ * written only by PiCode. The external pi is the one on the machine's PATH with its own
++ * profile (pi resolves `~/.pi/agent` by itself): PiCode **reads** it and never writes to it,
++ * so everything PiCode projects for pi — providers, MCP servers, credentials — keeps living
++ * in PiCode's own profile regardless of this choice.
++ *
++ * The answer is consumed in exactly two shapes:
++ *
++ * - `sdkEntryCandidates()` — where the SDK is loaded from. The empty list in external mode
++ *   means "there is no pi on this machine's PATH", and the loader says so instead of
++ *   silently falling back to the internal one.
++ * - `chatAgentDir()` — the `agentDir` the chat's sessions run against. `undefined` in
++ *   external mode is deliberate: it means "do not set the directory", so pi resolves its own
++ *   default exactly as it does from a terminal.
++ */
++
++/** The runtime modes the wizard and the setting offer. */
++export type PiRuntimeMode = 'internal' | 'external';
++
++/** The setting the choice is stored in. */
++export const PICODE_RUNTIME_SETTING = 'picode.pi.runtime';
++
++/** The mode in force. Anything unrecognised means the internal pi. */
++export function readRuntimeMode(): PiRuntimeMode {
++	const configured = vscode.workspace.getConfiguration('picode').get<string>(PICODE_RUNTIME_SETTING);
++	return configured === 'external' ? 'external' : 'internal';
++}
++
++/** PiCode's own profile, inside the distribution. Every PiCode write lands here. */
++export function internalProfileDir(distributionRoot: string): string {
++	return path.join(distributionRoot, 'data', 'pi-agent');
++}
++
++/** Where the SDK is loaded from, for the mode in force. */
++export function sdkEntryCandidates(distributionRoot: string): string[] {
++	if (readRuntimeMode() === 'external') {
++		const entry = externalSdkEntry();
++		return entry === undefined ? [] : [entry];
++	}
++	return sdkCandidates(distributionRoot);
++}
++
++/**
++ * The profile the chat's pi sessions run against.
++ *
++ * The internal profile when the internal pi runs; `undefined` for the external one, which
++ * is not a gap but the instruction to let pi use its own directory.
++ */
++export function chatAgentDir(distributionRoot: string): string | undefined {
++	return readRuntimeMode() === 'internal' ? internalProfileDir(distributionRoot) : undefined;
++}
+diff --git a/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
+index d4d36ffc..789f1fc5 100644
+--- a/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
++++ b/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts
+@@ -39,6 +39,9 @@ export const PICODE_MCP_SERVERS_SETTING = 'picode.mcp.servers';
+ /** Whether the editor's context travels with every prompt. */
+ export const PICODE_CONTEXT_ATTACH_SETTING = 'picode.context.attach';
+ 
++/** Which pi runs as the editor's agent: PiCode's own, or the machine's. */
++export const PICODE_PI_RUNTIME_SETTING = 'picode.pi.runtime';
++
+ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
+ 	id: 'picode',
+ 	title: 'PiCode',
+@@ -82,11 +85,22 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
+ 			),
+ 		},
+ 
+-		// pi itself: how hard it thinks, whether its thinking is shown, and whether the editor's
+-		// context travels with what he writes. Everything the retired extension had that answered
+-		// *which* pi runs, how it is talked to, or what its panel did with voice is deliberately
+-		// absent: those questions no longer exist here, and a setting that changes nothing is a
+-		// surface that lies.
++		// pi itself: which one runs, how hard it thinks, whether its thinking is shown, and whether
++		// the editor's context travels with what he writes. The runtime choice was re-introduced on
++		// the owner's request ("si interno o externo") together with the first-run setup; the other
++		// questions the retired extension had — transport, voice, its own panel — still do not exist
++		// here, and a setting that changes nothing would be a surface that lies.
++		[PICODE_PI_RUNTIME_SETTING]: {
++			type: 'string',
++			enum: ['internal', 'external'],
++			enumDescriptions: [
++				localize('picode.pi.runtime.internal', "PiCode's own pi, kept inside the editor. Its configuration lives inside PiCode, and PiCode updates it."),
++				localize('picode.pi.runtime.external', "The pi installed on this machine (on the PATH), with its own configuration. PiCode uses it without writing to it."),
++			],
++			default: 'internal',
++			scope: ConfigurationScope.APPLICATION,
++			markdownDescription: localize('picode.pi.runtime', "Which pi runs as the editor's agent. The external pi keeps its own configuration on this machine, so providers connected by subscription stay with the internal pi. The choice is made for new conversations, and it is also the first step of [Set up PiCode](command:picode.setup)."),
++		},
+ 		[PICODE_THINKING_LEVEL_SETTING]: {
+ 			type: 'string',
+ 			enum: ['default', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
