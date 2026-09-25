@@ -188,3 +188,14 @@ Both are the same machinery: `dev/build-run.sh` runs the build and leaves a lock
 code behind, `dev/build-progress.mjs` reads them (in text, or `--json` for the window), and
 `dev/restore-profile.mjs` puts the owner's profile back afterwards, because the pack deletes the
 directory it lives in.
+
+None of them needs flags. With none, the build fetches the source if it is missing, prepares it,
+installs, compiles, packs and stages — and it is safe to repeat, because a tree that is already
+prepared is reused. `-s` is the other thing: reuse the tree *as it is*, for when you know it is
+prepared. It fails outright when the tree is not there, which is why it is not a default anywhere.
+
+The editor's own task list carries the same four entry points (`.vscode/tasks.json`, which VS Code
+reads with comments allowed — this explanation lives here so the file stays readable by every JSON
+tool). The default task is the live build, the one with the bar. Two builds in one tree fight over
+`node_modules` and over the directory they pack into — one of those left a half-installed tree
+behind — so the lock is checked before starting, never after.

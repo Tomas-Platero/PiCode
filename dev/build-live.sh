@@ -8,16 +8,13 @@
 # them — and puts `dev/build-progress.mjs` in front, drawing one line with the stage, a bar and an
 # estimate of what is left.
 #
-# Usage: dev/build-live.sh [build.sh flags...]        (default: -s, a rebuild of a prepared tree)
+# Usage: dev/build-live.sh [build.sh flags...]        (default: the whole build)
 #
 # The log is `.scratch/build-live.log`; the same file the window reads.
 
 set -eo pipefail
 
 FLAGS=("$@")
-if (( ${#FLAGS[@]} == 0 )); then
-  FLAGS=(-s)
-fi
 
 mkdir -p .scratch
 

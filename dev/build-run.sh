@@ -14,7 +14,13 @@
 # directory: copied aside before the build, put back after. A collaborator with nothing there loses
 # nothing; somebody building over the editor they use every day would lose everything.
 #
-# Usage: dev/build-run.sh [build.sh flags...]        (default: -s)
+# Usage: dev/build-run.sh [build.sh flags...]        (default: the whole build)
+#
+# With no flags it runs `dev/build.sh` with no flags: fetch the source if it is not there, prepare
+# it, install, compile, pack and stage. That is what "build" means to a person, and it is safe to
+# repeat — the preparation is skipped when the tree is already prepared. `-s` is the other thing:
+# reuse the tree *as it is*, which is only right when you know it is prepared, and which fails
+# outright when the tree is not there at all.
 #
 # One at a time: a second runner refuses to start while the lock is alive, because two builds in one
 # tree fight over `node_modules` and over the directory they pack into.
@@ -22,9 +28,6 @@
 set -eo pipefail
 
 FLAGS=("$@")
-if (( ${#FLAGS[@]} == 0 )); then
-  FLAGS=(-s)
-fi
 
 mkdir -p .scratch
 LOCK=".scratch/build.lock"

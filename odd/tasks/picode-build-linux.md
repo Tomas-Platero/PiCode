@@ -1,4 +1,4 @@
-# Feature: la build también para Linux
+﻿# Feature: la build también para Linux
 
 ## Goal
 
@@ -69,5 +69,5 @@ como se activaron):
 5. Lo que falle, se arregla: es la primera vez que este camino se ejecuta de verdad.
 
 **Y lo que sigue pendiente y no depende de nada de esto**: la build de **Windows**, que el dueño
-quería lanzar él (`devuild-window.cmd` o `bash dev/build-live.sh`), y que ahora sale como
+quería lanzar él (`dev/build-window.cmd` o `bash dev/build-live.sh`), y que ahora sale como
 `PiCode-Win32-x64`.

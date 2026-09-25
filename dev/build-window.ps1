@@ -1,10 +1,10 @@
-﻿﻿<#
+<#
 .SYNOPSIS
     PiCode's build, in a small window: what is missing, a way to get it, and how much is left.
 
 .DESCRIPTION
-    The build needs things — a Node of the pinned version, Git (its Bash is what runs the build),
-    jq, Python — and when one is missing the failure arrives minutes later inside a log nobody can
+    The build needs things - a Node of the pinned version, Git (its Bash is what runs the build),
+    jq, Python - and when one is missing the failure arrives minutes later inside a log nobody can
     read. A collaborator also has no way to know whether a build is already running, or how far it
     got: its long phases print nothing for minutes, so a terminal cannot tell "working" from
     "stuck".
@@ -200,7 +200,7 @@ function Get-BuildState {
 if ($Check) {
     Get-Requirements | ForEach-Object {
         $mark = if ($_.Ok) { 'OK  ' } else { 'NO  ' }
-        $how = if (-not $_.Ok) { if ($_.Action) { " — run: $($_.Action)" } elseif ($_.Install) { " — winget install $($_.Install)" } else { '' } } else { '' }
+        $how = if (-not $_.Ok) { if ($_.Action) { " - run: $($_.Action)" } elseif ($_.Install) { " - winget install $($_.Install)" } else { '' } } else { '' }
         Write-Output ("{0}{1,-14} {2}{3}" -f $mark, $_.Name, $_.Detail, $how)
     }
     $state = Get-BuildState
@@ -400,7 +400,7 @@ function Show-Requirements {
                 switch ($this.Tag) {
                     'prepare' { Start-Build @('-o') }
                     'dependencies' { Start-Build @('-DepsOnly') }
-                    'build' { Start-Build @('-s') }
+                    'build' { Start-Build @() }
                 }
             })
             [System.Windows.Controls.Grid]::SetColumn($run, 3)
@@ -412,10 +412,11 @@ function Show-Requirements {
 }
 
 <#
-    Starts a build step: `dev/build-run.sh` with the flags that say which one.
+    Starts a build step: `dev/build-run.sh` with the flags that say which one, or with none, which
+    is the whole build: fetch the source if it is missing, prepare it, install, compile, pack, stage.
 
-    Only one at a time — two builds in one tree fight over `node_modules` and over the directory
-    they pack into — so the button refuses when the lock is alive.
+    Only one at a time - two builds in one tree fight over `node_modules` and over the directory
+    they pack into - so the button refuses when the lock is alive.
 #>
 function Start-Build([string[]]$flags) {
     $state = Get-BuildState
@@ -424,7 +425,7 @@ function Start-Build([string[]]$flags) {
         return
     }
     # The steps that pack cannot run while the editor is open, and finding that out after eight
-    # minutes — inside the pack, as an EBUSY nobody can read — is what this window exists to avoid.
+    # minutes - inside the pack, as an EBUSY nobody can read - is what this window exists to avoid.
     if ((Get-Process -Name 'PiCode' -ErrorAction SilentlyContinue) -and -not ($flags -contains '-o') -and -not ($flags -contains '-DepsOnly')) {
         Add-Log 'PiCode is running: close the editor before building (the pack replaces its folder)'
         [System.Windows.MessageBox]::Show(
@@ -482,7 +483,7 @@ function Update-View {
     }
 }
 
-$buildButton.Add_Click({ Start-Build @('-s') })
+$buildButton.Add_Click({ Start-Build @() })
 $prepareButton.Add_Click({ Start-Build @('-o') })
 $depsButton.Add_Click({ Start-Build @('-DepsOnly') })
 $refreshButton.Add_Click({ Show-Requirements })

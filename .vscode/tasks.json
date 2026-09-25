@@ -1,19 +1,11 @@
 {
-	// PiCode's own build, runnable from the editor so its progress can be watched in a terminal.
-	//
-	// The default task is the **live** one: it runs the same build and draws a line with the stage,
-	// a bar and how much is left, because the long phases (installing dependencies, packing) print
-	// nothing for minutes and a silent log cannot be told apart from a stuck one.
-	//
-	// One at a time: two builds in the same tree fight over `node_modules` and over the platform
-	// directory they pack into, and one of those left a half-installed tree behind (that happened).
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "PiCode: build the editor (con progreso)",
-			"detail": "Compila el núcleo y el conector, y empaqueta el editor, con la barra de progreso",
+			"label": "PiCode: build the editor (with progress)",
+			"detail": "Runs the whole build and draws the stage, a bar and how much is left",
 			"type": "shell",
-			"command": "bash dev/build-live.sh -s",
+			"command": "bash dev/build-live.sh",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
@@ -30,8 +22,8 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "PiCode: seguir la build que ya está en marcha",
-			"detail": "Solo el visor: lee el registro de la build en curso y dibuja el progreso",
+			"label": "PiCode: follow the build already running",
+			"detail": "The viewer alone: reads the running build's log and draws its progress",
 			"type": "shell",
 			"command": "node dev/build-progress.mjs",
 			"options": {
@@ -46,10 +38,10 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "PiCode: build the editor (salida cruda)",
-			"detail": "La build sin visor, con toda la salida tal cual",
+			"label": "PiCode: build the editor (raw output)",
+			"detail": "The whole build with no viewer, every line as it comes",
 			"type": "shell",
-			"command": "bash dev/build.sh -s",
+			"command": "bash dev/build.sh",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
