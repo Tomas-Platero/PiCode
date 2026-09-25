@@ -86,10 +86,25 @@ ven, y el que produce los binarios. Cada ejecución sube los dos árboles empaqu
 como artefactos (14 días de retención, con `SHA256SUMS.txt`).
 
 **Releases:** al empujar un tag `v*` (por ejemplo `git tag v0.1.2 && git push origin
-v0.1.2`), los dos binarios portables se publican como release con su nombre
-canónico — `PiCode-<versión>-win-x64.zip` y `PiCode-<versión>-linux-x64.tar.gz` — y
-sus checksums. El nombre del fichero sale del tag (sin la `v`); los builds que no
-son de tag usan la versión del producto (`distribution/product-delta.json`).
+v0.1.2`), se publican como release **portables e instaladores** de ambos sistemas:
+
+| Fichero | Qué es |
+| --- | --- |
+| `PiCode-<versión>-win-x64-setup.exe` | Instalador de Windows (Inno Setup; tarea del propio árbol). Sin firmar: SmartScreen avisa en el primer arranque (Más información → Ejecutar igualmente). |
+| `PiCode-<versión>-win-x64.zip` | Portable de Windows. |
+| `PiCode-<versión>-linux-x64.deb` / `.rpm` | Instaladores de Linux (dpkg/rpm). Sin firma: no hace falta para descarga directa. |
+| `PiCode-<versión>-linux-x64.tar.gz` | Portable de Linux. |
+| `SHA256SUMS.txt` | Checksums de todos. |
+
+El nombre sale del tag (sin la `v`); los builds que no son de tag usan la versión del
+producto (`distribution/product-delta.json`). Cada ejecución sube los mismos paquetes
+como artefactos (14 días de retención), release o no.
+
+**Firma de código:** los binarios de Windows salen sin firmar mientras no exista
+certificado. Para activarlo basta con añadir los secretos `PICODE_CODESIGN_PFX`
+(certificado en base64) y `PICODE_CODESIGN_PASSWORD`; el workflow firma entonces
+`PiCode.exe` y el instalador con `signtool`. En Linux, la descarga directa no exige
+firma; firmar el repositorio APT/RPM sería el paso siguiente si algún día se hospeda uno.
 
 **Corre en ambos sistemas.** Linux es el más rápido y barato; Windows es el sistema
 que se publica, así que compila también en CI. El runner de GitHub trae las

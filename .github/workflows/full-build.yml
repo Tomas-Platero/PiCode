@@ -186,13 +186,14 @@ jobs:
           restore-keys: |
             npm-cache-${{ runner.os }}-
 
-      - name: Install the native build dependencies (Linux)
+      - name: Install the native build and packaging dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config
+            libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config \
+            fakeroot rpm
 
       - name: Verify the Spectre libraries and point the build at VS (Windows)
         if: runner.os == 'Windows'
@@ -227,6 +228,48 @@ jobs:
           PICODE_FAST_INSTALL: "yes"
         run: ./dev/build.sh
 
+      - name: Build the Windows installer (setup.exe)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd picode-source
+          npm run gulp vscode-win32-x64-system-setup
+
+      - name: Build the Linux installers (.deb and .rpm)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cd picode-source
+          npm run gulp vscode-linux-x64-prepare-deb \
+            vscode-linux-x64-build-deb
+          npm run gulp vscode-linux-x64-prepare-rpm \
+            vscode-linux-x64-build-rpm
+
+      - name: Code-sign the Windows binaries (only when a certificate is set)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          PICODE_CODESIGN_PFX: ${{ secrets.PICODE_CODESIGN_PFX }}
+          PICODE_CODESIGN_PASSWORD: ${{ secrets.PICODE_CODESIGN_PASSWORD }}
+        run: |
+          if [[ -z "${PICODE_CODESIGN_PFX}" ]]; then
+            echo "no certificate configured: binaries stay unsigned"
+            echo "(Windows shows a SmartScreen warning on first run)"
+            exit 0
+          fi
+          pfx="${RUNNER_TEMP}/codesign.pfx"
+          base64 --decode <<< "${PICODE_CODESIGN_PFX}" > "${pfx}"
+          signtool="$( find "${LOCALAPPDATA}/Microsoft Windows Kits" \
+            -name signtool.exe 2>/dev/null | sort | tail -1 )"
+          targets=()
+          targets+=( "$( ls -d PiCode-win32-* | head -1 )/PiCode.exe" )
+          targets+=( $( ls picode-source/.build/win32-x64/system-setup/*.exe ) )
+          for target in "${targets[@]}"; do
+            "${signtool}" sign /fd SHA256 /f "${pfx}" \
+              /p "${PICODE_CODESIGN_PASSWORD}" "${target}"
+          done
+          rm -f "${pfx}"
+
       - name: Package the portable tree
         id: package
         shell: bash
@@ -237,8 +280,12 @@ jobs:
             pack_dir="$( ls -d PiCode-linux-* | head -1 )"
             tar -czf "PiCode-${PKG_VERSION}-linux-x64.tar.gz" \
               "${pack_dir}"
-            sha256sum "PiCode-${PKG_VERSION}-linux-x64.tar.gz" \
-              >> SHA256SUMS.txt
+            deb="$( ls picode-source/.build/linux/deb/x64/deb/*.deb )"
+            rpm="$( ls picode-source/.build/linux/rpm/x64/rpmbuild \
+              /RPMS/*/*.rpm )"
+            cp "${deb}" "PiCode-${PKG_VERSION}-linux-x64.deb"
+            cp "${rpm}" "PiCode-${PKG_VERSION}-linux-x64.rpm"
+            sha256sum PiCode-${PKG_VERSION}-linux-* >> SHA256SUMS.txt
             echo "artifact=PiCode-${PKG_VERSION}-linux" \
               >> "$GITHUB_OUTPUT"
           else
@@ -246,18 +293,22 @@ jobs:
             powershell -NoProfile -Command \
               "Compress-Archive -Path '${pack_dir}' \
               -DestinationPath 'PiCode-${PKG_VERSION}-win-x64.zip' -Force"
-            sha256sum "PiCode-${PKG_VERSION}-win-x64.zip" \
-              >> SHA256SUMS.txt
+            setup="$( ls picode-source/.build/win32-x64/system-setup/*.exe )"
+            cp "${setup}" "PiCode-${PKG_VERSION}-win-x64-setup.exe"
+            sha256sum PiCode-${PKG_VERSION}-win-* >> SHA256SUMS.txt
             echo "artifact=PiCode-${PKG_VERSION}-win" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Upload the packed binary
+      - name: Upload the packed binaries
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.artifact }}
           path: |
             PiCode-*-linux-x64.tar.gz
+            PiCode-*-linux-x64.deb
+            PiCode-*-linux-x64.rpm
             PiCode-*-win-x64.zip
+            PiCode-*-win-x64-setup.exe
             SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -284,8 +335,15 @@ jobs:
         run: |
           cat dist/SHA256SUMS.txt
           gh release create "${TAG}" dist/PiCode-* \
-            --title "PiCode ${TAG#v} — full binaries" \
-            --notes "Portable build from the pinned VS Code source (see
-          upstream/stable.json). Unzip (Windows) or untar (Linux) and run
-          the binary; a data/ folder is created next to it on first run.
-          SHA256SUMS.txt carries the checksums of both archives."
+            --title "PiCode ${TAG#v} — portable and installers" \
+            --notes "Built from the pinned VS Code source (see
+          upstream/stable.json).
+
+          Windows: PiCode-x-win-x64-setup.exe (installer),
+          PiCode-x-win-x64.zip (portable). The binaries are unsigned, so
+          SmartScreen shows a warning on first run — More info, Run anyway.
+
+          Linux: PiCode-x-linux-x64.deb and .rpm (installers),
+          PiCode-x-linux-x64.tar.gz (portable).
+
+          SHA256SUMS.txt carries the checksums of every archive."
