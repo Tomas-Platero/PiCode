@@ -116,10 +116,10 @@ index 00000000000..7a72463d001
 +}
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
 new file mode 100644
-index 00000000000..59a28662eef
+index 00000000000..8b734e44a31
 --- /dev/null
 +++ b/extensions/picode/src/agent.ts
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,331 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -370,6 +370,8 @@ index 00000000000..59a28662eef
 +
 +	/** What the editor's MCP servers offer right now, as a signature to compare. */
 +	const currentMcpSignature = () => toolSetSignature(mcpTools(vscode.lm.tools as readonly EditorToolInfo[]));
++	/** Whether the owner wants pi to have the editor's MCP tools at all (`picode.mcp.enabled`). */
++	const mcpEnabled = () => readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).mcpEnabled;
 +	/** The chat request in flight, which is where an MCP call gets its invocation token. */
 +	const toolToken: ToolTokenHolder = {};
 +
@@ -388,7 +390,7 @@ index 00000000000..59a28662eef
 +
 +		try {
 +			const selected = modelRefOf(request.model, VENDOR);
-+			const signature = currentMcpSignature();
++			const signature = mcpEnabled() ? currentMcpSignature() : '';
 +			// Rebuilt when the folder changes — a session belongs to a working directory — and when
 +			// the editor's MCP servers do, which is the one thing a session cannot take later.
 +			const folderChanged = sessionFolder !== cwd;
@@ -409,7 +411,7 @@ index 00000000000..59a28662eef
 +					...(settings.thinkingLevel === undefined ? {} : { thinkingLevel: settings.thinkingLevel }),
 +					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
 +					// because a server added a minute ago has to be there on the next message.
-+					customTools: piToolsFromEditor(toolToken),
++					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
 +				});
 +				session = created.session;
 +				sessionFolder = cwd;
@@ -999,10 +1001,10 @@ index 00000000000..421fb0a8d75
 +}
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
 new file mode 100644
-index 00000000000..920244d03d5
+index 00000000000..b9e7e83dca9
 --- /dev/null
 +++ b/extensions/picode/src/extension.ts
-@@ -0,0 +1,610 @@
+@@ -0,0 +1,710 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1015,6 +1017,7 @@ index 00000000000..920244d03d5
 +import { fetchModelIds } from './endpoint';
 +import { splitModelId } from './providerIds';
 +import { connectSubscription } from './login';
++import { mcpServersText, type McpServerSetting } from './mcpServers';
 +import { loadPiSdk } from './piSdk';
 +import {
 +	CONNECT_PROVIDER_COMMAND,
@@ -1145,6 +1148,94 @@ index 00000000000..920244d03d5
 +		}
 +	}
 +	return out;
++}
++
++
++/* ------------------------------------------------------------------ *
++ * The MCP servers pi runs
++ * ------------------------------------------------------------------ */
++
++/** The adapter that gives pi MCP: installed into PiCode's own profile, never the machine's. */
++const MCP_ADAPTER_PACKAGE = 'npm:pi-mcp-adapter';
++
++/** Where the adapter's own file lives, inside PiCode's profile. */
++function mcpServersFile(profile: string): string {
++	return path.join(profile, 'mcp.json');
++}
++
++/**
++ * Writes the MCP servers the owner declared, in the shape the adapter reads.
++ *
++ * The setting is the surface and this file is the projection, the same arrangement the model
++ * providers use: what the owner fills in the form becomes what pi reads. The write is skipped when
++ * the file already says exactly this, because activation and every settings change call it.
++ */
++function writeMcpServers(profile: string, servers: readonly McpServerSetting[]): void {
++	const file = mcpServersFile(profile);
++	const text = mcpServersText(readJsonFile(file), servers);
++	try {
++		if (fs.readFileSync(file, 'utf8') === text) {
++			return;
++		}
++	} catch {
++		// No file yet: the first time a server is declared.
++	}
++	fs.mkdirSync(path.dirname(file), { recursive: true });
++	fs.writeFileSync(file, text, { mode: 0o600 });
++}
++
++/** The file's content, or `undefined` when there is none to read. */
++function readJsonFile(file: string): unknown {
++	try {
++		return JSON.parse(fs.readFileSync(file, 'utf8'));
++	} catch {
++		return undefined;
++	}
++}
++
++/**
++ * Installs the adapter once, if the profile does not have it.
++ *
++ * pi owns its packages, so the install is pi's own command, run against **PiCode's** profile
++ * (`PI_CODING_AGENT_DIR`), which is what keeps this inside the product. It runs in the background
++ * and its result is reported: a server whose adapter is missing would look connected and do
++ * nothing.
++ */
++async function ensureMcpAdapter(profile: string): Promise<void> {
++	if (fs.existsSync(path.join(profile, 'npm', 'node_modules', 'pi-mcp-adapter'))) {
++		return;
++	}
++	const entry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
++	if (!fs.existsSync(entry)) {
++		return;
++	}
++	try {
++		const { execFile } = await import('node:child_process');
++		await new Promise<void>((resolve, reject) => {
++			execFile(process.execPath, [entry, 'install', MCP_ADAPTER_PACKAGE], {
++				env: { ...process.env, PI_CODING_AGENT_DIR: profile },
++			}, error => (error === null ? resolve() : reject(error)));
++		});
++		void vscode.window.showInformationMessage('PiCode: the MCP adapter is installed for pi. Its servers are in Settings > PiCode > MCP.');
++	} catch (error) {
++		const message = error instanceof Error ? error.message : String(error);
++		void vscode.window.showErrorMessage(`PiCode: the MCP adapter could not be installed (${message}). The servers you declared will not be reachable until it is.`);
++	}
++}
++
++/** The servers the settings declare. */
++function declaredMcpServers(): McpServerSetting[] {
++	const configured = vscode.workspace.getConfiguration('picode').get<McpServerSetting[]>('mcp.servers');
++	return Array.isArray(configured) ? configured : [];
++}
++
++/** Writes the servers pi reads, and installs the adapter the first time one is declared. */
++async function applyMcpServers(profile: string): Promise<void> {
++	const servers = declaredMcpServers();
++	writeMcpServers(profile, servers);
++	if (servers.length > 0) {
++		await ensureMcpAdapter(profile);
++	}
 +}
 +
 +/* ------------------------------------------------------------------ *
@@ -1590,6 +1681,17 @@ index 00000000000..920244d03d5
 +		log: line => console.error(`[pi] ${line}`),
 +	});
 +
++	// The MCP servers pi runs are written from the settings row, and followed while the editor is
++	// open: adding one in the form is what makes it available to pi.
++	void applyMcpServers(profileDirectory(context.extensionUri));
++	context.subscriptions.push(
++		vscode.workspace.onDidChangeConfiguration(event => {
++			if (event.affectsConfiguration('picode.mcp.servers')) {
++				void applyMcpServers(profileDirectory(context.extensionUri));
++			}
++		}),
++	);
++
 +	// Connecting a provider with a subscription. It is a **list** and not a chain of windows: pi
 +	// says which of its providers can be logged in with an account the owner already pays for,
 +	// and the editor's own quick pick is where he chooses. The endpoints with an address and a
@@ -1887,6 +1989,138 @@ index 00000000000..60e67f3357c
 +	}
 +	return source.token;
 +}
+diff --git a/extensions/picode/src/mcpServers.ts b/extensions/picode/src/mcpServers.ts
+new file mode 100644
+index 00000000000..07755692e0a
+--- /dev/null
++++ b/extensions/picode/src/mcpServers.ts
+@@ -0,0 +1,126 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * The MCP servers the owner declares, as the file **pi** reads.
++ *
++ * PiCode's pi has no MCP of its own: the owner installs `pi-mcp-adapter`, a pi extension that adds
++ * it, and that adapter reads `<Pi agent dir>/mcp.json` — which for PiCode is
++ * `data/pi-agent/mcp.json`, **inside the product**, never the machine's `~/.config/mcp/mcp.json`.
++ * This module is the translation between the row in the settings (`picode.mcp.servers`, a form) and
++ * that file, in the shape the adapter documents: a `mcpServers` object whose entries are either a
++ * remote server (`type`, `url`) or a local one (`command`, `args`).
++ *
++ * The file may already hold things that are not ours — the adapter keeps its own overrides there,
++ * and the owner may have added a server by hand — so the merge keeps every entry it does not own.
++ *
++ * No `vscode` import: the translation can be exercised by running it.
++ */
++
++/** One server as the settings row holds it. */
++export interface McpServerSetting {
++	readonly name: string;
++	readonly transport: string;
++	readonly target: string;
++	readonly args: string;
++	readonly key: string;
++}
++
++/** One server as the adapter's file declares it. */
++export type McpServerEntry =
++	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
++	| { readonly command: string; readonly args: readonly string[] };
++
++const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
++
++/**
++ * The arguments of a local server's command, as the row writes them.
++ *
++ * Split on spaces, and quoted pieces kept together (`"C:\\Program Files\\x"`) because a path with a
++ * space is the common case and splitting it would start a command that does not exist.
++ */
++export function splitArguments(args: string): string[] {
++	const pieces: string[] = [];
++	let current = '';
++	let quoted = false;
++	for (const character of args) {
++		if (character === '"') {
++			quoted = !quoted;
++			continue;
++		}
++		if (character === ' ' && !quoted) {
++			if (current.length > 0) {
++				pieces.push(current);
++				current = '';
++			}
++			continue;
++		}
++		current += character;
++	}
++	if (current.length > 0) {
++		pieces.push(current);
++	}
++	return pieces;
++}
++
++/** Whether the row describes a server the adapter could use. */
++export function isUsableServer(server: McpServerSetting | undefined | null): boolean {
++	return !!server
++		&& typeof server.name === 'string' && NAME_PATTERN.test(server.name.trim())
++		&& typeof server.target === 'string' && server.target.trim().length > 0;
++}
++
++/** One server, in the adapter's shape. */
++export function mcpServerEntry(server: McpServerSetting): McpServerEntry {
++	const key = typeof server.key === 'string' ? server.key.trim() : '';
++	const headers = key.length === 0 ? undefined : { Authorization: `Bearer ${key}` };
++	if (server.transport === 'stdio') {
++		return { command: server.target.trim(), args: splitArguments(typeof server.args === 'string' ? server.args : '') };
++	}
++	return { type: 'http', url: server.target.trim(), ...(headers === undefined ? {} : { headers }) };
++}
++
++/**
++ * The file's content: what the settings declare, over whatever else was already there.
++ *
++ * An entry with the same name is replaced — that is what editing the row means — and a name the
++ * settings no longer declare is **removed**, because a server deleted from the form has to stop
++ * being offered. What is left alone is everything that is not a server of ours: the adapter's own
++ * settings, plugin paths, and any entry the owner added by hand in a shape this row cannot express.
++ */
++export function mcpServersFile(existing: unknown, servers: readonly McpServerSetting[]): Record<string, unknown> {
++	const root = typeof existing === 'object' && existing !== null && !Array.isArray(existing)
++		? { ...(existing as Record<string, unknown>) }
++		: {};
++	const previous = typeof root.mcpServers === 'object' && root.mcpServers !== null && !Array.isArray(root.mcpServers)
++		? { ...(root.mcpServers as Record<string, unknown>) }
++		: {};
++
++	const declared = new Map<string, McpServerEntry>();
++	for (const server of servers ?? []) {
++		if (isUsableServer(server)) {
++			declared.set(server.name.trim(), mcpServerEntry(server));
++		}
++	}
++
++	const merged: Record<string, unknown> = {};
++	for (const [name, entry] of Object.entries(previous)) {
++		// Kept when the settings do not declare it: it is not ours to delete.
++		if (!declared.has(name)) {
++			merged[name] = entry;
++		}
++	}
++	for (const [name, entry] of declared) {
++		merged[name] = entry;
++	}
++
++	root.mcpServers = merged;
++	return root;
++}
++
++/** What is written, as text: two-space indentation and a final newline, like the rest of the profile. */
++export function mcpServersText(existing: unknown, servers: readonly McpServerSetting[]): string {
++	return `${JSON.stringify(mcpServersFile(existing, servers), null, 2)}\n`;
++}
 diff --git a/extensions/picode/src/mcpTools.ts b/extensions/picode/src/mcpTools.ts
 new file mode 100644
 index 00000000000..ffa0d280528
@@ -2013,10 +2247,10 @@ index 00000000000..ffa0d280528
 + * ------------------------------------------------------------------ */
 diff --git a/extensions/picode/src/piConfig.ts b/extensions/picode/src/piConfig.ts
 new file mode 100644
-index 00000000000..c95efa0dd40
+index 00000000000..3c9f85026b3
 --- /dev/null
 +++ b/extensions/picode/src/piConfig.ts
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,72 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2061,6 +2295,8 @@ index 00000000000..c95efa0dd40
 +	readonly showReasoning: boolean;
 +	/** Whether the editor's context (folder, file, selection) travels with the prompt. */
 +	readonly attachContext: boolean;
++	/** Whether the editor's MCP servers' tools are given to pi. */
++	readonly mcpEnabled: boolean;
 +}
 +
 +/**
@@ -2074,9 +2310,13 @@ index 00000000000..c95efa0dd40
 +	const reasoning = get('pi.reasoning');
 +	const attach = get('context.attach');
 +
++	const mcp = get('mcp.enabled');
++
 +	return {
 +		thinkingLevel: typeof thinking === 'string' && (THINKING_LEVELS as readonly string[]).includes(thinking) ? thinking : undefined,
 +		showReasoning: reasoning === 'show',
++		// On unless it was turned off: a switch that only exists to be left alone is not a switch.
++		mcpEnabled: mcp === undefined ? true : mcp === true,
 +		// Default **on**, unlike the retired extension's: attaching the context is what makes the
 +		// agent answer about the file the owner is looking at without being told which one, and a
 +		// user who does not want it is the exception, not the rule.

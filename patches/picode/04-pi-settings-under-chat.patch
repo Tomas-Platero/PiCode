@@ -1,23 +1,33 @@
 diff --git a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
-index 2c363f1517f..5c7124f4901 100644
+index 2c363f1517f..d335d8cc05e 100644
 --- a/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
 +++ b/src/vs/workbench/contrib/preferences/browser/settingsLayout.ts
-@@ -181,6 +181,30 @@ export const tocData: ITOCEntry<string> = {
+@@ -179,8 +179,39 @@ export const tocData: ITOCEntry<string> = {
+ 		},
+ 		{
  			id: 'chat',
- 			label: localize('chat', "Chat"),
+-			label: localize('chat', "Chat"),
++			// PiCode, not "Chat": this product's own node, and the name the owner reads ("Primero
++			// Chat renombralo a PiCode"). The editor's own rows still live under it, which is
++			// where a person looks for anything the chat does.
++			label: localize('chat', "PiCode"),
  			children: [
 +				// PiCode: the model providers are their **own node**, beside `pi` (owner, 2026-09-25:
 +				// "la parte de proveedores en Settings > Chat > Providers (muevelo de pi)"). Two
 +				// nodes and not one, because they answer two questions: this one is *which providers
 +				// exist*, and `pi` is *how pi itself behaves*.
++				//
++				// Order (owner: "luego ordena las categorias"): PiCode's own two nodes first —
++				// connecting a model is the first thing anyone does — and then the editor's, in
++				// the order it already had.
 +				{
 +					id: 'chat/providers',
 +					label: localize('chatProviders', "Providers"),
 +					settings: ['picode.providers']
 +				},
-+				// PiCode: pi's own settings live here, inside the Chat node, because pi is the
-+				// agent this product ships — there is no PiCode panel any more, and the editor's
-+				// settings are the surface (owner, 2026-09-24).
++				// PiCode: pi's own settings. The node is called **Settings** (owner: "luego pi
++				// cambialo a Settings"): `pi` is the agent's name, and inside a node already called
++				// PiCode the word that helps is the one that says what the rows do.
 +				//
 +				// **One node, globbed on `picode.pi.*`**, and not one node per category: the
 +				// categories that were here before pointed at settings the *extension* declared,
@@ -27,9 +37,18 @@ index 2c363f1517f..5c7124f4901 100644
 +				// touching this file again.
 +				{
 +					id: 'chat/picode',
-+					label: localize('chatPicode', "pi"),
++					label: localize('chatPicode', "Settings"),
 +					settings: ['picode.pi.*', 'picode.context.*']
 +				},
  				{
  					id: 'chat/agent',
  					label: localize('chatAgent', "Agent"),
+@@ -243,7 +274,7 @@ export const tocData: ITOCEntry<string> = {
+ 				{
+ 					id: 'chat/mcp',
+ 					label: localize('chatMcp', "MCP"),
+-					settings: ['mcp', 'chat.mcp.*', 'mcp.*']
++					settings: ['mcp', 'chat.mcp.*', 'mcp.*', 'picode.mcp.*']
+ 				},
+ 				{
+ 					id: 'chat/context',
