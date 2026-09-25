@@ -84,3 +84,7 @@ desktop.ini
 # copiar de él lo que sirve. No es producto, no se compila y se borra cuando la migración
 # termine — por eso tampoco se revisa.
 legacy/
+
+# The C# builder: what it compiles, never what it is written from.
+/builder/bin/
+/builder/obj/

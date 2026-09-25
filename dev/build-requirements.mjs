@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+/*
+ * What the build needs, in one place.
+ *
+ * Two front-ends ask this question — the PowerShell window and the C# builder — and a third (the
+ * terminal) may want it later. Each one used to work it out on its own, which is two copies of the
+ * same truth and one of them always ends up stale. This is that truth: the checks, what each one is
+ * for, and how to get it.
+ *
+ * Usage: node dev/build-requirements.mjs [--json]
+ *
+ *   --json   one object: the platform, whether anything blocks a build, and one entry per check with
+ *            its name, whether it is there, what was found, and how to install it.
+ *   (plain)  one line per check, for a person in a terminal.
+ *
+ * Platform matters: a check about the editor being closed is about Windows, where the build replaces
+ * a folder Windows will not let go of while a program is running. On Linux it is not asked.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+const REPO = path.resolve(import.meta.dirname, '..');
+const json = process.argv.includes('--json');
+
+const isWindows = process.platform === 'win32';
+
+/** What a command prints, or nothing at all: every check here can fail without stopping anything. */
+function run(command, args) {
+	try {
+		return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n')[0];
+	} catch {
+		return '';
+	}
+}
+
+/** The node the build wants, from `.nvmrc`: the pin, not whatever happens to be installed. */
+function wantedNode() {
+	try {
+		return fs.readFileSync(path.join(REPO, '.nvmrc'), 'utf8').trim().split('.')[0];
+	} catch {
+		return '24';
+	}
+}
+
+function roomOnDisk() {
+	try {
+		const stat = fs.statfsSync(REPO);
+		return Math.round((stat.bavail * stat.bsize) / 1024 / 1024 / 1024 * 10) / 10;
+	} catch {
+		return undefined;
+	}
+}
+
+const checks = [];
+
+// Node runs the build's own tasks. The major version is what matters: any 24.x will do.
+const nodeVersion = run('node', ['--version']).replace(/^v/, '');
+const wanted = wantedNode();
+checks.push({
+	id: 'node',
+	name: 'Node.js',
+	ok: nodeVersion !== '' && nodeVersion.split('.')[0] === wanted,
+	found: nodeVersion === '' ? 'not found' : `v${nodeVersion} (the build wants ${wanted})`,
+	missing: nodeVersion === '' ? `Node.js ${wanted} is missing` : `Node.js ${wanted} is what the build uses; this machine has v${nodeVersion}`,
+	install: 'OpenJS.NodeJS',
+	url: 'https://nodejs.org/en/download',
+	note: 'runs npm and the build tasks'
+});
+
+// Git and Git Bash are one install on Windows, so they are one check: the Bash is what runs the build.
+const git = run('git', ['--version']);
+const hasBash = run(isWindows ? 'bash' : 'sh', ['-c', 'echo yes']) === 'yes';
+let shellNote = ', with no shell';
+if (hasBash) {
+	shellNote = isWindows ? ', with Git Bash' : ', with a shell';
+}
+checks.push({
+	id: 'git',
+	name: isWindows ? 'Git for Windows' : 'Git and a shell',
+	ok: git !== '' && hasBash,
+	found: git === '' ? 'not found' : `${git}${shellNote}`,
+	missing: git === '' ? 'Git is missing' : 'No shell to run the build in',
+	install: 'Git.Git',
+	url: 'https://git-scm.com/downloads',
+	note: 'Git, and the shell the build runs in'
+});
+
+const jq = run('jq', ['--version']);
+checks.push({
+	id: 'jq',
+	name: 'jq',
+	ok: jq !== '',
+	found: jq === '' ? 'not found' : jq,
+	missing: 'jq is missing',
+	install: isWindows ? 'jqlang.jq' : '',
+	url: 'https://jqlang.github.io/jq/download/',
+	note: 'the pipeline reads the product and the patches with it'
+});
+
+const python = run('python3', ['--version']) || run('python', ['--version']);
+checks.push({
+	id: 'python',
+	name: 'Python 3',
+	ok: python !== '',
+	found: python === '' ? 'not found' : python,
+	missing: 'Python 3 is missing',
+	install: isWindows ? 'Python.Python.3.12' : '',
+	url: 'https://www.python.org/downloads/',
+	note: 'the native modules are compiled with it'
+});
+
+const free = roomOnDisk();
+checks.push({
+	id: 'disk',
+	name: 'Room on disk',
+	ok: free === undefined ? false : free >= 8,
+	found: free === undefined ? 'could not be read' : `${free} GB free`,
+	missing: free === undefined ? 'The free space could not be read' : `Only ${free} GB free: the build needs about 8 GB`,
+	install: '',
+	url: '',
+	note: 'the source, its dependencies and the packed editor take a few GB'
+});
+
+// Windows only, and not a tool: the one thing that has to be true for the pack to be able to replace
+// the folder the editor runs from.
+if (isWindows) {
+	let running = false;
+	try {
+		const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq PiCode.exe', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+		running = /PiCode\.exe/i.test(out);
+	} catch {
+		running = false;
+	}
+	checks.push({
+		id: 'editor-closed',
+		name: 'PiCode closed',
+		ok: !running,
+		found: running ? 'PiCode is running' : 'nothing is using the folder it is built into',
+		missing: 'Close PiCode first: the build replaces the folder the editor runs from',
+		install: '',
+		url: '',
+		note: 'Windows will not delete the files of a program that is running'
+	});
+}
+
+const blockers = checks.filter(check => !check.ok);
+
+if (json) {
+	process.stdout.write(JSON.stringify({
+		platform: isWindows ? 'windows' : 'linux',
+		ready: blockers.length === 0,
+		blockers: blockers.map(check => check.id),
+		checks
+	}, null, '\t') + '\n');
+} else {
+	for (const check of checks) {
+		const mark = check.ok ? 'OK  ' : 'NO  ';
+		process.stdout.write(`${mark}${check.name.padEnd(18)} ${check.ok ? check.found : check.missing}\n`);
+	}
+	process.stdout.write(blockers.length === 0 ? 'nothing is missing\n' : `${blockers.length} thing(s) to fix\n`);
+}
