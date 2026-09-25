@@ -537,28 +537,56 @@ public sealed partial class MainWindow : Window
 	}
 
 	/// <summary>What the last build did, and when. No per-step times: the module does not measure them.</summary>
+	/// <summary>The mark and the word: what the last run did, or what the folder says happened.</summary>
+	private static StackPanel VerdictLine(bool ok, string word) => new()
+	{
+		Orientation = Orientation.Horizontal,
+		Spacing = 8,
+		Children =
+		{
+			new TextBlock
+			{
+				Text = ok ? "\u2713" : "\u2717",
+				Foreground = (Brush)Application.Current.Resources[
+					ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
+			},
+			new TextBlock { Text = word },
+		},
+	};
+
 	private void ShowLastBuild(string? exit, Progress? progress)
 	{
 		LastBuild.Children.Clear();
+
+		// What exists outranks what a file says. The verdict file can be missing - cleaned, or never
+		// written by a run that died hard - while the editor it produced is sitting right there, and a
+		// card that says "nothing built" over a built editor is lying about the thing it exists to
+		// report.
 		if (exit is null && progress is null)
 		{
-			LastBuild.Children.Add(new TextBlock
+			if (Pipeline.EditorExists)
 			{
-				Text = "Nothing built on this machine yet.",
-				Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-			});
+				LastBuild.Children.Add(VerdictLine(true, "Built"));
+				LastBuild.Children.Add(new TextBlock
+				{
+					Text = "PiCode.exe is in PiCode-Win32-x64. When a build runs, its verdict is written here.",
+					TextWrapping = TextWrapping.Wrap,
+					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+				});
+			}
+			else
+			{
+				LastBuild.Children.Add(new TextBlock
+				{
+					Text = "Nothing built on this machine yet.",
+					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+				});
+			}
 			return;
 		}
 
-		var ok = exit == "0";
-		var mark = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-		mark.Children.Add(new TextBlock
-		{
-			Text = ok ? "\u2713" : "\u2717",
-			Foreground = (Brush)Application.Current.Resources[ok ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush"],
-		});
-		mark.Children.Add(new TextBlock { Text = ok ? "Successful" : "Did not finish" });
-		LastBuild.Children.Add(mark);
+		var ok = exit == "0" || (exit is null && Pipeline.EditorExists);
+		LastBuild.Children.Add(VerdictLine(ok, ok ? "Successful" : "Did not finish"));
 
 		try
 		{
