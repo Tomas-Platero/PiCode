@@ -84,9 +84,17 @@ public sealed class Pipeline
 
 	private static string FindRepoRoot()
 	{
-		// The app runs from builder/bin/<config>/<tfm>/<rid>/. Walking up to the folder that holds the
-		// pipeline is steadier than counting levels, and it keeps working if the app is ever moved.
-		var directory = new DirectoryInfo(AppContext.BaseDirectory);
+		// Where the executable really is. `AppContext.BaseDirectory` is not that in a single-file
+		// publish: it is the temporary folder the runtime unpacks itself into, so the search below
+		// started in %TEMP% and never found anything. That one mistake showed up as four things - a
+		// strange path in the footer, no checks, a button that did nothing, and no icon.
+		var start = Environment.ProcessPath is { Length: > 0 } processPath
+			? Path.GetDirectoryName(processPath) ?? AppContext.BaseDirectory
+			: AppContext.BaseDirectory;
+
+		// Walking up to the folder that holds the pipeline is steadier than counting levels, and it
+		// keeps working if the app is ever moved.
+		var directory = new DirectoryInfo(start);
 		while (directory is not null)
 		{
 			if (File.Exists(Path.Combine(directory.FullName, "dev", "build.sh")))

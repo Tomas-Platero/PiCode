@@ -260,6 +260,19 @@ public sealed partial class MainWindow : Window
 			RailChecks.Children.Add(CheckRow(check, withButton: false));
 		}
 		var required = _requirements.Required > 0 ? _requirements.Required : _requirements.Checks.Length;
+		// No checks at all is not "everything is satisfied": it means the list could not be read, and
+		// saying otherwise offered a Build button that could not do anything.
+		if (_requirements.Checks.Length == 0)
+		{
+			RailCheckCount.Text = "";
+			RailCheckSummary.Visibility = Visibility.Collapsed;
+			Checks.Children.Add(Note("The checks could not be read: the repository was not found from where this program is running."));
+			RailChecks.Children.Add(Note("The checks could not be read"));
+			BuildButton.IsEnabled = false;
+			BuildButtonText.Text = "Build PiCode (no repository)";
+			return;
+		}
+
 		RailCheckCount.Text = $"{required - _blockers.Count} / {required} ready";
 		RailCheckSummary.Visibility = _blockers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 		RailCheckSummaryText.Text = _blockers.Count == 0
