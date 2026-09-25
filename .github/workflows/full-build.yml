@@ -91,6 +91,13 @@ jobs:
           restore-keys: |
             npm-cache-${{ runner.os }}-
 
+      - name: Install the native build dependencies (Linux)
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config
+
       - name: Fetch the pinned source (incremental on a cache hit)
         shell: bash
         run: bash dev/get_repo.sh --fetch

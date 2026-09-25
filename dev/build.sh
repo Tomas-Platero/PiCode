@@ -166,8 +166,13 @@ require_tool node "The product delta is applied by node, and the build runs npm.
 # Whatever happens, this script leaves its verdict behind: builds started by hand - not through
 # dev/build-run.sh, which writes the same file - are the ones the window and the terminal viewer read.
 # Without this, a successful command-line build was invisible to every front-end.
-mkdir -p .scratch
-trap 'printf "%s" "$?" > .scratch/build.status' EXIT
+# The status file is anchored to the repository root on purpose: the build `cd`s into
+# picode-source for phases 6-7, and a failure there used to make this trap try to write
+# into picode-source/.scratch, which does not exist ("No such file or directory") and the
+# real exit code was lost with it.
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+mkdir -p "${ROOT_DIR}/.scratch"
+trap 'printf "%s" "$?" > "${ROOT_DIR}/.scratch/build.status"' EXIT
 
 TREE_PREPARED="no"
 
