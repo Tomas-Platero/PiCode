@@ -21,6 +21,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+const bs = String.fromCharCode(92);
+
 const REPO = path.resolve(import.meta.dirname, '..');
 const json = process.argv.includes('--json');
 
@@ -111,6 +113,67 @@ checks.push({
 	note: 'the native modules are compiled with it'
 });
 
+// The C++ toolchain, which is what compiles the native modules the editor needs. On Windows that is
+// Visual Studio, and specifically its Spectre-mitigated libraries: without them the build stops with
+// MSB8040, minutes in, which is the failure this check exists to move to the front.
+if (isWindows) {
+	let vs = '';
+	let spectre = '';
+	let cpp = '';
+	const vswhere = path.join(process.env['ProgramFiles(x86)'] ?? 'C:' + bs + 'Program Files (x86)',
+		'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
+	if (fs.existsSync(vswhere)) {
+		vs = run(vswhere, ['-latest', '-products', '*', '-property', 'installationPath']);
+		cpp = run(vswhere, ['-latest', '-products', '*', '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath']);
+		spectre = run(vswhere, ['-latest', '-products', '*', '-requires', 'Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre', '-property', 'installationPath']);
+	}
+	const complete = vs !== '' && cpp !== '' && spectre !== '';
+	let found = 'the C++ tools and the Spectre libraries are there';
+	if (vs === '') { found = 'Visual Studio was not found'; }
+	else if (cpp === '') { found = 'the C++ tools are missing'; }
+	else if (spectre === '') { found = 'the Spectre libraries are missing'; }
+	let missing = 'The Spectre-mitigated libraries are missing: the build stops with MSB8040 without them';
+	if (vs === '') { missing = 'Visual Studio 2022 with Desktop development with C++ is missing'; }
+	else if (cpp === '') { missing = 'Visual Studio is there but without the C++ tools'; }
+	checks.push({
+		id: 'cplusplus',
+		name: 'Visual Studio, C++ and Spectre',
+		ok: complete,
+		found,
+		missing,
+		install: '',
+		url: 'https://learn.microsoft.com/cpp/build/reference/vs2022-redistributable-and-spectre-libraries',
+		note: 'node-gyp compiles the native modules with MSBuild'
+	});
+} else {
+	const gcc = run('g++', ['--version']) || run('clang++', ['--version']);
+	checks.push({
+		id: 'cplusplus',
+		name: 'A C++ compiler',
+		ok: gcc !== '',
+		found: gcc === '' ? 'not found' : gcc,
+		missing: 'A C++ compiler (g++ or clang++) is missing',
+		install: '',
+		url: '',
+		note: 'node-gyp compiles the native modules with it'
+	});
+}
+
+// Rust builds some of the editor's native modules. Recommended, not required: the pipeline does not ask
+// for it, so a machine without it may well build, and refusing to try would be the wrong call.
+const cargo = run('cargo', ['--version']);
+checks.push({
+	id: 'rust',
+	name: 'Rust',
+	optional: true,
+	ok: cargo !== '',
+	found: cargo === '' ? 'not found' : cargo,
+	missing: 'Rust is not installed (recommended, not required)',
+	install: 'Rustlang.Rustup',
+	url: 'https://rustup.rs/',
+	note: 'compiles some of the native modules; it rewrites PATH, so restart the shell afterwards'
+});
+
 const free = roomOnDisk();
 checks.push({
 	id: 'disk',
@@ -145,19 +208,23 @@ if (isWindows) {
 	});
 }
 
-const blockers = checks.filter(check => !check.ok);
+// Required, or merely recommended. The difference matters: something recommended that is missing must
+// not stop a build that would have worked, and the pipeline itself decides that - it demands only jq,
+// git and node, and the rest is what installing the dependencies needs.
+const blockers = checks.filter(check => !check.ok && !check.optional);
 
 if (json) {
 	process.stdout.write(JSON.stringify({
 		platform: isWindows ? 'windows' : 'linux',
 		ready: blockers.length === 0,
+		required: checks.filter(check => !check.optional).length,
 		blockers: blockers.map(check => check.id),
 		checks
 	}, null, '\t') + '\n');
 } else {
 	for (const check of checks) {
-		const mark = check.ok ? 'OK  ' : 'NO  ';
-		process.stdout.write(`${mark}${check.name.padEnd(18)} ${check.ok ? check.found : check.missing}\n`);
+		const mark = check.ok ? 'OK  ' : (check.optional ? '--  ' : 'NO  ');
+		process.stdout.write(`${mark}${(check.optional ? check.name + ' (rec.)' : check.name).padEnd(32)} ${check.ok ? check.found : check.missing}\n`);
 	}
 	process.stdout.write(blockers.length === 0 ? 'nothing is missing\n' : `${blockers.length} thing(s) to fix\n`);
 }
