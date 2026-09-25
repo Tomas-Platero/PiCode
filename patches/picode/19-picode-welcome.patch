@@ -20,7 +20,7 @@ index acf75a6e..3c397cdd 100644
  			'scope': ConfigurationScope.RESOURCE,
  			'type': 'string',
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
-index e97fa180..6c59cf45 100644
+index e97fa180..88eadb62 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts
 @@ -15,9 +15,7 @@ import { coalesce, equals } from '../../../../base/common/arrays.js';
@@ -68,8 +68,9 @@ index e97fa180..6c59cf45 100644
  import { GroupsOrder, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../../services/editor/common/editorGroupsService.js';
  import { IExtensionService } from '../../../services/extensions/common/extensions.js';
  import { IHostService } from '../../../services/host/browser/host.js';
- import { IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
+-import { IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
 -import { GettingStartedIndexList } from './gettingStartedList.js';
++import { IWorkbenchThemeService, IWorkbenchColorTheme } from '../../../services/themes/common/workbenchThemeService.js';
  import { canShowAgentsBanner, createAgentsBanner } from '../../chat/browser/agentSessions/agentSessionsBanner.js';
  import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
  import { AccessibilityVerbositySettingId } from '../../accessibility/browser/accessibilityConfiguration.js';
@@ -103,7 +104,7 @@ index e97fa180..6c59cf45 100644
  type GettingStartedActionClassification = {
  	command: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'The command being executed on the getting started page.' };
  	walkthroughId: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'The walkthrough which the command is in' };
-@@ -116,12 +86,65 @@ type GettingStartedActionEvent = {
+@@ -116,12 +86,80 @@ type GettingStartedActionEvent = {
  	argument: string | undefined;
  };
  
@@ -113,6 +114,18 @@ index e97fa180..6c59cf45 100644
  const REDUCED_MOTION_KEY = 'workbench.welcomePage.preferReducedMotion';
  
 -const BUILTIN_ANNOUNCEMENTS: AnnouncementEntry[] = [/* BUILTIN_ANNOUNCEMENTS */];
++/** The setup facts the connector answers with (`picode.setup.getState`). */
++interface SetupState {
++	runtime: 'internal' | 'external';
++	externalAvailable: boolean;
++	gentleInstalled: boolean;
++}
++
++/** The sentence an error carries, whatever threw it. */
++function messageOf(error: unknown): string {
++	return error instanceof Error ? error.message : String(error);
++}
++
 +/**
 + * PiCode's mark, drawn as strokes, in the colors of the theme.
 + *
@@ -152,7 +165,10 @@ index e97fa180..6c59cf45 100644
 +		c.setAttribute('cy', String(cy));
 +		c.setAttribute('r', String(r));
 +		c.setAttribute('fill', color);
-+		c.removeAttribute('stroke');
++		// The group carries the stroke, and the dots of the mark are fills: without an explicit
++		// `none` they would inherit the group's 84-unit stroke and render as blobs (the eyes
++		// became the whole face). The source SVG says the same on every circle.
++		c.setAttribute('stroke', 'none');
 +		group.appendChild(c);
 +	};
 +
@@ -173,7 +189,7 @@ index e97fa180..6c59cf45 100644
  
  export class GettingStartedPage extends EditorPane {
  
-@@ -136,7 +159,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -136,7 +174,6 @@ export class GettingStartedPage extends EditorPane {
  
  	// Ensure that the these are initialized before use.
  	// Currently initialized before use in buildCategoriesSlide and scrollToCategory
@@ -181,7 +197,7 @@ index e97fa180..6c59cf45 100644
  	private gettingStartedCategories!: IResolvedWalkthrough[];
  
  	private currentWalkthrough: IResolvedWalkthrough | undefined;
-@@ -153,12 +175,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -153,12 +190,6 @@ export class GettingStartedPage extends EditorPane {
  
  	private contextService: IContextKeyService;
  
@@ -194,15 +210,26 @@ index e97fa180..6c59cf45 100644
  	private stepsSlide!: HTMLElement;
  	private categoriesSlide!: HTMLElement;
  	private stepsContent!: HTMLElement;
-@@ -170,7 +186,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -170,7 +201,17 @@ export class GettingStartedPage extends EditorPane {
  	private detailsRenderer: GettingStartedDetailsRenderer;
  
  	private readonly categoriesSlideDisposables: DisposableStore;
 -	private showFeaturedWalkthrough = true;
++
++	/** The setup as the connector last reported it; undefined until the first answer arrives. */
++	private setupState: SetupState | undefined;
++	/** The installed color themes, fetched once per session and reused for every render. */
++	private colorThemes: readonly IWorkbenchColorTheme[] | undefined;
++	/** The container the setup section renders into, kept so an action can re-render it. */
++	private setupContainer: HTMLElement | undefined;
++	/** The line under the setup rows that says what an action is doing or did. */
++	private setupNote: HTMLElement | undefined;
++	/** True while a setup action is in flight, so a double click cannot start two. */
++	private setupBusy = false;
  
  	get editorInput(): GettingStartedInput | undefined {
  		return this._input as GettingStartedInput | undefined;
-@@ -194,9 +209,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -194,9 +235,6 @@ export class GettingStartedPage extends EditorPane {
  		@INotificationService private readonly notificationService: INotificationService,
  		@IEditorGroupsService private readonly groupsService: IEditorGroupsService,
  		@IContextKeyService contextService: IContextKeyService,
@@ -212,7 +239,7 @@ index e97fa180..6c59cf45 100644
  		@IHostService private readonly hostService: IHostService,
  		@IWebviewService private readonly webviewService: IWebviewService,
  		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
-@@ -246,12 +258,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -246,12 +284,6 @@ export class GettingStartedPage extends EditorPane {
  		this._register(this.gettingStartedService.onDidAddWalkthrough(rerender));
  		this._register(this.gettingStartedService.onDidRemoveWalkthrough(rerender));
  
@@ -225,22 +252,32 @@ index e97fa180..6c59cf45 100644
  		this._register(this.gettingStartedService.onDidChangeWalkthrough(category => {
  			const ourCategory = this.gettingStartedCategories.find(c => c.id === category.id);
  			if (!ourCategory) { return; }
-@@ -442,12 +448,8 @@ export class GettingStartedPage extends EditorPane {
+@@ -442,12 +474,20 @@ export class GettingStartedPage extends EditorPane {
  				this.runSkip();
  				break;
  			}
 -			case 'showMoreRecents': {
 -				this.commandService.executeCommand(OpenRecentAction.ID);
--				break;
--			}
++			case 'setupRuntime': {
++				await this.applyRuntimeChoice(argument);
++				break;
++			}
++			case 'setupGentle': {
++				await this.applyGentleChoice(argument === 'install');
++				break;
++			}
++			case 'setupTheme': {
++				await this.applyThemeChoice(argument);
+ 				break;
+ 			}
 -			case 'seeAllWalkthroughs': {
 -				await this.openWalkthroughSelector();
-+			case 'setup': {
-+				this.commandService.executeCommand('picode.setup');
++			case 'setupBrowseThemes': {
++				this.commandService.executeCommand('workbench.extensions.search', '@category:themes @sort:installs');
  				break;
  			}
  			case 'openFolder': {
-@@ -464,16 +466,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -464,16 +504,6 @@ export class GettingStartedPage extends EditorPane {
  				this.gettingStartedService.markWalkthroughOpened(argument);
  				break;
  			}
@@ -257,7 +294,7 @@ index e97fa180..6c59cf45 100644
  			case 'hideCategory': {
  				this.hideCategory(argument);
  				break;
-@@ -516,7 +508,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -516,7 +546,6 @@ export class GettingStartedPage extends EditorPane {
  		const selectedCategory = this.gettingStartedCategories.find(category => category.id === categoryId);
  		if (!selectedCategory) { throw Error('Could not find category with ID ' + categoryId); }
  		this.setHiddenCategories([...this.getHiddenCategories().add(categoryId)]);
@@ -265,7 +302,7 @@ index e97fa180..6c59cf45 100644
  	}
  
  	private markAllStepsComplete() {
-@@ -542,20 +533,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -542,20 +571,6 @@ export class GettingStartedPage extends EditorPane {
  		}
  	}
  
@@ -286,7 +323,7 @@ index e97fa180..6c59cf45 100644
  	private getHiddenCategories(): Set<string> {
  		return new Set(JSON.parse(this.storageService.get(hiddenEntriesConfigurationKey, StorageScope.PROFILE, '[]')));
  	}
-@@ -930,17 +907,20 @@ export class GettingStartedPage extends EditorPane {
+@@ -930,17 +945,21 @@ export class GettingStartedPage extends EditorPane {
  		}));
  
  		const header = $('.header', {},
@@ -303,18 +340,19 @@ index e97fa180..6c59cf45 100644
 -		const gettingStartedList = this.buildGettingStartedWalkthroughsList();
 -		const announcementList = await this.buildAnnouncementList();
 +		// PiCode's welcome is its own, not the inherited start page: the agent is built in, so
-+		// the page offers the one-time setup and the way into a folder, and nothing else.
++		// the page carries the setup itself — the same window, no popups — and the way into a folder.
++		const setupContainer = this.setupContainer = $('div.setup-section');
 +		const welcomeColumn = $('.categories-column.categories-column-left', {},
 +			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, Gentle AI, your providers and your themes are all part of it. Set up once and start working — you can change any of this later.")),
++			setupContainer,
 +			$('ul.welcome-actions', {},
-+				this.welcomeAction('setup', 'gear', localize('welcome.setup', "Set up PiCode"), localize('welcome.setupDetail', "Choose which pi runs, whether Gentle AI is on, and your color theme.")),
 +				this.welcomeAction('openFolder', 'folder', localize('welcome.openFolder', "Open Folder"), undefined),
 +			)
 +		);
  
  		const footerChildren: HTMLElement[] = [];
  		if (canShowAgentsBanner(this.chatEntitlementService)) {
-@@ -962,34 +942,7 @@ export class GettingStartedPage extends EditorPane {
+@@ -962,38 +981,12 @@ export class GettingStartedPage extends EditorPane {
  
  		const footer = $('.footer', {}, ...footerChildren);
  
@@ -350,7 +388,12 @@ index e97fa180..6c59cf45 100644
  		this.categoriesPageScrollbar?.scanDomNode();
  
  		this.updateCategoryProgress();
-@@ -1019,307 +972,23 @@ export class GettingStartedPage extends EditorPane {
+ 		this.registerDispatchListeners();
++		void this.renderSetupSection();
+ 
+ 		const editorInput = this.editorInput;
+ 		if (editorInput?.selectedCategory) {
+@@ -1019,307 +1012,200 @@ export class GettingStartedPage extends EditorPane {
  			const telemetryNotice = $('p.telemetry-notice');
  			this.buildTelemetryFooter(telemetryNotice);
  			footer.appendChild(telemetryNotice);
@@ -494,8 +537,14 @@ index e97fa180..6c59cf45 100644
 -			const workspacesWithID = this.filterRecentlyOpened(workspaces);
 -			this.recentlyOpenedList.value?.setEntries(workspacesWithID);
 -		}).catch(onUnexpectedError);
--	}
--
++		return $('li', {},
++			$('button.welcome-action.button-link', { 'x-dispatch': dispatch, 'tabindex': 0, 'title': detail ?? label },
++				$(`span.codicon.codicon-${icon}`),
++				text,
++			)
++		);
+ 	}
+ 
 -	private async buildAnnouncementList(): Promise<GettingStartedIndexList<AnnouncementEntry>> {
 -		const renderAnnouncement = (announcement: AnnouncementEntry) => {
 -			const { title, url } = announcement;
@@ -530,7 +579,25 @@ index e97fa180..6c59cf45 100644
 -					.then(async res => {
 -						if (res.ok) {
 -							var extraAnnouncements = await res.json() as AnnouncementEntry[];
--
++	/**
++	 * The setup, rendered into the welcome page itself.
++	 *
++	 * The page asks the connector for the facts (`picode.setup.getState`) and renders them;
++	 * every control dispatches back through `runDispatchCommand`, which calls one command and
++	 * re-renders from what the command answered. Gentle AI is only asked about when the
++	 * internal pi runs: it lives in PiCode's own profile, and the external pi's profile is
++	 * never this editor's to write to.
++	 */
++	private async renderSetupSection(): Promise<void> {
++		const container = this.setupContainer;
++		if (container === undefined) { return; }
++
++		const state = await this.resolveSetupState();
++		if (!this.colorThemes) {
++			this.colorThemes = await this.themeService.getColorThemes();
++		}
++		if (this.setupContainer !== container) { return; } // the page was rebuilt meanwhile
+ 
 -							this.announcementData = [...extraAnnouncements, ...BUILTIN_ANNOUNCEMENTS];
 -						} else {
 -							this.announcementData = BUILTIN_ANNOUNCEMENTS;
@@ -541,9 +608,23 @@ index e97fa180..6c59cf45 100644
 -					});
 -			} else {
 -				this.announcementData = BUILTIN_ANNOUNCEMENTS;
--			}
--		}
--
++		const rows: HTMLElement[] = [];
++		if (state === undefined) {
++			// The connector has not answered yet (it activates at startup); say so instead of
++			// rendering controls that would do nothing.
++			rows.push($('p.setup-note', {}, localize('setup.unavailable', "The setup is not available yet — it will appear in a moment.")));
++		} else {
++			rows.push(this.setupPiRow(state));
++			// Gentle AI follows the internal pi, so with the external one chosen the question
++			// simply does not appear.
++			if (state.runtime === 'internal') {
++				rows.push(this.setupGentleRow(state));
+ 			}
+ 		}
++		if (state !== undefined) {
++			rows.push(this.setupThemeRow());
++		}
+ 
 -		announcementList.setEntries(this.announcementData);
 -
 -		return announcementList;
@@ -573,8 +654,12 @@ index e97fa180..6c59cf45 100644
 -		startList.setEntries(parsedStartEntries);
 -		startList.onDidChange(() => this.registerDispatchListeners());
 -		return startList;
--	}
--
++		this.setupNote = $('p.setup-note');
++		reset(container, ...rows, this.setupNote);
++		this.registerDispatchListeners();
++		this.categoriesPageScrollbar?.scanDomNode();
+ 	}
+ 
 -	private buildGettingStartedWalkthroughsList(): GettingStartedIndexList<IResolvedWalkthrough> {
 -
 -		const renderGetttingStaredWalkthrough = (category: IResolvedWalkthrough): HTMLElement => {
@@ -593,16 +678,35 @@ index e97fa180..6c59cf45 100644
 -			if (category.isFeatured && this.showFeaturedWalkthrough) {
 -				reset(featuredBadge, $('.featured', {}, $('span.featured-icon.codicon.codicon-star-full')));
 -				reset(descriptionContent, ...renderLabelWithIcons(category.description));
--			}
--
++	/** The connector's answer, retried briefly — it activates as the window finishes starting. */
++	private async resolveSetupState(): Promise<SetupState | undefined> {
++		for (let attempt = 0; attempt < 5; attempt += 1) {
++			try {
++				this.setupState = await this.commandService.executeCommand<SetupState>('picode.setup.getState');
++				return this.setupState;
++			} catch {
++				await new Promise<void>(resolve => setTimeout(resolve, 1500));
+ 			}
++		}
++		return undefined;
++	}
+ 
 -			const titleContent = $('h3.category-title.max-lines-3', { 'x-category-title-for': category.id });
 -			reset(titleContent, ...renderLabelWithIcons(category.title));
 -
 -			return $('button.getting-started-category' + (category.isFeatured && this.showFeaturedWalkthrough ? '.featured' : ''),
--				{
++	private setupPiRow(state: SetupState): HTMLElement {
++		const option = (mode: 'internal' | 'external'): HTMLElement => {
++			const available = mode === 'internal' || state.externalAvailable;
++			const checked = state.runtime === mode;
++			return $('button.setup-option' + (checked ? '.checked' : '') + (available ? '' : '.unavailable'),
+ 				{
 -					'x-dispatch': 'selectCategory:' + category.id,
 -					'title': category.description
--				},
++					'x-dispatch': `setupRuntime:${mode}`,
++					'tabindex': 0,
++					'title': available ? undefined : localize('setup.pi.notFound', "No pi was found on this machine's PATH."),
+ 				},
 -				featuredBadge,
 -				$('.main-content', {},
 -					this.iconWidgetFor(category),
@@ -615,15 +719,70 @@ index e97fa180..6c59cf45 100644
 -						'role': 'button',
 -						'aria-label': localize('closeAriaLabel', "Hide"),
 -					}),
--				),
++				$(`span.codicon.codicon-${checked ? 'circle-filled' : 'circle-large-outline'}`),
++				$('.setup-option-text', {},
++					$('span.setup-option-label', {}, mode === 'internal'
++						? localize('setup.pi.internal', "PiCode's internal pi")
++						: localize('setup.pi.external', "The pi on this machine")),
++					$('span.setup-option-detail', {}, mode === 'internal'
++						? localize('setup.pi.internalDetail', "Kept and updated by PiCode; its configuration lives inside the editor.")
++						: localize('setup.pi.externalDetail', "Your own installation, with its own configuration. PiCode reads it and never writes to it.")),
+ 				),
 -				descriptionContent,
 -				$('.category-progress', { 'x-data-category-id': category.id, },
 -					$('.progress-bar-outer', { 'role': 'progressbar' },
 -						$('.progress-bar-inner'))));
--		};
--
--
--
++			);
+ 		};
++		return $('.setup-row', {},
++			$('.setup-row-head', {}, $('.setup-title', {}, localize('setup.pi', "pi"))),
++			$('.setup-options', {}, option('internal'), option('external')),
++			$('p.setup-row-note', {}, localize('setup.pi.note', "Takes effect for new conversations.")),
++		);
++	}
+ 
++	private setupGentleRow(state: SetupState): HTMLElement {
++		return $('.setup-row', {},
++			$('.setup-row-head', {},
++				$('.setup-title', {}, localize('setup.gentle', "Gentle AI")),
++				$('span.setup-hint', {}, state.gentleInstalled
++					? localize('setup.gentle.on', "Installed")
++					: localize('setup.gentle.off', "Not installed")),
++			),
++			$('.setup-row-body', {},
++				$('span.setup-row-description', {}, localize('setup.gentle.detail', "The agent layer — ODD, subagents, skills and memory — for pi.")),
++				$('button.setup-button.button-link',
++					{ 'x-dispatch': `setupGentle:${state.gentleInstalled ? 'remove' : 'install'}`, 'tabindex': 0 },
++					state.gentleInstalled
++						? localize('setup.gentle.remove', "Remove Gentle AI — use plain pi")
++						: localize('setup.gentle.install', "Install Gentle AI")),
++			),
++		);
++	}
+ 
++	private setupThemeRow(): HTMLElement {
++		const current = this.themeService.getColorTheme().settingsId;
++		const swatches = (this.colorThemes ?? []).map(theme => {
++			const checked = theme.settingsId === current;
++			return $('button.setup-theme' + (checked ? '.checked' : ''),
++				{ 'x-dispatch': `setupTheme:${theme.settingsId}`, 'tabindex': 0, 'title': theme.settingsId ?? theme.id },
++				$(`span.codicon.codicon-${checked ? 'check' : 'paintcan'}`),
++				$('span.setup-theme-label', {}, theme.label),
++			);
++		});
++		return $('.setup-row', {},
++			$('.setup-row-head', {},
++				$('.setup-title', {}, localize('setup.theme', "Theme")),
++				$('span.setup-hint', {}, (this.colorThemes ?? []).find(t => t.settingsId === current)?.label ?? ''),
++			),
++			$('.setup-themes', {}, ...swatches),
++			$('.setup-row-body', {},
++				$('button.setup-button.button-link', { 'x-dispatch': 'setupBrowseThemes', 'tabindex': 0 },
++					localize('setup.theme.browse', "Browse more themes…")),
++			),
++		);
++	}
+ 
 -		const rankWalkthrough = (e: IResolvedWalkthrough) => {
 -			let rank: number | null = e.order;
 -
@@ -646,7 +805,24 @@ index e97fa180..6c59cf45 100644
 -				rankElement: rankWalkthrough,
 -				contextService: this.contextService,
 -			});
--
++	private async applyRuntimeChoice(mode: string): Promise<void> {
++		if (this.setupBusy || this.setupState === undefined) { return; }
++		if (mode !== 'internal' && mode !== 'external') { return; }
++		if (mode === this.setupState.runtime) { return; }
++		if (mode === 'external' && !this.setupState.externalAvailable) { return; }
++		this.setupBusy = true;
++		this.setSetupNote(localize('setup.pi.switching', "Switching pi…"), false);
++		try {
++			this.setupState = await this.commandService.executeCommand<SetupState>('picode.setup.applyRuntime', mode);
++		} catch (error) {
++			this.setSetupNote(messageOf(error), true);
++			this.setupBusy = false;
++			return;
++		}
++		this.setupBusy = false;
++		await this.renderSetupSection();
++	}
+ 
 -		gettingStartedList.onDidChange(() => {
 -			const hidden = this.getHiddenCategories();
 -			const someWalkthroughsHidden = hidden.size || gettingStartedList.itemCount < this.gettingStartedCategories.filter(c => this.contextService.contextMatchesRules(c.when)).length;
@@ -655,21 +831,45 @@ index e97fa180..6c59cf45 100644
 -			allWalkthroughsHiddenContext.bindTo(this.contextService).set(gettingStartedList.itemCount === 0);
 -			this.updateCategoryProgress();
 -		});
--
++	private async applyGentleChoice(install: boolean): Promise<void> {
++		if (this.setupBusy || this.setupState === undefined || this.setupState.runtime !== 'internal') { return; }
++		this.setupBusy = true;
++		this.setSetupNote(install
++			? localize('setup.gentle.installing', "Installing Gentle AI — this runs pi's own installer and may take a moment…")
++			: localize('setup.gentle.removing', "Removing Gentle AI…"), false);
++		try {
++			this.setupState = await this.commandService.executeCommand<SetupState>('picode.setup.applyGentle', install);
++		} catch (error) {
++			this.setSetupNote(messageOf(error), true);
++			this.setupBusy = false;
++			return;
++		}
++		this.setupBusy = false;
++		await this.renderSetupSection();
++	}
+ 
 -		gettingStartedList.setEntries(this.gettingStartedCategories);
 -		allWalkthroughsHiddenContext.bindTo(this.contextService).set(gettingStartedList.itemCount === 0);
--
++	private async applyThemeChoice(settingsId: string): Promise<void> {
++		const theme = (this.colorThemes ?? []).find(t => t.settingsId === settingsId);
++		if (theme === undefined) { return; }
++		await this.themeService.setColorTheme(theme.settingsId, undefined);
++		// A theme choice is a setup choice: it counts as the setup having happened.
++		this.commandService.executeCommand('picode.setup.complete');
++		await this.renderSetupSection();
++	}
+ 
 -		return gettingStartedList;
-+		return $('li', {},
-+			$('button.welcome-action.button-link', { 'x-dispatch': dispatch, 'tabindex': 0, 'title': detail ?? label },
-+				$(`span.codicon.codicon-${icon}`),
-+				text,
-+			)
-+		);
++	/** The line under the rows that says what an action is doing or did. */
++	private setSetupNote(message: string, isError: boolean): void {
++		if (this.setupNote !== undefined) {
++			this.setupNote.innerText = message;
++			this.setupNote.classList.toggle('error', isError);
++		}
  	}
  
  	layout(size: Dimension) {
-@@ -1328,10 +997,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -1328,10 +1214,6 @@ export class GettingStartedPage extends EditorPane {
  		this.categoriesPageScrollbar?.scanDomNode();
  		this.detailsPageScrollbar?.scanDomNode();
  
@@ -680,7 +880,7 @@ index e97fa180..6c59cf45 100644
  		if (this.editorInput?.selectedStep && this.currentMediaType) {
  			this.mediaDisposables.clear();
  			this.stepDisposables.clear();
-@@ -1402,12 +1067,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -1402,12 +1284,6 @@ export class GettingStartedPage extends EditorPane {
  		});
  	}
  
@@ -693,7 +893,7 @@ index e97fa180..6c59cf45 100644
  	private focusSideEditorGroup() {
  		const fullSize = this.groupsService.getPart(this.group).contentDimension;
  		if (!fullSize || fullSize.width <= 700 || this.container.classList.contains('width-constrained') || this.container.classList.contains('width-semi-constrained')) { return; }
-@@ -1725,15 +1384,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -1725,15 +1601,6 @@ export class GettingStartedPage extends EditorPane {
  		parent.append(renderedContents.element);
  	}
  
@@ -709,7 +909,7 @@ index e97fa180..6c59cf45 100644
  	private getKeyBinding(command: string) {
  		command = command.replace(/^command:/, '');
  		return this.keybindingService.lookupKeybinding(command);
-@@ -1757,12 +1407,6 @@ export class GettingStartedPage extends EditorPane {
+@@ -1757,12 +1624,6 @@ export class GettingStartedPage extends EditorPane {
  					this.editorInput.walkthroughPageTitle = undefined;
  				}
  
@@ -723,7 +923,7 @@ index e97fa180..6c59cf45 100644
  				this.setSlide('categories');
  				this.container.focus();
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-index c2622705..303b98c9 100644
+index c2622705..14317503 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 @@ -109,34 +109,32 @@
@@ -750,14 +950,14 @@ index c2622705..303b98c9 100644
 +.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
  	grid-template-columns: 1fr;
 -	grid-template-areas: "header" "left-column" "right-column" "footer";
-+	grid-template-areas: "header" "left-column" "footer";
- }
- 
+-}
+-
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: auto minmax(min-content, auto) min-content;
 -	grid-template-areas: "header" "left-column right-column" "footer footer";
--}
--
++	grid-template-areas: "header" "left-column" "footer";
+ }
+ 
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: min-content minmax(min-content, auto) min-content;
 -	grid-template-columns: 1fr;
@@ -779,7 +979,7 @@ index c2622705..303b98c9 100644
  }
  
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories li.showWalkthroughsEntry {
-@@ -165,6 +163,47 @@
+@@ -165,6 +163,181 @@
  	grid-area: left-column;
  }
  
@@ -822,6 +1022,140 @@ index c2622705..303b98c9 100644
 +
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .welcome-action-detail {
 +	opacity: .8;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-section {
++	margin: 0 0 20px 0;
++	padding: 12px 16px;
++	border: 1px solid var(--vscode-widget-border, transparent);
++	border-radius: 6px;
++	background: var(--vscode-editorWidget-background, transparent);
++	max-width: 520px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-row {
++	margin-bottom: 14px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-row:last-of-type {
++	margin-bottom: 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-row-head {
++	display: flex;
++	align-items: baseline;
++	gap: 8px;
++	margin-bottom: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-title {
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-hint {
++	opacity: .7;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-options {
++	display: flex;
++	gap: 8px;
++	flex-wrap: wrap;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option {
++	display: flex;
++	align-items: flex-start;
++	gap: 6px;
++	padding: 6px 10px;
++	border: 1px solid var(--vscode-widget-border, transparent);
++	border-radius: 4px;
++	text-align: left;
++	cursor: pointer;
++	max-width: 240px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option.checked {
++	border-color: var(--vscode-focusBorder);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option.unavailable {
++	opacity: .5;
++	cursor: default;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option .codicon {
++	margin-top: 2px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option-text {
++	display: flex;
++	flex-direction: column;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option-label {
++	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-option-detail {
++	opacity: .75;
++	font-size: .92em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-row-body {
++	display: flex;
++	flex-direction: column;
++	gap: 4px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-row-description {
++	opacity: .75;
++	font-size: .92em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-button {
++	padding: 2px 0;
++	text-align: left;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-themes {
++	display: flex;
++	flex-wrap: wrap;
++	gap: 4px;
++	max-height: 96px;
++	overflow-y: auto;
++	margin-bottom: 6px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-theme {
++	display: flex;
++	align-items: center;
++	gap: 4px;
++	padding: 2px 8px;
++	border-radius: 4px;
++	cursor: pointer;
++	white-space: nowrap;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-theme:hover {
++	background: var(--vscode-list-hoverBackground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-theme.checked {
++	background: var(--vscode-list-activeSelectionBackground);
++	color: var(--vscode-list-activeSelectionForeground);
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-note {
++	margin: 8px 0 0 0;
++	min-height: 1em;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-note:empty {
++	margin: 0;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .setup-note.error {
++	color: var(--vscode-errorForeground);
 +}
 +
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
