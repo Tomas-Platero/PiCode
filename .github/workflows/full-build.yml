@@ -311,12 +311,14 @@ jobs:
             pack_dir="$( ls -d PiCode-linux-* | head -1 )"
             tar -czf "PiCode-${PKG_VERSION}-linux-x64.tar.gz" \
               "${pack_dir}"
-            deb="$( ls picode-source/.build/linux/deb/x64/deb/*.deb )"
+            # Debian renames the arch: the deb tasks build under amd64, not x64.
+            deb="$( ls picode-source/.build/linux/deb/amd64/deb/*.deb )"
             rpm="$( ls picode-source/.build/linux/rpm/x64/rpmbuild \
-              /RPMS/*/*.rpm )"
+              /RPMS/x86_64/*.rpm )"
             cp "${deb}" "PiCode-${PKG_VERSION}-linux-x64.deb"
             cp "${rpm}" "PiCode-${PKG_VERSION}-linux-x64.rpm"
-            sha256sum PiCode-${PKG_VERSION}-linux-* >> SHA256SUMS.txt
+            sha256sum PiCode-${PKG_VERSION}-linux-* \
+              >> SHA256SUMS-linux.txt
             echo "artifact=PiCode-${PKG_VERSION}-linux" \
               >> "$GITHUB_OUTPUT"
           else
@@ -326,7 +328,8 @@ jobs:
               -DestinationPath 'PiCode-${PKG_VERSION}-win-x64.zip' -Force"
             setup="$( ls picode-source/.build/win32-x64/system-setup/*.exe )"
             cp "${setup}" "PiCode-${PKG_VERSION}-win-x64-setup.exe"
-            sha256sum PiCode-${PKG_VERSION}-win-* >> SHA256SUMS.txt
+            sha256sum PiCode-${PKG_VERSION}-win-* \
+              >> SHA256SUMS-win.txt
             echo "artifact=PiCode-${PKG_VERSION}-win" >> "$GITHUB_OUTPUT"
           fi
 
@@ -340,7 +343,8 @@ jobs:
             PiCode-*-linux-x64.rpm
             PiCode-*-win-x64.zip
             PiCode-*-win-x64-setup.exe
-            SHA256SUMS.txt
+            SHA256SUMS-linux.txt
+            SHA256SUMS-win.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -364,8 +368,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          # Both matrix legs wrote their own checksums file (same name inside
+          # different artifacts); merge them into the one the release carries.
+          cat dist/SHA256SUMS-linux.txt dist/SHA256SUMS-win.txt \
+            > dist/SHA256SUMS.txt
           cat dist/SHA256SUMS.txt
-          gh release create "${TAG}" dist/PiCode-* \
+          gh release create "${TAG}" dist/PiCode-* dist/SHA256SUMS.txt \
             --title "PiCode ${TAG#v} — portable and installers" \
             --notes "Built from the pinned VS Code source (see
           upstream/stable.json).
