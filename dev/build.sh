@@ -58,7 +58,9 @@ export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
 #   near heap limit") at ~7.4 GB, right after the TypeScript compile finished
 #   with 0 errors; the Windows runner has 16 GB, so 12288 fits.
 # - The Linux runner OOM-killed the bundler ("Killed", then a shutdown signal)
-#   with 8192 free to grow — its RAM is smaller, so the ceiling comes down.
+#   with 8192 free to grow, and later runs died with a bare "shutdown signal"
+#   ~9 minutes into compile-src: `free -m` measured 7938 MB TOTAL on the runner,
+#   so node's heap plus the runner agent plus the OS do not fit above ~6 GB.
 # VS Code's own `npm run gulp` hardcodes --max-old-space-size=8192 in its
 # package.json script and a CLI flag beats NODE_OPTIONS, so phase 7 invokes gulp
 # with node directly instead of through npm.
@@ -67,7 +69,7 @@ case "${OSTYPE}" in
     NODE_HEAP_MB=12288
     ;;
   *)
-    NODE_HEAP_MB=7168
+    NODE_HEAP_MB=5632
     ;;
 esac
 export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
