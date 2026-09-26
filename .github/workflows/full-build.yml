@@ -313,10 +313,9 @@ jobs:
               "${pack_dir}"
             # Debian renames the arch: the deb tasks build under amd64, not x64.
             deb="$( ls picode-source/.build/linux/deb/amd64/deb/*.deb )"
-            # The rpm tree uses the RPM arch name (x86_64), not the VSCodium
-            # one (x64): getRpmPackageArch maps x64 -> x86_64.
-            rpm="$( ls picode-source/.build/linux/rpm/x86_64/rpmbuild \
-              /RPMS/x86_64/*.rpm )"
+            # buildRpmPackage copies the finished .rpm straight into
+            # .build/linux/rpm/x86_64/ - no need to dig into rpmbuild/RPMS.
+            rpm="$( ls picode-source/.build/linux/rpm/x86_64/*.rpm )"
             cp "${deb}" "PiCode-${PKG_VERSION}-linux-x64.deb"
             cp "${rpm}" "PiCode-${PKG_VERSION}-linux-x64.rpm"
             sha256sum PiCode-${PKG_VERSION}-linux-* \
