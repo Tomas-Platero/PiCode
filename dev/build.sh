@@ -53,7 +53,18 @@ export VSCODE_QUALITY="stable"
 export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
-export NODE_OPTIONS="--max-old-space-size=8192"
+# The minify/bundle step wants more heap on Windows than on the rest: measured
+# in CI, 8192 MB died with SIGABRT ("Ineffective mark-compacts near heap
+# limit") at ~7.4 GB after the TypeScript compile had finished with 0 errors.
+# The Windows runner has 16 GB, so 12288 fits.
+case "${OSTYPE}" in
+  msys* | cygwin*)
+    export NODE_OPTIONS="--max-old-space-size=12288"
+    ;;
+  *)
+    export NODE_OPTIONS="--max-old-space-size=8192"
+    ;;
+esac
 
 REUSE_TREE="no"
 SKIP_COMPILE="no"
