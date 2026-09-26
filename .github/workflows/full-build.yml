@@ -33,7 +33,10 @@ permissions:
 
 concurrency:
   group: full-build
-  cancel-in-progress: false
+  # A new build (tag, nightly, dispatch) supersedes whatever is running: the
+  # owner asked for exactly this - an old run left compiling burns quota for
+  # nothing, and its artifacts are stale the moment the new commit exists.
+  cancel-in-progress: true
 
 jobs:
   gate:
