@@ -53,18 +53,24 @@ export VSCODE_QUALITY="stable"
 export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
-# The minify/bundle step wants more heap on Windows than on the rest: measured
-# in CI, 8192 MB died with SIGABRT ("Ineffective mark-compacts near heap
-# limit") at ~7.4 GB after the TypeScript compile had finished with 0 errors.
-# The Windows runner has 16 GB, so 12288 fits.
+# The gulp tasks need a heap that fits the runner. Two measurements drove this:
+# - Windows overflowed an 8192 MB heap with SIGABRT ("Ineffective mark-compacts
+#   near heap limit") at ~7.4 GB, right after the TypeScript compile finished
+#   with 0 errors; the Windows runner has 16 GB, so 12288 fits.
+# - The Linux runner OOM-killed the bundler ("Killed", then a shutdown signal)
+#   with 8192 free to grow — its RAM is smaller, so the ceiling comes down.
+# VS Code's own `npm run gulp` hardcodes --max-old-space-size=8192 in its
+# package.json script and a CLI flag beats NODE_OPTIONS, so phase 7 invokes gulp
+# with node directly instead of through npm.
 case "${OSTYPE}" in
   msys* | cygwin*)
-    export NODE_OPTIONS="--max-old-space-size=12288"
+    NODE_HEAP_MB=12288
     ;;
   *)
-    export NODE_OPTIONS="--max-old-space-size=8192"
+    NODE_HEAP_MB=7168
     ;;
 esac
+export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
 
 REUSE_TREE="no"
 SKIP_COMPILE="no"
@@ -429,7 +435,7 @@ export VSCODE_PUBLISH_COUNTER=1
 # `./picode-source` aborted the phase with exit 127 -- `./picode-source/build/windows/` does not
 # exist. It is also not needed: its only product is `LICENSE.rtf`, which is read
 # by `build/win32/code.iss`, the Inno installer, and PiCode builds no installer.
-npm run gulp vscode-min-prepack
+node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js vscode-min-prepack
 
 # The policy files are per system: the DTO copies are Windows' (read by Windows tooling), and the
 # generator writes the data the editor itself carries, for the platform being packed.
@@ -442,7 +448,7 @@ npm run gulp vscode-min-prepack
 node build/lib/policies/copyPolicyDto.ts
 node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc "${PACK_PLATFORM}"
 
-npm run gulp "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
+node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
 
 cd ..
 
