@@ -450,10 +450,10 @@ index d2be4d69..e905eb5a 100644
  		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
 diff --git a/extensions/picode/src/onboarding.ts b/extensions/picode/src/onboarding.ts
 new file mode 100644
-index 00000000..6496b74d
+index 00000000..806b72d6
 --- /dev/null
 +++ b/extensions/picode/src/onboarding.ts
-@@ -0,0 +1,382 @@
+@@ -0,0 +1,401 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -656,6 +656,7 @@ index 00000000..6496b74d
 +					logGentle("Recording Gentle AI in pi's configuration…");
 +					editProfilePackages(deps, true);
 +					logGentle('Installing the packages with npm (this downloads the agent)…');
++					ensureNpmProject(deps);
 +					await runNpm(deps, ['install', '--save', 'gentle-pi', 'gentle-engram']);
 +					logGentle('Approving install scripts…');
 +					await runNpm(deps, ['approve-scripts', 'gentle-pi']);
@@ -805,6 +806,24 @@ index 00000000..6496b74d
 +		});
 +	}
 +	return (externalProbe = { found: true, path: shim, version });
++}
++
++/**
++ * Ensures the profile's npm project exists — the directory pi installs packages
++ * into and the one whose `package.json` carries the install-script approvals. pi
++ * creates it on its own first install; the setup bridge gets there first, and
++ * execFile with a missing cwd fails before npm is even spawned (measured: a
++ * fresh profile died with ENOENT and the card said nothing).
++ */
++function ensureNpmProject(deps: SetupDeps): void {
++	const projectDir = path.join(deps.profileDir, 'npm');
++	if (!existsSync(projectDir)) {
++		mkdirSync(projectDir, { recursive: true });
++	}
++	const manifest = path.join(projectDir, 'package.json');
++	if (!existsSync(manifest)) {
++		writeFileSync(manifest, JSON.stringify({ name: 'pi-extensions', private: true }, null, '\t') + '\n');
++	}
 +}
 +
 +/**
