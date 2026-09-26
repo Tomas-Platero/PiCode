@@ -113,9 +113,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            timeout: 75
+            timeout: 105
           - os: windows-latest
-            timeout: 110
+            timeout: 140
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -227,6 +227,10 @@ jobs:
           # Reuse the cached node_modules only when its recorded install state
           # matches this tree; otherwise dev/build.sh runs `npm ci` as usual.
           PICODE_FAST_INSTALL: "yes"
+          # The build downloads release assets from api.github.com (the js-debug
+          # extension among them); anonymous requests from shared runner IPs hit
+          # the 60/hour cap and fail with 403. fetch.ts honours this token.
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./dev/build.sh
 
       - name: Build the Windows installer (setup.exe)
