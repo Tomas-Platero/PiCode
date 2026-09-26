@@ -1,0 +1,7 @@
+---
+# Custom labels of the org's hosted larger runners. The Linux compile runs on
+# the 16 GB runner so the bundler cannot run out of memory again (the standard
+# runner ships 7.9 GB and was the source of every OOM kill).
+self-hosted-runner:
+  labels:
+    - ubuntu-latest-m

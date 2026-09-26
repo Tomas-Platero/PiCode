@@ -112,7 +112,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # The Linux leg compiles on the org's larger runner (16 GB): the
+          # standard runner's 7.9 GB was the source of every OOM kill. The
+          # Windows leg stays on the standard runner - it compiles fine and
+          # larger Windows runners bill at a much higher multiplier.
+          - os: ubuntu-latest-m
             timeout: 105
           - os: windows-latest
             timeout: 140
@@ -238,6 +242,9 @@ jobs:
           # extension among them); anonymous requests from shared runner IPs hit
           # the 60/hour cap and fail with 403. fetch.ts honours this token.
           GITHUB_TOKEN: ${{ github.token }}
+          # The larger Linux runner has room for the heap the bundler wanted;
+          # build.sh honours this override over its per-OS default.
+          NODE_HEAP_MB: "12288"
         run: ./dev/build.sh
 
       - name: Build the Windows installer (setup.exe)

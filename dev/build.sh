@@ -64,12 +64,14 @@ export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
 # VS Code's own `npm run gulp` hardcodes --max-old-space-size=8192 in its
 # package.json script and a CLI flag beats NODE_OPTIONS, so phase 7 invokes gulp
 # with node directly instead of through npm.
+# An explicit NODE_HEAP_MB (the CI workflow sets it for the larger runner)
+# wins; otherwise the per-OS default applies.
 case "${OSTYPE}" in
   msys* | cygwin*)
-    NODE_HEAP_MB=12288
+    NODE_HEAP_MB="${NODE_HEAP_MB:-12288}"
     ;;
   *)
-    NODE_HEAP_MB=5632
+    NODE_HEAP_MB="${NODE_HEAP_MB:-5632}"
     ;;
 esac
 export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
