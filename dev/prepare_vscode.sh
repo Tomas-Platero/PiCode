@@ -362,6 +362,18 @@ brand_package_metadata() {
   }
   echo "${jsonTmp}" > package.json
 
+  # npm 11.17 gates dependency install scripts behind per-package approvals, keyed by
+  # name@version COMPLETE - the VSCodium suffix included. Without the second key, phase 6's
+  # npm install refuses @vscodium/native-keymap's install.js and dies in its retries.
+  jsonTmp=$( jq '.allowScripts = ((.allowScripts // {}) + {
+    "native-keymap@3.3.9": true,
+    "@vscodium/native-keymap@3.3.9-260952": true
+  })' package.json ) || {
+    echo "error: jq could not write the allow-scripts approvals into package.json." >&2
+    exit 2
+  }
+  echo "${jsonTmp}" > package.json
+
   replace 's|Microsoft Corporation|PiCode|' package.json
 
   # electron.ts carries both the company name and the copyright line, and they
