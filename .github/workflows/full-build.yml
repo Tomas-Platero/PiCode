@@ -191,6 +191,13 @@ jobs:
         shell: bash
         run: |
           free -m || true
+          # ubuntu-24.04 runners ship systemd-oomd: on sustained memory pressure
+          # it kills the whole cgroup (runner agent included) BEFORE the kernel
+          # OOM killer ever writes "Killed" - which is why every long compile
+          # died with a bare "runner has received a shutdown signal" ~12 minutes
+          # into compile-src, heap-independent. The compile is the job's job.
+          sudo systemctl stop systemd-oomd || true
+          sudo systemctl disable systemd-oomd || true
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libkrb5-dev libx11-dev libxkbfile-dev libsecret-1-dev pkg-config \
