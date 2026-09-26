@@ -234,6 +234,11 @@ jobs:
         shell: bash
         run: |
           cd picode-source
+          # inno_updater.exe lives in tools/ and the .iss copies it into the
+          # installer; without this task Inno aborts with "No files found
+          # matching ...\tools\*" (measured in CI). It is a separate task from
+          # the setup task in VS Code's own pipeline too.
+          npm run gulp vscode-win32-x64-inno-updater
           npm run gulp vscode-win32-x64-system-setup
 
       - name: Build the Linux installers (.deb and .rpm)
