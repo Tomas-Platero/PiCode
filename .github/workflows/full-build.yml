@@ -264,10 +264,14 @@ jobs:
         shell: bash
         run: |
           cd picode-source
-          npm run gulp vscode-linux-x64-prepare-deb \
-            vscode-linux-x64-build-deb
-          npm run gulp vscode-linux-x64-prepare-rpm \
-            vscode-linux-x64-build-rpm
+          # Each build task reads the directory its prepare task creates, so the
+          # pairs run one invocation at a time: a single gulp call with both
+          # names runs them in parallel and build-deb raced prepare-deb with
+          # 'spawn /bin/sh ENOENT' (measured in CI).
+          npm run gulp vscode-linux-x64-prepare-deb
+          npm run gulp vscode-linux-x64-build-deb
+          npm run gulp vscode-linux-x64-prepare-rpm
+          npm run gulp vscode-linux-x64-build-rpm
 
       - name: Code-sign the Windows binaries (only when a certificate is set)
         if: runner.os == 'Windows'
