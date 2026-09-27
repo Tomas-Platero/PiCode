@@ -134,9 +134,15 @@ comprobación de segundos.
   desuso desde el 21-09) y `legacy/` (5,8 MB, snapshot del panel aún más viejo).
   Arreglados de paso: `updates/README.md` citaba un parche borrado; `README.md`, `CHANGELOG.md`
   y el wiki contaban el mundo de los parches como presente.
-- **Hueco declarado** (registrado para que no sorprenda): desde el 24-09 el empaquetado no
-  incluye el panel y la migración al núcleo no terminó — **el editor construido desde fuente
-  hoy no trae el chat visible**.
+- **Hueco declarado** (registrado para que no sorprenda; **corregido dos veces el 27-09 por
+  culpa de dos ledgers rancios — el dueño: «a ver si hablas con propiedad»**): el chat que
+  quiere el dueño es el **chat agéntico nativo ya modificado**, y ESTÁ en el build: 21
+  ficheros del chat tocados (+138/−101) y el conector integrado `picode` (5.360 líneas en
+  24 ficheros: proveedor de modelos —los modelos de pi salen en el selector—, participante
+  @pi, herramientas MCP, localización y pilotaje de pi, asistente, importación de perfil,
+  temas). Lo que NO está verificado es el **comportamiento en vivo**: nadie ha abierto aún la
+  ventana del chat del editor empaquetado y ha visto responder a pi. Frases anteriores,
+  ambas falsas: «el editor no trae chat» y «el conector es un cascarón vacío a propósito».
 - 2026-09-27 · **borrada la carpeta `extensions/` del panel** («pues borrala», tras advertir
   que era el único material de migración y que el chat habría que reconstruirlo o sacarlo del
   historial): 119 ficheros versionados → recuperables por git; copia de comodidad en

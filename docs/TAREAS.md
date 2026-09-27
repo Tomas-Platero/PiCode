@@ -33,9 +33,9 @@
 
 | A medias | Qué falta |
 | --- | --- |
-| `picode-source/`**`/extensions/picode`** | El contenedor está creado y registrado en la compilación del editor, con su `activate` **vacío a propósito**. Le falta su primer contenido real: el puente de proveedores |
-| **El host de pi** | La sesión y la traducción están; falta **la clase que las une** con todo lo que el editor pide a un agente |
-| **Los ajustes de pi en Chat** | Solo existe la fila de **Proveedores**; el resto volverá cuando sus funciones existan |
+| **El conector** (`picode-source/extensions/picode`) | **Ya no es un cascarón**: 5.360 líneas en 24 ficheros, embarcado en el pack. Aporta al chat nativo el proveedor de modelos de pi, el participante `@pi`, herramientas MCP, asistente, importación de perfil y temas. Pendiente: comprobación en vivo (abrir el chat del editor empaquetado y hablar) |
+| **El host de pi** | Lo que la ficha afirmaba («la sesión y la traducción están; falta la clase que las une») estaba **anclado al panel viejo**; en el modelo actual el pilotaje vive en el conector. Qué falta exactamente solo se sabrá abriendo el chat publicado y probándolo |
+| **Los ajustes de pi en Chat** | Existe la fila de **Proveedores** en el núcleo (`picodeConfiguration.ts`, 172 líneas) además del proveedor de modelos del conector; el resto volverá cuando sus funciones existan |
 | **El material viejo** | ~~Archivado en `legacy/`~~. El 2026-09-27 el dueño borró `legacy/` y la carpeta `extensions/` del panel («pues borrala»): la reconstrucción se apoya en el historial de git y en `.scratch/picode-pi-chat-ultima-copia.tar.gz`; los dos SVG de marca viven en el núcleo |
 
 ## Lo que falta, en orden
