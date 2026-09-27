@@ -134,6 +134,15 @@ comprobación de segundos.
   desuso desde el 21-09) y `legacy/` (5,8 MB, snapshot del panel aún más viejo).
   Arreglados de paso: `updates/README.md` citaba un parche borrado; `README.md`, `CHANGELOG.md`
   y el wiki contaban el mundo de los parches como presente.
-- **Hueco declarado, no resuelto** (registrado para que no sorprenda): desde el 24-09 el
-  empaquetado no incluye el panel y la migración al núcleo no terminó — **el editor construido
-  desde fuente hoy no trae el chat visible**. Es el primer trabajo real pendiente del producto.
+- **Hueco declarado** (registrado para que no sorprenda): desde el 24-09 el empaquetado no
+  incluye el panel y la migración al núcleo no terminó — **el editor construido desde fuente
+  hoy no trae el chat visible**.
+- 2026-09-27 · **borrada la carpeta `extensions/` del panel** («pues borrala», tras advertir
+  que era el único material de migración y que el chat habría que reconstruirlo o sacarlo del
+  historial): 119 ficheros versionados → recuperables por git; copia de comodidad en
+  `.scratch/picode-pi-chat-ultima-copia.tar.gz`; los dos SVG de marca (rosa de la barra y
+  marca de agua) rescatados a `picode-source/.../contrib/picode/browser/media/` y anotado en
+  `AGENTS.md` siguiendo su propia regla. Comprobado antes de borrar: ni el núcleo, ni
+  `product.json`, ni el delta, ni `apply-picode.ps1`, ni el pin de runtime referencian ya el
+  panel — el paso de escenificarlo salió del script el 24-09 y solo los papeles lo seguían
+  afirmando (`docs/DISTRIBUTION.md`, `distribution/README`), corregidos.

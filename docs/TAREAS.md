@@ -33,10 +33,10 @@
 
 | A medias | Qué falta |
 | --- | --- |
-| **El conector** (`picode-source/extensions/picode`) | El contenedor está creado y registrado en la compilación del editor, con su `activate` **vacío a propósito**. Le falta su primer contenido real: el puente de proveedores |
+| `picode-source/`**`/extensions/picode`** | El contenedor está creado y registrado en la compilación del editor, con su `activate` **vacío a propósito**. Le falta su primer contenido real: el puente de proveedores |
 | **El host de pi** | La sesión y la traducción están; falta **la clase que las une** con todo lo que el editor pide a un agente |
 | **Los ajustes de pi en Chat** | Solo existe la fila de **Proveedores**; el resto volverá cuando sus funciones existan |
-| **El material viejo** | Archivado en `legacy/picode-pi-chat.tar.gz`, **sin migrar todavía** |
+| **El material viejo** | ~~Archivado en `legacy/`~~. El 2026-09-27 el dueño borró `legacy/` y la carpeta `extensions/` del panel («pues borrala»): la reconstrucción se apoya en el historial de git y en `.scratch/picode-pi-chat-ultima-copia.tar.gz`; los dos SVG de marca viven en el núcleo |
 
 ## Lo que falta, en orden
 

@@ -93,7 +93,6 @@ produces it is versioned here.
 | `distribution/` | The product layer as data: product delta (the single home of the identity and version), settings, icons, and the apply script for the prebuilt-archive route. |
 | `dev/` | The build engine — bash scripts, the build window, progress viewer. |
 | `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
-| `extensions/` | The PiCode chat panel as a VS Code extension (being migrated into the core). |
 | `upstream/` | The pin file (`stable.json`) — the VS Code commit the tree descends from. |
 | `wiki/` | The public wiki, page by page — import source for the GitHub Pages wiki. |
 | `docs/` | Internal papers: architecture, decisions, distribution, how-to-build. Index: [`docs/README.md`](docs/README.md). |

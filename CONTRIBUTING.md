@@ -18,7 +18,7 @@ Three things to read before anything else:
 | --- | --- | --- |
 | Use PiCode | nothing — download a release | [Releases](https://github.com/Tomas-Platero/PiCode/releases) |
 | Change branding, defaults, or what is removed from the product | `distribution/product-delta.json` and the apply scripts | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) |
-| Change editor behaviour | `picode-source/` — the TypeScript itself (`patches/picode/` is the record of how the current source was made, not the place to edit) | [docs/howto-build.md](docs/howto-build.md) |
+| Change editor behaviour | `picode-source/` — the TypeScript itself | [docs/howto-build.md](docs/howto-build.md) |
 | Change the agent integration | the core connector and agent host under `picode-source/extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Fix the pipeline | `dev/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
 
@@ -103,10 +103,11 @@ do not translate sources in place.
 
 ## Tests
 
-The agent-layer suites run with `npm test` inside `extensions/picode-pi-chat/` (hermetic, no
-editor needed) and `npm run test:live` (needs a real `pi` on PATH). The core itself is
-verified today by building and running — a fresh-clone build is the first thing a maintainer
-will look at in a PR that touches `dev/`, `patches/` or `distribution/`.
+The core is verified today by building and running — a fresh-clone build is the first thing
+a maintainer will look at in a PR that touches `dev/` or `distribution/`. (The agent-layer
+suites used to live inside `extensions/picode-pi-chat/`, hermetic `npm test` plus
+`test:live` against a real pi; that folder was deleted on 2026-09-27 by the owner's
+decision, and the panel returns as core code, with its tests, when the migration is done.)
 
 ## Reporting
 

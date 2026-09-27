@@ -41,7 +41,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"Tengo un svg para el menú de la izq para gentle-ai"*
 > *"Es una rosa, es el logo de gentle-ai"*
 
-* **Barra de actividad de Gentle AI:** Usa su rosa situada en `extensions/picode-pi-chat/media/gentle-ai.svg` (SVG monocromo sin fondo).
+* **Barra de actividad de Gentle AI:** Usa su rosa; hoy vive en `picode-source/src/vs/workbench/contrib/picode/browser/media/gentle-ai.svg` (SVG monocromo sin fondo). Antes estaba en `extensions/picode-pi-chat/media/`; esa carpeta se borró el 27-S con la decisión del dueño, y el icono se rescató a su destino de núcleo.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
 > *"El logo que cambiamos en el centro de la pantalla... no uses el png usa el svg"*
@@ -166,3 +166,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-24** · Confirmado que **no existe extensión propia**: todo el desarrollo va dentro del núcleo del editor.
 * **2026-09-25** · Regla de UI: La pantalla muestra acciones y estados (*Built*, *Stop build*), no explicaciones de funcionamiento interno.
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
+* **2026-09-27** · Regla de los iconos: la rosa y la marca de agua cambian de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasan al núcleo (`picode-source/.../contrib/picode/browser/media/`). La intención —la rosa de la izquierda, el dibujo de trazos en el editor vacío— no cambia.

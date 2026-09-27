@@ -350,7 +350,10 @@ fi
 
 # The step that staged `extensions/picode-pi-chat` as a built-in extension was **removed on
 # 2026-09-24 by the owner's decision**: pi lives in the core, and the extension is being
-# migrated into it. Nothing compiles or packages that directory.
+# migrated into it. Nothing compiled the directory, and on 2026-09-27 the owner deleted it
+# («pues borrala»): the panel's code remains in git history and in
+# `.scratch/picode-pi-chat-ultima-copia.tar.gz`, and its two brand SVGs now live in
+# `picode-source/src/vs/workbench/contrib/picode/browser/media/`.
 echo ""
 echo "  -- dependencies"
 

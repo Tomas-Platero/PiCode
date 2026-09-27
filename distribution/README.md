@@ -15,8 +15,8 @@ at the repository root — and applies a product delta to it.
 | `apply-picode.ps1` | The orchestrator: product delta, portable profile, first-run defaults, the visible names, and staging the panel as a built-in extension. Preview by default; `-Apply` writes. |
 | `settings.json` | First-run defaults. Copied only when the user has no settings file of their own. |
 
-The pinned pi version lives in `extensions/picode-pi-chat/runtime.json` rather than
-here, because it ships with the extension that uses it.
+The pinned pi version lives in `distribution/runtime.json` — the one file the build and the
+archive route both read.
 
 ## Running it
 
@@ -31,7 +31,6 @@ It is idempotent, refuses to run outside a VSCodium root, and backs up
 ## What it touches when `-Apply` is passed
 
 - `resources/app/product.json` — the product delta, after a backup
-- `resources/app/extensions/picode-pi-chat/` — the panel, staged as a built-in extension
 - `data/user-data/`, `data/extensions/`, `data/tmp/` — the portable profile
 - `data/user-data/User/settings.json` — only created if it does not exist
 - `PiCode.exe`, `bin/picode.cmd`, `bin/picode`, `PiCode.VisualElementsManifest.xml` — renamed

@@ -48,7 +48,7 @@ the tree itself.
 | 1 | Editor | the VSCodium archive, extracted at the root | the operator |
 | 2 | Product delta | `distribution/product-delta.json` | `apply-product-delta.mjs`, orchestrated by `apply-picode.ps1` |
 | 3 | Portable profile | `data/{user-data,extensions,tmp}` | `apply-picode.ps1` |
-| 4 | Agent panel | `extensions/picode-pi-chat` staged into `resources/app/extensions/` | `apply-picode.ps1` |
+| 4 | ~~Agent panel~~ | *retirado el 2026-09-24; la carpeta `extensions/` fue borrada el 2026-09-27 por decisión del dueño — el panel vuelve como código del núcleo* | — |
 | 5 | Defaults | `distribution/settings.json` → `data/user-data/User/settings.json` | `apply-picode.ps1`, only when absent |
 | 6 | Agent runtime | a pi per `picode.pi.runtime`; PiCode's own installed on demand | the panel |
 
@@ -105,13 +105,14 @@ not the user data directory and never was.
 
 The profile is disposable by design: deleting `data/` yields a clean PiCode.
 
-## 5. The panel as a built-in extension
+## 5. The panel (retired)
 
-Because the tree is owned, the panel needs no VSIX and no install step: the script
-stages the built extension into `resources/app/extensions/picode-pi-chat`. What ships
-mirrors `.vscodeignore` — no sources, toolchain, maps, tests or packaging state — and
-files no longer in the build are removed, so a renamed module cannot leave its old
-output behind for the editor to keep loading.
+Until 2026-09-24 this script staged `extensions/picode-pi-chat` into
+`resources/app/extensions/` as a built-in extension. That step was removed by the owner's
+decision ("pi lives in the core"), and on 2026-09-27 the owner deleted the `extensions/`
+folder itself. The panel will return as core code; its last extension-era source lives in
+this repository's git history and, for convenience, in
+`.scratch/picode-pi-chat-ultima-copia.tar.gz`.
 
 ## 6. The agent runtime
 
