@@ -5,7 +5,8 @@ directory by `raw.githubusercontent.com`, which is why there is no update server
 
 ## Why it lives here and not in GitHub Releases
 
-With `patches/vscodium/11-update-use-github-release.patch` applied, the updater asks for
+With the updater change baked into the source tree (VSCodium's
+`11-update-use-github-release`, now ordinary code in `picode-source/`), the updater asks for
 
 ```text
 <updateUrl>/<quality>/<platform>/<architecture>[/<target>]/latest.json
@@ -53,7 +54,7 @@ it is the same version on both paths. It has **one home**:
 distribution/product-delta.json  →  set.version
 ```
 
-That file is what both paths already apply — this build in phase 5, and
+That file is what both paths already apply — this build in the prepare phase, and
 `distribution/apply-picode.ps1` onto the packaged tree — so the compiled editor and the
 released one cannot disagree. Bumping a release is editing that one value.
 
