@@ -122,7 +122,7 @@ jobs:
           - os: ubuntu-latest-m
             timeout: 105
           - os: windows-latest
-            timeout: 140
+            timeout: 210
     steps:
       - name: Check out
         uses: actions/checkout@v7
