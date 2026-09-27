@@ -154,6 +154,14 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * El detalle técnico se documenta de forma completa en `odd/tasks/`.
 * Explicación funcional de errores: qué significa la falla (ej. "no se pudo conectar"), no la causa en el código.
 
+### La ventana de gestión del chat habla de pi, no de Copilot
+>
+> *"Necesito que esta ventana contenga las cosas de pi y gentle-ai ejemplo: Agents - Agentes de Gentle. Skills - Skills tanto en pi, proyecto y gentle-ai. Instructions - esto quitalo. Prompts - Esto quitalo. Hooks - Esto quitalo (pi no tiene hooks). MCP Servers - Lista de servidores mcp de pi. Plugins - Listado de Packages de Pi."*
+
+* La página **«Agent Customizations»** del chat debe listar los elementos reales del runtime pi (perfil en fuerza), no los de las convenciones de GitHub/Copilot.
+* **Agents**: los agentes de Gentle/pi. **Skills**: las de pi, las del proyecto y las de gentle-ai. **MCP Servers**: los servidores mcp de pi. **Plugins**: los paquetes instalados de pi.
+* **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejeta de la página.
+
 ---
 
 ## Registro de Cambios
@@ -167,3 +175,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-25** · Regla de UI: La pantalla muestra acciones y estados (*Built*, *Stop build*), no explicaciones de funcionamiento interno.
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
 * **2026-09-27** · Regla de los iconos: la rosa y la marca de agua cambian de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasan al núcleo (`picode-source/.../contrib/picode/browser/media/`). La intención —la rosa de la izquierda, el dibujo de trazos en el editor vacío— no cambia.
+* **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi/gentle (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.

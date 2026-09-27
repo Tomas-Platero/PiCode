@@ -55,10 +55,10 @@ solo un guion).
   (nadie llama su registro) pero comparte helpers con el wizard → limpieza aplazada a commit
   propio. Build completo status 0; verificado DENTRO del pack (nombre del participante, tipo de
   vista, iconPath, comando de datos); editor abierto para el dueño. Commit `48a6b1ca`.
-- 2026-09-28 · el dueño reclama la barra `usage`. Investigación: es cuota del proveedor que
+- 2026-09-27 · el dueño reclama la barra `usage`. Investigación: es cuota del proveedor que
   Gentle Shell pide viva (no vive en sesión). Ruta NaN implementada con parser espejo y caché 60 s;
   Anthropic/Codex quedan declarados follow-up (cabeceras SSE invisibles al conector).
-- 2026-09-28 · **S6 cerrada**. El obrero paró a la primera (faltaba `src/status-view.ts` en la
+- 2026-09-27 · **S6 cerrada**. El obrero paró a la primera (faltaba `src/status-view.ts` en la
   superficie: el contrato `StatusData` y el render del árbol viven ahí, no en `status-data.ts`) y
   el dueño autorizó el conjunto corregido. Correcciones de punteros del padre aceptadas: no hay
   `session-usage.ts` ni `currentModel` — la verdad es `getSessionUsage()` de `src/agent.ts` con
