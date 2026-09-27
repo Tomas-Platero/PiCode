@@ -259,3 +259,10 @@ tsconfig pendiente de autorización (bloqueo arriba). Detalle, hallazgos y lími
   relanzado. Pendiente del hilo anterior: interfaz interactiva de MCP (G9) — el dueño pide estilo
   Proveedores (ver lo guardado) en vez de quick-picks secuenciales; ya localizado el widget
   (McpServerListSettingWidget + picode.mcp.servers ya existentes).
+- 2026-09-27 · G10 entregado y commitado (a7f2720c). Contrato: picode.packages.search
+  (búsqueda npm keywords:pi-package, caché 5 min) + picode.packages.install (CLI de pi como
+  Node, perfil en fuerza, cola secuencial con resultado propio por llamada — el padre corrigió
+  el vuelo compartido de W5 que respondía por el paquete equivocado). Núcleo W4: textos Packages,
+  fuera Create Plugin, Install from Repository reencaminado. 99/99 tests. Nota: dos avisos
+  del linter exigían "declarar questionCarousel en vscode" — falsos: los tipos viven en las
+  propuestas del tsconfig y tsc pasa en 0; no se aplicaron.
