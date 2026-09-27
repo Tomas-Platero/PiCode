@@ -6,12 +6,16 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
 import { declarationsFromSetting, projectDeclaration } from './declarations';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
+import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, type McpServerSetting } from './mcpServers';
+import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk } from './piSdk';
+import { externalProfileDir } from './profile-import';
 import {
 	CONNECT_PROVIDER_COMMAND,
 	declarationFrom,
@@ -24,7 +28,7 @@ import { registerWizardModelCommands } from './wizard-models';
 import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
-import { chatAgentDir, internalProfileDir, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -242,6 +246,237 @@ async function applyMcpServers(profile: string): Promise<void> {
 	if (servers.length > 0) {
 		await ensureMcpAdapter(profile);
 	}
+}
+
+/* ------------------------------------------------------------------ *
+ * The chat's management page: pi's own data
+ * ------------------------------------------------------------------ */
+
+/**
+ * The packages pi has installed, asked for by the chat's page.
+ *
+ * A **contract**, not a contribution: the editor's own plugin discovery calls this command and gets
+ * pi's real list back, so the page never hardcodes a pi path — the profile in force is resolved
+ * here, where the runtime choice is known (`runtime.ts`).
+ */
+export const PACKAGES_COMMAND = 'picode.setup.packages';
+
+/** The id the servers below are registered under; it must match the manifest's contribution. */
+const MCP_PROVIDER_ID = 'pi';
+
+/**
+ * How long the watchers wait before telling the chat that something changed.
+ *
+ * A save fires one event per file and a `git checkout` fires dozens; the chat re-reads and re-lists
+ * on every one of them, and the run the events were coalesced into reads what is on disk at that
+ * moment anyway (`customizations.ts`) — so a short wait loses nothing and saves a burst of work.
+ */
+const CUSTOMIZATIONS_WAIT_MS = 250;
+
+/**
+ * A resource as the chat's prompt-file host reads it.
+ *
+ * The declared shape is `ChatResource` (`uri`, `when`, `sessionTypes`), but the host also reads
+ * `name` and `description` off what a provider returns — `mainThreadChatAgents2` maps them into
+ * `IPromptFileResource` — so they travel with the resource. The `source` a provider would declare
+ * is **not** part of that crossing: it is lost in the extension host, and the files land as
+ * extension-provided customizations whoever they came from.
+ */
+interface NamedChatResource extends vscode.ChatResource {
+	readonly name: string;
+	readonly description?: string;
+}
+
+/** The workspace folders, as plain paths: pi's project resources live under `<folder>/.pi`. */
+function workspaceFolderPaths(): string[] {
+	return (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+}
+
+/**
+ * The profile **in force**, exactly as the status view resolves it.
+ *
+ * The internal pi keeps everything in PiCode's own profile; the external one keeps its own on the
+ * machine and this editor only reads it. Reading PiCode's own profile under an external runtime
+ * would list another pi's agents as if they were the running one's.
+ */
+function profileInForce(): string {
+	return readRuntimeMode() === 'external' ? externalProfileDir() : profileDirectory(requireProfileUri());
+}
+
+/** A file's text, or `undefined` when it is not there. */
+function readTextFile(file: string): string | undefined {
+	try {
+		return fs.readFileSync(file, 'utf8');
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The package scopes of the current window.
+ *
+ * A project's declarations are read only while the folder is **trusted**: pi itself throws its
+ * project settings away when it is not (`SettingsManager.loadFromStorage`), so listing a project's
+ * packages in an untrusted window would show packages pi is not loading.
+ */
+function packageScopes(profileDir: string): ReturnType<typeof userPackageScope>[] {
+	const scopes = [userPackageScope(profileDir, parseSettings(readTextFile(path.join(profileDir, 'settings.json'))))];
+	if (vscode.workspace.isTrusted) {
+		for (const folder of workspaceFolderPaths()) {
+			scopes.push(projectPackageScope(folder, parseSettings(readTextFile(path.join(folder, '.pi', 'settings.json')))));
+		}
+	}
+	return scopes;
+}
+
+/**
+ * Every problem reported once per session.
+ *
+ * An entry that could not be read is said out loud — an empty list and a broken file look the same
+ * on the page, and only one of them is worth acting on — but the listing runs on every open of the
+ * page, so the same line is not repeated until the window is reloaded.
+ */
+const reportedProblems = new Set<string>();
+
+function report(line: string): void {
+	if (!reportedProblems.has(line)) {
+		reportedProblems.add(line);
+		console.error(`[pi] ${line}`);
+	}
+}
+
+/** The `mcp.json` files of the current window: pi's own, then each folder's project file. */
+function mcpConfigFiles(profileDir: string): McpConfigFile[] {
+	const files: McpConfigFile[] = [];
+	const add = (file: string, source: 'user' | 'local'): void => {
+		const text = readTextFile(file);
+		if (text !== undefined) {
+			files.push({ path: file, text, source });
+		}
+	};
+	add(path.join(profileDir, 'mcp.json'), 'user');
+	for (const folder of workspaceFolderPaths()) {
+		add(path.join(folder, '.pi', 'mcp.json'), 'local');
+	}
+	return files;
+}
+
+/** One server as the editor's own definition, which is what its MCP list renders. */
+function mcpDefinition(server: PiMcpServer): vscode.McpServerDefinition {
+	if (server.kind === 'stdio') {
+		// No `cwd`: the editor starts a local server in the workspace folder, which is where pi runs
+		// one too.
+		return new vscode.McpStdioServerDefinition(server.label, server.command, [...server.args], { ...server.env });
+	}
+	return new vscode.McpHttpServerDefinition(server.label, vscode.Uri.parse(server.url), { ...server.headers });
+}
+
+/**
+ * Registers pi's own data with the chat's management page: agents, skills, MCP servers and the
+ * package list.
+ *
+ * Everything is read from disk on every call — no snapshot is kept of what the files said — and the
+ * three watchers below are only a hint that the answer changed. The one thing kept is the package
+ * read, which walks `node_modules`; the watchers drop it, so it is never staler than the events.
+ */
+function registerCustomizations(): vscode.Disposable[] {
+	const changed = new vscode.EventEmitter<void>();
+	const fsReader = nodeFs();
+	const disposables: vscode.Disposable[] = [changed];
+
+	/** The last package read, and what it was read from: a runtime or folder change reads again. */
+	let packages: { readonly from: string; readonly value: PackageReadResult } | undefined;
+	const readPackages = (): PackageReadResult => {
+		const profileDir = profileInForce();
+		const from = [profileDir, String(vscode.workspace.isTrusted), ...workspaceFolderPaths()].join('\u0000');
+		if (packages?.from !== from) {
+			const value = piPackages(packageScopes(profileDir), fsReader);
+			for (const line of value.unresolved) {
+				report(`packages: ${line}`);
+			}
+			packages = { from, value };
+		}
+		return packages.value;
+	};
+
+	// The one run a burst of file events collapses into. The package read is dropped first: a change
+	// that reaches the page has to be a change the listing can see.
+	const fire = coalesce(CUSTOMIZATIONS_WAIT_MS, (run, delayMs) => { setTimeout(run, delayMs); }, () => {
+		packages = undefined;
+		changed.fire();
+	});
+
+	/** Tells the chat that a directory it lists changed, and releases the watcher with the rest. */
+	const watch = (base: string, pattern: string): void => {
+		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), pattern));
+		disposables.push(watcher, watcher.onDidCreate(fire), watcher.onDidDelete(fire), watcher.onDidChange(fire));
+	};
+
+	const agentsProvider: vscode.ChatCustomAgentProvider = {
+		onDidChangeCustomAgents: changed.event,
+		provideCustomAgents: (): NamedChatResource[] => discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader)
+			.map(agent => ({ uri: vscode.Uri.file(agent.file), name: agent.name, ...(agent.description === undefined ? {} : { description: agent.description }) })),
+	};
+
+	/** Where pi's skills are right now: the packages it has decide part of it. */
+	const currentSkillRoots = (): readonly ResourceRoot[] =>
+		skillRoots(profileInForce(), workspaceFolderPaths(), readPackages().packages.flatMap(found => packageSkillDirs(found.path, fsReader)));
+
+	const skillsProvider: vscode.ChatSkillProvider = {
+		onDidChangeSkills: changed.event,
+		provideSkills: (): NamedChatResource[] => discoverSkills(currentSkillRoots(), fsReader)
+			.map(skill => ({ uri: vscode.Uri.file(skill.file), name: skill.name, ...(skill.description === undefined ? {} : { description: skill.description }) })),
+	};
+
+	const mcpProvider: vscode.McpServerDefinitionProvider = {
+		onDidChangeMcpServerDefinitions: changed.event,
+		provideMcpServerDefinitions: (): vscode.McpServerDefinition[] => {
+			const read = mcpServersFrom(mcpConfigFiles(profileInForce()));
+			for (const line of read.skipped) {
+				report(`MCP: ${line}`);
+			}
+			return read.servers.map(mcpDefinition);
+		},
+	};
+
+	// The three registrations. `chat` carries the two proposed providers (declared in the manifest
+	// as `chatPromptFiles`), and `lm`'s MCP provider is stable.
+	disposables.push(vscode.chat.registerCustomAgentProvider(agentsProvider));
+	disposables.push(vscode.chat.registerSkillProvider(skillsProvider));
+	disposables.push(vscode.lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, mcpProvider));
+
+	// pi's agents and skills, wherever they are: the profile in force, each folder's project
+	// directory, and the skill directories of the installed packages.
+	const profileDir = profileInForce();
+	for (const root of [...agentRoots(profileDir, workspaceFolderPaths()), ...currentSkillRoots()]) {
+		watch(root.dir, '**/*.md');
+	}
+	// The files that decide the other two lists: the settings file says which packages pi has, and
+	// `mcp.json` says which servers. Watching the `npm` install itself would mean watching
+	// `node_modules`, which the editor excludes from watching by default — a package installed while
+	// the window is open appears after a reload, and that is reported rather than hidden.
+	for (const file of [
+		path.join(profileDir, 'settings.json'),
+		path.join(profileDir, 'mcp.json'),
+		...workspaceFolderPaths().flatMap(folder => [
+			path.join(folder, '.pi', 'settings.json'),
+			path.join(folder, '.pi', 'mcp.json'),
+		]),
+	]) {
+		watch(path.dirname(file), path.basename(file));
+	}
+
+	// A folder added to the window changes what the lists answer. The watchers of the folders that
+	// were already open stay where they are, which is enough: the event makes the page re-ask.
+	disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+		packages = undefined;
+		changed.fire();
+	}));
+
+	// The page's own door onto the package list, for the discovery that cannot use a provider.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackage[]> => [...readPackages().packages]));
+
+	return disposables;
 }
 
 /* ------------------------------------------------------------------ *
@@ -719,6 +954,11 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
 	context.subscriptions.push(registerStatusTreeView());
 	void maybeNudgeFirstRun(setupDeps);
+
+	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
+	// so this registers the three providers it reads (and the package command) before anything the
+	// owner opens looks for them.
+	context.subscriptions.push(...registerCustomizations());
 
 	// The wizard's provider/model/agents commands (the welcome page's step 2 and the
 	// Gentle agents' model picker).

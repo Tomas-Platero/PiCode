@@ -20,11 +20,15 @@
 	},
 	"enabledApiProposals": [
 		"defaultChatParticipant",
-		"chatProvider"
+		"chatProvider",
+		"chatPromptFiles"
 	],
 	"activationEvents": [
 		"onLanguageModelChatProvider:picode",
 		"onChatParticipant:picode.pi",
+		"onCustomAgentProvider",
+		"onSkillProvider",
+		"onMcpCollection:pi",
 		"onStartupFinished"
 	],
 	"contributes": {
@@ -40,6 +44,12 @@
 					"agent",
 					"edit"
 				]
+			}
+		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "pi",
+				"label": "pi"
 			}
 		],
 		"languageModelChatProviders": [
