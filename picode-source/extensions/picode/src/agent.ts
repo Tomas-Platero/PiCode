@@ -64,7 +64,14 @@ interface PiEvent {
 }
 
 /** pi's `Model`, opaque here: it is handed back to pi and never inspected. */
-type PiModel = unknown;
+interface PiModel {
+	readonly [key: string]: unknown;
+}
+
+/** pi's session store, created once and handed back to pi across a session's rebuilds. */
+interface PiSessionStore {
+	readonly [key: string]: unknown;
+}
 
 interface PiSession {
 	readonly sessionId: string;
@@ -97,7 +104,7 @@ interface PiSdk {
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
 		// default, which is right for the external pi and a leak for the internal one.
-		create(cwd: string, sessionDir?: string): unknown;
+		create(cwd: string, sessionDir?: string): PiSessionStore;
 	};
 }
 
@@ -368,6 +375,10 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	};
 
 	const participant = vscode.chat.createChatParticipant(PI_PARTICIPANT, handler);
+	// The answer header's avatar is the participant's icon: the host turns `iconPath` into the
+	// agent metadata the chat renderer reads (`chatListRenderer.getAgentIcon`), which is why the
+	// manifest has no `iconPath` of its own. The brand mark is the line-art `media/picode.svg`.
+	participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'picode.svg');
 	context.subscriptions.push(
 		participant,
 		new vscode.Disposable(() => {

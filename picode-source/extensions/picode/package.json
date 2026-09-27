@@ -31,8 +31,8 @@
 		"chatParticipants": [
 			{
 				"id": "picode.pi",
-				"name": "pi",
-				"fullName": "pi",
+				"name": "picode",
+				"fullName": "PiCode",
 				"description": "PiCode's agent: reads and edits your code with your own models.",
 				"isDefault": true,
 				"modes": [
@@ -100,9 +100,9 @@
 		"views": {
 			"picode-status": [
 				{
-					"type": "webview",
+					"type": "tree",
 					"id": "picode.statusView",
-					"name": "PiCode Status"
+					"name": "Status"
 				}
 			]
 		}

@@ -153,7 +153,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 
 		out.push(new StatusItem('Project', { children: [
 			new StatusItem('Branch', { description: d.gitBranch || '—' }),
-			new StatusItem('Pending changes', { description: String(d.gitChanges ?? 0) }),
+			new StatusItem('Pending changes', { description: d.gitChanges === undefined ? '—' : String(d.gitChanges) }),
 			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0) }),
 			new StatusItem('Sessions', { description: String(d.sessions ?? 0) }),
 		] }));

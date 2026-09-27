@@ -22,6 +22,8 @@ import {
 import { registerPiAgent, resetChatSession } from './agent';
 import { registerWizardModelCommands } from './wizard-models';
 import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
+import { registerStatusDataCommand } from './status-data';
+import { registerStatusTreeView } from './status-view';
 import { chatAgentDir, internalProfileDir, sdkEntryCandidates } from './runtime';
 
 /**
@@ -711,6 +713,11 @@ export function activate(context: vscode.ExtensionContext): void {
 		resetChat: resetChatSession,
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
+	// The activity-bar status view is a native tree (declared `type: "tree"` in the manifest), so
+	// its rows come from the data command. The command is registered before the view, because the
+	// view refreshes the moment it is registered and would otherwise answer with an error row.
+	context.subscriptions.push(registerStatusDataCommand(setupDeps));
+	context.subscriptions.push(registerStatusTreeView());
 	void maybeNudgeFirstRun(setupDeps);
 
 	// The wizard's provider/model/agents commands (the welcome page's step 2 and the
