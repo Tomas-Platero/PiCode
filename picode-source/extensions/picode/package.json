@@ -1,0 +1,117 @@
+{
+	"name": "picode",
+	"publisher": "picode",
+	"displayName": "PiCode",
+	"description": "The bridge between the editor and pi: providers, models and the agent's own runtime.",
+	"version": "1.0.0",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"main": "./out/extension.js",
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"enabledApiProposals": [
+		"defaultChatParticipant",
+		"chatProvider"
+	],
+	"activationEvents": [
+		"onLanguageModelChatProvider:picode",
+		"onChatParticipant:picode.pi",
+		"onStartupFinished"
+	],
+	"contributes": {
+		"chatParticipants": [
+			{
+				"id": "picode.pi",
+				"name": "pi",
+				"fullName": "pi",
+				"description": "PiCode's agent: reads and edits your code with your own models.",
+				"isDefault": true,
+				"modes": [
+					"ask",
+					"agent",
+					"edit"
+				]
+			}
+		],
+		"languageModelChatProviders": [
+			{
+				"vendor": "picode",
+				"displayName": "pi",
+				"configuration": {
+					"properties": {
+						"endpoint": {
+							"type": "string",
+							"description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
+						},
+						"api": {
+							"type": "string",
+							"enum": [
+								"openai-completions",
+								"openai-responses",
+								"anthropic-messages",
+								"google-generative-ai"
+							],
+							"default": "openai-completions",
+							"description": "The dialect that endpoint speaks."
+						},
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "The provider's key. It is stored encrypted and never shown again."
+						},
+						"id": {
+							"type": "string",
+							"description": "A short name for this provider, with no spaces (for example omni)."
+						}
+					}
+				}
+			}
+		],
+		"commands": [
+			{
+				"command": "picode.connectProvider",
+				"title": "Connect a subscription",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.setup",
+				"title": "Set up PiCode",
+				"category": "PiCode"
+			}
+		],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "picode-status",
+					"title": "PiCode",
+					"icon": "media/picode-status.svg"
+				}
+			]
+		},
+		"views": {
+			"picode-status": [
+				{
+					"type": "webview",
+					"id": "picode.statusView",
+					"name": "PiCode Status"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:picode",
+		"watch": "gulp watch-extension:picode"
+	},
+	"devDependencies": {
+		"@types/node": "24.x"
+	}
+}

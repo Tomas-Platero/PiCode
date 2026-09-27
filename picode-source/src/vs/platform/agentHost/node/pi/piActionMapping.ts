@@ -1,0 +1,274 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { URI } from '../../../../base/common/uri.js';
+import { ChatAction, SessionAction } from '../../common/state/sessionActions.js';
+import { ActionType } from '../../common/state/protocol/actions.js';
+import { MarkdownResponsePart, MessageKind, ReasoningResponsePart, ResponsePartKind } from '../../common/state/protocol/channels-chat/state.js';
+
+/**
+ * Turns pi's event stream into the actions the agent host dispatches.
+ *
+ * A provider does not paint progress: it builds {@link ChatAction}s and the host routes
+ * them through its state reducer. That is why this module exists on its own and is pure —
+ * no session, no SDK, no clock of its own — so the translation can be exercised without a
+ * host and without pi, which is the only way to be sure of it before the whole provider is
+ * written.
+ *
+ * ## Why a part is created before it is streamed
+ *
+ * `chat/responsePart` **creates** a part and `chat/delta` **appends** to one by `partId`.
+ * Streaming into a part that was never created would be an action against a part the
+ * reducer does not know, so every text or reasoning block opens with a response part and
+ * only then accepts deltas. pi's own deltas announce that boundary (`text_start`,
+ * `thinking_start`), which is what makes the pairing exact rather than guessed.
+ *
+ * ## What the tool path deliberately leaves out
+ *
+ * `ToolCallResult` can carry the tool's output (`content`), and this mapping does not fill
+ * it: it reports the **lifecycle** — started, advancing, finished with success or failure —
+ * and a past-tense sentence. The output's own shape (`ToolResultContent`, a union of text,
+ * embedded resource, file edit, terminal and subagent contents) is a second decision, and
+ * half-describing it would put content on screen that claims to be the tool's output when
+ * it is only part of it. The lifecycle is what the chat needs to show that something is
+ * happening, and it is honest on its own.
+ */
+
+/* ------------------------------------------------------------------ *
+ * The slice of pi's event stream this mapping consumes
+ * ------------------------------------------------------------------ */
+
+/**
+ * One assistant streaming delta, structurally typed.
+ *
+ * `contentIndex` is part of the identity and not just a counter: pi streams several
+ * blocks per message (a reasoning block and a text block, for instance), so the index is
+ * what tells them apart, and it is what the part id is derived from.
+ */
+export type PiDelta =
+	| { readonly type: 'text_start'; readonly contentIndex: number }
+	| { readonly type: 'text_delta'; readonly contentIndex: number; readonly delta: string }
+	| { readonly type: 'text_end'; readonly contentIndex: number }
+	| { readonly type: 'thinking_start'; readonly contentIndex: number }
+	| { readonly type: 'thinking_delta'; readonly contentIndex: number; readonly delta: string }
+	| { readonly type: 'thinking_end'; readonly contentIndex: number };
+
+/** One tool's life, as pi reports it. */
+export type PiToolEvent =
+	| { readonly type: 'tool_execution_start'; readonly toolCallId: string; readonly toolName: string }
+	| { readonly type: 'tool_execution_update'; readonly toolCallId: string; readonly toolName: string; readonly partialResult?: unknown }
+	| { readonly type: 'tool_execution_end'; readonly toolCallId: string; readonly toolName: string; readonly isError?: boolean };
+
+/** The events that move a turn. Anything else is not this module's business. */
+export type PiTurnEvent =
+	| { readonly type: 'turn_start' }
+	| { readonly type: 'message_update'; readonly assistantMessageEvent: PiDelta }
+	| PiToolEvent
+	| { readonly type: 'turn_end' }
+	| { readonly type: 'agent_settled' }
+	| { readonly type: 'abort' };
+
+/* ------------------------------------------------------------------ *
+ * The mapping
+ * ------------------------------------------------------------------ */
+
+/** Where the actions go: the channel the host addressed, and who the message is from. */
+export interface PiTurnTarget {
+	/** Channel URI — the host's own routing resource for this turn. */
+	readonly resource: URI;
+	/** Turn identifier, minted by the host for the turn being served. */
+	readonly turnId: string;
+}
+
+/** The action to dispatch, or nothing when the event needs no action. */
+export interface PiDispatch {
+	readonly resource: URI;
+	readonly action: SessionAction | ChatAction;
+}
+
+/** One dispatch, or `undefined` for an event that carries no action of its own. */
+type Dispatch = PiDispatch | undefined;
+
+function partId(turnId: string, kind: 'text' | 'reasoning', contentIndex: number): string {
+	return `${turnId}:${kind}:${contentIndex}`;
+}
+
+/**
+ * How a tool is named on screen.
+ *
+ * pi's tool names are already readable — `read`, `edit`, `bash` — so a name the table has
+ * not caught up with is shown as it came rather than hidden. Guessing a nicer label from an
+ * unknown name would be worse than the name itself, which is the same rule the extension's
+ * own turn translation follows.
+ */
+const TOOL_LABELS: Readonly<Record<string, string>> = {
+	read: 'Read',
+	write: 'Write',
+	edit: 'Edit',
+	bash: 'Run',
+	grep: 'Search the code',
+	find: 'Find files',
+	ls: 'List',
+};
+
+function toolDisplayName(toolName: string): string {
+	return TOOL_LABELS[toolName] ?? toolName;
+}
+
+/**
+ * The text path of one turn, as a state machine.
+ *
+ * `now` is injected rather than read from the clock because the protocol requires
+ * `startedAt` and `duration` to come from the producer's own clock — and because a test
+ * that asserts a duration cannot do it against a real clock.
+ */
+export class PiTurnMapping {
+	private startedAt: number | undefined;
+
+	constructor(
+		private readonly target: PiTurnTarget,
+		private readonly now: () => number,
+	) { }
+
+	/**
+	 * Opens the turn.
+	 *
+	 * The user message is carried by the started action itself: `chat/turnStarted` is what
+	 * says a turn exists and what the user asked for, so a turn that started without it
+	 * would leave the host with a turn it cannot show.
+	 */
+	start(prompt: string): PiDispatch {
+		this.startedAt = this.now();
+		return {
+			resource: this.target.resource,
+			action: {
+				type: ActionType.ChatTurnStarted,
+				turnId: this.target.turnId,
+				startedAt: new Date(this.startedAt).toISOString(),
+				message: { text: prompt, origin: { kind: MessageKind.User } },
+			},
+		};
+	}
+
+	/** Translates one pi event. */
+	handle(event: PiTurnEvent): Dispatch {
+		switch (event.type) {
+			case 'message_update':
+				return this.delta(event.assistantMessageEvent);
+			case 'turn_end':
+				// Not the end of the turn: pi settles afterwards, and a turn marked complete
+				// here would be closed while pi can still emit a retry. `agent_settled` closes.
+				return undefined;
+			case 'agent_settled':
+				return this.finish(ActionType.ChatTurnComplete);
+			case 'abort':
+				return this.finish(ActionType.ChatTurnCancelled);
+			case 'tool_execution_start':
+				return {
+					resource: this.target.resource,
+					action: {
+						type: ActionType.ChatToolCallStart,
+						turnId: this.target.turnId,
+						toolCallId: event.toolCallId,
+						toolName: event.toolName,
+						displayName: toolDisplayName(event.toolName),
+					},
+				};
+			case 'tool_execution_update':
+				// `partialResult` is deliberately not read: see the note at the top. The action is
+				// emitted so the tool stays visibly alive while it runs, not to render its output.
+				return {
+					resource: this.target.resource,
+					action: {
+						type: ActionType.ChatToolCallDelta,
+						turnId: this.target.turnId,
+						toolCallId: event.toolCallId,
+					},
+				};
+			case 'tool_execution_end':
+				return {
+					resource: this.target.resource,
+					action: {
+						type: ActionType.ChatToolCallComplete,
+						turnId: this.target.turnId,
+						toolCallId: event.toolCallId,
+						result: {
+							success: event.isError !== true,
+							pastTenseMessage: event.isError === true
+								? `Failed: ${toolDisplayName(event.toolName)}`
+								: `Done: ${toolDisplayName(event.toolName)}`,
+						},
+					},
+				};
+			case 'turn_start':
+				return undefined;
+		}
+	}
+
+	private delta(delta: PiDelta): Dispatch {
+		switch (delta.type) {
+			case 'text_start':
+				return this.part(ResponsePartKind.Markdown, 'text', delta.contentIndex);
+			case 'thinking_start':
+				return this.part(ResponsePartKind.Reasoning, 'reasoning', delta.contentIndex);
+			case 'text_delta':
+				return {
+					resource: this.target.resource,
+					action: {
+						type: ActionType.ChatDelta,
+						turnId: this.target.turnId,
+						partId: partId(this.target.turnId, 'text', delta.contentIndex),
+						content: delta.delta,
+					},
+				};
+			case 'thinking_delta':
+				return {
+					resource: this.target.resource,
+					action: {
+						type: ActionType.ChatReasoning,
+						turnId: this.target.turnId,
+						partId: partId(this.target.turnId, 'reasoning', delta.contentIndex),
+						content: delta.delta,
+					},
+				};
+			case 'text_end':
+			case 'thinking_end':
+				// An end carries no new content: everything it would say already arrived as
+				// deltas, and re-emitting it would duplicate the part.
+				return undefined;
+		}
+	}
+
+	private part(kind: ResponsePartKind.Markdown | ResponsePartKind.Reasoning, slot: 'text' | 'reasoning', contentIndex: number): PiDispatch {
+		const id = partId(this.target.turnId, slot, contentIndex);
+		// Built in each branch rather than through a ternary: a ternary widens `kind` to the
+		// enum and the result stops being a member of the `ResponsePart` union.
+		const part: MarkdownResponsePart | ReasoningResponsePart = kind === ResponsePartKind.Markdown
+			? { kind: ResponsePartKind.Markdown, id, content: '' }
+			: { kind: ResponsePartKind.Reasoning, id, content: '' };
+		return {
+			resource: this.target.resource,
+			action: {
+				type: ActionType.ChatResponsePart,
+				turnId: this.target.turnId,
+				part,
+			},
+		};
+	}
+
+	private finish(type: ActionType.ChatTurnComplete | ActionType.ChatTurnCancelled): Dispatch {
+		const startedAt = this.startedAt;
+		if (startedAt === undefined) {
+			// A turn that never started cannot be finished: the host has no turn to close, and
+			// sending the action would be about a turn it does not hold.
+			return undefined;
+		}
+		this.startedAt = undefined;
+		return {
+			resource: this.target.resource,
+			action: { type, turnId: this.target.turnId, duration: this.now() - startedAt } as ChatAction,
+		};
+	}
+}

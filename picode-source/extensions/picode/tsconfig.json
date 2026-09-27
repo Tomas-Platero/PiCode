@@ -1,0 +1,26 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": "./src",
+		"outDir": "./out",
+		"types": [
+			"node"
+		],
+		"typeRoots": [
+			"../../node_modules/@types"
+		],
+		// A proposal file refers to types declared in other proposals, and listing every one of
+		//them would drag half the set in for a field. `git` does the same: the check that
+		// matters is this connector's own code, which is still the one being compiled.
+		"skipLibCheck": true
+	},
+	"include": [
+		"src/**/*",
+		"../../src/vscode-dts/vscode.d.ts",
+		// The proposal this connector declares in `enabledApiProposals`. Without it here the
+		// compiler sees only the stable surface, which does not carry the provider's
+		// `configuration` — and the whole point of this connector is to read the configuration
+		// the owner fills in.
+		"../../src/vscode-dts/vscode.proposed.chatProvider.d.ts"
+	]
+}
