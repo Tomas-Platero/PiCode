@@ -47,8 +47,10 @@ configuró — el mismo resolutorio que usa el conector (`profile-paths`).
 | G2 | Conector: `chat.registerCustomAgentProvider` (agentes del perfil en fuerza + `.pi/agents` del proyecto) y `chat.registerSkillProvider` (skills de perfil + proyecto + paquetes npm incl. gentle-pi) | ✅ W2: `customizations.ts` (436 L) + 11 tests. El bloqueo declarado por W2 (falta la propuesta en el `include` del tsconfig, fuera de su superficie) lo cerró el padre: una línea + comentario, patrón idéntico al de `chatProvider`. Typecheck 0 |
 | G3 | Conector: `lm.registerMcpServerDefinitionProvider` (estable) alimentando la sección MCP desde el `mcp.json` del perfil + proyecto | ✅ W2: `mcp-provider.ts` (239 L) + 8 tests; punto de manifest `mcpServerDefinitionProviders` |
 | G4 | Plugins: comando conector `picode.setup.packages` (contrato fijo) + clase de descubrimiento en `agentPluginServiceImpl.ts` que lo llama (patrón `CopilotCliAgentPluginDiscovery:854`) | ✅ núcleo `0236ddff` + W2 `packages-data.ts` (385 L) + 11 tests; contrato exacto cumplido |
-| G5 | Build completo + verificación visual en el editor empaquetado | pendiente |
-| G6 | Documentar, commits por unidad y cierre | pendiente |
+| G5 | Build completo + verificación visual en el editor empaquetado | ✅ build 0; pack verificado (3 módulos + manifest + discovery); editor relanzado |
+| G6 | Documentar, commits por unidad y cierre | ✅ `0236ddff` + `f104e729` + `cfc30b75` |
+| G7 | Verificación del dueño: ¿conecta con el pi externo E interno? | ✅ verificado en código: `profileInForce()` (extension.ts:302) y `chatAgentDir()` (runtime.ts:66) resuelven al MISMO directorio en ambos modos — interno `data/pi-agent`, externo `~/.pi/agent`. La ventana y las sesiones de pi ven siempre el mismo `mcp.json` |
+| G8 | (petición del dueño) Añadir servidores MCP desde la propia sección MCP y que pi los detecte — sin `mcp.json` previo también debe funcionar. El conector ya tiene escritor (`mcpServers.ts`); falta dirigir ahí el flujo "Add" de la sección | ✅ W3: botón → `picode.mcp.addServer` con retorno al flujo del editor; módulo `mcp-add.ts` + 15 tests; typechecks 0, 61/61 |
 
 ## Decisiones de arquitectura (27-09, tras G0)
 
@@ -193,3 +195,58 @@ tsconfig pendiente de autorización (bloqueo arriba). Detalle, hallazgos y lími
     `src/runtime.ts` (`readRuntimeMode` + `internalProfileDir`) más
     `externalProfileDir()` de `src/profile-import.ts`; no existe ningún
     `src/profile-paths.ts` en el conector.
+- 2026-09-27 · **G8 entregado por W3** (worker delegado). Detalle, decisiones y límites:
+
+  - **Núcleo, una edición** (`mcpListWidget.ts:1152`): el botón "+ Add Server" lanza
+    `picode.mcp.addServer` y, solo si la llamada **rechaza** (conector ausente o
+    desactivado → comando sin registrar), cae al flujo del editor
+    (`McpCommandIds.AddConfiguration`). El comentario del botón explica el PORQUÉ
+    (la ventana habla pi; el flujo del editor escribiría otro fichero/forma). La
+    cancelación del flujo pi **resuelve**, no rechaza → nunca cae al flujo del editor.
+  - **Conector**: comando `picode.mcp.addServer` (`ADD_MCP_SERVER_COMMAND` en
+    `extension.ts`, registrado junto a `picode.setup.packages`, sin entrada en
+    manifest — como el de paquetes, es invocación programática). Flujo quick-pick:
+    nombre (validado al teclear) → duplicado (overwrite/cancel si existe) →
+    transporte (stdio/http) → comando (+ args con `splitArguments`) o URL →
+    cabeceras/env de una línea `KEY=VALUE` cada vez (el input box es de una línea;
+    vacío termina, malformada se dice inline y repite). Todo cancelable en silencio.
+    Escribe SOLO `<perfil-en-fuerza>/mcp.json` (el mismo fichero que lista el
+    provider), `mkdir` + `mode 0o600` como `writeMcpServers`; tras escribir,
+    `ensureMcpAdapter` fire-and-forget; el refresco de la lista viene del watcher
+    existente (sin código extra); mensaje final único "MCP server <name> added to pi.
+    It will appear in the list.". Los errores internos se **dicen y no se re-lanzan**:
+    un rechazo haría caer el botón al flujo del editor, que escribiría el fichero
+    equivocado — el fallback solo corresponde a "conector no registrado".
+  - **Módulo puro nuevo** `src/mcp-add.ts` (sin `vscode` ni imports de hermanos —
+    verificado: Node no resuelve import de hermano sin extensión, así que los módulos
+    ejecutables de este conector van sueltos; igual que los demás): `AddServerDraft`,
+    `validateServerName`, `validateDraft`, `parseKeyValueLines`, `serverFileEntry`,
+    `mcpServersWithAdded`, `mcpServersTextWithAdded`, `serverNames`.
+  - **Desviación justificada del plan (opción b)**: el plan decía fusionar vía
+    `mcpServersFile(existing, [...existingServers, newOne])` y un helper
+    `buildMcpServerSetting`. Verificado en fuente: `McpServerSetting`/`mcpServerEntry`
+    **no pueden expresar** `env` de un stdio ni cabeceras más allá del bearer único
+    (`McpServerEntry` stdio es `{command, args}` sin env), y `mcpServersFile` con la
+    lista completa **reescribiría** las entradas existentes pasándolas por esa forma
+    estrecha → perdería `env`/cabeceras que el dueño ya tenga a mano. Por eso el
+    helper se llama `mcpServersWithAdded`: normaliza como `mcpServersFile` con lista
+    vacía (fichero ausente/roto = vacío; `mcpServers` no-objeto = objeto), conserva
+    **verbatim** todo lo existente, sustituye solo el nombre coincidente, y escribe la
+    entrada nueva directamente (stdio `command/args/env`, http `type/url/headers`).
+    El formato de texto es idéntico al de `mcpServersText` (2 espacios + `\n` final),
+    y los tests cruzan ambos módulos para mantenerlo (añadido + reescritura de la
+    fila de ajustes + relectura por `mcpServersFrom`).
+  - **Fuera de superficie / notas**: dos anotaciones sin cambio de comportamiento en
+    helpers preexistentes de `extension.ts` para calmar la regla del repo
+    (`readJsonFile` devuelve `Record<string, unknown> | undefined` — un `mcp.json`
+    que no sea objeto se lee como ausente, mismo resultado final que antes vía
+    `mcpServersFile`; `buildRequestBody` tipado como `ProviderRequestBody`).
+  - **Pruebas**: `mcp-add.test.ts` — 15 (entradas stdio/http con y sin env/headers,
+    validateDraft/validateServerName, parseKeyValueLines con malformadas, fusión que
+    preserva fichero existente + reemplazo por nombre + fichero ausente/roto, texto
+    redondo vía el lector de la sección, y supervivencia ante la reescritura de la
+    fila de ajustes). Total del directorio: 61/61 (46 previas intactas).
+  - **Verificación**: typecheck del conector 0 + emisión `out/`; typecheck del
+    workbench (`-p picode-source/src/tsconfig.json --noEmit`) 0. Pendiente del
+    dueño/padre: prueba visual en el editor empaquetado (el refresco de la lista
+    depende del watcher existente, verificado en código).

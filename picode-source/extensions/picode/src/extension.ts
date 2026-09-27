@@ -12,7 +12,8 @@ import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
-import { mcpServersText, type McpServerSetting } from './mcpServers';
+import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServers';
+import { mcpServersTextWithAdded, parseKeyValueLines, serverNames, validateDraft, validateServerName, type AddServerDraft } from './mcp-add';
 import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk } from './piSdk';
 import { externalProfileDir } from './profile-import';
@@ -191,10 +192,11 @@ function writeMcpServers(profile: string, servers: readonly McpServerSetting[]):
 	fs.writeFileSync(file, text, { mode: 0o600 });
 }
 
-/** The file's content, or `undefined` when there is none to read. */
-function readJsonFile(file: string): unknown {
+/** The file's content as an object, or `undefined` when there is none, it is broken, or it is not an object. */
+function readJsonFile(file: string): Record<string, unknown> | undefined {
 	try {
-		return JSON.parse(fs.readFileSync(file, 'utf8'));
+		const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+		return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
 	} catch {
 		return undefined;
 	}
@@ -234,8 +236,7 @@ async function ensureMcpAdapter(profile: string): Promise<void> {
 }
 
 /** The servers the settings declare. */
-function declaredMcpServers(): McpServerSetting[] {
-	const configured = vscode.workspace.getConfiguration('picode').get<McpServerSetting[]>('mcp.servers');
+function declaredMcpServers(): McpServerSetting[] {	const configured = vscode.workspace.getConfiguration('picode').get<McpServerSetting[]>('mcp.servers');
 	return Array.isArray(configured) ? configured : [];
 }
 
@@ -245,6 +246,126 @@ async function applyMcpServers(profile: string): Promise<void> {
 	writeMcpServers(profile, servers);
 	if (servers.length > 0) {
 		await ensureMcpAdapter(profile);
+	}
+}
+
+/**
+ * Asks the owner what the new server is, one quick pick at a time, and writes it into the
+ * profile's `mcp.json` — the same file the management page's MCP section lists.
+ *
+ * Every step can be cancelled, and a cancellation ends the flow quietly: an `undefined` answer
+ * is not an error. The name is checked as it is typed, and a name the file already holds is
+ * overwritten only after the owner says so. The project's `.pi/mcp.json` is deliberately out
+ * of reach here: the profile is the one file every window and every pi session agrees on.
+ *
+ * A failure is **not** rethrown: the core's button falls back to the editor's own add flow
+ * when this command rejects, and that flow writes a file pi never reads. The failure is said
+ * here instead, and the file is left as it was.
+ */
+async function addMcpServer(profile: string): Promise<void> {
+	const file = mcpServersFile(profile);
+	const existing = readJsonFile(file);
+
+	const name = (await vscode.window.showInputBox({
+		prompt: 'Name of the MCP server',
+		placeHolder: 'my-server',
+		validateInput: validateServerName,
+	}))?.trim();
+	if (name === undefined || name.length === 0) {
+		return;
+	}
+	if (serverNames(existing).includes(name)) {
+		const overwrite = await vscode.window.showQuickPick(['Overwrite it', 'Cancel'], {
+			placeHolder: `An MCP server named "${name}" is already in pi's profile`,
+		});
+		if (overwrite !== 'Overwrite it') {
+			return;
+		}
+	}
+
+	const picked = await vscode.window.showQuickPick(['stdio', 'http'], {
+		placeHolder: 'How the server is reached: a local command or a remote URL',
+	});
+	if (picked === undefined) {
+		return;
+	}
+	const transport: AddServerDraft['transport'] = picked === 'http' ? 'http' : 'stdio';
+
+	let draft: AddServerDraft;
+	if (transport === 'stdio') {
+		const command = (await vscode.window.showInputBox({
+			prompt: 'Command that starts the server',
+			placeHolder: 'npx -y some-mcp-server',
+		}))?.trim();
+		if (command === undefined || command.length === 0) {
+			return;
+		}
+		const argsText = await vscode.window.showInputBox({
+			prompt: 'Arguments of the command, separated by spaces; quote one that holds spaces (optional)',
+			placeHolder: '--port 3000',
+		});
+		if (argsText === undefined) {
+			return;
+		}
+		const env = await collectKeyValueLines('Environment variable of the server');
+		if (env === undefined) {
+			return;
+		}
+		draft = { name, transport, command, args: splitArguments(argsText), ...env };
+	} else {
+		const url = (await vscode.window.showInputBox({
+			prompt: 'URL of the server',
+			placeHolder: 'https://example.test/mcp',
+		}))?.trim();
+		if (url === undefined || url.length === 0) {
+			return;
+		}
+		const headers = await collectKeyValueLines('Header sent to the server');
+		if (headers === undefined) {
+			return;
+		}
+		draft = { name, transport, url, ...headers };
+	}
+
+	const problems = validateDraft(draft);
+	if (problems.length > 0) {
+		// Everything above was validated as it was asked; this is the net under it.
+		void vscode.window.showErrorMessage(`PiCode: the server is not complete — ${problems.join(' ')}`);
+		return;
+	}
+
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	fs.writeFileSync(file, mcpServersTextWithAdded(existing, draft), { mode: 0o600 });
+
+	// The list repaints itself through the file watcher; the adapter only decides whether pi can
+	// actually run the server, and installing it is idempotent, so it is checked every time.
+	void ensureMcpAdapter(profile);
+	void vscode.window.showInformationMessage(`MCP server ${name} added to pi. It will appear in the list.`);
+}
+
+/**
+ * Asks for `KEY=VALUE` lines one at a time — the editor's input box is single-line — until an
+ * empty answer ends it. A malformed line is said inline and asked again. `undefined` is a
+ * cancellation; an empty record is "none".
+ */
+async function collectKeyValueLines(subject: string): Promise<Record<string, string> | undefined> {
+	const lines: string[] = [];
+	for (;;) {
+		const line = await vscode.window.showInputBox({
+			prompt: `${subject} as KEY=VALUE${lines.length === 0 ? '' : ' — leave empty to finish'}`,
+			placeHolder: 'KEY=VALUE',
+			validateInput: value => value.trim().length === 0 || parseKeyValueLines([value]).malformed.length === 0
+				? undefined
+				: 'Use KEY=VALUE, for example TOKEN=abc.',
+		});
+		if (line === undefined) {
+			return undefined;
+		}
+		const trimmed = line.trim();
+		if (trimmed.length === 0) {
+			return parseKeyValueLines(lines).values;
+		}
+		lines.push(trimmed);
 	}
 }
 
@@ -260,6 +381,13 @@ async function applyMcpServers(profile: string): Promise<void> {
  * here, where the runtime choice is known (`runtime.ts`).
  */
 export const PACKAGES_COMMAND = 'picode.setup.packages';
+
+/**
+ * The MCP section's "Add Server", which the core invokes: it asks this connector for the new
+ * server instead of the editor's own add flow, because the servers this page lists live in
+ * pi's own `mcp.json` — the editor's flow would write a file pi never reads.
+ */
+export const ADD_MCP_SERVER_COMMAND = 'picode.mcp.addServer';
 
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
@@ -475,6 +603,18 @@ function registerCustomizations(): vscode.Disposable[] {
 
 	// The page's own door onto the package list, for the discovery that cannot use a provider.
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackage[]> => [...readPackages().packages]));
+
+	// The MCP section's "Add Server": it writes into pi's profile through `addMcpServer`, and a
+	// failure inside it is said there rather than rejected — the core falls back to the editor's
+	// own add flow on a rejection, and that flow writes a file pi never reads.
+	disposables.push(vscode.commands.registerCommand(ADD_MCP_SERVER_COMMAND, async () => {
+		try {
+			await addMcpServer(profileInForce());
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be added (${message}).`);
+		}
+	}));
 
 	return disposables;
 }
@@ -799,8 +939,13 @@ function resolveApiKey(entry: PiProviderEntry, providerId: string): string | und
 	}
 }
 
+/** The request body, in one of the two dialects the editor's providers speak. */
+type ProviderRequestBody =
+	| { readonly model: string; readonly input: readonly unknown[]; readonly stream: true }
+	| { readonly model: string; readonly messages: readonly unknown[]; readonly stream: true };
+
 /** The request body, in the dialect the provider declares. */
-function buildRequestBody(api: string | undefined, modelId: string, messages: readonly vscode.LanguageModelChatRequestMessage[]): unknown {
+function buildRequestBody(api: string | undefined, modelId: string, messages: readonly vscode.LanguageModelChatRequestMessage[]): ProviderRequestBody {
 	const converted = messages.map(message => ({
 		role: message.role === vscode.LanguageModelChatMessageRole.User ? 'user' : 'assistant',
 		content: message.content
@@ -811,8 +956,7 @@ function buildRequestBody(api: string | undefined, modelId: string, messages: re
 	// completions, which is what a compatible endpoint expects by default.
 	return api === 'openai-responses'
 		? { model: modelId, input: converted, stream: true }
-		: { model: modelId, messages: converted, stream: true };
-}
+		: { model: modelId, messages: converted, stream: true };}
 
 /**
  * Reads the provider's stream and forwards the text as it arrives.

@@ -1151,7 +1151,19 @@ export class McpListWidget extends Disposable {
 		this.addButton.element.classList.add('list-icon-button');
 		this._register(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), this.addButton.element, localize('addServerTooltip', "Add Server")));
 		this._register(this.addButton.onDidClick(() => {
-			this.commandService.executeCommand(McpCommandIds.AddConfiguration);
+			// PiCode: this window speaks pi. The servers this section lists come from pi's own
+			// `mcp.json`, so "Add Server" writes there too, through the connector's command — the
+			// editor's own flow would put the entry in the editor's user `mcp.json`, a file and a
+			// shape pi never reads. When the connector is absent or disabled the command is not
+			// registered and the call rejects; the editor's own flow stays as the fallback, so the
+			// button never dead-ends.
+			void (async () => {
+				try {
+					await this.commandService.executeCommand('picode.mcp.addServer');
+				} catch {
+					await this.commandService.executeCommand(McpCommandIds.AddConfiguration);
+				}
+			})();
 		}));
 
 		// Empty state
