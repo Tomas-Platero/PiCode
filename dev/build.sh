@@ -205,8 +205,9 @@ echo "== phase 1/5 - prepare (the source, the identity, the dependencies)"
 
 if [[ ! -d ./picode-source ]]; then
   echo "error: ./picode-source is missing." >&2
-  echo "       It is PiCode's own copy of the editor's source and this script does not download" >&2
-  echo "       it any more. See docs/howto-build.md for how the tree is brought in and kept." >&2
+  echo "       It is PiCode's own source and it is versioned IN this repository: a clone has it." >&2
+  echo "       A missing tree here means this checkout is damaged - restore it with git, do not" >&2
+  echo "       re-run the build. docs/howto-build.md explains what the tree is." >&2
   exit 2
 fi
 
@@ -466,9 +467,10 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 
 echo ""
 echo "== done"
-echo "source:    ./picode-source (a PiCode tree of its own; no patches applied here)"
+echo "source:    ./picode-source (PiCode's own tree, versioned in this repository)"
 # The product reports APP_VERSION (PiCode's own release). There is no VS Code tag to name any
-# more: the tree IS the source, and which VS Code it descends from is its git history.
+# more: the tree IS the source, and which VS Code it descends from is recorded in
+# upstream/stable.json and in the history of this repository.
 echo "product:   PiCode ${APP_VERSION}"
 echo "output:    ${PACK_DIR}"
 echo "run it:    ${PACK_DIR}/PiCode.exe"

@@ -31,9 +31,13 @@ Las fases 1-5 son el *cómo*, no el *qué*: se repetían para reconstruir siempr
 
 ## Decisión
 
-1. **El árbol se registra en su propio historial** (`picode-source` es un repo git con
-   `origin=microsoft/vscode`). Un commit lleva el estado preparado completo: el borrado de
-   5.053 ficheros, 327 modificaciones y 40 altas que eran los parches.
+1. **El árbol se guardó, y acabó en este repositorio.** Primero como commit en el git que había
+   dentro de `picode-source` (el borrado de 5.053 ficheros, 327 modificaciones y 40 altas que
+   eran los parches) y, el mismo día por decisión del dueño (*"un único repositorio, lo clonas
+   y ya está todo"*), importado aquí: commit `396b3d7`, 13.125 ficheros, la lista exacta que
+   versionaba el git anidado. El historial anidado se guardó en
+   `.scratch/picode-source-history.bundle` y el `.git` anidado se aparcó en
+   `.scratch/picode-source-git-removed`.
 2. **Los parches dejan de gobernar.** `patches/**` se conserva como registro de cómo se hizo
    cada cambio, pero el build ya no lo lee. Editar el código es editar el código.
 3. **El build se queda en cinco fases**: prepare (el árbol, la identidad y las dependencias en una
@@ -91,11 +95,16 @@ es una descarga que el dueño debe decidir cuándo pagar.
 - [x] `jq` no lo usa ningún script del camino del build (`build.sh`, `build-connector.sh`, `pi-runtime.sh`, `stage-distribution.sh`).
 - [ ] **No medido: la compilación y el empaquetado completos.** Tardan horas y no se han ejecutado. El primer build real es quien lo confirma.
 
-## Trabajo sin commitear en el repo de PiCode
+## Commits (rama `feat/source-in-repo`, local — `origin` no se toca)
 
-Los cambios de este repositorio quedaron **en el árbol de trabajo, sin commit**, porque el dueño
-pidió no tocar `origin`. El único commit hecho está **dentro de `./picode-source`**, en su propio
-git, que nadie empuja (`origin` allí es `microsoft/vscode`).
+- `d56d0a4` · `build: the pipeline stops fetching and patching` — la reescritura del build,
+  los scripts y la documentación de la primera entrega.
+- `396b3d7` · `source: picode-source is now versioned in this repository` — la importación:
+  13.125 ficheros exactos, `.gitignore` corregido (la trampa `PiCode-*` que se comía
+  `picode-source/` por insensibilidad a mayúsculas, y `.vscode`/`legacy` sin anclar), y el
+  bundle de procedencia fuera del árbol.
+- Queda sin commitear en esta entrega: los textos de documentación que cambian de «su propio
+  git» a «este repositorio» — se commitean a continuación.
 
 ---
 

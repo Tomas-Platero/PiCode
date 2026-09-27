@@ -4,8 +4,8 @@
 
 `./picode-source` is **not a download**. It is PiCode's copy of the editor's source: it carries
 the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity, and it is
-committed **in its own git repository inside that folder**. The PiCode repository ignores it
-(and must: `CONTRIBUTING.md` forbids uploading Microsoft's source here).
+committed **in this repository** (decided by the owner on 2026-09-27 — one clone now has
+everything; see `CONTRIBUTING.md` for the publishing rule this brought with it).
 
 That is what the build is built around. There is no fetch step and no patch step, and the
 dependencies are installed once instead of on every build. Editing PiCode means editing that
@@ -121,7 +121,8 @@ applied explicitly only when `DISABLE_UPDATE=yes`, which the build does not set.
 ## What the build never writes
 
 `patches/**`, `distribution/**` (the delta is read, never rewritten), `extensions/**` and
-`.git/**`. `picode-source` is written, and it is versioned — in its own repository, not this one.
+`.git/**`. `picode-source` is written, and it is versioned — in this repository, since
+2026-09-27.
 `PiCode-*` is a build output and is ignored.
 
 ## Building without a terminal

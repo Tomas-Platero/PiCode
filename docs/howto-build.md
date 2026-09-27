@@ -17,7 +17,7 @@ propio árbol.
 
 **Lo que cambió el 2026-09-27**, y es la razón de que este documento se lea distinto: el árbol
 dejó de ser el resultado desechable de aplicar parches en cada build y pasó a ser **la fuente de
-PiCode**, con sus cambios registrados en su propio git. Ya no hay fase de descarga ni de
+PiCode**, versionada en este repositorio. Ya no hay fase de descarga ni de
 parcheo, y las dependencias se instalan una vez. El detalle está en
 [`odd/tasks/picode-fuente-propia.md`](../odd/tasks/picode-fuente-propia.md).
 
@@ -48,18 +48,20 @@ El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
   ./picode-source   ←  esto es PiCode, y aquí se trabaja
 ```
 
-Ese trabajo se hizo **una vez** y quedó registrado como un commit en el git del propio árbol.
-A partir de ahí:
+Ese trabajo se hizo **una vez**: primero quedó registrado como un commit en el git que había
+dentro del árbol, y el mismo día **el árbol pasó a versionarse en este repositorio** (decisión
+del dueño, 2026-09-27 — commit `396b3d7`). A partir de ahí:
 
 - **no se descarga nada**: el árbol ya está;
 - **no se aplica ningún parche**: los cambios son el código;
 - `patches/**` y `upstream/*.json` quedan como **registro de procedencia** y como camino de
   recuperación, no como entrada del build.
 
-Lo que sigue siendo verdad, y conviene no confundir: `./picode-source` **no puede subirse a este
-repositorio** — `CONTRIBUTING.md` lo prohíbe con todas las letras (*"Microsoft's source must
-never be uploaded to this repository"*). Vive en local, con su propio git dentro. Compartirlo
-exige un repositorio aparte, y esa decisión no está tomada.
+Lo que trajo ese paso, y conviene no confundir: como la fuente de Microsoft vive ahora **dentro
+de este repositorio**, la prohibición de `CONTRIBUTING.md` subió de nivel — lo que no puede
+hacerse es **empujar este repositorio a un origen público**. Publicarlo es decisión exclusiva
+del dueño. El historial anterior a la importación se guardó en un bundle fuera del repositorio
+(`.scratch/picode-source-history.bundle`, 54 MB).
 
 ## La cadena, por capas
 
@@ -204,12 +206,14 @@ no se pueda derivar `windows`, `osx` o `linux` es un error duro.
 
 | Ruta | Qué es |
 | --- | --- |
-| `./picode-source` | **La fuente de PiCode.** Se edita. Su git es suyo, dentro de la carpeta. |
+| `./picode-source` | **La fuente de PiCode.** Se edita, se commitea y vive en **este** repositorio. |
 | `./PiCode-Win32-x64` | La salida del empaquetado (fases 4 y 5). |
 | `./PiCode-Win32-x64/PiCode.exe` | El ejecutable construido desde fuente. |
 
-`./picode-source` y `./PiCode-*` están en el `.gitignore` de **este** repositorio: el árbol se
-versiona en su propio git, y `CONTRIBUTING.md` prohíbe subir la fuente de Microsoft aquí.
+`./picode-source` **se versiona en este repositorio** desde el 2026-09-27; `./PiCode-Win32-*` es
+salida del empaquetado y sigue ignorado. La fuente de Microsoft vive aquí dentro, así que la
+regla de publicación es la de `CONTRIBUTING.md`: este repositorio no se empuja a un origen
+público sin decisión del dueño.
 
 ### Qué se midió cuando el build se hacía con parches
 

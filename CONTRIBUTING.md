@@ -48,10 +48,13 @@ written by node.
 There is also a graphical front-end, [`builder/`](builder/README.md) (C# / WinUI 3, drives the
 same scripts; needs only the .NET SDK).
 
-`picode-source/` is **not** a build output any more: it is the source, and it carries its own
-git history. `PiCode-*` still is a build output and is ignored. **Microsoft's source must never
-be uploaded to this repository** — which is why the tree is kept out of it and, when it has to
-be shared, goes to a repository of its own.
+`picode-source/` is **not** a build output any more: it is the source, and it is versioned in
+this repository (decided by the owner on 2026-09-27: one clone carries everything). `PiCode-*`
+still is a build output and is ignored. Because Microsoft's source now lives in this tree, the
+old "never upload it here" rule moved up a level: **this repository must never be pushed to a
+public remote** — publishing it is the owner's decision alone, never a collaborator's or an
+agent's. The pre-import history of the tree is kept in a bundle outside the repository
+(`.scratch/picode-source-history.bundle`).
 
 ## The two pins
 
