@@ -125,7 +125,7 @@ CI guards the source build. Three workflows, one guard each:
 | Workflow | When | What |
 | --- | --- | --- |
 | **[Pin check](.github/workflows/pin-check.yml)** | Every push / PR | Phases 1–5 on Linux and Windows. Goes red if a patch stops applying. |
-| **[Full build](.github/workflows/full-build.yml)** | Nightly, pin change, `v*` tag | Real compile on Linux and Windows. A tag produces a GitHub Release with portables and installers. |
+| **[Full build](.github/workflows/full-build.yml)** | `v*` tag, on demand | Real compile on Linux and Windows. A tag publishes a GitHub Release with portables and installers. No nightly, no automatic builds. |
 | **[Pin watch](.github/workflows/pin-watch.yml)** | Weekly | Checks latest VS Code and its security advisories. Opens a labelled PR with the new pin. |
 
 The two badges at the top of this file are live.

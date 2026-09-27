@@ -74,11 +74,10 @@ documentada que el `GITHUB_TOKEN` sí puede disparar. Ese run escribe el estado
 
 ## 3. Build completo y releases — `.github/workflows/full-build.yml`
 
-**Cuándo:** cada noche a las 03:41 UTC — pero solo si algo relevante cambió
-desde la última build exitosa (`upstream/`, `patches/`, `dev/`,
-`distribution/`, `.nvmrc`); compilar un árbol sin cambios no descubre nada.
-También cuando un `push` mueve `upstream/stable.json` o
-`upstream/vscodium.json`; a mano desde *Actions*; y al empujar un tag `v*`.
+**Cuándo:** ÚNICAMENTE al empujar un tag `v*` (que además publica la release) o a
+mano desde *Actions*. **No hay nightly ni builds automáticos**: compilar un árbol
+sin cambios o sin decisión de release quema minutos para nada. El vigilante del
+pin abre la PR de actualización; construir y publicar esa PR es decisión del dueño.
 
 **Qué hace:** `./dev/build.sh` completo (compilación y empaquetado reales) en
 **Linux y en Windows** — es el que pilla errores de compilación que las fases 1-5 no
@@ -106,14 +105,14 @@ certificado. Para activarlo basta con añadir los secretos `PICODE_CODESIGN_PFX`
 `PiCode.exe` y el instalador con `signtool`. En Linux, la descarga directa no exige
 firma; firmar el repositorio APT/RPM sería el paso siguiente si algún día se hospeda uno.
 
-**Corre en ambos sistemas.** Linux es el más rápido y barato; Windows es el sistema
-que se publica, así que compila también en CI. El runner de GitHub trae las
-librerías Spectre de Visual Studio; el workflow lo verifica con `vswhere` y falla
-con un mensaje claro si no estuvieran.
+**Corre en ambos sistemas.** Linux compila en el larger runner de la
+organización (16 GB — el estándar de 7,9 GB fue la fuente de todos los OOM);
+Windows es el sistema que se publica, así que compila en el runner estándar
+(también 16 GB). El workflow verifica las librerías Spectre de Visual Studio
+con `vswhere` y falla con un mensaje claro si no estuvieran.
 
-Nota técnica: GitHub no permite combinar filtros `paths` y `tags` en un mismo
-disparador `push`, así que el push normal ejecuta un job mínimo (`gate`) que
-decide si el push movió el pin; solo entonces arranca la matriz de compilación.
+**Nuevo build = cancela el anterior** (concurrency con `cancel-in-progress`):
+un run dejado compilando mientras existe uno más nuevo quema minutos para nada.
 
 ## Caché
 
