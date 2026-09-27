@@ -1,0 +1,90 @@
+name: Bug report
+description: Something PiCode does that it should not,
+  or does not do that it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PiCode is agent-first and built from a pinned
+        upstream, so the exact version and how it was
+        obtained matter as much as the symptom.
+        For anything that could be a **security**
+        problem, use a private
+        [security advisory][adv] instead of this form.
+
+        [adv]: https://github.com/Tomas-Platero/PiCode/security/advisories/new
+  - type: input
+    id: version
+    attributes:
+      label: PiCode version
+      description: Release tag, or the output of Help → About
+      placeholder: v0.1.2
+    validations:
+      required: true
+  - type: dropdown
+    id: origin
+    attributes:
+      label: How did you get this PiCode?
+      options:
+        - Release ZIP / installer
+        - Built from source (dev/build.sh or builder)
+        - Applied distribution layer over a VSCodium archive
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows x64
+        - Linux x64
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The symptom, in plain words. What you did, what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        Log lines, the output channel text, a
+        screenshot. PiCode's own log lives under
+        `data/user-data/logs/` in a portable install.
+        If a patch or build step failed, paste the
+        exact message — the build names the guilty
+        file.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open PiCode
+        2. Run 'PiCode: Open pi Chat'
+        3. ...
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues (open and closed)
+          required: true
+        - label: I can reproduce it, or the evidence above shows it happening
+          required: true
+        - label: This is not a security report (those go privately)
+          required: true

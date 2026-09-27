@@ -1,0 +1,63 @@
+diff --git a/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts b/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts
+index ee77dd9f..361030e6 100644
+--- a/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts
++++ b/src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts
+@@ -12,7 +12,7 @@ import { ResourceMap, ResourceSet } from '../../../../base/common/map.js';
+ import { joinPath } from '../../../../base/common/resources.js';
+ import { compare as compareStrings } from '../../../../base/common/strings.js';
+ import { URI } from '../../../../base/common/uri.js';
+-import { dirname as nodeDirname } from '../../../../base/common/path.js';
++import { dirname as nodeDirname, join as nodeJoin } from '../../../../base/common/path.js';
+ import { FileOperationResult, IFileService, IFileStat, IFileStatWithMetadata, toFileOperationResult } from '../../../files/common/files.js';
+ import { ILogService } from '../../../log/common/log.js';
+ 
+@@ -119,7 +119,21 @@ interface IFixedDiscoveryFile {
+  * Skills require a depth-2 scan (`<skillDir>/SKILL.md`), agents are scanned at
+  * a single directory depth, and instructions/hooks are recursively scanned.
+  */
+-const searchRoots: { workspace: ISearchRoot[]; user: ISearchRoot[] } = {
++/**
++ * PiCode's own profile — `<dist>/data/pi-agent` — resolved from the running
++ * distribution. The extension host's executable is the distribution's binary
++ * (`<dist>/PiCode.exe`), so the profile sits beside it. `undefined` everywhere
++ * else (plain electron, tests), so nothing phantom is scanned.
++ */
++const PICODE_PROFILE_ROOT: string | undefined = (() => {
++	if (!/picode/i.test(process.execPath)) {
++		return undefined;
++	}
++	// dirname(PiCode.exe) = <dist>; the profile lives right beside the binary.
++	return nodeJoin(nodeDirname(process.execPath), 'data', 'pi-agent');
++})();
++
++const searchRoots: { workspace: ISearchRoot[]; user: ISearchRoot[]; picode: ISearchRoot[] } = {
+ 	workspace: [
+ 		{ path: ['.github', 'agents'], type: DiscoveredType.Agent, name: '.github' },
+ 		{ path: ['.claude', 'agents'], type: DiscoveredType.Agent, name: '.claude' },
+@@ -152,6 +166,17 @@ const searchRoots: { workspace: ISearchRoot[]; user: ISearchRoot[] } = {
+ 		{ path: ['.pi', 'agent', 'agents'], type: DiscoveredType.Agent, name: '~/.pi/agent' },
+ 		{ path: ['.pi', 'agent', 'skills'], recursive: true, type: DiscoveredType.Skill, name: '~/.pi/agent' },
+ 	],
++
++	// PiCode's own profile, wherever the distribution runs from. gentle-pi ships its
++	// agents and skills inside its npm package, and the wizard installs that package
++	// here — so this root is what makes the whole Gentle AI harness visible to the
++	// editor's hub, completions and agent picker. Empty when not running as PiCode.
++	picode: PICODE_PROFILE_ROOT === undefined ? [] : [
++		{ path: ['agents'], type: DiscoveredType.Agent, name: 'PiCode profile' },
++		{ path: ['skills'], recursive: true, type: DiscoveredType.Skill, name: 'PiCode profile' },
++		{ path: ['npm', 'node_modules', 'gentle-pi', 'assets', 'agents'], type: DiscoveredType.Agent, name: 'gentle-pi' },
++		{ path: ['npm', 'node_modules', 'gentle-pi', 'skills'], recursive: true, type: DiscoveredType.Skill, name: 'gentle-pi' },
++	],
+ };
+ 
+ 
+@@ -322,6 +347,8 @@ export class SessionCustomizationDiscovery extends Disposable {
+ 				(root.type === DiscoveredType.Hook ? this._hookWorkingDirectories : this._workingDirectories)
+ 					.map(workingDirectory => this._scanRoot(workingDirectory, root, seen, result, nextWatchRootUris, token))),
+ 			...searchRoots.user.map(root => this._scanRoot(this._userHome, root, seen, result, nextWatchRootUris, token)),
++
++			...(PICODE_PROFILE_ROOT === undefined ? [] : searchRoots.picode.map(root => this._scanRoot(URI.file(PICODE_PROFILE_ROOT), root, seen, result, nextWatchRootUris, token))),
+ 			...this._workingDirectories.map(workingDirectory =>
+ 				this._scanFixedDiscoveryFiles(workingDirectory, workspaceFixedNonHook, seen, result, nextWatchRootUris, token)),
+ 			...this._hookWorkingDirectories.map(workingDirectory =>

@@ -108,8 +108,9 @@ jobs:
     needs: gate
     if: needs.gate.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
-    # Hard ceilings well under anything that could look hung: a healthy build
-    # needs ~45 min (Linux) or ~70 (Windows) with warm caches.
+    # Hard ceilings well under anything that could look hung: a healthy Linux
+    # leg runs ~60 min on the larger runner; a healthy Windows leg with a full
+    # npm ci runs ~2.5 hours.
     timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
@@ -294,6 +295,10 @@ jobs:
           base64 --decode <<< "${PICODE_CODESIGN_PFX}" > "${pfx}"
           signtool="$( find "${LOCALAPPDATA}/Microsoft Windows Kits" \
             -name signtool.exe 2>/dev/null | sort | tail -1 )"
+          if [[ -z "${signtool}" ]]; then
+            signtool="$( find "/c/Program Files (x86)/Windows Kits" \
+              -name signtool.exe 2>/dev/null | sort | tail -1 )"
+          fi
           targets=()
           targets+=( "$( ls -d PiCode-win32-* | head -1 )/PiCode.exe" )
           targets+=( $( ls picode-source/.build/win32-x64/system-setup/*.exe ) )
@@ -376,9 +381,16 @@ jobs:
           cat dist/SHA256SUMS-linux.txt dist/SHA256SUMS-win.txt \
             > dist/SHA256SUMS.txt
           cat dist/SHA256SUMS.txt
-          gh release create "${TAG}" dist/PiCode-* dist/SHA256SUMS.txt \
-            --title "PiCode ${TAG#v} — portable and installers" \
-            --notes "Built from the pinned VS Code source (see
+          # Idempotent: if the create fails midway (an asset upload times out,
+          # say), a rerun uploads to the existing release instead of dying on
+          # 'already_exists'.
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" dist/PiCode-* dist/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create "${TAG}" dist/PiCode-* dist/SHA256SUMS.txt \
+              --title "PiCode ${TAG#v} — portable and installers" \
+              --notes "Built from the pinned VS Code source (see
           upstream/stable.json).
 
           Windows: PiCode-x-win-x64-setup.exe (installer),
@@ -389,3 +401,4 @@ jobs:
           PiCode-x-linux-x64.tar.gz (portable).
 
           SHA256SUMS.txt carries the checksums of every archive."
+          fi

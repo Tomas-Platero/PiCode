@@ -1,0 +1,21 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: >-
+      https://github.com/Tomas-Platero/PiCode/security/advisories/new
+    about: >-
+      Anything that could be a vulnerability goes
+      privately, never as an issue. See SECURITY.md.
+  - name: Upstream Pi issues
+    url: https://github.com/earendil-works/pi
+    about: >
+      The agent itself (RPC protocol, providers,
+      model catalog) is Pi's project — if the panel
+      is only reporting what Pi did, report it
+      there.
+  - name: Upstream Gentle AI issues
+    url: >-
+      https://github.com/Gentleman-Programming/gentle-ai
+    about: >-
+      The harness, its skills and its review
+      binaries belong upstream of PiCode.

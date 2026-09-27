@@ -1,8 +1,75 @@
+diff --git a/extensions/picode/media/gentle-ai.svg b/extensions/picode/media/gentle-ai.svg
+new file mode 100644
+index 00000000..1887b65a
+--- /dev/null
++++ b/extensions/picode/media/gentle-ai.svg
+@@ -0,0 +1,41 @@
++<?xml version="1.0" encoding="utf-8"?>
++
++<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
++<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
++<svg height="800px" width="800px" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
++	 viewBox="0 0 512 512"  xml:space="preserve">
++<style type="text/css">
++	.st0{fill:#000000;}
++</style>
++<g>
++	<path class="st0" d="M222.598,186.442c29.136,23.184,64.397,10.377,56.084-10.394c-41.721-15.548-58.381-67.814-40.19-87.473
++		c18.173-19.65,56.138,0.338,35.866-15.326c-20.256-15.662-55.515-2.857-69.274,20.549
++		C191.325,117.212,193.461,163.25,222.598,186.442z"/>
++	<path class="st0" d="M312.038,160.099c33.338-15.939,30.544-70.172,9.025-80.789c-21.501-10.608-34.69-0.446-20.7,19.036
++		c18.404,23.236-18.03,51.821-35.1,44.978C265.262,143.324,278.683,176.047,312.038,160.099z"/>
++	<path class="st0" d="M285.518,60.451c27.73-3.933,44.319,4.94,55.764,23.797c13.136-20.886-2.865-64.957-47.114-81.128
++		c-44.23-16.161-102.006,33.978-89.209,69.23C212.488,63.486,249.475,43.605,285.518,60.451z"/>
++	<path class="st0" d="M129.509,238.655c10.804,7.716,51.208,20.54,85.969,31.718c34.744,11.177,69.95-12.353,68.49-50.193
++		c-105.387-7.013-105.174-84.608-99.602-107.346c-45.423-0.392-60.143,40.626-57.046,69.06
++		C130.631,212.152,118.118,230.512,129.509,238.655z"/>
++	<path class="st0" d="M141.044,111.161c21.074-9.567,34.974-6.168,34.974-6.168s5.286-16.108,12.495-23.717
++		c-1.904-3.15-1.958-13.866-1.958-13.866s0.232-11.997,2.403-20.834c-18.013-8.428-56.744,7.556-58.933,11.035
++		C127.854,61.092,124.935,105.892,141.044,111.161z"/>
++	<path class="st0" d="M414.044,126.13c-11-53.558-56.423-53.95-56.423-53.95s-0.552,13.243-7.476,19.597
++		c18.475,33.961-13.208,86.912-36.755,88.301c67.778,51.368,100.884-11.053,105.868-20.54
++		C424.278,150.052,416.02,139.995,414.044,126.13z"/>
++	<path class="st0" d="M373.284,213.728c-15.218,6.025-51.332-5.402-69.719-21.492c-1.21,8.615-12.921,20.032-17.336,19.855
++		c14.346,10.643,22.302,43.83-12.264,68.393c8.276,13.625,54.981,16.126,85.204,5.659c4.913-1.709,18.351-27.65,23.94-43.233
++		C390.532,222.262,396.993,204.348,373.284,213.728z"/>
++	<path class="st0" d="M259.958,92.045c-19.33,5.989-16.215,37.093,5.464,39.709c31.095-3.115,24.848-32.296,17.069-33.31
++		c-7.795-1.015,1.335,16.383-8.543,16.66c-11.712,0.302-16.766-7.957-10.804-14.239C267.968,95.783,269.142,89.598,259.958,92.045z"
++		/>
++	<path class="st0" d="M334.66,364.984c-49.267-20.682-83.957-10.51-107.381,4.743c3.329-7.093,6.426-13.972,9.185-20.415
++		c12.797-29.92,19.401-51.466,19.525-51.84l-23.441-7.52l-0.108,0.338c-1.21,3.906-13.117,41.044-34.512,83.228
++		c-7.138,14.097-15.431,28.692-24.598,42.842c11.089-30.792,23.851-63.116-12.424-98.535c-5.5,3.346-5.998,14.951-5.998,14.951
++		s-20.166-51.831-34.529-50.656c-14.364,1.184-39.479,56.023-14.454,87.937c-13.278-3.24-19.276,11.711-10.964,16.081
++		c7.938,4.183,57.278,39.861,60.784,55.097c-14.31,18.262-30.311,34.316-47.63,45.556c-6.016,3.898-8.224,12.264-4.967,18.68
++		c3.275,6.416,10.786,8.446,16.803,4.548c22.89-14.907,42.593-35.759,59.448-58.435c9.006-12.129,17.176-24.794,24.581-37.431
++		c61.958,36.79,105.424,16.5,109.98,6.746c4.912-10.519-17.71-4.326-17.71-4.326S355.164,377.034,334.66,364.984z"/>
++</g>
++</svg>
+\ No newline at end of file
+diff --git a/extensions/picode/media/picode-status.svg b/extensions/picode/media/picode-status.svg
+new file mode 100644
+index 00000000..4c9148f6
+--- /dev/null
++++ b/extensions/picode/media/picode-status.svg
+@@ -0,0 +1,13 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
++  <title>PiCode</title>
++  <g transform="translate(0,92)" fill="none" stroke="#9AA4AE" stroke-width="84" stroke-linecap="round" stroke-linejoin="round">
++    <path d="M512 200 V152" stroke-width="60"/>
++    <circle cx="512" cy="112" r="48" fill="#3B9BFF" stroke="none"/>
++    <path d="M360 640 V262 Q360 200 422 200 H602 Q664 200 664 262 V640"/>
++    <path d="M268 432 H756"/>
++    <circle cx="452" cy="316" r="34" fill="#3B9BFF" stroke="none"/>
++    <circle cx="572" cy="316" r="34" fill="#3B9BFF" stroke="none"/>
++    <path d="M424 590 L360 660 L424 730" stroke="#3B9BFF"/>
++    <path d="M600 590 L664 660 L600 730" stroke="#3B9BFF"/>
++  </g>
++</svg>
 diff --git a/extensions/picode/package.json b/extensions/picode/package.json
-index 7a72463d..b704a86f 100644
+index 7a72463d..a42a5466 100644
 --- a/extensions/picode/package.json
 +++ b/extensions/picode/package.json
-@@ -1,93 +1,99 @@
+@@ -1,93 +1,117 @@
  {
 -  "name": "picode",
 -  "publisher": "picode",
@@ -183,7 +250,25 @@ index 7a72463d..b704a86f 100644
 +				"title": "Set up PiCode",
 +				"category": "PiCode"
 +			}
-+		]
++		],
++		"viewsContainers": {
++			"activitybar": [
++				{
++					"id": "picode-status",
++					"title": "PiCode",
++					"icon": "media/picode-status.svg"
++				}
++			]
++		},
++		"views": {
++			"picode-status": [
++				{
++					"type": "webview",
++					"id": "picode.statusView",
++					"name": "PiCode Status"
++				}
++			]
++		}
 +	},
 +	"scripts": {
 +		"compile": "gulp compile-extension:picode",
@@ -194,7 +279,7 @@ index 7a72463d..b704a86f 100644
 +	}
  }
 diff --git a/extensions/picode/src/agent.ts b/extensions/picode/src/agent.ts
-index 8b734e44..de646244 100644
+index 8b734e44..dd4d36b9 100644
 --- a/extensions/picode/src/agent.ts
 +++ b/extensions/picode/src/agent.ts
 @@ -6,6 +6,8 @@
@@ -234,17 +319,46 @@ index 8b734e44..de646244 100644
  	readonly log: (line: string) => void;
  }
  
-@@ -230,9 +234,17 @@ export interface AgentDeps {
+@@ -230,9 +234,46 @@ export interface AgentDeps {
   * the editor's chat is one conversation in one place. The session is rebuilt if the folder
   * changes, because a session that outlived its directory is a session pi cannot use.
   */
 +/** The live session's reset hook, set by registerPiAgent for `resetChatSession`. */
++let sessionUsageProvider: (() => { ctxTokens?: number; cost?: number; input?: number; output?: number } | undefined) | undefined;
 +let sessionResetter: (() => void) | undefined;
 +
  export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 +	// The setup bridge needs to drop the live session when Gentle AI is installed or
 +	// removed: its agents, skills and commands load when pi's session is created.
 +	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; };
++	sessionUsageProvider = () => {
++		if (sessionManager === undefined) {
++			return undefined;
++		}
++		try {
++			const entries = (sessionManager as {
++				getEntries?: () => ReadonlyArray<Record<string, unknown>>;
++			}).getEntries?.() ?? [];
++			let input = 0;
++			let output = 0;
++			let cost = 0;
++			let lastCtx: number | undefined;
++			for (const entry of entries) {
++				const usage = (entry as { usage?: { input?: number; output?: number; cost?: { total?: number } } }).usage;
++				if (usage === undefined) { continue; }
++				if (typeof usage.input === 'number') {
++					input += usage.input;
++					lastCtx = usage.input;
++				}
++				if (typeof usage.output === 'number') { output += usage.output; }
++				const total = (usage.cost as { total?: number } | undefined)?.total;
++				if (typeof total === 'number') { cost += total; }
++			}
++			return { ctxTokens: lastCtx, input, output, cost };
++		} catch {
++			return undefined;
++		}
++	};
  	let session: PiSession | undefined;
  	let sessionFolder: string | undefined;
 +	/** The profile the live session was built against, so a runtime switch rebuilds it. */
@@ -252,7 +366,7 @@ index 8b734e44..de646244 100644
  	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
  	let services: PiServices | undefined;
  	/**
-@@ -269,15 +281,21 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -269,15 +310,21 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
  		try {
  			const selected = modelRefOf(request.model, VENDOR);
  			const signature = mcpEnabled() ? currentMcpSignature() : '';
@@ -280,7 +394,7 @@ index 8b734e44..de646244 100644
  				}
  				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
  				const created = await sdk.createAgentSessionFromServices({
-@@ -293,6 +311,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -293,6 +340,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
  				});
  				session = created.session;
  				sessionFolder = cwd;
@@ -288,7 +402,7 @@ index 8b734e44..de646244 100644
  				mcpSignature = signature;
  			} else {
  				// The model picked in the chat between two turns is followed here: a session that
-@@ -329,3 +348,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
+@@ -329,3 +377,13 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
  	);
  	return participant;
  }
@@ -296,6 +410,11 @@ index 8b734e44..de646244 100644
 +/** Disposes the chat's live pi session; the next message rebuilds it from scratch. */
 +export function resetChatSession(): void {
 +	sessionResetter?.();
++}
++
++/** The live session's usage totals, as the status view shows them. */
++export function getSessionUsage(): { ctxTokens?: number; cost?: number; input?: number; output?: number } | undefined {
++	return sessionUsageProvider?.();
 +}
 diff --git a/extensions/picode/src/extension.ts b/extensions/picode/src/extension.ts
 index b9e7e83d..9a0cb054 100644
@@ -459,22 +578,24 @@ index d2be4d69..e905eb5a 100644
  		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
 diff --git a/extensions/picode/src/onboarding.ts b/extensions/picode/src/onboarding.ts
 new file mode 100644
-index 00000000..5d6d1360
+index 00000000..5ed5c900
 --- /dev/null
 +++ b/extensions/picode/src/onboarding.ts
-@@ -0,0 +1,382 @@
+@@ -0,0 +1,638 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
 + *--------------------------------------------------------------------------------------------*/
 +
-+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
++import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 +import * as path from 'node:path';
 +import { execFile } from 'node:child_process';
 +import * as vscode from 'vscode';
 +import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 +import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 +import { externalProfileDir, importProfile, scanExternalProfile, type ProfilePreview } from './profile-import';
++import { getSessionUsage } from './agent';
++import type { StatusData } from './status-view';
 +
 +/**
 + * The first-run setup, as a **bridge** for the welcome page.
@@ -572,7 +693,7 @@ index 00000000..5d6d1360
 +}
 +
 +/** The Gentle installer's live state, answered to the page's poll. */
-+const gentleLog: { running: boolean; lines: string[] } = { running: false, lines: [] };
++const gentleLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
 +
 +function logGentle(line: string): void {
 +	gentleLog.lines.push(line);
@@ -656,22 +777,31 @@ index 00000000..5d6d1360
 +			// here, hidden, each one logged for the card to show live.
 +			gentleLog.running = true;
 +			gentleLog.lines = [];
++			gentleLog.step = 0;
++			gentleLog.total = want === 'remove' ? 2 : 5;
 +			try {
 +				if (want === 'remove') {
-+					logGentle("Removing Gentle AI from pi's configuration…");
++					logGentle("[1/2] Removing Gentle AI from pi's configuration…");
 +					editProfilePackages(deps, false);
-+					logGentle('Removed. New conversations run plain pi.');
++					gentleLog.step = 1;
++					logGentle('[2/2] Removed. New conversations run plain pi.');
++					gentleLog.step = 2;
 +				} else {
-+					logGentle("Recording Gentle AI in pi's configuration…");
++					logGentle("[1/5] Recording Gentle AI in pi's configuration…");
 +					editProfilePackages(deps, true);
-+					logGentle('Installing the packages with npm (this downloads the agent)…');
++					gentleLog.step = 1;
++					logGentle('[2/5] Installing the packages with npm (this downloads the agent)…');
 +					await runNpm(deps, ['install', '--save', 'gentle-pi', 'gentle-engram']);
-+					logGentle('Approving install scripts…');
++					gentleLog.step = 2;
++					logGentle('[3/5] Approving install scripts…');
 +					await runNpm(deps, ['approve-scripts', 'gentle-pi']);
 +					await runNpm(deps, ['approve-scripts', 'gentle-engram']);
-+					logGentle('Rebuilding so the approved script runs (fetches the agent)…');
++					gentleLog.step = 3;
++					logGentle('[4/5] Rebuilding so the approved script runs (fetches the agent)…');
 +					await runNpm(deps, ['rebuild', 'gentle-pi', 'gentle-engram']);
-+					logGentle('Checking what landed on disk…');
++					gentleLog.step = 4;
++					logGentle('[5/5] Checking what landed on disk…');
++					gentleLog.step = 5;
 +				}
 +			} catch (error) {
 +				gentleLog.running = false;
@@ -682,6 +812,11 @@ index 00000000..5d6d1360
 +			// Gentle's agents, skills and commands load when pi's session is created; the
 +			// live session is disposed so the next message rebuilds with them in.
 +			deps.resetChat();
++			// And the editor gets Gentle's skills as /commands and its agents in the agent
++			// picker: they are mirrored into the profile's own folders and those folders
++			// are registered as chat sources. Removal unregisters.
++			mirrorGentleIntoProfile(deps, want !== 'remove');
++			await registerChatSources(deps, want !== 'remove');
 +			markDone();
 +			const after = state();
 +			// The honest answer is what is actually on disk now, not what the command hoped:
@@ -695,7 +830,7 @@ index 00000000..5d6d1360
 +		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 +		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 +			({ ...scanExternalProfile(), profile: externalProfileDir() })),
-+		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[] } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
++		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
 +		vscode.commands.registerCommand(IMPORT_COMMAND, (credentials: unknown) => {
 +			// Credentials are the one item whose copy is the owner's own decision: the page asks
 +			// for them behind an unchecked box, and nothing here turns the import into a way of
@@ -749,6 +884,246 @@ index 00000000..5d6d1360
 +	deps.globalState.update(NAG_KEY, nudges + 1);
 +	if (answer === 'Set up…') {
 +		await vscode.commands.executeCommand(SETUP_COMMAND);
++	}
++}
++
++/** Recursively copies a directory tree, creating the destination as needed. */
++function copyTree(from: string, to: string): void {
++	if (!existsSync(from)) {
++		return;
++	}
++	mkdirSync(to, { recursive: true });
++	for (const entry of readdirSync(from, { withFileTypes: true })) {
++		const source = path.join(from, entry.name);
++		const target = path.join(to, entry.name);
++		if (entry.isDirectory()) {
++			copyTree(source, target);
++		} else if (entry.isFile()) {
++			writeFileSync(target, readFileSync(source));
++		}
++	}
++}
++
++/**
++	* Mirrors Gentle AI's skills and agents into the profile's own `skills/` and
++		* `agents/` folders - the folders the editor's chat scans for `/commands` and
++		* agent picker entries. The package itself stays the source; this is a copy.
++	*/
++function mirrorGentleIntoProfile(deps: SetupDeps, enable: boolean): void {
++	if (!enable) {
++		return; // removal unregisters the sources; the mirrored copies are left orphaned-free
++	}
++	const packageDir = path.join(deps.profileDir, 'npm', 'node_modules', 'gentle-pi');
++	copyTree(path.join(packageDir, 'skills'), path.join(deps.profileDir, 'skills'));
++	// The editor's agent scanner only picks up `*.agent.md` in the agents folders, so the
++	// mirrors are renamed on the way in: gentle-ai-explore.md -> gentle-ai-explore.agent.md.
++	const agentsFrom = path.join(packageDir, 'assets', 'agents');
++	const agentsTo = path.join(deps.profileDir, 'agents');
++	mkdirSync(agentsTo, { recursive: true });
++	if (existsSync(agentsFrom)) {
++		for (const entry of readdirSync(agentsFrom)) {
++			if (!entry.endsWith('.md')) {
++				continue;
++			}
++			const base = entry.slice(0, -'.md'.length);
++			writeFileSync(path.join(agentsTo, base + '.agent.md'), readFileSync(path.join(agentsFrom, entry)));
++		}
++	}
++}
++
++/**
++	* Registers (or unregisters) the profile's skills and agents folders as chat
++		* sources (`chat.agentSkillsLocations` / `chat.agentFilesLocations`).
++	*/
++async function registerChatSources(deps: SetupDeps, enable: boolean): Promise<void> {
++	const skillsKey = (deps.profileDir + '/skills').replace(/\\/g, '/');
++	const agentsKey = (deps.profileDir + '/agents').replace(/\\/g, '/');
++	const configuration = vscode.workspace.getConfiguration();
++
++	const skills = configuration.get<Record<string, boolean>>('chat.agentSkillsLocations', {});
++	const nextSkills: Record<string, boolean> = { ...skills };
++	if (enable) {
++		nextSkills[skillsKey] = true;
++	} else {
++		delete nextSkills[skillsKey];
++	}
++	await configuration.update('chat.agentSkillsLocations', nextSkills, vscode.ConfigurationTarget.Global);
++
++	const agents = configuration.get<Record<string, boolean>>('chat.agentFilesLocations', {});
++	const nextAgents: Record<string, boolean> = { ...agents };
++	if (enable) {
++		nextAgents[agentsKey] = true;
++	} else {
++		delete nextAgents[agentsKey];
++	}
++	await configuration.update('chat.agentFilesLocations', nextAgents, vscode.ConfigurationTarget.Global);
++}
++
++export const STATUS_DATA_COMMAND = 'picode.setup.status';
++
++/** Everything the status view renders, aggregated in one call. */
++export const STATUS_COMMAND = 'picode.setup.status';
++
++/** Registers the status view's data command. */
++export function registerStatusCommand(deps: SetupDeps): vscode.Disposable {
++	return vscode.commands.registerCommand(STATUS_COMMAND, async (): Promise<StatusData> => buildStatusData(deps));
++}
++
++export async function buildStatusData(deps: SetupDeps): Promise<{
++	runtime: 'internal' | 'external';
++	piVersion?: string;
++	gentleInstalled: boolean;
++	gentleVersion?: string;
++	providers: number;
++	defaultModel?: string;
++	mcpServers: number;
++	skills: number;
++	agents: number;
++	sessions: number;
++	gitBranch?: string;
++	gitChanges: number;
++	ctxTokens?: number;
++	ctxWindow?: number;
++	cost?: number;
++	inputTokens?: number;
++	outputTokens?: number;
++	/** The external pi's own facts (read-only), when the external runtime is in force. */
++	external?: {
++		found: boolean;
++		version?: string;
++		path?: string;
++		providers: number;
++		skills: number;
++		agents: number;
++		gentleInstalled: boolean;
++	};
++}> {
++	const gentle = isGentleInstalled(deps.profileDir);
++	const gentleVersion = readGentleVersion(deps.profileDir);
++	const providers = vscode.workspace.getConfiguration('picode').get<Array<Record<string, string>>>('providers', []);
++	const mcpServers = vscode.workspace.getConfiguration('picode').get<Array<Record<string, unknown>>>('mcp.servers', []).length;
++	const defaultModel = readProfileDefaultModel(deps);
++	const skills = countDirs(path.join(deps.profileDir, 'skills'));
++	const agents = countDirs(path.join(deps.profileDir, 'agents'));
++	const sessions = countDirs(path.join(deps.profileDir, 'sessions'));
++	const piVersion = readInternalPiVersion(deps.distributionRoot);
++	const usage = getSessionUsage();
++	const ctxWindow = usage?.ctxTokens !== undefined ? readContextWindow(deps, defaultModel) : undefined;
++	const git = await gitInfo();
++	const external = readRuntimeMode() === 'external' ? await probeExternalPi().then(info => ({
++		found: info.found,
++		version: info.version,
++		path: info.path,
++		providers: countMachineProfileProviders(),
++		skills: countDirsAt(externalProfileDir(), 'skills'),
++		agents: countDirsAt(externalProfileDir(), 'agents'),
++		gentleInstalled: isGentleInstalled(externalProfileDir()),
++	})) : undefined;
++
++	return {
++		runtime: readRuntimeMode(),
++		piVersion,
++		gentleInstalled: gentle,
++		gentleVersion,
++		providers: providers.length,
++		defaultModel,
++		mcpServers,
++		skills,
++		agents,
++		sessions,
++		gitBranch: git?.branch,
++		gitChanges: git?.changes ?? 0,
++		ctxTokens: usage?.ctxTokens,
++		ctxWindow,
++		cost: usage?.cost,
++		inputTokens: usage?.input,
++		outputTokens: usage?.output,
++		external,
++	};
++}
++
++function countDirs(dir: string): number {
++	try {
++		return readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
++	} catch {
++		return 0;
++	}
++}
++
++/** Counts the provider entries in a profile's models.json — read-only, any profile. */
++function countMachineProfileProviders(): number {
++	try {
++		const models = JSON.parse(readFileSync(externalProfileDir() + '/models.json', 'utf8')) as Record<string, unknown>;
++		const providers = models['providers'];
++		return typeof providers === 'object' && providers !== null ? Object.keys(providers).length : 0;
++	} catch {
++		return 0;
++	}
++}
++
++function countDirsAt(base: string, sub: string): number {
++	try {
++		return readdirSync(base + '/' + sub, { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
++	} catch {
++		return 0;
++	}
++}
++
++/** The profile's default model, from pi's own settings.json. */
++function readProfileDefaultModel(deps: SetupDeps): string | undefined {
++	try {
++		const settings = JSON.parse(readFileSync(path.join(deps.profileDir, 'settings.json'), 'utf8')) as Record<string, unknown>;
++		return typeof settings['defaultModel'] === 'string' ? settings['defaultModel'] : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++/** The default model's context window, from the profile's models.json. */
++function readContextWindow(deps: SetupDeps, defaultModel: string | undefined): number | undefined {
++	if (defaultModel === undefined || !defaultModel.includes('/')) { return undefined; }
++	const slash = defaultModel.indexOf('/');
++	const providerId = defaultModel.slice(0, slash);
++	const modelId = defaultModel.slice(slash + 1);
++	try {
++		const models = JSON.parse(readFileSync(path.join(deps.profileDir, 'models.json'), 'utf8')) as Record<string, unknown>;
++		const provider = (models['providers'] as Record<string, unknown> | undefined)?.[providerId];
++		const list = provider !== undefined && typeof provider === 'object' ? (provider as { models?: unknown }).models : undefined;
++		if (!Array.isArray(list)) { return undefined; }
++		for (const model of list) {
++			if (typeof model === 'object' && model !== null && (model as { id?: unknown }).id === modelId) {
++				const window = (model as { contextWindow?: unknown }).contextWindow;
++				return typeof window === 'number' ? window : undefined;
++			}
++		}
++		return undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++/** Branch and pending changes, via the editor's own git extension. */
++async function gitInfo(): Promise<{ branch?: string; changes: number } | undefined> {
++	try {
++		const git = vscode.extensions.getExtension('vscode.git');
++		if (git === undefined || !git.isActive) { return undefined; }
++		const api = git.exports.getAPI(1) as {
++			repositories: ReadonlyArray<{
++				state: {
++					HEAD?: { name?: string };
++					workingTreeChanges: unknown[];
++					indexChanges: unknown[];
++				};
++			}>;
++		};
++		const repo = api.repositories[0];
++		if (repo === undefined) { return undefined; }
++		return {
++			branch: repo.state.HEAD?.name,
++			changes: repo.state.workingTreeChanges.length + repo.state.indexChanges.length,
++		};
++	} catch {
++		return undefined;
 +	}
 +}
 +
@@ -1361,6 +1736,182 @@ index 00000000..eda686a1
 + */
 +export function chatAgentDir(distributionRoot: string): string | undefined {
 +	return readRuntimeMode() === 'internal' ? internalProfileDir(distributionRoot) : undefined;
++}
+diff --git a/extensions/picode/src/status-view.ts b/extensions/picode/src/status-view.ts
+new file mode 100644
+index 00000000..9bf982dd
+--- /dev/null
++++ b/extensions/picode/src/status-view.ts
+@@ -0,0 +1,170 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) PiCode. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as vscode from 'vscode';
++
++/**
++ * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
++ * in force, the provider and default model, the session's usage and cost, the project's
++ * branch and pending changes, and Gentle AI's state.
++ *
++ * A tree, deliberately, and not a webview: the data is a handful of rows, the theme is
++ * the editor's own, and a native view cannot fail to render. The rows refresh on a slow
++ * timer; errors surface as rows instead of empty panels.
++ */
++
++export const STATUS_VIEW_TYPE = 'picode.statusView';
++export const STATUS_DATA_COMMAND = 'picode.setup.status';
++
++export interface StatusData {
++	runtime?: string;
++	piVersion?: string;
++	gentleInstalled?: boolean;
++	gentleVersion?: string;
++	providers?: number;
++	defaultModel?: string;
++	mcpServers?: number;
++	skills?: number;
++	agents?: number;
++	sessions?: number;
++	gitBranch?: string;
++	gitChanges?: number;
++	ctxTokens?: number;
++	ctxWindow?: number;
++	cost?: number;
++	inputTokens?: number;
++	outputTokens?: number;
++	error?: string;
++}
++
++export function registerStatusTreeView(): vscode.Disposable {
++	const provider = new StatusTreeProvider();
++	return vscode.window.registerTreeDataProvider(STATUS_VIEW_TYPE, provider);
++}
++
++class StatusItem extends vscode.TreeItem {
++
++	constructor(
++		label: string,
++		options: { description?: string; children?: StatusItem[] } = {},
++	) {
++		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
++		if (options.description !== undefined) {
++			this.description = options.description;
++		}
++		if (options.children) {
++			this.children = options.children;
++		}
++	}
++
++	children: StatusItem[] | undefined;
++}
++
++class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.Disposable {
++
++	private readonly _onDidChangeTreeData = new vscode.EventEmitter<StatusItem | undefined>();
++	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
++
++	private data: StatusData | undefined;
++	private readonly timer = setInterval(() => { void this.refresh(); }, 5000);
++
++	constructor() {
++		void this.refresh();
++	}
++
++	async refresh(): Promise<void> {
++		try {
++			const data = await vscode.commands.executeCommand<StatusData>(STATUS_DATA_COMMAND);
++			if (data !== undefined) {
++				this.data = data;
++			}
++		} catch (error) {
++			// The connector may not be activated yet; the next tick tries again.
++			this.data = { error: error instanceof Error ? error.message : String(error) };
++		}
++		this._onDidChangeTreeData.fire(undefined);
++	}
++
++	getTreeItem(item: StatusItem): vscode.TreeItem {
++		return item;
++	}
++
++	async getChildren(item?: StatusItem): Promise<StatusItem[]> {
++		if (item === undefined) {
++			if (this.data === undefined) {
++				await this.refresh();
++			}
++			if (this.data === undefined) {
++				return [new StatusItem('The status is not available yet — it will appear in a moment.')];
++			}
++			return this.sections(this.data);
++		}
++		return item.children ?? [];
++	}
++
++	private sections(d: StatusData): StatusItem[] {
++		const out: StatusItem[] = [];
++
++		const piRows: StatusItem[] = [
++			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'External (machine)' : 'Internal' }),
++			new StatusItem('Version', { description: d.piVersion || '—' }),
++			new StatusItem('Providers', { description: String(d.providers ?? 0) }),
++		];
++		if (d.defaultModel !== undefined) {
++			piRows.push(new StatusItem('Default model', { description: d.defaultModel }));
++		}
++		out.push(new StatusItem('pi', { children: piRows }));
++
++		// Gentle AI lives in the internal profile; with the external pi it appears only
++		// when the machine's own profile happens to carry it.
++		if (d.runtime === 'internal' || d.gentleInstalled === true) {
++			const gentleRows: StatusItem[] = [
++				new StatusItem('State', { description: d.gentleInstalled ? 'Installed' + (d.gentleVersion ? ' · v' + d.gentleVersion : '') : 'Not installed' }),
++			];
++			if (d.gentleInstalled) {
++				gentleRows.push(
++					new StatusItem('Skills', { description: String(d.skills ?? 0) }),
++					new StatusItem('Agents', { description: String(d.agents ?? 0) }),
++				);
++			}
++			out.push(new StatusItem('Gentle AI', { children: gentleRows }));
++		}
++
++		const sessionRows: StatusItem[] = [];
++		if (d.ctxTokens !== undefined) {
++			const pct = d.ctxWindow !== undefined && d.ctxWindow > 0
++				? ` (${Math.round(d.ctxTokens / d.ctxWindow * 100)}%)`
++				: '';
++			sessionRows.push(new StatusItem('Context', {
++				description: d.ctxWindow !== undefined
++					? `${d.ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()} tokens${pct}`
++					: `${d.ctxTokens.toLocaleString()} tokens`,
++			}));
++			sessionRows.push(new StatusItem('Cost (session)', { description: '$' + (d.cost === undefined ? '0.000' : Number(d.cost).toFixed(3)) }));
++			if (d.inputTokens !== undefined) {
++				sessionRows.push(new StatusItem('Tokens in / out', { description: `${d.inputTokens.toLocaleString()} / ${(d.outputTokens ?? 0).toLocaleString()}` }));
++			}
++		} else {
++			sessionRows.push(new StatusItem('No turns yet', { description: 'The usage appears after the first message.' }));
++		}
++		out.push(new StatusItem('Session', { children: sessionRows }));
++
++		out.push(new StatusItem('Project', { children: [
++			new StatusItem('Branch', { description: d.gitBranch || '—' }),
++			new StatusItem('Pending changes', { description: String(d.gitChanges ?? 0) }),
++			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0) }),
++			new StatusItem('Sessions', { description: String(d.sessions ?? 0) }),
++		] }));
++
++		if (d.error !== undefined) {
++			out.push(new StatusItem('Status error: ' + d.error));
++		}
++		return out;
++	}
++
++	dispose(): void {
++		clearInterval(this.timer);
++	}
 +}
 diff --git a/extensions/picode/src/theme-catalog.ts b/extensions/picode/src/theme-catalog.ts
 new file mode 100644
