@@ -94,11 +94,14 @@ export class SessionsAICustomizationWorkspaceService implements IAICustomization
 		this._overrideRoot.set(undefined, undefined);
 	}
 
+	/**
+	 * The sections of the Agent Customizations window. Instructions and Hooks are
+	 * deliberately absent: this product's agent is pi, which has none of them (see
+	 * AGENTS.md, "La ventana de gestión del chat habla de pi, no de Copilot").
+	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
 		AICustomizationManagementSection.Agents,
 		AICustomizationManagementSection.Skills,
-		AICustomizationManagementSection.Instructions,
-		AICustomizationManagementSection.Hooks,
 		AICustomizationManagementSection.Automations,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,

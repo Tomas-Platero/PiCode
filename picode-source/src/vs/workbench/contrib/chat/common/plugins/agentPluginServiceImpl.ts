@@ -57,6 +57,7 @@ import { AgentPluginCollisionEnablementModel, getAgentPluginPolicyId, getCanonic
 import { IAgentPluginRepositoryService } from './agentPluginRepositoryService.js';
 import { AgentPluginDiscoveryPriority, agentPluginDiscoveryRegistry, IAgentPlugin, IAgentPluginDiscovery, IAgentPluginHook, IAgentPluginInstruction, IAgentPluginService } from './agentPluginService.js';
 import { IMarketplacePlugin, IPluginMarketplaceService } from './pluginMarketplaceService.js';
+import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 
 // Re-export shared helpers so existing consumers (including tests) continue to work.
 export { shellQuotePluginRootInCommand, resolveMcpServersMap, convertBareEnvVarsToVsCodeSyntax } from '../../../../../platform/agentPlugins/common/pluginParsers.js';
@@ -236,6 +237,13 @@ interface IPluginSource {
 	readonly fromMarketplace: IMarketplacePlugin | undefined;
 	/** Repository root that serves as the boundary for component path resolution. */
 	readonly repositoryUri?: URI;
+	/**
+	 * Display label for the plugin when neither marketplace metadata nor an
+	 * on-disk manifest supplies a name. Sources that already know the plugin's
+	 * real name (e.g. an installed pi package) pass it here so the list shows the
+	 * name the source owns instead of the directory basename.
+	 */
+	readonly label?: string;
 	/** Called when remove is invoked on the plugin; absent for policy-managed plugins */
 	remove?(): void;
 }
@@ -301,7 +309,7 @@ export abstract class AbstractAgentPluginDiscovery extends Disposable implements
 					if (!this._isCurrentRefresh(version)) {
 						return [];
 					}
-					const plugin = await this._toPlugin(source.uri, format, source.fromMarketplace, source.repositoryUri, source.remove, version);
+					const plugin = await this._toPlugin(source.uri, format, source.fromMarketplace, source.repositoryUri, source.remove, source.label, version);
 					seenPluginUris.add(key);
 					plugins.push(plugin);
 				} catch (error) {
@@ -331,7 +339,7 @@ export abstract class AbstractAgentPluginDiscovery extends Disposable implements
 		}
 	}
 
-	private async _toPlugin(uri: URI, format: IPluginFormatConfig, fromMarketplace: IMarketplacePlugin | undefined, repositoryUri: URI | undefined, removeCallback: (() => void) | undefined, version: number): Promise<IAgentPlugin> {
+	private async _toPlugin(uri: URI, format: IPluginFormatConfig, fromMarketplace: IMarketplacePlugin | undefined, repositoryUri: URI | undefined, removeCallback: (() => void) | undefined, sourceLabel: string | undefined, version: number): Promise<IAgentPlugin> {
 		const key = uri.toString();
 		const existing = this._pluginEntries.get(key);
 		if (existing) {
@@ -474,7 +482,7 @@ export abstract class AbstractAgentPluginDiscovery extends Disposable implements
 		const plugin: PluginEntry = {
 			uri,
 			format: format.format,
-			label: fromMarketplace?.name ?? manifestName ?? basename(uri),
+			label: fromMarketplace?.name ?? manifestName ?? sourceLabel ?? basename(uri),
 			enablement,
 			policyBlocked,
 			remove: removeCallback,
@@ -1005,6 +1013,186 @@ export class CopilotCliAgentPluginDiscovery extends AbstractAgentPluginDiscovery
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// pi package discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Command the PiCode connector answers with the packages installed in the pi
+ * profile (see AGENTS.md, "La ventana de gestión del chat habla de pi, no de
+ * Copilot"). The connector owns the profile layout, so this discovery never
+ * guesses pi's own paths.
+ */
+const PI_PACKAGES_COMMAND_ID = 'picode.setup.packages';
+
+/**
+ * Command the plugins section runs when the user asks it to refresh. Repeated as
+ * a literal because this file lives in `common/` and cannot import the browser
+ * module the id is declared in (`chat.ts`, `UpdateAgentPluginsCommandId`).
+ */
+const PI_PACKAGES_REFRESH_COMMAND_ID = 'workbench.agentPlugins.checkForUpdates';
+
+/**
+ * A package installed in the pi profile, as answered by
+ * {@link PI_PACKAGES_COMMAND_ID}. Only `path` and `name` reach the plugin list
+ * today: `IAgentPlugin` cannot carry a package version or description, so the
+ * remaining fields are kept for the contract's sake and are not shown.
+ */
+interface IPiPackageEntry {
+	/** Stable identity of the package in the pi profile. */
+	readonly id: string;
+	readonly name: string;
+	readonly version?: string;
+	readonly description?: string;
+	/** Absolute path of the installed package directory. */
+	readonly path: string;
+}
+
+/**
+ * Reads the connector's answer into package entries, dropping entries without a
+ * usable path. Returns `undefined` when the answer is not a list at all, so a
+ * connector that changes its contract cannot silently empty the section with
+ * fabricated data.
+ */
+function parsePiPackageEntries(result: unknown): IPiPackageEntry[] | undefined {
+	if (!Array.isArray(result)) {
+		return undefined;
+	}
+
+	const entries: IPiPackageEntry[] = [];
+	for (const item of result) {
+		if (!item || typeof item !== 'object') {
+			continue;
+		}
+		const candidate = item as Partial<IPiPackageEntry>;
+		if (typeof candidate.path !== 'string' || !candidate.path.trim()) {
+			continue;
+		}
+		const path = candidate.path.trim();
+		const name = typeof candidate.name === 'string' && candidate.name.trim() ? candidate.name.trim() : undefined;
+		entries.push({
+			id: typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id.trim() : path,
+			name: name ?? basename(URI.file(path)),
+			version: typeof candidate.version === 'string' ? candidate.version : undefined,
+			description: typeof candidate.description === 'string' ? candidate.description : undefined,
+			path,
+		});
+	}
+	return entries;
+}
+
+/**
+ * Discovers the packages installed in the pi profile as plugins. The PiCode
+ * connector owns the profile layout and answers with the installed packages over
+ * the {@link PI_PACKAGES_COMMAND_ID} command, so this discovery never guesses at
+ * pi's own paths.
+ *
+ * The command can be missing or late: the connector registers it while the
+ * window is starting. The section therefore publishes an empty list first — a
+ * discovery that never resolves holds back the whole shared plugin list — and
+ * re-reads the profile once the installed extensions are registered. Nothing is
+ * fabricated for a package directory: whatever the shared readers find on disk
+ * is what the entry shows, and a plain npm package without a plugin manifest is
+ * an entry with no components.
+ */
+export class PiPackagesAgentPluginDiscovery extends AbstractAgentPluginDiscovery {
+
+	private _entries: readonly IPiPackageEntry[] = [];
+
+	constructor(
+		@ICommandService private readonly _commandService: ICommandService,
+		@IExtensionService private readonly _extensionService: IExtensionService,
+		@IFileService fileService: IFileService,
+		@IPathService pathService: IPathService,
+		@ILogService logService: ILogService,
+		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
+	) {
+		super(fileService, pathService, logService, workspaceContextService);
+	}
+
+	public override start(enablementModel: IEnablementModel): void {
+		this._enablementModel = enablementModel;
+
+		// Publish the (still empty) snapshot right away so this discovery never
+		// delays the plugins another discovery already found.
+		void this._refreshPlugins();
+
+		// The connector activates with its extension, after the installed
+		// extensions are registered; waiting avoids racing an unknown command
+		// through the extension host from the startup path.
+		void this._extensionService.whenInstalledExtensionsRegistered().then(() => this._readPackages());
+
+		// The connector reports installed packages on request only, so the refresh
+		// button of the plugins section is the way to pick up a package installed
+		// during this session.
+		this._register(this._commandService.onDidExecuteCommand(e => {
+			if (e.commandId === PI_PACKAGES_REFRESH_COMMAND_ID) {
+				void this._readPackages();
+			}
+		}));
+	}
+
+	private async _readPackages(): Promise<void> {
+		if (this._store.isDisposed) {
+			return;
+		}
+
+		let answer: unknown;
+		try {
+			answer = await this._commandService.executeCommand<unknown>(PI_PACKAGES_COMMAND_ID);
+		} catch (error) {
+			// No connector, or a connector without the command yet: the section
+			// stays empty instead of guessing at the pi profile.
+			this._logService.debug(`[PiPackagesAgentPluginDiscovery] '${PI_PACKAGES_COMMAND_ID}' is not available: ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		}
+
+		const entries = parsePiPackageEntries(answer);
+		if (!entries) {
+			this._logService.warn(`[PiPackagesAgentPluginDiscovery] '${PI_PACKAGES_COMMAND_ID}' did not answer with a package list; leaving the section unchanged.`);
+			return;
+		}
+
+		this._entries = entries;
+		await this._refreshPlugins();
+	}
+
+	protected override async _discoverPluginSources(): Promise<readonly IPluginSource[]> {
+		const sources: IPluginSource[] = [];
+
+		for (const entry of this._entries) {
+			let stat;
+			try {
+				stat = await this._fileService.resolve(URI.file(entry.path));
+			} catch {
+				this._logService.debug(`[PiPackagesAgentPluginDiscovery] Package path is not a readable directory: ${entry.path}`);
+				continue;
+			}
+			if (!stat.isDirectory) {
+				this._logService.debug(`[PiPackagesAgentPluginDiscovery] Package path is not a directory: ${entry.path}`);
+				continue;
+			}
+
+			sources.push({
+				uri: stat.resource,
+				fromMarketplace: undefined,
+				label: entry.name,
+				// Removing a package belongs to the pi profile, not to this list, so
+				// no remove callback is offered.
+			});
+		}
+
+		return sources;
+	}
+}
+
+// The pi packages are the connector's surface, not a VS Code discovery source,
+// so the registration sits beside the class it registers instead of beside the
+// VS Code sources in `chat.shared.contribution.ts`. Priority only decides which
+// discovery wins when two of them report the same location; pi packages live in
+// the pi profile, so they take the lowest existing bucket.
+agentPluginDiscoveryRegistry.register(new SyncDescriptor(PiPackagesAgentPluginDiscovery), AgentPluginDiscoveryPriority.CopilotCli);
 
 // ---------------------------------------------------------------------------
 // Extension-contributed plugin discovery

@@ -19,7 +19,6 @@ import { PromptsType } from '../../common/promptSyntax/promptTypes.js';
 import type { IAICustomizationWelcomePageImplementation, ICustomizationMigrationCategorySummary, IWelcomePageCallbacks } from './aiCustomizationWelcomePage.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { getDefaultHoverDelegate } from '../../../../../base/browser/ui/hover/hoverDelegateFactory.js';
-import { CONFIGURE_DICTATION_INSTRUCTIONS_ACTION_ID, CONFIGURE_VOICE_INSTRUCTIONS_ACTION_ID } from '../actions/configureVoiceInstructionsAction.js';
 
 const $ = DOM.$;
 
@@ -105,18 +104,11 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 	];
 
 	private readonly standaloneCustomizations: IStandaloneCustomizationDescription[] = [
-		{
-			label: localize('voiceModeInstructions', "Voice Mode Instructions"),
-			icon: Codicon.voiceMode,
-			description: localize('voiceModeInstructionsDesc', "Customize Voice Mode behavior and terminology with voice.md."),
-			commandId: CONFIGURE_VOICE_INSTRUCTIONS_ACTION_ID,
-		},
-		{
-			label: localize('dictationInstructions', "Dictation Instructions"),
-			icon: Codicon.mic,
-			description: localize('dictationInstructionsDesc', "Customize Dictation terminology and transcript formatting with dictation.md."),
-			commandId: CONFIGURE_DICTATION_INSTRUCTIONS_ACTION_ID,
-		},
+		// Empty on purpose: the Voice Mode and Dictation cards this mechanism used
+		// to render are VS Code editor concepts with no pi equivalent, so they must
+		// not appear in this window (AGENTS.md, "La ventana de gestión del chat
+		// habla de pi, no de Copilot"). The rendering path stays so a future
+		// standalone customization has a home that already works.
 	];
 
 	constructor(
@@ -193,7 +185,8 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 				if (this.workspaceService.isSessionsWindow) {
 					query = `Generate agent customizations. ${value}`;
 				} else {
-					query = `/init ${value}`;
+					// pi has no `/init` command: the text is sent to chat as written.
+					query = value;
 				}
 
 				// Show confirmation immediately — before prefillChat so it's visible

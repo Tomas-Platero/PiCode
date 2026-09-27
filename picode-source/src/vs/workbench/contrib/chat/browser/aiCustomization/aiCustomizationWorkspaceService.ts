@@ -46,12 +46,15 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 		return folders[0]?.uri;
 	}
 
+	/**
+	 * The sections of the Agent Customizations window. Instructions, Prompts and
+	 * Hooks are deliberately absent: this product's agent is pi, which has none of
+	 * them (see AGENTS.md, "La ventana de gestión del chat habla de pi, no de
+	 * Copilot"). Harness descriptors can only hide sections, never re-show them.
+	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
 		AICustomizationManagementSection.Agents,
 		AICustomizationManagementSection.Skills,
-		AICustomizationManagementSection.Instructions,
-		AICustomizationManagementSection.Prompts,
-		AICustomizationManagementSection.Hooks,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,
 		AICustomizationManagementSection.Tools,
