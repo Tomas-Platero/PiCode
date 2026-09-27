@@ -19,8 +19,8 @@ import { STATUS_DATA_COMMAND, type StatusData } from './status-view';
  *
  * One call answers the whole tree: the pi in force and its version, the providers pi has, the
  * default model, the MCP servers, Gentle AI's state, the session's usage and cost, and the
- * project's branch and pending changes. What `status-view.ts` draws is exactly this, so the
- * shape returned here is that module's `StatusData` contract and nothing else.
+ * project's branch, pending files and diff totals. What `status-view.ts` draws is exactly this,
+ * so the shape returned here is that module's `StatusData` contract and nothing else.
  *
  * ## The profile **in force**, not always PiCode's own
  *
@@ -109,14 +109,14 @@ function readDefaultModel(profileDir: string): string | undefined {
 	return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/** The default model's context window, from the profile's `models.json`. */
-function readContextWindow(profileDir: string, defaultModel: string | undefined): number | undefined {
-	if (defaultModel === undefined || !defaultModel.includes('/')) {
+/** The context window for a `provider/modelId` reference, from the profile's `models.json`. */
+function readContextWindow(profileDir: string, modelRef: string | undefined): number | undefined {
+	if (modelRef === undefined || !modelRef.includes('/')) {
 		return undefined;
 	}
-	const slash = defaultModel.indexOf('/');
-	const providerId = defaultModel.slice(0, slash);
-	const modelId = defaultModel.slice(slash + 1);
+	const slash = modelRef.indexOf('/');
+	const providerId = modelRef.slice(0, slash);
+	const modelId = modelRef.slice(slash + 1);
 	const models = readJsonObject(path.join(profileDir, 'models.json'));
 	const providers = models?.['providers'];
 	const provider = isRecord(providers) ? providers[providerId] : undefined;
@@ -142,18 +142,41 @@ function git(folder: string, args: readonly string[]): Promise<string | undefine
 	});
 }
 
-/** The project's branch and pending changes, or `undefined` for each fact git cannot give. */
-async function readGit(folder: string | undefined): Promise<{ branch?: string; changes?: number }> {
+/**
+ * Sums the added/removed columns of `git diff --numstat`; `-` binary rows and malformed lines
+ * are skipped because they carry no line count.
+ */
+function sumNumstat(output: string): { insertions: number; deletions: number } {
+	let insertions = 0;
+	let deletions = 0;
+	for (const line of output.split('\n')) {
+		if (line.trim().length === 0) {
+			continue;
+		}
+		const [added, removed] = line.split('\t');
+		const add = Number(added);
+		const del = Number(removed);
+		if (Number.isFinite(add)) { insertions += add; }
+		if (Number.isFinite(del)) { deletions += del; }
+	}
+	return { insertions, deletions };
+}
+
+/** The project's branch, pending files and diff totals, or `undefined` for each fact git cannot give. */
+async function readGit(folder: string | undefined): Promise<{ branch?: string; changes?: number; insertions?: number; deletions?: number }> {
 	if (folder === undefined) {
 		return {};
 	}
-	const [branch, status] = await Promise.all([
+	const [branch, status, numstat] = await Promise.all([
 		git(folder, ['rev-parse', '--abbrev-ref', 'HEAD']),
 		git(folder, ['status', '--porcelain']),
+		git(folder, ['diff', 'HEAD', '--numstat']),
 	]);
+	const diff = numstat === undefined ? undefined : sumNumstat(numstat);
 	return {
 		...(branch === undefined ? {} : { branch: branch.trim() }),
 		...(status === undefined ? {} : { changes: status.split('\n').filter(line => line.trim().length > 0).length }),
+		...(diff === undefined ? {} : { insertions: diff.insertions, deletions: diff.deletions }),
 	};
 }
 
@@ -184,15 +207,21 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		defaultModel,
 		mcpServers: countMcpServers(profileDir),
 		skills: countDirectories(path.join(profileDir, 'skills')),
-		agents: countDirectories(path.join(profileDir, 'agents')),
-		sessions: countDirectories(path.join(profileDir, 'sessions')),
 		gitBranch: gitInfo.branch,
 		gitChanges: gitInfo.changes,
+		gitInsertions: gitInfo.insertions,
+		gitDeletions: gitInfo.deletions,
 		ctxTokens: usage?.ctxTokens,
-		ctxWindow: usage?.ctxTokens === undefined ? undefined : readContextWindow(profileDir, defaultModel),
+		// The window belongs to the model the session is actually on; the profile default is
+		// only the fallback for a session that has not reported a model yet.
+		ctxWindow: usage?.ctxTokens === undefined ? undefined : readContextWindow(profileDir, usage?.model ?? defaultModel),
 		cost: usage?.cost,
 		inputTokens: usage?.input,
 		outputTokens: usage?.output,
+		cacheRead: usage?.cacheRead,
+		cacheWrite: usage?.cacheWrite,
+		model: usage?.model,
+		thinkingLevel: usage?.thinkingLevel,
 	};
 }
 

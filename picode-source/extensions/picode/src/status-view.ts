@@ -25,17 +25,21 @@ export interface StatusData {
 	gentleVersion?: string;
 	providers?: number;
 	defaultModel?: string;
+	model?: string;
+	thinkingLevel?: string;
 	mcpServers?: number;
 	skills?: number;
-	agents?: number;
-	sessions?: number;
 	gitBranch?: string;
 	gitChanges?: number;
+	gitInsertions?: number;
+	gitDeletions?: number;
 	ctxTokens?: number;
 	ctxWindow?: number;
 	cost?: number;
 	inputTokens?: number;
 	outputTokens?: number;
+	cacheRead?: number;
+	cacheWrite?: number;
 	error?: string;
 }
 
@@ -112,8 +116,12 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			new StatusItem('Version', { description: d.piVersion || '—' }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0) }),
 		];
-		if (d.defaultModel !== undefined) {
-			piRows.push(new StatusItem('Default model', { description: d.defaultModel }));
+		const model = d.model ?? d.defaultModel;
+		if (model !== undefined) {
+			piRows.push(new StatusItem('Model', { description: model }));
+		}
+		if (d.thinkingLevel !== undefined) {
+			piRows.push(new StatusItem('Effort', { description: d.thinkingLevel }));
 		}
 		out.push(new StatusItem('pi', { children: piRows }));
 
@@ -126,7 +134,6 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			if (d.gentleInstalled) {
 				gentleRows.push(
 					new StatusItem('Skills', { description: String(d.skills ?? 0) }),
-					new StatusItem('Agents', { description: String(d.agents ?? 0) }),
 				);
 			}
 			out.push(new StatusItem('Gentle AI', { children: gentleRows }));
@@ -139,23 +146,30 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				: '';
 			sessionRows.push(new StatusItem('Context', {
 				description: d.ctxWindow !== undefined
-					? `${d.ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()} tokens${pct}`
-					: `${d.ctxTokens.toLocaleString()} tokens`,
+					? `${d.ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()}${pct}`
+					: d.ctxTokens.toLocaleString(),
 			}));
 			sessionRows.push(new StatusItem('Cost (session)', { description: '$' + (d.cost === undefined ? '0.000' : Number(d.cost).toFixed(3)) }));
 			if (d.inputTokens !== undefined) {
 				sessionRows.push(new StatusItem('Tokens in / out', { description: `${d.inputTokens.toLocaleString()} / ${(d.outputTokens ?? 0).toLocaleString()}` }));
+			}
+			if (d.cacheRead !== undefined && d.cacheWrite !== undefined) {
+				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}` }));
 			}
 		} else {
 			sessionRows.push(new StatusItem('No turns yet', { description: 'The usage appears after the first message.' }));
 		}
 		out.push(new StatusItem('Session', { children: sessionRows }));
 
+		const changes = d.gitChanges === undefined
+			? '—'
+			: d.gitInsertions !== undefined && d.gitDeletions !== undefined
+				? `${d.gitChanges} files · +${d.gitInsertions.toLocaleString()} −${d.gitDeletions.toLocaleString()}`
+				: String(d.gitChanges);
 		out.push(new StatusItem('Project', { children: [
 			new StatusItem('Branch', { description: d.gitBranch || '—' }),
-			new StatusItem('Pending changes', { description: d.gitChanges === undefined ? '—' : String(d.gitChanges) }),
+			new StatusItem('Changes', { description: changes }),
 			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0) }),
-			new StatusItem('Sessions', { description: String(d.sessions ?? 0) }),
 		] }));
 
 		if (d.error !== undefined) {

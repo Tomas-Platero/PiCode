@@ -241,8 +241,30 @@ export interface AgentDeps {
  * the editor's chat is one conversation in one place. The session is rebuilt if the folder
  * changes, because a session that outlived its directory is a session pi cannot use.
  */
+/** The live session's usage totals and current selection, as the status view shows them. */
+export interface SessionUsage {
+	readonly ctxTokens?: number;
+	readonly cost?: number;
+	readonly input?: number;
+	readonly output?: number;
+	readonly cacheRead?: number;
+	readonly cacheWrite?: number;
+	readonly model?: string;
+	readonly thinkingLevel?: string;
+}
+
+/** A JSON object from an unknown value, or `undefined` when it is not one. */
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
+}
+
+/** A finite number from an unknown value, or `undefined` when it is not one. */
+function numberOf(value: unknown): number | undefined {
+	return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 /** The live session's reset hook, set by registerPiAgent for `resetChatSession`. */
-let sessionUsageProvider: (() => { ctxTokens?: number; cost?: number; input?: number; output?: number } | undefined) | undefined;
+let sessionUsageProvider: (() => SessionUsage | undefined) | undefined;
 let sessionResetter: (() => void) | undefined;
 
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
@@ -259,20 +281,58 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			}).getEntries?.() ?? [];
 			let input = 0;
 			let output = 0;
+			let cacheRead = 0;
+			let cacheWrite = 0;
 			let cost = 0;
-			let lastCtx: number | undefined;
+			let hasUsage = false;
+			let ctxTokens: number | undefined;
+			let model: string | undefined;
+			let thinkingLevel: string | undefined;
 			for (const entry of entries) {
-				const usage = (entry as { usage?: { input?: number; output?: number; cost?: { total?: number } } }).usage;
-				if (usage === undefined) { continue; }
-				if (typeof usage.input === 'number') {
-					input += usage.input;
-					lastCtx = usage.input;
+				if (entry['type'] === 'message') {
+					// Usage lives nested under `message`, and only assistant messages carry it.
+					const message = recordOf(entry['message']);
+					if (message?.['role'] !== 'assistant') {
+						continue;
+					}
+					const usage = recordOf(message['usage']);
+					if (usage === undefined) {
+						continue;
+					}
+					hasUsage = true;
+					const turnInput = numberOf(usage['input']) ?? 0;
+					const turnCacheRead = numberOf(usage['cacheRead']) ?? 0;
+					const turnCacheWrite = numberOf(usage['cacheWrite']) ?? 0;
+					input += turnInput;
+					output += numberOf(usage['output']) ?? 0;
+					cacheRead += turnCacheRead;
+					cacheWrite += turnCacheWrite;
+					// Occupancy is what the last prompt actually cost: fresh input plus everything
+					// read from or written to the cache. The last answer's output is not in yet.
+					ctxTokens = turnInput + turnCacheRead + turnCacheWrite;
+					cost += numberOf(recordOf(usage['cost'])?.['total']) ?? 0;
+					continue;
 				}
-				if (typeof usage.output === 'number') { output += usage.output; }
-				const total = (usage.cost as { total?: number } | undefined)?.total;
-				if (typeof total === 'number') { cost += total; }
+				if (entry['type'] === 'model_change') {
+					const providerId = entry['provider'];
+					const modelId = entry['modelId'];
+					if (typeof providerId === 'string' && typeof modelId === 'string') {
+						model = `${providerId}/${modelId}`;
+					}
+					continue;
+				}
+				if (entry['type'] === 'thinking_level_change') {
+					const level = entry['thinkingLevel'];
+					if (typeof level === 'string') {
+						thinkingLevel = level;
+					}
+				}
 			}
-			return { ctxTokens: lastCtx, input, output, cost };
+			return {
+				...(model === undefined ? {} : { model }),
+				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost } : {}),
+			};
 		} catch {
 			return undefined;
 		}
@@ -394,7 +454,7 @@ export function resetChatSession(): void {
 	sessionResetter?.();
 }
 
-/** The live session's usage totals, as the status view shows them. */
-export function getSessionUsage(): { ctxTokens?: number; cost?: number; input?: number; output?: number } | undefined {
+/** The live session's usage totals and current selection, as the status view shows them. */
+export function getSessionUsage(): SessionUsage | undefined {
 	return sessionUsageProvider?.();
 }
