@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { contextBlock, withContext, type EditorContext } from './context';
 import { readPiChatSettings } from './piConfig';
+import { extractTasks, type TaskRow } from './session-tasks';
 import { chatAgentDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
@@ -18,6 +19,7 @@ import {
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
+import { activityLines, gentleAgentsHome, readPresenceActivity } from './subagents';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { loadPiSdk } from './piSdk';
 import { modelRefOf } from './providerIds';
@@ -65,8 +67,10 @@ interface PiEvent {
 	readonly type: string;
 	readonly message?: { readonly role?: unknown; readonly errorMessage?: unknown };
 	readonly assistantMessageEvent?: PiDelta;
+	readonly toolCallId?: string;
 	readonly toolName?: string;
 	readonly args?: unknown;
+	readonly result?: unknown;
 	readonly isError?: boolean;
 }
 
@@ -182,6 +186,123 @@ function editorContext(folder: string | undefined): EditorContext {
 }
 
 /* ------------------------------------------------------------------ *
+ * Gentle subagents, as the chat can see them
+ * ------------------------------------------------------------------ */
+
+/** The prefixes gentle registers one tool per agent under; the prefix moved between releases. */
+const AGENT_TOOL_PREFIX = /^(?:agent|subagent)_/;
+
+/** The longest a subagent prompt or result gets in a card: it is a pointer, not a transcript. */
+const CARD_PROMPT_CHARS = 200;
+const CARD_RESULT_CHARS = 2000;
+
+/** How often the turn's presence poller looks at gentle's activity file. */
+const AGENT_POLL_MS = 1_500;
+
+/** How long the poller waits before scanning for an incarnation again after a miss. */
+const AGENT_RESCAN_BACKOFF_MS = 10_000;
+
+/** Whether pi is calling a gentle subagent. */
+function isAgentToolName(toolName: string): boolean {
+	return AGENT_TOOL_PREFIX.test(toolName);
+}
+
+/** The tool's agent, spoken: `subagent_gentle_ai_worker` becomes "gentle ai worker". */
+function agentDisplayName(toolName: string): string {
+	return toolName.replace(AGENT_TOOL_PREFIX, '').replace(/_/g, ' ') || toolName;
+}
+
+/** A string capped for a card, with an ellipsis where it was cut. */
+function cardText(value: string, max: number): string {
+	return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+/** The subagent's prompt, as the tool's arguments carry it. */
+function agentPromptOf(args: unknown): string | undefined {
+	const record = recordOf(args);
+	const prompt = typeof record?.['task'] === 'string' ? record['task'] : typeof record?.['prompt'] === 'string' ? record['prompt'] : undefined;
+	if (prompt !== undefined) {
+		return cardText(prompt, CARD_PROMPT_CHARS);
+	}
+	try {
+		return args === undefined || args === null ? undefined : cardText(JSON.stringify(args), CARD_PROMPT_CHARS);
+	} catch {
+		return undefined;
+	}
+}
+
+/** The gentle correlation a finished agent tool reports, read from the result's details. */
+function gentleDetailsOf(result: unknown): { taskId?: string; agent?: string; status?: string } | undefined {
+	const details = recordOf(recordOf(result)?.['details']);
+	const gentle = recordOf(details?.['gentleAgents']);
+	if (gentle === undefined) {
+		return undefined;
+	}
+	return {
+		taskId: typeof gentle['taskId'] === 'string' ? gentle['taskId'] : undefined,
+		agent: typeof gentle['agent'] === 'string' ? gentle['agent'] : undefined,
+		status: typeof gentle['status'] === 'string' ? gentle['status'] : undefined,
+	};
+}
+
+/** The text a finished agent tool returned, as the chat's card wants it. */
+function agentResultOf(result: unknown): string | undefined {
+	const content = recordOf(result)?.['content'];
+	if (!Array.isArray(content)) {
+		return undefined;
+	}
+	const text = content
+		.map(part => (recordOf(part)?.['type'] === 'text' && typeof recordOf(part)?.['text'] === 'string' ? recordOf(part)?.['text'] as string : ''))
+		.filter(part => part.length > 0)
+		.join('\n');
+	return text.length === 0 ? undefined : cardText(text, CARD_RESULT_CHARS);
+}
+
+/**
+ * What a subagent card carries at each stage.
+ *
+ * At `tool_execution_start` the card names the agent and its prompt; at
+ * `tool_execution_end` it gains the result and `isComplete`. The renderer updates the same
+ * card in place because every push carries the same `toolCallId` and
+ * `enablePartialUpdate`.
+ */
+interface AgentCardData {
+	readonly prompt?: string;
+	readonly result?: string;
+	readonly complete?: boolean;
+	readonly isError?: boolean;
+	readonly modelName?: string;
+}
+
+/**
+ * Pushes one subagent card into the chat stream.
+ *
+ * The renderer API is proposed-API surface (`chatParticipantAdditions`); if it ever moves,
+ * the turn must not die with it — the card is a window onto the subagent, and losing the
+ * window is reported, not fatal.
+ */
+function pushSubagentCard(stream: vscode.ChatResponseStream, toolName: string, toolCallId: string, data: AgentCardData, log: (line: string) => void): void {
+	try {
+		const subagent = new vscode.ChatSubagentToolInvocationData(undefined, agentDisplayName(toolName), data.prompt, data.result);
+		if (data.modelName !== undefined) {
+			subagent.modelName = data.modelName;
+		}
+		const part = new vscode.ChatToolInvocationPart(toolName, toolCallId);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		if (data.complete !== undefined) {
+			part.isComplete = data.complete;
+		}
+		if (data.isError !== undefined) {
+			part.isError = data.isError;
+		}
+		stream.push(part);
+	} catch (error) {
+		log(`subagent card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * The turn, as the editor's chat wants it
  * ------------------------------------------------------------------ */
 
@@ -191,7 +312,86 @@ function editorContext(folder: string | undefined): EditorContext {
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
-async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean): Promise<void> {
+async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void): Promise<void> {
+	/** One gentle agent tool of this turn, by its toolCallId. */
+	const agentCalls = new Map<string, { toolName: string; ended: boolean }>();
+	/** Stops the presence poller; set the first time an agent tool starts. */
+	let stopAgentPolling: (() => void) | undefined;
+
+		/**
+		 * One live progress line for the turn's subagents, polling gentle's presence file.
+		 *
+		 * Started only when an agent tool actually starts — a normal turn pays nothing. One
+		 * tick is one file read of one known incarnation; the incarnation is re-scanned only
+		 * after a miss, and a miss backs off, so an editor without gentle pays one failed
+		 * scan every ten seconds and nothing else. Every reported line is a warning part
+		 * under the spinner — the one part the progress task can carry — reported only when
+		 * the picture changed, and the line settles as soon as every launched tool returned
+		 * (task-mode agent tools block until their subagent is done) or the turn itself ends.
+		 */
+		const startAgentPolling = (): void => {
+			if (stopAgentPolling !== undefined) {
+				return;
+			}
+			const sessionId = session.sessionId;
+			const home = gentleAgentsHome();
+			let incarnation: string | undefined;
+			let rescanAfter = 0;
+			let settled = false;
+			let lastReported: string | undefined;
+			let reporter: vscode.Progress<vscode.ChatResponseWarningPart | vscode.ChatResponseReferencePart> | undefined;
+			const finish = (): void => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				clearInterval(timer);
+				const launched = agentCalls.size;
+				const done = [...agentCalls.values()].filter(call => call.ended).length;
+				resolvePolling(launched === 0 ? 'Subagents' : `Subagents: ${done}/${launched} finished`);
+			};
+			let resolvePolling!: (value: string) => void;
+			const polling = new Promise<string>(resolve => { resolvePolling = resolve; });
+			const timer = setInterval(() => {
+				if (settled) {
+					return;
+				}
+				// In task mode an agent tool returns only when its subagent is done, so every
+				// tool having returned IS the work having finished.
+				if (agentCalls.size > 0 && [...agentCalls.values()].every(call => call.ended)) {
+					finish();
+					return;
+				}
+				try {
+					if (incarnation === undefined && Date.now() < rescanAfter) {
+						return;
+					}
+					const read = readPresenceActivity(sessionId, home, undefined, incarnation);
+					if (read === undefined) {
+						// A vanished incarnation or no gentle here at all: back off before the
+						// next scan, so absence costs one failed scan per back-off, not per tick.
+						incarnation = undefined;
+						rescanAfter = Date.now() + AGENT_RESCAN_BACKOFF_MS;
+						return;
+					}
+					incarnation = read.incarnation;
+					const lines = activityLines(read.activity);
+					const text = lines.join('  \n');
+					if (lines.length > 0 && reporter !== undefined && text !== lastReported) {
+						lastReported = text;
+						reporter.report(new vscode.ChatResponseWarningPart(text));
+					}
+				} catch {
+					// Presence is a window, not a dependency: a failing tick says nothing.
+				}
+			}, AGENT_POLL_MS);
+			stopAgentPolling = finish;
+			stream.progress('Running subagents', progress => {
+				reporter = progress;
+				return polling;
+			});
+		};
+
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		let thinking = false;
@@ -229,6 +429,30 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
 				// "read" is not.
 				stream.progress(toolProgress(event.toolName, event.args));
+				// A gentle subagent gets a card the renderer can update in place, and the
+				// turn's one presence poller, which reports what the subagents are doing live.
+				if (isAgentToolName(event.toolName) && typeof event.toolCallId === 'string') {
+					agentCalls.set(event.toolCallId, { toolName: event.toolName, ended: false });
+					pushSubagentCard(stream, event.toolName, event.toolCallId, { prompt: agentPromptOf(event.args) }, log);
+					startAgentPolling();
+				}
+				return;
+			}
+			if (event.type === 'tool_execution_end' && typeof event.toolCallId === 'string') {
+				const call = agentCalls.get(event.toolCallId);
+				if (call !== undefined) {
+					call.ended = true;
+					// The same card, now with the result: the toolCallId and enablePartialUpdate
+					// are what make the renderer update instead of append.
+					const gentle = gentleDetailsOf(event.result);
+					pushSubagentCard(stream, call.toolName, event.toolCallId, {
+						prompt: agentPromptOf(event.args),
+						result: agentResultOf(event.result),
+						complete: true,
+						isError: event.isError === true,
+						modelName: gentle?.agent ?? gentle?.status,
+					}, log);
+				}
 				return;
 			}
 			if (event.type === 'message_end') {
@@ -254,7 +478,10 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 
 		session.prompt(prompt).catch(reject);
 		void cancellation;
-	});
+	})
+		// Whether the turn answered, threw or was cancelled, the poller has nothing more to
+		// watch: its interval must not outlive the turn.
+		.finally(() => stopAgentPolling?.());
 }
 
 /* ------------------------------------------------------------------ *
@@ -375,6 +602,8 @@ export interface SessionUsage {
 	readonly cacheWrite?: number;
 	readonly model?: string;
 	readonly thinkingLevel?: string;
+	/** The session's task list (gentle-pi's todo tool), last snapshot; absent when none exists. */
+	readonly tasks?: readonly TaskRow[];
 }
 
 /** A JSON object from an unknown value, or `undefined` when it is not one. */
@@ -412,8 +641,12 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			let ctxTokens: number | undefined;
 			let model: string | undefined;
 			let thinkingLevel: string | undefined;
+			let tasks: readonly TaskRow[] | undefined;
 			for (const entry of entries) {
 				if (entry['type'] === 'message') {
+					// The task list rides on the same entries: gentle-pi's todo tool stamps the full
+					// snapshot on every result, so the last one in order is the current list.
+					tasks = extractTasks([entry]) ?? tasks;
 					// Usage lives nested under `message`, and only assistant messages carry it.
 					const message = recordOf(entry['message']);
 					if (message?.['role'] !== 'assistant') {
@@ -456,6 +689,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 				...(model === undefined ? {} : { model }),
 				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost } : {}),
+				...(tasks === undefined ? {} : { tasks }),
 			};
 		} catch {
 			return undefined;
@@ -559,7 +793,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			}
 
 			const context = settings.attachContext ? contextBlock(editorContext(folder)) : undefined;
-			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning);
+			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);

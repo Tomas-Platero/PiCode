@@ -63,3 +63,8 @@ solo un guion).
   el dueño autorizó el conjunto corregido. Correcciones de punteros del padre aceptadas: no hay
   `session-usage.ts` ni `currentModel` — la verdad es `getSessionUsage()` de `src/agent.ts` con
   `model: "provider/modelId"`. 16/16 tests, typecheck y emit en 0. Sin commit (rama del dueño).
+| S7 | Iconos en el Status: raíces `pi` (robot de marca), `Gentle AI` (rosa), `Session` (history), `Project` (root-folder) + todas las filas bullet con icono por significado (runtime circuit-board, versión tag, proveedores plug, modelo chip, effort dashboard, estado check, skills lightbulb, contexto pulse, coste credit-card, usage symbol-numeric, tokens arrow-swap, caché archive, rama git-branch, cambios diff, MCP server-process). Cada id verificado contra `codiconsLibrary.ts` (gauge no existe → pulse) | ✅ padre (el obrero murió sin escribir nada; trabajo recuperado inline) |\n| S8 | Lista de tareas de la sesión: fuente verificada en gentle-pi (tool `todo`, snapshot completo en `details.gentleTodo` de cada resultado); `session-tasks.ts` puro (última foto gana, in-progress primero, entradas malas se saltan), cableado en el bucle de usage de `agent.ts` → `StatusData.tasks` → bloque bajo Session con icono por estado (check/sync/circle-large-outline) y nota como descripción. Sin lista → sin filas | ✅ 5 tests; 117/117 conector |
+- 2026-09-27 · S7/S8: el obrero delegado murió sin escribir (3 h, cero ficheros); el padre las
+  terminó inline con el brief original. Iconos verificados contra codiconsLibrary (ninguno
+  inventado). 117/117 tests; tsc 0; build 0; pack verificado (session-tasks.js + picode.svg en
+  status-view.js dentro del pack). Editor relanzado.

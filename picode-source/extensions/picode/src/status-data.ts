@@ -302,6 +302,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		thinkingLevel: usage?.thinkingLevel,
 		// The provider's own quota for the model in use, never the session's totals above.
 		usage: await readUsageRow(profileDir, usage?.model),
+		tasks: usage?.tasks,
 	};
 }
 

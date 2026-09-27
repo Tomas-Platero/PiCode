@@ -28,6 +28,7 @@ import {
 	type ProviderConfiguration,
 } from './providers';
 import { registerPiAgent, resetChatSession } from './agent';
+import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
 import { registerWizardModelCommands } from './wizard-models';
 import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
@@ -1158,6 +1159,76 @@ function extractText(payload: string, api: string | undefined): string | undefin
 }
 
 /* ------------------------------------------------------------------ *
+ * The subagents' transcripts
+ * ------------------------------------------------------------------ */
+
+/** The command that opens a subagent's transcript; it takes an optional task id. */
+export const OPEN_SUBAGENT_TRANSCRIPT_COMMAND = 'picode.openSubagentTranscript';
+
+/**
+ * Opens a subagent's transcript, rendered from its pi session file.
+ *
+ * With a task id the transcript opens directly; without one the finished tasks gentle
+ * recorded are listed, newest first. The markdown is opened in an **untitled** document:
+ * the profile and the session files are read, never written or renamed. Every failure path
+ * is a sentence, not a throw — a command the palette can invoke must not fail into the void.
+ */
+async function openSubagentTranscript(taskId?: string): Promise<void> {
+	try {
+		const home = gentleAgentsHome();
+		let chosen = taskId;
+		if (chosen === undefined) {
+			const now = Date.now();
+			const picks = listTaskFiles(home)
+				.map(file => ({
+					taskId: path.basename(file.file, '.json'),
+					record: readTaskRecord(file.file),
+				}))
+				.map(({ taskId: id, record }) => ({
+					taskId: id,
+					label: `${record?.agent ?? 'subagent'} — ${record?.label ?? id}`,
+					description: record?.endedAt === undefined ? undefined : relativeTime(record.endedAt, now),
+				}));
+			if (picks.length === 0) {
+				void vscode.window.showInformationMessage('PiCode: no subagent transcripts yet. They appear after gentle launches a subagent.');
+				return;
+			}
+			const picked = await vscode.window.showQuickPick(picks, {
+				placeHolder: 'Which subagent transcript do you want to open?',
+			});
+			if (picked === undefined) {
+				return;
+			}
+			chosen = picked.taskId;
+		}
+
+		const sessionPath = readTaskTranscriptPath(chosen, home);
+		if (sessionPath === undefined) {
+			void vscode.window.showInformationMessage(`PiCode: no transcript was recorded for subagent ${chosen}.`);
+			return;
+		}
+		let text: string | undefined;
+		try {
+			text = fs.readFileSync(sessionPath, 'utf8');
+		} catch {
+			text = undefined;
+		}
+		if (text === undefined) {
+			void vscode.window.showInformationMessage(`PiCode: the subagent's session file could not be read (${sessionPath}).`);
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument({
+			content: sessionToMarkdown(text, { title: `Subagent ${chosen}` }),
+			language: 'markdown',
+		});
+		await vscode.window.showTextDocument(document, { preview: true });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		void vscode.window.showErrorMessage(`PiCode: the subagent transcript could not be opened (${message}).`);
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * Activation
  * ------------------------------------------------------------------ */
 
@@ -1244,7 +1315,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// its rows come from the data command. The command is registered before the view, because the
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
-	context.subscriptions.push(registerStatusTreeView());
+	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
 	void maybeNudgeFirstRun(setupDeps);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
@@ -1259,6 +1330,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		profileDir: profileDirectory(context.extensionUri),
 		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
 	}));
+
+	// The subagents gentle launched from a chat turn stay visible in the chat itself (see
+	// `agent.ts`); this command is how their full transcript opens — the pi session file
+	// rendered as markdown into an untitled document, the profile never written.
+	context.subscriptions.push(vscode.commands.registerCommand(OPEN_SUBAGENT_TRANSCRIPT_COMMAND, (taskId?: string) =>
+		openSubagentTranscript(typeof taskId === 'string' ? taskId : undefined)));
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>

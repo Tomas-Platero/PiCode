@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import type { TaskRow } from './session-tasks';
 
 /**
  * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
@@ -46,11 +47,13 @@ export interface StatusData {
 	 * connector cannot obtain an honest one.
 	 */
 	usage?: string;
+	/** The session's task list (gentle-pi's todo tool), last snapshot; absent when none exists. */
+	tasks?: readonly TaskRow[];
 	error?: string;
 }
 
-export function registerStatusTreeView(): vscode.Disposable {
-	const provider = new StatusTreeProvider();
+export function registerStatusTreeView(extensionUri: vscode.Uri): vscode.Disposable {
+	const provider = new StatusTreeProvider(extensionUri);
 	return vscode.window.registerTreeDataProvider(STATUS_VIEW_TYPE, provider);
 }
 
@@ -58,11 +61,14 @@ class StatusItem extends vscode.TreeItem {
 
 	constructor(
 		label: string,
-		options: { description?: string; children?: StatusItem[] } = {},
+		options: { description?: string; children?: StatusItem[]; icon?: vscode.ThemeIcon | vscode.Uri } = {},
 	) {
 		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 		if (options.description !== undefined) {
 			this.description = options.description;
+		}
+		if (options.icon !== undefined) {
+			this.iconPath = options.icon;
 		}
 		if (options.children) {
 			this.children = options.children;
@@ -80,7 +86,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 	private data: StatusData | undefined;
 	private readonly timer = setInterval(() => { void this.refresh(); }, 5000);
 
-	constructor() {
+	constructor(private readonly extensionUri: vscode.Uri) {
 		void this.refresh();
 	}
 
@@ -116,33 +122,36 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 
 	private sections(d: StatusData): StatusItem[] {
 		const out: StatusItem[] = [];
+		// Every icon id here was verified against `src/vs/base/common/codiconsLibrary.ts` —
+		// a codicon the library does not register renders as a broken box, so no guesses.
+		const media = (name: string): vscode.Uri => vscode.Uri.joinPath(this.extensionUri, 'media', name);
 
 		const piRows: StatusItem[] = [
-			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'External (machine)' : 'Internal' }),
-			new StatusItem('Version', { description: d.piVersion || '—' }),
-			new StatusItem('Providers', { description: String(d.providers ?? 0) }),
+			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'External (machine)' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
+			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
+			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
 		];
 		const model = d.model ?? d.defaultModel;
 		if (model !== undefined) {
-			piRows.push(new StatusItem('Model', { description: model }));
+			piRows.push(new StatusItem('Model', { description: model, icon: new vscode.ThemeIcon('chip') }));
 		}
 		if (d.thinkingLevel !== undefined) {
-			piRows.push(new StatusItem('Effort', { description: d.thinkingLevel }));
+			piRows.push(new StatusItem('Effort', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
 		}
-		out.push(new StatusItem('pi', { children: piRows }));
+		out.push(new StatusItem('pi', { children: piRows, icon: media('picode.svg') }));
 
 		// Gentle AI lives in the internal profile; with the external pi it appears only
 		// when the machine's own profile happens to carry it.
 		if (d.runtime === 'internal' || d.gentleInstalled === true) {
 			const gentleRows: StatusItem[] = [
-				new StatusItem('State', { description: d.gentleInstalled ? 'Installed' + (d.gentleVersion ? ' · v' + d.gentleVersion : '') : 'Not installed' }),
+				new StatusItem('State', { description: d.gentleInstalled ? 'Installed' + (d.gentleVersion ? ' · v' + d.gentleVersion : '') : 'Not installed', icon: new vscode.ThemeIcon('check') }),
 			];
 			if (d.gentleInstalled) {
 				gentleRows.push(
-					new StatusItem('Skills', { description: String(d.skills ?? 0) }),
+					new StatusItem('Skills', { description: String(d.skills ?? 0), icon: new vscode.ThemeIcon('lightbulb') }),
 				);
 			}
-			out.push(new StatusItem('Gentle AI', { children: gentleRows }));
+			out.push(new StatusItem('Gentle AI', { children: gentleRows, icon: media('gentle-ai.svg') }));
 		}
 
 		const sessionRows: StatusItem[] = [];
@@ -155,25 +164,34 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				description: d.ctxWindow !== undefined
 					? `${ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()}${pct}`
 					: ctxTokens.toLocaleString(),
+				icon: new vscode.ThemeIcon('pulse'),
 			}));
-			sessionRows.push(new StatusItem('Cost (session)', { description: '$' + (d.cost === undefined ? '0.000' : Number(d.cost).toFixed(3)) }));
+			sessionRows.push(new StatusItem('Cost (session)', { description: '$' + (d.cost === undefined ? '0.000' : Number(d.cost).toFixed(3)), icon: new vscode.ThemeIcon('credit-card') }));
 		} else {
-			sessionRows.push(new StatusItem('No turns yet', { description: "The session's usage appears after the first message." }));
+			sessionRows.push(new StatusItem('No turns yet', { description: "The session's usage appears after the first message.", icon: new vscode.ThemeIcon('history') }));
 		}
 		// The provider's quota sits with the session's numbers it is read beside, and it is
 		// drawn even before the first turn: it is live provider data, not session data.
 		if (d.usage !== undefined) {
-			sessionRows.push(new StatusItem('Usage', { description: d.usage }));
+			sessionRows.push(new StatusItem('Usage', { description: d.usage, icon: new vscode.ThemeIcon('symbol-numeric') }));
 		}
 		if (ctxTokens !== undefined) {
 			if (d.inputTokens !== undefined) {
-				sessionRows.push(new StatusItem('Tokens in / out', { description: `${d.inputTokens.toLocaleString()} / ${(d.outputTokens ?? 0).toLocaleString()}` }));
+				sessionRows.push(new StatusItem('Tokens in / out', { description: `${d.inputTokens.toLocaleString()} / ${(d.outputTokens ?? 0).toLocaleString()}`, icon: new vscode.ThemeIcon('arrow-swap') }));
 			}
 			if (d.cacheRead !== undefined && d.cacheWrite !== undefined) {
-				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}` }));
+				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}`, icon: new vscode.ThemeIcon('archive') }));
 			}
 		}
-		out.push(new StatusItem('Session', { children: sessionRows }));
+		// The session's task list, exactly as the todo tool last left it — the row per task
+		// carries the status icon, the note becomes the description. No list, no rows.
+		for (const task of d.tasks ?? []) {
+			sessionRows.push(new StatusItem(task.title, {
+				description: task.note,
+				icon: new vscode.ThemeIcon(task.status === 'done' ? 'check' : task.status === 'in_progress' ? 'sync' : 'circle-large-outline'),
+			}));
+		}
+		out.push(new StatusItem('Session', { children: sessionRows, icon: new vscode.ThemeIcon('history') }));
 
 		const changes = d.gitChanges === undefined
 			? '—'
@@ -181,10 +199,10 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				? `${d.gitChanges} files · +${d.gitInsertions.toLocaleString()} −${d.gitDeletions.toLocaleString()}`
 				: String(d.gitChanges);
 		out.push(new StatusItem('Project', { children: [
-			new StatusItem('Branch', { description: d.gitBranch || '—' }),
-			new StatusItem('Changes', { description: changes }),
-			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0) }),
-		] }));
+			new StatusItem('Branch', { description: d.gitBranch || '—', icon: new vscode.ThemeIcon('git-branch') }),
+			new StatusItem('Changes', { description: changes, icon: new vscode.ThemeIcon('diff') }),
+			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0), icon: new vscode.ThemeIcon('server-process') }),
+		], icon: new vscode.ThemeIcon('root-folder') }));
 
 		if (d.error !== undefined) {
 			out.push(new StatusItem('Status error: ' + d.error));
