@@ -158,20 +158,28 @@ Los dos pines ya **no dirigen el build**: son la procedencia del árbol.
 | [`upstream/vscodium.json`](../upstream/vscodium.json) | La revisión de **VSCodium** de la que se vendorió `patches/vscodium/`, y de la que sale `dev/vscodium-product.json`. |
 
 El día que toque una versión nueva, el trabajo **no** es reaplicar parches: es **juntar las dos
-versiones** dentro del árbol. Eso es exactamente lo que se gana teniendo los cambios como
-código, y es la parte que no se ha ejercitado todavía: **nada de lo de abajo se ha ejecutado**,
-así que se lee como un plan, no como una receta comprobada.
+versiones**. Este repositorio recibió el árbol como una importación aplastada (sin el historial
+de VS Code dentro), así que la juntanza se hace en un clon desechable que sí tiene ese
+historial, y el resultado entra aquí como un commit normal. **Nada de lo de abajo se ha
+ejecutado todavía**: se lee como un plan, no como una receta comprobada.
 
-1. Traer el historial hasta el commit nuevo. El árbol se descargó **superficialmente** (un solo
-   commit), y para juntar hacen falta las dos ramas y su ancestro común:
-   `git -C picode-source fetch --unshallow origin`. Es una descarga grande, y se paga una vez.
-2. Juntar: `git -C picode-source merge <commit-nuevo>`. Los conflictos salen uno a uno y con
+1. Levantar el árbol con historial en un clon de trabajo: restaurar
+   `.scratch/picode-source-history.bundle` en un directorio fuera del repositorio
+   (`git clone <bundle> .merge-work`, con `origin` apuntando a `microsoft/vscode`, y luego
+   `git -C .merge-work fetch --unshallow origin`). El `--unshallow` se paga una vez: el bundle
+   guarda un clon superficial, y para juntar hacen falta las dos ramas y su ancestro común.
+2. Juntar allí: `git -C .merge-work merge <commit-nuevo>`. Los conflictos salen uno a uno y con
    contexto, en vez de un `git apply` que se para sin decir dónde.
-3. Actualizar `tag` y `commit` en `upstream/stable.json`, y re-vendorizar `patches/vscodium/**`
+3. Traer el resultado a casa: copiar el árbol fusionado sobre `picode-source/` (sin tocar
+   `node_modules` ni los `out*`) y commitear aquí —el commit de la juntanza es la nueva
+   procedencia—. `git status` en el padre es el control: si solo cambió lo que cambió el merge,
+   entró limpio.
+4. Actualizar `tag` y `commit` en `upstream/stable.json`, y re-vendorizar `patches/vscodium/**`
    y `dev/vscodium-product.json` desde la revisión nueva de VSCodium. `patches/vscodium/**` es
    verbatim: nunca se edita a mano.
-4. Comprobar que el árbol sigue siendo el que el build espera: `./dev/build.sh -o`.
-5. Compilar y confirmar que arranca.
+5. Comprobar que el árbol sigue siendo el que el build espera: `./dev/build.sh -o`. Y volver a
+   guardar el historial fusionado como bundle, para la próxima versión.
+6. Compilar y confirmar que arranca.
 
 `RELEASE_VERSION` sale de `distribution/product-delta.json` (`set.version`), que es la **única**
 casa de la versión desde que las fases 1-5 se retiraron. `upstream/stable.json` ya no la fija.
