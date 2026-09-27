@@ -250,3 +250,11 @@ tsconfig pendiente de autorización (bloqueo arriba). Detalle, hallazgos y lími
     workbench (`-p picode-source/src/tsconfig.json --noEmit`) 0. Pendiente del
     dueño/padre: prueba visual en el editor empaquetado (el refresco de la lista
     depende del watcher existente, verificado en código).
+- 2026-09-27 · aviso del dueño: "el chat está usando el interno al parecer" con runtime
+  externo. Autopsia: FALSO — la sesión de su «hola» cayó en ~/.pi/agent/sessions (externo) y el
+  perfil interno no tiene NI UNA sesión. Causa real de la sospecha: AGENT_FRAME decía «runs inside
+  the PiCode editor» SIEMPRE, también al pi externo. Fix 89c051b9: el marco ahora sigue el modo
+  («the machine's own coding agent, answering through the PiCode editor» en externo). Editor
+  relanzado. Pendiente del hilo anterior: interfaz interactiva de MCP (G9) — el dueño pide estilo
+  Proveedores (ver lo guardado) en vez de quick-picks secuenciales; ya localizado el widget
+  (McpServerListSettingWidget + picode.mcp.servers ya existentes).
