@@ -40,6 +40,12 @@ export interface StatusData {
 	outputTokens?: number;
 	cacheRead?: number;
 	cacheWrite?: number;
+	/**
+	 * The provider's own subscription quota for the model in use (`usage-data.ts`), not the
+	 * session's totals above: the TUI's `usage` bar is live provider data. Absent when the
+	 * connector cannot obtain an honest one.
+	 */
+	usage?: string;
 	error?: string;
 }
 
@@ -140,24 +146,32 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		}
 
 		const sessionRows: StatusItem[] = [];
-		if (d.ctxTokens !== undefined) {
+		const ctxTokens = d.ctxTokens;
+		if (ctxTokens !== undefined) {
 			const pct = d.ctxWindow !== undefined && d.ctxWindow > 0
-				? ` (${Math.round(d.ctxTokens / d.ctxWindow * 100)}%)`
+				? ` (${Math.round(ctxTokens / d.ctxWindow * 100)}%)`
 				: '';
 			sessionRows.push(new StatusItem('Context', {
 				description: d.ctxWindow !== undefined
-					? `${d.ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()}${pct}`
-					: d.ctxTokens.toLocaleString(),
+					? `${ctxTokens.toLocaleString()} / ${d.ctxWindow.toLocaleString()}${pct}`
+					: ctxTokens.toLocaleString(),
 			}));
 			sessionRows.push(new StatusItem('Cost (session)', { description: '$' + (d.cost === undefined ? '0.000' : Number(d.cost).toFixed(3)) }));
+		} else {
+			sessionRows.push(new StatusItem('No turns yet', { description: "The session's usage appears after the first message." }));
+		}
+		// The provider's quota sits with the session's numbers it is read beside, and it is
+		// drawn even before the first turn: it is live provider data, not session data.
+		if (d.usage !== undefined) {
+			sessionRows.push(new StatusItem('Usage', { description: d.usage }));
+		}
+		if (ctxTokens !== undefined) {
 			if (d.inputTokens !== undefined) {
 				sessionRows.push(new StatusItem('Tokens in / out', { description: `${d.inputTokens.toLocaleString()} / ${(d.outputTokens ?? 0).toLocaleString()}` }));
 			}
 			if (d.cacheRead !== undefined && d.cacheWrite !== undefined) {
 				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}` }));
 			}
-		} else {
-			sessionRows.push(new StatusItem('No turns yet', { description: 'The usage appears after the first message.' }));
 		}
 		out.push(new StatusItem('Session', { children: sessionRows }));
 

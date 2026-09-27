@@ -13,6 +13,7 @@ import { isGentleInstalled, probeExternalPi, readGentleVersion, readInternalPiVe
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode } from './runtime';
 import { STATUS_DATA_COMMAND, type StatusData } from './status-view';
+import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKey } from './usage-data';
 
 /**
  * The data behind the PiCode status view.
@@ -189,6 +190,83 @@ async function readPiVersion(mode: 'internal' | 'external', distributionRoot: st
 	return readInternalPiVersion(distributionRoot);
 }
 
+/**
+ * The provider and model the live session is on.
+ *
+ * pi's entries carry the two as one `provider/modelId` reference (`agent.ts`), which is what
+ * this splits: the provider id is matched against the declarations, the model id picks the
+ * meter. A reference that is not one — no slash, or one at either end — is no answer at all.
+ */
+function currentModelRef(model: string | undefined): { provider: string; model: string } | undefined {
+	if (model === undefined) {
+		return undefined;
+	}
+	const slash = model.indexOf('/');
+	if (slash <= 0 || slash === model.length - 1) {
+		return undefined;
+	}
+	return { provider: model.slice(0, slash), model: model.slice(slash + 1) };
+}
+
+/**
+ * The credential pi's own `auth.json` holds for a provider.
+ *
+ * The file is pi's, so both shapes found there are read: the record `declarations.ts` itself
+ * writes (`{ type, key }`) and a bare string. Anything else — an OAuth entry, a malformed
+ * value — is not a key and is left alone.
+ */
+function storedApiKey(profileDir: string, providerId: string): string | undefined {
+	const entry = readJsonObject(path.join(profileDir, 'auth.json'))?.[providerId];
+	if (typeof entry === 'string' && entry.length > 0) {
+		return entry;
+	}
+	if (isRecord(entry)) {
+		const key = entry['key'];
+		if (typeof key === 'string' && key.length > 0) {
+			return key;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * The subscription-usage row: the provider's own quota for the model in use, or `undefined`
+ * when there is no honest row to print.
+ *
+ * Three things must all hold before anything is drawn, and each failing one means **no row**
+ * rather than a placeholder: the session must be on a provider the settings declare **and**
+ * that declaration must be NaN's, and a credential must be resolvable. Showing another
+ * provider's meter under the session's model would be a number the owner cannot act on.
+ *
+ * Once those hold, the row is worth drawing even when the read fails: `unavailable` says the
+ * provider is the one with a quota route and the number is not in hand. Codex and Claude
+ * Pro/Max report their windows in SSE response headers this connector never sees, so they get
+ * no row at all — not a dash, which would promise a number that cannot arrive.
+ */
+async function readUsageRow(profileDir: string, model: string | undefined): Promise<string | undefined> {
+	const current = currentModelRef(model);
+	if (current === undefined) {
+		return undefined;
+	}
+	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('providers'));
+	const provider = matchedNanProvider(declared, current.provider);
+	if (provider === undefined) {
+		return undefined;
+	}
+	const apiKey = resolveNanApiKey({
+		declared: provider.key,
+		environment: process.env,
+		stored: storedApiKey(profileDir, provider.id),
+	});
+	if (apiKey === undefined) {
+		return undefined;
+	}
+	const cached = await getCachedNanUsage(apiKey, Date.now());
+	return cached.value === undefined
+		? 'unavailable'
+		: nanUsageSummary(cached.value, current.model) ?? 'unavailable';
+}
+
 /** Builds the one answer the status tree renders, from the profile in force. */
 export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const runtime = readRuntimeMode();
@@ -222,6 +300,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		cacheWrite: usage?.cacheWrite,
 		model: usage?.model,
 		thinkingLevel: usage?.thinkingLevel,
+		// The provider's own quota for the model in use, never the session's totals above.
+		usage: await readUsageRow(profileDir, usage?.model),
 	};
 }
 
