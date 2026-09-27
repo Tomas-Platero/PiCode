@@ -10,8 +10,6 @@
 [![Built on VSCodium](https://img.shields.io/badge/Built%20on-VSCodium-1E1E1E?style=flat-square)](https://github.com/VSCodium/vscodium)
 [![Powered by Pi](https://img.shields.io/badge/Powered%20by-Pi-3B9BFF?style=flat-square)](https://pi.dev)
 [![Gentle AI](https://img.shields.io/badge/Memory%20%26%20Workflow-Gentle%20AI-3B9BFF?style=flat-square)](https://github.com/Gentleman-Programming/gentle-ai)
-[![Pin check](https://github.com/TomasPlatero/PiCode/actions/workflows/pin-check.yml/badge.svg?style=flat-square)](https://github.com/TomasPlatero/PiCode/actions/workflows/pin-check.yml)
-[![Full build](https://github.com/TomasPlatero/PiCode/actions/workflows/full-build.yml/badge.svg?style=flat-square)](https://github.com/TomasPlatero/PiCode/actions/workflows/full-build.yml)
 
 </div>
 
@@ -120,15 +118,11 @@ Full dependency list, per-OS details, and troubleshooting in [Contributing docs]
 
 ## Continuous integration
 
-CI guards the source build. Three workflows, one guard each:
-
-| Workflow | When | What |
-| --- | --- | --- |
-| **[Pin check](.github/workflows/pin-check.yml)** | Every push / PR | Phases 1–5 on Linux and Windows. Goes red if a patch stops applying. |
-| **[Full build](.github/workflows/full-build.yml)** | `v*` tag, on demand | Real compile on Linux and Windows. A tag publishes a GitHub Release with portables and installers. No nightly, no automatic builds. |
-| **[Pin watch](.github/workflows/pin-watch.yml)** | Weekly | Checks latest VS Code and its security advisories. Opens a labelled PR with the new pin. |
-
-The two badges at the top of this file are live.
+There is no CI: during the active development stage the Actions minutes bill
+faster than they are worth, so the workflows were removed (they live in git
+history if they ever come back). Releases are built locally and published by
+hand — the process, the packaging tasks and the known build traps are
+documented in [docs/CI.md](docs/CI.md).
 
 ## Where the reasoning lives
 
