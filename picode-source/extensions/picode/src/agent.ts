@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { contextBlock, withContext, type EditorContext } from './context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
@@ -425,7 +425,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			}
 
 			const context = settings.attachContext ? contextBlock(editorContext(folder)) : undefined;
-			await runTurn(session, withContext(request.prompt, context), stream, token, settings.showReasoning);
+			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);

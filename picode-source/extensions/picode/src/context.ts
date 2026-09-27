@@ -61,11 +61,20 @@ export function contextBlock(context: EditorContext): string | undefined {
  * esta app"). The model read it and answered as the *development* agent — which is a different
  * pi, on a different machine, in a terminal. One sentence that it is the editor's agent is what
  * keeps the two apart, and it costs a line.
+ *
+ * The sentence follows the runtime mode (`picode.pi.runtime`): the internal pi is PiCode's own
+ * and lives in the editor; the external one is the machine's, running on the editor's behalf.
+ * A frame that always said "inside the PiCode editor" made the external pi claim to be the
+ * internal one — the very confusion the frame exists to prevent.
  */
-export const AGENT_FRAME = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.';
+export function agentFrame(runtime: 'internal' | 'external'): string {
+	return runtime === 'external'
+		? 'You are pi, the machine\'s own coding agent, answering through the PiCode editor. You answer about the project the person you are talking to has open in it.'
+		: 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.';
+}
 
 /** The prompt pi is asked with: who it is, the editor's context when there is one, then the request. */
-export function withContext(prompt: string, context: string | undefined): string {
-	const head = context === undefined ? AGENT_FRAME : `${AGENT_FRAME}\n\n${context}`;
+export function withContext(prompt: string, context: string | undefined, runtime: 'internal' | 'external'): string {
+	const head = context === undefined ? agentFrame(runtime) : `${agentFrame(runtime)}\n\n${context}`;
 	return `${head}\n\n---\n\n${prompt}`;
 }
