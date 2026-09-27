@@ -768,16 +768,16 @@ index e97fa180..c278ab2b 100644
  				this.setSlide('categories');
  				this.container.focus();
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-index c2622705..2300317f 100644
+index c2622705..70dc0905 100644
 --- a/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/media/gettingStarted.css
-@@ -109,34 +109,32 @@
+@@ -109,34 +109,48 @@
  	height: 100%;
  	max-width: 1200px;
  	margin: 0 auto;
 -	grid-template-rows: 25% minmax(min-content, auto) min-content;
 -	grid-template-columns: 1fr 6fr 1fr 6fr 1fr;
-+	grid-template-rows: minmax(min-content, auto) minmax(min-content, auto) min-content;
++	grid-template-rows: minmax(min-content, auto) minmax(0, 1fr) min-content;
 +	grid-template-columns: 1fr 6fr 1fr;
  	grid-template-areas:
 -		".  header header header ."
@@ -790,33 +790,46 @@ index c2622705..2300317f 100644
  
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: auto min-content minmax(min-content, auto) min-content;
-+.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
-+.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
-+.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
- 	grid-template-columns: 1fr;
+-	grid-template-columns: 1fr;
 -	grid-template-areas: "header" "left-column" "right-column" "footer";
--}
--
++/*
++ * The wizard's steps overflow the column (23 agents, the model list, the gallery), so
++ * the column scrolls: its height is definite - the grid track above - and this rule
++ * beats the container's `> * { overflow: hidden }` by specificity and order.
++ */
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left {
++	overflow-y: auto;
++	min-height: 0;
++	scrollbar-width: thin;
+ }
+ 
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: auto minmax(min-content, auto) min-content;
 -	grid-template-areas: "header" "left-column right-column" "footer footer";
-+	grid-template-areas: "header" "left-column" "footer";
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup {
++	max-width: 100%;
++}
  }
  
--.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
++.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
++.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
+ .monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer {
 -	grid-template-rows: min-content minmax(min-content, auto) min-content;
--	grid-template-columns: 1fr;
+ 	grid-template-columns: 1fr;
 -	grid-template-areas: "left-column" "right-column" "footer";
-+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header .product-logo {
-+	height: 128px;
-+	width: 128px;
-+	color: var(--vscode-foreground);
-+	margin-bottom: 16px;
++	grid-template-areas: "header" "left-column" "footer";
  }
  
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header,
 -.monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header {
 -	display: none;
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header .product-logo {
++	height: 128px;
++	width: 128px;
++	color: var(--vscode-foreground);
++	margin-bottom: 16px;
++}
++
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .header .product-logo svg.product-logo-svg {
 +	width: 100%;
 +	height: 100%;
@@ -824,7 +837,7 @@ index c2622705..2300317f 100644
  }
  
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories li.showWalkthroughsEntry {
-@@ -165,6 +163,421 @@
+@@ -165,6 +179,426 @@
  	grid-area: left-column;
  }
  
@@ -870,6 +883,11 @@ index c2622705..2300317f 100644
 +}
 +
 +/* --- PiCode setup: the cards on the welcome page ------------------------ */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-step-body {
++	min-height: 0;
++	padding-right: 4px;
++}
 +
 +.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup {
 +	display: flex;
@@ -1246,7 +1264,7 @@ index c2622705..2300317f 100644
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
  	grid-area: right-column;
  }
-@@ -1146,3 +1559,221 @@
+@@ -1146,3 +1580,271 @@
  .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlide .getting-started-checkbox {
  	border-color: var(--vscode-checkbox-border) !important;
  }
@@ -1468,12 +1486,62 @@ index c2622705..2300317f 100644
 +	gap: 10px;
 +	margin-top: 4px;
 +}
++
++/* the agent selects: themed, with a visible chevron affordance */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-select-wrap {
++	position: relative;
++	flex: 1;
++	min-width: 200px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-select-wrap select {
++	width: 100%;
++	appearance: none;
++	padding-right: 26px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-select-chevron {
++	position: absolute;
++	right: 8px;
++	top: 50%;
++	transform: translateY(-50%);
++	pointer-events: none;
++	opacity: .8;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.disabled {
++	opacity: .45;
++	pointer-events: none;
++}
++
++/* the Gentle installer's progress bar */
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress {
++	height: 6px;
++	border-radius: 3px;
++	background: var(--vscode-progressBar-background, rgba(128,128,128,.3));
++	overflow: hidden;
++	margin-bottom: 4px;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress-bar {
++	height: 100%;
++	background: var(--vscode-progressBar-background, var(--vscode-focusBorder));
++	transition: width 0.4s ease-out;
++}
++
++.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress-label {
++	font-size: .85em;
++	opacity: .75;
++	margin-bottom: 4px;
++}
 diff --git a/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
 new file mode 100644
-index 00000000..ea5eeb8d
+index 00000000..608481da
 --- /dev/null
 +++ b/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts
-@@ -0,0 +1,1269 @@
+@@ -0,0 +1,1345 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) PiCode. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1630,6 +1698,7 @@ index 00000000..ea5eeb8d
 +	private galleryQuery = '';
 +	private galleryShown = 0;
 +	private galleryLoading = false;
++	private gallerySearchTimer: Timeout | undefined;
 +	/** The Gentle installer's live output, polled while the install runs. */
 +	private gentleLogEl: HTMLElement | undefined;
 +
@@ -1708,11 +1777,13 @@ index 00000000..ea5eeb8d
 +					? this.renderGentleStep(state)
 +					: this.renderThemeCard();
 +
++		const foot = this.renderWizardFoot(state);
++		this.wizardFootEl = foot;
 +		reset(
 +			this.container as HTMLElement,
 +			this.renderWizardHead(),
 +			$('.picode-step-body', {}, body),
-+			this.renderWizardFoot(state),
++			foot,
 +		);
 +	}
 +
@@ -1750,7 +1821,7 @@ index 00000000..ea5eeb8d
 +		const next = this.navButton(
 +			'picode-wizard-next',
 +			nextLabel,
-+			this.step === 0 ? this.piChosen : this.step === 1 ? this.wizardModel !== undefined : true,
++			this.step === 0 ? this.piChosen : this.step === 1 ? this.wizardModel !== undefined : !(this.busy && this.step === 2),
 +			() => this.advanceFrom(state),
 +			'primary',
 +		);
@@ -1764,7 +1835,7 @@ index 00000000..ea5eeb8d
 +		}
 +		const foot = $('.picode-wizard-foot', {}, back, $('.picode-foot-spacer', {}));
 +		if (this.step < 3) {
-+			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.advanceFrom(state, true)));
++			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), !(this.busy && this.step === 2), () => this.advanceFrom(state, true)));
 +		}
 +		foot.append(
 +			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
@@ -1808,6 +1879,16 @@ index 00000000..ea5eeb8d
 +			button.classList.add('disabled');
 +		}
 +		return button;
++	}
++
++	/** Rebuilds the foot in place - the way a mid-step choice re-enables its buttons. */
++	private repaintFoot(): void {
++		const foot = this.wizardFootEl;
++		if (foot !== undefined && this.state !== undefined) {
++			const fresh = this.renderWizardFoot(this.state);
++			foot.replaceWith(fresh);
++			this.wizardFootEl = fresh;
++		}
 +	}
 +
 +	private goTo(step: 0 | 1 | 2 | 3): void {
@@ -2030,15 +2111,19 @@ index 00000000..ea5eeb8d
 +	}
 +
 +	private providerOption(icon: string, _kind: string, label: string, detail: string, onClick: () => void): HTMLElement {
-+		return $('button.picode-option-card',
++		const card = $('button.picode-option-card',
 +			{ 'type': 'button', 'tabindex': 0 },
 +			$(`span.codicon.codicon-${icon}.picode-option-icon`),
 +			$('.picode-option-text', {},
 +				$('.picode-option-label', {}, label),
 +				$('.picode-option-detail', {}, detail),
 +			),
-+			// built here so the option cards keep the same look as step 1's
-+		) as HTMLElement;
++		);
++		this.disposables.add(addDisposableListener(card, 'click', event => {
++			event.preventDefault();
++			onClick();
++		}));
++		return card;
 +	}
 +
 +	/** The hand-written provider's form, hidden until the owner picks that way in. */
@@ -2107,7 +2192,7 @@ index 00000000..ea5eeb8d
 +			return;
 +		}
 +		const rows = models.map(model => $('button.picode-model-row' + (this.wizardModel === model.ref ? '.checked' : ''),
-+			{ 'type': 'button', 'tabindex': 0 },
++			{ 'type': 'button', 'data-ref': model.ref, 'tabindex': 0 },
 +			$(`span.codicon.codicon-${this.wizardModel === model.ref ? 'check' : 'circle-large-outline'}`),
 +			$('span.picode-model-ref', {}, model.ref),
 +		));
@@ -2123,11 +2208,21 @@ index 00000000..ea5eeb8d
 +				this.setNote(localize('picodeSetup.provider.chosen', "Default model: {0}", ref), false);
 +				const area2 = this.currentModelArea;
 +				if (area2 !== undefined) { this.paintModels(area2); }
++				// The foot's Next was rendered disabled back when no model was chosen; it is
++				// rebuilt here, enabled, or the pick would never unlock the way forward.
++				const foot = this.wizardFootEl;
++				if (foot !== undefined && this.state !== undefined) {
++					const fresh = this.renderWizardFoot(this.state);
++					foot.replaceWith(fresh);
++					this.wizardFootEl = fresh;
++				}
 +			}));
 +		}
 +	}
 +
 +	private currentModelArea: HTMLElement | undefined;
++	/** The foot element, kept so a choice made mid-step re-enables its Next. */
++	private wizardFootEl: HTMLElement | undefined;
 +
 +	private async loadWizardModels(): Promise<void> {
 +		this.modelsLoading = true;
@@ -2190,7 +2285,8 @@ index 00000000..ea5eeb8d
 +					this.disposables.add(addDisposableListener(select, 'keydown', event => event.stopPropagation()));
 +					agentsBox.appendChild($('.picode-agent-row', {},
 +						$('span.picode-agent-name', {}, agent),
-+						select,
++						$('.picode-select-wrap', {}, select,
++							$('span.codicon.codicon-chevron-down.picode-select-chevron')),
 +					));
 +				}
 +				const save = this.button('picode-agents-save', localize('picodeSetup.agents.save', "Save agent models"), async () => {
@@ -2346,13 +2442,38 @@ index 00000000..ea5eeb8d
 +		* extension and then applies the theme; hovering previews nothing (the theme is not
 +		* on disk yet) - the thumbnail is the preview.
 +		*/
++	/**
++		* The gallery grid: what Open VSX has, one card per theme, thumbnailed from the
++		* theme's own colors once its file lands in the cache.
++		*
++		* Self-clearing, on purpose: every invocation resets the toolbar, the grid and the
++			* "more" row before painting. The earlier version appended and re-invoked itself
++			* per keystroke, which multiplied the toolbar and the "Show more" buttons into a
++			* hall of mirrors.
++		*/
 +	private renderGalleryInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, applyTheme: (theme: IWorkbenchColorTheme, persist: boolean) => Promise<void>): void {
++		reset(toolbar);
++		toolbar.append(this.themeSourceTabs(() => {
++			this.themeSource = 'installed';
++			this.render();
++		}));
++		clearNode(grid);
++		clearNode(more);
++
 +		const search = this.themeSearch(text => {
 +			this.galleryQuery = text;
 +			this.galleryShown = THEME_GALLERY_PAGE;
-+			void this.loadGallery(() => this.renderGalleryInto(toolbar, grid, more, applyTheme));
++			// One request per pause, not per keystroke.
++			if (this.gallerySearchTimer !== undefined) {
++				clearTimeout(this.gallerySearchTimer);
++			}
++			this.gallerySearchTimer = setTimeout(() => {
++				this.gallerySearchTimer = undefined;
++				void this.loadGallery(() => this.renderGalleryInto(toolbar, grid, more, applyTheme));
++			}, 350);
 +		});
 +		toolbar.append(search);
++
 +		more.append(
 +			this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
 +				this.galleryShown += THEME_GALLERY_PAGE;
@@ -2365,6 +2486,7 @@ index 00000000..ea5eeb8d
 +		if (this.galleryItems === undefined) {
 +			void this.loadGallery(() => this.renderGalleryInto(toolbar, grid, more, applyTheme));
 +		}
++
 +		const items = (this.galleryItems ?? []).slice(0, this.galleryShown);
 +		if (items.length === 0) {
 +			grid.appendChild(this.galleryLoading
@@ -2626,14 +2748,36 @@ index 00000000..ea5eeb8d
 +	private async applyGentle(action: 'install' | 'update' | 'remove'): Promise<void> {
 +		if (this.busy || this.state === undefined || this.state.runtime !== 'internal') { return; }
 +		this.busy = true;
++		// The card's buttons go inert for the whole run: a second click is a no-op by the
++		// busy guard, but it should also LOOK dead while the installer works.
++		const gentleCard = this.gentleLogEl?.closest('.picode-card');
++		if (gentleCard instanceof HTMLElement) {
++			for (const button of gentleCard.querySelectorAll('.picode-gentle-actions .picode-button')) {
++				button.classList.add('disabled');
++			}
++		}
++		this.repaintFoot();
 +		// The install takes a while; the bridge logs its steps, and this poll paints
 +		// them as they happen - a card that talks is a card that reassures.
 +		const poll = setInterval(() => {
 +			void this.services.commandService
-+				.executeCommand<{ running: boolean; lines: string[] }>('picode.setup.gentleLog')
++				.executeCommand<{ running: boolean; lines: string[]; step: number; total: number }>('picode.setup.gentleLog')
 +				.then(log => {
 +					if (log === undefined || this.gentleLogEl === undefined || !this.gentleLogEl.isConnected) { return; }
-+					reset(this.gentleLogEl, ...log.lines.slice(-4).map(line => $('.picode-gentle-log-line', {}, line)));
++					const pct = log.total > 0 ? Math.round(log.step / log.total * 100) : 0;
++					const bar = $('.picode-gentle-progress', {},
++						$('.picode-gentle-progress-bar', { style: `width:${pct}%` }),
++					);
++					const label = $('.picode-gentle-progress-label', {}, `${pct}%`);
++					reset(this.gentleLogEl, bar, label, ...log.lines.slice(-3).map(line => $('.picode-gentle-log-line', {}, line)));
++					// While the installer runs, the card's buttons and the way forward are
++					// visually locked (the busy guard already makes them no-ops).
++					const card = this.gentleLogEl.closest('.picode-card');
++					if (card instanceof HTMLElement) {
++						for (const button of card.querySelectorAll('.picode-button')) {
++							button.classList.toggle('disabled', log.running);
++						}
++					}
 +				})
 +				.catch(() => { /* the next tick tries again */ });
 +		}, 1200);

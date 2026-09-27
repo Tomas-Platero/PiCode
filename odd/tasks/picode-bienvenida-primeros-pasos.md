@@ -104,6 +104,56 @@ de extensiones para instalar temas nuevos. La galería completa de la extensión
 - [ ] **T7 — Cierre.** Commits de unidad de trabajo, informe.
 
 ## Evidence
+- **Ronda 6 (2026-09-26): hallazgo mayor — el descubrimiento de personalizaciones está
+  huérfano.** El dueño pidió: skills de Gentle en el chat como `/gentle:…`, los agentes de
+  Gentle en el selector de agentes del chat, y la vista de estado con el logo en la barra
+  lateral. Diagnóstico con el fuente en la mano:
+  - El popup de `/` del chat lista los skills del perfil de la **máquina** (`/winui-app`
+    etc. vienen de `~/.pi/agent/skills` vía el sistema de personalizaciones del fork).
+  - Gentle vive en el **perfil interno** (`data/pi-agent`), que ese sistema no mira — y el
+    paquete de gentle-pi además guarda sus skills y agentes **dentro de su npm package**
+    (`npm/node_modules/gentle-pi/{skills,assets/agents}`), doblemente fuera.
+  - La clase que parecía el gancho (`SessionCustomizationDiscovery`,
+    `platform/agentHost/node/copilot/`) está **preparada pero sin cablear**: nadie la
+    importa, el bundler la poda (verificado: recompilación completa con el estado
+    incremental borrado y la extensión sigue ausente de `agentHostMain.js`).
+  - Parche 23 creado con la extensión de la tabla de descubrimiento (perfil de PiCode +
+    `gentle-pi/{assets/agents,skills}`) — queda como base de la ronda de cableado, que es
+    la pieza M que falta: **conectar el descubrimiento al camino vivo** de
+    personalizaciones del fork (quién publica el snapshot que las sesiones leen).
+  - **Corrección posterior (verificación en el binario)**: la tabla de descubrimiento
+    entera — incluidas las entradas `~/.pi/agent` del parche 07 — **no llega al bundle
+    compilado** (`agentHostMain.js` sin rastro de `~/.pi/agent` ni de la tabla; recompilación
+    completa con el estado incremental borrado, mismo resultado). La clase es código muerto
+    en el build actual: su único importador (`sessionPluginBundler.ts`) solo la usa por
+    tipos. Consecuencia: extenderla no basta — la ronda de cableado debe encontrar el
+    servicio VIVO que lista `/winui-app` (candidatos: `aiCustomizationWorkspaceService.ts`,
+    `agentCustomizationItemProvider.ts`, el sistema de plugins del chat) y enchufar ahí el
+    escaneo de los perfiles de pi (máquina + interno) y del paquete de gentle-pi.
+  - **Verificado en el build final (00:05 → 01:16)**: la clase de descubrimiento sigue
+    fuera del bundle incluso con recompilación completa (`out/tsbuildinfo` borrado) —
+    confirmación definitiva de que está **sin cablear** (nada la importa; el tree-shaking
+    la poda). El parche 23 queda en disco inerte hasta la ronda de cableado. Lo que SÍ
+    viaja en el build: el espejo de skills/agentes de Gentle al perfil + su registro en
+    `chat.agentSkillsLocations` / `chat.agentFilesLocations` — el escáner del chat
+    (`findAgentSkills`) que acepta rutas absolutas tras relajar el patrón del core.
+    **Pendiente de prueba del dueño**: los skills de Gentle en el popup `/` y sus agentes
+    en el selector.
+  - La vista de estado (icono en la barra lateral) también queda para esa ronda: el SDK de
+    pi expone lo necesario (entradas de sesión con `usage`) — investigación hecha.
+  El resto del wizard (pasos 1-2, proveedor/modelo, Gentle con agentes) verificado en el
+  build de las 00:05 y anterior. Sin commitear (CI/CD del dueño en curso).
+- **Ronda 5 (2026-09-26): el wizard se convierte en flujo completo de puesta a punto.**
+  Cuatro pasos: pi → **proveedor y modelo** (solo con el interno; suscripción OAuth vía
+  `picode.connectProvider` o proveedor a mano — proyectado al perfil con el mismo
+  `projectDeclaration` de la fila de ajustes — y la lista de modelos **traída del
+  proveedor**, con una elegida como `default_model` del perfil) → **Gentle AI** (siempre
+  la última versión — npm sin versión fija — y tras instalar, los **23 agentes de
+  gentle-pi** con modelo elegible por agente, escrito en `subagents.json`
+  `model_profiles`, el formato que `agents-config.ts` de gentle-pi parsea) → temas.
+  Con el pi externo: paso de proveedor sustituido por una tarjeta explicativa y Gentle
+  atenuado. Puente nuevo: `wizard-models.ts` (providerAddManual, modelsList, modelDefault,
+  gentleAgents, gentleAgentModels). Sin commitear: el dueño está en el CI/CD.
 - **Defecto del dueño, encontrado en su máquina (2026-09-25): la clave del runtime.**
   "Unable to write to User Settings because picode:picode.pi.runtime is not a registered
   configuration". La causa era mía: la escritura (y la lectura) usaban la clave **completa**
