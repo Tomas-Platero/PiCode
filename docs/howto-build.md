@@ -1,8 +1,8 @@
 # Cómo compilar PiCode desde la fuente
 
-Este documento describe el **camino adicional** que construye PiCode parcheando la fuente
-de VS Code, con el modelo de VSCodium: clonar el commit fijado, aplicar el juego de
-patches heredado, aplicar los patches propios, aplicar la capa de producto y compilar.
+Este documento describe cómo se compila PiCode desde su propia fuente: qué es
+`./picode-source`, qué hace cada fase del build y qué se hace el día que toca traer una
+versión nueva de VS Code.
 
 No sustituye a la release. El **ZIP precompilado** sigue siendo el camino de quien solo
 quiere usar PiCode (`distribution/apply-picode.ps1`, descrito en
@@ -12,72 +12,68 @@ necesita recompilar.
 La diferencia que justifica el trabajo: en el ZIP el producto se parchea sobre un
 `resources/app` ya minificado y con un mapa `checksums` que impide tocar el bundle. Aquí
 el producto se aplica a `picode-source/product.json` **antes** de compilar, los `checksums` se
-calculan sobre el resultado, y un cambio de comportamiento se escribe en TypeScript en
-`patches/picode/`.
+calculan sobre el resultado, y un cambio de comportamiento se escribe en TypeScript, en el
+propio árbol.
+
+**Lo que cambió el 2026-09-27**, y es la razón de que este documento se lea distinto: el árbol
+dejó de ser el resultado desechable de aplicar parches en cada build y pasó a ser **la fuente de
+PiCode**, con sus cambios registrados en su propio git. Ya no hay fase de descarga ni de
+parcheo, y las dependencias se instalan una vez. El detalle está en
+[`odd/tasks/picode-fuente-propia.md`](../odd/tasks/picode-fuente-propia.md).
 
 ## Índice
 
+- [Qué es ./picode-source](#qué-es-picode-source)
 - [La cadena, por capas](#la-cadena-por-capas)
 - [Dependencias en Windows](#dependencias-en-windows)
-- [Los dos pins y cómo volver a fijarlos](#los-dos-pins-y-cómo-volver-a-fijarlos)
 - [Cómo compilar](#cómo-compilar)
-- [Arreglar un patch cuando upstream se mueve](#arreglar-un-patch-cuando-upstream-se-mueve)
-- [Reglas de `patches/picode/`](#reglas-de-patchespicode)
+- [Traer una versión nueva de VS Code](#traer-una-versión-nueva-de-vs-code)
+- [El camino retirado: los parches](#el-camino-retirado-los-parches)
 - [Estado de verificación](#estado-de-verificación)
+
+## Qué es `./picode-source`
+
+El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
+
+```text
+  Microsoft VS Code 1.135.0  (commit 08d4889f, el tag y el commit de upstream/stable.json)
+        │
+        │  el juego de parches heredado   patches/vscodium/**
+        │  (verbatim de la revisión de VSCodium fijada en upstream/vscodium.json)
+        │
+        │  los cambios propios            patches/picode/**
+        │
+        │  la capa de producto            distribution/product-delta.json
+        ▼
+  ./picode-source   ←  esto es PiCode, y aquí se trabaja
+```
+
+Ese trabajo se hizo **una vez** y quedó registrado como un commit en el git del propio árbol.
+A partir de ahí:
+
+- **no se descarga nada**: el árbol ya está;
+- **no se aplica ningún parche**: los cambios son el código;
+- `patches/**` y `upstream/*.json` quedan como **registro de procedencia** y como camino de
+  recuperación, no como entrada del build.
+
+Lo que sigue siendo verdad, y conviene no confundir: `./picode-source` **no puede subirse a este
+repositorio** — `CONTRIBUTING.md` lo prohíbe con todas las letras (*"Microsoft's source must
+never be uploaded to this repository"*). Vive en local, con su propio git dentro. Compartirlo
+exige un repositorio aparte, y esa decisión no está tomada.
 
 ## La cadena, por capas
 
-Cada capa añade algo y ninguna reescribe la anterior. El orden no es negociable.
+Las capas que formaron el árbol, y lo que el build hace hoy con ellas. El orden de las tres
+primeras no es negociable —así se construyó el árbol— pero **el build ya no las ejecuta**.
 
-```text
-  Microsoft VS Code
-  (commit fijado en upstream/stable.json)
-        │
-        │  fase 1 · dev/get_repo.sh: clona/fetch del commit y verifica HEAD
-        ▼
-  ./picode-source              VS Code sin tocar
-        │
-        │  fase 2 · dev/prepare_vscode.sh brand
-        │  (identidad base de VSCodium en product.json + dev/vscodium-product.json)
-        ▼
-  ./picode-source              listo para los patches heredados
-        │
-        │  fase 3 · patches/vscodium/**  (verbatim de upstream/vscodium.json;
-        │           acciones .json de borrado, luego *.patch, luego ${OS_NAME}/)
-        ▼
-  ./picode-source                     con el juego VSCodium aplicado
-        │
-        │  fase 4 · patches/picode/**    (los cambios propios de fuente)
-        ▼
-  ./picode-source                     con los cambios propios
-        │
-        │  fase 5 · distribution/product-delta.json
-        │           (node distribution/apply-product-delta.mjs … --write)
-        ▼
-  ./picode-source/product.json        ya es el producto PiCode
-        │
-        │  fase 6 · npm ci        (dependencias; hasta 5 intentos)
-        │  fase 7 · gulp vscode-min-prepack + recursos + politicas win32
-        │           + gulp vscode-win32-x64-min-packing
-        ▼
-  ./PiCode-Win32-x64/          árbol empaquetado
-        │
-        │  fase 8 · dev/stage-distribution.sh
-        │           (capa distribution/: delta, perfil portable, settings, panel, marcas,
-        │            renombrado PiCode.exe / bin/picode*)
-        ▼
-  ./PiCode-Win32-x64/PiCode.exe
-```
-
-Las capas están separadas a propósito:
-
-| Capa | Fuente de verdad | Qué aporta |
-| --- | --- | --- |
-| Fuente | `upstream/stable.json` | El VS Code exacto sobre el que se compila. |
-| Patches heredados | `patches/vscodium/**` + `upstream/vscodium.json` | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…). |
-| Patches propios | `patches/picode/**` | Cambios de fuente que PiCode necesita y que no son datos. |
-| Producto | `distribution/product-delta.json` | Marca, galería, URLs, poda de claves. Es la **única** fuente de la identidad PiCode. |
-| Empaquetado | `dev/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. |
+| Capa | Fuente de verdad | Qué aportó | ¿La ejecuta el build? |
+| --- | --- | --- | --- |
+| Fuente | `upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
+| Parches heredados | `patches/vscodium/**` + `upstream/vscodium.json` | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…). | No |
+| Cambios propios | `patches/picode/**` | Los cambios de fuente que PiCode necesita y que no son datos. | No |
+| Producto | `distribution/product-delta.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
+| El árbol | `./picode-source` | Todo lo anterior ya aplicado, y es donde se edita. | Es la entrada |
+| Empaquetado | `dev/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. | **Sí** — fase 5 |
 
 ## Dependencias en Windows
 
@@ -88,7 +84,7 @@ Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash
 | --- | --- | --- |
 | **Git for Windows** | Git **y Git Bash**: sin él no hay shell para los scripts. | `winget install --id Git.Git -e` |
 | **Node.js 24.18.0** (lo que dice [`.nvmrc`](../.nvmrc)) | `npm ci` y las tareas gulp. Con nvm-windows: | `nvm install 24.18.0` y luego `nvm use 24.18.0` |
-| **jq** | La fase 2 marca `product.json` con `jq`, y las acciones `.json` lo leen. Sin `jq` en el `PATH`, la preparación falla con un mensaje claro. | `winget install --id jqlang.jq -e` |
+| ~~**jq**~~ | **Ya no hace falta.** El build lee y escribe el JSON que toca con `node`, y desde el 2026-09-27 `dev/pi-runtime.sh` también. Sigue en la lista solo porque el camino retirado (`dev/prepare_vscode.sh`, `dev/utils.sh`) lo usa. | — |
 | **Python 3.11** | Lo pide el sistema de build de VS Code para los módulos nativos (`node-gyp`). Medido: con **3.14.7** `node-gyp` llegó hasta MSBuild sin quejarse, así que la versión **no** fue el obstáculo; 3.11 es lo que documenta upstream y lo recomendable. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compila algunos módulos nativos de VS Code. Reescribe el `PATH` al terminar: reinicia el shell. | [rustup.rs](https://rustup.rs/) o `winget install --id Rustlang.Rustup -e` |
 | **7-Zip** | Empaqueta archivos `.zip`. | `winget install --id 7zip.7zip -e` |
@@ -109,7 +105,7 @@ Se comprueba sin instalar nada:
 ```bash
 VSW="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
 "$VSW" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre -property installationPath
-# sin salida = el componente NO está, y la fase 6 se parará con MSB8040
+# sin salida = el componente NO está, y la instalación de dependencias se parará con MSB8040
 ```
 
 Node también se puede bajar de [nodejs.org](https://nodejs.org/); si se usa el instalador,
@@ -150,83 +146,80 @@ Medido el 2026-09-23. Se deja dicho para que nadie lo dé por hecho:
   llegó de ahí.
 - **`shellcheck` no está** instalado, así que los scripts solo se han validado con `bash -n`.
 
-## Los dos pins y cómo volver a fijarlos
+## Traer una versión nueva de VS Code
 
-El pipeline se apoya en **dos** archivos de pin, y se mueven **juntos**:
+Los dos pines ya **no dirigen el build**: son la procedencia del árbol.
 
-| Pin | Qué fija |
+| Pin | Qué registra |
 | --- | --- |
-| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code**: `tag`, `commit`, `repository`. Es lo que clona la fase 1. |
-| [`upstream/vscodium.json`](../upstream/vscodium.json) | La revisión de **VSCodium** cuyo árbol `patches/` se vendió en `patches/vscodium/`, y de la que sale `dev/vscodium-product.json` (el `product.json` raíz de VSCodium). |
+| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./picode-source`: `tag`, `commit`, `repository`. |
+| [`upstream/vscodium.json`](../upstream/vscodium.json) | La revisión de **VSCodium** de la que se vendorió `patches/vscodium/`, y de la que sale `dev/vscodium-product.json`. |
 
-Los patches heredados no son genéricos: están escritos contra **una** revisión de VS Code
-concreta. Por eso los dos pines forman una pareja y por eso `upstream/vscodium.json` lleva
-la nota de que volver a fijar VS Code sin moverlo es un defecto.
+El día que toque una versión nueva, el trabajo **no** es reaplicar parches: es **juntar las dos
+versiones** dentro del árbol. Eso es exactamente lo que se gana teniendo los cambios como
+código, y es la parte que no se ha ejercitado todavía: **nada de lo de abajo se ha ejecutado**,
+así que se lee como un plan, no como una receta comprobada.
 
-**Modo de fallo si solo se mueve uno:**
+1. Traer el historial hasta el commit nuevo. El árbol se descargó **superficialmente** (un solo
+   commit), y para juntar hacen falta las dos ramas y su ancestro común:
+   `git -C picode-source fetch --unshallow origin`. Es una descarga grande, y se paga una vez.
+2. Juntar: `git -C picode-source merge <commit-nuevo>`. Los conflictos salen uno a uno y con
+   contexto, en vez de un `git apply` que se para sin decir dónde.
+3. Actualizar `tag` y `commit` en `upstream/stable.json`, y re-vendorizar `patches/vscodium/**`
+   y `dev/vscodium-product.json` desde la revisión nueva de VSCodium. `patches/vscodium/**` es
+   verbatim: nunca se edita a mano.
+4. Comprobar que el árbol sigue siendo el que el build espera: `./dev/build.sh -o`.
+5. Compilar y confirmar que arranca.
 
-- **Se mueve `upstream/stable.json` y se deja `upstream/vscodium.json`:** la fase 3 aplica
-  patches escritos para la revisión anterior de VS Code; los hunks que ya no encajan hacen
-  que `git apply` falle y **el build se detiene** ahí (no hay `--reject` en el pipeline: un
-  juego a medias es peor que un build parado). Además, el `dev/vscodium-product.json`
-  vendido puede estar incompleto para las claves nuevas de la fuente.
-- **Se mueve `upstream/vscodium.json` (se vendían patches nuevos) y se deja
-  `stable.json`:** los patches están escritos contra un VS Code más nuevo y fallan contra
-  la fuente vieja, por el mismo motivo en sentido contrario.
+`RELEASE_VERSION` sale de `distribution/product-delta.json` (`set.version`), que es la **única**
+casa de la versión desde que las fases 1-5 se retiraron. `upstream/stable.json` ya no la fija.
 
-**Pasos para volver a fijarlos:**
-
-1. Actualiza `tag` y `commit` en `upstream/stable.json`.
-2. Actualiza `tag` y `commit` en `upstream/vscodium.json`.
-3. Vuelve a vendoriar `patches/vscodium/**` y `dev/vscodium-product.json` desde esa
-   revisión de VSCodium. `patches/vscodium/**` es verbatim: nunca se edita a mano.
-4. Comprueba que componen, sin compilar:
-   ```bash
-   ./dev/build.sh -o
-   find vscode -name '*.rej'   # debe salir vacío
-   ```
-
-`RELEASE_VERSION` sale del `tag` de `upstream/stable.json` (una release real lo fija en el
-entorno y debe ser `X.Y.Z`). Ese valor es con lo que se expande `!!RELEASE_VERSION!!`.
-
-El vigilante semanal de CI abre solo la PR que mueve `upstream/stable.json`: la pareja
-con VSCodium y el re-vendorizado siguen siendo un paso humano. La política (seguridad →
-en pocos días; versión normal → cuando convenga) y los tres workflows están en
-[`docs/CI.md`](CI.md).
+El vigilante semanal de CI que abría la PR con el pin nuevo está **eliminado** con el resto de
+los workflows; [`docs/CI.md`](CI.md) lo explica.
 
 ## Cómo compilar
 
 ```bash
-./dev/build.sh          # cadena completa: fetch, preparar, npm ci, compilar, empaquetar, stage
-./dev/build.sh -o       # solo preparación (fases 1-5): sin npm ci y sin compilar
-./dev/build.sh -s       # reutiliza ./picode-source en vez de descargarlo
+./dev/build.sh          # comprueba la fuente, instala si falta, compila, empaqueta y remata
+./dev/build.sh -o       # solo comprobación: segundos, sin instalar ni compilar
+./dev/build.sh -i       # fuerza la instalación de dependencias aunque el estado cuadre
 ```
 
-- **`./dev/build.sh`** ejecuta las 8 fases. Necesita las dependencias completas de la
-  sección anterior.
-- **`./dev/build.sh -o`** para en la fase 5, sale con código 0 y **no compila nada**. Es la
-  forma de verificar la preparación en un minuto en lugar de tras un build largo.
-- **`./dev/build.sh -s`** reutiliza `./picode-source`. Si el árbol está limpio (descargado pero
-  nunca preparado) pasa por las fases 2–5; si está sucio, se considera **preparado**, se
-  saltan las fases 1–5 y el build continúa en la 6. `-s` verifica además que el `HEAD` de
-  `./picode-source` coincide con el commit del pin.
+- **`./dev/build.sh`** ejecuta las 5 fases. Necesita las dependencias completas de la sección
+  anterior, pero solo la **primera vez**: `npm ci` se repite únicamente cuando el estado que
+  VS Code registró deja de cuadrar, que es lo que responde `dev/deps-current.mjs`.
+- **`./dev/build.sh -o`** para **dentro de la fase 1**, después de comprobar la fuente y la
+  identidad y antes de instalar nada; sale con código 0 y **no compila nada**. En la
+  práctica son segundos, y es la forma de saber que el árbol es el correcto antes de pagar un
+  build largo.
+- **`-f` no existe**, y a propósito: borraba `./picode-source`. Ese árbol es la fuente y el único
+  sitio donde existe; el flag da error y lo explica.
+- **`-s`** se acepta con un aviso: significaba "reutiliza el árbol en vez de descargarlo", y desde
+  el 2026-09-27 eso es lo único que puede pasar.
 
-`OS_NAME` se deriva de `OSTYPE` (Git Bash → `windows`) y es **obligatorio**: un `OSTYPE`
-del que no se pueda derivar `windows`, `osx` o `linux` es un error duro, porque el stage de
-patches acabaría haciendo glob de `patches/vscodium//*.patch` y aplicando el juego de
-arriba dos veces.
+`OS_NAME` se deriva de `OSTYPE` (Git Bash → `windows`) y es **obligatorio**: un `OSTYPE` del que
+no se pueda derivar `windows`, `osx` o `linux` es un error duro.
 
 **Dónde queda todo:**
 
 | Ruta | Qué es |
 | --- | --- |
-| `./picode-source` | El clon de la fuente, ya preparado (fases 1–5). `-o` lo deja así y para. |
-| `./PiCode-Win32-x64` | La salida del empaquetado (fase 7). |
+| `./picode-source` | **La fuente de PiCode.** Se edita. Su git es suyo, dentro de la carpeta. |
+| `./PiCode-Win32-x64` | La salida del empaquetado (fases 4 y 5). |
 | `./PiCode-Win32-x64/PiCode.exe` | El ejecutable construido desde fuente. |
 
-`./picode-source` y `./VSCode-*` están en `.gitignore`: la fuente y la salida nunca se versionan.
+`./picode-source` y `./PiCode-*` están en el `.gitignore` de **este** repositorio: el árbol se
+versiona en su propio git, y `CONTRIBUTING.md` prohíbe subir la fuente de Microsoft aquí.
 
-### Qué se ha ejecutado y qué no
+### Qué se midió cuando el build se hacía con parches
+
+Esta lista es del camino **retirado** (las fases de descarga y parcheo). Se conserva porque fue
+el trabajo real de verificación de aquella cadena y porque los defectos que encontró —sobre todo
+el del icono— siguen siendo verdad hoy.
+
+**Aviso sobre la numeración:** los números de fase que aparecen aquí (y en todo el apartado
+retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y en él
+"compilar y empaquetar" ya no es la fase 7.
 
 - `./dev/build.sh -o` se ha ejecutado **dos veces**, salida **0** las dos, con
   **50 patches aplicados** (43 de `patches/vscodium/*.patch`, 6 de
@@ -257,95 +250,77 @@ arriba dos veces.
   `ExtractAssociatedIcon` devuelve un bitmap reescalado, no el frame nativo — comparar así
   da «distintos» con el icono correcto puesto.
 
-## Arreglar un patch cuando upstream se mueve
+## El camino retirado: los parches
 
-Cuando se mueve el pin, algún patch deja de aplicar. El flujo es el de VSCodium, adaptado a
-que los patches viven en `patches/picode/`.
+Nada de esto lo ejecuta el build. Se conserva porque es el registro de cómo se hizo el árbol
+actual, y porque es la alternativa si algún día se prefiere rehacer la fuente en vez de juntarla.
 
-> **Antes de nada:** si el patch que falla está en `patches/vscodium/**`, **no se arregla a
-> mano**. Ese árbol es vendido verbatim: se vuelve a vendoriar desde la nueva revisión de
-> VSCodium. `./dev/patch.sh` y `./dev/update_patches.sh` trabajan **solo** sobre
-> `patches/picode/`.
+- **`patches/picode/**`** — los cambios propios, 22 ficheros. Con ellos se construyó el árbol.
+  Editar aquí **no cambia nada**: el build lee el árbol, no los parches. Si un cambio tiene que
+  llegar al producto, se escribe en `./picode-source`.
+- **`patches/vscodium/**`** — material heredado, vendido verbatim de VSCodium. Nunca se edita a
+  mano: se vuelve a vendoriar desde la revisión nueva.
+- **`dev/get_repo.sh` / `dev/prepare_vscode.sh`** — descargaban la fuente, la marcaban y
+  aplicaban las dos familias de parches, en el orden: acciones `.json` de borrado, `*.patch`
+  ordenados con la localización C, `patches/*/${OS_NAME}/*.patch`, `patches/*/user/*.patch`.
+  Cada parche se aplicaba con `git apply --ignore-whitespace`, y si uno no aplicaba el build se
+  paraba (no había `--reject`: un juego a medias es peor que un build parado).
+- **`dev/patch.sh` / `dev/update_patches.sh`** — el ciclo de autoría de un parche, sobre el
+  índice de git. **Ya no funcionan tal cual:** tratan el índice como estado de referencia y
+  resetean a `HEAD`, y ahora `HEAD` **es** el árbol preparado, así que un reset aterriza en el
+  árbol parcheado y no en VS Code virgen. Para usarlos hay que partir del commit virgen
+  registrado (`08d4889f`, VS Code 1.135.0).
 
-### Semiautomático
+**Los sufijos `.patch.no` y `.patch.yet`:** un parche solo se aplica si su nombre termina en
+`.patch`; los que acaban en `.patch.no` o `.patch.yet` quedan inactivos **por nombre** y el glob
+los salta. Renombrar es cómo se habilita o deshabilita uno. (Única excepción, heredada de
+VSCodium: `patches/vscodium/00-update-disable.patch.yet` se aplicaba explícitamente solo con
+`DISABLE_UPDATE=yes`, que el build no fija.)
 
-- Ejecuta `./dev/build.sh`; si un patch falla,
-- ejecuta `./dev/update_patches.sh`;
-- cuando el script se pare en `Press any key when the conflicts have been resolved...`,
-  abre el directorio `vscode` en un PiCode (o VSCodium);
-- arregla todos los ficheros `*.rej`;
-- ejecuta `npm run watch`;
-- ejecuta `./script/code.sh` hasta que todo funcione;
-- vuelve a la terminal y pulsa una tecla para que el script reescriba los patches.
+## Reglas de `patches/picode/` (para el archivo, no para el trabajo)
 
-El baseline sobre el que se regeneran es el baseline real del pipeline (fases 2–5,
-patches heredados incluidos), y la referencia es el índice de git: no se crean commits
-desechables en el clon.
+Siguen valiendo si algún día se rehace la fuente desde cero o se añade un parche al juego
+heredado:
 
-### Manual
-
-- Ejecuta `./dev/build.sh`; si un patch falla,
-- ejecuta `./dev/patch.sh <name>.patch`, donde `<name>.patch` es el patch que falló;
-- abre `vscode` en una ventana nueva de PiCode (o VSCodium);
-- arregla los `*.rej`;
-- ejecuta `npm run watch`;
-- ejecuta `./script/code.sh` hasta que todo funcione;
-- vuelve a la terminal del `./dev/patch.sh`, pulsa **ENTER** para validar y reescribir el
-  patch.
-
-### Los sufijos `.patch.no` y `.patch.yet`
-
-Un patch solo se aplica si su nombre termina en **`.patch`**. Los ficheros que acaban en
-`.patch.no` o `.patch.yet` están **inactivos por nombre** y el glob los salta. La forma de
-habilitar o deshabilitar un patch es, por tanto, renombrarlo.
-
-(Única excepción, heredada de VSCodium: `patches/vscodium/00-update-disable.patch.yet` se
-aplica explícitamente solo si `DISABLE_UPDATE=yes`, que el build por defecto no fija.)
-
-## Reglas de `patches/picode/`
-
-- **Un concepto por patch.** Nombre `NN-<area>-<qué-hace>.patch`, con el número fijando el
-  orden de aplicación.
-- **Solo cambios de fuente.** Si algo se puede hacer con `distribution/product-delta.json`,
-  se hace allí; un patch aquí es el último recurso. Por eso la carpeta es pequeña.
-- **Misma plantilla que el juego heredado.** `dev/utils.sh` expande `!!APP_NAME!!` y
-  compañía en una **copia temporal** del patch antes de aplicarlo; el fichero de
-  `patches/picode/` nunca se reescribe. Los placeholders solo pueden aparecer en líneas
-  añadidas, que es lo que permite aplicar el patch tal cual mientras se edita.
-
-  | Placeholder | Valor |
-  | --- | --- |
-  | `!!APP_NAME!!` | `PiCode` |
-  | `!!APP_NAME_LC!!` | `picode` |
-  | `!!ASSETS_REPOSITORY!!`, `!!GH_REPO_PATH!!` | `TomasPlatero/PiCode` |
-  | `!!BINARY_NAME!!` | `picode` |
-  | `!!GLOBAL_DIRNAME!!` | `picode` |
-  | `!!ORG_NAME!!` | `TomasPlatero` |
-  | `!!RELEASE_VERSION!!` | el `tag` de `upstream/stable.json` |
-  | `!!TUNNEL_APP_NAME!!` | `picode-tunnel` |
-
+- **Un concepto por patch.** Nombre `NN-<area>-<qué-hace>.patch`, con el número fijando el orden
+  de aplicación.
+- **Solo cambios de fuente.** Lo que se pueda hacer con `distribution/product-delta.json` se hace
+  allí; un parche es el último recurso. Por eso la carpeta es pequeña.
 - **Prefijos `a/` y `b/`**, saltos de línea LF y contenido ASCII.
 - **Nunca se edita `patches/vscodium/`.** Es material heredado y vendido verbatim.
-- En la fase 4 el orden es: acciones `.json` de borrado, `*.patch` ordenados con la
-  localización C, `patches/picode/${OS_NAME}/*.patch`, `patches/picode/user/*.patch`.
-  Cada patch se aplica con `git apply --ignore-whitespace`; si uno no aplica, el build se
-  para (no hay `--reject` en el pipeline).
 
-Para autorar uno:
+Los placeholders `!!APP_NAME!!` y compañía eran de este camino: `dev/utils.sh` los expandía en
+una **copia temporal** del parche antes de aplicarlo, y por eso el fichero de `patches/picode/
+nunca se reescribía. Hoy **nada los expande**. Los valores que tomaban eran `PiCode`, `picode`,
+`TomasPlatero/PiCode`, `TomasPlatero`, `picode-tunnel`, y para `!!RELEASE_VERSION!!` el `tag` de
+`upstream/stable.json`.
 
-```bash
-./dev/build.sh -o            # una vez, para tener ./picode-source preparado
-./dev/patch.sh 00-my-change  # resetea, rehace el baseline, aplica, edita, regenera
-./dev/update_patches.sh      # regenera todos los patches en orden
-```
-
-El pipeline avisa: **`patches/**` no se escribe** salvo por `patch.sh` /
-`update_patches.sh`, cuando el desarrollador se lo pide. `distribution/**`,
-`extensions/**` y `.git/**` no se tocan.
+El pipeline avisaba: **`patches/**` no se escribía** salvo por `patch.sh` /
+`update_patches.sh`, cuando el desarrollador se lo pedía. `distribution/**`,
+`extensions/**` y `.git/**` no se tocaban.
 
 ## Estado de verificación
 
-**Medido en esta máquina (2026-09-23):**
+### La fuente propia (2026-09-27): lo que se midió al retirar las fases 1-5
+
+- El árbol preparado se registró como commit en el git de `./picode-source` (`5945775f`, sobre
+  el commit virgen `08d4889f`). Después de eso `git status` queda **limpio**: las 5.053 rutas
+  borradas, las 327 modificadas y las 40 añadidas pasan a ser historial.
+- La comprobación de fuente y de identidad de la fase 1 se ejecutó contra el árbol real y pasa:
+  nombre de producto, nombre de compañía en `electron.ts`, icono de Windows que lee el
+  empaquetador, manifiesto del servidor y conector, todo presente.
+- `dev/deps-current.mjs` se ejecutó contra el estado real y respondió que **cuadra** (node
+  24.19.0). Eso es lo que permite que `npm ci` no vuelva a correr.
+- `bash -n` y el análisis estático de los scripts tocados salen limpios; `docs/CI.md` avisa de
+  que los workflows ya no existen y el proceso de release es manual.
+- **No medido:** la compilación y el empaquetado completos con el build nuevo. Tardan horas y no
+  se han ejecutado en esta sesión. El primer build real es quien lo confirma, y hasta entonces
+  esto no está verificado de punta a punta.
+
+### El camino retirado (medido el 2026-09-23)
+
+También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta de producto y
+"la fase 7" la compilación y el empaquetado.
 
 - La composición de patches aplica limpia sobre la fuente fijada: el juego de VSCodium
   (43 + 6) más `patches/picode/` dan `exit 0` y **cero `.rej`**. Se reprodujo tres veces en

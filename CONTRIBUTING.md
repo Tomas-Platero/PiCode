@@ -18,8 +18,8 @@ Three things to read before anything else:
 | --- | --- | --- |
 | Use PiCode | nothing — download a release | [Releases](https://github.com/Tomas-Platero/PiCode/releases) |
 | Change branding, defaults, or what is removed from the product | `distribution/product-delta.json` and the apply scripts | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) |
-| Change editor behaviour | `patches/picode/` (TypeScript patches against the pinned VS Code source) | [docs/howto-build.md](docs/howto-build.md) |
-| Change the agent integration | the core connector and agent host under `picode-source/extensions/picode/`, produced by patches | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Change editor behaviour | `picode-source/` — the TypeScript itself (`patches/picode/` is the record of how the current source was made, not the place to edit) | [docs/howto-build.md](docs/howto-build.md) |
+| Change the agent integration | the core connector and agent host under `picode-source/extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Fix the pipeline | `dev/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
 
 ## Building from source
@@ -27,30 +27,39 @@ Three things to read before anything else:
 The scripts are **Bash** — on Windows run them from Git Bash, PowerShell will not work.
 
 ```bash
-./dev/build.sh          # full chain: fetch, patch, compile, pack, stage
-./dev/build.sh -o       # preparation only (phases 1-5), no compile — this is what CI's
-                        # pin-check runs, and it takes minutes, not the 20-45 of a build
-./dev/build.sh -s       # reuse ./picode-source instead of re-fetching
+./dev/build.sh          # check the source, install what is missing, compile, pack, stage
+./dev/build.sh -o       # check the source only: seconds, nothing installed or compiled
+./dev/build.sh -i       # install the dependencies even when the recorded state still matches
 ```
 
-Dependencies (Windows): Git for Windows, Node matching `.nvmrc`, jq, Python 3.11, Rustup,
+`./picode-source` is PiCode's own source, not a download: it already carries the VSCodium
+patch set, PiCode's changes and the PiCode product identity, and it is committed **in its own
+git repository inside that folder**. The PiCode repository ignores it. Building is therefore
+local work on the tree: there is no fetch and no patch step to wait for, and the dependencies
+are installed once instead of on every build.
+
+Dependencies (Windows): Git for Windows, Node matching `.nvmrc`, Python 3.11, Rustup,
 and Visual Studio 2022 with the **Spectre-mitigated libraries** — without that component the
 native modules stop with `error MSB8040`. The authoritative list of checks lives in
 [`dev/build-requirements.mjs`](dev/build-requirements.mjs); run it and it tells you what this
-machine is missing.
+machine is missing. `jq` is no longer needed by the build: the JSON it touches is read and
+written by node.
 
 There is also a graphical front-end, [`builder/`](builder/README.md) (C# / WinUI 3, drives the
 same scripts; needs only the .NET SDK).
 
-Nothing under `picode-source/` or `PiCode-*` is ever committed — they are build outputs and
-git ignores them. **Microsoft's source must never be uploaded to this repository.**
+`picode-source/` is **not** a build output any more: it is the source, and it carries its own
+git history. `PiCode-*` still is a build output and is ignored. **Microsoft's source must never
+be uploaded to this repository** — which is why the tree is kept out of it and, when it has to
+be shared, goes to a repository of its own.
 
 ## The two pins
 
-`upstream/stable.json` (the VS Code commit) and `upstream/vscodium.json` (the VSCodium
-revision whose patches are vendored verbatim under `patches/vscodium/`) move **together**.
-Re-pinning VS Code without re-vendoring the VSCodium patch set is considered a defect, and
-`patches/vscodium/**` is never hand-edited — it mirrors upstream exactly.
+`upstream/stable.json` (the VS Code commit the tree descends from) and `upstream/vscodium.json`
+(the VSCodium revision whose patches are vendored verbatim under `patches/vscodium/`) record
+where the current source came from. They no longer drive the build — nothing is fetched or
+patched — but they are the provenance of the tree and the starting point for the day a newer
+VS Code is brought in. `patches/vscodium/**` is never hand-edited: it mirrors upstream exactly.
 
 If a patch stops applying, CI's pin-check goes red and names the patch. The repair process
 (semi-automatic and manual) is documented in

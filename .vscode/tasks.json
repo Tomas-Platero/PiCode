@@ -54,8 +54,8 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "PiCode: prepare the source tree",
-			"detail": "Fetches the pinned VS Code source and applies every patch, without compiling",
+			"label": "PiCode: check the source tree",
+			"detail": "Confirms the tree is the PiCode source and the identity is in place. Seconds.",
 			"type": "shell",
 			"command": "bash dev/build.sh -o",
 			"options": {

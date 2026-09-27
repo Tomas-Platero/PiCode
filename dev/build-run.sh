@@ -16,11 +16,10 @@
 #
 # Usage: dev/build-run.sh [build.sh flags...]        (default: the whole build)
 #
-# With no flags it runs `dev/build.sh` with no flags: fetch the source if it is not there, prepare
-# it, install, compile, pack and stage. That is what "build" means to a person, and it is safe to
-# repeat — the preparation is skipped when the tree is already prepared. `-s` is the other thing:
-# reuse the tree *as it is*, which is only right when you know it is prepared, and which fails
-# outright when the tree is not there at all.
+# With no flags it runs `dev/build.sh` with no flags: check the source, install what is missing,
+# compile, pack and stage. That is what "build" means to a person, and it is safe to repeat —
+# the source is never fetched and the dependencies are installed once, so a repeat build is
+# compile and pack and nothing else.
 #
 # One at a time: a second runner refuses to start while the lock is alive, because two builds in one
 # tree fight over `node_modules` and over the directory they pack into.

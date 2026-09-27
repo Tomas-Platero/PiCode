@@ -16,7 +16,7 @@
 # The version is pinned in `distribution/runtime.json` and not taken from `latest`: an editor
 # built today must behave the same in six months.
 #
-# Run from the repository root, by `dev/build.sh` (phase 8), not by hand.
+# Run from the repository root, by `dev/build.sh` (phase 7), not by hand.
 
 set -eo pipefail
 
@@ -28,10 +28,12 @@ if [[ ! -f "${PIN}" ]]; then
   exit 2
 fi
 
-PACKAGE=$( jq -r '.package' "${PIN}" )
-VERSION=$( jq -r '.version' "${PIN}" )
+# Read with node rather than jq. This was the last place in the build that wanted jq, and the
+# build should not ask a collaborator to install a tool for two lines of JSON.
+PACKAGE=$( node -p "require('./distribution/runtime.json').package" )
+VERSION=$( node -p "require('./distribution/runtime.json').version" )
 
-if [[ -z "${PACKAGE}" || "${PACKAGE}" == "null" || -z "${VERSION}" || "${VERSION}" == "null" ]]; then
+if [[ -z "${PACKAGE}" || "${PACKAGE}" == "null" || "${PACKAGE}" == "undefined" || -z "${VERSION}" || "${VERSION}" == "null" || "${VERSION}" == "undefined" ]]; then
   echo "error: ${PIN} must declare a package and a version." >&2
   exit 2
 fi

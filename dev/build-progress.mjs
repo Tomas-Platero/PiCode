@@ -46,18 +46,19 @@ const logFile = args.find(argument => !argument.startsWith('--')) ?? newestLog()
 /**
  * The stages, in order, with how much of the work each one is.
  *
- * The weights come from the runs on this machine (a `-s` rebuild: dependencies and the core
- * compile are the two big ones; the pack is the third) and the `because` line is what makes the
- * bar move inside a stage that has no marker of its own.
+ * The weights come from the runs on this machine (the core compile and the pack are the two big
+ * ones, and they always run; the dependency install is the third, and it is skipped when nothing
+ * that affects it changed) and the `because` line is what makes the bar move inside a stage that
+ * has no marker of its own.
  */
 const STAGES = [
 	{
-		id: 'prepare', label: 'Preparing the source', weight: 4, expectedSeconds: 60,
-		detail: 'Fetching the pinned VS Code source and applying every patch. Nothing is compiled yet.'
+		id: 'prepare', label: 'Checking the source', weight: 2, expectedSeconds: 10,
+		detail: 'Confirming the tree is the PiCode source, already branded. Seconds: nothing is downloaded or patched here any more.'
 	},
 	{
 		id: 'dependencies', label: 'Getting the pieces it needs', weight: 30, expectedSeconds: 300,
-		detail: 'Downloading and installing the packages the editor is built with. This is the longest step.'
+		detail: 'Installing the packages the editor is built with. It runs once: when nothing that affects them changed, it is skipped.'
 	},
 	{
 		id: 'connector', label: 'Compiling the connector', weight: 3, expectedSeconds: 20,
@@ -96,12 +97,12 @@ function readLog(text) {
 	}
 
 	const markers = [
-		{ index: 0, pattern: /== phase 1\/8|== phases 2-5/ },
-		{ index: 1, pattern: /== phase 6\/8|npm ci|Installing dependencies/ },
-		{ index: 2, pattern: /== phase 6b\/8|connector compiled/ },
+		{ index: 0, pattern: /== phase 1\/5|the source carries the PiCode identity/ },
+		{ index: 1, pattern: /  -- dependencies|npm ci|Installing dependencies|the dependencies are the ones/ },
+		{ index: 2, pattern: /== phase 2\/5|connector compiled/ },
 		{ index: 3, pattern: /Starting compile-src|Starting .*compilation/ },
 		{ index: 4, pattern: /Finished compile-src|Bundled extension:|Packing/ },
-		{ index: 5, pattern: /== phase 8\/8|--- step [0-9]\/6|staging complete/ },
+		{ index: 5, pattern: /== phase 5\/5|--- step [0-9]\/6|staging complete/ },
 	];
 
 	// The furthest stage that has left its mark wins. Not the marker that appears latest in the text:

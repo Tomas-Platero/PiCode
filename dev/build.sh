@@ -1,40 +1,33 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1091
 #
-# PiCode's source-build entry point (VSCodium's model: patch the source, not the
-# binary).
+# PiCode's build.
 #
-#   ./dev/build.sh        fetch, prepare, install, compile, stage
-#   ./dev/build.sh -o     stop after the preparation (no npm install, no compile)
-#   ./dev/build.sh -s     reuse the existing ./picode-source instead of fetching it
+# The editor's source is PiCode's own and it lives in ./picode-source: it already carries
+# the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity,
+# recorded in that tree's history. See odd/tasks/picode-fuente-propia.md.
 #
-# Adapted from VSCodium's `dev/build.sh` at the revision pinned in
-# `upstream/vscodium.json`. Where it differs:
+#   ./dev/build.sh        install what is missing, compile, pack, stage
+#   ./dev/build.sh -o     check the source and stop (seconds; nothing installed or compiled)
+#   ./dev/build.sh -i     install the dependencies even when the recorded state still matches
+#   ./dev/build.sh -h     this text
 #
-#   * PiCode sets its own identity here (APP_NAME, BINARY_NAME, ORG_NAME, the
-#     asset and GitHub paths, GLOBAL_DIRNAME, TUNNEL_APP_NAME). VSCodium derives
-#     the same variables from an `-i` insider flag and its own constants.
-#   * Only `-o` and `-s` exist. The `-i` (insider), `-l` (latest) and `-p`
-#     (assets) flags of VSCodium build what PiCode does not publish; the
-#     prebuilt-ZIP release path is `distribution/apply-picode.ps1` and is
-#     untouched.
-#   * An unknown OSTYPE is a hard error. In the vendored script an unset OSTYPE
-#     falls through to `linux`, which here would silently glob
-#     `patches/vscodium//*.patch` and apply the whole top-level set twice.
-#   * The phases are PiCode's: fetch, brand, VSCodium patches, PiCode patches,
-#     package metadata, product delta, built-in extension + npm ci, compile+pack,
-#     stage. VSCodium folds preparation into `prepare_vscode.sh` and stops there.
-#   * `-o` stops after phase 5 and does not compile, so the preparation can be
-#     verified without a 20-minute build.
+# What this script deliberately does NOT do any more, and why:
 #
-# `-s` reuses `./picode-source` as it is:
-#   * a clean tree (freshly fetched, never prepared) goes through phases 2-5;
-#   * a dirty tree is a *prepared* tree, so phases 1-5 are skipped and the build
-#     resumes at phase 6, which is what VSCodium's SKIP_SOURCE does.
+#   * It does not fetch VS Code. dev/get_repo.sh is kept for the day a newer VS Code has to be
+#     brought in, and that day the job is a merge against ./picode-source, not a re-fetch.
+#     Downloading a tree and rebuilding it from patches on every run was the work this
+#     replaced: those phases are done once and kept.
+#   * It does not apply patches. patches/** is the record of how the current source was made.
+#     Editing PiCode means editing ./picode-source.
+#   * It does not re-brand the Windows icons. They are in the tree, committed. Replacing
+#     distribution/picode.ico and getting it into the executable is what
+#     `dev/prepare_vscode.sh metadata` does, and phase 1 refuses a tree whose icon is missing
+#     rather than shipping the previous one in silence.
+#   * It does not use jq. The JSON this script touches is read and written by node.
 #
-# Nothing in this pipeline writes to `patches/**`, `distribution/**`,
-# `extensions/**` or `.git/**`: the patch templates are expanded into a temporary
-# copy (`dev/utils.sh`).
+# The phases are PiCode's: prepare (the source, the identity and the dependencies), the
+# connector, compile, pack, stage. `-o` stops inside the first one.
 
 set -eo pipefail
 
@@ -53,7 +46,8 @@ export VSCODE_QUALITY="stable"
 export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
-# The gulp tasks need a heap that fits the runner. Two measurements drove this:
+
+# The gulp tasks need a heap that fits the machine. Two measurements drove this:
 # - Windows overflowed an 8192 MB heap with SIGABRT ("Ineffective mark-compacts
 #   near heap limit") at ~7.4 GB, right after the TypeScript compile finished
 #   with 0 errors; the Windows runner has 16 GB, so 12288 fits.
@@ -62,10 +56,10 @@ export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
 #   ~9 minutes into compile-src: `free -m` measured 7938 MB TOTAL on the runner,
 #   so node's heap plus the runner agent plus the OS do not fit above ~6 GB.
 # VS Code's own `npm run gulp` hardcodes --max-old-space-size=8192 in its
-# package.json script and a CLI flag beats NODE_OPTIONS, so phase 7 invokes gulp
-# with node directly instead of through npm.
-# An explicit NODE_HEAP_MB (the CI workflow sets it for the larger runner)
-# wins; otherwise the per-OS default applies.
+# package.json script and a CLI flag beats NODE_OPTIONS, so the compile and pack
+# phases invoke gulp with node directly instead of through npm.
+# An explicit NODE_HEAP_MB (a CI workflow sets it for a larger runner) wins;
+# otherwise the per-OS default applies.
 case "${OSTYPE}" in
   msys* | cygwin*)
     NODE_HEAP_MB="${NODE_HEAP_MB:-12288}"
@@ -76,37 +70,44 @@ case "${OSTYPE}" in
 esac
 export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP_MB}"
 
-REUSE_TREE="no"
-SKIP_COMPILE="no"
-FRESH_TREE="no"
+CHECK_ONLY="no"
+FORCE_INSTALL="no"
 
 usage() {
   cat <<'EOF' >&2
-usage: ./dev/build.sh [-f] [-s] [-o]
+usage: ./dev/build.sh [-o] [-i]
 
-  (no flag)  use ./picode-source if it is there, and fetch it if it is not
-  -f         fetch it fresh: the tree that is there is removed and downloaded again
-  -s         reuse the existing ./picode-source instead of fetching it
-  -o         stop after the preparation (phase 5); no npm install, no compile
+  (no flag)  check the source, install what is missing, compile, pack and stage
+  -o         check the source and the identity, then stop (nothing is installed
+             or compiled; this is the seconds-long sanity check)
+  -i         install the dependencies even when the recorded state still matches
 EOF
 }
 
-while getopts ":fsoh" opt; do
+while getopts ":oihs" opt; do
   case "$opt" in
-    f)
-      FRESH_TREE="yes"
-      ;;
-    s)
-      REUSE_TREE="yes"
-      ;;
     o)
-      SKIP_COMPILE="yes"
+      CHECK_ONLY="yes"
+      ;;
+    i)
+      FORCE_INSTALL="yes"
       ;;
     h)
       usage
       exit 0
       ;;
+    s)
+      echo "note: -s is no longer needed. The source is never fetched, so it is always"
+      echo "      the ./picode-source that is here. Continuing."
+      ;;
     *)
+      if [[ "${OPTARG}" == "f" ]]; then
+        echo "error: -f is gone, and for a good reason: it used to delete ./picode-source." >&2
+        echo "       That tree is PiCode's own source now, and this repository is the only" >&2
+        echo "       place it exists. To bring in a newer VS Code, merge it into the tree" >&2
+        echo "       (docs/howto-build.md) instead of throwing the tree away." >&2
+        exit 2
+      fi
       echo "error: unknown option -${OPTARG}" >&2
       usage
       exit 2
@@ -115,8 +116,7 @@ while getopts ":fsoh" opt; do
 done
 
 # ---------------------------------------------------------------------------
-# OS_NAME. Mandatory: `patches/vscodium/${OS_NAME}/` and
-# `patches/picode/${OS_NAME}/` are selected with it.
+# OS_NAME. Mandatory: it selects what is packed and what the output is called.
 # ---------------------------------------------------------------------------
 case "${OSTYPE}" in
   msys* | cygwin*)
@@ -130,7 +130,7 @@ case "${OSTYPE}" in
     ;;
   *)
     echo "error: OSTYPE is '${OSTYPE}', and no OS_NAME can be derived from it." >&2
-    echo "       The patch stage needs it to pick patches/<set>/\${OS_NAME}/*.patch." >&2
+    echo "       Windows and Linux builds are set up; macOS is not (see docs/howto-build.md)." >&2
     exit 2
     ;;
 esac
@@ -145,7 +145,7 @@ fi
 
 # The pack directory, named for the product and for the system being packed. The task that writes it
 # is `vscode-<platform>-<arch>-min-packing`, and the directory name is set in the gulpfiles
-# (`patches/picode/16` and `17`), so the two have to agree: this is the same table.
+# (`patches/picode/16` and `17`, applied in the tree), so the two have to agree: this is the same table.
 case "${OS_NAME}" in
   windows)
     PACK_PLATFORM="win32"
@@ -166,8 +166,9 @@ esac
 echo "OS_NAME=\"${OS_NAME}\""
 echo "VSCODE_ARCH=\"${VSCODE_ARCH}\""
 echo "VSCODE_QUALITY=\"${VSCODE_QUALITY}\""
-echo "REUSE_TREE=\"${REUSE_TREE}\""
-echo "SKIP_COMPILE=\"${SKIP_COMPILE}\""
+echo "CHECK_ONLY=\"${CHECK_ONLY}\""
+echo "FORCE_INSTALL=\"${FORCE_INSTALL}\""
+echo "NODE_HEAP_MB=\"${NODE_HEAP_MB}\""
 
 require_tool() {
   if ! command -v "$1" > /dev/null 2>&1; then
@@ -177,211 +178,197 @@ require_tool() {
   fi
 }
 
-require_tool jq "The product branding stage rewrites picode-source/product.json with jq (install jq)."
-require_tool git "The source is fetched and patched with git."
-require_tool node "The product delta is applied by node, and the build runs npm."
+require_tool node "The build runs npm and the gulp tasks through node, and it reads and writes the product JSON with it."
+require_tool npm "The dependencies are installed with npm."
+require_tool git "The source tree is a git repository, and a newer VS Code is brought in as a merge."
 
-# ---------------------------------------------------------------------------
-# Is ./picode-source already a prepared tree?
 # ---------------------------------------------------------------------------
 # Whatever happens, this script leaves its verdict behind: builds started by hand - not through
 # dev/build-run.sh, which writes the same file - are the ones the window and the terminal viewer read.
 # Without this, a successful command-line build was invisible to every front-end.
 # The status file is anchored to the repository root on purpose: the build `cd`s into
-# picode-source for phases 6-7, and a failure there used to make this trap try to write
-# into picode-source/.scratch, which does not exist ("No such file or directory") and the
-# real exit code was lost with it.
+# picode-source for the dependency and compile phases, and a failure there used to make this trap
+# try to write into picode-source/.scratch, which does not exist ("No such file or directory")
+# and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
 trap 'printf "%s" "$?" > "${ROOT_DIR}/.scratch/build.status"' EXIT
 
-TREE_PREPARED="no"
-
-# An existing tree is finished work. With no flags it is reused: fetching it again is now something to
-# ask for with -f. Deleting it unasked is how twenty minutes of a prepared tree, dependencies and all,
-# disappeared, because the documentation said the flagless build reused what was already there while
-# the script removed it.
-if [[ "${REUSE_TREE}" != "yes" && "${FRESH_TREE}" != "yes" && -d "./picode-source/.git" ]]; then
-  echo "note: ./picode-source is already here and is being reused (-f fetches it again)"
-  REUSE_TREE="yes"
-fi
-
-if [[ "${REUSE_TREE}" == "yes" && -d "./picode-source/.git" ]]; then
-  if [[ -n "$( git -C ./picode-source status --porcelain )" ]]; then
-    TREE_PREPARED="yes"
-  fi
-fi
-
 # ---------------------------------------------------------------------------
-# Phase 1 - fetch the source
+# Phase 1 - the source
 # ---------------------------------------------------------------------------
+# The three things that leave the tree ready to compile, in one phase because they are one job:
+# confirm the tree is PiCode's, put the product identity on it, and install what it needs. Of the
+# three, only the install can be long, and only the first time it runs.
 echo ""
-echo "== phase 1/8 - fetch the pinned VS Code source"
+echo "== phase 1/5 - prepare (the source, the identity, the dependencies)"
 
-if [[ "${TREE_PREPARED}" == "yes" ]]; then
-  echo "skipped: ./picode-source is already prepared (reused by -s)"
-elif [[ "${REUSE_TREE}" == "yes" ]]; then
-  . ./dev/get_repo.sh --reuse
-else
-  for stale in ./picode-source ./PiCode-* ./VSCode-* ./vscode-*; do
-    if [[ -e "${stale}" ]]; then
-      echo "removing ${stale}"
-      rm -rf -- "${stale}"
-    fi
-  done
-
-  . ./dev/get_repo.sh --fetch
+if [[ ! -d ./picode-source ]]; then
+  echo "error: ./picode-source is missing." >&2
+  echo "       It is PiCode's own copy of the editor's source and this script does not download" >&2
+  echo "       it any more. See docs/howto-build.md for how the tree is brought in and kept." >&2
+  exit 2
 fi
 
-if [[ "${TREE_PREPARED}" != "yes" ]]; then
-  . ./dev/version.sh
-  echo "RELEASE_VERSION=\"${RELEASE_VERSION}\""
-  echo "BUILD_SOURCEVERSION=\"${BUILD_SOURCEVERSION}\""
-else
-  # The pins are still needed by the phases below; deriving them reads no network.
-  . ./dev/get_repo.sh --reuse
-  . ./dev/version.sh
+if [[ ! -f ./picode-source/product.json || ! -f ./picode-source/package.json ]]; then
+  echo "error: ./picode-source is not a prepared tree (product.json or package.json is missing)." >&2
+  exit 2
 fi
 
-# ---------------------------------------------------------------------------
-# PiCode's own product version
-# ---------------------------------------------------------------------------
-# The updater compares `product.json.version` — which the packer injects from
-# `package.json.version` — against the feed's `productVersion`. Sealing the raw VS Code
-# tag made every PiCode release report the same version, so a newer PiCode could never
-# look newer than an older one.
-#
-# The version has ONE home: `set.version` in `distribution/product-delta.json`. Both paths
-# already apply that file — this build in phase 5, and `distribution/apply-picode.ps1` onto
-# the packaged tree — so the compiled editor and the released one cannot disagree. Bumping
-# a release is editing that one value.
-#
-# The major.minor stay VS Code's on purpose: every extension's `engines.vscode`
-# (e.g. `^1.90.0`) is matched against this version, so an independent numbering would make
-# every extension look incompatible.
-#
-# `RELEASE_VERSION` is deliberately NOT changed: the vendored patches build asset URLs out
-# of it, and the published assets are named after the VS Code tag.
 if [[ ! -f ./distribution/product-delta.json ]]; then
   echo "error: ./distribution/product-delta.json is missing; it carries the product version." >&2
   exit 2
 fi
 
-APP_VERSION=$( jq -r '.set.version // empty' ./distribution/product-delta.json )
-if [[ -z "${APP_VERSION}" ]]; then
+APP_VERSION=$( node -p "require('./distribution/product-delta.json').set.version" 2> /dev/null ) || {
+  echo "error: distribution/product-delta.json could not be read, or it does not set a 'version'." >&2
+  exit 2
+}
+
+if [[ -z "${APP_VERSION}" || "${APP_VERSION}" == "undefined" ]]; then
   echo "error: distribution/product-delta.json does not set a 'version'." >&2
   exit 2
 fi
-export APP_VERSION
 
-echo "APP_VERSION=\"${APP_VERSION}\""
+# The tree is PiCode's, and this is where that is checked instead of assumed. Each of these is
+# something a phase further down depends on, and each of them failing quietly would ship a
+# broken or mislabelled editor: a product that is not PiCode's, a company name left as
+# Microsoft's, an icon the packer cannot find, or no connector to reach pi.
+if ! node <<'NODE'
+const fs = require('fs');
+const fail = [];
+const root = 'picode-source';
+const product = JSON.parse(fs.readFileSync(`${root}/product.json`, 'utf8'));
+const delta = JSON.parse(fs.readFileSync('distribution/product-delta.json', 'utf8'));
 
-if [[ "${TREE_PREPARED}" == "yes" ]]; then
-  # -------------------------------------------------------------------------
-  # Phases 2-5 are exactly what the tree already carries.
-  # -------------------------------------------------------------------------
-  echo ""
-  echo "== phases 2-5/8 - skipped: ./picode-source is the prepared tree (reused by -s)"
-else
-  # -------------------------------------------------------------------------
-  # Phase 2 - brand product.json
-  # -------------------------------------------------------------------------
-  echo ""
-  echo "== phase 2/8 - brand picode-source/product.json (jq)"
+if (product.nameShort !== delta.set.nameShort) {
+  fail.push(`product.json says nameShort="${product.nameShort}" where the delta says "${delta.set.nameShort}"`);
+}
+if (fs.readFileSync(`${root}/build/lib/electron.ts`, 'utf8').indexOf("companyName: 'PiCode'") === -1) {
+  fail.push('build/lib/electron.ts does not carry the PiCode company name');
+}
+if (!fs.existsSync(`${root}/resources/win32/code.ico`)) {
+  fail.push('resources/win32/code.ico is missing, and the packer reads it');
+}
+if (!fs.existsSync(`${root}/resources/server/manifest.json`) || JSON.parse(fs.readFileSync(`${root}/resources/server/manifest.json`, 'utf8')).name !== delta.set.nameShort) {
+  fail.push('resources/server/manifest.json does not carry the PiCode name');
+}
+if (!fs.existsSync(`${root}/extensions/picode/package.json`)) {
+  fail.push('extensions/picode/package.json is missing, and that is the connector');
+}
 
-  bash dev/prepare_vscode.sh brand
-
-  # -------------------------------------------------------------------------
-  # Phase 3 - the inherited VSCodium patch set
-  # -------------------------------------------------------------------------
-  echo ""
-  echo "== phase 3/8 - apply patches/vscodium"
-
-  bash dev/prepare_vscode.sh patches-vscodium
-
-  # -------------------------------------------------------------------------
-  # Phase 4 - PiCode's own patches, then the package metadata
-  # -------------------------------------------------------------------------
-  echo ""
-  echo "== phase 4/8 - apply patches/picode"
-
-  bash dev/prepare_vscode.sh patches-picode
-
-  # The package.json version/author and the electron company name are not part of
-  # any patch: VSCodium writes them with `replace`/`setpath` after its patch stage,
-  # and so does this. Without it the compiled product reports the upstream version
-  # while its asset URLs report PiCode's, and `Microsoft Corporation` survives into
-  # the binary's properties.
-  bash dev/prepare_vscode.sh metadata
-
-  # -------------------------------------------------------------------------
-  # Phase 5 - the frozen product delta
-  # -------------------------------------------------------------------------
-  echo ""
-  echo "== phase 5/8 - apply distribution/product-delta.json to picode-source/product.json"
-
-  set +e
-  node distribution/apply-product-delta.mjs \
-    --target picode-source/product.json \
-    --delta distribution/product-delta.json \
-    --write
-  DELTA_EXIT=$?
-  set -e
-
-  if [[ "${DELTA_EXIT}" -ne 0 ]]; then
-    echo "error: the product delta failed with exit code ${DELTA_EXIT} (2 = error, 0 = applied or already current)." >&2
-    exit "${DELTA_EXIT}"
-  fi
+if (fail.length > 0) {
+  console.error(fail.map(line => `  - ${line}`).join('\n'));
+  process.exit(1);
+}
+console.log(`  the source carries the PiCode identity (version ${delta.set.version})`);
+NODE
+then
+  echo "error: ./picode-source is not the PiCode source this build expects (see above)." >&2
+  echo "       If the tree was replaced wholesale, dev/prepare_vscode.sh is what brands it." >&2
+  exit 2
 fi
 
-if [[ "${SKIP_COMPILE}" == "yes" ]]; then
+# ---------------------------------------------------------------------------
+# The identity
+# ---------------------------------------------------------------------------
+# The identity has ONE home: distribution/product-delta.json. Both paths apply it - this build
+# here, and distribution/apply-picode.ps1 onto the packaged tree - so the compiled editor and the
+# released one cannot disagree. Bumping a release is editing that one value.
+#
+# The delta sets product.json's version; the packer also reads package.json's, so the two are put
+# in agreement here rather than maintained by hand. This is the one thing that changes release to
+# release; the rest of the branding (the company name, the Windows icons, the server manifest)
+# was applied once and is committed in the tree, which is what the source check above verified.
+
+set +e
+node distribution/apply-product-delta.mjs \
+  --target picode-source/product.json \
+  --delta distribution/product-delta.json \
+  --write
+DELTA_EXIT=$?
+set -e
+
+if [[ "${DELTA_EXIT}" -ne 0 ]]; then
+  echo "error: the product delta failed with exit code ${DELTA_EXIT} (2 = error, 0 = applied or already current)." >&2
+  exit "${DELTA_EXIT}"
+fi
+
+if ! APP_VERSION="${APP_VERSION}" node <<'NODE'
+const fs = require('fs');
+const file = 'picode-source/package.json';
+const version = process.env.APP_VERSION;
+const raw = fs.readFileSync(file, 'utf8');
+const next = raw.replace(/^(\t"version":\s*")[^"]*(")/m, `$1${version}$2`);
+
+if (next === raw) {
+  if (raw.indexOf(`"version": "${version}"`) === -1) {
+    console.error('  package.json has no version line this script can rewrite');
+    process.exit(1);
+  }
+  console.log(`  package.json already reports ${version}`);
+  process.exit(0);
+}
+fs.writeFileSync(file, next);
+console.log(`  package.json version set to ${version}`);
+NODE
+then
+  echo "error: the version could not be written into picode-source/package.json." >&2
+  exit 2
+fi
+
+# The value the packer stamps into product.json's `commit` and reads back for the versioned
+# resources folder. VSCodium derives it from the release version with sha1sum; the algorithm is
+# kept identical, newline included, so a PiCode built here is stamped the way it always was.
+RELEASE_VERSION="${APP_VERSION}"
+if [[ -z "${BUILD_SOURCEVERSION}" ]]; then
+  if command -v sha1sum > /dev/null 2>&1; then
+    BUILD_SOURCEVERSION=$( echo "${RELEASE_VERSION/-*/}" | sha1sum | cut -d' ' -f1 )
+  elif command -v shasum > /dev/null 2>&1; then
+    BUILD_SOURCEVERSION=$( echo "${RELEASE_VERSION/-*/}" | shasum -a 1 | cut -d' ' -f1 )
+  else
+    echo "error: neither sha1sum nor shasum was found, and the build stamp needs one of them." >&2
+    exit 2
+  fi
+fi
+export RELEASE_VERSION BUILD_SOURCEVERSION
+
+echo "APP_VERSION=\"${APP_VERSION}\""
+echo "RELEASE_VERSION=\"${RELEASE_VERSION}\""
+echo "BUILD_SOURCEVERSION=\"${BUILD_SOURCEVERSION}\""
+
+if [[ "${CHECK_ONLY}" == "yes" ]]; then
   echo ""
-  echo "== phase 5/8 reached. -o was given: nothing was compiled."
-  echo "prepared tree:  ./picode-source"
-  echo "pack output:    ${PACK_DIR} (not created yet)"
-  echo "next:           ./dev/build.sh -s   to install, compile and stage"
+  echo "== phase 1/5 reached. -o was given: nothing was installed or compiled."
+  echo "source:  ./picode-source (the PiCode source, identity checked)"
+  echo "next:    ./dev/build.sh    to install, compile and pack"
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# Phase 6 - the source dependencies
-# ---------------------------------------------------------------------------
 # The step that staged `extensions/picode-pi-chat` as a built-in extension was **removed on
 # 2026-09-24 by the owner's decision**: pi lives in the core, and the extension is being
-# migrated into it (Chat and the agentic machinery the editor already ships). The extension
-# directory is kept in the repository only as the source being migrated — nothing compiles
-# it and nothing packages it, so a build no longer contains it.
-#
-# What that costs today, said plainly: the built editor has no chat until the core provider
-# is finished. `dev/builtin-extension.sh` was deleted with this step; restoring it is how
-# the old surface comes back if the migration has to be paused.
+# migrated into it. Nothing compiles or packages that directory.
 echo ""
-echo "== phase 6/8 - dependencies"
+echo "  -- dependencies"
 
 cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-# Cache-aware fast path, used only by CI (see .github/workflows/full-build.yml).
-# VS Code records the dependency state it installed in
-# `node_modules/.postinstall-state` and compares it against the current
-# package.json/package-lock/.npmrc (build/npm/installStateHash.ts).
-# `PICODE_FAST_INSTALL=yes` reuses a `node_modules` restored from cache only
-# when that recorded state is current; every other case runs `npm ci` exactly
-# as before, so a partial or stale cache can never be trusted silently.
+# The install is the step this build exists to stop repeating. VS Code records the dependency
+# state it installed in `node_modules/.postinstall-state`; dev/deps-current.mjs compares that
+# against the tree as it is now, and the install is skipped ONLY when the two are identical.
+# A partial or stale node_modules is never trusted: it is reinstalled, exactly as before.
 reuse_node_modules="no"
-if [[ "${PICODE_FAST_INSTALL}" == "yes" && -f node_modules/.postinstall-state ]]; then
-  if node build/npm/installStateHash.ts \
-      | jq -e '.saved != null
-               and .current.nodeVersion == .saved.nodeVersion
-               and .current.fileHashes == .saved.fileHashes' > /dev/null; then
+if [[ "${FORCE_INSTALL}" != "yes" && -f node_modules/.postinstall-state ]]; then
+  if node "${ROOT_DIR}/dev/deps-current.mjs"; then
     reuse_node_modules="yes"
   fi
 fi
 
 if [[ "${reuse_node_modules}" == "yes" ]]; then
-  echo "reusing node_modules: the recorded install state matches this tree"
+  echo "the dependencies are the ones this source needs: nothing to install"
 else
   node build/npm/preinstall.ts
 
@@ -403,33 +390,32 @@ fi
 cd ..
 
 # ---------------------------------------------------------------------------
-# Phase 6b - the connector
+# The connector
 # ---------------------------------------------------------------------------
 # PiCode's connector (`picode-source/extensions/picode`) is compiled **here and not by the packer**:
 # the packing step collects every extension under `picode-source/extensions/` — which is how the
 # connector gets inside the binary — but it does not run `tsc` for it, and an extension
-# packaged without its `out/` never activates. It runs after `npm ci` because it compiles with
-# the tree's own typings, and before the pack because the pack is what collects it.
-#
+# packaged without its `out/` never activates. It runs after the dependencies because it compiles
+# with the tree's own typings, and before the pack because the pack is what collects it.
 echo ""
-echo "== phase 6b/8 - compile the connector"
+echo "== phase 2/5 - compile the connector"
 
 bash dev/build-connector.sh
 
-cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
-
 # ---------------------------------------------------------------------------
-# Phase 7 - compile and pack
+# Compile
 # ---------------------------------------------------------------------------
 echo ""
-echo "== phase 7/8 - compile and pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
+echo "== phase 3/5 - compile the editor (vscode-min-prepack)"
 
 export VSCODE_PUBLISH_COUNTER=1
 
+cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
+
 # VSCodium's windows sequence: the prepack task compiles, then the group-policy
-# definitions the packer copies, then the packer. The packing task alone would
-# pack a tree that was never compiled, which is why `vscode-min-prepack` is here
-# even though the phase is named after the packer.
+# definitions the packer copies, then the packer (phase 6 here). The packing task alone would
+# pack a tree that was never compiled, which is why `vscode-min-prepack` is here even though
+# the phase is named after the packer in the task name.
 #
 # VSCodium also runs `bash build/windows/rtf/make.sh` between those two. That step
 # is deliberately absent here, and the reason is a defect that was found by
@@ -452,15 +438,25 @@ node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_mo
 node build/lib/policies/copyPolicyDto.ts
 node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc "${PACK_PLATFORM}"
 
+cd ..
+
+# ---------------------------------------------------------------------------
+# Pack
+# ---------------------------------------------------------------------------
+echo ""
+echo "== phase 4/5 - pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
+
+cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
+
 node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
 
 cd ..
 
 # ---------------------------------------------------------------------------
-# Phase 8 - pi, and the distribution layer
+# pi, and the distribution layer
 # ---------------------------------------------------------------------------
 echo ""
-echo "== phase 8/8 - pi, and the distribution layer, onto ${PACK_DIR}"
+echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 
 # pi first: it is what the connector looks for, and an editor built without it can only
 # answer "no encuentro el pi de este editor".
@@ -470,11 +466,9 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 
 echo ""
 echo "== done"
-echo "source:    ./picode-source (commit ${MS_COMMIT})"
-# The product reports APP_VERSION (PiCode's own release), while RELEASE_VERSION is the
-# VS Code tag the assets are named after. Printing the tag as "the product" would state a
-# version the running editor does not report.
+echo "source:    ./picode-source (a PiCode tree of its own; no patches applied here)"
+# The product reports APP_VERSION (PiCode's own release). There is no VS Code tag to name any
+# more: the tree IS the source, and which VS Code it descends from is its git history.
 echo "product:   PiCode ${APP_VERSION}"
-echo "vscode:    ${RELEASE_VERSION}"
 echo "output:    ${PACK_DIR}"
 echo "run it:    ${PACK_DIR}/PiCode.exe"

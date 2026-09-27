@@ -16,7 +16,8 @@ intento. Los workflows se **eliminaron** y las releases se generan **a mano**.
 1. **Compilar desde fuente** (ver [`howto-build.md`](howto-build.md)):
    - Windows: `dev/build.sh` → árbol empaquetado en `PiCode-Win32-x64/`.
    - Linux: lo mismo desde WSL o Linux → `PiCode-linux-x64/`.
-   - Atajos: `-o` solo prepara (fases 1-5), `-s` reutiliza el árbol existente.
+   - Atajos: `-o` solo comprueba la fuente (segundos, sin instalar ni compilar); `-i` fuerza
+     la instalación de las dependencias aunque el estado registrado siga cuadrando.
 2. **Empaquetar** lo que en CI hacían las tareas de instalador:
    - Portable Windows: comprimir `PiCode-Win32-x64/` en zip.
    - Portable Linux: `tar -czf PiCode-<versión>-linux-x64.tar.gz PiCode-linux-x64/`.
