@@ -21,7 +21,9 @@
 	"enabledApiProposals": [
 		"defaultChatParticipant",
 		"chatProvider",
-		"chatPromptFiles"
+		"chatPromptFiles",
+		"chatParticipantAdditions",
+		"chatParticipantPrivate"
 	],
 	"activationEvents": [
 		"onLanguageModelChatProvider:picode",

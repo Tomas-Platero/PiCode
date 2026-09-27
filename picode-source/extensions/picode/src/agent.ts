@@ -9,6 +9,13 @@ import { readPiChatSettings } from './piConfig';
 import { chatAgentDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import {
+	decisionFromAnswer,
+	permissionLevelOf,
+	PERMISSION_ALLOW,
+	PERMISSION_QUESTION_ID,
+	shouldAsk,
+} from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
 import { THINKING_HEADER, quotedThinking } from './thinking';
@@ -68,6 +75,30 @@ interface PiModel {
 	readonly [key: string]: unknown;
 }
 
+/** The `tool_call` event pi hands an extension, reduced to what a permission asks: which tool, with what. */
+interface PiToolCallEvent {
+	readonly toolName: string;
+	readonly input?: unknown;
+}
+
+/** What a `tool_call` handler may return: block with a reason, or nothing to let it run. */
+interface PiToolCallResult {
+	block?: boolean;
+	reason?: string;
+}
+
+/** pi's extension API, reduced to the one event this bridge listens on. */
+interface PiExtensionApi {
+	on(event: 'tool_call', handler: (event: PiToolCallEvent) => Promise<PiToolCallResult | undefined>): () => void;
+}
+
+/** pi's inline extension shape (`resourceLoaderOptions.extensionFactories`). */
+interface PiInlineExtension {
+	name: string;
+	factory: (pi: PiExtensionApi) => void | Promise<void>;
+	hidden?: boolean;
+}
+
 /** pi's session store, created once and handed back to pi across a session's rebuilds. */
 interface PiSessionStore {
 	readonly [key: string]: unknown;
@@ -92,7 +123,12 @@ interface PiServices {
 }
 
 interface PiSdk {
-	createAgentSessionServices(options: { cwd: string; agentDir?: string }): Promise<PiServices>;
+	createAgentSessionServices(options: {
+		cwd: string;
+		agentDir?: string;
+		/** Inline extensions of this embedded session — here, the permission gate. */
+		resourceLoaderOptions?: { extensionFactories?: PiInlineExtension[] };
+	}): Promise<PiServices>;
 	createAgentSessionFromServices(options: {
 		services: PiServices;
 		sessionManager: unknown;
@@ -219,6 +255,94 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 		session.prompt(prompt).catch(reject);
 		void cancellation;
 	});
+}
+
+/* ------------------------------------------------------------------ *
+ * The permission gate, as the chat's "Default permissions" wants it
+ * ------------------------------------------------------------------ */
+
+/**
+ * One chat request while its pi turn runs.
+ *
+ * The question carousel can only be shown on the request's own stream, and the level only
+ * changes per request — so this is filled when the turn starts and emptied when it settles,
+ * and the `tool_call` handler reads it at call time, exactly like `toolToken`.
+ */
+interface TurnContext {
+	stream: vscode.ChatResponseStream;
+	level: ReturnType<typeof permissionLevelOf>;
+}
+
+/** The request in flight, which is where a pi tool call gets its stream and its level. */
+const turnContext: { current?: TurnContext } = {};
+
+/** The longest stretch of a command or path shown in the permission question. */
+const PERMISSION_DETAIL_LIMIT = 160;
+
+/** One line saying what the tool is about to do, for the question's message. */
+function describeToolCall(toolName: string, input: unknown): string {
+	const record = recordOf(input);
+	if (toolName === 'bash' || toolName === 'powershell') {
+		const command = typeof record?.['command'] === 'string' ? record['command'] : '';
+		return command.length === 0 ? `It runs a ${toolName} command.`
+			: `It runs:${command.length > PERMISSION_DETAIL_LIMIT ? `
+${command.slice(0, PERMISSION_DETAIL_LIMIT)}…` : `
+${command}`}`;
+	}
+	const target = typeof record?.['path'] === 'string' ? record['path'] : '';
+	return target.length === 0 ? `It changes a file with ${toolName}.` : `It wants to ${toolName} ${target}.`;
+}
+
+/** The Allow / Deny question, in the two positions the chat's picker model speaks. */
+function permissionQuestion(toolName: string, input: unknown): vscode.ChatQuestion {
+	return new vscode.ChatQuestion(
+		PERMISSION_QUESTION_ID,
+		vscode.ChatQuestionType.SingleSelect,
+		`pi wants to run ${toolName}`,
+		{
+			message: describeToolCall(toolName, input),
+			options: [
+				{ id: 'allow', label: 'Allow', value: PERMISSION_ALLOW },
+				{ id: 'deny', label: 'Deny', value: 'deny' },
+			],
+		},
+	);
+}
+
+/**
+ * The inline extension that gates pi's mutating tools behind the chat's permission level.
+ *
+ * It is registered once per session rebuild and reads the turn holder at call time, so a
+ * session built under one level answers correctly after the picker moved. When it must not
+ * ask (approving level, read-only tool) it returns `undefined` — pi's contract for "carry
+ * on". The failure posture is fail-OPEN on the bridge's own breakage (no stream, a carousel
+ * that throws): a permission layer that wedges every command over its own bugs would be a
+ * worse defect than one that misses some gates. What the owner does explicitly — Escape,
+ * a skip, a Deny — is honored and blocks, never opened.
+ */
+function permissionExtension(log: (line: string) => void): PiInlineExtension {
+	return {
+		name: 'picode-permissions',
+		hidden: true,
+		factory: pi => {
+			void pi.on('tool_call', async event => {
+				if (!shouldAsk(turnContext.current?.level, event.toolName)) {
+					return undefined;
+				}
+				const stream = turnContext.current?.stream;
+				if (stream === undefined || typeof stream.questionCarousel !== 'function') {
+					return undefined;
+				}
+				try {
+					const answer = await stream.questionCarousel([permissionQuestion(event.toolName, event.input)]);
+					return decisionFromAnswer(answer, event.toolName);
+				} catch (error) {
+					log(`permission question failed: ${error instanceof Error ? error.message : String(error)}`);
+					return undefined;
+				}
+			});
+		},
+	};
 }
 
 /* ------------------------------------------------------------------ *
@@ -361,8 +485,14 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	/** The chat request in flight, which is where an MCP call gets its invocation token. */
 	const toolToken: ToolTokenHolder = {};
 
-	const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
+const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
 		toolToken.current = request.toolInvocationToken;
+		// The picker's two positions name the four level names the host has shipped; see
+		// `permissions.ts`. The setting covers a request that arrives without a level.
+		turnContext.current = {
+				stream,
+				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
+		};
 		const sdk = await loadSdk(deps.distributionRoot, deps.log);
 		if (sdk === undefined) {
 			stream.markdown('PiCode: this editor has no pi to talk to. Reinstall it so the agent can answer.');
@@ -389,7 +519,11 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			const profileChanged = sessionAgentDir !== agentDir;
 			if (session === undefined || folderChanged || toolsChanged || profileChanged) {
 				session?.dispose();
-				services = await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
+				services = await sdk.createAgentSessionServices({
+				cwd,
+				...(agentDir === undefined ? {} : { agentDir }),
+				resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log)] },
+			});
 				if (folderChanged || sessionManager === undefined || profileChanged) {
 					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
 				}
