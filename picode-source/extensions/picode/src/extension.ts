@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
@@ -14,6 +15,7 @@ import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, parseKeyValueLines, serverNames, validateDraft, validateServerName, type AddServerDraft } from './mcp-add';
+import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk } from './piSdk';
 import { externalProfileDir } from './profile-import';
@@ -718,9 +720,89 @@ interface PiRuntimeSdk {
  */
 let runtimeCache: { readonly cwd: string; readonly agentDir: string | undefined; readonly services: PiRuntimeServices } | undefined;
 
+/**
+ * How long an answer the connector already holds is served before the source is asked again.
+ *
+ * The configured endpoint is a network read, so its answer lives five minutes; pi's catalogue
+ * is cheap once the runtime is built, and the runtime itself is cached separately, so its
+ * answer lives one minute — long enough to absorb the listings the editor fires in bursts,
+ * short enough that a login is never hidden behind a stale list for long.
+ */
+const CONFIGURED_MODELS_TTL_MS = 5 * 60_000;
+const SUBSCRIPTION_MODELS_TTL_MS = 60_000;
+
+/**
+ * The last model list each source answered with, and the reads in flight for them.
+ *
+ * These are what make the picker open **now**: the listing serves whatever is here — fresh or
+ * stale — and schedules the refreshes it needs instead of awaiting them, because the editor
+ * re-asks the moment `onDidChangeLanguageModelChatInformation` fires and a slow source asked
+ * once per listing would hold the picker hostage exactly when the owner is looking at it.
+ * The configured cache is keyed by a **digest** of the endpoint and the key, so the key itself
+ * is never held past the request (the same rule `usage-data.ts` keeps), and the subscription
+ * cache is keyed by the agent directory, the one thing that changes what pi's catalogue answers.
+ */
+const configuredModelsCache = new Map<string, CacheEntry<vscode.LanguageModelChatInformation[]>>();
+const configuredModelsInFlight = new Map<string, Promise<vscode.LanguageModelChatInformation[]>>();
+const subscriptionModelsCache = new Map<string, CacheEntry<vscode.LanguageModelChatInformation[]>>();
+const subscriptionModelsInFlight = new Map<string, Promise<vscode.LanguageModelChatInformation[]>>();
+
+/** The configured cache's key: a digest, so the raw key never sits in a map. */
+function configuredModelsCacheKey(config: ProviderConfiguration): string {
+	return createHash('sha256').update(cacheKey(config.endpoint, config.apiKey)).digest('hex');
+}
+
+/**
+ * Asks the configured endpoint for its models **in the background**, and repaints when they moved.
+ *
+ * Scheduled, never awaited: the listing that needs this has already answered with the stale
+ * value. A failure is reported, not thrown — an endpoint that does not answer is a fact for
+ * the owner, and the last list it gave stays in place either way.
+ */
+function refreshConfiguredModels(profile: string, configured: ProviderConfiguration, key: string): void {
+	void singleFlight(configuredModelsInFlight, key, () => modelsForConfiguration(configured))
+		.then(models => {
+			const changed = !sameIds(configuredModelsCache.get(key)?.value ?? [], models);
+			storeModels(configuredModelsCache, key, models, Date.now());
+			const declaration = declarationFrom(configured);
+			if (declaration !== undefined) {
+				projectDeclaration(profile, declaration, models.map(info => splitModelId(info.id).modelId));
+			}
+			if (changed) {
+				onDidChangeModels.fire();
+			}
+		})
+		.catch((error: unknown) =>
+			report(`models: the configured endpoint could not be read (${error instanceof Error ? error.message : String(error)})`));
+}
+
+/**
+ * Builds pi's catalogue **in the background**, and repaints when it moved.
+ *
+ * The expensive part is the first runtime build for a folder — pi's extensions and skills are
+ * scanned there — and it must never sit between the owner and an open picker. The runtime
+ * cache inside `subscriptionModels` absorbs the rebuilds; this cache absorbs the re-reads.
+ */
+function refreshSubscriptionModels(agentDir: string | undefined, key: string): void {
+	void singleFlight(subscriptionModelsInFlight, key, () =>
+		subscriptionModels(distributionRoot(requireProfileUri()), agentDir, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()))
+		.then(models => {
+			const changed = !sameIds(subscriptionModelsCache.get(key)?.value ?? [], models);
+			storeModels(subscriptionModelsCache, key, models, Date.now());
+			if (changed) {
+				onDidChangeModels.fire();
+			}
+		})
+		.catch((error: unknown) =>
+			report(`models: pi's catalogue could not be read (${error instanceof Error ? error.message : String(error)})`));
+}
+
 /** Forgets the cached runtime, so the next listing reads credentials as they are now. */
 export function forgetPiRuntime(): void {
 	runtimeCache = undefined;
+	// The subscription list is read through that runtime, so a dropped runtime must not leave
+	// a cached answer standing behind it: the next listing refreshes it in the background.
+	subscriptionModelsCache.clear();
 }
 
 /**
@@ -779,35 +861,63 @@ const provider: vscode.LanguageModelChatProvider = {
 
 	async provideLanguageModelChatInformation(options, _token) {
 		const profile = profileDirectory(requireProfileUri());
+		const now = Date.now();
 
 		// The editor's **own provider form**, when the owner filled it in: it is the surface that
 		// renders the declared fields, with the key stored as a secret. Kept from the last listing
 		// because the request that follows carries the model but not the configuration.
 		const configured = readConfiguration(options.configuration);
-		const configuredModels =
-			configured.endpoint === undefined ? [] : await modelsForConfiguration(configured);
 		if (configured.endpoint === undefined) {
 			lastConfiguration = undefined;
 		} else {
 			lastConfiguration = configured;
+		}
+
+		// The listing answers **now** with what the caches hold — fresh or stale, never missing
+		// once a previous listing saw the value — and schedules the refreshes it needs instead of
+		// awaiting them. A slow source must not hold the picker hostage exactly when the owner is
+		// looking at it: the editor re-asks the moment `onDidChangeLanguageModelChatInformation`
+		// fires, and the refreshed lists arrive that way.
+		const configuredKey = configuredModelsCacheKey(configured);
+		const configuredRead = configured.endpoint === undefined
+			? { value: undefined as vscode.LanguageModelChatInformation[] | undefined, fresh: true }
+			: cachedModels(configuredModelsCache, configuredKey, CONFIGURED_MODELS_TTL_MS, now);
+		const fromConfigured = configuredRead.value ?? [];
+		if (configuredRead.value !== undefined) {
+			// The declaration the editor's form projects carries the model ids, so it is written
+			// from the cached list when there is one — the ids read from a previous listing are
+			// what pi needs, and a projection from a guess would be worse than none.
 			const declaration = declarationFrom(configured);
 			if (declaration !== undefined) {
-				projectDeclaration(profile, declaration, configuredModels.map(info => splitModelId(info.id).modelId));
+				projectDeclaration(profile, declaration, fromConfigured.map(info => splitModelId(info.id).modelId));
 			}
+		}
+		if (!configuredRead.fresh) {
+			refreshConfiguredModels(profile, configured, configuredKey);
 		}
 
 		// The **lines the owner writes in the settings list**, projected so pi knows them too, and
 		// then the profile read back: it now holds both of the above plus every provider an earlier
-		// version of the connecting flow wrote there.
+		// version of the connecting flow wrote there. This stays in the response path on purpose:
+		// pi depends on the projection being done before the owner's next request, and deferring
+		// it would let a request reach a model pi cannot yet see.
 		await projectDeclaredProviders(profile);
 
 		const models = readModelsFile(profile);
 		const fromProfile = models === undefined ? [] : toChatInformation(models);
-		const fromSubscriptions = await subscriptionModels(distributionRoot(requireProfileUri()), chatAgentDir(distributionRoot(requireProfileUri())), vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd());
-		const configuredIds = new Set(configuredModels.map(info => info.id));
+
+		const agentDir = chatAgentDir(distributionRoot(requireProfileUri()));
+		const subscriptionKey = agentDir ?? '';
+		const subscriptionRead = cachedModels(subscriptionModelsCache, subscriptionKey, SUBSCRIPTION_MODELS_TTL_MS, now);
+		const fromSubscriptions = subscriptionRead.value ?? [];
+		if (!subscriptionRead.fresh) {
+			refreshSubscriptionModels(agentDir, subscriptionKey);
+		}
+
+		const configuredIds = new Set(fromConfigured.map(info => info.id));
 		const profileIds = new Set(fromProfile.map(info => info.id));
 		return [
-			...configuredModels,
+			...fromConfigured,
 			...fromProfile.filter(info => !configuredIds.has(info.id)),
 			...fromSubscriptions.filter(info => !configuredIds.has(info.id) && !profileIds.has(info.id)),
 		];
@@ -1075,6 +1185,13 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('picode.mcp.servers')) {
 				void applyMcpServers(profileDirectory(context.extensionUri));
+			}
+			// The declared rows changed, so the answers the endpoint cache holds can no longer be
+			// trusted: they are dropped and the picker is told to ask again — which serves the
+			// profile immediately and refreshes the endpoints in the background.
+			if (event.affectsConfiguration('picode.providers') || event.affectsConfiguration('pi.providers')) {
+				configuredModelsCache.clear();
+				onDidChangeModels.fire();
 			}
 		}),
 	);
