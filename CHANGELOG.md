@@ -10,6 +10,15 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 ## [Unreleased] — 2026-09-27
 
 ### Changed
+- **esbuild is back on — at upstream's factory value.** VSCodium had flipped
+  `useEsbuildTranspile` to `false` without recording a reason anywhere; PiCode restored it to
+  `true` (2026-09-27) and closed the one real gap the route has: the product chain no longer
+  type-checks by itself, so a headless `tsgo --noEmit` step (`picode-typecheck`) now runs at
+  the front of `vscode-min-prepack`, same as `core-ci` does. Measured steady-state: compile
+  41s (was 5m05s), pack 2m23s including the bundle (was 36s), **full build 3m34s** (was
+  about 6 min), editor starts. The development loop exists again: `npm run transpile-client`
+  turns 7,559 source files into a runnable `out/` in 7s, and `npm run watch` is no longer a
+  no-op.
 - **`picode-source/` is the product source now, versioned in this repository.** One clone has
   everything: the editor's code, the PiCode changes and the identity. The tree that used to be
   rebuilt on every build by fetching VS Code and applying 92 patches was committed and
@@ -27,10 +36,14 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 - **`jq` is gone as a dependency** — nothing needs it any more.
 
 ### Measured
-- A full steady-state Windows build on a 16-core machine: **about six minutes** — compile 5m
-  05s, pack 36s, stage 17s. The former up-to-210-minute cost belonged to the old chain
-  (dependency reinstalls, native rebuilds, CI runners), not to compiling. The rebuilt editor
-  starts and restores the portable profile.
+- A full steady-state Windows build on a 16-core machine, with the esbuild route restored
+  (2026-09-27): **3 min 34 s** — compile 41 s (the headless type check inside), pack 2 min
+  23 s (bundling the 24 shipped outputs from source costs ~100 s of it), stage 17 s. The
+  dev loop too: 7,559 files transpiled to a runnable `out/` in 6.8 s. The rebuilt editor
+  starts (eight processes, window up) and restores the portable profile (138 files).
+- The same tree on the classic gulp-tsb route, earlier the same day: about six minutes —
+  compile 5m05s, pack 36s, stage 17s. The former up-to-210-minute cost belonged to the old
+  chain (dependency reinstalls, native rebuilds, CI runners), not to compiling.
 
 ## [0.1.2] — 2026-09-27
 

@@ -43,18 +43,6 @@ const glob = promisify(globCallback);
 const rcedit = promisify(rceditCallback);
 const root = path.dirname(import.meta.dirname);
 const commit = getVersion(root);
-const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')) as {
-	readonly packages?: Readonly<Record<string, { readonly version?: string }>>;
-};
-
-function getLockedPackageVersion(packageName: string): string {
-	const version = packageLock.packages?.[`node_modules/${packageName}`]?.version;
-	if (!version) {
-		throw new Error(`Package ${packageName} is missing a version in package-lock.json.`);
-	}
-
-	return version;
-}
 
 // Build
 const vscodeEntryPoints = [
@@ -597,8 +585,14 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 			glob('**/tgrep.exe', { cwd }),
 			glob('**/*explorer_command*.dll', { cwd }),
 		])).flatMap(o => o);
-		const packageJson = JSON.parse(await fs.promises.readFile(path.join(cwd, versionedResourcesFolder, 'resources', 'app', 'package.json'), 'utf8'));
-		const product = JSON.parse(await fs.promises.readFile(path.join(cwd, versionedResourcesFolder, 'resources', 'app', 'product.json'), 'utf8'));
+		let packageJson: { version: string };
+		let product: { nameLong: string };
+		try {
+			packageJson = JSON.parse(await fs.promises.readFile(path.join(cwd, versionedResourcesFolder, 'resources', 'app', 'package.json'), 'utf8'));
+			product = JSON.parse(await fs.promises.readFile(path.join(cwd, versionedResourcesFolder, 'resources', 'app', 'product.json'), 'utf8'));
+		} catch (e) {
+			throw new Error(`Cannot read the packaged app metadata for win32 dependency patching: ${e instanceof Error ? e.message : e}`);
+		}
 		const baseVersion = packageJson.version.replace(/-.*$/, '');
 
 		const patchPromises = deps.map<Promise<unknown>>(async dep => {
@@ -674,6 +668,10 @@ BUILD_TARGETS.forEach(buildTarget => {
 			);
 
 			const prepackTask = task.define(`vscode${dashed(minified)}-prepack`, task.series(
+				// PiCode: esbuild strips types without checking them, and this route has no
+				// compile-build step. Run the compiler headless (as core-ci does) so the
+				// shipped artifact is type-checked like the classic path's was.
+				task.define(`picode-typecheck${dashed(minified)}`, () => spawnTsgo(path.join(root, 'src', 'tsconfig.json'), { taskName: 'picode-typecheck', noEmit: true })),
 				copyCodiconsTask,
 				cleanExtensionsBuildTask,
 				compileNonNativeExtensionsBuildTask,

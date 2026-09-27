@@ -30,9 +30,9 @@ note so that old commands keep working.
 | --- | --- | --- |
 | 1 | prepare | The three things that leave the tree ready to compile, in one phase because they are one job. **The source**: verifies `./picode-source` is the PiCode source — the product name matches the delta, `build/lib/electron.ts` carries the PiCode company name, the Windows icon the packer reads is there, the server manifest is PiCode's, and the connector is present. Any of these failing quietly would ship a broken or mislabelled editor. **The identity**: `node distribution/apply-product-delta.mjs … --write` (idempotent, says "already current" when nothing moved) and the release version written into `picode-source/package.json`. **The dependencies**: `npm ci`, **only** when `dev/deps-current.mjs` says the state VS Code recorded does not match the tree; anything else — no record, a different node, an unreadable state — is a no, and the install runs. Only the install can be long, and only the first time. |
 | 2 | connector | `dev/build-connector.sh`: `tsc` over `picode-source/extensions/picode`. The packer collects extensions but does not compile them, so this has to happen first. |
-| 3 | compile | `gulp vscode-min-prepack`, then the group-policy DTO copy and the policy generator for the platform being packed. |
-| 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`. |
-| 5 | stage | `dev/pi-runtime.sh` (installs the pinned pi into the pack) and `dev/stage-distribution.sh` (portable profile, settings, panel, icons, names). |
+| 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
+| 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-vscode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
+| 5 | stage | `dev/pi-runtime.sh` (installs the pinned pi into the pack) and `dev/stage-distribution.sh` (portable profile, settings, icons, names). The panel is not staged — it died with the `extensions/` folder (2026-09-27) and returns as core code. |
 
 `-o` stops inside phase 1 with exit code 0: after the source and the identity are checked, before
 anything is installed. It exists so the source can be checked in seconds rather than discovered to

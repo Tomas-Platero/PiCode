@@ -115,8 +115,10 @@ The chain, five phases:
 prepare (tree + identity + deps) → connector → compile → pack → stage
 ```
 
-A full build in steady state takes about **six minutes** on a 16-core Windows machine (the
-dependencies are installed once, not every build). For the fast correctness check — the source
+A full build in steady state takes about **three and a half minutes** on a 16-core Windows
+machine (the dependencies are installed once, not every build), and seeing a code change in
+the running editor takes **seconds** without packaging anything — see
+[dev/README.md](dev/README.md#development-loop). For the fast correctness check — the source
 and the identity, nothing installed or compiled:
 
 ```bash

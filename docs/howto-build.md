@@ -223,6 +223,29 @@ salida del empaquetado y sigue ignorado. La fuente de Microsoft vive aquí dentr
 regla de publicación es la de `CONTRIBUTING.md`: este repositorio no se empuja a un origen
 público sin decisión del dueño.
 
+### El bucle de desarrollo (ver un cambio en segundos, sin empaquetar)
+
+Para tocar código y verlo en el editor no hace falta pasar por las 5 fases. Con la ruta de
+fábrica reactivada (esbuild, ver `odd/tasks/build-veloz.md`):
+
+```bash
+cd picode-source
+npm run transpile-client      # src/ → out/ : 7.559 ficheros en ~7 segundos
+npm run watch                 # y a partir de ahí, re-transpilación al guardar
+scripts\code.bat              # arranca el editor DESDE out/ (la primera vez baja Electron)
+```
+
+Cosas que hay que saber de este modo, para que no sorprendan:
+
+- La interfaz sale **en inglés**: el modo desarrollo omite a propósito el paso de traducción.
+  El español lo mete el empaquetado, y para eso está `./dev/build.sh`.
+- `transpile-client` **no comprueba tipos**. El control salta al construir el producto (y en
+  el bucle se puede tener aparte con `npm run gulp watch-client`).
+- El `out/` de desarrollo **nunca se empaqueta**: el build del producto escribe sus propias
+  salidas (`out-build`, `out-vscode-min`) y no se pisa con esto.
+- `npm run build-fast` está muerto (heredó referencias a una extensión que VSCodium borró);
+  no lo uséis hasta que se limpie.
+
 ### Qué se midió cuando el build se hacía con parches
 
 Esta lista es del camino **retirado** (las fases de descarga y parcheo). Se conserva porque fue
@@ -285,6 +308,21 @@ directamente en el árbol y se commitea.
 ## Estado de verificación
 
 ### La fuente propia (2026-09-27): lo que se midió al retirar las fases 1-5
+
+- Cadena completa `./dev/build.sh`, en régimen normal sobre esta máquina (16 núcleos):
+  compilar e empaquetar → `PiCode.exe` → rematado. Medidas por separado con los comandos
+  exactos del build y con salida 0 en todas las fases: **compilar 5 min 05 s**
+  (`compile-src` con gulp-tsb = 264 s, el 85 % del tiempo), **empaquetar 36 s**,
+  **rematar 17 s**. Build completo en régimen normal: **≈ 6 minutos** con las dependencias ya
+  instaladas. El registro en bruto queda en `.scratch/baseline-{prepack,pack,stage}.{log,time}`
+  (fuera del árbol versionado).
+- **Actualizado el mismo día, con el interruptor de esbuild devuelto a su valor de fábrica**
+  (decisión registrada en `odd/tasks/build-veloz.md`): la cadena volvió a medirse de punta a
+  punta y **aplastó sus propios números** — compilar pasó de 5 min 05 s a **41 s** (dentro van
+  14 s de control de tipos, cero errores), empaquetar de 36 s a 2 min 23 s (agrupar desde la
+  fuente cuesta ~100 s) y el **build completo, de ~6 min a 3 min 34 s**, con el editor
+  arrancando después. El `rimraf` de `out-build/` sigue costando ~3 s: no es palanca, y ahora
+  menos.
 
 - El árbol preparado se registró como commit en el git de `./picode-source` (`5945775f`, sobre
   el commit virgen `08d4889f`). Después de eso `git status` queda **limpio**: las 5.053 rutas
