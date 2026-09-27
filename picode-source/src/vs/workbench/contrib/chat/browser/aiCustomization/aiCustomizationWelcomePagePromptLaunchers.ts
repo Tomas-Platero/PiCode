@@ -91,9 +91,9 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 		},
 		{
 			id: AICustomizationManagementSection.Plugins,
-			label: localize('plugins', "Plugins"),
+			label: localize('plugins', "Packages"),
 			icon: pluginIcon,
-			description: localize('pluginsDesc', "Install and manage agent plugins that add additional tools, skills, and integrations."),
+			description: localize('pluginsDesc', "Extend pi with packages that add extensions, skills, prompts, and MCP servers."),
 		},
 		{
 			id: AICustomizationManagementSection.Tools,

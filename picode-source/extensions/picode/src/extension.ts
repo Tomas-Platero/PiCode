@@ -16,6 +16,7 @@ import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-prov
 import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, parseKeyValueLines, serverNames, validateDraft, validateServerName, type AddServerDraft } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
+import { installPackage, searchPackages } from './packages-registry';
 import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk } from './piSdk';
 import { externalProfileDir } from './profile-import';
@@ -385,6 +386,21 @@ async function collectKeyValueLines(subject: string): Promise<Record<string, str
 export const PACKAGES_COMMAND = 'picode.setup.packages';
 
 /**
+ * The Packages section's catalog: what npm says about packages tagged with pi's keywords —
+ * the very list `pi.dev/packages` renders, asked straight from npm's search endpoint (pi.dev
+ * has no public API of its own). A **contract**, like `PACKAGES_COMMAND` above: the page
+ * calls it programmatically, with the owner's query as an optional string argument.
+ */
+export const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
+
+/**
+ * The Packages section's install: pi's own installer, run into the profile in force. A
+ * **contract** like the search: the page hands the target the owner chose (an npm name or a
+ * git URL) and shows the one sentence this answers.
+ */
+export const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
+
+/**
  * The MCP section's "Add Server", which the core invokes: it asks this connector for the new
  * server instead of the editor's own add flow, because the servers this page lists live in
  * pi's own `mcp.json` — the editor's flow would write a file pi never reads.
@@ -605,6 +621,21 @@ function registerCustomizations(): vscode.Disposable[] {
 
 	// The page's own door onto the package list, for the discovery that cannot use a provider.
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackage[]> => [...readPackages().packages]));
+
+	// The Packages section's catalog and install. The search resolves nothing of the editor —
+	// the rules live in `packages-registry.ts` and its failures are said here, once per session,
+	// the way the package listing's are. The install resolves the editor-only parts first: the
+	// bundled pi CLI (a missing one is a sentence, not an error) and the profile in force, which
+	// is the directory pi installs into — the same resolution `ensureMcpAdapter` makes.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_SEARCH_COMMAND, async (query?: string) =>
+		searchPackages(typeof query === 'string' ? query : '', { log: report })));
+	disposables.push(vscode.commands.registerCommand(PACKAGES_INSTALL_COMMAND, async (target?: string) => {
+		const cliEntry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+		if (!fs.existsSync(cliEntry)) {
+			return { ok: false, message: 'pi runtime not found in this editor' };
+		}
+		return installPackage(typeof target === 'string' ? target : '', { cliEntry, profileDir: profileInForce() });
+	}));
 
 	// The MCP section's "Add Server": it writes into pi's profile through `addMcpServer`, and a
 	// failure inside it is said there rather than rejected — the core falls back to the editor's

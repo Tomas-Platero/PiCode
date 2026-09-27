@@ -29,7 +29,7 @@ export class ManagePluginsAction extends Action2 {
 	constructor() {
 		super({
 			id: ManagePluginsAction.ID,
-			title: localize2('plugins', 'Plugins'),
+			title: localize2('plugins', 'Packages'),
 			category: CHAT_CATEGORY,
 			precondition: ChatContextKeys.enabled,
 			menu: [{

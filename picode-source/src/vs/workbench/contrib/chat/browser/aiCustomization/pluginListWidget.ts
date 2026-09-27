@@ -30,7 +30,10 @@ import { isWeb } from '../../../../../base/common/platform.js';
 import { IAgentPlugin, IAgentPluginService } from '../../common/plugins/agentPluginService.js';
 import { isContributionEnabled } from '../../common/enablement.js';
 import { getInstalledPluginContextMenuActions } from '../agentPluginActions.js';
-import { IMarketplacePlugin, IPluginMarketplaceService } from '../../common/plugins/pluginMarketplaceService.js';
+import { IMarketplacePlugin, IPluginMarketplaceService, MarketplaceType, PluginSourceKind } from '../../common/plugins/pluginMarketplaceService.js';
+import { IMarketplaceReference, MarketplaceReferenceKind } from '../../common/plugins/marketplaceReference.js';
+import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
+import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { IPluginInstallService } from '../../common/plugins/pluginInstallService.js';
 import { AgentPluginItemKind, IAgentPluginItem, IInstalledPluginItem, IMarketplacePluginItem } from '../agentPluginEditor/agentPluginItems.js';
 import { pluginIcon } from './aiCustomizationIcons.js';
@@ -47,6 +50,23 @@ import { UpdateAgentPluginsCommandId } from '../chat.js';
 const $ = DOM.$;
 
 const PLUGIN_ITEM_HEIGHT = 36;
+
+/** Row shape returned by the PiCode package catalog connector (`picode.packages.search`). */
+interface IPackageCatalogRow {
+	readonly name: string;
+	readonly description?: string;
+	readonly publisher?: string;
+	readonly version?: string;
+}
+
+/** Result shape returned by the PiCode package installer connector (`picode.packages.install`). */
+interface IPackageInstallResult {
+	readonly ok: boolean;
+	readonly message: string;
+}
+
+const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
+const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
 
 //#region Entry types
 
@@ -270,6 +290,9 @@ class PluginMarketplaceItemProvider implements IGalleryItemProvider<IPluginMarke
 	constructor(
 		private readonly pluginInstallService: IPluginInstallService,
 		private readonly agentPluginService: IAgentPluginService,
+		private readonly commandService: ICommandService,
+		private readonly dialogService: IDialogService,
+		private readonly onPackageInstalled: () => void,
 	) { }
 
 	getLabel(element: IPluginMarketplaceItemEntry): string {
@@ -291,7 +314,13 @@ class PluginMarketplaceItemProvider implements IGalleryItemProvider<IPluginMarke
 	}
 
 	async install(element: IPluginMarketplaceItemEntry): Promise<void> {
-		await this.pluginInstallService.installPlugin({ ...this._toInstallable(element.item), readmeUri: element.item.readmeUri });
+		await installPackageViaConnector(
+			this.commandService,
+			this.dialogService,
+			`npm:${element.item.name}`,
+			element.item.name,
+			this.onPackageInstalled,
+		);
 	}
 
 	onDidChangeInstallState(_element: IPluginMarketplaceItemEntry, listener: () => void) {
@@ -313,18 +342,7 @@ class PluginMarketplaceItemProvider implements IGalleryItemProvider<IPluginMarke
 }
 
 //#endregion
-
 //#region Helpers
-
-function installedPluginToItem(plugin: IAgentPlugin, labelService: ILabelService): IInstalledPluginItem {
-	// Use `||` (not `??`) so an empty `label` also falls back to the URI basename.
-	// The items model's `getPluginCount` dedupes against this same fallback; using
-	// `??` here would silently break dedup for plugins whose label is `''`.
-	const name = plugin.label || basename(plugin.uri);
-	const description = plugin.fromMarketplace?.description ?? labelService.getUriLabel(dirname(plugin.uri), { relative: true });
-	const marketplace = plugin.fromMarketplace?.marketplace;
-	return { kind: AgentPluginItemKind.Installed, name, description, marketplace, plugin };
-}
 
 function marketplacePluginToItem(plugin: IMarketplacePlugin): IMarketplacePluginItem {
 	return {
@@ -338,6 +356,71 @@ function marketplacePluginToItem(plugin: IMarketplacePlugin): IMarketplacePlugin
 		marketplaceType: plugin.marketplaceType,
 		readmeUri: plugin.readmeUri,
 	};
+}
+
+/**
+ * Maps a package catalog row to the marketplace item shape used by the browse list.
+ * The synthetic npm reference is never cloned or resolved locally; installs go through
+ * the PiCode connector (`picode.packages.install`) and discovery refreshes separately.
+ */
+function npmPackageToMarketplacePlugin(row: IPackageCatalogRow): IMarketplacePlugin {
+	const marketplaceReference: IMarketplaceReference = {
+		rawValue: `npm:${row.name}`,
+		displayLabel: row.name,
+		cloneUrl: '',
+		canonicalId: `npm:${row.name}`,
+		cacheSegments: ['npm', row.name],
+		kind: MarketplaceReferenceKind.GitUri,
+	};
+	return {
+		name: row.name,
+		description: row.description ?? '',
+		version: row.version ?? '',
+		source: 'npm',
+		sourceDescriptor: { kind: PluginSourceKind.Npm, package: row.name },
+		marketplace: 'npm',
+		marketplaceReference,
+		marketplaceType: MarketplaceType.OpenPlugin,
+	};
+}
+
+/**
+ * Installs a package through the PiCode connector and reports the outcome.
+ * On success the plugin discovery is refreshed and {@link onInstalled} runs so the
+ * caller can return to the installed list. On connector absence the user is pointed
+ * at the pi CLI instead of a generic failure.
+ */
+async function installPackageViaConnector(
+	commandService: ICommandService,
+	dialogService: IDialogService,
+	installTarget: string,
+	displayName: string,
+	onInstalled: () => void,
+): Promise<void> {
+	let result: IPackageInstallResult | undefined;
+	try {
+		result = await commandService.executeCommand<IPackageInstallResult>(PACKAGES_INSTALL_COMMAND, installTarget);
+	} catch {
+		await dialogService.warn(localize('packagesConnectorUnavailableInstall', "PiCode connector is unavailable — packages are installed from the pi CLI."));
+		return;
+	}
+	if (result?.ok) {
+		await dialogService.info(localize('packageInstalled', "Package {0} installed. It will appear in the list.", displayName));
+		await commandService.executeCommand(UpdateAgentPluginsCommandId);
+		onInstalled();
+	} else {
+		await dialogService.warn(result?.message || localize('packageInstallFailed', "Package installation failed."));
+	}
+}
+
+function installedPluginToItem(plugin: IAgentPlugin, labelService: ILabelService): IInstalledPluginItem {
+	// Use `||` (not `??`) so an empty `label` also falls back to the URI basename.
+	// The items model's `getPluginCount` dedupes against this same fallback; using
+	// `??` here would silently break dedup for plugins whose label is `''`.
+	const name = plugin.label || basename(plugin.uri);
+	const description = plugin.fromMarketplace?.description ?? labelService.getUriLabel(dirname(plugin.uri), { relative: true });
+	const marketplace = plugin.fromMarketplace?.marketplace;
+	return { kind: AgentPluginItemKind.Installed, name, description, marketplace, plugin };
 }
 
 //#endregion
@@ -375,7 +458,6 @@ export class PluginListWidget extends Disposable {
 	private addButtonContainer!: HTMLElement;
 	private addButtonSimple!: Button;
 	private addButton!: ButtonWithDropdown;
-	private createPluginButton!: Button;
 	private updatePluginsButton!: Button;
 	private readonly addDropdownActions = this._register(new DisposableStore());
 
@@ -408,6 +490,8 @@ export class PluginListWidget extends Disposable {
 		@ICustomizationHarnessService private readonly harnessService: ICustomizationHarnessService,
 		@IAICustomizationItemsModel private readonly itemsModel: IAICustomizationItemsModel,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IDialogService private readonly dialogService: IDialogService,
 	) {
 		super();
 		this.element = $('.mcp-list-widget'); // reuse MCP list widget CSS
@@ -430,16 +514,16 @@ export class PluginListWidget extends Disposable {
 		this.sectionTitleHeader = DOM.append(this.element, $('.section-title-header'));
 		const titleRow = DOM.append(this.sectionTitleHeader, $('.section-title-row'));
 		const sectionTitle = DOM.append(titleRow, $('h2.section-title'));
-		sectionTitle.textContent = localize('plugins', "Plugins");
+		sectionTitle.textContent = localize('plugins', "Packages");
 		const sectionTitleDescription = DOM.append(this.sectionTitleHeader, $('p.section-title-description'));
 		const sectionTitleDescriptionText = DOM.append(sectionTitleDescription, $('span.section-title-description-text'));
-		sectionTitleDescriptionText.textContent = localize('pluginsDescription', "Extend your AI agent with plugins that add commands, skills, agents, hooks, and MCP servers from reusable packages.");
+		sectionTitleDescriptionText.textContent = localize('pluginsDescription', "Extend pi with packages that add extensions, skills, prompts, and MCP servers — the ones pi runs in this editor.");
 		// Real whitespace text node between description and link so the gap collapses
 		// when the link wraps to a new line (a CSS margin-left would push it inward).
 		sectionTitleDescription.appendChild(document.createTextNode(' '));
 		this.sectionLink = DOM.append(sectionTitleDescription, $('a.section-title-link')) as HTMLAnchorElement;
-		this.sectionLink.textContent = localize('learnMorePlugins', "Learn more about agent plugins");
-		this.sectionLink.href = 'https://code.visualstudio.com/docs/agent-customization/agent-plugins?referrer=in-product';
+		this.sectionLink.textContent = localize('learnMorePlugins', "Browse pi packages on pi.dev");
+		this.sectionLink.href = 'https://pi.dev/packages';
 		this._register(DOM.addDisposableListener(this.sectionLink, 'click', (e) => {
 			e.preventDefault();
 			const href = this.sectionLink.href;
@@ -475,7 +559,7 @@ export class PluginListWidget extends Disposable {
 		// Search container
 		const searchContainer = DOM.append(this.searchAndButtonContainer, $('.list-search-container'));
 		this.searchInput = this._register(new InputBox(searchContainer, this.contextViewService, {
-			placeholder: localize('searchPluginsPlaceholder', "Type to search..."),
+			placeholder: localize('searchPluginsPlaceholder', "Search pi packages..."),
 			inputBoxStyles: defaultInputBoxStyles,
 		}));
 
@@ -501,13 +585,13 @@ export class PluginListWidget extends Disposable {
 		this._register(this.backButton.onDidClick(() => this.toggleBrowseMode(false)));
 
 		const browseButtonContainer = DOM.append(this.buttonContainer, $('.list-add-button-container'));
-		const browseMarketplaceLabel = localize('browseMarketplace', "Browse Marketplace");
+		const browseMarketplaceLabel = localize('browseMarketplace', "Browse Packages");
 		this.browseButton = this._register(new Button(browseButtonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: browseMarketplaceLabel, ariaLabel: browseMarketplaceLabel }));
 		this.browseButton.element.classList.add('list-add-button');
 		this._register(this.browseButton.onDidClick(() => this.runPrimaryButtonAction()));
 
 		this.addButtonContainer = DOM.append(this.buttonContainer, $('.list-add-button-container'));
-		const addPluginLabel = localize('addPlugin', "Add Plugin");
+		const addPluginLabel = localize('addPlugin', "Install from Repository");
 		this.addButtonSimple = this._register(new Button(this.addButtonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: addPluginLabel, ariaLabel: addPluginLabel }));
 		this.addButtonSimple.element.classList.add('list-add-button');
 		this._register(this.addButtonSimple.onDidClick(() => this.runPrimaryAddAction()));
@@ -525,13 +609,7 @@ export class PluginListWidget extends Disposable {
 		this.addButton.element.classList.add('list-add-button');
 		this._register(this.addButton.onDidClick(() => this.runPrimaryAddAction()));
 
-		const createPluginLabel = localize('createPlugin', "Create Plugin");
-		this.createPluginButton = this._register(new Button(this.buttonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: createPluginLabel, ariaLabel: createPluginLabel }));
-		this.createPluginButton.element.classList.add('list-icon-button');
-		this.createPluginButton.label = `$(${Codicon.newFile.id})`;
-		this._register(this.createPluginButton.onDidClick(() => this.runCreatePluginAction()));
-
-		const updatePluginsLabel = localize('updatePlugins', "Update Plugins");
+		const updatePluginsLabel = localize('updatePlugins', "Update Packages");
 		this.updatePluginsButton = this._register(new Button(this.buttonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: updatePluginsLabel, ariaLabel: updatePluginsLabel }));
 		this.updatePluginsButton.element.classList.add('list-icon-button');
 		this.updatePluginsButton.label = `$(${Codicon.refresh.id})`;
@@ -562,7 +640,13 @@ export class PluginListWidget extends Disposable {
 		const groupHeaderRenderer = new CustomizationGroupHeaderRenderer<IPluginGroupHeaderEntry>('pluginGroupHeader', this.hoverService);
 		const installedRenderer = new PluginInstalledItemRenderer();
 		const remoteRenderer = new PluginRemoteItemRenderer();
-		const marketplaceRenderer = new GalleryItemRenderer<IPluginMarketplaceItemEntry>(PLUGIN_MARKETPLACE_ITEM_TEMPLATE_ID, new PluginMarketplaceItemProvider(this.pluginInstallService, this.agentPluginService));
+		const marketplaceRenderer = new GalleryItemRenderer<IPluginMarketplaceItemEntry>(PLUGIN_MARKETPLACE_ITEM_TEMPLATE_ID, new PluginMarketplaceItemProvider(
+			this.pluginInstallService,
+			this.agentPluginService,
+			this.commandService,
+			this.dialogService,
+			() => this.exitBrowseMode(),
+		));
 
 		this.list = this._register(this.instantiationService.createInstance(
 			WorkbenchList<IPluginListEntry>,
@@ -593,7 +677,7 @@ export class PluginListWidget extends Disposable {
 						return nameAndDesc;
 					},
 					getWidgetAriaLabel() {
-						return localize('pluginsListAriaLabel', "Plugins");
+						return localize('pluginsListAriaLabel', "Packages");
 					}
 				},
 				openOnSingleClick: true,
@@ -738,16 +822,15 @@ export class PluginListWidget extends Disposable {
 		}
 
 		this.browseButton.element.parentElement!.style.display = this.browseMode ? 'none' : '';
-		this.browseButton.label = `$(${Codicon.library.id}) ${localize('browseMarketplace', "Browse Marketplace")}`;
+		this.browseButton.label = `$(${Codicon.library.id}) ${localize('browseMarketplace', "Browse Packages")}`;
 		this.browseButton.enabled = browseMarketplaceAvailable;
 		const browseTitle = browseMarketplaceAvailable
-			? localize('browseMarketplace', "Browse Marketplace")
-			: localize('browseMarketplaceUnsupportedWeb', "Browse Marketplace is not available in VS Code for the Web.");
+			? localize('browseMarketplace', "Browse Packages")
+			: localize('browseMarketplaceUnsupportedWeb', "Browse Packages is not available in VS Code for the Web.");
 		this.browseButton.setTitle(browseTitle);
 		this.browseButton.element.setAttribute('aria-label', browseTitle);
 
 		this.updateAddButton();
-		this.createPluginButton.enabled = true;
 	}
 
 	private isBrowseMarketplaceAvailable(): boolean {
@@ -790,17 +873,12 @@ export class PluginListWidget extends Disposable {
 		return [
 			...this.pluginActions,
 			{
-				id: 'plugin.installFromSource',
-				label: localize('installFromSource', "Install Plugin from Source"),
-				tooltip: localize('installFromSource', "Install Plugin from Source"),
+				id: 'plugin.installFromRepository',
+				label: localize('installFromRepository', "Install from Repository"),
+				tooltip: localize('installFromRepository', "Install from Repository"),
 				icon: Codicon.add,
 				run: async () => {
-					const installed = await this.commandService.executeCommand<boolean>('workbench.action.chat.installPluginFromSource', { skipReveal: true });
-					// Return to the installed list so the newly installed plugin is
-					// visible — source-installed plugins may not appear in the marketplace.
-					if (installed && this.browseMode) {
-						this.exitBrowseMode();
-					}
+					await this.runInstallFromRepository();
 				},
 			},
 		];
@@ -826,8 +904,49 @@ export class PluginListWidget extends Disposable {
 		}
 	}
 
-	private async runCreatePluginAction(): Promise<void> {
-		await this.commandService.executeCommand('workbench.action.chat.createPlugin');
+	/**
+	 * Prompts for a git URL or owner/repo shorthand and installs the package through
+	 * the PiCode connector, which decides whether the target is an npm package or a
+	 * git source. Mirrors the quick-input UX of the former Install-from-Source action.
+	 */
+	private runInstallFromRepository(): Promise<void> {
+		const store = new DisposableStore();
+		const inputBox = store.add(this.quickInputService.createInputBox());
+		inputBox.placeholder = localize('installFromRepositoryPlaceholder', "git URL or owner/repo");
+		inputBox.prompt = localize('installFromRepositoryPrompt', "Enter a git URL or owner/repo shorthand to install a package from");
+		inputBox.ignoreFocusOut = true;
+		inputBox.show();
+
+		store.add(inputBox.onDidChangeValue(() => {
+			inputBox.validationMessage = undefined;
+		}));
+
+		let accepting = false;
+		store.add(inputBox.onDidHide(() => {
+			if (!accepting) {
+				store.dispose();
+			}
+		}));
+
+		store.add(inputBox.onDidAccept(async () => {
+			const source = inputBox.value.trim();
+			if (!source || accepting) {
+				return;
+			}
+
+			// Show busy state and prevent concurrent installs.
+			accepting = true;
+			inputBox.busy = true;
+			inputBox.enabled = false;
+			// Hide the input box so it doesn't conflict with dialogs.
+			inputBox.hide();
+			try {
+				await installPackageViaConnector(this.commandService, this.dialogService, source, source, () => this.exitBrowseMode());
+			} finally {
+				store.dispose();
+			}
+		}));
+		return Promise.resolve();
 	}
 
 	private async runUpdatePluginsAction(): Promise<void> {
@@ -863,8 +982,8 @@ export class PluginListWidget extends Disposable {
 		this.backButton.element.parentElement!.style.display = browse ? '' : 'none';
 
 		this.searchInput.setPlaceHolder(browse
-			? localize('searchMarketplacePlaceholder', "Search plugin marketplace...")
-			: localize('searchPluginsPlaceholder', "Type to search...")
+			? localize('searchMarketplacePlaceholder', "Search npm for pi packages...")
+			: localize('searchPluginsPlaceholder', "Search pi packages...")
 		);
 
 		if (browse) {
@@ -888,24 +1007,28 @@ export class PluginListWidget extends Disposable {
 		// Show loading state
 		this.emptyContainer.style.display = 'flex';
 		this.listContainer.style.display = 'none';
-		this.emptyText.textContent = localize('loadingMarketplace', "Loading marketplace...");
+		this.emptyText.textContent = localize('loadingMarketplace', "Loading packages...");
 		this.emptySubtext.textContent = '';
 
 		try {
-			const plugins = await this.pluginMarketplaceService.fetchMarketplacePlugins(cts.token);
+			// The PiCode connector performs the npm keyword search; the text query is
+			// passed through and re-applied client-side as a cheap local narrowing.
+			const query = this.searchQuery.toLowerCase().trim();
+			const rows = await this.commandService.executeCommand<readonly IPackageCatalogRow[]>(PACKAGES_SEARCH_COMMAND, this.searchQuery.trim()) ?? [];
 
 			if (cts.token.isCancellationRequested) {
 				return;
 			}
 
-			const query = this.searchQuery.toLowerCase().trim();
-			const filtered = query
-				? plugins.filter(p => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query))
-				: plugins;
+			const filtered = rows.filter(p =>
+				p.name.toLowerCase().includes(query)
+				|| (p.description ?? '').toLowerCase().includes(query)
+			);
 
-			// Filter out already-installed plugins
+			// Filter out already-installed packages
 			const installedUris = new Set(this.agentPluginService.plugins.get().map(p => p.uri.toString()));
 			this.marketplaceItems = filtered
+				.map(npmPackageToMarketplacePlugin)
 				.filter(p => {
 					const expectedUri = this.pluginInstallService.getPluginInstallUri(p);
 					return !installedUris.has(expectedUri.toString());
@@ -914,12 +1037,13 @@ export class PluginListWidget extends Disposable {
 
 			this.updateMarketplaceList();
 		} catch {
+			// The connector command is not registered (extension absent) or failed.
 			if (!cts.token.isCancellationRequested) {
 				this.marketplaceItems = [];
 				this.emptyContainer.style.display = 'flex';
 				this.listContainer.style.display = 'none';
-				this.emptyText.textContent = localize('marketplaceError', "Unable to load marketplace");
-				this.emptySubtext.textContent = localize('tryAgainLater', "Check your connection and try again");
+				this.emptyText.textContent = localize('marketplaceError', "Unable to load packages");
+				this.emptySubtext.textContent = localize('packagesConnectorUnavailableListing', "PiCode connector is unavailable — packages cannot be listed.");
 			}
 		}
 	}
@@ -929,10 +1053,10 @@ export class PluginListWidget extends Disposable {
 			this.emptyContainer.style.display = 'flex';
 			this.listContainer.style.display = 'none';
 			if (this.searchQuery.trim()) {
-				this.emptyText.textContent = localize('noMarketplaceResults', "No plugins match '{0}'", this.searchQuery);
+				this.emptyText.textContent = localize('noMarketplaceResults', "No packages match '{0}'", this.searchQuery);
 				this.emptySubtext.textContent = localize('tryDifferentSearch', "Try a different search term");
 			} else {
-				this.emptyText.textContent = localize('emptyMarketplace', "No plugins available");
+				this.emptyText.textContent = localize('emptyMarketplace', "No packages available");
 				this.emptySubtext.textContent = '';
 			}
 		} else {
@@ -1011,14 +1135,14 @@ export class PluginListWidget extends Disposable {
 			this.listContainer.style.display = 'none';
 
 			if (this.searchQuery.trim()) {
-				this.emptyText.textContent = localize('noMatchingPlugins', "No plugins match '{0}'", this.searchQuery);
+				this.emptyText.textContent = localize('noMatchingPlugins', "No packages match '{0}'", this.searchQuery);
 				this.emptySubtext.textContent = localize('tryDifferentSearch', "Try a different search term");
 			} else if (this.harnessService.getActiveDescriptor().itemProvider) {
 				this.emptyText.textContent = localize('noRemotePlugins', "No plugins configured");
 				this.emptySubtext.textContent = localize('addRemotePlugins', "Use the toolbar to add remote plugins or install plugins from a source.");
 			} else {
-				this.emptyText.textContent = localize('noPlugins', "No plugins installed");
-				this.emptySubtext.textContent = localize('browseToAdd', "Browse the marketplace to discover and install plugins");
+				this.emptyText.textContent = localize('noPlugins', "No packages installed.");
+				this.emptySubtext.textContent = localize('browseToAdd', "Use Browse Packages to discover and install pi packages from npm.");
 			}
 		} else {
 			this.emptyContainer.style.display = 'none';
