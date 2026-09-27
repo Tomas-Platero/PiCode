@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD033 -->
 <div align="center">
 
 <img src="./assets/picode-banner.png" alt="PiCode — the best AI for coding, powered by Pi" width="100%" />
@@ -5,7 +6,7 @@
 <br />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square)](./LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square&logo=windows&logoColor=3B9BFF)](#getting-a-runnable-tree)
+[![Platform](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square&logo=windows&logoColor=3B9BFF)](#what-exists-today)
 [![Built on VSCodium](https://img.shields.io/badge/Built%20on-VSCodium-1E1E1E?style=flat-square)](https://github.com/VSCodium/vscodium)
 [![Powered by Pi](https://img.shields.io/badge/Powered%20by-Pi-3B9BFF?style=flat-square)](https://pi.dev)
 [![Gentle AI](https://img.shields.io/badge/Memory%20%26%20Workflow-Gentle%20AI-3B9BFF?style=flat-square)](https://github.com/Gentleman-Programming/gentle-ai)
@@ -16,340 +17,129 @@
 
 <br />
 
-> A curated VSCodium distribution with the **[Pi](https://pi.dev) coding agent** and **[Gentle
-> AI](https://github.com/Gentleman-Programming/gentle-ai)** built in as first-class surfaces:
-> the chat panel, the settings, the providers, the themes and the first-run wizard are part
-> of the editor, not something you install after it.
-
-PiCode is not a plugin for VS Code. It is a distribution: a stock VSCodium tree, branded and
-patched, plus one extension that owns the agent layer. Opening PiCode means opening a
-working agentic environment — no setup ceremony.
-
-PiCode itself is **free and complete**: no feature is held back, and nothing it does needs a
-server to work.
+> **A VSCodium distribution with the [Pi](https://pi.dev) coding agent and [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) inside the editor core — not as something you install afterwards.**
+>
+> `@pi` in the chat, providers connected from settings, memory and skills already there. No setup ceremony, no Copilot.
 
 <br />
 
-## Built on
+**PiCode is free and complete.** No feature is held back. The editor itself is 100% open-source and works fully offline with your own provider keys.
 
-PiCode doesn't reinvent the editor, the agent or the memory layer — it unifies three
-open-source projects that already do their part well, and wires them together as one
-coherent tool.
-
-| | Project | What it brings to PiCode |
-| --- | --- | --- |
-| <img src="./assets/vscodium.svg" width="26" alt="VSCodium" /> | **[VSCodium](https://github.com/VSCodium/vscodium)** / [VS Code — MIT source](https://github.com/microsoft/vscode) | The editor itself: the base every surface in PiCode is built on. |
-| <img src="./assets/pi.svg" width="26" alt="Pi" /> | **[Pi](https://pi.dev)** ([`earendil-works/pi`](https://github.com/earendil-works/pi), by Mario Zechner) | The coding agent: chat, tools, providers, models, packages and skills. |
-| <img src="./assets/gentle-ai.png" width="22" alt="Gentle AI" /> | **[Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)** & **[Engram](https://github.com/Gentleman-Programming/engram)** (Gentleman Programming) | Persistent memory, Spec-Driven Development workflow and curated skills on top of Pi. |
-
-All three are MIT-licensed. Full attribution and upstream licenses are preserved and
-documented in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) — see [License](#license) below.
-
-<br />
-
-## Contents
-
-- [What is in this repository, and what is not](#what-is-in-this-repository-and-what-is-not)
-- [Getting a runnable tree](#getting-a-runnable-tree)
-- [Building the core from source](#to-build-the-core-from-source)
-- [Continuous integration](#continuous-integration)
-- [Working on the agent layer](#working-on-the-agent-layer)
-- [What exists today](#what-exists-today)
-- [Known state](#known-state)
-- [Where the reasoning lives](#where-the-reasoning-lives)
-- [License](#license)
-
-<br />
-
-## What is in this repository, and what is not
-
-The repository root doubles as the distribution root, because that is what enables portable
-mode (a `data/` folder next to the executable). **The ~1 GB VSCodium payload is not
-versioned**, and it cannot be: GitHub refuses any push carrying a file over 100 MB, and the
-editor's own executable is 212 MB. What is versioned is the layer that turns a stock archive
-into PiCode:
-
-| Path | What it is |
+| 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
-| `patches/` | The two patch sets the source build applies: `vscodium/` (vendored verbatim from VSCodium) and `picode/` (PiCode's own). |
-| `upstream/` | The pins: which VS Code commit, and which VSCodium revision the patches were vendored from. |
-| `dev/` | The pipeline itself: fetch, prepare, patch, compile, pack, stage — plus the build window and the progress viewer. |
-| `.github/workflows/` | The CI guard: the patch check on every push, the weekly pin watchdog and the nightly full build (see [Continuous integration](#continuous-integration)). |
-| `builder/` | The C# application that presses the button: it drives the same pipeline, natively on Windows and through WSL for Linux. |
-| `extensions/picode-pi-chat/` | The **retired** agent extension. Nothing compiles it or ships it; it stays until its migration into the editor's core finishes (see `odd/tasks/picode-migrar-al-core.md`). |
-| `distribution/` | The modification layer as data: `product-delta.json` (branding, gallery, removed endpoints), `settings.json` (first-run defaults), the icon, and `apply-picode.ps1` which applies the delta, creates the portable profile and stages the built extension into the tree. |
-| `odd/tasks/` | The **ODD** feature records: one document per feature, with the decisions taken, the checks observed, the defects found and the commits that carry them. This is where the reasoning lives. |
-| `docs/` | `ARCHITECTURE.md`, `DECISIONS.md` (ADRs) and `DISTRIBUTION.md` (how the owned tree is built and what was removed from it). Index: [`docs/README.md`](docs/README.md). |
-| `wiki/` | The public wiki, page by page — the same content as `docs/` written for someone who has never seen the repo. It is the import source for the GitHub Pages wiki of this repository. |
-| `AGENTS.md` | The owner's own words, verbatim (Spanish), with what each one means in practice. Read it before changing product behaviour. |
-
-So a fresh clone is not a runnable editor yet. That is deliberate: versioning the payload
-would freeze a copy of VSCodium nobody would update, and git refuses a file over 100 MB
-anyway — the editor's own executable is 212 MB.
+| [Download a release](https://github.com/TomasPlatero/PiCode/releases) · unzip · run `PiCode.exe` · read the [wiki](https://github.com/TomasPlatero/PiCode/wiki) | [Source build guide](#the-source-build) · [Contributing docs](CONTRIBUTING.md) · [How to compile](docs/howto-build.md) |
 
 <br />
 
-## Getting a runnable tree
+## What it is
 
-There are two ways, and they are for different people.
+A stock VSCodium tree branded and patched so that opening it means opening a working agentic environment:
 
-### To try it: the release
+| | What you get |
+| --- | --- |
+| **Chat** | `@pi` as the default participant — streaming transcript, tools, reasoning, sessions (list/resume/fork), slash commands, attachments (images, files, video, audio). |
+| **Settings** | Pi's settings (models, analytics, network, tools, packages, skills) in the editor's own tree, grouped in product nodes. No PiCode-owned settings page — the editor *is* the surface. |
+| **Providers** | Connect with an API key or OAuth subscription (ChatGPT, Claude Pro/Max, Copilot, Grok, Kimi, Meta, OpenRouter, Radius…). Custom endpoints with your own base URL and dialect. 41 providers total. |
+| **Themes** | A gallery with a live preview rendered from each theme's own colours, install-and-apply in one action. Open VSX gallery; marketplace-only themes are explained rather than failing silently. |
+| **One profile** | Settings, credentials, models, packages, skills, MCPs, memory — all in PiCode's portable `data/` folder. Nothing is read from or written to a Pi already on your machine. |
+| **Gentle AI** | The workflow harness on top: memory, skills, subagents, review discipline. Installed in the wizard or the settings. |
 
-Download the ZIP from [Releases](https://github.com/TomasPlatero/PiCode/releases), unzip it
-anywhere and run `PiCode.exe`. It is portable: on first run it creates a `data/` folder next
-to the executable, and deleting that folder gives you a clean PiCode. **No profile travels
-in the archive** — no settings, no credentials, no caches.
+It speaks to Pi two ways: **RPC** (`pi --mode rpc`, JSONL over stdio) as a child process — or **embedded** through the SDK, loading Pi inside the editor. Both use the same installation.
 
-### To work on the distribution layer: build the tree
+## What it stands on
 
-Requirements:
+PiCode doesn't reinvent the editor, the agent or the memory layer. It unifies three open-source projects and wires them together:
 
-- **Node.js 22.19+** — Pi's own requirement, not a preference (developed against 24.x)
-- **PowerShell 5.1+** (Windows) to run the apply script
-- A **VSCodium archive** for your platform ([releases](https://github.com/VSCodium/vscodium/releases)),
-  extracted at the repository root
-- Optional, for the `path` runtime: **Pi** on `PATH`
-  (`npm install -g @earendil-works/pi-coding-agent`). PiCode can also install and update
-  **its own** Pi from the settings panel, which is the recommended path.
-
-```powershell
-# 1. Extract a stock VSCodium archive into the repository root (it brings bin/, resources/,
-#    locales/, the Electron artifacts and the executable).
-
-# 2. Apply the PiCode layer. Preview first: without -Apply nothing is written.
-./distribution/apply-picode.ps1
-./distribution/apply-picode.ps1 -Apply
-```
-
-The script is idempotent and non-destructive: it previews by default, backs up
-`product.json` before its first write, never overwrites an existing `settings.json`, and
-reports "already current" on a second run. It creates `data/` for portable mode (user data,
-extensions, sessions, cache).
-
-Then run `PiCode.exe` (or `bin/picode`). The `data/` folder is disposable by design: delete
-it and you get a clean PiCode.
-
-### To build the core from source
-
-**The way to build is through the builder** — the desktop app in [`builder/`](builder/README.md)
-that drives this whole pipeline with one button, for Windows natively and for Linux through
-WSL. The manual chain below is documented because it is what the builder runs, and what CI
-runs; use it when you need to see the steps, not when you just want a build.
-
-There is also a **source path**, for whoever needs to change or audit the core: clone VS Code at
-the pinned commit, apply the patch set inherited from VSCodium, apply PiCode's own patches, apply
-the product layer and compile `PiCode.exe`. It is an **additional** path, meant for collaborators:
-the **prebuilt ZIP stays the way in for someone who just wants to use PiCode**, and this does not
-change that.
-
-The chain, link by link:
-
-```text
-VS Code (pinned commit) → patches/vscodium/ → patches/picode/ → distribution/ → PiCode.exe
-```
-
-#### Dependencies (Windows)
-
-The scripts are **Bash**, so they run from **Git Bash** (which comes with Git for Windows).
-PowerShell will not run them.
-
-| Tool | What it is for | Install |
+| | Project | What it brings |
 | --- | --- | --- |
-| **Git for Windows** | Git **and Git Bash**: without it there is no shell to run the scripts. | `winget install --id Git.Git -e` |
-| **Node.js 24.18.0** (what [`.nvmrc`](.nvmrc) pins) | `npm ci` and the gulp tasks. | `winget install --id OpenJS.NodeJS.LTS -e`, or nvm-windows |
-| **jq** | Brands `product.json` (phase 2) and reads the patches' `.json` actions. | `winget install --id jqlang.jq -e` |
-| **Visual Studio 2022** with *Desktop development with C++* **and the Spectre libraries** | `node-gyp` compiles the native modules with MSBuild. **Without the Spectre libraries the build stops** with `error MSB8040`. | Visual Studio Installer → *Modify* → *Individual components* → tick **MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)** |
-| **Python 3.11** | VS Code's build system asks for it for `node-gyp`. | `winget install --id Python.Python.3.11 -e` |
-| **Rustup** | Compiles some of VS Code's native modules. It rewrites `PATH`: restart the shell when it is done. | `winget install --id Rustlang.Rustup -e` |
-| **7-Zip** | Only to produce the release `.zip`. **Not** needed to compile or to pack the tree. | `winget install --id 7zip.7zip -e` |
+| <img src="./assets/vscodium.svg" width="26" alt="VSCodium" /> | **[VSCodium](https://github.com/VSCodium/vscodium)** / [VS Code — MIT source](https://github.com/microsoft/vscode) | The editor — the base every surface is built on. |
+| <img src="./assets/pi.svg" width="26" alt="Pi" /> | **[Pi](https://pi.dev)** by Mario Zechner | The coding agent: loop, tools, providers, models, packages, skills. |
+| <img src="./assets/gentle-ai.png" width="22" alt="Gentle AI" /> | **[Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)** & **[Engram](https://github.com/Gentleman-Programming/engram)** | Persistent memory, curated skills, and the ODD/SDD workflow harness. |
 
-### Building the builder
+All three are MIT-licensed. Full attribution is preserved in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project — it is not an official distribution of VSCodium, Pi or Gentle AI.
 
-This is the way to build. The window in [`builder/`](builder/README.md) is a C# application, and it needs nothing installed beyond the
-.NET SDK - the Windows App SDK arrives as a package the first time you build it:
+## The two pins
 
-```bash
-cd builder
-./build.cmd          # double-click it, or run it: it builds this and opens it
-dotnet run           # the same thing
-dotnet build         # compile only
-```
+Every build is reproducible from two pins:
 
-It presses the same buttons the manual chain presses: it starts the same scripts in `dev/` and reads
-the same `dev/build-requirements.mjs` and `dev/build-progress.mjs` that a terminal reads. It can build for
-Windows or for Linux through WSL, and the editor's task list carries it as **PiCode: build the builder**
-and **PiCode: run the builder**.
+| Pin | Points to | Why it matters |
+| --- | --- | --- |
+| **`upstream/stable.json`** | The exact VS Code commit (`1.135.0`) | The source that gets patched and compiled. |
+| **`upstream/vscodium.json`** | The VSCodium revision whose patches are vendored verbatim (`1.135.06055`) | `patches/vscodium/` mirrors this exactly. Both pins move together. |
 
-**The checks themselves live in one place**: [`dev/build-requirements.mjs`](dev/build-requirements.mjs).
-Run it to see this machine's answer, and read it to see which of these are required and which are only
-recommended — Rust is recommended, for instance, and its absence does not stop a build. This table says
-what each one is *for*; that file decides what is missing. Two lists that both claim to be the truth is
-how one of them ends up stale.
-
-After installing, **open a new terminal**: `PATH` is updated for new processes, not for the ones
-already open. From Git Bash:
-
-```bash
-node --version    # must match .nvmrc
-jq --version
-python3 --version
-cargo --version
-git --version
-```
-
-```bash
-./dev/build.sh          # the whole chain: fetch, prepare, compile, pack, stage
-./dev/build.sh -o       # the preparation alone, without compiling
-./dev/build.sh -s       # reuse ./picode-source instead of fetching it again
-```
-
-- `-o` is how to check that the patch set composes **without paying for a whole build**: it takes
-  minutes and leaves the tree prepared.
-- `-s` **resumes**. If `./picode-source` is already prepared it goes straight into `npm ci` and carries on:
-  that is what you use after a failure you have already fixed. It is not a default anywhere, because
-  it fails outright when there is no tree to reuse — `dev/build-live.sh` and
-  `dev/build-window.cmd` run the whole chain for that reason.
-- The whole chain takes on the order of **20-45 minutes** (`npm ci` plus the gulp task) and needs a
-  few GB of `node_modules`.
-- When it ends, the packed tree is in `./PiCode-Win32-<arch>/` with the `distribution/` layer already
-  applied. `./picode-source` and `./PiCode-*` are build outputs: git ignores them and they can be deleted at
-  any time.
-- **Linux** is wired end to end: the pipeline derives the OS from the shell, applies the
-  per-system patch set (`patches/*/linux/`) and packs into `./PiCode-linux-<arch>/`. It is what
-  the nightly full build compiles in CI. **macOS** is not wired yet: the build refuses with a
-  message that says so.
-
-#### If something fails
-
-- **`error MSB8040: Spectre-mitigated libraries are required`** — the Spectre component of Visual
-  Studio is missing (table above). It can be checked without installing anything:
-
-  ```bash
-  VSW="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
-  "$VSW" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre -property installationPath
-  # no output = missing, and phase 6 will stop
-  ```
-
-- **`npm ci` fails once and the script carries on** — that is normal: the pipeline retries up to five
-  times, and transient Windows failures (`STATUS_DLL_INIT_FAILED`) recover on their own.
-- **A patch does not apply** — it means upstream has moved. The repair process is in
-  [`docs/howto-build.md`](docs/howto-build.md).
-
-#### What the reference document holds
-
-[`docs/howto-build.md`](docs/howto-build.md) covers what is **not** here: the **two pins** (VS Code,
-and the VSCodium revision the patches were vendored from), how to **re-pin them**, the **patch repair
-process** (semi-automatic and manual) and the **verification state**, including what has not been
-measured.
-
-The dependency list and the checks in this section are repeated in docs/howto-build.md, which is
-where the detail lives. Change a dependency and both places have to move.
-
-<br />
-
-## Continuous integration
-
-CI guards the source build, and none of it ever commits Microsoft's source: the tree is
-fetched into `picode-source/`, which git ignores.
-
-- **Pin check** (every push and pull request) runs the preparation only — fetch, patches,
-  product layer, no compile — on **Linux and Windows**. If it goes red, a patch no longer
-  applies to the pinned VS Code commit, and the log names it: the repair process is in
-  [`docs/howto-build.md`](docs/howto-build.md).
-- **Full build** (nightly, whenever the pin moves, and on a `v*` tag) compiles
-  the real thing on **Linux and Windows** — compile errors surface even when
-  the patches compose, and a tag publishes a release with both portable
-  binaries.
-
-The two badges at the top of this file are those workflows, live. The watch over the pin
-itself — version bumps, security advisories, the cache map — is maintainer territory and is
-documented in [`docs/CI.md`](docs/CI.md).
-
-<br />
-
-## Working on the agent layer
-
-The editor's chat is the surface. The panel this repository used to ship as a built-in
-extension was retired on 2026-09-24 and its code is being migrated into the editor's core:
-until that migration finishes, `distribution/` stages nothing into
-`resources/app/extensions/`, and the old extension's source is reachable through git history
-(`legacy/` keeps a copy on the machine where it was retired).
-
-<br />
+A weekly guardian workflow ([`pin-watch.yml`](.github/workflows/pin-watch.yml)) checks upstream and opens a labelled PR whenever a new version lands — security advisories are flagged with CVEs and severity.
 
 ## What exists today
 
-- **Chat panel** — streaming transcript with tools, reasoning blocks, sessions (list,
-  resume, fork), slash commands, and attachments: images, files, video frames and audio
-  transcription.
-- **Settings panel** — Pi's own settings (models, analytics, network, tools, packages,
-  skills) next to PiCode's own (`picode.pi.*`), grouped in categories with a search box and
-  a global/project scope.
-- **Providers** — sign in to a provider from the editor (API key or subscription), and
-  declare a compatible endpoint with its own models (`models.json`) — for whichever Pi
-  instance is selected.
-- **Themes** — a gallery with a real preview rendered from each theme's own colours,
-  install-and-apply in one action, reachable from the palette, the settings panel and the
-  first-run wizard.
-- **One Pi, inside PiCode** — installed and updated from the editor, with its profile inside
-  PiCode and isolated from the rest of the machine: settings, credentials, models, packages,
-  skills, MCPs and memory all live here. Nothing is read from or written to the `pi` on your
-  `PATH`; connecting to an external one is an option the owner asks for, and importing its
-  profile copies it instead of sharing it.
-- **First-run wizard** — choose the runtime, switch Gentle AI on, choose a theme; all of it
-  inside the editor, with no terminal step.
-- **Gentle AI** — its panel and its package install, wired to the same state the rest of the
-  editor reads.
-- **Packages and extensions** — search the Pi package catalog (npm registry) and the editor's
-  own gallery, list what is installed, install, update and remove.
-- **Status and usage** — what Pi is using right now (version, providers, sessions, tokens,
-  cost) and the session statistics.
+- **Chat panel** — streaming with tools, reasoning blocks, session management, slash commands, and attachments (images, files, video frames, audio transcription).
+- **Providers** — sign in with a key or OAuth subscription, or declare a compatible endpoint with its own models. Provider rows live under `Settings → PiCode → Providers`.
+- **Themes** — gallery with real previews, install-and-apply from palette or settings.
+- **First-run wizard** — choose the runtime, connect a provider, install Gentle AI, pick a theme. All inside the editor — no terminal step.
+- **Pi inside PiCode** — the managed runtime installs on demand (~410 MB) and is updated from the editor. A Pi profile in PiCode's own `data/` folder, isolated from the machine.
+- **Gentle AI** — memory, skills, subagents. Its agents appear in the editor because the host discovers them on disk.
+- **MCP bridged into Pi** — editor MCP tools handed to Pi as custom tools, so editor permissions and confirmations apply. No second MCP UI.
+- **Packages** — search and manage Pi packages (npm registry keyword `pi-package`) and editor extensions (Open VSX gallery).
+- **Status & usage** — version, providers, sessions, tokens and cost.
 
-How it talks to Pi is a setting: `rpc` spawns `pi --mode rpc` as a child process and speaks
-line-delimited JSON on stdio; `embedded` loads the same Pi inside PiCode through its
-SDK. Both use the same installation.
+## What is in this repository
 
-<br />
+The repo root is the distribution root (portable mode). The ~1 GB editor payload is **not in git** — GitHub rejects files over 100 MB and the executable alone is 212 MB. What is versioned is the layer that turns a stock archive into PiCode:
 
-## Known state
+| Path | What it is |
+| --- | --- |
+| `patches/vscodium/` | 75 files verbatim from upstream VSCodium — telemetry removal, branding, Copilot hooks, cloud. |
+| `patches/picode/` | 23+ numbered patches — the welcome page, wizard, connector, agent host, source changes. |
+| `distribution/` | The modification layer as data: product delta, settings, icons, apply scripts. |
+| `dev/` | The build engine — bash scripts, CI helpers, build window, progress viewer. |
+| `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
+| `upstream/` | The two pin files (`stable.json`, `vscodium.json`). |
+| `wiki/` | The public wiki, page by page — import source for the GitHub Pages wiki. |
+| `docs/` | Internal papers: architecture, decisions, distribution, how-to-build. Index: [`docs/README.md`](docs/README.md). |
+| `odd/tasks/` | The ODD feature records — every non-trivial change left a record with decisions, checks and defects. |
+| `AGENTS.md` | The owner's own words, verbatim. Read it before changing product behaviour. |
 
-- The VSCodium payload is not in git, so the first run of a fresh clone is the two steps
-  above. Nothing else is missing.
-- The interactive surfaces — pickers, dialogs, the theme gallery's clicks — have **no
-  automated coverage**: what is tested is every decision around them (what is shown, what is
-  written, what is refused), and the click paths are checked by hand.
-- The old chat extension is retired: `distribution/` stages nothing into
-  `resources/app/extensions/` any more, and the code it held is reachable through git
-  history. Its migration into the editor's core is still open.
-- A theme that exists only in the **Microsoft Marketplace** cannot be installed here: the
-  gallery is Open VSX, which is what this editor installs from. Browse such a theme on
-  `vscodethemes.com`, install it here only if it is also on Open VSX.
-- The managed Pi runtime is installed on demand (about 410 MB) rather than shipped in the
-  archive.
+## The source build
 
-<br />
+The source path is the canonical build — releases and CI use it. It compiles a real `PiCode.exe` (or Linux equivalent) from the pinned VS Code source plus the patch set, with the product layer applied *before* compilation. That lifts the limit the binary path carries: the `checksums` map over the minified bundle makes core changes unavailable on the ZIP-over-archive route.
+
+The chain, eight phases:
+
+```text
+VS Code (pinned) → patches/vscodium/ → patches/picode/ → product.json → npm ci → gulp → PiCode-Win32-x64/ → stage
+```
+
+A full build takes 20–45 minutes. For the fast correctness check (fetch, patches, product delta — no compile):
+
+```bash
+./dev/build.sh -o
+```
+
+The recommended way to build is through the **builder** — a C# desktop app in `builder/` that presses the same buttons as the manual chain. It needs only the .NET SDK.
+
+Full dependency list, per-OS details, and troubleshooting in [Contributing docs](CONTRIBUTING.md) and [howto-build](docs/howto-build.md).
+
+## Continuous integration
+
+CI guards the source build. Three workflows, one guard each:
+
+| Workflow | When | What |
+| --- | --- | --- |
+| **[Pin check](.github/workflows/pin-check.yml)** | Every push / PR | Phases 1–5 on Linux and Windows. Goes red if a patch stops applying. |
+| **[Full build](.github/workflows/full-build.yml)** | Nightly, pin change, `v*` tag | Real compile on Linux and Windows. A tag produces a GitHub Release with portables and installers. |
+| **[Pin watch](.github/workflows/pin-watch.yml)** | Weekly | Checks latest VS Code and its security advisories. Opens a labelled PR with the new pin. |
+
+The two badges at the top of this file are live.
 
 ## Where the reasoning lives
 
-Every non-trivial change is worked as an ODD feature and leaves a record in `odd/tasks/`:
-what was asked, what was verified, what was decided, what was deliberately *not* built, the
-defects found (including the ones found by an independent verification pass) and the commits
-that carry them. Start there when a decision looks arbitrary — it usually is not, and the
-reason is written down.
-
-<br />
+Every non-trivial change is worked as an ODD feature and leaves a record in `odd/tasks/`: what was asked, what was verified, what was deliberately *not* built, the defects found (including the ones found by an independent verification pass) — and the commits that carry them. Start there when a decision looks arbitrary; it usually is not, and the reason is written down.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). PiCode is a distribution of **VSCodium**, which is a build of
-the MIT-licensed **VS Code** source, with **[Pi](https://pi.dev)** and **[Gentle
-AI](https://github.com/Gentleman-Programming/gentle-ai)** integrated as its agent and memory
-layer. All three upstream projects are MIT-licensed; their licenses and attribution are
-preserved and documented in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an
-independent project — it is not an official distribution of VSCodium, Pi or Gentle AI.
+MIT — see [LICENSE](LICENSE). See also [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for full upstream attribution.
 
-<div align="center">
 <br />
+<div align="center">
 
 Made by [Tomás Platero](https://tomasplatero.com) · built on [VSCodium](https://github.com/VSCodium/vscodium), [Pi](https://pi.dev) and [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)
 
