@@ -38,8 +38,12 @@ Las fases 1-5 son el *cómo*, no el *qué*: se repetían para reconstruir siempr
    versionaba el git anidado. El historial anidado se guardó en
    `.scratch/picode-source-history.bundle` y el `.git` anidado se aparcó en
    `.scratch/picode-source-git-removed`.
-2. **Los parches dejan de gobernar.** `patches/**` se conserva como registro de cómo se hizo
-   cada cambio, pero el build ya no lo lee. Editar el código es editar el código.
+2. **Los parches dejan de gobernar.** **El 2026-09-27, por decisión del dueño, se borraron
+todos**: `patches/**`, `dev/get_repo.sh`, `dev/prepare_vscode.sh`, `dev/patch.sh`,
+`dev/update_patches.sh`, `dev/version.sh`, `dev/utils.sh`, `dev/vscodium-product.json`,
+`upstream/vscodium.json` y `dev/ci/pin-check.sh`. Lo que eran los parches es ahora código en
+`picode-source/`. La procedencia queda en `upstream/stable.json` (commit público de VS Code)
+y, en esta máquina, en el bundle del historial pre-importación.
 3. **El build se queda en cinco fases**: prepare (el árbol, la identidad y las dependencias en una
    sola), compilar el conector, compilar el editor, empaquetar y rematar.
 4. **Nada se toca en `origin`.** Todo el trabajo es local.
@@ -117,3 +121,8 @@ compilar.
 unificaron en una sola (`prepare`): son la misma faena, dejar el árbol listo para compilar. El
 build pasa de 7 fases a 5. `-o` sigue parando antes de instalar nada, así que sigue siendo la
 comprobación de segundos.
+- 2026-09-27 · **borrado el aparato de parches** («pues si no necesitamos patches, bórralos»):
+  10 rutas (98 ficheros solo en `patches/`) + las 3 funciones de `utils.sh` que el rematado aún
+  usaba, ahora dentro de `stage-distribution.sh`. `jq` fuera también de la lista de requisitos.
+  Comprobado tras el borrado: `-o` ✓, `bash -n` en todos los guiones ✓, y el rematado vuelve a
+  correr idempotente sobre el pack real ✓ (17 s, 7 pasos, «staging complete»).

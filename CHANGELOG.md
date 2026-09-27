@@ -4,8 +4,33 @@ All notable changes to PiCode are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Releases are cut by pushing a `v*` tag, which triggers the full-build workflow to publish
-portable archives and installers for Windows and Linux.
+Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
+(the owner removed them; the process lives in `docs/CI.md`).
+
+## [Unreleased] — 2026-09-27
+
+### Changed
+- **`picode-source/` is the product source now, versioned in this repository.** One clone has
+  everything: the editor's code, the PiCode changes and the identity. The tree that used to be
+  rebuilt on every build by fetching VS Code and applying 92 patches was committed and
+  imported (13,125 files; base recorded in `upstream/stable.json`, VS Code 1.135.0). Product
+  work means editing code, not writing patches.
+- **The patch machinery was deleted by the owner's decision**: `patches/**`,
+  `dev/get_repo.sh`, `dev/prepare_vscode.sh`, `dev/patch.sh`, `dev/update_patches.sh`,
+  `dev/version.sh`, `dev/utils.sh`, `dev/vscodium-product.json`, `upstream/vscodium.json`,
+  `dev/ci/pin-check.sh`. Provenance lives in the pin, in the public VS Code commit it names,
+  and (locally) in a git bundle of the pre-import history.
+- **The build has five phases instead of eight**: prepare (tree + identity + dependencies in
+  one), connector, compile, pack, stage. `npm ci` runs only when the recorded dependency state
+  no longer matches the tree; `-f` refuses instead of deleting the source; `-o` checks the
+  source and identity in seconds.
+- **`jq` is gone as a dependency** — nothing needs it any more.
+
+### Measured
+- A full steady-state Windows build on a 16-core machine: **about six minutes** — compile 5m
+  05s, pack 36s, stage 17s. The former up-to-210-minute cost belonged to the old chain
+  (dependency reinstalls, native rebuilds, CI runners), not to compiling. The rebuilt editor
+  starts and restores the portable profile.
 
 ## [0.1.2] — 2026-09-27
 

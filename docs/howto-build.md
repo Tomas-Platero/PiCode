@@ -28,7 +28,7 @@ parcheo, y las dependencias se instalan una vez. El detalle está en
 - [Dependencias en Windows](#dependencias-en-windows)
 - [Cómo compilar](#cómo-compilar)
 - [Traer una versión nueva de VS Code](#traer-una-versión-nueva-de-vs-code)
-- [El camino retirado: los parches](#el-camino-retirado-los-parches)
+- [El camino retirado: los parches (borrados)](#el-camino-retirado-los-parches-borrados)
 - [Estado de verificación](#estado-de-verificación)
 
 ## Qué es `./picode-source`
@@ -86,7 +86,7 @@ Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash
 | --- | --- | --- |
 | **Git for Windows** | Git **y Git Bash**: sin él no hay shell para los scripts. | `winget install --id Git.Git -e` |
 | **Node.js 24.18.0** (lo que dice [`.nvmrc`](../.nvmrc)) | `npm ci` y las tareas gulp. Con nvm-windows: | `nvm install 24.18.0` y luego `nvm use 24.18.0` |
-| ~~**jq**~~ | **Ya no hace falta.** El build lee y escribe el JSON que toca con `node`, y desde el 2026-09-27 `dev/pi-runtime.sh` también. Sigue en la lista solo porque el camino retirado (`dev/prepare_vscode.sh`, `dev/utils.sh`) lo usa. | — |
+| ~~**jq**~~ | **Ya no hace falta para nada.** El build lee y escribe el JSON que toca con `node`; el último guion que usaba `jq` (`dev/utils.sh`) fue borrado el 2026-09-27 junto con el aparato de parches. | — |
 | **Python 3.11** | Lo pide el sistema de build de VS Code para los módulos nativos (`node-gyp`). Medido: con **3.14.7** `node-gyp` llegó hasta MSBuild sin quejarse, así que la versión **no** fue el obstáculo; 3.11 es lo que documenta upstream y lo recomendable. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compila algunos módulos nativos de VS Code. Reescribe el `PATH` al terminar: reinicia el shell. | [rustup.rs](https://rustup.rs/) o `winget install --id Rustlang.Rustup -e` |
 | **7-Zip** | Empaqueta archivos `.zip`. | `winget install --id 7zip.7zip -e` |
@@ -253,8 +253,9 @@ retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y 
   (`build/gulpfile.vscode.win32.ts`). La fase 8 sustituía solo la copia **interna**
   (`resources/app/resources/win32/code.ico`) y **después** del empaquetado, así que el
   icono ya incrustado no cambiaba. Ahora la marca del icono —y el redibujado de las dos
-  teselas del menú Inicio— ocurre en la preparación, en `dev/prepare_vscode.sh`, **antes**
-  de la fase 7.
+  teselas del menú Inicio— está **en el árbol**: los ficheros brandados viven en
+  `picode-source/resources/win32/` y se commitean; para cambiarlos, se cambian allí antes de
+  empaquetar (el `dev/prepare_vscode.sh` que hacía esta marca murió con el aparato de parches).
 - **Verificado después del arreglo, y sin lugar a dudas:** parseando el directorio de
   recursos del PE, los **7 frames** de `distribution/picode.ico` (16, 24, 32, 48, 64, 128 y
   256) están presentes en `PiCode.exe` **byte a byte**. Ojo con la forma de medirlo:
@@ -262,54 +263,24 @@ retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y 
   `ExtractAssociatedIcon` devuelve un bitmap reescalado, no el frame nativo — comparar así
   da «distintos» con el icono correcto puesto.
 
-## El camino retirado: los parches
+## El camino retirado: los parches (borrados)
 
-Nada de esto lo ejecuta el build. Se conserva porque es el registro de cómo se hizo el árbol
-actual, y porque es la alternativa si algún día se prefiere rehacer la fuente en vez de juntarla.
+El 2026-09-27 el dueño decidió que PiCode no se mantiene con parches, y se **borró** todo el
+aparato: `patches/**` (los propios y los heredados de VSCodium), `dev/get_repo.sh`,
+`dev/prepare_vscode.sh`, `dev/patch.sh`, `dev/update_patches.sh`, `dev/version.sh`,
+`dev/utils.sh`, `dev/vscodium-product.json`, `upstream/vscodium.json` y `dev/ci/pin-check.sh`.
 
-- **`patches/picode/**`** — los cambios propios, 22 ficheros. Con ellos se construyó el árbol.
-  Editar aquí **no cambia nada**: el build lee el árbol, no los parches. Si un cambio tiene que
-  llegar al producto, se escribe en `./picode-source`.
-- **`patches/vscodium/**`** — material heredado, vendido verbatim de VSCodium. Nunca se edita a
-  mano: se vuelve a vendoriar desde la revisión nueva.
-- **`dev/get_repo.sh` / `dev/prepare_vscode.sh`** — descargaban la fuente, la marcaban y
-  aplicaban las dos familias de parches, en el orden: acciones `.json` de borrado, `*.patch`
-  ordenados con la localización C, `patches/*/${OS_NAME}/*.patch`, `patches/*/user/*.patch`.
-  Cada parche se aplicaba con `git apply --ignore-whitespace`, y si uno no aplicaba el build se
-  paraba (no había `--reject`: un juego a medias es peor que un build parado).
-- **`dev/patch.sh` / `dev/update_patches.sh`** — el ciclo de autoría de un parche, sobre el
-  índice de git. **Ya no funcionan tal cual:** tratan el índice como estado de referencia y
-  resetean a `HEAD`, y ahora `HEAD` **es** el árbol preparado, así que un reset aterriza en el
-  árbol parcheado y no en VS Code virgen. Para usarlos hay que partir del commit virgen
-  registrado (`08d4889f`, VS Code 1.135.0).
+Lo que merecía la pena guardar de ese camino está en otras manos:
 
-**Los sufijos `.patch.no` y `.patch.yet`:** un parche solo se aplica si su nombre termina en
-`.patch`; los que acaban en `.patch.no` o `.patch.yet` quedan inactivos **por nombre** y el glob
-los salta. Renombrar es cómo se habilita o deshabilita uno. (Única excepción, heredada de
-VSCodium: `patches/vscodium/00-update-disable.patch.yet` se aplicaba explícitamente solo con
-`DISABLE_UPDATE=yes`, que el build no fija.)
+- **Los cambios son la fuente**: `picode-source/`, versionada en este repositorio.
+- **La procedencia es un único pin**: `upstream/stable.json` (commit `08d4889f`, VS Code
+  1.135.0) y el plan para la siguiente versión está más arriba, en *Traer una versión nueva*.
+- La historia completa antes/después del parcheo existe además en el bundle local
+  `.scratch/picode-source-history.bundle` (fuera del versionado: respaldo de esta máquina).
 
-## Reglas de `patches/picode/` (para el archivo, no para el trabajo)
-
-Siguen valiendo si algún día se rehace la fuente desde cero o se añade un parche al juego
-heredado:
-
-- **Un concepto por patch.** Nombre `NN-<area>-<qué-hace>.patch`, con el número fijando el orden
-  de aplicación.
-- **Solo cambios de fuente.** Lo que se pueda hacer con `distribution/product-delta.json` se hace
-  allí; un parche es el último recurso. Por eso la carpeta es pequeña.
-- **Prefijos `a/` y `b/`**, saltos de línea LF y contenido ASCII.
-- **Nunca se edita `patches/vscodium/`.** Es material heredado y vendido verbatim.
-
-Los placeholders `!!APP_NAME!!` y compañía eran de este camino: `dev/utils.sh` los expandía en
-una **copia temporal** del parche antes de aplicarlo, y por eso el fichero de `patches/picode/
-nunca se reescribía. Hoy **nada los expande**. Los valores que tomaban eran `PiCode`, `picode`,
-`TomasPlatero/PiCode`, `TomasPlatero`, `picode-tunnel`, y para `!!RELEASE_VERSION!!` el `tag` de
-`upstream/stable.json`.
-
-El pipeline avisaba: **`patches/**` no se escribía** salvo por `patch.sh` /
-`update_patches.sh`, cuando el desarrollador se lo pedía. `distribution/**`,
-`extensions/**` y `.git/**` no se tocaban.
+Los placeholders `!!APP_NAME!!` y las reglas de sufijos `.patch.no` / `.patch.yet` murieron con
+la maquinaria: nada los expande ni los aplica. Lo que alguna vez hizo un parche, hoy se escribe
+directamente en el árbol y se commitea.
 
 ## Estado de verificación
 
@@ -377,12 +348,14 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 
 - `dev/patch.sh` y `dev/update_patches.sh` no se han ejecutado (son interactivos y
   reescriben `patches/picode/*.patch`); solo se ha validado su sintaxis con `bash -n`.
+  Ambos ficheros, y los parches que escribían, fueron **borrados** el 2026-09-27.
 - La fase 8 se ha ejecutado sobre el empaquetado real de una compilación completa, pero no
   se ha arrancado el `PiCode.exe` resultante en esta máquina.
 - No hay análisis estático de los scripts (`shellcheck` no está instalado).
 - `undo_telemetry.sh` de VSCodium **no está integrado**: el pipeline no reescribe las URLs
   `*.data.microsoft.com` de la fuente. El patch de telemetría y el delta ya desactivan el
-  envío, pero la reescritura de URLs es un hueco declarado en `dev/README.md`.
+  envío, pero la reescritura de URLs es un hueco declarado en `dev/README.md`. Sigue siendo
+  hueco hoy: el cambio nunca llegó a hacerse en el árbol.
 - Las teselas PNG del menú Inicio (`code_150x150.png`, `code_70x70.png`) **sí se
   redibujan** desde `distribution/picode.ico`, en la preparación: el empaquetado las copia
   antes de que la fase 8 pueda tocarlas. `dev/README.md` explica por qué es ahí y no en el
@@ -408,7 +381,7 @@ compilar y los `checksums` se calculan sobre el producto final. Dicho eso, con e
 `distribution/product-delta.json` **congelado actual** el objeto `defaultChatAgent` sigue
 en `product.json` (el delta poda sus subclaves de URL con `unsetNested`, pero conserva
 `extensionId`, `chatExtensionId`, `provider` y `providerScopes`), así que hoy las guardas
-de `patches/picode/` son **defensivas**: protegen el workbench el día que el delta deje de
+que escribió `patches/picode/` —ahora código en el árbol— son **defensivas**: protegen el workbench el día que el delta deje de
 declarar la clave, pero no cambian el comportamiento del binario construido. Que PiCode no
 declare Copilot por defecto exige además un cambio en `distribution/`, que está congelado.
 

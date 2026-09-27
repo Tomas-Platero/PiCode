@@ -14,15 +14,16 @@
 #
 # What this script deliberately does NOT do any more, and why:
 #
-#   * It does not fetch VS Code. dev/get_repo.sh is kept for the day a newer VS Code has to be
-#     brought in, and that day the job is a merge against ./picode-source, not a re-fetch.
-#     Downloading a tree and rebuilding it from patches on every run was the work this
-#     replaced: those phases are done once and kept.
-#   * It does not apply patches. patches/** is the record of how the current source was made.
-#     Editing PiCode means editing ./picode-source.
-#   * It does not re-brand the Windows icons. They are in the tree, committed. Replacing
-#     distribution/picode.ico and getting it into the executable is what
-#     `dev/prepare_vscode.sh metadata` does, and phase 1 refuses a tree whose icon is missing
+#   * It does not fetch VS Code. ./picode-source is PiCode's own source, versioned in this
+#     repository. Bringing in a newer VS Code is a merge (docs/howto-build.md), not a
+#     download-and-repatch: the fetch and patch machinery (dev/get_repo.sh,
+#     dev/prepare_vscode.sh, dev/patch.sh, patches/**) was DELETED on 2026-09-27 by the
+#     owner's decision.
+#   * It does not apply patches. There are no patches any more: the changes they carried are
+#     part of the source. Editing PiCode means editing ./picode-source.
+#   * It does not re-brand the Windows icons. They are in the tree, committed. To change an
+#     icon, replace picode-source/resources/win32/code.ico before the pack runs: rcedit
+#     stamps the executable during phase 4, and phase 1 refuses a tree whose icon is missing
 #     rather than shipping the previous one in silence.
 #   * It does not use jq. The JSON this script touches is read and written by node.
 #
@@ -145,7 +146,7 @@ fi
 
 # The pack directory, named for the product and for the system being packed. The task that writes it
 # is `vscode-<platform>-<arch>-min-packing`, and the directory name is set in the gulpfiles
-# (`patches/picode/16` and `17`, applied in the tree), so the two have to agree: this is the same table.
+# (PiCode's own change, written into the tree), so the two have to agree: this is the same table.
 case "${OS_NAME}" in
   windows)
     PACK_PLATFORM="win32"
@@ -266,7 +267,8 @@ console.log(`  the source carries the PiCode identity (version ${delta.set.versi
 NODE
 then
   echo "error: ./picode-source is not the PiCode source this build expects (see above)." >&2
-  echo "       If the tree was replaced wholesale, dev/prepare_vscode.sh is what brands it." >&2
+  echo "       If the tree was replaced wholesale, brand it in the tree: product.json," >&2
+  echo "       build/lib/electron.ts, resources/win32/code.ico, resources/server/manifest.json." >&2
   exit 2
 fi
 

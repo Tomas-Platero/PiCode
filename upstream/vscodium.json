@@ -1,7 +1,0 @@
-{
-  "tag": "1.135.06055",
-  "commit": "5a73682ca091082675b10c9dc3f348c1d824d94f",
-  "repository": "https://github.com/VSCodium/vscodium",
-  "patchesPath": "patches/vscodium",
-  "note": "Revision whose patches/ tree is vendored verbatim under patches/vscodium/. Re-pinning VS Code (upstream/stable.json) without re-pinning this file is a defect."
-}

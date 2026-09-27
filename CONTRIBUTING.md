@@ -56,18 +56,14 @@ public remote** — publishing it is the owner's decision alone, never a collabo
 agent's. The pre-import history of the tree is kept in a bundle outside the repository
 (`.scratch/picode-source-history.bundle`).
 
-## The two pins
+## The pin
 
-`upstream/stable.json` (the VS Code commit the tree descends from) and `upstream/vscodium.json`
-(the VSCodium revision whose patches are vendored verbatim under `patches/vscodium/`) record
-where the current source came from. They no longer drive the build — nothing is fetched or
-patched — but they are the provenance of the tree and the starting point for the day a newer
-VS Code is brought in. `patches/vscodium/**` is never hand-edited: it mirrors upstream exactly.
-
-If a patch stops applying, CI's pin-check goes red and names the patch. The repair process
-(semi-automatic and manual) is documented in
-[docs/howto-build.md](docs/howto-build.md), section *Arreglar un patch cuando upstream se
-mueve*.
+`upstream/stable.json` records the VS Code commit the tree descends from (`08d4889f`, 1.135.0).
+It no longer drives the build — nothing is fetched or patched any more, and the VSCodium patch
+machinery was deleted on 2026-09-27 — but it is the provenance of the tree and the starting
+point for the day a newer VS Code is brought in. That day is a **merge**, and
+[docs/howto-build.md](docs/howto-build.md), section *Traer una versión nueva de VS Code*, is the
+plan (unexercised so far).
 
 ## Rules that have burned us before
 

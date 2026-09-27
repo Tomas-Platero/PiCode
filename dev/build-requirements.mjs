@@ -98,19 +98,6 @@ checks.push({
 	note: 'Git, and the shell the build runs in'
 });
 
-const jq = run('jq', ['--version']);
-checks.push({
-	id: 'jq',
-	icon: 'json',
-	name: 'jq',
-	ok: jq !== '',
-	found: jq === '' ? 'not found' : jq,
-	missing: isWindows ? 'jq is missing' : 'jq is missing. Install with: sudo apt install -y jq',
-	install: isWindows ? 'jqlang.jq' : '',
-	url: 'https://jqlang.github.io/jq/download/',
-	note: 'the pipeline reads the product and the patches with it'
-});
-
 const python = run('python3', ['--version']) || run('python', ['--version']);
 checks.push({
 	id: 'python',

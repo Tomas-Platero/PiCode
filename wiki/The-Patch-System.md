@@ -1,5 +1,12 @@
 # The Patch System
 
+> **RETIRED 2026-09-27.** The patch system described here has been **deleted** by the owner's
+> decision: `patches/**`, `dev/get_repo.sh`, `dev/prepare_vscode.sh`, `dev/patch.sh`,
+> `dev/update_patches.sh`, `dev/utils.sh` and `upstream/vscodium.json` no longer exist. The
+> changes those patches carried are now ordinary code inside `picode-source/`, versioned in this
+> repository. This page is kept as the history of how the tree was made. For how work happens
+> now: `CONTRIBUTING.md` and `docs/howto-build.md`.
+
 PiCode's changes to the editor live in two patch directories and one data
 file. Knowing which one owns your change is the first skill of contributing.
 

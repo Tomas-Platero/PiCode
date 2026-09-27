@@ -1,5 +1,13 @@
 # Building PiCode
 
+> **UPDATED 2026-09-27.** The chain below describes the old eight-phase build (fetch → patches
+> → compile). That machinery is **deleted**: the build now has five phases — *prepare* (the tree,
+> the identity and the dependencies, in one), *connector*, *compile*, *pack*, *stage* — because
+> `picode-source/` is versioned in this repository and carries the patches' changes as code.
+> A full build in steady state measures about **six minutes** locally. The current truth is
+> `dev/README.md` and [`docs/howto-build.md`](../docs/howto-build.md); this page stays as the
+> record of the old chain.
+
 The source build is the canonical one: releases are produced by it, CI runs
 it, and it is the only path that can change editor behaviour. The ZIP-over-
 VSCodium path stays available for auditors of the *modification layer* only —

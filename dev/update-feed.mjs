@@ -2,8 +2,8 @@
 /*
  * Writes the static update feed a PiCode release needs.
  *
- * Why a feed at all: with `patches/vscodium/11-update-use-github-release.patch` applied,
- * the editor's updater reads a JSON document per platform from
+ * Why a feed at all: the editor's updater (VSCodium's `11-update-use-github-release`
+ * change, baked into the source tree) reads a JSON document per platform from
  *
  *     <updateUrl>/<quality>/<platform>/<architecture>[/<target>]/latest.json
  *

@@ -8,8 +8,9 @@ intento. Los workflows se **eliminaron** y las releases se generan **a mano**.
 - Los workflows vivieron en `.github/workflows/` — recuperables del historial
   de git si algún día se quiere volver (buscar los commits `ci:` de
   septiembre de 2026; el último fue `c25f963`, anterior a su eliminación).
-- Los scripts que usaban (`dev/ci/pin-check.sh`, y todo `dev/build.sh`)
-  **siguen en el repositorio** y funcionan en local.
+- Los scripts que usaban: `dev/build.sh` sigue en el repositorio y funciona en local;
+  `dev/ci/pin-check.sh` fue **borrado el 2026-09-27** junto con el aparato de parches al que
+  vigilaba (recuperable del historial si los controles automáticos vuelven algún día).
 
 ## Cómo generar una release a mano
 

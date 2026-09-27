@@ -15,9 +15,9 @@
 #
 # The icon the executable actually carries is decided by `rcedit` while the source
 # tree is PACKED, from `picode-source/resources/win32/code.ico`, and the Start Menu tiles
-# are copied by the same pack. So the real branding happens in
-# `dev/prepare_vscode.sh` (`brand_windows_icons`, in the `metadata` stage), before
-# phase 7. Replacing anything here cannot change what the executable already has:
+# are copied by the same pack. So the real branding lives IN THE TREE: to change the icon,
+# replace that file before the pack runs (phase 4). Replacing anything here cannot change
+# what the executable already has:
 # measured, the packed `PiCode.exe` used to keep VS Code's icon while this script
 # reported "replaced resources/win32/code.ico". This copy stays so that a tree
 # packed elsewhere still ends up internally consistent, and it is idempotent.
@@ -28,8 +28,29 @@
 
 set -eo pipefail
 
-# include common functions (`picode_tmp_dir` and its cleanup)
-. ./dev/utils.sh
+# The tmp helpers, inline since 2026-09-27: the patch machinery (dev/utils.sh) was deleted
+# with it, and these three are all this script ever used.
+picode_tmp_dir() {
+  if [[ -z "${PICODE_TMP_DIR}" || ! -d "${PICODE_TMP_DIR}" ]]; then
+    PICODE_TMP_DIR="$( mktemp -d "${TMPDIR:-/tmp}/picode-staging-XXXXXX" )" || {
+      echo "error: could not create a temporary directory." >&2
+      exit 1
+    }
+  fi
+}
+picode_cleanup_tmp() {
+  if [[ -n "${PICODE_TMP_DIR}" && -d "${PICODE_TMP_DIR}" ]]; then
+    rm -rf -- "${PICODE_TMP_DIR}"
+  fi
+  PICODE_TMP_DIR=""
+}
+replace() {
+  if sed --version &> /dev/null; then
+    sed -i -E "${1}" "${2}"
+  else
+    sed -i '' -E "${1}" "${2}"
+  fi
+}
 
 picode_tmp_dir
 MARK_WORK="${PICODE_TMP_DIR}"
@@ -331,11 +352,11 @@ else
   fi
 
   # The icon inside the executable and the Start Menu tiles were branded before the
-  # pack, by dev/prepare_vscode.sh (stage `metadata`). This only reports what the
+  # pack, from the tree itself (resources/win32/code.ico). This only reports what the
   # packed tree carries, because the executable cannot be changed from here.
   if [[ -f "${PACK_DIR}/resources/app/resources/win32/code_150x150.png" ]]; then
-    echo "note: the executable's icon and the Start Menu tiles come from the preparation"
-    echo "      (dev/prepare_vscode.sh metadata), not from this script."
+    echo "note: the executable's icon and the Start Menu tiles come from the tree at pack"
+    echo "      time (resources/win32/code.ico), not from this script."
   fi
 fi
 

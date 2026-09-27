@@ -3,9 +3,10 @@
 `dev/` builds PiCode from its own source tree.
 
 `./picode-source` is **not a download**. It is PiCode's copy of the editor's source: it carries
-the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity, and it is
-committed **in this repository** (decided by the owner on 2026-09-27 — one clone now has
-everything; see `CONTRIBUTING.md` for the publishing rule this brought with it).
+the changes that used to be the VSCodium patch set, PiCode's own work and the PiCode product
+identity, all baked in, and it is committed **in this repository** (decided by the owner on
+2026-09-27 — one clone now has everything; see `CONTRIBUTING.md` for the publishing rule this
+brought with it).
 
 That is what the build is built around. There is no fetch step and no patch step, and the
 dependencies are installed once instead of on every build. Editing PiCode means editing that
@@ -46,34 +47,27 @@ be wrong after an hour of compiling.
 - `python3`, `rustup` and Visual Studio 2022 with the Spectre libraries are needed for the
   **first** `npm ci` only (they build the native modules). Missing Spectre stops the install
   with `error MSB8040` in `@picode-source/deviceid` and `@picode-source/windows-registry`.
-- **`jq` is no longer needed.** The build reads and writes the JSON it touches with node, and
-  since 2026-09-27 `dev/pi-runtime.sh` does too — it was the last place that asked for it.
-  `dev/utils.sh` still uses `jq` in the removal actions, but those belong to the retired patch
-  path and the build never calls them.
+- **`jq` is not needed by anything any more.** The build reads and writes the JSON it touches
+  with node; `dev/pi-runtime.sh` joined on 2026-09-27, and the last script that used `jq` died
+  with the patch machinery on the same day.
 - `shellcheck` is not installed here, so the scripts are validated with `bash -n`.
 
-## The retired path, kept on purpose
+## The deleted path
 
-`dev/get_repo.sh`, `dev/prepare_vscode.sh`, `dev/patch.sh`, `dev/update_patches.sh`,
-`dev/version.sh`, `dev/utils.sh`, `patches/**` and `upstream/*.json` are **not called by the
-build any more**. They are kept because they are:
+On 2026-09-27 the owner decided to stop keeping the VSCodium-style machinery. **Deleted**:
+`patches/**`, `upstream/vscodium.json`, `dev/get_repo.sh`, `dev/prepare_vscode.sh`,
+`dev/patch.sh`, `dev/update_patches.sh`, `dev/version.sh`, `dev/utils.sh`,
+`dev/vscodium-product.json` and `dev/ci/pin-check.sh`.
 
-1. the record of how the current source was made — which patch did what, and why;
-2. the provenance of the tree (`upstream/stable.json` is the VS Code commit it descends from,
-   `upstream/vscodium.json` the VSCodium revision the inherited patch set was vendored from);
-3. the recovery path, if a PiCode tree ever has to be rebuilt from a fresh VS Code by replaying
-   the patch series instead of merging.
+Nothing is lost that a repository should hold:
 
-**They are not usable as they were.** `dev/patch.sh` and `dev/update_patches.sh` treat the git
-index as the reference state and reset to `HEAD`; with the prepared tree committed, `HEAD` *is*
-the prepared state, so a reset lands on the patched tree rather than on pristine VS Code. Anyone
-who needs them starts from the recorded pristine commit (`08d4889f` for VS Code 1.135.0) and
-works from there.
-
-A patch is only applied if its name ends in `.patch`. Files ending in `.patch.no` or `.patch.yet`
-are inactive **by name** and the glob skips them: renaming is how one is enabled or disabled.
-(One exception, inherited from VSCodium: `patches/vscodium/00-update-disable.patch.yet` is
-applied explicitly only when `DISABLE_UPDATE=yes`, which the build does not set.)
+- **What the changes were** is the source itself — they are `picode-source/`, committed.
+- **Which VS Code the tree descends from** is the one remaining pin, `upstream/stable.json`
+  (commit `08d4889f`, VS Code 1.135.0). Diffing against pristine VS Code means fetching that
+  public commit, and `docs/howto-build.md` ("Traer una versión nueva de VS Code") is the plan.
+- The full pristine-to-prepared history also exists locally as a git bundle
+  (`.scratch/picode-source-history.bundle`, not versioned, session-fragile): the permanent
+  record is the public pin plus this repository's history.
 
 ## Where PiCode's identity lives
 
@@ -86,21 +80,20 @@ applied explicitly only when `DISABLE_UPDATE=yes`, which the build does not set.
   `build/lib/electron.ts`, the Windows icon the packer reads, the server manifest name, npm 11's
   script approvals — is **in the tree**, committed. Phase 1 verifies it rather than re-applying
   it, because a silent re-application is what let the first full build ship VS Code's icon.
-- The `!!APP_NAME!!`-style placeholders belong to the retired patch path: `dev/utils.sh` expanded
-  them into a temporary copy of a patch before applying it. Nothing expands them now.
 
 ## Known gaps
 
-- **The Windows icon has to be right before phase 4.** `rcedit` stamps the executable during the
-  pack, so replacing `code.ico` afterwards changes nothing. Phase 1 fails if the file is missing,
-  but re-branding it from `distribution/picode.ico` is still `dev/prepare_vscode.sh metadata`,
-  and that is not wired into the build.
+- **The Windows icon has to be right before the pack (phase 4).** `rcedit` stamps the
+  executable during the pack, so replacing `code.ico` afterwards changes nothing. To re-brand
+  it: replace `picode-source/resources/win32/code.ico` (from `distribution/picode.ico` there is
+  no automated conversion wired) and pack again. Phase 1 fails if the file is missing.
 - **`dev/build-requirements.mjs`** (the list the collaborator window reads) still names `jq`.
-- **`undo_telemetry.sh` is not wired.** `patches/vscodium/00-telemetry-disable.patch` and the
-  product delta already disable telemetry reporting; the URL rewrite itself is not done.
-- **`build_cli.sh` is not wired, so a source build ships no TUNNEL binary.** `bin/picode` and
-  `bin/picode.cmd` do exist (the pack produces the CLI shim with the renamed binary), but
-  `picode-tunnel.exe` does not.
+- **Telemetry URLs are not rewritten.** Reporting is already disabled in the tree and in the
+  product delta, but the endpoint strings themselves still point at Microsoft's URLs. Nobody
+  calls them; a future pass should clean them in the source.
+- **A source build ships no TUNNEL binary.** `bin/picode` and `bin/picode.cmd` do exist (the
+  pack produces the CLI shim with the renamed binary), but there is no `picode-tunnel.exe`
+  until something builds the Rust CLI (`picode-source/cli/`) into the pack.
 - **The announcement injection is not wired.** PiCode ships no announcements, so there is nothing
   to splice.
 - **The staging step duplicates logic from `distribution/apply-picode.ps1`.** The PowerShell
@@ -120,7 +113,7 @@ applied explicitly only when `DISABLE_UPDATE=yes`, which the build does not set.
 
 ## What the build never writes
 
-`patches/**`, `distribution/**` (the delta is read, never rewritten), `extensions/**` and
+`distribution/**` (the delta is read, never rewritten), `extensions/**` and
 `.git/**`. `picode-source` is written, and it is versioned — in this repository, since
 2026-09-27.
 `PiCode-*` is a build output and is ignored.

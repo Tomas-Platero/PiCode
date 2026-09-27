@@ -31,7 +31,9 @@
 
 ## What it is
 
-A stock VSCodium tree branded and patched so that opening it means opening a working agentic environment:
+A VS Code-family editor we maintain **as our own source**: `picode-source/` is versioned here,
+with the branding, the connector and the product identity already inside it. Opening PiCode
+means opening a working agentic environment:
 
 | | What you get |
 | --- | --- |
@@ -56,16 +58,16 @@ PiCode doesn't reinvent the editor, the agent or the memory layer. It unifies th
 
 All three are MIT-licensed. Full attribution is preserved in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project — it is not an official distribution of VSCodium, Pi or Gentle AI.
 
-## The two pins
+## The pin
 
-Every build is reproducible from two pins:
+The source tree descends from one recorded VS Code commit:
 
 | Pin | Points to | Why it matters |
 | --- | --- | --- |
-| **`upstream/stable.json`** | The exact VS Code commit (`1.135.0`) | The source that gets patched and compiled. |
-| **`upstream/vscodium.json`** | The VSCodium revision whose patches are vendored verbatim (`1.135.06055`) | `patches/vscodium/` mirrors this exactly. Both pins move together. |
+| **`upstream/stable.json`** | The exact VS Code commit (`1.135.0`, `08d4889f`) | The base `picode-source/` was made from. A newer VS Code is brought in as a merge, not a re-download: `docs/howto-build.md` holds the plan. |
 
-A weekly guardian workflow ([`pin-watch.yml`](.github/workflows/pin-watch.yml)) checks upstream and opens a labelled PR whenever a new version lands — security advisories are flagged with CVEs and severity.
+There is no CI watching upstream (the workflows were removed — see [Continuous
+integration](#continuous-integration)); new VS Code versions are noticed and merged by hand.
 
 ## What exists today
 
@@ -81,32 +83,42 @@ A weekly guardian workflow ([`pin-watch.yml`](.github/workflows/pin-watch.yml)) 
 
 ## What is in this repository
 
-The repo root is the distribution root (portable mode). The ~1 GB editor payload is **not in git** — GitHub rejects files over 100 MB and the executable alone is 212 MB. What is versioned is the layer that turns a stock archive into PiCode:
+One clone has everything. The editor's payload is still not in git — GitHub rejects files over
+100 MB and the built executable alone is 212 MB — but that is only the *output*: the source that
+produces it is versioned here.
 
 | Path | What it is |
 | --- | --- |
-| `patches/vscodium/` | 75 files verbatim from upstream VSCodium — telemetry removal, branding, Copilot hooks, cloud. |
-| `patches/picode/` | 23+ numbered patches — the welcome page, wizard, connector, agent host, source changes. |
-| `distribution/` | The modification layer as data: product delta, settings, icons, apply scripts. |
-| `dev/` | The build engine — bash scripts, CI helpers, build window, progress viewer. |
+| **`picode-source/`** | **PiCode's own source** — the editor's code with the PiCode changes and identity applied (13,125 files; VS Code 1.135.0 descends recorded in `upstream/stable.json`). This is where product work happens. |
+| `distribution/` | The product layer as data: product delta (the single home of the identity and version), settings, icons, and the apply script for the prebuilt-archive route. |
+| `dev/` | The build engine — bash scripts, the build window, progress viewer. |
 | `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
-| `upstream/` | The two pin files (`stable.json`, `vscodium.json`). |
+| `extensions/` | The PiCode chat panel as a VS Code extension (being migrated into the core). |
+| `upstream/` | The pin file (`stable.json`) — the VS Code commit the tree descends from. |
 | `wiki/` | The public wiki, page by page — import source for the GitHub Pages wiki. |
 | `docs/` | Internal papers: architecture, decisions, distribution, how-to-build. Index: [`docs/README.md`](docs/README.md). |
 | `odd/tasks/` | The ODD feature records — every non-trivial change left a record with decisions, checks and defects. |
 | `AGENTS.md` | The owner's own words, verbatim. Read it before changing product behaviour. |
 
+The old VSCodium-style machinery — `patches/**`, the fetch scripts, the VSCodium pin — was
+**deleted on 2026-09-27** by the owner's decision. Its changes live in `picode-source/` as code.
+
 ## The source build
 
-The source path is the canonical build — releases and CI use it. It compiles a real `PiCode.exe` (or Linux equivalent) from the pinned VS Code source plus the patch set, with the product layer applied *before* compilation. That lifts the limit the binary path carries: the `checksums` map over the minified bundle makes core changes unavailable on the ZIP-over-archive route.
+The source path is the canonical build. Releases are built with it: a real `PiCode.exe` (or
+Linux equivalent) compiled from `picode-source/`, with the product delta applied to the tree
+*before* compilation. That lifts the limit the binary path carries: the `checksums` map over the
+minified bundle makes core changes unavailable on the ZIP-over-archive route.
 
-The chain, eight phases:
+The chain, five phases:
 
 ```text
-VS Code (pinned) → patches/vscodium/ → patches/picode/ → product.json → npm ci → gulp → PiCode-Win32-x64/ → stage
+prepare (tree + identity + deps) → connector → compile → pack → stage
 ```
 
-A full build takes 20–45 minutes. For the fast correctness check (fetch, patches, product delta — no compile):
+A full build in steady state takes about **six minutes** on a 16-core Windows machine (the
+dependencies are installed once, not every build). For the fast correctness check — the source
+and the identity, nothing installed or compiled:
 
 ```bash
 ./dev/build.sh -o
@@ -114,7 +126,7 @@ A full build takes 20–45 minutes. For the fast correctness check (fetch, patch
 
 The recommended way to build is through the **builder** — a C# desktop app in `builder/` that presses the same buttons as the manual chain. It needs only the .NET SDK.
 
-Full dependency list, per-OS details, and troubleshooting in [Contributing docs](CONTRIBUTING.md) and [howto-build](docs/howto-build.md).
+Full dependency list, per-OS details, and troubleshooting in [Contributing docs](CONTRIBUTING.md) and [howto-build](docs/howto-build.md). (`jq` is not needed by anything any more.)
 
 ## Continuous integration
 
