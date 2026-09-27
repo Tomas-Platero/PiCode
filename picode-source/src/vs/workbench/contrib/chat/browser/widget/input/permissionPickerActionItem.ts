@@ -72,11 +72,15 @@ export interface IPermissionPickerDelegate {
 	readonly managedSandboxEnforced?: IObservable<boolean>;
 }
 
-/** Default level set offered when a delegate does not specify {@link IPermissionPickerDelegate.availableLevels}. */
+/** Default level set offered when a delegate does not specify {@link IPermissionPickerDelegate.availableLevels}.
+ *
+ * PiCode: Assisted and Autopilot are deliberately not offered — they are VS Code agent concepts,
+ * and with pi as the only agent this product exposes exactly two positions: ask (Default) and
+ * allow all. The upstream machinery for the other levels stays; the picker just never shows them.
+ */
 const DEFAULT_PERMISSION_LEVELS: readonly ChatPermissionLevel[] = [
 	ChatPermissionLevel.Default,
 	ChatPermissionLevel.AutoApprove,
-	ChatPermissionLevel.Autopilot,
 ];
 
 interface IPermissionLevelMeta {
