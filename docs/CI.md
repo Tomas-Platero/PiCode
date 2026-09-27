@@ -120,16 +120,15 @@ decide si el push movió el pin; solo entonces arranca la matriz de compilación
 | Qué | Dónde | Clave | Para qué |
 | --- | --- | --- | --- |
 | Objetos de git de la fuente | `picode-source/.git` | `vscode-git-<os>-<commit>` | No volver a descargar el commit pineado (~320 MB). |
-| Dependencias instaladas | `picode-source/node_modules` | `vscode-deps-<os>-<commit>` | Solo en el build completo, y solo si el estado de instalación de VS Code la avala. |
 | Tarballs de npm + cabeceras de node-gyp | `npm config get cache` + `~/.cache/node-gyp` | `npm-cache-<os>-<commit>` | Si hay que instalar de verdad, no repetir la descarga de paquetes. |
 
-La caché de `node_modules` es la única que no se puede confiar a ciegas.
-`dev/build.sh` acepta `PICODE_FAST_INSTALL=yes` (solo lo pone CI) y reutiliza
-`node_modules` **solo** cuando `node_modules/.postinstall-state` —lo que VS Code
-escribió al instalar— coincide con el hash de `package.json` /
-`package-lock.json` / `.npmrc` del árbol. En cualquier otro caso ejecuta
-`npm ci`, igual que siempre. Así una caché parcial, vieja o de otro commit no
-puede colarse sin que nadie lo note.
+**Deliberadamente NO se cachea `node_modules`**: el postinstall de VS Code instala
+node modules en ~50 directorios de workspace (`build/`, `remote/`, cada extensión…)
+y una caché que solo lleva el raíz hizo que el fast-install confiara en un árbol
+a medias — el build del tag murió en fase 7 con `Cannot find package
+gulp-merge-json`. El `npm ci` completo cuesta ~4-5 minutos con la caché de
+tarballs caliente y siempre es completo: para builds que publican binarios, es
+el precio correcto.
 
 ## Política de cuándo mover el pin
 

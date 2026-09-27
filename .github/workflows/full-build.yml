@@ -175,13 +175,12 @@ jobs:
 
       # Reused only when VS Code's own install state proves it current (see
       # PICODE_FAST_INSTALL in dev/build.sh); otherwise `npm ci` runs.
-      - name: Cache the installed dependencies
-        uses: actions/cache@v6
-        with:
-          path: picode-source/node_modules
-          key: vscode-deps-${{ runner.os }}-${{ steps.versions.outputs.commit }}
-          restore-keys: |
-            vscode-deps-${{ runner.os }}-
+      # Deliberately NO cache of node_modules: VS Code's postinstall installs
+      # node modules into ~50 workspace directories (build/, remote/, every
+      # bundled extension, ...), and a cache carrying only the root one made
+      # the fast-install path trust a half-installed tree - the tag build died
+      # in phase 7 with 'Cannot find package gulp-merge-json'. The full npm ci
+      # costs ~4-5 minutes with a warm tarball cache and is always complete.
 
       - name: Cache npm tarballs and node headers
         uses: actions/cache@v6
@@ -238,9 +237,12 @@ jobs:
       - name: Full build (compile and pack)
         shell: bash
         env:
-          # Reuse the cached node_modules only when its recorded install state
-          # matches this tree; otherwise dev/build.sh runs `npm ci` as usual.
-          PICODE_FAST_INSTALL: "yes"
+          # Deliberately NO PICODE_FAST_INSTALL here: the fast path trusts a
+          # node_modules that the cache cannot carry completely (VS Code's
+          # postinstall installs ~50 workspace directories) - measured: the
+          # tag build died in phase 7 with 'Cannot find package
+          # gulp-merge-json'. Full npm ci every time; the tarball cache keeps
+          # it around 4-5 minutes.
           # The build downloads release assets from api.github.com (the js-debug
           # extension among them); anonymous requests from shared runner IPs hit
           # the 60/hour cap and fail with 403. fetch.ts honours this token.
