@@ -29,8 +29,9 @@ ejecución de herramientas; sin colgar el turno si el dueño cancela (cancelar =
 | P0 | Mapa delegado (a949166b): ajuste `chat.permissions.default` (enum `default/assisted/autoApprove/autopilot`, se estampa por petición en `request.modeInfo.permissionLevel`); API `stream.questionCarousel` (awaitable EN el mismo turno, Escape→undefined); interceptación via extensión inline `resourceLoaderOptions.extensionFactories` + `pi.on("tool_call")` con `{block, reason}` — el bucle de pi ESPERA al handler (agent-session.js:227-245) | ✅ |
 | P1 | Implementar el puente de permisos según el mapa: propuestas `chatParticipantAdditions` + `chatParticipantPrivate`; holder de turno (patrón `toolToken`); extensión inline `picode-permissions` interceptando bash/powershell/edit/write; `autoApprove`/`autopilot` → libre (hoy); `default`/`assisted` → questionCarousel Permir/Denegar; denegar o cancelar → `{block:true, reason}` | ✅ obrero 27-09 |
 | P2 | Tests del puente puro (decisión preguntar/no-preguntar por tool y modo del mando) | ✅ 13 tests, `node --test` en verde |
-| P3 | Build + pack + editor relanzado | pendiente |
-| P4 | Documentar, commit, cierre | pendiente |
+| P3 | Build + pack + editor relanzado | ✅ build 0; `picode-permissions` + `questionCarousel` verificados dentro del pack; editor relanzado |
+| P4 | Documentar, commit, cierre | ✅ `c7be0bc4` (núcleo: dos posiciones, edición del padre) + `3edb6c1e` (puente) |
+| P5 | (decisión del dueño en pleno vuelo) Solo DOS posiciones en el picker: Ask y Allow all — Autopilot/Assisted fuera de `DEFAULT_PERMISSION_LEVELS` y del enum del ajuste; la maquinaria upstream queda intacta y un valor guardado de nivel quitado se lee como Default | ✅ |
 
 ## Notas del código ya verificado (27-09)
 
