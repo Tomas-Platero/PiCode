@@ -126,3 +126,14 @@ comprobación de segundos.
   usaba, ahora dentro de `stage-distribution.sh`. `jq` fuera también de la lista de requisitos.
   Comprobado tras el borrado: `-o` ✓, `bash -n` en todos los guiones ✓, y el rematado vuelve a
   correr idempotente sobre el pack real ✓ (17 s, 7 pasos, «staging complete»).
+- 2026-09-27 · **revisión de carpetas** («¿las necesitamos todas?»): se conservan todas las
+  versionadas. Dos hallazgos: `extensions/picode-pi-chat` **no es basura** (el núcleo solo tiene
+  1 fichero de la migración; el chat sigue viviendo ahí) y `updates/` es el mecanismo vivo de
+  entrega de actualizaciones. Borrados por decisión explícita del dueño, previa advertencia de
+  irreversibilidad (no estaban en git): `data/` de la raiz (48 MB, perfil del editor suelto, en
+  desuso desde el 21-09) y `legacy/` (5,8 MB, snapshot del panel aún más viejo).
+  Arreglados de paso: `updates/README.md` citaba un parche borrado; `README.md`, `CHANGELOG.md`
+  y el wiki contaban el mundo de los parches como presente.
+- **Hueco declarado, no resuelto** (registrado para que no sorprenda): desde el 24-09 el
+  empaquetado no incluye el panel y la migración al núcleo no terminó — **el editor construido
+  desde fuente hoy no trae el chat visible**. Es el primer trabajo real pendiente del producto.
