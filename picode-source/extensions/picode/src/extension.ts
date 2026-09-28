@@ -1558,6 +1558,8 @@ async function streamInto(
 function extractText(payload: string, api: string | undefined): string | undefined {
 	let event: Record<string, unknown> | undefined;
 	try {
+		// SAFETY: the payload is a streamed JSON event whose shape the dialect table below
+		// knows; parsing hands it over as an untyped record and the table narrows it.
 		event = JSON.parse(payload) as Record<string, unknown>;
 	} catch {
 		return undefined;
