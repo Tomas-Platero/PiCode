@@ -108,13 +108,6 @@ const registry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 registry.registerConfiguration({
 	...workbenchConfigurationNodeBase,
 	'properties': {
-		'workbench.settings.enableNaturalLanguageSearch': {
-			'type': 'boolean',
-			'description': nls.localize('enableNaturalLanguageSettingsSearch', "Controls whether to enable the natural language search mode for settings. The natural language search is provided by a Microsoft online service."),
-			'default': false,
-			'scope': ConfigurationScope.WINDOW,
-			'tags': ['usesOnlineServices']
-		},
 		'workbench.settings.settingsSearchTocBehavior': {
 			'type': 'string',
 			'enum': ['hide', 'filter'],

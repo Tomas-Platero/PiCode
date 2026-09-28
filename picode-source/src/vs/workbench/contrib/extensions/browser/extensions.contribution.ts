@@ -143,7 +143,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 					localize('extensions.autoUpdate.on', 'Download and install updates automatically only for enabled extensions.'),
 					localize('extensions.autoUpdate.off', 'Extensions are not automatically updated.'),
 				],
-				description: localize('extensions.autoUpdate', "Controls the automatic update behavior of extensions. The updates are fetched from a Microsoft online service."),
+				description: localize('extensions.autoUpdate', "Controls the automatic update behavior of extensions. The updates are fetched from the extension marketplace."),
 				default: 'on',
 				scope: ConfigurationScope.APPLICATION,
 				tags: ['usesOnlineServices'],
@@ -154,7 +154,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 					localization: {
 						description: {
 							key: 'extensions.autoUpdate',
-							value: localize('extensions.autoUpdate', "Controls the automatic update behavior of extensions. The updates are fetched from a Microsoft online service."),
+							value: localize('extensions.autoUpdate', "Controls the automatic update behavior of extensions. The updates are fetched from the extension marketplace."),
 						},
 						enumDescriptions: [
 							{
@@ -189,7 +189,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 			},
 			'extensions.autoCheckUpdates': {
 				type: 'boolean',
-				description: localize('extensionsCheckUpdates', "When enabled, automatically checks extensions for updates. If an extension has an update, it is marked as outdated in the Extensions view. The updates are fetched from a Microsoft online service."),
+				description: localize('extensionsCheckUpdates', "When enabled, automatically checks extensions for updates. If an extension has an update, it is marked as outdated in the Extensions view. The updates are fetched from the extension marketplace."),
 				default: true,
 				scope: ConfigurationScope.APPLICATION,
 				tags: ['usesOnlineServices']
