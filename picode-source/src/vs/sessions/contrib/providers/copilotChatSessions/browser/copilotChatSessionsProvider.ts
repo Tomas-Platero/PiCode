@@ -1482,7 +1482,9 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 	) {
 		super();
 
-		this._multiChatEnabled = this.configurationService.getValue<boolean>(COPILOT_MULTI_CHAT_SETTING) ?? true;
+		// The `sessions.github.copilot.multiChatSessions` setting was removed with the
+		// Copilot harness deprecation; multi-chat stays on (its last shipped default).
+		this._multiChatEnabled = true;
 
 		this._register(runOnChange(this.agentHostEnablementService.enabled, () => {
 			this._onDidChangeSessionTypes.fire();

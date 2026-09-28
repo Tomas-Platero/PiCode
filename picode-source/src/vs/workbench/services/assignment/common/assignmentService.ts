@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../../nls.js';
 import { createDecorator, IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import type { IKeyValueStorage, IExperimentationTelemetry, IExperimentationFilterProvider, ExperimentationService as TASClient } from 'tas-client';
 import { Memento } from '../../../common/memento.js';
@@ -14,9 +13,6 @@ import { InstantiationType, registerSingleton } from '../../../../platform/insta
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { ASSIGNMENT_REFETCH_INTERVAL, ASSIGNMENT_STORAGE_KEY, AssignmentFilterProvider, IAssignmentService, TargetPopulation, VSCodeCoreAssignmentsFilterProvider, WindowKind } from '../../../../platform/assignment/common/assignment.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
-import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
-import { IConfigurationRegistry, Extensions as ConfigurationExtensions, ConfigurationScope } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { resolveAmdNodeModulePath } from '../../../../amdX.js';
 import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
@@ -516,18 +512,3 @@ export class WorkbenchAssignmentService extends Disposable implements IAssignmen
 }
 
 registerSingleton(IWorkbenchAssignmentService, WorkbenchAssignmentService, InstantiationType.Delayed);
-
-const registry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration);
-registry.registerConfiguration({
-	...workbenchConfigurationNodeBase,
-	'properties': {
-		'workbench.enableExperiments': {
-			'type': 'boolean',
-			'description': localize('workbench.enableExperiments', "Fetches experiments to run from a Microsoft online service."),
-			'default': false,
-			'scope': ConfigurationScope.APPLICATION,
-			'restricted': true,
-			'tags': ['usesOnlineServices']
-		}
-	}
-});

@@ -17,13 +17,10 @@ import '../../../../platform/agentHost/browser/agentHostEnablementService.js';
 import '../../../../platform/agentHost/common/agentHostEnablementService.js';
 import { AgentHostMapLegacySettingsToManagedSettingsSettingId } from '../../../../platform/agentHost/common/agentHostManagedSettings.js';
 import { AgentHostAutoReplyEnabledConfigKey, AgentHostEditAutoApprovePatternsConfigKey, AgentHostExternalSessionsMode, AgentHostGlobalAutoApproveEnabledConfigKey, AgentHostMigrateLegacyCopilotCliEnabledConfigKey, AgentHostSessionSyncEnabledConfigKey, AgentHostShowExternalSessionsConfigKey } from '../../../../platform/agentHost/common/agentHostSchema.js';
-import '../../../../platform/agentHost/common/agentHostStarter.config.contribution.js';
-import { AgentMergeSettingId } from '../../../../platform/agentHost/common/agentMerge.js';
 import { AgentHostAhpJsonlLoggingSettingId, AgentHostAllowSignedOutWhenUsableSettingId, AgentHostSdkSandboxEnabledSettingId, AgentHostSdkSandboxWindowsEnabledSettingId, CodexPreferAgentHostEditorSettingId } from '../../../../platform/agentHost/common/agentService.js';
-import { AgentHostCopilotModelCapabilityOverridesSettingId, AgentHostCopilotSdkLogLevelSettingId, AgentHostCustomTerminalToolEnabledSettingId, AgentHostMultiTurnContextRoutingEnabledSettingId, AgentHostOpus48PromptEnabledSettingId, AgentHostReasoningEffortOverrideSettingId, AgentHostReasoningSummaryEnabledSettingId, AgentHostToolSearchDeferThresholdSettingId, AgentHostToolSearchEnabledSettingId, CopilotSubagentModelGuidanceEnabledSettingId, copilotSdkLogLevelSettingValues } from '../../../../platform/agentHost/common/copilotCliConfig.js';
+import { AgentHostToolSearchEnabledSettingId } from '../../../../platform/agentHost/common/copilotCliConfig.js';
 import { CopilotSemanticSearchEnabledSettingId } from '../../../../platform/agentHost/common/semanticSearchConstants.js';
 import { DEFAULT_EDIT_AUTO_APPROVE_PATTERNS, mergeChatEditAutoApprovePatterns } from '../../../../platform/chat/common/chatSettings.js';
-import { reasoningEffortLevels } from '../../../../platform/agentHost/common/reasoningEffort.js';
 import { ChatSessionArchiveActionWordingSettingId } from '../../../../platform/chat/common/sessionArchiveActions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -33,7 +30,6 @@ import { SyncDescriptor } from '../../../../platform/instantiation/common/descri
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IJSONContributionRegistry, Extensions as JSONExtensions } from '../../../../platform/jsonschemas/common/jsonContributionRegistry.js';
-import { DEFAULT_LOCAL_TRANSCRIPTION_MODEL } from '../../../../platform/localTranscription/common/localTranscription.js';
 import { McpAccessValue, McpAutoStartValue, mcpAccessConfig, mcpAllowedServersConfig, mcpAppsEnabledConfig, mcpAutoStartConfig, mcpDeniedServersConfig, mcpGalleryServiceEnablementConfig, mcpGalleryServiceUrlConfig } from '../../../../platform/mcp/common/mcpManagement.js';
 import { AgentNetworkFilterService, IAgentNetworkFilterService } from '../../../../platform/networkFilter/common/networkFilterService.js';
 import { AgentNetworkDomainSettingId } from '../../../../platform/networkFilter/common/settings.js';
@@ -120,7 +116,7 @@ import { registerChatSpeechToTextActions } from './actions/chatSpeechToTextActio
 import { registerChatTitleActions } from './actions/chatTitleActions.js';
 import { registerChatToolActions } from './actions/chatToolActions.js';
 import { ChatTransferContribution } from './actions/chatTransfer.js';
-import { CONFIGURE_DICTATION_INSTRUCTIONS_ACTION_ID, registerConfigureSpeechInstructionsActions } from './actions/configureVoiceInstructionsAction.js';
+import { registerConfigureSpeechInstructionsActions } from './actions/configureVoiceInstructionsAction.js';
 import './agentSessions/agentSessions.contribution.js';
 import { AgentHostChatDebugContribution } from './chatDebug/agentHostChatDebugProvider.js';
 import { ChatDebugEditor } from './chatDebug/chatDebugEditor.js';
@@ -129,7 +125,7 @@ import { ChatGoalSummaryService, IChatGoalSummaryService } from './chatGoalSumma
 import { ChatSubmitRequestHandlerService, IChatSubmitRequestHandlerService } from './chatSubmitRequestHandlerService.js';
 import { PromptsDebugContribution } from './promptsDebugContribution.js';
 import { PromptLanguageFeaturesProvider } from './promptSyntax/promptFileContributions.js';
-import { ChatSpeechToTextService, DictationSettingId, IChatSpeechToTextService } from './speechToText/chatSpeechToTextService.js';
+import { ChatSpeechToTextService, IChatSpeechToTextService } from './speechToText/chatSpeechToTextService.js';
 import './telemetry/chatModelCountTelemetry.js';
 import { ChatToolRiskAssessmentService, IChatToolRiskAssessmentService } from './tools/chatToolRiskAssessmentService.js';
 import { ClientToolSetsContribution } from './tools/clientToolSetsContribution.js';
@@ -278,67 +274,6 @@ configurationRegistry.registerConfiguration({
 			type: 'string',
 			description: nls.localize('chat.fontFamily', "Controls the font family in chat messages."),
 			default: 'default'
-		},
-		'dictation.enabled': {
-			type: 'boolean',
-			markdownDescription: nls.localize('dictation.enabled', "Enables dictation across the product (chat input, editor, and terminal). When enabled on a supported platform, a microphone button appears in the chat input and the dictation shortcut becomes available; the on-device transcription model is downloaded on first use and runs locally."),
-			default: true,
-			tags: ['experimental'],
-			policy: {
-				name: 'DictationEnabled',
-				category: PolicyCategory.InteractiveSession,
-				minimumVersion: '1.131',
-				localization: {
-					description: {
-						key: 'dictation.enabled.policy',
-						value: nls.localize('dictation.enabled.policy', "Controls whether dictation is available across the product (chat input, editor, and terminal).")
-					}
-				},
-			}
-		},
-		'dictation.model': {
-			type: 'string',
-			enum: [
-				DEFAULT_LOCAL_TRANSCRIPTION_MODEL,
-				'mai',
-			],
-			enumItemLabels: [
-				nls.localize('dictation.model.nemotronMultilingual.label', "Nemotron 3.5 ASR (Multilingual) — On-Device"),
-				nls.localize('dictation.model.mai.label', "MAI — Cloud"),
-			],
-			markdownEnumDescriptions: [
-				nls.localize('dictation.model.nemotronMultilingual', "NVIDIA Nemotron 3.5 multilingual streaming RNN-T, run on-device through Microsoft Foundry Local. Works offline; no audio leaves the device. Automatic language selection follows the Voice Mode language setting; when that setting is Automatic, dictation uses the configured display language when supported, then the system or browser locale, with model detection as a fallback. Downloaded on first use and cached on disk."),
-				nls.localize('dictation.model.mai', "Cloud transcription through the same Microsoft AI voice service used by Voice Mode. Requires a network connection and GitHub sign-in; audio is streamed to the service."),
-			],
-			markdownDescription: nls.localize('dictation.model', "The model used for dictation. On-device models download on first use and run locally through Microsoft Foundry Local; the cloud option streams audio to the Microsoft AI voice service."),
-			default: DEFAULT_LOCAL_TRANSCRIPTION_MODEL,
-			tags: ['experimental'],
-			experiment: { mode: 'auto' }
-		},
-		[DictationSettingId.ShowTranscript]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('dictation.showTranscript', "Controls whether the transcript is shown while dictating. The final transcript is inserted when dictation ends."),
-			default: true,
-			tags: ['experimental']
-		},
-		[DictationSettingId.ShowButton]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('dictation.showButton', "Controls whether the dictation microphone button is shown in the chat input. When hidden, dictation can still be started with its keyboard shortcut."),
-			default: true,
-			tags: ['experimental']
-		},
-		'dictation.experimental.llmCleanup': {
-			type: 'boolean',
-			markdownDescription: nls.localize('dictation.experimental.llmCleanup', "Experimental: when dictation ends, the final transcript is passed through a small language model to restore punctuation, capitalization, paragraphs, and lists. Requires Copilot to be enabled; the transcript is sent to the language model for cleanup. Falls back to the raw transcript when no model is available. Use [dictation instructions](command:{0}) to customize terminology and formatting.", CONFIGURE_DICTATION_INSTRUCTIONS_ACTION_ID),
-			default: true,
-			tags: ['experimental']
-		},
-		'dictation.experimental.llmCleanupModel': {
-			type: 'string',
-			enum: ['auto', 'copilot-utility-small', 'gpt-5.6-luna'],
-			markdownDescription: nls.localize('dictation.experimental.llmCleanupModel', "Controls the language model used for experimental dictation cleanup. `auto` follows the active experiment treatment."),
-			default: 'auto',
-			tags: ['experimental']
 		},
 		'chat.editor.fontSize': {
 			type: 'number',
@@ -512,12 +447,6 @@ configurationRegistry.registerConfiguration({
 			],
 			description: nls.localize('chat.upvoteAnimation', "Controls whether an animation is shown when clicking the thumbs up button on a chat response."),
 			default: 'floatingThumbs',
-		},
-		'chat.experimental.detectParticipant.enabled': {
-			type: 'boolean',
-			deprecationMessage: nls.localize('chat.experimental.detectParticipant.enabled.deprecated', "This setting is deprecated. Please use `chat.detectParticipant.enabled` instead."),
-			description: nls.localize('chat.experimental.detectParticipant.enabled', "Enables chat participant autodetection for panel chat."),
-			default: null
 		},
 		[ChatConfiguration.IncrementalRendering]: {
 			type: 'boolean',
@@ -1554,35 +1483,11 @@ configurationRegistry.registerConfiguration({
 				mode: 'startup'
 			},
 		},
-		[AgentHostCustomTerminalToolEnabledSettingId]: {
-			type: 'boolean',
-			description: nls.localize('chat.agentHost.customTerminalTool.enabled', "When enabled, Copilot SDK sessions use the Agent Host terminal tool override instead of the SDK's default terminal behavior."),
-			default: false,
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostCopilotSdkLogLevelSettingId]: {
-			type: 'string',
-			enum: [...copilotSdkLogLevelSettingValues],
-			enumDescriptions: [
-				nls.localize('chat.agentHost.copilotSdk.logLevel.info', "Log informational messages. Running PiCode with trace logging still enables all Copilot SDK runtime diagnostics."),
-				nls.localize('chat.agentHost.copilotSdk.logLevel.trace', "Log all Copilot SDK runtime diagnostics."),
-			],
-			markdownDescription: nls.localize('chat.agentHost.copilotSdk.logLevel', "Controls the log level for the Copilot SDK runtime used by the local agent host. Changing this setting restarts the Copilot SDK client; active sessions are reloaded when next used."),
-			default: 'info',
-			scope: ConfigurationScope.APPLICATION,
-			tags: ['experimental', 'advanced'],
-		},
 		[AgentHostMapLegacySettingsToManagedSettingsSettingId]: {
 			type: 'boolean',
 			markdownDescription: nls.localize('chat.agentHost.copilot.mapLegacySettingsToManagedSettings', "When enabled, maps supported legacy PiCode settings to equivalent Copilot SDK managed settings for local Agent Host sessions. Only restrictions are mapped, and only from globally-scoped values — workspace and folder values are ignored. Applies to local sessions using the Copilot agent; remote hosts and other agents are unaffected. This compatibility bridge is temporary and is not used for new settings."),
 			default: false,
 			scope: ConfigurationScope.APPLICATION_MACHINE,
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostOpus48PromptEnabledSettingId]: {
-			type: 'boolean',
-			description: nls.localize('chat.agentHost.opus48Prompt.enabled', "When enabled, Copilot SDK sessions running a Claude Opus 4.8 model apply Opus 4.8-tuned system-prompt section overrides on top of the default system message."),
-			default: false,
 			tags: ['experimental', 'advanced'],
 		},
 		[AgentHostToolSearchEnabledSettingId]: {
@@ -1591,80 +1496,10 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			tags: ['experimental', 'advanced'],
 		},
-		[AgentHostToolSearchDeferThresholdSettingId]: {
-			type: 'number',
-			description: nls.localize('chat.agentHost.copilot.toolSearch.deferThreshold', "Minimum number of tools before MCP and external tools are deferred behind tool search. Set to 0 to always defer external tools. Only effective when tool search is enabled."),
-			default: 1,
-			minimum: 0,
-			tags: ['experimental', 'advanced'],
-		},
 		[CopilotSemanticSearchEnabledSettingId]: {
 			type: 'boolean',
 			description: nls.localize('chat.copilot.semanticSearch.enabled', "Controls whether Copilot Agent Host sessions can use PiCode's semantic workspace search. When disabled, semantic search is unavailable."),
 			default: false,
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostReasoningEffortOverrideSettingId]: {
-			type: 'string',
-			markdownDescription: nls.localize('chat.agentHost.reasoningEffortOverride', "Overrides the reasoning effort for Copilot SDK agent sessions regardless of the per-model picker value. Set it to a level the selected model supports (for example `low`, `medium`, `high`, or `xhigh`) — choosing a level the model does not support may be rejected by the model. A value that isn't a recognized effort level is ignored and the session falls back to the picker value. Applied when a session is created and when its model changes. Only affects Copilot CLI agent sessions.\n\n**Note**: This is an advanced setting for experimentation."),
-			default: '',
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostReasoningSummaryEnabledSettingId]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('chat.agentHost.reasoningSummary', "When enabled, requests concise reasoning summaries for supported Copilot SDK agent sessions."),
-			default: false,
-			experiment: { mode: 'startup' },
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostMultiTurnContextRoutingEnabledSettingId]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('chat.agentHost.copilot.multiTurnContextRouting', "When enabled, Auto model selection in Copilot SDK agent sessions routes on the conversation so far, sending prior user messages to the router instead of scoring the latest message alone."),
-			default: false,
-			experiment: { mode: 'startup' },
-			tags: ['experimental', 'advanced'],
-		},
-		[CopilotSubagentModelGuidanceEnabledSettingId]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('chat.copilot.subagentModelGuidance.enabled', "When enabled, Copilot SDK agent sessions instruct the model to keep subagents on their default model, setting the task tool's `model` parameter only when you explicitly name the model a subagent should run on. Applied when a session launches or resumes."),
-			default: false,
-			experiment: { mode: 'startup' },
-			tags: ['experimental', 'advanced'],
-		},
-		[AgentHostCopilotModelCapabilityOverridesSettingId]: {
-			type: 'object',
-			markdownDescription: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides', "Per-model capability overrides for Copilot SDK agent sessions, keyed by model id (`*` matches every model; a specific entry wins field-by-field), intended for evaluating models against an existing model's profile. Declare an aliased `family` (for example `claude-opus-4.8`) to route the model to that family's tuned system prompt and tool profile without changing the model id sent to the runtime — so a preview model can be evaluated against a known prompt while still running on its own endpoint — a `reasoningEffort` to pin its effort level, `availableTools`/`excludedTools` to filter its tool set, or `modelCapabilities` to override individual capability limits (e.g. vision support, context window size) passed through to the SDK. All overrides apply when a session launches or resumes. On a mid-session model change, only the new model's `reasoningEffort` is applied; the session keeps its launch-time family, tool filters, and model capabilities. Only affects Copilot agent sessions.\n\n**Note**: This is an advanced setting for experimentation."),
-			additionalProperties: {
-				type: 'object',
-				properties: {
-					family: {
-						type: 'string',
-						description: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides.family', "Route the model to another family's tuned system prompt and tool profile (e.g. `claude-opus-4.8`). The model id sent to the runtime is unaffected, so the session still runs on the selected model."),
-					},
-					reasoningEffort: {
-						type: 'string',
-						enum: [...reasoningEffortLevels],
-						description: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides.reasoningEffort', "Reasoning effort for sessions on this model, overriding the model picker's thinking level. Use the `*` entry to set it for every model. Unrecognized values are ignored."),
-					},
-					availableTools: {
-						type: 'array',
-						items: { type: 'string' },
-						description: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides.availableTools', "When set, only matching tools are available to sessions on this model. Patterns: bare tool names, `builtin:*` or `builtin:<name>` (Copilot runtime tools), `mcp:*` or `mcp:<name>` (MCP server tools), and `custom:*` or `custom:<name>` (every tool PiCode registers with the SDK, including the agent host's own terminal tools); a bare `*` expands to all three sources."),
-					},
-					excludedTools: {
-						type: 'array',
-						items: { type: 'string' },
-						description: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides.excludedTools', "Tools disabled for sessions on this model; same pattern syntax as `availableTools` and takes precedence over it. Note that `custom:*` and a bare `*` also disable the agent host's own terminal tools registered with the SDK."),
-					},
-					modelCapabilities: {
-						type: 'object',
-						additionalProperties: true,
-						description: nls.localize('chat.agentHost.copilot.modelCapabilityOverrides.modelCapabilities', "Per-property model capability overrides passed through to the Copilot SDK's `modelCapabilities` session field (e.g. `{ \"supports\": { \"vision\": false }, \"limits\": { \"max_context_window_tokens\": 64000 } }`), deep-merged over the runtime's resolved defaults for this model. Applied when the session launches or resumes."),
-					},
-				},
-			},
-			default: {},
-			scope: ConfigurationScope.APPLICATION,
 			tags: ['experimental', 'advanced'],
 		},
 		[AgentHostAllowSignedOutWhenUsableSettingId]: {
@@ -2252,43 +2087,6 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.titleBar.openInAgentsWindow.enabled', "Controls whether the Open in Agents Window button is shown in the title bar."),
 			default: true,
 		},
-		'chat.approvedAccountOrganizations': {
-			type: 'array',
-			items: { type: 'string' },
-			description: nls.localize('chat.approvedAccountOrganizations', "List of GitHub organization logins whose members are permitted to use AI features. When set to a non-empty list, AI features are disabled until the user signs into a GitHub account that belongs to one of the specified organizations and account-level policy data has been resolved. Set to '*' to allow any authenticated GitHub or GitHub Enterprise account."),
-			default: [],
-			included: false,
-			policy: {
-				name: 'ChatApprovedAccountOrganizations',
-				category: PolicyCategory.InteractiveSession,
-				minimumVersion: '1.118',
-				localization: {
-					description: {
-						key: 'chat.approvedAccountOrganizations.policy.description',
-						value: nls.localize('chat.approvedAccountOrganizations.policy.description', "Setting this policy to a non-empty list activates the Approved Account gate: all AI features are disabled until the user signs into a GitHub account whose organizations intersect this list AND the account-side policy data has resolved. Comparison is case-insensitive. Use '*' as a wildcard to accept any signed-in GitHub or GHE account (use this for GHE deployments where the organization list is not surfaced).")
-					}
-				}
-			}
-		},
-		'chat.allowAnonymousAccess': { // TODO@bpasero remove me eventually
-			type: 'boolean',
-			description: nls.localize('chat.allowAnonymousAccess', "Controls whether anonymous access is allowed in chat."),
-			default: false,
-			included: false,
-			tags: ['experimental'],
-			experiment: {
-				mode: 'auto'
-			}
-		},
-		[ChatConfiguration.GrowthNotificationEnabled]: {
-			type: 'boolean',
-			description: nls.localize('chat.growthNotification', "Controls whether to show a growth notification in the agent sessions view to encourage new users to try Copilot."),
-			default: false,
-			tags: ['experimental'],
-			experiment: {
-				mode: 'auto'
-			}
-		},
 		[ChatConfiguration.RestoreLastPanelSession]: {
 			type: 'boolean',
 			description: nls.localize('chat.restoreLastPanelSession', "Controls whether the last session is restored in panel after restart."),
@@ -2299,15 +2097,6 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.exitAfterDelegation', "Controls whether the chat panel automatically exits after delegating a request to another session."),
 			default: false,
 			tags: ['preview'],
-		},
-		'chat.extensionUnification.enabled': {
-			type: 'boolean',
-			description: nls.localize('chat.extensionUnification.enabled', "Enables the unification of GitHub Copilot extensions. When enabled, all GitHub Copilot functionality is served from the GitHub Copilot Chat extension. When disabled, the GitHub Copilot and GitHub Copilot Chat extensions operate independently."),
-			default: true,
-			tags: ['experimental'],
-			experiment: {
-				mode: 'auto'
-			}
 		},
 		[ChatConfiguration.SubagentsAllowInvocationsFromSubagents]: {
 			type: 'boolean',
@@ -2511,73 +2300,6 @@ Registry.as<IConfigurationMigrationRegistry>(Extensions.ConfigurationMigration).
 			['chat.plugins.paths', { value: undefined }],
 			[ChatConfiguration.PluginLocations, { value }]
 		])
-	},
-	// Agent Merge settings dropped the `agentHost` segment from their ids. Without
-	// this an explicit opt-out (for example `fixCI: false`) would silently revert to
-	// the permissive default for sessions that already have Agent Merge enabled.
-	...Object.values(AgentMergeSettingId).map(settingId => {
-		const legacyKey = settingId.replace(/^chat\./, 'chat.agentHost.');
-		return {
-			key: legacyKey,
-			migrateFn: (value: unknown, accessor: (key: string) => unknown): ConfigurationKeyValuePairs => {
-				const pairs: ConfigurationKeyValuePairs = [[legacyKey, { value: undefined }]];
-				// Never clobber an explicitly configured new key (e.g. after settings
-				// sync brought both keys across versions).
-				if (accessor(settingId) === undefined) {
-					pairs.push([settingId, { value }]);
-				}
-				return pairs;
-			}
-		};
-	}),
-	{
-		// The on-device dictation runtime moved to Foundry Local; the old
-		// transformers.js/onnxruntime model IDs no longer resolve and would fail
-		// with an unknown-model error. Map any explicitly-stored legacy value to
-		// the new default so existing users keep working. Also migrate the setting
-		// from its old `chat.speechToText.model` id to `dictation.model`.
-		key: 'chat.speechToText.model',
-		migrateFn: (value: unknown, accessor) => {
-			const legacyModelIds = [
-				'onnx-community/whisper-tiny',
-				'onnx-community/whisper-base',
-				'onnx-community/whisper-small',
-				'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
-				'nemotron-speech-streaming-en-0.6b',
-			];
-			const migrated = (typeof value === 'string' && legacyModelIds.includes(value))
-				? DEFAULT_LOCAL_TRANSCRIPTION_MODEL
-				: value;
-			const pairs: ConfigurationKeyValuePairs = [['chat.speechToText.model', { value: undefined }]];
-			// Never clobber an explicitly configured new key (e.g. after settings
-			// sync brought both keys across versions).
-			if (accessor('dictation.model') === undefined) {
-				pairs.push(['dictation.model', { value: migrated }]);
-			}
-			return pairs;
-		}
-	},
-	{
-		// Existing users may have the former English-only default stored
-		// explicitly. Move them to the multilingual replacement as well.
-		key: 'dictation.model',
-		migrateFn: value => ({
-			value: value === 'nemotron-speech-streaming-en-0.6b'
-				? DEFAULT_LOCAL_TRANSCRIPTION_MODEL
-				: value
-		})
-	},
-	{
-		// Dictation settings were regrouped under the top-level `dictation.*`
-		// namespace (they govern dictation across chat, editor, and terminal).
-		key: 'chat.speechToText.enabled',
-		migrateFn: (value: unknown, accessor) => {
-			const pairs: ConfigurationKeyValuePairs = [['chat.speechToText.enabled', { value: undefined }]];
-			if (accessor('dictation.enabled') === undefined) {
-				pairs.push(['dictation.enabled', { value }]);
-			}
-			return pairs;
-		}
 	},
 	{
 		// `chat.speechToText.mode` was removed (the shortcut is always tap-toggle /
