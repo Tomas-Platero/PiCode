@@ -69,6 +69,31 @@ jobs:
           path: ~\AppData\Local\electron\Cache
           key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
 
+      # preinstall.ts looks for Visual Studio only under fixed Program Files
+      # layouts. The runner image ships it in another edition, so locate it
+      # with vswhere and hand the path over via the documented override.
+      - name: Locate the C++ toolchain
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          VSDIR="/c/Program Files (x86)/Microsoft Visual Studio/Installer"
+          VSWHERE="${VSDIR}/vswhere.exe"
+          if [ ! -f "${VSWHERE}" ]; then
+            echo "error: vswhere not found; no Visual Studio here." >&2
+            exit 1
+          fi
+          VS_PATH=$("${VSWHERE}" -latest -products '*' \
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 \
+            -property installationPath | head -1 | tr -d '\r')
+          if [ -z "${VS_PATH}" ]; then
+            echo "error: no Visual Studio C++ toolset on this runner." >&2
+            exit 1
+          fi
+          # preinstall.ts honors vs2022_install as an explicit override.
+          VS_PATH=$(cygpath -m "${VS_PATH}")
+          echo "vs2022_install=${VS_PATH}" >> "$GITHUB_ENV"
+          echo "C++ toolchain: ${VS_PATH}"
+
       - name: Build
         shell: bash
         run: ./dev/build.sh
