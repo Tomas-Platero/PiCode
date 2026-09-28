@@ -144,3 +144,23 @@ Arreglo:
   auth.json).
 - Al terminar, el conector suelta las cachés de modelos y repinta el selector: los
   proveedores y modelos importados aparecen **sin reiniciar**.
+
+## Corrección del dueño: la importación se ELIGE (`3860c022`)
+
+Me equivoqué de dirección: el import **no se lanza solo** — se elige. Y el defecto real
+que vio era gordo: **cada package instalado abría su ventana de consola** (el instalador
+de pi lanza hijos de npm que se sacan consola propia; el propio instalador de Gentle ya
+documentaba eso y por eso corre npm directo).
+
+Arreglo:
+- El panel vuelve a ser una **decisión**: recuentos, casilla «Sign me in with my saved
+  logins», botón **Import**. La barra de progreso se queda para mientras corre, con la
+  línea de lo que va haciendo (mismo panel, mismo sitio).
+- Los packages se instalan con **npm directo en el proyecto del perfil, consola oculta**,
+  uno a uno, con fallo registrado y el resto siguiendo. Las fuentes de pi se traducen a
+  especificaciones npm con un helper puro nuevo (`npmInstallSpec`: `npm:x` → `x`,
+  `git:`/`https:` → `git+https:`, rutas locales se declaran no trasladables y se saltan),
+  con prueba roja-primero en el registro.
+- El resultado dice installed / failed / skipped.
+- Apuntado para el futuro (idea del dueño, no construido): una tercera opción de pi en
+  **cloud** por URL RPC en la primera página del asistente.
