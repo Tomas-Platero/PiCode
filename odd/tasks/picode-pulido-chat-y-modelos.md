@@ -123,3 +123,24 @@ Todo el texto de la página de pi pasa a responder lo que el dueño está decidi
   logins sin nombre de fichero, y la nota: «Everything is copied into PiCode. Nothing
   is deleted — your external pi keeps working exactly as it is.»
 - Resultado: «Ready: X items brought over, Y updated. N packages installed, M failed.»
+
+## Añadido posterior: el import se ejecuta solo (`25fb8864`)
+
+Lo que el dueño vio al probarlo: el pi interno no parecía seleccionado por defecto, el
+Next se habilitaba «sin poder marcarlo», la importación pedía tres clics más y no se veía
+progreso, y al acabar no se sabía si proveedores y modelos habían entrado.
+
+Arreglo:
+- El pi interno aparece **marcado desde el principio** (es el default; antes la marca
+  dependía del valor exacto del ajuste).
+- La oferta aparece cuando el perfil de la máquina tiene algo que traer (proveedores
+  incluidos en el cálculo) y **el import arranca solo**, sin segundo botón.
+- **Barra de progreso real**: el conector cuenta un paso por la copia, uno por cada
+  package y uno por el refresco; la página lo consulta cada 500 ms y mueve la barra con
+  la línea que va («Installing package 3 of 20: npm:pi-lens…»). Mismo patrón que el
+  instalador de Gentle. Un import cada vez, forzado.
+- Sin casilla de credenciales a mitad de flujo: el import automático lo trae todo menos
+  los logins, y al terminar ofrece una vez «Sign in with my saved logins» (copia solo
+  auth.json).
+- Al terminar, el conector suelta las cachés de modelos y repinta el selector: los
+  proveedores y modelos importados aparecen **sin reiniciar**.
