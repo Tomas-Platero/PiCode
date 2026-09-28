@@ -55,6 +55,12 @@ export const IMPORT_PREVIEW_COMMAND = 'picode.setup.importPreview';
 /** The one-shot copy from the external profile into PiCode's own. */
 export const IMPORT_COMMAND = 'picode.setup.importFromExternal';
 
+/** Brings only the saved logins (auth.json), as a follow-up to the main import. */
+export const IMPORT_CREDENTIALS_COMMAND = 'picode.setup.importCredentials';
+
+/** The import's live state, answered to the page's poll — the same pattern as the Gentle log. */
+export const IMPORT_LOG_COMMAND = 'picode.setup.importLog';
+
 /** The Gentle install's live output, polled by the page while the install runs. */
 export const GENTLE_LOG_COMMAND = 'picode.setup.gentleLog';
 
@@ -90,6 +96,8 @@ export interface SetupDeps {
 	readonly forgetRuntime: () => void;
 	/** Disposes the chat's live pi session, so the next message loads what just changed. */
 	readonly resetChat: () => void;
+	/** Drops the model caches and repaints the picker — what an import just changed on disk. */
+	readonly refreshModels: () => void;
 }
 
 /** What the welcome page renders, and what the actions answer with. */
@@ -111,6 +119,16 @@ export interface SetupActionError {
 
 /** The Gentle installer's live state, answered to the page's poll. */
 const gentleLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
+
+/** The import's live state: the page polls it to draw its progress bar. */
+const importLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
+
+function logImport(line: string): void {
+	importLog.lines.push(line);
+	if (importLog.lines.length > 12) {
+		importLog.lines.splice(0, importLog.lines.length - 12);
+	}
+}
 
 function logGentle(line: string): void {
 	gentleLog.lines.push(line);
@@ -249,49 +267,86 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),
 		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
 		vscode.commands.registerCommand(IMPORT_COMMAND, async (credentials: unknown) => {
-			// Credentials are the one item whose copy is the owner's own decision: the page asks
-			// for them behind an unchecked box, and nothing here turns the import into a way of
-			// copying `auth.json` as a side effect.
-			const report = importProfile({
+			// One import at a time: the page starts it and watches the log.
+			if (importLog.running) {
+				return undefined;
+			}
+			// Credentials are the one item whose copy is the owner's own decision: the page
+			// asks for them behind an unchecked box, and nothing here turns the import into
+			// a way of copying `auth.json` as a side effect.
+			importLog.running = true;
+			importLog.lines = [];
+			importLog.step = 0;
+			importLog.total = 2;
+			try {
+				logImport('Bringing your packages, connections, skills and conversations…');
+				const report = importProfile({
+					from: externalProfileDir(),
+					to: deps.profileDir,
+					selection: {
+						settings: true,
+						models: true,
+						mcp: true,
+						skills: true,
+						memory: true,
+						sessions: true,
+						credentials: credentials === true,
+					},
+				});
+				importLog.step = 1;
+				// Packages: the settings copy carries the declarations, but the packages' files
+				// stay in the external profile's npm tree. Install each declared source into
+				// this profile, so what the import brings actually runs here.
+				const settingsFile = path.join(deps.profileDir, 'settings.json');
+				const settings = report.items.some(i => i.item === 'settings' && (i.status === 'copied' || i.status === 'overwritten'))
+					? ((): Record<string, unknown> | undefined => {
+						try {
+							const value: unknown = JSON.parse(readFileSync(settingsFile, 'utf8'));
+							return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+						} catch {
+							return undefined;
+						}
+					})()
+					: undefined;
+				const declared = settings !== undefined && Array.isArray(settings['packages'])
+					? settings['packages'].filter((entry): entry is string => typeof entry === 'string')
+					: [];
+				const cliEntry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+				let packagesInstalled = 0;
+				let packagesFailed = 0;
+				if (declared.length > 0 && existsSync(cliEntry)) {
+					importLog.total = 2 + declared.length;
+					let index = 0;
+					for (const source of declared) {
+						index += 1;
+						logImport(`Installing package ${index} of ${declared.length}: ${source}…`);
+						const result = await installPackage(source, { cliEntry, profileDir: deps.profileDir });
+						result.ok ? packagesInstalled += 1 : packagesFailed += 1;
+						importLog.step = 1 + index;
+					}
+				}
+				// The imported providers and models are files on disk until the editor asks
+				// again: drop the caches and repaint the picker now.
+				logImport('Refreshing your models and connections…');
+				deps.forgetRuntime();
+				deps.refreshModels();
+				importLog.step = importLog.total;
+				logImport('Done.');
+				return { ...report, packagesInstalled, packagesFailed, credentialsImported: credentials === true };
+			} finally {
+				importLog.running = false;
+			}
+		}),
+		vscode.commands.registerCommand(IMPORT_CREDENTIALS_COMMAND, () => {
+			// The follow-up after an automatic import that ran without logins: this copies
+			// auth.json and nothing else — the rest already came over.
+			return importProfile({
 				from: externalProfileDir(),
 				to: deps.profileDir,
-				selection: {
-					settings: true,
-					models: true,
-					mcp: true,
-					skills: true,
-					memory: true,
-					sessions: true,
-					credentials: credentials === true,
-				},
+				selection: { credentials: true },
 			});
-			// Packages: the settings copy carries the declarations, but the packages' files
-			// stay in the external profile's npm tree. Install each declared source into
-			// this profile, so what the import brings actually runs here.
-			const packagesInstalled = { ok: 0, failed: 0 };
-			const settingsFile = path.join(deps.profileDir, 'settings.json');
-			const settings = report.items.some(i => i.item === 'settings' && (i.status === 'copied' || i.status === 'overwritten'))
-				? ((): Record<string, unknown> | undefined => {
-					try {
-						const value: unknown = JSON.parse(readFileSync(settingsFile, 'utf8'));
-						return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-					} catch {
-						return undefined;
-					}
-				})()
-				: undefined;
-			const declared = settings !== undefined && Array.isArray(settings['packages'])
-				? settings['packages'].filter((entry): entry is string => typeof entry === 'string')
-				: [];
-			const cliEntry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
-			if (declared.length > 0 && existsSync(cliEntry)) {
-				for (const source of declared) {
-					const result = await installPackage(source, { cliEntry, profileDir: deps.profileDir });
-					result.ok ? packagesInstalled.ok += 1 : packagesInstalled.failed += 1;
-				}
-			}
-			return { ...report, packagesInstalled: packagesInstalled.ok, packagesFailed: packagesInstalled.failed };
 		}),
+		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];
 }
 

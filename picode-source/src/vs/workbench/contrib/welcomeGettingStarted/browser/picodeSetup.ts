@@ -148,8 +148,13 @@ export class PiCodeSetup extends Disposable {
 	private readonly gridDisposables = this._register(new DisposableStore());
 
 	// Live elements, re-created on every render.
-	private importPreviewBox: HTMLElement | undefined;
 	private importResult: HTMLElement | undefined;
+	/** The import starts itself the first time the internal pi is chosen with a profile to bring. */
+	private importStarted = false;
+	/** The finished import's counts, kept across re-renders. */
+	private importReport: (ImportReport & { packagesInstalled?: number; packagesFailed?: number; credentialsImported?: boolean }) | undefined;
+	/** The saved-logins follow-up, offered once after the automatic import. */
+	private credentialsBrought = false;
 	private note: HTMLElement | undefined;
 	private gentleStatus: HTMLElement | undefined;
 	/* The theme card's two sources: what is installed, and what the gallery (Open VSX) has. */
@@ -383,7 +388,7 @@ export class PiCodeSetup extends Disposable {
 						: localize('picodeSetup.pi.externalUnknown', "Looking for pi on your computer… this can take a few seconds"),
 		});
 		const internal = this.renderPiOption({
-			checked: state.runtime === 'internal',
+			checked: state.runtime !== 'external',
 			available: true,
 			label: localize('picodeSetup.pi.internal', "PiCode's internal pi"),
 			detail: localize('picodeSetup.pi.internalDetail', "Kept and updated by PiCode; its configuration lives inside the editor."),
@@ -473,7 +478,8 @@ export class PiCodeSetup extends Disposable {
 
 	private renderImportCta(preview: ProfilePreview): HTMLElement {
 		this.importResult = undefined;
-		const previewBox = this.importPreviewBox = $('.picode-import-preview', {},
+		const progressArea = $('.picode-import-progress-area');
+		const previewBox = $('.picode-import-preview', {},
 			$('.picode-import-counts', {},
 				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
 				this.importCount(localize('picodeSetup.import.providers', "AI connections"), preview.providers),
@@ -481,26 +487,25 @@ export class PiCodeSetup extends Disposable {
 				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
 				this.importCount(localize('picodeSetup.import.sessions', "Conversations"), preview.sessions),
 			),
-			$('.picode-import-credentials', {},
-				this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Sign me in with my saved logins")),
-			),
-			$('.picode-import-actions', {},
-				this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => this.runImport(preview), 'primary'),
-				this.button('picode-import-cancel', localize('picodeSetup.import.cancel', "Cancel"), () => {
-					if (this.importPreviewBox) { this.importPreviewBox.hidden = true; }
-				}),
-			),
+			progressArea,
 			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Everything is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
 		);
 		const result = this.importResult = $('.picode-import-result');
 
-		return $('.picode-import-cta', {},
-			this.button('picode-import-open', localize('picodeSetup.import.cta', "Bring everything from your pi"), () => {
-				if (this.importPreviewBox) { this.importPreviewBox.hidden = !this.importPreviewBox.hidden; }
-			}),
-			previewBox,
-			result,
-		);
+		// One shot: the first time this card is on screen with something to bring, the
+		// import starts itself — no second button to find.
+		if (!this.importStarted) {
+			this.importStarted = true;
+			this.renderImportProgress(progressArea);
+			this.startImport(preview, progressArea, result);
+		} else if (this.importReport) {
+			this.renderImportDone(preview, progressArea, result);
+		} else {
+			// Still running; the poller keeps the bar alive across re-renders.
+			this.renderImportProgress(progressArea);
+		}
+
+		return $('.picode-import-cta', {}, previewBox, result);
 	}
 
 	private importCount(label: string, value: number): HTMLElement {
@@ -510,34 +515,81 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	private async runImport(_preview: ProfilePreview): Promise<void> {
-		if (this.busy || !this.importResult) { return; }
-		this.busy = true;
-		this.importResult.textContent = localize('picodeSetup.import.running', "Importing…");
-		this.importResult.classList.remove('picode-error');
-		const credentials = this.container.querySelector<HTMLInputElement>('#picode-import-credentials-box');
-		try {
-			const report = await this.services.commandService.executeCommand<ImportReport>(
-				'picode.setup.importFromExternal',
-				credentials?.checked === true,
-			);
-			if (report === undefined) {
-				throw new Error('the import answered nothing');
-			}
+	private renderImportProgress(area: HTMLElement): void {
+		area.replaceChildren(
+			$('.picode-import-progress', {}, $('.picode-import-progress-fill')),
+			$('.picode-import-progress-line', {}, localize('picodeSetup.import.running', "Bringing everything over…")),
+		);
+	}
+
+	private startImport(preview: ProfilePreview, progressArea: HTMLElement, result: HTMLElement): void {
+		const fill = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-fill');
+		const line = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-line');
+
+		const importRun = this.services.commandService.executeCommand<ImportReport & { packagesInstalled?: number; packagesFailed?: number; credentialsImported?: boolean }>(
+			'picode.setup.importFromExternal',
+			false,
+		);
+
+		// The bar: the connector counts one step for the copy, one per package and one for
+		// the model refresh; the page polls and moves the fill along.
+		const poll = window.setInterval(() => {
+			void this.services.commandService.executeCommand<{ running: boolean; lines: string[]; step: number; total: number }>('picode.setup.importLog')
+				.then(log => {
+					if (!log) { return; }
+					const pct = log.total > 0 ? Math.min(100, Math.round((log.step / log.total) * 100)) : 0;
+					const fillEl = fill();
+					if (fillEl instanceof HTMLElement) { fillEl.style.width = `${pct}%`; }
+					const last = log.lines[log.lines.length - 1];
+					const lineEl = line();
+					if (last && lineEl) { lineEl.textContent = last; }
+					if (!log.running) {
+						window.clearInterval(poll);
+					}
+				})
+				.catch(() => { /* the bar freezes; the command's own answer reports the failure */ });
+		}, 500);
+		this.disposables.add({ dispose: () => window.clearInterval(poll) });
+
+		importRun.then(report => {
+			if (report === undefined || this._store.isDisposed) { return; }
+			this.importReport = report;
+			this.renderImportDone(preview, progressArea, result);
+		}).catch(error => {
 			if (this.importResult) {
-				const packagesNote = (report.packagesInstalled ?? 0) + (report.packagesFailed ?? 0) > 0
-					? ' ' + localize('picodeSetup.import.packagesNote', "{0} packages installed, {1} failed.", report.packagesInstalled ?? 0, report.packagesFailed ?? 0)
-					: '';
-				this.importResult.textContent = report.failed > 0
-					? localize('picodeSetup.import.doneWithFailures', "Finished with problems: {0} items brought over, {1} updated, {2} failed.", report.copied, report.overwritten, report.failed) + packagesNote
-					: localize('picodeSetup.import.done', "Ready: {0} items brought over, {1} updated.", report.copied, report.overwritten) + packagesNote;
+				this.importResult.textContent = messageOf(error);
+				this.importResult.classList.add('picode-error');
 			}
-			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
-		} catch (error) {
-			this.importResult.textContent = messageOf(error);
-			this.importResult.classList.add('picode-error');
+		});
+	}
+
+	private renderImportDone(preview: ProfilePreview, progressArea: HTMLElement, result: HTMLElement): void {
+		const report = this.importReport;
+		if (!report) { return; }
+		progressArea.replaceChildren();
+
+		if (this.importResult) {
+			const packagesNote = (report.packagesInstalled ?? 0) + (report.packagesFailed ?? 0) > 0
+				? ' ' + localize('picodeSetup.import.packagesNote', "{0} packages installed, {1} failed.", report.packagesInstalled ?? 0, report.packagesFailed ?? 0)
+				: '';
+			this.importResult.textContent = report.failed > 0
+				? localize('picodeSetup.import.doneWithFailures', "Finished with problems: {0} items brought over, {1} updated, {2} failed.", report.copied, report.overwritten, report.failed) + packagesNote
+				: localize('picodeSetup.import.done', "Ready: {0} items brought over, {1} updated.", report.copied, report.overwritten) + packagesNote;
 		}
-		this.busy = false;
+
+		// The automatic import runs without logins; if the external profile has them, offer
+		// to bring them now — once.
+		if (preview.hasCredentials && report.credentialsImported !== true && !this.credentialsBrought) {
+			result.append(this.button('picode-import-credentials', localize('picodeSetup.import.bringLogins', "Sign in with my saved logins"), () => {
+				this.credentialsBrought = true;
+				void this.services.commandService.executeCommand('picode.setup.importCredentials')
+					.then(() => {
+						if (this.importResult) {
+							this.importResult.textContent = localize('picodeSetup.import.loginsDone', "Your saved logins are in — no need to sign in again.");
+						}
+					});
+			}, 'secondary'));
+		}
 	}
 
 	/**
@@ -1282,13 +1334,6 @@ export class PiCodeSetup extends Disposable {
 			onClick();
 		}));
 		return button;
-	}
-
-	private checkbox(id: string, label: string): HTMLElement {
-		const input = $('input.picode-checkbox', { 'type': 'checkbox', 'id': id });
-		// A click on the label toggles the box natively through `for`; the id ties them.
-		const label2 = $('label', { 'for': id }, label);
-		return $('.picode-checkbox-row', {}, input, label2);
 	}
 
 	private themeSearch(onInput: (query: string) => void): HTMLElement {

@@ -1863,6 +1863,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		forgetRuntime: forgetPiRuntime,
 		// Installing or removing Gentle AI must be visible to the chat immediately.
 		resetChat: resetChatSession,
+		// An import writes providers, models and packages onto disk: the picker must ask
+		// again instead of serving what it cached before the copy.
+		refreshModels: () => {
+			configuredModelsCache.clear();
+			onDidChangeModels.fire();
+		},
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
 	// The activity-bar status view is a native tree (declared `type: "tree"` in the manifest), so
