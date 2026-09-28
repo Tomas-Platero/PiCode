@@ -109,7 +109,10 @@ export class ReviewPlanTool extends Disposable implements IToolImpl {
 	}
 
 	async invoke(invocation: IToolInvocation, _countTokens: CountTokensCallback, _progress: ToolProgress, token: CancellationToken): Promise<IToolResult> {
-		const parameters = invocation.parameters as IReviewPlanParams;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const parameters = invocation.parameters as unknown as IReviewPlanParams;
 		const { title, plan, content, actions, canProvideFeedback } = parameters;
 
 		if (!actions || actions.length === 0) {

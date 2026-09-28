@@ -1726,7 +1726,9 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 
 		return await this.invoke({
 			...options.invocation,
-			parameters: retryParameters,
+			// SAFETY: retryParameters is the same schema-declared shape the original
+			// invocation arrived with; the interface just lacks the index signature.
+			parameters: retryParameters as unknown as Record<string, unknown>,
 			toolSpecificData: retryToolSpecificData,
 		}, options.countTokens, options.progress, options.token);
 	}
@@ -1749,7 +1751,10 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 			};
 		}
 
-		const args = invocation.parameters as IRunInTerminalInputParams;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const args = invocation.parameters as unknown as IRunInTerminalInputParams;
 		const allowUnsandboxedCommands = this._getAllowToRunUnsandboxedCommands(args);
 		const sandboxPrecheckInputs = this._getSandboxPrecheckInputs(invocation.context.sessionResource, invocation.chatRequestId);
 		const isSandboxEnabled = await this._terminalSandboxService.isEnabled(sandboxPrecheckInputs);

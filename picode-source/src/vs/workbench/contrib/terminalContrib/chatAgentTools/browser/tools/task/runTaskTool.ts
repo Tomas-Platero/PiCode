@@ -37,7 +37,10 @@ export class RunTaskTool implements IToolImpl {
 	) { }
 
 	async invoke(invocation: IToolInvocation, _countTokens: CountTokensCallback, _progress: ToolProgress, token: CancellationToken): Promise<IToolResult> {
-		const args = invocation.parameters as IRunTaskToolInput;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const args = invocation.parameters as unknown as IRunTaskToolInput;
 
 		if (!invocation.context) {
 			return { content: [{ kind: 'text', value: `No invocation context` }], toolResultMessage: `No invocation context` };

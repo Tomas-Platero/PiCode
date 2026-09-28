@@ -352,7 +352,10 @@ suite('RunInTerminalTool', () => {
 		return runInTerminalTool.invoke({
 			callId: 'test-call',
 			toolId: TerminalToolId.RunInTerminal,
-			parameters,
+			// SAFETY: the test builds the parameters in the schema-declared shape
+			// directly; the interface just lacks the index signature IToolInvocation
+			// declares.
+			parameters: parameters as unknown as Record<string, unknown>,
 			context: { sessionResource: LocalChatSessionUri.forSession('run-in-terminal-test') },
 			toolSpecificData: preparedInvocation.toolSpecificData,
 			selectedCustomButton,

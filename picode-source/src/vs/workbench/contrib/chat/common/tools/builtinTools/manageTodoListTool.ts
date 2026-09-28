@@ -97,7 +97,10 @@ export class ManageTodoListTool extends Disposable implements IToolImpl {
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	async invoke(invocation: IToolInvocation, _countTokens: any, _progress: any, _token: CancellationToken): Promise<IToolResult> {
-		const args = invocation.parameters as IManageTodoListToolInputParams;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const args = invocation.parameters as unknown as IManageTodoListToolInputParams;
 		let chatSessionResource = invocation.context?.sessionResource;
 		if (!chatSessionResource && args.operation === 'read' && args.chatSessionResource) {
 			try {

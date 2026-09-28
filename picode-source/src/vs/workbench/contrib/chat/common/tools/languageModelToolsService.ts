@@ -102,6 +102,14 @@ export interface IToolProgressStep {
 
 export type ToolProgress = IProgress<IToolProgressStep>;
 
+/**
+ * MCP tools and tool sets are always enabled for chat: pi is the agent of this
+ * editor, and its MCP servers must stay available regardless of stored state.
+ */
+export function isAlwaysEnabledToolDataSource(source: ToolDataSource | undefined): boolean {
+	return source?.type === 'mcp';
+}
+
 export type ToolDataSource =
 	| {
 		type: 'extension';
@@ -169,15 +177,13 @@ export namespace ToolDataSource {
 export interface IExternalPreToolUseHookResult {
 	permissionDecision?: 'allow' | 'deny' | 'ask';
 	permissionDecisionReason?: string;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	updatedInput?: Record<string, any>;
+	updatedInput?: Record<string, unknown>;
 }
 
 export interface IToolInvocation {
 	callId: string;
 	toolId: string;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	parameters: Record<string, any>;
+	parameters: Record<string, unknown>;
 	tokenBudget?: number;
 	context: IToolInvocationContext | undefined;
 	chatRequestId?: string;

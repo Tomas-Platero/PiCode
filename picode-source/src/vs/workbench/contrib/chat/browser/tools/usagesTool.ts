@@ -112,7 +112,10 @@ export class UsagesTool extends Disposable implements IToolImpl {
 	}
 
 	async invoke(invocation: IToolInvocation, _countTokens: CountTokensCallback, _progress: ToolProgress, token: CancellationToken): Promise<IToolResult> {
-		const input = invocation.parameters as ISymbolToolInput;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const input = invocation.parameters as unknown as ISymbolToolInput;
 
 		// --- resolve URI ---
 		const uri = resolveSymbolToolFileUri(input, this._workspaceContextService, invocation.context?.workingDirectory);

@@ -366,7 +366,7 @@ declare module 'vscode' {
 		preToolUseResult?: {
 			permissionDecision?: PreToolUsePermissionDecision;
 			permissionDecisionReason?: string;
-			updatedInput?: object;
+			updatedInput?: Record<string, unknown>;
 		};
 	}
 

@@ -44,7 +44,14 @@ export class EditTool implements IToolImpl {
 			throw new Error('toolInvocationToken is required for this tool');
 		}
 
-		const parameters = invocation.parameters as EditToolParams;
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		
+		// SAFETY: the model supplies tool parameters as an untyped JSON record; the
+		// interface is the shape this tool declared in its schema, so the contract is
+		// recovered here — Record<string, unknown> has no overlapping structure with it.
+		const parameters = invocation.parameters as unknown as EditToolParams;
 		const fileUri = URI.revive(parameters.uri);
 		const uri = CellUri.parse(fileUri)?.notebook || fileUri;
 
