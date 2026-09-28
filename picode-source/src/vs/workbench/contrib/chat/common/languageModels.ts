@@ -1381,6 +1381,12 @@ export class LanguageModelsService implements ILanguageModelsService {
 
 		this._providers.set(vendor, provider);
 
+		// Resolve **now**, not when the chat first opens: the window paints with the model
+		// list already resolved, and the last model the owner picked resolves against it at
+		// startup. The provider answers from its caches and refreshes in the background —
+		// this call is what makes those background refreshes begin at activation.
+		void this._resolveAllLanguageModels(vendor, true);
+
 		const modelChangeListener = provider.onDidChange(() => {
 			this._resolveAllLanguageModels(vendor, true);
 		});

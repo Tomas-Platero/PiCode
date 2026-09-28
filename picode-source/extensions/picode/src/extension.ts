@@ -838,6 +838,23 @@ export function forgetPiRuntime(): void {
 }
 
 /**
+ * Warms the model caches **without being asked**.
+ *
+ * The editor resolves the list when the provider registers (and again whenever the window
+ * feels like it), but between those moments the caches would sit and age. This re-reads
+ * both sources on a fixed rhythm — the subscription catalogue through pi's runtime, and the
+ * configured endpoint once a listing has seen its configuration — so a picker opened after
+ * any stretch of idle time still answers instantly with something current.
+ */
+export function warmUpModels(): void {
+	const agentDir = chatAgentDir(distributionRoot(requireProfileUri()));
+	refreshSubscriptionModels(agentDir, agentDir ?? '');
+	if (lastConfiguration?.endpoint !== undefined) {
+		refreshConfiguredModels(profileDirectory(requireProfileUri()), lastConfiguration, configuredModelsCacheKey(lastConfiguration));
+	}
+}
+
+/**
  * The models of the providers **with a credential**, read from pi.
  *
  * Without this, connecting a subscription would leave the model list empty: those providers have no
@@ -1322,6 +1339,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	// so this registers the three providers it reads (and the package command) before anything the
 	// owner opens looks for them.
 	context.subscriptions.push(...registerCustomizations());
+
+	// The model caches are re-read every five minutes, unasked: the picker must never open on
+	// a list that went stale during a quiet stretch, and the subscription catalogue (the slow
+	// one with the external pi) is read the moment the window exists.
+	warmUpModels();
+	const modelsTimer = setInterval(() => warmUpModels(), 5 * 60_000);
+	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
 
 	// The wizard's provider/model/agents commands (the welcome page's step 2 and the
 	// Gentle agents' model picker).
