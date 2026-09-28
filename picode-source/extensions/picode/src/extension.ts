@@ -29,7 +29,7 @@ import {
 	type ManageFs,
 	type PiPackageRow,
 } from './packages-manage';
-import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult } from './packages-data';
+import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk } from './piSdk';
 import { externalProfileDir } from './profile-import';
 import {
@@ -42,10 +42,11 @@ import {
 import { registerPiAgent, resetChatSession } from './agent';
 import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
 import { registerWizardModelCommands } from './wizard-models';
-import { maybeNudgeFirstRun, registerSetupCommands } from './onboarding';
+import { maybeNudgeFirstRun, probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
 import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { describeTargets, fetchNpmLatest, parseSnapshot, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -1613,6 +1614,203 @@ let lastConfiguration: ProviderConfiguration | undefined;
  * Read through a function so an early call — the editor can ask for models before
  * activation has run — fails with a sentence instead of dereferencing nothing.
  */
+/* ------------------------------------------------------------------ *
+ * The update check
+ *
+ * One question — is what this editor runs behind what npm has — asked quietly: 30 seconds
+ * after activation and then every six hours, never competing with startup. The answer shows
+ * as a notification and as a status-bar item (the workbench's toast position is its own, so
+ * the item is the corner the owner actually sees), and the snapshot it produced survives
+ * restarts in globalState until an update happens or a check says clean.
+ * ------------------------------------------------------------------ */
+
+/** The setting that turns the whole check off; on unless the owner says otherwise. */
+const UPDATES_CHECK_SETTING = 'picode.updates.check';
+
+/** Where the last check's answer lives, so the status-bar item survives a restart. */
+const UPDATES_STATE_KEY = 'picode.updates.lastCheck';
+
+/** The check starts this long after activation: past the work every startup actually does. */
+const UPDATES_FIRST_CHECK_DELAY_MS = 30_000;
+
+/** And then every six hours for as long as the window is open. */
+const UPDATES_CHECK_INTERVAL_MS = 6 * 60 * 60_000;
+
+/** The npm package both runtimes come from: the internal one ships it, the external one installs it. */
+const PI_RUNTIME_PACKAGE = '@earendil-works/pi-coding-agent';
+
+/** Whether the owner wants the check to run at all. */
+function updatesCheckEnabled(): boolean {
+	return vscode.workspace.getConfiguration().get<boolean>(UPDATES_CHECK_SETTING, true);
+}
+
+/** The stored value as a snapshot, or `undefined` when nothing usable was stored. */
+function readUpdatesSnapshot(globalState: vscode.Memento): UpdatesSnapshot | undefined {
+	return parseSnapshot(globalState.get<unknown>(UPDATES_STATE_KEY));
+}
+
+/** Whether `file` lives under `dir` — path-relative, so a sibling sharing a prefix is not inside. */
+function isInside(dir: string, file: string): boolean {
+	const relative = path.relative(dir, file);
+	return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * The candidates one check compares: the runtime in force, Gentle AI, and the npm packages of
+ * the profile pi loads. Everything arrives as "installed version if readable" — the assembly
+ * in `updates-check.ts` decides what is actually behind, and a missing or junk version is
+ * simply not a claim the check makes.
+ */
+async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
+	const candidates: CandidateTarget[] = [];
+	const profile = profileDirectory(requireProfileUri());
+
+	// The runtime: the internal one from its manifest, the external one from the probe of the
+	// machine's pi. Both are versions of the same npm package, so the latest is the same lookup.
+	const installedPi = readRuntimeMode() === 'external'
+		? (await probeExternalPi()).version
+		: readInternalPiVersion(distributionRoot(requireProfileUri()));
+	candidates.push({ kind: 'runtime', name: 'pi', installed: installedPi, latest: await fetchNpmLatest(PI_RUNTIME_PACKAGE, { log: report }) });
+
+	// Gentle AI, only when it is installed: an absent package is not an out-of-date one.
+	const gentleInstalled = readGentleVersion(profile);
+	if (gentleInstalled !== undefined) {
+		candidates.push({ kind: 'gentle', name: 'gentle-pi', installed: gentleInstalled, latest: await fetchNpmLatest('gentle-pi', { log: report }) });
+	}
+	const engramInstalled = readProfilePackageVersion(profile, 'gentle-engram');
+	if (engramInstalled !== undefined) {
+		candidates.push({ kind: 'gentle', name: 'gentle-engram', installed: engramInstalled, latest: await fetchNpmLatest('gentle-engram', { log: report }) });
+	}
+
+	// The npm packages of the profile in force. Git checkouts carry no version to compare and
+	// are skipped; Gentle is skipped here because it is already counted above.
+	const scopes = packageScopes(profileInForce());
+	const npmRoots = scopes.map(scope => scope.npmRoot);
+	const npmPackages = piPackages(scopes, nodeFs()).packages.filter((found): found is PiPackage & { version: string } =>
+		found.version !== undefined
+		&& found.name !== 'gentle-pi'
+		&& found.name !== 'gentle-engram'
+		&& npmRoots.some(root => isInside(root, found.path)));
+	const latests = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
+	npmPackages.forEach((found, index) => {
+		const latest = latests[index];
+		if (latest !== undefined) {
+			candidates.push({ kind: 'package', name: found.name, installed: found.version, latest });
+		}
+	});
+	return candidates;
+}
+
+/**
+ * One check, run and stored: the snapshot is what the status bar and the notification read,
+ * and what the next start finds in globalState.
+ */
+async function runUpdateCheck(context: vscode.ExtensionContext): Promise<UpdatesSnapshot | undefined> {
+	const snapshot: UpdatesSnapshot = { checkedAt: Date.now(), targets: updatableTargets(await gatherUpdateCandidates()) };
+	await context.globalState.update(UPDATES_STATE_KEY, snapshot);
+	return snapshot;
+}
+
+/**
+ * The whole update surface, registered once: the status-bar item, the command behind it, the
+ * notification with its two buttons, and the `pi update` flow the Update button runs.
+ */
+function registerUpdateChecks(context: vscode.ExtensionContext): void {
+	// Left of the status bar, low priority: the corner the owner reads, without pushing the
+	// editor's own indicators around.
+	const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1_000);
+	status.name = 'PiCode updates';
+	status.text = '$(cloud-download) PiCode updates';
+	status.command = 'picode.updates.show';
+	context.subscriptions.push(status);
+
+	const showStatus = (snapshot: UpdatesSnapshot | undefined): void => {
+		if (snapshot !== undefined && snapshot.targets.length > 0) {
+			status.tooltip = `PiCode: updates available — ${describeTargets(snapshot.targets)}`;
+			status.show();
+		} else {
+			status.hide();
+		}
+	};
+
+	/** The update itself: stop the chat's pi, let pi update everything, then reload. */
+	const runUpdateFlow = async (): Promise<void> => {
+		const cliEntry = piCliEntry();
+		if (!fs.existsSync(cliEntry)) {
+			void vscode.window.showInformationMessage('PiCode could not be updated: the pi CLI is missing from this installation.');
+			return;
+		}
+		// The chat runs pi in this very process: its session must be gone before the files under
+		// it change, or it keeps running the code being replaced.
+		resetChatSession();
+		const result = await runPiUpdate({ cliEntry, profileDir: profileInForce() });
+		if (!result.ok) {
+			void vscode.window.showInformationMessage(result.message);
+			return;
+		}
+		// The optimistic clear: the new version is on disk, the reload loads it, and the check
+		// that runs after the reload rebuilds the truth from scratch.
+		await context.globalState.update(UPDATES_STATE_KEY, undefined);
+		showStatus(undefined);
+		void vscode.window.showInformationMessage(
+			'PiCode updated. Reload the window to start using the new version.',
+			'Reload Window',
+		).then(choice => {
+			if (choice === 'Reload Window') {
+				void vscode.commands.executeCommand('workbench.action.reloadWindow');
+			}
+		});
+	};
+
+	const showUpdatesNotice = (snapshot: UpdatesSnapshot | undefined): void => {
+		if (snapshot === undefined || snapshot.targets.length === 0) {
+			void vscode.window.showInformationMessage('PiCode: everything is up to date.');
+			return;
+		}
+		void vscode.window.showInformationMessage(
+			`PiCode: updates available — ${describeTargets(snapshot.targets)}`,
+			'Update',
+			'Later',
+		).then(choice => {
+			if (choice === 'Update') {
+				void runUpdateFlow();
+			}
+			// "Later" and a dismissal need no action: the status-bar item stays until the update
+			// happens or a check says clean.
+		});
+	};
+
+	context.subscriptions.push(vscode.commands.registerCommand('picode.updates.show', () =>
+		showUpdatesNotice(readUpdatesSnapshot(context.globalState))));
+
+	let checking = false;
+	const scheduledCheck = async (): Promise<void> => {
+		// One flight at a time — a slow registry must not stack checks — and the setting is read
+		// at fire time, so turning it off silences the check without a restart.
+		if (checking || !updatesCheckEnabled()) {
+			return;
+		}
+		checking = true;
+		try {
+			showStatus(await runUpdateCheck(context));
+		} catch (error) {
+			report(`updates: the check failed (${error instanceof Error ? error.message : String(error)})`);
+		} finally {
+			checking = false;
+		}
+	};
+
+	// The last check's answer survives restarts, so the item is back the moment the window is —
+	// before the first check of this session has run.
+	showStatus(readUpdatesSnapshot(context.globalState));
+	const firstCheck = setTimeout(() => { void scheduledCheck(); }, UPDATES_FIRST_CHECK_DELAY_MS);
+	const interval = setInterval(() => { void scheduledCheck(); }, UPDATES_CHECK_INTERVAL_MS);
+	context.subscriptions.push(new vscode.Disposable(() => {
+		clearTimeout(firstCheck);
+		clearInterval(interval);
+	}));
+}
+
 function requireProfileUri(): vscode.Uri {
 	if (profileUri === undefined) {
 		throw new Error('PiCode: the connector has not activated yet, so it does not know where pi\'s profile is.');
@@ -1678,6 +1876,10 @@ export function activate(context: vscode.ExtensionContext): void {
 	// so this registers the three providers it reads (and the package commands) before anything the
 	// owner opens looks for them. The global state carries the disabled-packages record.
 	context.subscriptions.push(...registerCustomizations(context.globalState));
+
+	// The update check: pi, Gentle AI and the profile's packages, asked quietly on a schedule,
+	// surfaced as a notification and a status-bar item, and run from there.
+	registerUpdateChecks(context);
 
 	// The model caches are re-read every five minutes, unasked: the picker must never open on
 	// a list that went stale during a quiet stretch, and the subscription catalogue (the slow

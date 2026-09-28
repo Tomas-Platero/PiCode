@@ -558,14 +558,19 @@ function readTextFile(file: string): string {
 	return readFileSync(file, 'utf8');
 }
 
-/** The installed Gentle AI's version, from its own manifest; undefined when it is not there. */
-export function readGentleVersion(profileDir: string): string | undefined {
+/** Any package's installed version, from its manifest under the profile's npm tree; undefined when it is not there. */
+export function readProfilePackageVersion(profileDir: string, name: string): string | undefined {
 	try {
-		const value: unknown = JSON.parse(readTextFile(path.join(profileDir, 'npm', 'node_modules', 'gentle-pi', 'package.json')));
+		const value: unknown = JSON.parse(readTextFile(path.join(profileDir, 'npm', 'node_modules', name, 'package.json')));
 		return typeof (value as { version?: unknown }).version === 'string' ? (value as { version: string }).version : undefined;
 	} catch {
 		return undefined;
 	}
+}
+
+/** The installed Gentle AI's version, from its own manifest; undefined when it is not there. */
+export function readGentleVersion(profileDir: string): string | undefined {
+	return readProfilePackageVersion(profileDir, 'gentle-pi');
 }
 
 /** The internal pi's version, from the manifest of the copy PiCode ships. */
