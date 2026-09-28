@@ -166,7 +166,7 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 	 * @param canInstall When false, signals that the update cannot be installed from this app.
 	 */
 	private async checkForUpdateNoDownload(url: string, canInstall?: boolean): Promise<void> {
-		const headers = getUpdateRequestHeaders(this.productService.version);
+		const headers = getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode');
 		this.logService.trace('update#checkForUpdateNoDownload - checking update server', { url, headers });
 
 		try {

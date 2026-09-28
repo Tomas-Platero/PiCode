@@ -48,11 +48,11 @@ export function createUpdateURL(productService: IProductService, quality: string
  * On macOS, the User-Agent includes the Darwin kernel version.
  * On Windows, the User-Agent includes accurate Windows version from the registry.
  */
-export function getUpdateRequestHeaders(productVersion: string): Record<string, string> | undefined {
+export function getUpdateRequestHeaders(productVersion: string, productName: string): Record<string, string> | undefined {
 	if (isMacintosh) {
 		const darwinVersion = os.release();
 		return {
-			'User-Agent': `Code/${productVersion} Darwin/${darwinVersion}`
+			'User-Agent': `${productName}/${productVersion} Darwin/${darwinVersion}`
 		};
 	}
 
@@ -60,7 +60,7 @@ export function getUpdateRequestHeaders(productVersion: string): Record<string, 
 		const match = getWindowsReleaseSync().match(/^(\d+\.\d+)/);
 		if (match) {
 			return {
-				'User-Agent': `Code/${productVersion} Electron/${process.versions.electron} Windows NT ${match[1]}`
+				'User-Agent': `${productName}/${productVersion} Electron/${process.versions.electron} Windows NT ${match[1]}`
 			};
 		}
 	}
@@ -674,7 +674,7 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 	}
 
 	protected async _isLatestVersion(url: string, explicit: boolean, pendingVersion?: string, token: CancellationToken = CancellationToken.None): Promise<{lastest: boolean, update: IUpdate} | undefined> {
-		const headers = getUpdateRequestHeaders(this.productService.version);
+		const headers = getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode');
 		this.logService.trace('update#isLatestVersion() - checking update server', { url, headers });
 
 		return this.requestService.request({ url, headers, callSite: NO_FETCH_TELEMETRY }, CancellationToken.None)

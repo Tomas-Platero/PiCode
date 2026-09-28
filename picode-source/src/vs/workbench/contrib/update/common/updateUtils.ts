@@ -63,34 +63,6 @@ export function computeDownloadSpeed(state: Downloading): number | undefined {
 }
 
 /**
- * Computes the version to use for fetching update info.
- * - If the minor version differs: returns `{major}.{minor}` (e.g., 1.108.2 -> 1.109.5 => 1.109)
- * - If the same minor: returns the target version as-is (e.g., 1.109.2 -> 1.109.5 => 1.109.5)
- */
-export function computeUpdateInfoVersion(currentVersion: string, targetVersion: string): string | undefined {
-	const current = tryParseVersion(currentVersion);
-	const target = tryParseVersion(targetVersion);
-	if (!current || !target) {
-		return undefined;
-	}
-
-	if (current.minor !== target.minor || current.major !== target.major) {
-		return `${target.major}.${target.minor}`;
-	}
-
-	return `${target.major}.${target.minor}.${target.patch}`;
-}
-
-/**
- * Computes the URL to fetch update info from.
- * Follows the release notes URL pattern but with `_update` suffix.
- */
-export function getUpdateInfoUrl(version: string): string {
-	const versionLabel = version.replace(/\./g, '_').replace(/_0$/, '');
-	return `https://code.visualstudio.com/raw/v${versionLabel}_update.md`;
-}
-
-/**
  * Formats the time remaining as a human-readable string.
  */
 export function formatTimeRemaining(seconds: number): string {

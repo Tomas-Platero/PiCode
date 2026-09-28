@@ -7,7 +7,6 @@ import { ContextKeyExpr, RawContextKey } from '../../../../platform/contextkey/c
 import { InEditorZenModeContext, MenuBarVisibleContext } from '../../../common/contextkeys.js';
 
 export const ShowCurrentReleaseNotesActionId = 'update.showCurrentReleaseNotes';
-export const ShowCurrentReleaseNotesFromCurrentFileActionId = 'developer.showCurrentFileAsReleaseNotes';
 
 export const UpdateTitleBarContext = new RawContextKey<boolean>('updateTitleBar', false);
 export const UpdateTitleBarChatInProgressContext = new RawContextKey<boolean>('updateTitleBarChatRequestInProgress', false);

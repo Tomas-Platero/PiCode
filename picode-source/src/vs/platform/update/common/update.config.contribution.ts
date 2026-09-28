@@ -21,20 +21,20 @@ configurationRegistry.registerConfiguration({
 			enum: ['none', 'manual', 'start', 'default'],
 			default: 'default',
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."),
+			description: localize('updateMode', "Configure whether you receive automatic updates. The updates are published to the PiCode update feed, which is hosted on GitHub."),
 			tags: ['usesOnlineServices'],
 			enumDescriptions: [
 				localize('none', "Disable updates."),
 				localize('manual', "Disable automatic background update checks. Updates will be available if you manually check for updates."),
 				localize('start', "Check for updates only on startup. Disable automatic background update checks."),
-				localize('default', "Enable automatic update checks. Code will check for updates automatically and periodically.")
+				localize('default', "Enable automatic update checks. PiCode will check for updates automatically and periodically.")
 			],
 			policy: {
 				name: 'UpdateMode',
 				category: PolicyCategory.Update,
 				minimumVersion: '1.67',
 				localization: {
-					description: { key: 'updateMode', value: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."), },
+					description: { key: 'updateMode', value: localize('updateMode', "Configure whether you receive automatic updates. The updates are published to the PiCode update feed, which is hosted on GitHub."), },
 					enumDescriptions: [
 						{
 							key: 'none',
@@ -50,18 +50,11 @@ configurationRegistry.registerConfiguration({
 						},
 						{
 							key: 'default',
-							value: localize('default', "Enable automatic update checks. Code will check for updates automatically and periodically."),
+							value: localize('default', "Enable automatic update checks. PiCode will check for updates automatically and periodically."),
 						}
 					]
 				},
 			}
-		},
-		'update.channel': {
-			type: 'string',
-			default: 'default',
-			scope: ConfigurationScope.APPLICATION,
-			description: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."),
-			deprecationMessage: localize('deprecated', "This setting is deprecated, please use '{0}' instead.", 'update.mode')
 		},
 		'update.minReleaseAge': {
 			type: 'integer',
@@ -81,17 +74,9 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('showReleaseNotes', "Show Release Notes after an update. The Release Notes are fetched from a Microsoft online service."),
+			description: localize('showReleaseNotes', "Open the release notes page in the browser after an update. The release notes are hosted on the PiCode releases page on GitHub."),
 			tags: ['usesOnlineServices'],
 			agentsWindow: { default: false, readOnly: true },
-		},
-		'update.showPostInstallInfo': {
-			type: 'boolean',
-			default: false,
-			experiment: { mode: 'auto' },
-			scope: ConfigurationScope.APPLICATION,
-			description: localize('showPostInstallInfo', "Show a post-install update tooltip in the title bar instead of opening the release notes editor."),
-			tags: ['usesOnlineServices']
 		},
 		'update.titleBar': {
 			type: 'boolean',
