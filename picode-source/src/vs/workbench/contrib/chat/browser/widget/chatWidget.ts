@@ -17,7 +17,8 @@ import { Emitter, Event } from '../../../../../base/common/event.js';
 import { hash } from '../../../../../base/common/hash.js';
 import { IMarkdownString, MarkdownString } from '../../../../../base/common/htmlContent.js';
 import { Iterable } from '../../../../../base/common/iterator.js';
-import { Disposable, DisposableStore, IDisposable, MutableDisposable, thenIfNotDisposed, toDisposable } from '../../../../../base/common/lifecycle.js';
+import { FileAccess } from '../../../../../base/common/network.js';
+import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { ResourceSet } from '../../../../../base/common/map.js';
 import { Schemas } from '../../../../../base/common/network.js';
 import { IsSessionsWindowContext } from '../../../../common/contextkeys.js';
@@ -76,8 +77,8 @@ import { ChatAgentLocation, ChatConfiguration, ChatModeKind, ChatPermissionLevel
 import { IChatGoalSummaryService } from '../chatGoalSummaryService.js';
 import { ILanguageModelToolsService, isToolSet } from '../../common/tools/languageModelToolsService.js';
 import { IHandOff, PromptHeader } from '../../common/promptSyntax/promptFileParser.js';
-import { IPromptsService, PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
-import { GENERATE_AGENT_INSTRUCTIONS_COMMAND_ID, handleModeSwitch } from '../actions/chatActions.js';
+import { PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
+import { handleModeSwitch } from '../actions/chatActions.js';
 import { ChatTreeItem, IChatAcceptInputOptions, IChatAccessibilityService, IChatCodeBlockInfo, IChatFileTreeInfo, IChatFindController, IChatListItemRendererOptions, IChatPasteTargetService, IChatWidget, IChatWidgetService, IChatWidgetViewContext, IChatWidgetViewModelChangeEvent, IChatWidgetViewOptions, IChatWidgetViewState, isIChatResourceViewContext, isIChatViewViewContext } from '../chat.js';
 import { ChatAttachmentModel } from '../attachments/chatAttachmentModel.js';
 import { IChatAttachmentResolveService } from '../attachments/chatAttachmentResolveService.js';
@@ -418,9 +419,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 	private _inputVisible = true;
 	private _readOnly = false;
 
-	private _instructionFilesCheckPromise: Promise<boolean> | undefined;
-	private _instructionFilesExist: boolean | undefined;
-
 	private _isRenderingWelcome = false;
 	private _isLoading = false;
 
@@ -557,7 +555,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		@IChatSlashCommandService private readonly chatSlashCommandService: IChatSlashCommandService,
 		@IChatEditingService chatEditingService: IChatEditingService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IPromptsService private readonly promptsService: IPromptsService,
 		@ICustomizationHarnessService private readonly customizationHarnessService: ICustomizationHarnessService,
 		@ILanguageModelToolsService private readonly toolsService: ILanguageModelToolsService,
 		@IChatLayoutService private readonly chatLayoutService: IChatLayoutService,
@@ -845,7 +842,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		const capabilities = agent?.capabilities ?? (this._lockedAgent ? this.chatSessionsService.getCapabilitiesForSessionType(this._lockedAgent.id) : undefined);
 		this._attachmentCapabilities = capabilities ?? supportsAllAttachments;
 
-		const supportsAttachments = Object.keys(filter(this._attachmentCapabilities, (key, value) => value === true)).length > 0;
+		const supportsAttachments = Object.keys(filter(this._attachmentCapabilities, (_key, value) => value === true)).length > 0;
 		this._agentSupportsAttachmentsContextKey.set(supportsAttachments);
 	}
 
@@ -1485,9 +1482,8 @@ export class ChatWidget extends Disposable implements IChatWidget {
 				} else {
 					additionalMessage = defaultAgent?.metadata.additionalWelcomeMessage;
 				}
-				if (!additionalMessage && !this._lockedAgent) {
-					additionalMessage = this._getGenerateInstructionsMessage();
-				}
+				// PiCode: the "Generate Agent Instructions" onboarding link that used
+				// to be appended here was removed with the product welcome block.
 				const welcomeContent = this.getWelcomeViewContent(additionalMessage);
 				if (!this.welcomePart.value || this.welcomePart.value.needsRerender(welcomeContent)) {
 					dom.clearNode(this.welcomeMessageContainer);
@@ -1545,55 +1541,6 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		this._gettingStartedTip.value?.clear();
 	}
 
-
-	private _getGenerateInstructionsMessage(): IMarkdownString {
-		// Start checking for instruction files immediately if not already done
-		if (!this._instructionFilesCheckPromise) {
-			this._instructionFilesCheckPromise = this._checkForAgentInstructionFiles();
-			// Use VS Code's idiomatic pattern for disposal-safe promise callbacks
-			this._register(thenIfNotDisposed(this._instructionFilesCheckPromise, hasFiles => {
-				this._instructionFilesExist = hasFiles;
-				// Only re-render if the current view still doesn't have items and we're showing the welcome message
-				const hasViewModelItems = this.viewModel?.getItems().length ?? 0;
-				if (hasViewModelItems === 0) {
-					this.renderWelcomeViewContentIfNeeded();
-				}
-			}));
-		}
-
-		// If we already know the result, use it
-		if (this._instructionFilesExist === true) {
-			// Don't show generate instructions message if files exist
-			return new MarkdownString('');
-		} else if (this._instructionFilesExist === false) {
-			// Show generate instructions message if no files exist
-			return new MarkdownString(localize(
-				'chatWidget.instructions',
-				"[Generate Agent Instructions]({0}) to onboard AI onto your codebase.",
-				`command:${GENERATE_AGENT_INSTRUCTIONS_COMMAND_ID}`
-			), { isTrusted: { enabledCommands: [GENERATE_AGENT_INSTRUCTIONS_COMMAND_ID] } });
-		}
-
-		// While checking, don't show the generate instructions message
-		return new MarkdownString('');
-	}
-
-	/**
-	 * Checks if any agent instruction files (.github/copilot-instructions.md or AGENTS.md) exist in the workspace.
-	 * Used to determine whether to show the "Generate Agent Instructions" hint.
-	 *
-	 * @returns true if instruction files exist OR if instruction features are disabled (to hide the hint)
-	 */
-	private async _checkForAgentInstructionFiles(): Promise<boolean> {
-		try {
-			return (await this.promptsService.listAgentInstructions(CancellationToken.None)).length > 0;
-		} catch (error) {
-			// On error, assume no instruction files exist to be safe
-			this.logService.warn('[ChatWidget] Error checking for instruction files:', error);
-			return false;
-		}
-	}
-
 	private getWelcomeViewContent(additionalMessage: string | IMarkdownString | undefined): IChatViewWelcomeContent {
 		if (this.isLockedToCodingAgent) {
 			// Check for provider-specific customizations from chat sessions service
@@ -1618,19 +1565,12 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			};
 		}
 
-		let title: string;
-		if (this.input.currentModeKind === ChatModeKind.Ask) {
-			title = localize('chatDescription', "Ask about your code");
-		} else if (this.input.currentModeKind === ChatModeKind.Edit) {
-			title = localize('editsTitle', "Edit in context");
-		} else {
-			title = localize('agentTitle', "Build with Agent");
-		}
-
+		// PiCode product welcome: one greeting for every builtin mode (only
+		// Ask and Edit remain), with the product mark instead of a codicon.
 		return {
-			title,
+			title: localize('chatWelcomeTitle', "Hello, I'm PiCode"),
 			message: new MarkdownString(DISCLAIMER),
-			icon: Codicon.chatSparkle,
+			icon: FileAccess.asBrowserUri('vs/workbench/contrib/picode/browser/media/picode.svg'),
 			additionalMessage,
 		};
 	}
@@ -2239,7 +2179,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 					this.listWidget.scrollToCurrentItem(currentElement);
 				}));
 
-				this._register(this.inlineInputPart.inputEditor.onDidChangeCursorSelection((e) => {
+				this._register(this.inlineInputPart.inputEditor.onDidChangeCursorSelection(() => {
 					this.listWidget.scrollToCurrentItem(currentElement);
 				}));
 			}
@@ -3872,7 +3812,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 	 * mode-switch confirmation dialog), signalling that the caller should abort the
 	 * current input submission.
 	 */
-	private async _applyPromptMetadata({ agent, tools, model }: PromptHeader, requestInput: IChatRequestInputOptions): Promise<boolean> {
+	private async _applyPromptMetadata({ agent, tools, model }: PromptHeader, _requestInput: IChatRequestInputOptions): Promise<boolean> {
 
 		// pi is the agent of this editor: prompt files that declare tools do not
 		// force a switch to the built-in "Agent" mode (it is no longer offered).

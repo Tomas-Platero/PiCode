@@ -39,6 +39,7 @@ import { getEditingSessionContext } from '../chatEditing/chatEditingActions.js';
 import { ctxHasEditorModification, ctxHasRequestInProgress, ctxIsGlobalEditingSession } from '../chatEditing/chatEditingEditorContextKeys.js';
 import { ACTION_ID_NEW_CHAT, CHAT_CATEGORY, clearChatSessionPreservingType, handleCurrentEditingSession, handleModeSwitch } from './chatActions.js';
 import { CreateRemoteAgentJobAction } from './chatContinueInAction.js';
+import { OpenThinkingPickerAction } from '../widget/input/thinkingPickerActionItem.js';
 
 export interface IVoiceChatExecuteActionContext {
 	readonly disableTimeout?: boolean;
@@ -477,27 +478,10 @@ export class OpenModePickerAction extends Action2 {
 				primary: KeyMod.CtrlCmd | KeyCode.Period,
 				weight: KeybindingWeight.EditorContrib
 			},
-			menu: [
-				{
-					id: MenuId.ChatInput,
-					order: 1,
-					when: ContextKeyExpr.and(
-						ChatContextKeys.enabled,
-						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
-						ChatContextKeys.inQuickChat.negate(),
-						// Hide the agent picker while a delegation (continue in) target is pending
-						ChatContextKeys.hasPendingDelegationTarget.negate(),
-						ContextKeyExpr.or(
-							ChatContextKeys.lockedToCodingAgent.negate(),
-							ChatContextKeys.chatSessionHasCustomAgentTarget),
-						// Show in welcome view for local sessions or sessions with custom agent target
-						ContextKeyExpr.or(
-							ChatContextKeys.inAgentSessionsWelcome.negate(),
-							ChatContextKeys.chatSessionHasCustomAgentTarget,
-							ChatContextKeys.agentSessionType.isEqualTo(AgentSessionProviders.Local))),
-					group: 'navigation',
-				},
-			]
+			// PiCode: the mode chip is not rendered in the chat input, so this
+			// action is intentionally NOT contributed to `MenuId.ChatInput`. The
+			// command stays registered for other callers (for example the
+			// `/agents` slash command).
 		});
 	}
 
@@ -1179,6 +1163,7 @@ export function registerChatExecuteActions(): DisposableStore {
 	store.add(registerAction2(OpenModelPickerAction));
 	store.add(registerAction2(OpenPermissionPickerAction));
 	store.add(registerAction2(OpenModePickerAction));
+	store.add(registerAction2(OpenThinkingPickerAction));
 	store.add(registerAction2(OpenSessionTargetPickerAction));
 	store.add(registerAction2(OpenDelegationPickerAction));
 	store.add(registerAction2(OpenWorkspacePickerAction));

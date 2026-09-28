@@ -166,7 +166,8 @@ import { ChatPetAchievementIds, didExplicitlySwitchChatPetModel } from '../../ch
 import { IChatPetService } from '../../chatPetService.js';
 import { DelegationSessionPickerActionItem } from './delegationSessionPickerActionItem.js';
 import { ModelPickerActionItem, IModelPickerDelegate, IModelPickerPresentationOptions } from './modelPicker/modelPickerActionItem.js';
-import { IModePickerDelegate, isModeConsideredBuiltIn, ModePickerActionItem } from './modePickerActionItem.js';
+import { OpenThinkingPickerAction, ThinkingPickerActionItem } from './thinkingPickerActionItem.js';
+import { IModePickerDelegate, isModeConsideredBuiltIn } from './modePickerActionItem.js';
 import { IPermissionPickerDelegate, PermissionPickerActionItem } from './permissionPickerActionItem.js';
 import { SessionTypePickerActionItem } from './sessionTargetPickerActionItem.js';
 import { WorkspacePickerActionItem } from './workspacePickerActionItem.js';
@@ -646,7 +647,6 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 	private chatSessionHasCustomAgentTarget: IContextKey<boolean>;
 	private chatSessionHasTargetedModels: IContextKey<boolean>;
 	private modelWidget: ModelPickerActionItem | undefined;
-	private modeWidget: ModePickerActionItem | undefined;
 	private permissionWidget: PermissionPickerActionItem | undefined;
 	private readonly permissionWidgetDisposeListener = this._register(new MutableDisposable<IDisposable>());
 	private sessionTargetWidget: SessionTypePickerActionItem | undefined;
@@ -1299,7 +1299,8 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			this._showCombinedPhonePickerSheet();
 			return;
 		}
-		this.modeWidget?.show();
+		// PiCode: the mode chip is no longer rendered in the chat input, so
+		// the picker widget is never created and this is a no-op on desktop.
 	}
 
 	private _showCombinedPhonePickerSheet(): void {
@@ -3370,7 +3371,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		this._register(dom.addStandardDisposableListener(toolbarsContainer, dom.EventType.CLICK, e => this.inputEditor.focus()));
 		this._register(dom.addStandardDisposableListener(this.attachmentsContainer, dom.EventType.CLICK, e => this.inputEditor.focus()));
 		const shorterChatInputActionIds = new Set<string>([
-			OpenModePickerAction.ID,
+			OpenThinkingPickerAction.ID,
 			ConfigureToolsAction.ID,
 		]);
 		this.inputActionsToolbar = this._register(this.instantiationService.createInstance(MenuWorkbenchToolBar, this.options.renderInputToolbarBelowInput ? this.attachmentsContainer : toolbarsContainer, MenuId.ChatInput, {
@@ -3387,12 +3388,12 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			},
 			actionViewItemProvider: (action, options) => {
 				// Phone-layout branch: when an agents-window phone presenter
-				// is active, replace the desktop Mode + Model pickers with a
-				// single chip that opens a unified bottom sheet. The Mode
-				// action is hidden so its slot is not duplicated; the chip
-				// (mounted on the Model action's slot) opens both pickers
-				// from one tap. Mirrors the empty new-chat experience in
-				// `vs/sessions` (see `MobileChatInputConfigPicker`).
+				// is active, replace the desktop pickers with a single chip
+				// that opens a unified bottom sheet. The chip renders the
+				// model only (PiCode removed the mode chip from the input)
+				// but the sheet it opens is owned by the presenter. Mirrors
+				// the empty new-chat experience in `vs/sessions` (see
+				// `MobileChatInputConfigPicker`).
 				if (this.chatPhoneInputPresenter.enabled.get()) {
 					if (action.id === OpenModelPickerAction.ID && action instanceof MenuItemAction) {
 						if (!this._currentLanguageModel.get()) {
@@ -3402,6 +3403,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 						const modeDelegate = this._createModePickerDelegate();
 						return this.instantiationService.createInstance(MobileChatInputCombinedPickerActionItem, action, modeDelegate, modelDelegate);
 					} else if (action.id === OpenModePickerAction.ID && action instanceof MenuItemAction) {
+						// PiCode: the mode chip is never rendered in the chat input.
 						return new HiddenActionViewItem(action);
 					}
 				}
@@ -3415,8 +3417,13 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 					const itemDelegate: IModelPickerDelegate = this._createModelPickerDelegate();
 					return this.modelWidget = this.instantiationService.createInstance(ModelPickerActionItem, action, itemDelegate, pickerOptions);
 				} else if (action.id === OpenModePickerAction.ID && action instanceof MenuItemAction) {
-					const delegate: IModePickerDelegate = this._createModePickerDelegate();
-					return this.modeWidget = this.instantiationService.createInstance(ModePickerActionItem, action, delegate, pickerOptions);
+					// PiCode: the mode chip is never rendered in the chat input; the
+					// command stays registered for other callers (for example the
+					// `/agents` slash command), but its menu contribution was removed
+					// and this branch only guards against other contributors.
+					return new HiddenActionViewItem(action);
+				} else if (action.id === OpenThinkingPickerAction.ID && action instanceof MenuItemAction) {
+					return this.instantiationService.createInstance(ThinkingPickerActionItem, action, pickerOptions);
 				} else if ((action.id === OpenSessionTargetPickerAction.ID || action.id === OpenDelegationPickerAction.ID) && action instanceof MenuItemAction) {
 					// Use provided delegate if available, otherwise create default delegate
 					const delegate: ISessionTypePickerDelegate = this.options.sessionTypePickerDelegate ?? {

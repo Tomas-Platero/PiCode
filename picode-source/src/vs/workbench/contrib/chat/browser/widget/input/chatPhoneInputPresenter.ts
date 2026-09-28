@@ -137,10 +137,11 @@ class ChatPhoneInputPresenterService extends Disposable implements IChatPhoneInp
 registerSingleton(IChatPhoneInputPresenter, ChatPhoneInputPresenterService, InstantiationType.Delayed);
 
 /**
- * Phone-only action view item used in place of the desktop Model and Mode
- * pickers. Renders one compact button whose label shows the current model name
- * with the current mode's icon as a leading marker; tapping it opens the
- * unified bottom sheet through the {@link IChatPhoneInputPresenter}.
+ * Phone-only action view item used in place of the desktop pickers. Renders
+ * one compact button whose label shows the current model name; tapping it
+ * opens the unified bottom sheet through the {@link IChatPhoneInputPresenter}.
+ * PiCode removed the mode chip from the chat input, so the chip itself
+ * renders the model only; the sheet it opens is owned by the presenter.
  *
  * Visually mirrors the button used in the empty new-chat input (see
  * `MobileChatInputConfigPicker` in `vs/sessions`) so the two chat-input
@@ -187,12 +188,8 @@ export class MobileChatInputCombinedPickerActionItem extends BaseActionViewItem 
 			}
 		}));
 
-		// Reactively re-render the button when the active mode (label/icon)
-		// or the selected model changes.
+		// Reactively re-render the button when the selected model changes.
 		this._renderDisposables.add(autorun(reader => {
-			const currentMode = this._modeDelegate.currentMode.read(reader);
-			currentMode.label.read(reader);
-			currentMode.icon.read(reader);
 			this._modelDelegate.currentModel.read(reader);
 			this._updateTrigger();
 		}));
@@ -205,12 +202,6 @@ export class MobileChatInputCombinedPickerActionItem extends BaseActionViewItem 
 		}
 		dom.clearNode(trigger);
 
-		const currentMode = this._modeDelegate.currentMode.get();
-		const modeIcon = currentMode.icon.get();
-		if (modeIcon) {
-			dom.append(trigger, renderIcon(modeIcon));
-		}
-
 		const currentModel = this._modelDelegate.currentModel.get();
 		if (currentModel && this._modelDelegate.getPresentationOptions().showModelIcon) {
 			dom.append(trigger, renderIcon(getModelProviderIcon(currentModel)));
@@ -220,16 +211,10 @@ export class MobileChatInputCombinedPickerActionItem extends BaseActionViewItem 
 		const labelSpan = dom.append(trigger, dom.$('span.chat-input-picker-label'));
 		labelSpan.textContent = labelText;
 
-		const ariaParts: string[] = [];
-		const modeLabel = currentMode.label.get();
-		if (modeLabel) {
-			ariaParts.push(modeLabel);
-		}
-		ariaParts.push(labelText);
 		trigger.ariaLabel = localize(
 			'chatPhoneInput.triggerAriaLabel',
-			"Pick Mode and Model, {0}",
-			ariaParts.join(', '),
+			"Pick Model, {0}",
+			labelText,
 		);
 	}
 
