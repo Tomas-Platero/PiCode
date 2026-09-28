@@ -1556,9 +1556,9 @@ async function streamInto(
 
 /** Where each dialect puts the text of one streamed event. */
 function extractText(payload: string, api: string | undefined): string | undefined {
-	let event: any;
+	let event: Record<string, unknown> | undefined;
 	try {
-		event = JSON.parse(payload);
+		event = JSON.parse(payload) as Record<string, unknown>;
 	} catch {
 		return undefined;
 	}
@@ -1568,7 +1568,11 @@ function extractText(payload: string, api: string | undefined): string | undefin
 			? event.delta
 			: undefined;
 	}
-	return typeof event?.choices?.[0]?.delta?.content === 'string' ? event.choices[0].delta.content : undefined;
+	// SAFETY: the dialect table above knows this payload's shape — an OpenAI-completions
+	// stream event carries `choices[0].delta.content`; the parsed JSON is untyped at the
+	// boundary, so the contract is recovered here after a runtime typeof check.
+	const choices = event?.choices as unknown as Array<{ delta?: { content?: string } }> | undefined;
+	return typeof choices?.[0]?.delta?.content === 'string' ? choices[0].delta.content : undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1747,9 +1751,9 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 		&& found.name !== 'gentle-pi'
 		&& found.name !== 'gentle-engram'
 		&& npmRoots.some(root => isInside(root, found.path)));
-	const latests = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
+	const latestVersions = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
 	npmPackages.forEach((found, index) => {
-		const latest = latests[index];
+		const latest = latestVersions[index];
 		if (latest !== undefined) {
 			candidates.push({ kind: 'package', name: found.name, installed: found.version, latest });
 		}
