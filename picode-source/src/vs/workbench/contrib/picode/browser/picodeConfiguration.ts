@@ -94,12 +94,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'string',
 			enum: ['internal', 'external'],
 			enumDescriptions: [
-				localize('picode.pi.runtime.internal', "PiCode's own pi, kept inside the editor. Its configuration lives inside PiCode, and PiCode updates it."),
-				localize('picode.pi.runtime.external', "The pi installed on this machine (on the PATH), with its own configuration. PiCode uses it without writing to it."),
+				localize('picode.pi.runtime.internal', "PiCode's own pi, kept inside the editor. PiCode keeps its settings up to date."),
+				localize('picode.pi.runtime.external', "Your own pi, installed on your computer. PiCode uses it and never changes it."),
 			],
 			default: 'internal',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.pi.runtime', "Which pi runs as the editor's agent. The external pi keeps its own configuration on this machine, so providers connected by subscription stay with the internal pi. The choice is made for new conversations, and it is also the first step of [Set up PiCode](command:picode.setup)."),
+			markdownDescription: localize('picode.pi.runtime', "Which pi runs as the editor's agent. Your machine's pi keeps its own settings, so subscriptions you connect stay with the pi inside PiCode. The choice applies to new conversations, and it is also the first step of [Set up PiCode](command:picode.setup)."),
 		},
 		[PICODE_THINKING_LEVEL_SETTING]: {
 			type: 'string',
