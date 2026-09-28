@@ -922,7 +922,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		this._emptyInputAttachments = this._register(emptyInputAttachments(StorageScope.WORKSPACE, StorageTarget.USER, this.storageService));
 
 		this._contextResourceLabels = this._register(this.instantiationService.createInstance(ResourceLabels, { onDidChangeVisibility: this._onDidChangeVisibility.event }));
-		this._currentModeObservable = observableValue<IChatMode>('currentMode', this.options.defaultMode ?? ChatMode.Agent);
+		this._currentModeObservable = observableValue<IChatMode>('currentMode', this.options.defaultMode ?? ChatMode.Ask);
 		const localModes = this.chatModeService.createModes(LocalChatSessionUri.getNewSessionUri());
 		this._currentChatModes.value = localModes;
 		this._currentChatModesObservable = observableValue<IChatModes>('currentChatModes', localModes);
@@ -1669,9 +1669,8 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		}
 
 		if (this.entitlementService.anonymous) {
-			// Be deterministic for anonymous users to support
-			// agentic flows with default model.
-			this.setChatMode(ChatModeKind.Agent, false);
+			// Be deterministic for anonymous users.
+			this.setChatMode(ChatModeKind.Ask, false);
 			this._modelSelectionController.ensureCurrentModelSupported();
 			return;
 		}
@@ -2084,9 +2083,6 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 			modeLabel = localize('chatInput.mode.custom', "({0}), {1}", mode.label.get(), mode.description.get());
 		} else {
 			switch (this.currentModeKind) {
-				case ChatModeKind.Agent:
-					modeLabel = localize('chatInput.mode.agent', "(Agent), edit files in your workspace.");
-					break;
 				case ChatModeKind.Edit:
 					modeLabel = localize('chatInput.mode.edit', "(Edit), edit files in your workspace.");
 					break;
@@ -2110,7 +2106,9 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		const validMode = this._currentChatModesObservable.get().findModeById(currentMode.id);
 		const isAgentModeEnabled = this.configurationService.getValue<boolean>(ChatConfiguration.AgentEnabled);
 		if (!validMode) {
-			this.setChatMode(isAgentModeEnabled ? ChatModeKind.Agent : ChatModeKind.Ask);
+			// The built-in "Agent" mode is not offered (pi is the agent of this
+			// editor), so any unknown/restored mode falls back to Ask.
+			this.setChatMode(ChatModeKind.Ask);
 			return;
 		}
 		if (currentMode.kind === ChatModeKind.Agent && !isAgentModeEnabled) {

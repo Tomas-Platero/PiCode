@@ -40,7 +40,7 @@ suite('ChatSelectedTools', () => {
 
 		store.add(instaService);
 		toolsService = instaService.get(ILanguageModelToolsService);
-		selectedTools = store.add(instaService.createInstance(ChatSelectedTools, constObservable(ChatMode.Agent), constObservable(undefined)));
+		selectedTools = store.add(instaService.createInstance(ChatSelectedTools, constObservable(ChatMode.Ask), constObservable(undefined)));
 	});
 
 	teardown(function () {
@@ -106,6 +106,16 @@ suite('ChatSelectedTools', () => {
 
 			const toSet = ToolAndToolSetEnablementMap.fromEntries([[toolData1, true], [toolData2, false], [toolData3, false], [toolset, false]]);
 			selectedTools.set(toSet, false);
+
+			// Product policy: MCP tools and MCP tool sets are ALWAYS enabled for
+			// the chat (pi is the agent of this editor). A stored disable — stale
+			// memento state like the one written just above — is ignored at
+			// resolution time.
+			const entries = selectedTools.entriesMap.get();
+			assert.strictEqual(entries.get(toolData1), true);
+			assert.strictEqual(entries.get(toolData2), true);
+			assert.strictEqual(entries.get(toolData3), true);
+			assert.strictEqual(entries.get(toolset), true);
 
 			const userSelectedTools = selectedTools.userSelectedTools.get();
 			assert.strictEqual(Object.keys(userSelectedTools).length, 3); // 3 tools

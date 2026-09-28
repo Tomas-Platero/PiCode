@@ -16,7 +16,7 @@ import { ChatModeKind } from '../../../common/constants.js';
 import { ILanguageModelChatMetadataAndIdentifier } from '../../../common/languageModels.js';
 import { UserSelectedTools } from '../../../common/participants/chatAgents.js';
 import { PromptsStorage } from '../../../common/promptSyntax/service/promptsService.js';
-import { ILanguageModelToolsService, IToolData, isToolSet, ToolAndToolSetEnablementMap, IToolSet } from '../../../common/tools/languageModelToolsService.js';
+import { ILanguageModelToolsService, IToolData, isToolSet, isAlwaysEnabledToolDataSource, ToolAndToolSetEnablementMap, IToolSet } from '../../../common/tools/languageModelToolsService.js';
 import { PromptFileRewriter } from '../../promptSyntax/promptFileRewriter.js';
 
 
@@ -147,7 +147,9 @@ export class ChatSelectedTools extends Disposable {
 		// Use getTools with contextKeyService to filter tools by current model
 		for (const tool of this._currentTools.read(r)) {
 			if (tool.canBeReferencedInPrompt) {
-				map.set(tool, currentMap.tools.get(tool.id) !== false); // if unknown, it's enabled
+				// MCP tools are always enabled (pi is the agent of this editor);
+				// otherwise a stale stored entry means disabled and unknown means enabled.
+				map.set(tool, isAlwaysEnabledToolDataSource(tool.source) || currentMap.tools.get(tool.id) !== false);
 			}
 		}
 		for (const toolSet of this._toolsService.getToolSetsForModel(lm, r)) {
@@ -158,7 +160,9 @@ export class ChatSelectedTools extends Disposable {
 			if (toolSet.hiddenInToolsPicker) {
 				continue;
 			}
-			const toolSetEnabled = currentMap.toolSets.get(toolSet.id) !== false; // if unknown, it's enabled
+			// MCP tool sets are always enabled (pi is the agent of this editor);
+			// otherwise a stale stored entry means disabled and unknown means enabled.
+			const toolSetEnabled = isAlwaysEnabledToolDataSource(toolSet.source) || currentMap.toolSets.get(toolSet.id) !== false;
 			map.set(toolSet, toolSetEnabled);
 			for (const tool of toolSet.getTools(r)) {
 				map.set(tool, toolSetEnabled || currentMap.tools.get(tool.id) === true); // if unknown, use toolSetEnabled

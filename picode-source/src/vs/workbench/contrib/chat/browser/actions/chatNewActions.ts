@@ -368,9 +368,9 @@ async function runNewChatAction(
 	}
 
 	if (typeof executeCommandContext.agentMode === 'boolean') {
-		widget.input.setChatMode(executeCommandContext.agentMode ? ChatModeKind.Agent : ChatModeKind.Edit);
+		widget.input.setChatMode(executeCommandContext.agentMode ? ChatModeKind.Ask : ChatModeKind.Edit);
 	} else if (widget.input.currentModeKind === ChatModeKind.Edit) {
-		widget.input.setChatMode(ChatModeKind.Agent);
+		widget.input.setChatMode(ChatModeKind.Ask);
 	}
 
 	if (executeCommandContext.inputValue) {

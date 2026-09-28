@@ -188,9 +188,10 @@ export class ModePickerActionItem extends ChatInputPickerActionViewItem {
 			const customModes = groupBy(
 				filteredCustomModes,
 				mode => isModeConsideredBuiltIn(mode, this._productService) ? 'builtin' : 'custom');
-			// Always include the default "Agent" option first
-			const checked = currentMode.id === ChatMode.Agent.id;
-			const defaultAction = { ...makeAction(ChatMode.Agent, ChatMode.Agent), checked };
+			// Always include the default "Ask" option first (pi is the agent of this
+			// editor; the built-in "Agent" mode is not offered)
+			const checked = currentMode.id === ChatMode.Ask.id;
+			const defaultAction = { ...makeAction(ChatMode.Ask, ChatMode.Ask), checked };
 			defaultAction.category = builtInCategory;
 			const builtInActions = customModes.builtin?.map(mode => {
 				const action = makeActionFromCustomMode(mode, currentMode);
@@ -206,10 +207,13 @@ export class ModePickerActionItem extends ChatInputPickerActionViewItem {
 			getActions: () => {
 				const modes = delegate.currentChatModes.get();
 				const currentMode = delegate.currentMode.get();
-				const agentMode = modes.builtin.find(mode => mode.id === ChatMode.Agent.id);
+				// Product policy: pi is the agent of this editor. Always include the
+				// default "Ask" option first; the built-in "Agent" mode is not offered.
+				const defaultMode = modes.builtin.find(mode => mode.id === ChatMode.Ask.id);
 
 				const otherBuiltinModes = modes.builtin.filter(mode => {
-					return mode.id !== ChatMode.Agent.id && shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy);
+					return mode.id !== ChatMode.Ask.id && mode.id !== ChatMode.Agent.id &&
+						shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy);
 				});
 				const filteredCustomModes = modes.custom.filter(mode => {
 					if (isModeConsideredBuiltIn(mode, this._productService)) {
@@ -233,7 +237,7 @@ export class ModePickerActionItem extends ChatInputPickerActionViewItem {
 				customModeActions.sort((a, b) => a.label.localeCompare(b.label));
 
 				const orderedModes = coalesce([
-					agentMode && makeAction(agentMode, currentMode),
+					defaultMode && makeAction(defaultMode, currentMode),
 					...otherBuiltinModes.map(mode => mode && makeAction(mode, currentMode)),
 					...customBuiltinModeActions,
 					...customModeActions

@@ -28,7 +28,7 @@ import { IMcpServer, IMcpService, IMcpWorkbenchService, McpConnectionState, McpS
 import { startServerAndWaitForLiveTools } from '../../../mcp/common/mcpTypesUtils.js';
 import { ILanguageModelChatMetadata } from '../../common/languageModels.js';
 import { ILanguageModelToolsConfirmationService } from '../../common/tools/languageModelToolsConfirmationService.js';
-import { ILanguageModelToolsService, IToolData, IToolSet, ToolAndToolSetEnablementMap, ToolDataSource, ToolSet } from '../../common/tools/languageModelToolsService.js';
+import { ILanguageModelToolsService, IToolData, IToolSet, ToolAndToolSetEnablementMap, isAlwaysEnabledToolDataSource, ToolDataSource, ToolSet } from '../../common/tools/languageModelToolsService.js';
 import { ConfigureToolSets, deleteToolSetFromFileContents } from '../tools/toolSetsContribution.js';
 
 const enum BucketOrdinal { User, BuiltIn, Mcp, Extension }
@@ -479,7 +479,7 @@ export async function showToolsPicker(
 			if (!bucket) {
 				continue;
 			}
-			const toolChecked = bucket.checked === true || toolsEntries.get(tool.id) === true;
+			const toolChecked = isAlwaysEnabledToolDataSource(tool.source) || bucket.checked === true || toolsEntries.get(tool.id) === true;
 			const toolTreeItem = createToolTreeItemFromData(tool, toolChecked);
 			bucket.children.push(toolTreeItem);
 		}
@@ -577,9 +577,9 @@ export async function showToolsPicker(
 			for (const item of items) {
 				if (isBucketTreeItem(item)) {
 					if (item.toolset) { // MCP server
-						// MCP toolset is enabled only if all tools are enabled
-						const allChecked = item.checked === true;
-						result.set(item.toolset, allChecked);
+						// Product policy: MCP servers are always enabled for chat, so the
+						// picker must not be able to disable an MCP toolset.
+						result.set(item.toolset, isAlwaysEnabledToolDataSource(item.toolset.source));
 					}
 					traverse(item.children);
 				} else if (isToolSetTreeItem(item)) {
@@ -597,7 +597,8 @@ export async function showToolsPicker(
 					const previous = result.get(item.tool);
 					// Tools can show up in multiple places (e.g. buckets and tool sets). If a tool is
 					// explicitly unchecked anywhere, preserve that deselection.
-					result.set(item.tool, previous === undefined ? checked : previous && checked);
+					// Product policy: MCP tools are always enabled for chat.
+					result.set(item.tool, isAlwaysEnabledToolDataSource(item.tool.source) || (previous === undefined ? checked : previous && checked));
 				}
 			}
 		};

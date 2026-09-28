@@ -83,7 +83,9 @@ suite('ChatModeService', () => {
 	test('should return builtin modes', async () => {
 		const modes = await chatModeService.getLocalModes();
 
-		assert.strictEqual(modes.builtin.length, 3);
+		// Product policy: pi is the agent of this editor, so the built-in "Agent"
+		// mode is never offered — only Ask and Edit are builtin.
+		assert.strictEqual(modes.builtin.length, 2);
 		assert.strictEqual(modes.custom.length, 0);
 
 		// Check that Ask mode is always present
@@ -94,13 +96,13 @@ suite('ChatModeService', () => {
 		assert.strictEqual(askMode.kind, ChatModeKind.Ask);
 	});
 
-	test('should adjust builtin modes based on tools agent availability', async () => {
-		// Agent mode should always be present regardless of tools agent availability
+	test('should never offer the Agent mode regardless of tools agent availability', async () => {
+		// Product policy: the built-in "Agent" mode is not offered, with or
+		// without a tools agent.
 		chatAgentService.setHasToolsAgent(true);
 		let agents = await chatModeService.getLocalModes();
-		assert.ok(agents.builtin.find(agent => agent.id === ChatModeKind.Agent));
+		assert.strictEqual(agents.builtin.find(agent => agent.id === ChatModeKind.Agent), undefined);
 
-		// Without tools agent - Agent mode should not be present
 		chatAgentService.setHasToolsAgent(false);
 		agents = await chatModeService.getLocalModes();
 		assert.strictEqual(agents.builtin.find(agent => agent.id === ChatModeKind.Agent), undefined);
@@ -111,10 +113,15 @@ suite('ChatModeService', () => {
 	});
 
 	test('should find builtin modes by id', async () => {
+		const askMode = (await chatModeService.getLocalModes()).findModeById(ChatModeKind.Ask);
+		assert.ok(askMode);
+		assert.strictEqual(askMode.id, ChatMode.Ask.id);
+		assert.strictEqual(askMode.kind, ChatModeKind.Ask);
+
+		// The Agent constant survives for internal references, but it is no
+		// longer part of the builtin mode list.
 		const agentMode = (await chatModeService.getLocalModes()).findModeById(ChatModeKind.Agent);
-		assert.ok(agentMode);
-		assert.strictEqual(agentMode.id, ChatMode.Agent.id);
-		assert.strictEqual(agentMode.kind, ChatModeKind.Agent);
+		assert.strictEqual(agentMode, undefined);
 	});
 
 	test('should return undefined for non-existent mode', async () => {

@@ -603,12 +603,10 @@ export function registerChatActions() {
 
 	registerAction2(PrimaryOpenChatGlobalAction);
 	registerAction2(class extends ModeOpenChatGlobalAction {
-		constructor() { super(ChatMode.Ask); }
-	});
-	registerAction2(class extends ModeOpenChatGlobalAction {
 		constructor() {
-			super(ChatMode.Agent, {
-				when: ContextKeyExpr.has(`config.${ChatConfiguration.AgentEnabled}`),
+			// Product policy: there is no built-in "Agent" mode in this editor —
+			// pi is the agent. The former Agent action's keybinding now opens Ask.
+			super(ChatMode.Ask, {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyI,
 				linux: {

@@ -296,19 +296,13 @@ class ChatModes extends Disposable implements IChatModes {
 	}
 
 	private getBuiltinModes(): IChatMode[] {
-		const builtinModes: IChatMode[] = [
+		// Product policy: pi is the agent of this editor, so the built-in "Agent"
+		// mode is never offered in the UI and new chats default to Ask. The
+		// ChatMode.Agent constant stays for internal/back-compat references.
+		return [
 			ChatMode.Ask,
+			ChatMode.Edit,
 		];
-
-		// Include Agent mode if:
-		// - It's enabled (hasToolsAgent is true), OR
-		// - It's disabled by policy (so we can show it with a lock icon)
-		// But hide it if the user manually disabled it via settings
-		if (this.chatAgentService.hasToolsAgent || this.isAgentModeDisabledByPolicy()) {
-			builtinModes.unshift(ChatMode.Agent);
-		}
-		builtinModes.push(ChatMode.Edit);
-		return builtinModes;
 	}
 
 	private getCustomModes(): IChatMode[] {
