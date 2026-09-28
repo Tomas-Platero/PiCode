@@ -433,13 +433,13 @@ export class PiCodeSetup extends Disposable {
 			.catch(() => { /* the meta line keeps its placeholder; nothing to act on */ });
 
 		// The import offer depends on facts only the connector has; it asks once, lazily.
-		if (state.runtime === 'internal') {
+		if (state.runtime !== 'external') {
 			this.services.commandService.executeCommand<ProfilePreview>('picode.setup.importPreview')
 				.then(preview => {
 					if (preview === undefined || this._store.isDisposed || this.state?.runtime !== 'internal') { return; }
 					const area = card.querySelector('.picode-import-area');
 					if (!(area instanceof HTMLElement)) { return; }
-					const worth = preview.exists && (preview.packages + preview.mcpServers + preview.skills + preview.sessions) > 0;
+					const worth = preview.exists && (preview.packages + preview.providers + preview.mcpServers + preview.skills + preview.sessions) > 0;
 					if (worth) {
 						reset(area, this.renderImportCta(preview));
 					}

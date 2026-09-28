@@ -450,6 +450,29 @@
 	opacity: .8;
 }
 
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress {
+	height: 6px;
+	margin: 6px 0 4px;
+	border-radius: 3px;
+	background: var(--vscode-progressBar-background, var(--vscode-editorWidget-border, rgba(128, 128, 128, .3)));
+	opacity: .35;
+	overflow: hidden;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 3px;
+	background: var(--vscode-progressBar-background, var(--vscode-focusBorder, #0a80ff));
+	transition: width .3s ease-out;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress-line {
+	font-size: .88em;
+	opacity: .8;
+	min-height: 1.2em;
+}
+
 /* Gentle AI */
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-dimmed {
