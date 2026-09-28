@@ -60,3 +60,34 @@
 | V4 | 1 (External Pi + textos) | inline |
 | V5 | 3 (icono y textos de Packages) | inline |
 | V6 | 2 (carga en la lista de modelos) | inline |
+
+## Cierre (2026-09-28, tarde)
+
+| Commit | Punto |
+| --- | --- |
+| `d4448626` | 2, 3, 4, 5 y 1 — Browse MCP's, dominios de confianza, External Pi, packages (pausa/play + estados), fila de carga en modelos |
+| `f43edfea` | resto del 6 de la ronda anterior — test alineado con la firma del banner quitado |
+| `c8813c50` | 6, 7 y 8 — sin chip de modo, chip de thinking junto al modelo, saludo «Hello, I'm PiCode» con la marca |
+
+Verificación: typecheck del núcleo en 0 tras cada unidad; build completa al cierre.
+
+Decisiones tomadas en esta ronda:
+
+- D1 · P7: el chip escribe el ajuste **`picode.pi.thinkingLevel`** (el del núcleo, el
+  mismo que lee el conector vía `getConfiguration('picode').get('pi.thinkingLevel')`),
+  a nivel de usuario; «Default» lo limpia. Niveles: off · minimal · low · medium · high ·
+  xhigh · max. El cambio vale para el siguiente turno.
+- D2 · P6: el comando del selector de modo y su atajo siguen registrados (los usa el
+  comando de barra `/agents`), pero el chip no se pinta: en escritorio `/agents` y
+  Ctrl+Periodo quedan sin efecto visible — apuntado por si el dueño quiere redirigirlos.
+- D3 · P8: el saludo es «Hello, I'm PiCode» con la marca de trazos (máscara CSS, tinta del
+  tema); el aviso de exactitud se queda; el enlace «Generate Agent Instructions» y su
+  maquinaria, fuera del bloque de bienvenida.
+- D4 · P4: dominios de confianza por defecto en `product.json`
+  (`linkProtectionTrustedDomains`): open-vsx (ya estaba), mcp.directory, skills.sh,
+  www.skills.sh y pi.dev.
+- D5 · P3: el estado de una fila sin declaración es «Not declared» (pi no la carga), con
+  explicación en el sitio de las acciones; los botones hablan de lo que pasa
+  («Pi stops loading this package. Its files stay on disk.»).
+- D6 · P2: la fila de carga vive en la tabla y desaparece cuando la primera lista
+  resuelve; el progreso del editor se queda también, por si acaso.
