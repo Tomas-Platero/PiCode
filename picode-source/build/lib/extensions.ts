@@ -51,7 +51,14 @@ function updateExtensionPackageJSON(input: Stream, update: (data: any) => any): 
 		.pipe(packageJsonFilter)
 		.pipe(buffer())
 		.pipe(es.mapSync((f: File) => {
-			const data = JSON.parse(f.contents!.toString('utf8'));
+			// Wrap the parse: a malformed package.json should fail naming the
+			// file, not with a bare SyntaxError mid-stream.
+			let data: unknown;
+			try {
+				data = JSON.parse(f.contents!.toString('utf8'));
+			} catch (err) {
+				throw new Error(`Failed to parse package.json contents: ${err instanceof Error ? err.message : err}`);
+			}
 			f.contents = Buffer.from(JSON.stringify(update(data)));
 			return f;
 		}))
@@ -286,7 +293,15 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
 
 	const packageJsonFilter = filter('package.json', { restore: true });
 
-	return fetchGithub(new URL(repo).pathname, {
+	// new URL throws on a malformed repo; fail with a message that names it.
+	let repoPathname: string;
+	try {
+		repoPathname = new URL(repo).pathname;
+	} catch (err) {
+		throw new Error(`Invalid repo URL '${repo}': ${err instanceof Error ? err.message : err}`);
+	}
+
+	return fetchGithub(repoPathname, {
 		version,
 		name: asset ? asset.assetName : name => name.endsWith('.vsix'),
 		// The checksum is tied to a specific version; when resolving the latest release the
@@ -315,10 +330,6 @@ const nativeExtensions = [
 
 const excludedExtensions = [
 	'copilot',
-	'vscode-api-tests',
-	'vscode-colorize-tests',
-	'vscode-colorize-perf-tests',
-	'vscode-test-resolver',
 	'ms-vscode.node-debug',
 	'ms-vscode.node-debug2',
 ];
@@ -363,7 +374,7 @@ export function isWebExtension(manifest: IExtensionManifest): boolean {
 	}
 	if (typeof manifest.contributes !== 'undefined') {
 		for (const id of ['debuggers', 'terminal', 'typescriptServerPlugins']) {
-			if (manifest.contributes.hasOwnProperty(id)) {
+			if (Object.hasOwn(manifest.contributes, id)) {
 				return false;
 			}
 		}

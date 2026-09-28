@@ -22,10 +22,8 @@ import * as tsb from './lib/tsb/index.ts';
 import { createTsgoStream, spawnTsgo } from './lib/tsgo.ts';
 import * as util from './lib/util.ts';
 import watcher from './lib/watch/index.ts';
-import product from '../product.json' with { type: 'json' };
 
 const root = path.dirname(import.meta.dirname);
-const commit = getVersion(root);
 
 // Tracks active extension compilations to emit aggregate
 // "Starting compilation" / "Finished compilation" messages
@@ -88,10 +86,6 @@ const compilations = [
 	'extensions/tunnel-forwarding/tsconfig.json',
 	'extensions/typescript-language-features/web/tsconfig.json',
 	'extensions/typescript-language-features/tsconfig.json',
-	'extensions/vscode-api-tests/tsconfig.json',
-	'extensions/vscode-colorize-tests/tsconfig.json',
-	'extensions/vscode-colorize-perf-tests/tsconfig.json',
-	'extensions/vscode-test-resolver/tsconfig.json',
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',
 	'.vscode/extensions/vscode-selfhost-import-aid/tsconfig.json',
