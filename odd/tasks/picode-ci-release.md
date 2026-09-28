@@ -62,7 +62,7 @@ rápida no son 40 m son 10 m por ejemplo.»
 | R3 | `release.yml` nuevo: guardas (tag=versión, versión estrictamente mayor), build, zip 7-Zip, SHA-256, release con notas generadas, feed con `--installed` previo, push del feed a `master`, verificación en vivo, aviso de visibilidad | ✅ Escrito y corregido por revisión: `mv` (no `cp`) antes del checkout del feed y verificación en vivo con tubería curl→node |
 | R4 | Validación de sintaxis YAML de ambos workflows y revisión línea a línea contra la guía `picode-release` | ✅ YAML parseado con js-yaml; `bash -n` en los 14 bloques `run:`; guardia de versiones probada con 5 casos; 2 defectos reales hallados y corregidos |
 | R5 | Documentación: reescribir `docs/CI.md` (la decisión de «sin CI» queda revertida y fechada) y añadir la vía automática a la skill `picode-release` | ✅ `docs/CI.md` reescrita (por qué es rápido, reglas que enforce el release, cómo publicar, trampas vigentes); skill con «The automated path» y la manual como reserva |
-| R6 | Commits de unidad de trabajo (workflows, docs, ficha) | ✅ En curso |
+| R6 | Commits de unidad de trabajo (workflows, docs, ficha) | ✅ Tres commits: herramientas (`f0c572e5`), workflows + `docs/CI.md` (`842ca9a8`), ficha (`b4c1e414`). Árbol limpio |
 
 ## Registro
 
