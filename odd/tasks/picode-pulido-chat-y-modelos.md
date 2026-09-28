@@ -91,3 +91,21 @@ Decisiones tomadas en esta ronda:
   («Pi stops loading this package. Its files stay on disk.»).
 - D6 · P2: la fila de carga vive en la tabla y desaparece cuando la primera lista
   resuelve; el progreso del editor se queda también, por si acaso.
+
+## Añadido posterior: import real del perfil externo (`b1c0c0a3`)
+
+Lo que el dueño pidió: al detectar pi externo y elegir «pi interno» en la página de pi,
+importar TODO (skills, proveedores, packages…). El hueco real no era la oferta (ya existía
+desde el primer árbol): era que el import **no traía nada ejecutable de los packages** —
+copiaba las declaraciones del `settings.json` pero los ficheros seguían en el npm del pi
+externo — y **los proveedores no se nombraban** en la oferta.
+
+Arreglo:
+- El panel de importación se abre **expandido** al elegir interno con pi externo detectado.
+- La oferta cuenta **Providers** (tabla `providers` de models.json) además de packages,
+  MCP, skills y sesiones.
+- Tras la copia, cada package declarado se **instala de verdad** en el perfil interno con
+  el CLI de pi (el mismo instalador en cola de la página de Packages), y el resultado dice
+  cuántos entraron y cuántos fallaron.
+- La regla de siempre se mantiene: el perfil externo solo se lee; en el interno se fusiona,
+  nada se borra; las credenciales (`auth.json`) siguen detrás de la casilla explicita.
