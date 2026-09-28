@@ -6,7 +6,6 @@
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
 import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
-import { IHoverService } from '../../../../../../platform/hover/browser/hover.js';
 import { PromptLaunchersAICustomizationWelcomePage } from '../../../browser/aiCustomization/aiCustomizationWelcomePagePromptLaunchers.js';
 import { ICustomizationMigrationCategorySummary, IWelcomePageCallbacks } from '../../../browser/aiCustomization/aiCustomizationWelcomePage.js';
 import { CustomizationMigrationCategoryId } from '../../../browser/aiCustomization/customizationMigrationCategories.js';
@@ -28,11 +27,9 @@ suite('aiCustomizationWelcomePagePromptLaunchers', () => {
 		};
 		const page = store.add(new PromptLaunchersAICustomizationWelcomePage(
 			parent,
-			{ showGettingStartedBanner: false },
 			callbacks,
 			{} as ICommandService,
 			{ isSessionsWindow: true } as IAICustomizationWorkspaceService,
-			{} as IHoverService,
 			'Copilot [Agent Host]',
 		));
 		const category: ICustomizationMigrationCategorySummary = {
