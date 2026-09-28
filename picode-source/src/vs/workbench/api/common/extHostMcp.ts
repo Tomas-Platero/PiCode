@@ -351,6 +351,28 @@ function setHostHeader(headers: Record<string, string>, name: string, value: str
 }
 
 /**
+ * HTTP header values must be ByteStrings (characters <= 0xFF). Values that come
+ * from product branding or user configuration may contain other Unicode
+ * characters — e.g. the em dash in this product's `nameLong` — which makes the
+ * undici `Headers` constructor throw "Cannot convert argument to a ByteString
+ * ... value of 8212" and breaks every request to the server. Strip any such
+ * character so a cosmetic string can never take down an MCP connection.
+ */
+export function sanitizeHeaderValues(headers: Record<string, string>): Record<string, string> {
+	let dirty = false;
+	const result: Record<string, string> = {};
+	for (const name of Object.keys(headers)) {
+		const value = headers[name];
+		const clean = value.replace(/[^\x00-\xFF]/g, '');
+		if (clean !== value) {
+			dirty = true;
+		}
+		result[name] = clean;
+	}
+	return dirty ? result : headers;
+}
+
+/**
  * Implementation of both MCP HTTP Streaming as well as legacy SSE.
  *
  * The first request will POST to the endpoint, assuming HTTP streaming. If the
@@ -922,6 +944,9 @@ export class McpHTTPHandle extends Disposable {
 	}
 
 	protected _fetchInternal(url: string, init?: CommonRequestInit): Promise<CommonResponse> {
+		if (init) {
+			init = { ...init, headers: sanitizeHeaderValues(init.headers) };
+		}
 		return fetch(url, init);
 	}
 }

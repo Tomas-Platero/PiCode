@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import { LogLevel } from '../../../../platform/log/common/log.js';
-import { createAuthMetadata, CommonResponse, IAuthMetadata } from '../../common/extHostMcp.js';
+import { createAuthMetadata, CommonResponse, IAuthMetadata, sanitizeHeaderValues } from '../../common/extHostMcp.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
 
 // Test constants to avoid magic strings
@@ -101,6 +101,32 @@ async function createTestAuthMetadata(options: {
 
 suite('ExtHostMcp', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
+
+	suite('sanitizeHeaderValues', () => {
+		test('strips characters outside the ByteString range', () => {
+			// The product name carries an em dash (U+2014, 8212): "PiCode — Agentic Code Editor".
+			// A user-agent with it makes undici's Headers throw
+			// "Cannot convert argument to a ByteString because the character at
+			// index 7 has a value of 8212".
+			const headers = sanitizeHeaderValues({
+				'user-agent': 'PiCode — Agentic Code Editor/1.135.1',
+			});
+			assert.strictEqual(headers['user-agent'], 'PiCode  Agentic Code Editor/1.135.1');
+			for (const ch of headers['user-agent']) {
+				assert.ok(ch.charCodeAt(0) <= 0xFF, `character ${ch} must be a ByteString`);
+			}
+		});
+
+		test('returns the same object when nothing needs stripping', () => {
+			const headers = { Authorization: 'Bearer abc123', Accept: 'application/json' };
+			assert.strictEqual(sanitizeHeaderValues(headers), headers);
+		});
+
+		test('keeps Latin-1 range characters (<= 0xFF)', () => {
+			const headers = sanitizeHeaderValues({ 'X-Note': 'café' });
+			assert.strictEqual(headers['X-Note'], 'café');
+		});
+	});
 
 	suite('IAuthMetadata', () => {
 		suite('properties', () => {
