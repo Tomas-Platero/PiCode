@@ -211,17 +211,35 @@ jobs:
           fi
 
       - name: Verify the feed is live
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
+            --json visibility --jq .visibility)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
           FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
+          FEED_REF="updates/stable/win32/x64/archive/latest.json"
           ASSET="PiCode-win32-x64-${VERSION}.zip"
-          # raw.githubusercontent caches ~5 min, hence the bust query.
+          # On a PRIVATE repo raw.githubusercontent.com 404s for anonymous
+          # readers, so the anonymous check would fail even with a correct
+          # feed. Until the repo is public, verify the exact bytes on
+          # master through the authenticated contents API instead; the
+          # anonymous check takes over the moment the repo goes public.
+          fetch_feed() {
+            if [ "${VIS}" = "PUBLIC" ]; then
+              # raw.githubusercontent caches ~5 min, hence the bust query.
+              curl -fsSL "${FEED_URL}?bust=${1}"
+            else
+              # The contents API reads the exact bytes master serves.
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/contents/${FEED_REF}?ref=master" \
+                --jq .content | base64 -d
+            fi
+          }
           ok=""
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            # Pipe curl straight into the check: the node script reads
-            # stdin, so the response must actually be piped to it.
-            if curl -fsSL "${FEED_URL}?bust=${i}" \
+            if fetch_feed "${i}" \
                | VERSION="${VERSION}" ASSET="${ASSET}" node -e '
                 const f = JSON.parse(
                   require("fs").readFileSync(0, "utf8"));
