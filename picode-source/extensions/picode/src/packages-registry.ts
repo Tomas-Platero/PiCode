@@ -252,6 +252,30 @@ export function installTargetSpec(target: string): string {
 	return `npm:${trimmed}`;
 }
 
+/**
+ * Turns one of pi's package sources into the spec npm installs, or `undefined` for the
+ * sources that cannot come across — a local path names the other machine's disk.
+ *
+ * The import writes the declarations from the external profile and then installs each one
+ * directly with npm (hidden console — see the import flow), so it needs the npm spelling:
+ * `npm:x` is just `x`, and pi's `git:host/path` and `https://host/path` sources are npm's
+ * `git+https://host/path`.
+ */
+export function npmInstallSpec(source: string): string | undefined {
+	const trimmed = source.trim();
+	if (trimmed.startsWith('npm:')) {
+		return trimmed.slice(4) || undefined;
+	}
+	if (trimmed.startsWith('git:')) {
+		const host = trimmed.slice(4);
+		return host.length > 0 ? `git+https://${host}` : undefined;
+	}
+	if (/^https:\/\//i.test(trimmed)) {
+		return `git+${trimmed}`;
+	}
+	return undefined;
+}
+
 /** What an install needs beside the target, resolved by the caller (`extension.ts`). */
 export interface InstallContext {
 	/** The bundled pi CLI's entry, already checked for existence by the caller. */

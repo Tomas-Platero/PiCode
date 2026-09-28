@@ -10,7 +10,7 @@ import * as vscode from 'vscode';
 import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ProfilePreview } from './profile-import';
-import { installPackage } from './packages-registry';
+import { npmInstallSpec } from './packages-registry';
 import { getSessionUsage } from './agent';
 import type { StatusData } from './status-view';
 
@@ -311,17 +311,33 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				const declared = settings !== undefined && Array.isArray(settings['packages'])
 					? settings['packages'].filter((entry): entry is string => typeof entry === 'string')
 					: [];
-				const cliEntry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 				let packagesInstalled = 0;
 				let packagesFailed = 0;
-				if (declared.length > 0 && existsSync(cliEntry)) {
+				let packagesSkipped = 0;
+				if (declared.length > 0) {
 					importLog.total = 2 + declared.length;
 					let index = 0;
 					for (const source of declared) {
 						index += 1;
-						logImport(`Installing package ${index} of ${declared.length}: ${source}…`);
-						const result = await installPackage(source, { cliEntry, profileDir: deps.profileDir });
-						result.ok ? packagesInstalled += 1 : packagesFailed += 1;
+						const spec = npmInstallSpec(source);
+						if (spec === undefined) {
+							packagesSkipped += 1;
+							logImport(`Skipping ${source} — it lives on the other machine's disk. Reinstall it here if you need it.`);
+							importLog.step = 1 + index;
+							continue;
+						}
+						logImport(`Installing package ${index} of ${declared.length}: ${spec}…`);
+						try {
+							// npm directly, with a hidden console — pi's own installer spawns
+							// children that pop a window each, and twenty windows is not an
+							// experience. The declarations are already in the copied settings;
+							// this is what puts the files in place.
+							await runNpm(deps, ['install', '--save', '--no-audit', '--no-fund', spec]);
+							packagesInstalled += 1;
+						} catch {
+							packagesFailed += 1;
+							logImport(`Package ${spec} could not be installed — the rest goes on.`);
+						}
 						importLog.step = 1 + index;
 					}
 				}
@@ -332,7 +348,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				deps.refreshModels();
 				importLog.step = importLog.total;
 				logImport('Done.');
-				return { ...report, packagesInstalled, packagesFailed, credentialsImported: credentials === true };
+				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
 			} finally {
 				importLog.running = false;
 			}

@@ -38,6 +38,7 @@ const {
 	catalogSearchUrl,
 	installPackage,
 	installTargetSpec,
+	npmInstallSpec,
 	searchPackages,
 } = await import('../src/packages-registry.ts');
 
@@ -307,4 +308,15 @@ test('a failed install does not fail the ones queued after it', async () => {
 	assert.strictEqual(results[0].ok, false);
 	assert.strictEqual(results[1].ok, true);
 	assert.strictEqual(results[1].message, 'Package works installed with pi.');
+});
+
+test('npmInstallSpec turns pi package sources into npm specs', () => {
+	// npm: sources keep the name, without the prefix npm does not understand.
+	assert.strictEqual(npmInstallSpec('npm:pi-lens'), 'pi-lens');
+	assert.strictEqual(npmInstallSpec('npm:@scope/pkg'), '@scope/pkg');
+	// git sources become git+https, the form npm installs without a helper.
+	assert.strictEqual(npmInstallSpec('git:github.com/user/repo'), 'git+https://github.com/user/repo');
+	assert.strictEqual(npmInstallSpec('https://github.com/user/repo'), 'git+https://github.com/user/repo');
+	// Local paths cannot come across: the other machine's disk is not this one's.
+	assert.strictEqual(npmInstallSpec('./local/path'), undefined);
 });
