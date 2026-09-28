@@ -2121,3 +2121,87 @@ pane is first mounted. View switches inside the modal are not animated. */
 }
 
 /* Welcome page styles live in the welcome page variant stylesheets. */
+
+/* PiCode: the installed packages list presented as a table (pluginListWidget.ts).
+   The header row above the list and every package row share one grid so the
+   columns line up: Name · Version · Source · State · Actions. */
+.pi-packages-table-header,
+.mcp-list-widget .pi-package-row {
+	display: grid;
+	grid-template-columns: minmax(100px, 2fr) minmax(64px, 96px) minmax(120px, 2fr) minmax(80px, 110px) minmax(150px, auto);
+	gap: 8px;
+	box-sizing: border-box;
+}
+
+.pi-packages-table-header {
+	padding: 2px 8px 4px 30px;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.pi-packages-table-header .pi-packages-table-column {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcp-list-widget .pi-package-row {
+	align-items: center;
+	padding: 6px 8px 6px 30px;
+	cursor: default;
+	border-radius: var(--vscode-cornerRadius-small);
+	min-height: 32px;
+	overflow: hidden;
+}
+
+.mcp-list-widget .pi-package-row:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.mcp-list-widget .pi-package-row.disabled .pi-package-row-name,
+.mcp-list-widget .pi-package-row.disabled .pi-package-row-version,
+.mcp-list-widget .pi-package-row.disabled .pi-package-row-source {
+	opacity: 0.7;
+}
+
+.pi-package-row .pi-package-row-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 18px;
+}
+
+.pi-package-row .pi-package-row-version,
+.pi-package-row .pi-package-row-source {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+}
+
+.pi-package-row .pi-package-row-state {
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.pi-package-row .pi-package-row-state.disabled {
+	color: var(--vscode-descriptionForeground);
+}
+
+.pi-package-row .pi-package-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	justify-content: flex-end;
+	flex-wrap: nowrap;
+}
+
+.pi-package-row .pi-package-row-action.monaco-button {
+	min-width: 0;
+	min-height: var(--vscode-spacing-size240);
+	padding: 0 var(--vscode-spacing-size80);
+	font-size: var(--vscode-agents-fontSize-label1);
+	border-radius: var(--vscode-cornerRadius-small);
+}

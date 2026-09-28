@@ -51,6 +51,9 @@ const $ = DOM.$;
 
 const PLUGIN_ITEM_HEIGHT = 36;
 
+/** A table row carries two buttons, so it is a little taller than a plain item row. */
+const PI_PACKAGE_ROW_HEIGHT = 44;
+
 /** Row shape returned by the PiCode package catalog connector (`picode.packages.search`). */
 interface IPackageCatalogRow {
 	readonly name: string;
@@ -67,6 +70,28 @@ interface IPackageInstallResult {
 
 const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
 const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
+
+/** The listing command: what is installed, each row carrying its source, state and scope. */
+const PACKAGES_LIST_COMMAND = 'picode.setup.packages';
+
+/** The management commands the installed table's actions invoke; the connector performs. */
+const PACKAGES_DISABLE_COMMAND = 'picode.packages.disable';
+const PACKAGES_ENABLE_COMMAND = 'picode.packages.enable';
+const PACKAGES_UNINSTALL_COMMAND = 'picode.packages.uninstall';
+
+/** Result shape returned by the PiCode package disable/enable/uninstall connectors. */
+interface IPiPackageRow {
+	readonly id: string;
+	readonly name: string;
+	readonly version?: string;
+	readonly description?: string;
+	readonly path: string;
+	/** The declaration as pi's settings spell it (`npm:pi-lens`), when one exists. */
+	readonly source?: string;
+	readonly state?: 'enabled' | 'disabled';
+	/** Where the declaration was found: the user profile, or a workspace's `.pi`. */
+	readonly scope?: 'user' | 'workspace';
+}
 
 //#region Entry types
 
@@ -98,7 +123,16 @@ interface IPluginRemoteItemEntry {
 	readonly item: ICustomizationItem;
 }
 
-type IPluginListEntry = IPluginGroupHeaderEntry | IPluginInstalledItemEntry | IPluginMarketplaceItemEntry | IPluginRemoteItemEntry;
+/**
+ * Represents one installed pi package in the installed list, presented as a table row
+ * (see {@link PluginPiPackageRowRenderer}).
+ */
+interface IPluginPiPackageItemEntry {
+	readonly type: 'pi-package-item';
+	readonly row: IPiPackageRow;
+}
+
+type IPluginListEntry = IPluginGroupHeaderEntry | IPluginInstalledItemEntry | IPluginMarketplaceItemEntry | IPluginRemoteItemEntry | IPluginPiPackageItemEntry;
 
 //#endregion
 
@@ -112,8 +146,11 @@ class PluginItemDelegate implements IListVirtualDelegate<IPluginListEntry> {
 		if (element.type === 'marketplace-item') {
 			return 62;
 		}
+		if (element.type === 'pi-package-item') {
+			return PI_PACKAGE_ROW_HEIGHT;
+		}
 		return PLUGIN_ITEM_HEIGHT;
-	}
+}
 
 	getTemplateId(element: IPluginListEntry): string {
 		if (element.type === 'group-header') {
@@ -124,6 +161,9 @@ class PluginItemDelegate implements IListVirtualDelegate<IPluginListEntry> {
 		}
 		if (element.type === 'remote-item') {
 			return 'pluginRemoteItem';
+		}
+		if (element.type === 'pi-package-item') {
+			return PI_PACKAGE_ITEM_TEMPLATE_ID;
 		}
 		return 'pluginInstalledItem';
 	}
@@ -184,6 +224,98 @@ class PluginInstalledItemRenderer implements IListRenderer<IPluginInstalledItemE
 
 	disposeTemplate(templateData: IPluginInstalledItemTemplateData): void {
 		templateData.disposables.dispose();
+	}
+}
+
+//#endregion
+
+//#region Pi Package Table Row Renderer
+
+const PI_PACKAGE_ITEM_TEMPLATE_ID = 'pluginPiPackageItem';
+
+interface IPluginPiPackageRowTemplateData {
+	readonly container: HTMLElement;
+	readonly name: HTMLElement;
+	readonly version: HTMLElement;
+	readonly source: HTMLElement;
+	readonly state: HTMLElement;
+	readonly toggleButton: Button;
+	readonly uninstallButton: Button;
+	readonly disposables: DisposableStore;
+}
+
+/**
+ * One installed pi package as a table row: Name · Version · Source · State · Actions.
+ *
+ * The actions edit pi's own settings through the connector — Disable/Enable toggles the
+ * declaration, Uninstall removes it with pi — so a row without a declaration (a package the
+ * disk scan found without pi's settings spelling it) renders without buttons: there is no
+ * spelling for the actions to act on.
+ */
+class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEntry, IPluginPiPackageRowTemplateData> {
+	readonly templateId = PI_PACKAGE_ITEM_TEMPLATE_ID;
+
+	constructor(
+		private readonly onToggle: (row: IPiPackageRow) => void,
+		private readonly onUninstall: (row: IPiPackageRow) => void,
+	) { }
+
+	renderTemplate(container: HTMLElement): IPluginPiPackageRowTemplateData {
+		container.classList.add('pi-package-row');
+
+		const name = DOM.append(container, $('.pi-package-row-name'));
+		const version = DOM.append(container, $('.pi-package-row-version'));
+		const source = DOM.append(container, $('.pi-package-row-source'));
+		const state = DOM.append(container, $('.pi-package-row-state'));
+		const actions = DOM.append(container, $('.pi-package-row-actions'));
+
+		const toggleButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true });
+		toggleButton.element.classList.add('pi-package-row-action');
+		const uninstallLabel = localize('uninstallPackageButton', "Uninstall");
+		const uninstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: uninstallLabel, ariaLabel: uninstallLabel });
+		uninstallButton.label = `$(${Codicon.trash.id})`;
+		uninstallButton.element.classList.add('pi-package-row-action');
+
+		return { container, name, version, source, state, toggleButton, uninstallButton, disposables: new DisposableStore() };
+	}
+
+	renderElement(element: IPluginPiPackageItemEntry, _index: number, templateData: IPluginPiPackageRowTemplateData): void {
+		templateData.disposables.clear();
+		const { row } = element;
+		templateData.name.textContent = formatDisplayName(row.name);
+		templateData.name.title = truncateToFirstLine(row.description ?? '');
+		templateData.version.textContent = row.version ?? '';
+		templateData.source.textContent = row.source ?? '';
+		templateData.source.title = row.source ?? '';
+		const disabled = row.state === 'disabled';
+		templateData.state.textContent = disabled
+			? localize('packageStateDisabled', "Disabled")
+			: localize('packageStateEnabled', "Enabled");
+		templateData.state.classList.toggle('disabled', disabled);
+		templateData.container.classList.toggle('disabled', disabled);
+
+		if (row.source === undefined) {
+			templateData.toggleButton.element.style.display = 'none';
+			templateData.uninstallButton.element.style.display = 'none';
+			return;
+		}
+		templateData.toggleButton.element.style.display = '';
+		templateData.uninstallButton.element.style.display = '';
+		if (disabled) {
+			templateData.toggleButton.label = `$(${Codicon.check.id}) ${localize('enablePackageAction', "Enable")}`;
+			templateData.toggleButton.setTitle(localize('enablePackageTooltip', "Enable the package again in pi's settings"));
+		} else {
+			templateData.toggleButton.label = `$(${Codicon.circleSlash.id}) ${localize('disablePackageAction', "Disable")}`;
+			templateData.toggleButton.setTitle(localize('disablePackageTooltip', "Remove the package from pi's settings without deleting its files"));
+		}
+		templateData.disposables.add(templateData.toggleButton.onDidClick(() => this.onToggle(row)));
+		templateData.disposables.add(templateData.uninstallButton.onDidClick(() => this.onUninstall(row)));
+	}
+
+	disposeTemplate(templateData: IPluginPiPackageRowTemplateData): void {
+		templateData.disposables.dispose();
+		templateData.toggleButton.dispose();
+		templateData.uninstallButton.dispose();
 	}
 }
 
@@ -441,6 +573,7 @@ export class PluginListWidget extends Disposable {
 
 	private sectionTitleHeader!: HTMLElement;
 	private sectionLink!: HTMLAnchorElement;
+	private tableHeader!: HTMLElement;
 	private searchAndButtonContainer!: HTMLElement;
 	private searchInput!: InputBox;
 	private listContainer!: HTMLElement;
@@ -463,6 +596,7 @@ export class PluginListWidget extends Disposable {
 
 	private installedItems: IInstalledPluginItem[] = [];
 	private remoteItems: ICustomizationItem[] = [];
+	private piPackageRows: readonly IPiPackageRow[] = [];
 	private displayEntries: IPluginListEntry[] = [];
 	private marketplaceItems: IMarketplacePluginItem[] = [];
 	private searchQuery: string = '';
@@ -631,6 +765,20 @@ export class PluginListWidget extends Disposable {
 		this.disabledMessage = DOM.append(this.disabledContainer, $('.empty-subtext'));
 
 		// List container
+		// The installed packages read as a table: a small header row above the list, one grid
+		// row per package below (see PluginPiPackageRowRenderer). The header is hidden in
+		// browse mode and whenever the list itself is hidden.
+		this.tableHeader = DOM.append(this.element, $('.pi-packages-table-header'));
+		for (const label of [
+			localize('packagesTableColumnName', "Name"),
+			localize('packagesTableColumnVersion', "Version"),
+			localize('packagesTableColumnSource', "Source"),
+			localize('packagesTableColumnState', "State"),
+			localize('packagesTableColumnActions', "Actions"),
+		]) {
+			DOM.append(this.tableHeader, $('.pi-packages-table-column')).textContent = label;
+		}
+
 		this.listContainer = DOM.append(this.element, $('.mcp-list-container'));
 
 		// Section footer (removed — see section-title-header at top)
@@ -639,6 +787,10 @@ export class PluginListWidget extends Disposable {
 		const delegate = new PluginItemDelegate();
 		const groupHeaderRenderer = new CustomizationGroupHeaderRenderer<IPluginGroupHeaderEntry>('pluginGroupHeader', this.hoverService);
 		const installedRenderer = new PluginInstalledItemRenderer();
+		const piPackageRenderer = new PluginPiPackageRowRenderer(
+			row => { void this.togglePackageState(row); },
+			row => { void this.uninstallPackage(row); },
+		);
 		const remoteRenderer = new PluginRemoteItemRenderer();
 		const marketplaceRenderer = new GalleryItemRenderer<IPluginMarketplaceItemEntry>(PLUGIN_MARKETPLACE_ITEM_TEMPLATE_ID, new PluginMarketplaceItemProvider(
 			this.pluginInstallService,
@@ -653,7 +805,7 @@ export class PluginListWidget extends Disposable {
 			'PluginManagementList',
 			this.listContainer,
 			delegate,
-			[groupHeaderRenderer, installedRenderer, remoteRenderer, marketplaceRenderer],
+			[groupHeaderRenderer, installedRenderer, piPackageRenderer, remoteRenderer, marketplaceRenderer],
 			{
 				multipleSelectionSupport: false,
 				setRowLineHeight: false,
@@ -662,6 +814,12 @@ export class PluginListWidget extends Disposable {
 					getAriaLabel(element: IPluginListEntry) {
 						if (element.type === 'group-header') {
 							return localize('pluginGroupAriaLabel', "{0}, {1} items, {2}", element.label, element.count, element.collapsed ? localize('collapsed', "collapsed") : localize('expanded', "expanded"));
+						}
+						if (element.type === 'pi-package-item') {
+							const rowState = element.row.state === 'disabled'
+												? localize('pluginPiPackageItemDisabled', "Disabled")
+												: localize('pluginPiPackageItemEnabled', "Enabled");
+							return localize('pluginPiPackageItemAriaLabel', "{0}. {1}", element.row.name, rowState);
 						}
 						const name = formatDisplayName(element.item.name);
 						const description = element.item.description ? truncateToFirstLine(element.item.description) : undefined;
@@ -691,6 +849,9 @@ export class PluginListWidget extends Disposable {
 						}
 						if (element.type === 'remote-item') {
 							return element.item.itemKey ?? `remote-${element.item.groupKey ?? 'default'}-${element.item.uri.toString()}`;
+						}
+						if (element.type === 'pi-package-item') {
+							return `pi-package-${element.row.id}`;
 						}
 						return element.item.plugin.uri.toString();
 					}
@@ -767,8 +928,95 @@ export class PluginListWidget extends Disposable {
 		if (this.browseMode) {
 			await this.queryMarketplace();
 		} else {
-			this.filterPlugins();
+			await this.filterPlugins();
 		}
+	}
+
+	/**
+	 * The installed pi packages, asked straight from the connector.
+	 *
+	 * The shared plugin discovery answers through the same command but carries only what
+	 * `IAgentPlugin` can hold; the table's State and Actions need the declaration, the state
+	 * and the scope, so the widget asks the connector itself. A missing connector is an empty
+	 * answer, not an error: the shared discovery below still renders what it found.
+	 */
+	private async fetchPiPackageRows(): Promise<readonly IPiPackageRow[]> {
+		try {
+			return await this.commandService.executeCommand<readonly IPiPackageRow[]>(PACKAGES_LIST_COMMAND) ?? [];
+		} catch {
+			return [];
+		}
+	}
+
+	/** The header row shows only when the table below it does. */
+	private updateTableHeaderVisibility(): void {
+		const visible = !this.browseMode
+			&& this.piPackageRows.length > 0
+			&& this.listContainer.style.display !== 'none';
+		this.tableHeader.style.display = visible ? '' : 'none';
+	}
+
+	/**
+	 * Disables or enables one package through the connector, then refreshes: the discovery
+	 * re-reads pi's settings and the table re-asks the connector for the rows it shows.
+	 */
+	private async togglePackageState(row: IPiPackageRow): Promise<void> {
+		if (row.source === undefined) {
+			return;
+		}
+		const disabling = row.state !== 'disabled';
+		let result: IPackageInstallResult | undefined;
+		try {
+			result = await this.commandService.executeCommand<IPackageInstallResult>(
+				disabling ? PACKAGES_DISABLE_COMMAND : PACKAGES_ENABLE_COMMAND,
+				row.source,
+			);
+		} catch {
+			await this.dialogService.warn(localize('packagesConnectorUnavailableManage', "PiCode connector is unavailable — packages are managed from the pi CLI."));
+			return;
+		}
+		if (result && !result.ok) {
+			await this.dialogService.warn(result.message);
+			return;
+		}
+		await this.afterPackageChange();
+	}
+
+	/**
+	 * Uninstalls one package: the confirmation first — the declaration is removed from pi's
+	 * settings — then the connector runs pi's own remover and the table refreshes.
+	 */
+	private async uninstallPackage(row: IPiPackageRow): Promise<void> {
+		if (row.source === undefined) {
+			return;
+		}
+		const { confirmed } = await this.dialogService.confirm({
+			message: localize('uninstallPackageTitle', "Uninstall Package \"{0}\"?", row.name),
+			detail: localize('uninstallPackageDetail', "The package's declaration is removed from pi's settings, so it will no longer load in this editor. You can reinstall it later from the package catalog."),
+			primaryButton: localize('uninstallPackageButton', "Uninstall"),
+			type: 'question',
+		});
+		if (!confirmed) {
+			return;
+		}
+		let result: IPackageInstallResult | undefined;
+		try {
+			result = await this.commandService.executeCommand<IPackageInstallResult>(PACKAGES_UNINSTALL_COMMAND, row.source);
+		} catch {
+			await this.dialogService.warn(localize('packagesConnectorUnavailableManage', "PiCode connector is unavailable — packages are managed from the pi CLI."));
+			return;
+		}
+		if (result && !result.ok) {
+			await this.dialogService.warn(result.message);
+			return;
+		}
+		await this.afterPackageChange();
+	}
+
+	/** A connector action changed what pi loads: refresh the discovery and this table. */
+	private async afterPackageChange(): Promise<void> {
+		await this.commandService.executeCommand(UpdateAgentPluginsCommandId);
+		await this.refresh();
 	}
 
 	private updateAccessState(): void {
@@ -993,6 +1241,7 @@ export class PluginListWidget extends Disposable {
 			this.marketplaceItems = [];
 			void this.filterPlugins();
 		}
+		this.updateTableHeaderVisibility();
 
 		// Re-layout to account for the back link height change
 		if (this.lastHeight > 0) {
@@ -1046,6 +1295,7 @@ export class PluginListWidget extends Disposable {
 				this.emptySubtext.textContent = localize('packagesConnectorUnavailableListing', "PiCode connector is unavailable — packages cannot be listed.");
 			}
 		}
+		this.updateTableHeaderVisibility();
 	}
 
 	private updateMarketplaceList(): void {
@@ -1123,6 +1373,15 @@ export class PluginListWidget extends Disposable {
 		const allPlugins = this.agentPluginService.plugins.get();
 		this.remoteItems = [...await this.getRemotePluginItems(query)];
 
+		// The installed pi packages, straight from the connector and narrowed locally — the
+		// same client-side narrowing the marketplace search applies to its rows.
+		this.piPackageRows = await this.fetchPiPackageRows();
+		const packageRows = this.piPackageRows.filter(row => !query ||
+			row.name.toLowerCase().includes(query)
+			|| row.source?.toLowerCase().includes(query)
+			|| row.description?.toLowerCase().includes(query)
+		);
+
 		this.installedItems = allPlugins
 			.map(p => installedPluginToItem(p, this.labelService))
 			.filter(item => !query ||
@@ -1130,7 +1389,13 @@ export class PluginListWidget extends Disposable {
 				item.description.toLowerCase().includes(query)
 			);
 
-		if (this.remoteItems.length === 0 && this.installedItems.length === 0) {
+		// Packages the pi listing already carries render as table rows; showing them again as
+		// plugin items would put every package in the section twice. Whatever the shared
+		// discovery found that the connector did not answer for keeps its old rendering.
+		const packagePaths = new Set(this.piPackageRows.map(row => row.path.toLowerCase()));
+		const nonPackageItems = this.installedItems.filter(item => !packagePaths.has(item.plugin.uri.fsPath.toLowerCase()));
+
+		if (this.remoteItems.length === 0 && nonPackageItems.length === 0 && packageRows.length === 0) {
 			this.emptyContainer.style.display = 'flex';
 			this.listContainer.style.display = 'none';
 
@@ -1148,10 +1413,11 @@ export class PluginListWidget extends Disposable {
 			this.emptyContainer.style.display = 'none';
 			this.listContainer.style.display = '';
 		}
+		this.updateTableHeaderVisibility();
 
-		// Group plugins: enabled vs disabled
-		const enabledPlugins = this.installedItems.filter(item => isContributionEnabled(item.plugin.enablement.get()));
-		const disabledPlugins = this.installedItems.filter(item => !isContributionEnabled(item.plugin.enablement.get()));
+		// Group plugins: enabled vs disabled — the leftovers the pi table does not carry.
+		const enabledPlugins = nonPackageItems.filter(item => isContributionEnabled(item.plugin.enablement.get()));
+		const disabledPlugins = nonPackageItems.filter(item => !isContributionEnabled(item.plugin.enablement.get()));
 
 		const entries: IPluginListEntry[] = [];
 		let isFirst = true;
@@ -1175,6 +1441,10 @@ export class PluginListWidget extends Disposable {
 		}
 		for (const [groupKey, items] of remoteGroups) {
 			isFirst = this.appendGroup(entries, this.getRemoteGroupMetadata(groupKey), items, isFirst);
+		}
+
+		if (packageRows.length > 0) {
+			entries.push(...packageRows.map(row => ({ type: 'pi-package-item' as const, row })));
 		}
 
 		if (enabledPlugins.length > 0) {
@@ -1286,7 +1556,9 @@ export class PluginListWidget extends Disposable {
 		}
 		const headerHeight = this.sectionTitleHeader.offsetHeight;
 		this.lastHeaderHeight = headerHeight;
-		const listHeight = Math.max(0, height - searchBarHeight - headerHeight);
+		// The table's header row sits above the list, so the list gets what it does not use.
+		const tableHeaderHeight = this.tableHeader.offsetHeight;
+		const listHeight = Math.max(0, height - searchBarHeight - headerHeight - tableHeaderHeight);
 
 		this.listContainer.style.height = `${listHeight}px`;
 		this.list.layout(listHeight, width);
@@ -1310,7 +1582,9 @@ export class PluginListWidget extends Disposable {
 	}
 
 	private onContextMenu(e: IListContextMenuEvent<IPluginListEntry>): void {
-		if (!e.element || e.element.type === 'group-header' || e.element.type === 'marketplace-item') {
+		// The pi package table rows carry their actions inline, and the other two kinds have
+		// no item to act on.
+		if (!e.element || e.element.type === 'group-header' || e.element.type === 'marketplace-item' || e.element.type === 'pi-package-item') {
 			return;
 		}
 
