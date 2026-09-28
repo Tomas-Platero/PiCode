@@ -23,7 +23,9 @@ const commit = getVersion(repoPath);
 const buildPath = (arch: string) => path.join(path.dirname(repoPath), `PiCode-Win32-${arch}`);
 const setupDir = (arch: string, target: string) => path.join(repoPath, '.build', `win32-${arch}`, `${target}-setup`);
 const innoSetupPath = path.join(path.dirname(path.dirname(require.resolve('innosetup'))), 'bin', 'ISCC.exe');
-const signWin32Path = path.join(repoPath, 'build', 'azure-pipelines', 'common', 'sign-win32.ts');
+// The Azure Pipelines machinery (build/azure-pipelines/) was removed with the
+test tree: PiCode builds no installers and never signs with ESRP, so the
+const that pointed at its win32 signing script went with it.
 
 function packageInnoSetup(iss: string, options: { definitions?: Record<string, unknown> }, cb: (err?: Error | null) => void) {
 	const definitions = options.definitions || {};
@@ -43,8 +45,7 @@ function packageInnoSetup(iss: string, options: { definitions?: Record<string, u
 	const defs = keys.map(key => `/d${key}=${definitions[key]}`);
 	const args = [
 		iss,
-		...defs,
-		`/sesrp=node ${signWin32Path} $f`
+		...defs
 	];
 
 	cp.spawn(innoSetupPath, args, { stdio: ['ignore', 'inherit', 'inherit'] })
@@ -78,7 +79,14 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
 		const productJsonRelativePath = path.join(versionedResourcesFolder, 'resources/app/product.json');
 		const originalProductJsonPath = path.join(sourcePath, productJsonRelativePath);
 		const productJsonPath = path.join(outputPath, 'product.json');
-		const productJson = JSON.parse(fs.readFileSync(originalProductJsonPath, 'utf8'));
+		// Wrap the parse: a malformed built product.json should fail with a
+		// message that names the file, not with a bare SyntaxError.
+		let productJson: { [key: string]: any };
+		try {
+			productJson = JSON.parse(fs.readFileSync(originalProductJsonPath, 'utf8'));
+		} catch (err) {
+			throw new Error(`Failed to parse ${originalProductJsonPath}: ${err instanceof Error ? err.message : err}`);
+		}
 		productJson['target'] = target;
 
 		const definitions: Record<string, unknown> = {

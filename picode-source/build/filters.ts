@@ -149,8 +149,6 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!**/*.{svg,exe,png,bmp,jpg,gif,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,psm1,template,yaml,yml,d.ts.recipe,ico,icns,plist,opus,admx,adml,wasm}',
 	'!build/{lib,download,linux,darwin}/**/*.js',
 	'!build/**/*.sh',
-	'!build/azure-pipelines/**/*.js',
-	'!build/azure-pipelines/**/*.config',
 	'!build/npm/gyp/custom-headers/**',
 	'!**/Dockerfile',
 	'!**/Dockerfile.*',
