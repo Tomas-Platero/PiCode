@@ -17,6 +17,7 @@ import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServ
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
+import { listSessionFiles, sessionTurns } from './sessions-provider';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -662,6 +663,61 @@ function workspaceFolderPaths(): string[] {
  */
 function profileInForce(): string {
 	return readRuntimeMode() === 'external' ? externalProfileDir() : profileDirectory(requireProfileUri());
+}
+
+/**
+ * pi's sessions, listed for the editor's Sessions panel.
+ *
+ * Nothing in the editor reads the runtime profile's `sessions/` directory — the panel's
+ * 'Local' group is the chat service's own index. This provider is the bridge: it lists
+ * pi's transcripts under a `pi` group, replays one as a read-only history when opened,
+ * and fires the change event when the import lands a tree of transcripts.
+ */
+function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposable {
+	const sessionsChangedEmitter = new vscode.EventEmitter<void>();
+	const provider: vscode.ChatSessionItemProvider & {
+		provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Thenable<{ history: ReadonlyArray<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> }>
+	} = {
+		onDidChangeChatSessionItems: sessionsChangedEmitter.event,
+		onDidCommitChatSessionItem: new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>().event,
+		provideChatSessionItems(token: vscode.CancellationToken): vscode.ProviderResult<vscode.ChatSessionItem[]> {
+			if (token.isCancellationRequested) {
+				return [];
+			}
+			const sessionsDir = path.join(profileInForce(), 'sessions');
+			return listSessionFiles(sessionsDir).map(file => ({
+				resource: vscode.Uri.from({ scheme: 'picode-pi-session', path: `/${file.id}` }),
+				label: file.label,
+				iconPath: vscode.ThemeIcon.File,
+			}));
+		},
+		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken) {
+			if (token.isCancellationRequested) {
+				return { history: [] };
+			}
+			const sessionsDir = path.join(profileInForce(), 'sessions');
+			const id = resource.path.split('/').pop();
+			const file = listSessionFiles(sessionsDir).find(entry => entry.id === id);
+			if (file === undefined) {
+				return { history: [] };
+			}
+			const history: Array<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> = [];
+			for (const turn of sessionTurns(readTextFile(file.file) ?? '')) {
+				if (turn.role === 'user') {
+					history.push(new vscode.ChatRequestTurn2(turn.text, undefined, [], 'pi', [], undefined, undefined, undefined, undefined));
+				} else {
+					history.push(new vscode.ChatResponseTurn2(
+						[new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(turn.text))],
+						{},
+						'pi',
+					));
+				}
+			}
+			return { history };
+		},
+	};
+	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
+	return { fireChanged: () => sessionsChangedEmitter.fire(), dispose: () => registration.dispose() };
 }
 
 /** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
@@ -1856,6 +1912,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	// says which of its providers can be logged in with an account the owner already pays for,
 	// and the editor's own quick pick is where he chooses. The endpoints with an address and a
 	// dialect have their own form in the settings row, and never come through here.
+	// pi's own sessions, in the editor's Sessions panel. Nothing in the editor lists the
+	// runtime profile's sessions directory; this provider is the bridge, and the import
+	// fires it when a tree of transcripts lands.
+	const piSessions = registerPiSessionsProvider();
+	context.subscriptions.push(piSessions);
+
 	const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
@@ -1869,6 +1931,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			configuredModelsCache.clear();
 			onDidChangeModels.fire();
 		},
+		// An import also lands a tree of session transcripts: the Sessions panel re-lists.
+		sessionsChanged: () => piSessions.fireChanged(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
 	// The activity-bar status view is a native tree (declared `type: "tree"` in the manifest), so

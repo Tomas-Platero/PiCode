@@ -92,6 +92,8 @@ export interface SetupDeps {
 	readonly resetChat: () => void;
 	/** Drops the model caches and repaints the picker — what an import just changed on disk. */
 	readonly refreshModels: () => void;
+	/** Tells the Sessions panel that transcripts just landed. */
+	readonly sessionsChanged: () => void;
 }
 
 /** What the welcome page renders, and what the actions answer with. */
@@ -357,6 +359,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// Gentle AI may have just arrived with the packages: the running chat session
 				// still holds the pre-import pi. The next conversation loads what landed.
 				deps.resetChat();
+				deps.sessionsChanged();
 				importLog.step = importLog.total;
 				logImport('Done.');
 				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
