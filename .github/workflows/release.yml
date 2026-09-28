@@ -1,0 +1,296 @@
+# Release pipeline: build, publish the GitHub release, land the update
+# feed on master, and verify it live.
+#
+# Hard rules this workflow enforces:
+# - The release version lives ONLY in distribution/product-delta.json
+#   (set.version). The tag must agree with it, and it must be strictly
+#   newer than the previous release.
+# - `--force` is never passed to dev/update-feed.mjs: if the generator
+#   refuses, the release stops. That refusal is the guard that keeps the
+#   editor from being offered an update that is not one.
+# - The feed is served from raw.githubusercontent.com against the DEFAULT
+#   branch, so it only works for users if this repository is PUBLIC. A
+#   private repo still gets a release, but the summary warns loudly.
+# - The updater gates rollouts with update.minReleaseAge (default 120 h).
+#   That delay is by design: never rewrite the feed's timestamp to hurry it.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  # A release must never be cancelled midway: a half-published feed is
+  # worse than a queued one.
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      # fetch-depth 0 because the feed commit is pushed to master below;
+      # persist-credentials (default) is what lets that push authenticate
+      # with the workflow token.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # Same caches as CI so a release right after a green build is warm.
+      - name: Cache node_modules and npm cache
+        uses: actions/cache@v4
+        env:
+          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+        with:
+          path: |
+            picode-source/node_modules
+            ~\AppData\Local\npm-cache
+          key: picode-nm-${{ runner.os }}-${{ env.LOCK }}
+          restore-keys: picode-nm-${{ runner.os }}-
+
+      - name: Cache electron binary
+        uses: actions/cache@v4
+        env:
+          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+        with:
+          path: ~\AppData\Local\electron\Cache
+          key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
+
+      - name: Resolve and guard the version
+        shell: bash
+        run: |
+          VERSION=$(node -p \
+            "require('./distribution/product-delta.json').set.version")
+          if [ -z "${VERSION}" ]; then
+            echo "error: set.version is empty in" >&2
+            echo "distribution/product-delta.json." >&2
+            exit 1
+          fi
+          # A tag push must carry the version the delta file declares;
+          # otherwise the release and the feed would tell different stories.
+          if [ "${{ github.event_name }}" = "push" ] \
+             && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "error: tag '${GITHUB_REF_NAME}' does not match" >&2
+            echo "v${VERSION}." >&2
+            echo "The release version lives only in" >&2
+            echo "distribution/product-delta.json (set.version);" >&2
+            echo "re-tag or bump the file so both agree." >&2
+            exit 1
+          fi
+          # Refuse to publish a version that is not strictly newer than the
+          # last release: the updater would never offer it.
+          PREV_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            --jq .tag_name 2>/dev/null || true)
+          ver_le() {
+            # ver_le <a> <b>: true when a <= b, segment by segment.
+            local IFS=.
+            local -a x y
+            read -ra x <<< "$1"
+            read -ra y <<< "$2"
+            local i
+            for i in 0 1 2; do
+              if [ "${y[i]:-0}" -ne "${x[i]:-0}" ]; then
+                [ "${y[i]:-0}" -gt "${x[i]:-0}" ] && return 0 || return 1
+              fi
+            done
+            return 0
+          }
+          if [ -n "${PREV_TAG}" ] \
+             && ver_le "${VERSION}" "${PREV_TAG#v}"; then
+            echo "error: ${VERSION} is not strictly newer than the last" >&2
+            echo "release ${PREV_TAG}. Bump set.version in" >&2
+            echo "distribution/product-delta.json before tagging." >&2
+            exit 1
+          fi
+          {
+            echo "VERSION=${VERSION}"
+            echo "PREV_TAG=${PREV_TAG}"
+          } >> "$GITHUB_ENV"
+
+      - name: Build
+        shell: bash
+        run: ./dev/build.sh
+
+      - name: Read the built identity
+        shell: bash
+        run: |
+          PROD=PiCode-Win32-x64/resources/app/product.json
+          COMMIT=$(node -p "require('./$PROD').commit")
+          BUILT=$(node -p "require('./$PROD').version")
+          if ! [[ "${COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "error: built product.json commit is not a 40-hex sha:" >&2
+            echo "  '${COMMIT}'" >&2
+            exit 1
+          fi
+          if [ "${BUILT}" != "${VERSION}" ]; then
+            echo "error: the build produced version '${BUILT}' but" >&2
+            echo "the release is '${VERSION}'. Stop before publishing" >&2
+            echo "a mismatch." >&2
+            exit 1
+          fi
+          echo "COMMIT=${COMMIT}" >> "$GITHUB_ENV"
+
+      - name: Zip the build
+        shell: bash
+        run: |
+          ZIP=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
+          # data/ is the portable profile, never the product.
+          (
+            cd PiCode-Win32-x64
+            "$ZIP" a -tzip "../PiCode-win32-x64-${VERSION}.zip" . "-x!data"
+          )
+
+      - name: SHA-256
+        shell: bash
+        run: |
+          SHA=$(sha256sum "PiCode-win32-x64-${VERSION}.zip" | cut -d' ' -f1)
+          echo "SHA=${SHA}" >> "$GITHUB_ENV"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # On workflow_dispatch this also creates the v-tag; on a tag
+          # push --target just points the notes at the right commit.
+          gh release create "v${VERSION}" "PiCode-win32-x64-${VERSION}.zip" \
+            --title "PiCode ${VERSION}" --generate-notes \
+            --target "${GITHUB_SHA}"
+
+      - name: Generate the update feed
+        shell: bash
+        run: |
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
+          URL="${URL}/PiCode-win32-x64-${VERSION}.zip"
+          # No --installed for the FIRST release; --force is forbidden:
+          # if the generator refuses, this job fails by design.
+          if [ -n "${PREV_TAG}" ]; then
+            node dev/update-feed.mjs --version "${VERSION}" \
+              --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
+              --platform win32 --arch x64 --target archive \
+              --installed "${PREV_TAG#v}"
+          else
+            node dev/update-feed.mjs --version "${VERSION}" \
+              --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
+              --platform win32 --arch x64 --target archive
+          fi
+
+      - name: Land the feed on master
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          FEED=updates/stable/win32/x64/archive/latest.json
+          TMP=$(mktemp)
+          # mv, not cp: an untracked file still on disk would make the
+          # checkout below refuse to run on the second release, when
+          # master already tracks a different latest.json.
+          mv "${FEED}" "${TMP}"
+          git fetch origin master
+          git checkout -B feed-ship origin/master
+          mkdir -p "$(dirname "${FEED}")"
+          mv "${TMP}" "${FEED}"
+          git add updates/
+          if git diff --cached --quiet; then
+            echo "Feed on master is already identical; nothing to push."
+          else
+            git commit -m "release: update feed for v${VERSION} [skip ci]"
+            git push origin HEAD:master
+          fi
+
+      - name: Verify the feed is live
+        shell: bash
+        run: |
+          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
+          FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
+          ASSET="PiCode-win32-x64-${VERSION}.zip"
+          # raw.githubusercontent caches ~5 min, hence the bust query.
+          ok=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            # Pipe curl straight into the check: the node script reads
+            # stdin, so the response must actually be piped to it.
+            if curl -fsSL "${FEED_URL}?bust=${i}" \
+               | VERSION="${VERSION}" ASSET="${ASSET}" node -e '
+                const f = JSON.parse(
+                  require("fs").readFileSync(0, "utf8"));
+                const ok = f.productVersion === process.env.VERSION &&
+                  f.url.includes(process.env.ASSET);
+                if (!ok) {
+                  console.error("feed mismatch:",
+                    JSON.stringify(f, null, 2));
+                  process.exit(1);
+                }
+              '; then
+              ok=y
+              break
+            fi
+            echo "attempt ${i}: feed not live yet; retrying in 20 s."
+            sleep 20
+          done
+          if [ "${ok}" != "y" ]; then
+            echo "error: the feed did not land on master after 10" >&2
+            echo "attempts. No update will be offered to users; check" >&2
+            echo "the push step above." >&2
+            exit 1
+          fi
+
+      - name: Visibility and summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
+            --json visibility --jq .visibility)
+          SIZE=$(stat -c%s "PiCode-win32-x64-${VERSION}.zip" \
+            2>/dev/null || echo unknown)
+          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
+          FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
+          {
+            echo "## Release PiCode ${VERSION}"
+            echo
+            echo "- Commit: ${COMMIT}"
+            echo "- Zip: PiCode-win32-x64-${VERSION}.zip (${SIZE} bytes)"
+            echo "- SHA-256: ${SHA}"
+            echo "- Release: https://github.com/${GITHUB_REPOSITORY}"
+            echo "/releases/tag/v${VERSION}"
+            echo "- Feed: updates/stable/win32/x64/archive/latest.json"
+            echo "- Feed URL: ${FEED_URL}"
+            echo
+            echo "Updates roll out gradually: the updater's"
+            echo "\`update.minReleaseAge\` defaults to 120 h, so users"
+            echo "start seeing this release up to five days after"
+            echo "publishing. That delay is by design - never rewrite the"
+            echo "feed's timestamp to hurry it."
+          } >> "$GITHUB_STEP_SUMMARY"
+          # The feed is only reachable by end users when the repo is
+          # public; warn loudly without failing the release.
+          if [ "${VIS}" != "PUBLIC" ]; then
+            {
+              echo
+              echo "> [!WARNING]"
+              echo "> This repository is **${VIS}**, not public. The update"
+              echo "> feed is served from raw.githubusercontent.com and only"
+              echo "> works for users when the repository is **public**."
+              echo "> Make it public before relying on in-editor updates."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Convenience copy for debugging without downloading the release.
+      - name: Upload the zip as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiCode-win32-x64-${{ env.VERSION }}
+          path: PiCode-win32-x64-${{ env.VERSION }}.zip
+          if-no-files-found: error
