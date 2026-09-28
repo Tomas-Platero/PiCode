@@ -64,7 +64,9 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 	readonly isSessionsWindow = false;
 
 	readonly welcomePageFeatures = {
-		showGettingStartedBanner: true,
+		// The getting-started banner was removed from the Overview page; the flag
+		// stays for the feature contract but no longer enables anything.
+		showGettingStartedBanner: false,
 	};
 
 	readonly hasOverrideProjectRoot = constObservable(false);

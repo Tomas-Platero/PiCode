@@ -74,7 +74,7 @@ export class AICustomizationWelcomePage extends Disposable {
 		this.container = DOM.append(parent, $('.welcome-page-host'));
 		this.container.style.height = '100%';
 		this.container.style.overflow = 'hidden';
-		this.implementation = this._register(new PromptLaunchersAICustomizationWelcomePage(this.container, welcomePageFeatures, callbacks, commandService, workspaceService, hoverService, harnessLabel));
+		this.implementation = this._register(new PromptLaunchersAICustomizationWelcomePage(this.container, callbacks, commandService, workspaceService, harnessLabel));
 	}
 
 	rebuildCards(visibleSectionIds: ReadonlySet<AICustomizationManagementSection>): void {

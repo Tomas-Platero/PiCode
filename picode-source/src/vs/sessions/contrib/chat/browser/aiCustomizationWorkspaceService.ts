@@ -112,7 +112,9 @@ export class SessionsAICustomizationWorkspaceService implements IAICustomization
 	readonly isSessionsWindow = true;
 
 	readonly welcomePageFeatures = {
-		showGettingStartedBanner: true,
+		// The getting-started banner was removed from the Overview page; the flag
+		// stays for the feature contract but no longer enables anything.
+		showGettingStartedBanner: false,
 	};
 
 	/**

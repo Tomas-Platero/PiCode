@@ -18,9 +18,8 @@ import { Categories } from '../../../../../platform/action/common/actionCommonCa
 import { Action2, MenuRegistry, registerAction2 } from '../../../../../platform/actions/common/actions.js';
 import { IClipboardService } from '../../../../../platform/clipboard/common/clipboardService.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
-import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
-import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { FileSystemProviderCapabilities, IFileService } from '../../../../../platform/files/common/files.js';
 import { SyncDescriptor } from '../../../../../platform/instantiation/common/descriptors.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
@@ -32,7 +31,6 @@ import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { SYNCED_CUSTOMIZATION_SCHEME } from '../../../../services/agentHost/common/agentHostFileSystemService.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
-import { IWorkbenchExtensionManagementService } from '../../../../services/extensionManagement/common/extensionManagement.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { AICustomizationSources, IAICustomizationWorkspaceService } from '../../common/aiCustomizationWorkspaceService.js';
 import { ICustomizationHarnessService } from '../../common/customizationHarnessService.js';
@@ -83,7 +81,8 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 		localize('aiCustomizationManagementEditor', "Agent Customizations Editor")
 	),
 	[
-		// Note: Using the class directly since we use a singleton pattern
+		// Note: Using the class directly since we use a singleton pattern.
+		// SAFETY: safe cast — the registry instantiates the input class via a zero-arg constructor; TypeScript cannot check the serializer contract statically.
 		new SyncDescriptor(AICustomizationManagementEditorInput as unknown as { new(): AICustomizationManagementEditorInput })
 	]
 );
@@ -422,23 +421,6 @@ registerAction2(class extends Action2 {
 	}
 });
 
-const INSTALL_CHAT_CUSTOMIZATION_EXTENSION_ID = 'aiCustomizationManagement.installChatCustomizationExtension';
-const CHAT_CUSTOMIZATION_EXTENSION_ID = 'ms-vscode.vscode-chat-customizations-evaluations';
-const CHAT_CUSTOMIZATION_EXTENSION_NOT_INSTALLED_CONTEXT = new RawContextKey<boolean>('chat.customizationExtensionNotInstalled', true);
-const CHAT_CUSTOMIZATION_EXTENSION_NOT_INSTALLED = CHAT_CUSTOMIZATION_EXTENSION_NOT_INSTALLED_CONTEXT.isEqualTo(true);
-registerAction2(class extends Action2 {
-	constructor() {
-		super({
-			id: INSTALL_CHAT_CUSTOMIZATION_EXTENSION_ID,
-			title: localize2('installChatCustomizationExtension', "Install Chat Customization Extension"),
-			icon: Codicon.beaker,
-		});
-	}
-	async run(accessor: ServicesAccessor, context: AICustomizationContext): Promise<void> {
-		await accessor.get(ICommandService).executeCommand('workbench.extensions.installExtension', CHAT_CUSTOMIZATION_EXTENSION_ID, { enable: true });
-	}
-});
-
 /**
  * When clause that hides an action for read-only (extension, plugin, built-in) items.
  */
@@ -464,19 +446,6 @@ const WHEN_ITEM_IS_PLUGIN = ContextKeyExpr.and(
 // Register context menu items
 
 // Inline hover actions (shown as icon buttons on hover)
-MenuRegistry.appendMenuItem(AICustomizationManagementItemMenuId, {
-	command: { id: INSTALL_CHAT_CUSTOMIZATION_EXTENSION_ID, title: localize('Install Chat Customization Extension', "Install Chat Customization Extension"), icon: Codicon.beaker },
-	group: 'inline',
-	order: 1,
-	when: ContextKeyExpr.and(CHAT_CUSTOMIZATION_EXTENSION_NOT_INSTALLED,
-		ContextKeyExpr.or(
-			ContextKeyExpr.equals(AI_CUSTOMIZATION_ITEM_TYPE_KEY, PromptsType.prompt),
-			ContextKeyExpr.equals(AI_CUSTOMIZATION_ITEM_TYPE_KEY, PromptsType.instructions),
-			ContextKeyExpr.equals(AI_CUSTOMIZATION_ITEM_TYPE_KEY, PromptsType.agent),
-			ContextKeyExpr.equals(AI_CUSTOMIZATION_ITEM_TYPE_KEY, PromptsType.skill)
-		))
-});
-
 MenuRegistry.appendMenuItem(AICustomizationManagementItemMenuId, {
 	command: { id: COPY_AI_CUSTOMIZATION_PATH_ID, title: localize('copyPath', "Copy Path"), icon: Codicon.clippy },
 	group: 'inline',
@@ -521,6 +490,23 @@ MenuRegistry.appendMenuItem(AICustomizationManagementItemMenuId, {
 	when: WHEN_ITEM_IS_DELETABLE,
 });
 
+/**
+ * Type label for a customization item, mirroring the labels used by the AI
+ * customization list widget (AICustomizationListWidget.getTypeLabel) so
+ * uninstall confirmations can be phrased per item type. Returns undefined
+ * for unknown types so callers fall back to the generic "plugin" wording.
+ */
+function getCustomizationTypeLabel(promptType: PromptsType | undefined): string | undefined {
+	switch (promptType) {
+		case PromptsType.skill: return localize('uninstallTypeSkill', "Skill");
+		case PromptsType.agent: return localize('uninstallTypeAgent', "Agent");
+		case PromptsType.instructions: return localize('uninstallTypeInstructions', "Instructions");
+		case PromptsType.hook: return localize('uninstallTypeHook', "Hook");
+		case PromptsType.prompt: return localize('uninstallTypePrompt', "Prompt");
+		default: return undefined;
+	}
+}
+
 // Uninstall Plugin action - shown for plugin-provided items
 const UNINSTALL_PLUGIN_AI_CUSTOMIZATION_ID = 'aiCustomizationManagement.uninstallPlugin';
 registerAction2(class extends Action2 {
@@ -541,10 +527,18 @@ registerAction2(class extends Action2 {
 			return;
 		}
 
+		// Phrase the confirmation for the item's type ("Uninstall Skill",
+		// "Uninstall Agent", ...); fall back to the generic plugin wording
+		// when the type is unknown.
+		const typeLabel = getCustomizationTypeLabel(extractPromptType(context));
 		const result = await dialogService.confirm({
-			message: localize('confirmUninstallPlugin', "This item is provided by the plugin '{0}'", plugin.label),
+			message: typeLabel
+				? localize('confirmUninstallTyped', "This {0} is provided by the plugin '{1}'", typeLabel.toLowerCase(), plugin.label)
+				: localize('confirmUninstallPlugin', "This item is provided by the plugin '{0}'", plugin.label),
 			detail: localize('confirmUninstallPluginDetail', "Individual components from a plugin cannot be removed separately. Would you like to uninstall the entire plugin?"),
-			primaryButton: localize('uninstallPluginBtn', "Uninstall Plugin"),
+			primaryButton: typeLabel
+				? localize('uninstallTypedBtn', "Uninstall {0}", typeLabel)
+				: localize('uninstallPluginBtn', "Uninstall Plugin"),
 			type: 'question',
 		});
 		if (result.confirmed) {
@@ -716,32 +710,12 @@ MenuRegistry.appendMenuItem(AICustomizationManagementItemMenuId, {
 class AICustomizationManagementActionsContribution extends Disposable implements IWorkbenchContribution {
 
 	static readonly ID = 'workbench.contrib.aiCustomizationManagementActions';
-	private readonly chatCustomizationExtensionNotInstalledContext: IContextKey<boolean>;
 
 	constructor(
-		@IContextKeyService contextKeyService: IContextKeyService,
-		@IWorkbenchExtensionManagementService private readonly extensionManagementService: IWorkbenchExtensionManagementService,
+		@IContextKeyService _contextKeyService: IContextKeyService,
 	) {
 		super();
-		this.chatCustomizationExtensionNotInstalledContext = CHAT_CUSTOMIZATION_EXTENSION_NOT_INSTALLED_CONTEXT.bindTo(contextKeyService);
-
-		const refreshExtensionContext = () => this.updateChatCustomizationExtensionContext();
-		this._register(this.extensionManagementService.onProfileAwareDidInstallExtensions(refreshExtensionContext));
-		this._register(this.extensionManagementService.onProfileAwareDidUninstallExtension(refreshExtensionContext));
-		this._register(this.extensionManagementService.onDidChangeProfile(refreshExtensionContext));
-		this.updateChatCustomizationExtensionContext();
 		this.registerActions();
-	}
-
-	private async updateChatCustomizationExtensionContext(): Promise<void> {
-		try {
-			const installedExtensions = await this.extensionManagementService.getInstalled();
-			const extensionKey = ExtensionIdentifier.toKey(CHAT_CUSTOMIZATION_EXTENSION_ID);
-			const isInstalled = installedExtensions.some(ext => ExtensionIdentifier.toKey(ext.identifier.id) === extensionKey);
-			this.chatCustomizationExtensionNotInstalledContext.set(!isInstalled);
-		} catch {
-			this.chatCustomizationExtensionNotInstalledContext.set(true);
-		}
 	}
 
 	private registerActions(): void {

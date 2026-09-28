@@ -14,11 +14,9 @@ import { Codicon } from '../../../../../base/common/codicons.js';
 import type { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { AICustomizationManagementSection } from './aiCustomizationManagement.js';
 import { agentIcon, instructionsIcon, pluginIcon, skillIcon, hookIcon, toolsIcon } from './aiCustomizationIcons.js';
-import { IAICustomizationWorkspaceService, IWelcomePageFeatures } from '../../common/aiCustomizationWorkspaceService.js';
+import { IAICustomizationWorkspaceService } from '../../common/aiCustomizationWorkspaceService.js';
 import { PromptsType } from '../../common/promptSyntax/promptTypes.js';
 import type { IAICustomizationWelcomePageImplementation, ICustomizationMigrationCategorySummary, IWelcomePageCallbacks } from './aiCustomizationWelcomePage.js';
-import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
-import { getDefaultHoverDelegate } from '../../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 
 const $ = DOM.$;
 
@@ -46,12 +44,8 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 	private cardsContainer: HTMLElement | undefined;
 	private firstCard: HTMLElement | undefined;
 	private heading: HTMLElement | undefined;
-	private inputElement: HTMLInputElement | undefined;
 	private visibleSectionIds = new Set<AICustomizationManagementSection>();
 
-	private sentLabel: HTMLElement | undefined;
-	private submitBtn: HTMLElement | undefined;
-	private inputRow: HTMLElement | undefined;
 	private migrationCategories: readonly ICustomizationMigrationCategorySummary[] = [];
 
 	private readonly categoryDescriptions: IPromptLaunchersCategoryDescription[] = [
@@ -113,11 +107,9 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 
 	constructor(
 		parent: HTMLElement,
-		private readonly welcomePageFeatures: IWelcomePageFeatures | undefined,
 		private readonly callbacks: IWelcomePageCallbacks,
 		private readonly commandService: ICommandService,
 		private readonly workspaceService: IAICustomizationWorkspaceService,
-		private readonly hoverService: IHoverService,
 		private harnessLabel: string,
 	) {
 		super();
@@ -145,100 +137,7 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 		const subtitle = DOM.append(welcomeInner, $('p.welcome-prompts-subtitle'));
 		subtitle.textContent = localize('welcomeSubtitle', "Tailor how agents work in your projects. Configure workspace customizations for the entire team, or create personal ones that follow you across projects.");
 
-		if (this.welcomePageFeatures?.showGettingStartedBanner !== false) {
-			const gettingStarted = DOM.append(welcomeInner, $('.welcome-prompts-primary'));
-			const header = DOM.append(gettingStarted, $('.welcome-prompts-section-label'));
-			const icon = DOM.append(header, $('span.welcome-prompts-section-label-icon.codicon.codicon-sparkle'));
-			icon.setAttribute('aria-hidden', 'true');
-			const title = DOM.append(header, $('span'));
-			title.textContent = localize('gettingStartedTitle', "Customize Your Agent");
-
-			const description = DOM.append(gettingStarted, $('p.welcome-prompts-input-helper'));
-			description.textContent = localize('gettingStartedDesc', "Describe your preferences and conventions to draft agents, skills, and instructions.");
-
-			const inputRow = DOM.append(gettingStarted, $('.welcome-prompts-input-row'));
-			this.inputRow = inputRow;
-			this.inputElement = DOM.append(inputRow, $('input.welcome-prompts-input')) as HTMLInputElement;
-			this.inputElement.type = 'text';
-			this.inputElement.placeholder = localize('workflowInputPlaceholder', "Prefer concise commits, thorough reviews, and tested code...");
-			this.inputElement.setAttribute('aria-label', localize('workflowInputAriaLabel', "Describe your preferences to customize your agent"));
-
-			const submitBtn = DOM.append(inputRow, $('button.welcome-prompts-input-submit'));
-			this.submitBtn = submitBtn;
-			submitBtn.setAttribute('aria-label', localize('workflowSubmitAriaLabel', "Customize agent"));
-			this._register(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), submitBtn, localize('workflowSubmitTooltip', "Open in Chat")));
-			const chevron = DOM.append(submitBtn, $('span.codicon.codicon-arrow-up'));
-			chevron.setAttribute('aria-hidden', 'true');
-
-			const updateSubmitState = () => {
-				const hasValue = !!(this.inputElement?.value?.trim());
-				(submitBtn as HTMLButtonElement).disabled = !hasValue;
-				submitBtn.classList.toggle('welcome-prompts-input-submit-disabled', !hasValue);
-			};
-
-			const submit = () => {
-				const value = this.inputElement?.value?.trim();
-				if (!value) {
-					return;
-				}
-				let query: string;
-				if (this.workspaceService.isSessionsWindow) {
-					query = `Generate agent customizations. ${value}`;
-				} else {
-					// pi has no `/init` command: the text is sent to chat as written.
-					query = value;
-				}
-
-				// Show confirmation immediately — before prefillChat so it's visible
-				// even if prefillChat navigates focus away from this editor
-				if (this.inputElement) {
-					this.inputElement.value = '';
-				}
-				updateSubmitState();
-				inputRow.classList.add('sent');
-				submitBtn.style.display = 'none';
-				if (this.sentLabel) {
-					this.sentLabel.remove();
-				}
-				this.sentLabel = DOM.append(inputRow, $('span.welcome-prompts-sent-label'));
-				this.sentLabel.textContent = localize('sentToChat', "Sent to chat \u2713");
-
-				this.callbacks.prefillChat(query, { isPartialQuery: false, newChat: true });
-			};
-
-			this._register(DOM.addDisposableListener(submitBtn, 'click', e => { e.stopPropagation(); submit(); }));
-			this._register(DOM.addDisposableListener(this.inputElement, 'keydown', (e: KeyboardEvent) => {
-				if (e.key === 'Enter') {
-					e.preventDefault();
-					submit();
-				}
-			}));
-			this._register(DOM.addDisposableListener(this.inputElement, 'input', () => {
-				updateSubmitState();
-				// Typing restores the input row from sent state
-				this._clearSentState();
-			}));
-			updateSubmitState();
-		}
-
 		this.cardsContainer = DOM.append(welcomeInner, $('.welcome-prompts-cards'));
-	}
-
-	private _clearSentState(): void {
-		if (this.sentLabel) {
-			this.sentLabel.remove();
-			this.sentLabel = undefined;
-		}
-		if (this.submitBtn) {
-			this.submitBtn.style.display = '';
-		}
-		if (this.inputRow) {
-			this.inputRow.classList.remove('sent');
-		}
-	}
-
-	reset(): void {
-		this._clearSentState();
 	}
 
 	rebuildCards(visibleSectionIds: ReadonlySet<AICustomizationManagementSection>): void {
@@ -419,14 +318,8 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 	}
 
 	focus(): void {
-		// Prefer the prompt input so screen reader / keyboard users land on a meaningful
-		// control. If the input isn't rendered (e.g. when the getting-started banner is
-		// disabled), fall back to the first focusable card so focus stays inside the
-		// welcome page rather than escaping to the surrounding workbench editor.
-		if (this.inputElement) {
-			this.inputElement.focus();
-			return;
-		}
+		// Focus the first focusable card so focus stays inside the welcome page
+		// rather than escaping to the surrounding workbench editor.
 		this.firstCard?.focus();
 	}
 }

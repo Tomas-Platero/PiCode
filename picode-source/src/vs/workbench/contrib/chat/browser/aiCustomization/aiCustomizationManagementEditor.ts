@@ -15,7 +15,7 @@ import { DisposableStore, IReference, toDisposable } from '../../../../../base/c
 import { Event } from '../../../../../base/common/event.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
 import { ResourceMap, ResourceSet } from '../../../../../base/common/map.js';
-import { autorun } from '../../../../../base/common/observable.js';
+import { autorun, derived } from '../../../../../base/common/observable.js';
 import { dirname as dirnamePath } from '../../../../../base/common/path.js';
 import { Orientation, Sizing, SplitView } from '../../../../../base/browser/ui/splitview/splitview.js';
 import { Color } from '../../../../../base/common/color.js';
@@ -42,7 +42,7 @@ import { AICustomizationManagementEditorInput } from './aiCustomizationManagemen
 import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionWidget } from './aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationListWidget } from './aiCustomizationListWidget.js';
 import type { IAICustomizationItemSource } from './aiCustomizationItemSource.js';
-import { IAICustomizationItemsModel, ITEMS_MODEL_SECTIONS } from './aiCustomizationItemsModel.js';
+import { IAICustomizationItemsModel, ITEMS_MODEL_SECTIONS, filterVisibleSectionItems } from './aiCustomizationItemsModel.js';
 import { McpListWidget } from './mcpListWidget.js';
 import { PluginListWidget } from './pluginListWidget.js';
 import { ToolsListWidget } from './toolsListWidget.js';
@@ -66,6 +66,12 @@ import { ChatModelsWidget } from '../chatManagement/chatModelsWidget.js';
 import { PromptsType, Target } from '../../common/promptSyntax/promptTypes.js';
 import { IPromptsService, IPromptPath, PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
 import { IHeaderAttribute, IValue, ParsedPromptFile } from '../../common/promptSyntax/promptFileParser.js';
+
+/**
+ * JSON-serializable shape produced when converting parsed YAML front-matter
+ * values into preview objects. Scalars come from the parser as strings.
+ */
+type PreviewJsonValue = string | readonly PreviewJsonValue[] | { readonly [key: string]: PreviewJsonValue };
 import { AGENT_MD_FILENAME } from '../../common/promptSyntax/config/promptFileLocations.js';
 import { getAttributeDefinition, getTarget } from '../../common/promptSyntax/languageProviders/promptFileAttributes.js';
 import { INewPromptOptions, NEW_PROMPT_COMMAND_ID, NEW_INSTRUCTIONS_COMMAND_ID, NEW_AGENT_COMMAND_ID, NEW_SKILL_COMMAND_ID } from '../promptSyntax/newPromptFileActions.js';
@@ -809,6 +815,9 @@ export class AICustomizationManagementEditor extends EditorPane {
 								await this.commandService.executeCommand('workbench.action.sessions.newChat');
 							}
 							const view = await this.viewsService.openView(sessionsViewId, true);
+							// SAFETY: openView returns the base IView; the sessions chat view is
+							// known to expose the optional prefillInput/sendQuery methods used
+							// below, and every access here is optional-chained.
 							const chatView = view as unknown as { prefillInput?(text: string): void; sendQuery?(text: string): void } | undefined;
 							if (options?.isPartialQuery && chatView?.prefillInput) {
 								chatView.prefillInput(query);
@@ -1084,9 +1093,12 @@ export class AICustomizationManagementEditor extends EditorPane {
 		}
 
 		// Per-prompts-section autoruns: drive sidebar counts from the items model,
-		// the same source the editor list widget renders from.
+		// the same source the editor list widget renders from. The Agents section
+		// counts only the connector-contributed agents the list actually shows.
 		for (const section of ITEMS_MODEL_SECTIONS) {
-			const observable = this.itemsModel.getCount(section);
+			const observable = section === AICustomizationManagementSection.Agents
+				? derived(reader => filterVisibleSectionItems(section, this.itemsModel.getItems(section).read(reader)).length)
+				: this.itemsModel.getCount(section);
 			this.editorDisposables.add(autorun(reader => {
 				this.updateSectionCount(section, observable.read(reader));
 			}));
@@ -3144,14 +3156,14 @@ export class AICustomizationManagementEditor extends EditorPane {
 		}
 	}
 
-	private toPreviewObject(value: IValue): unknown {
+	private toPreviewObject(value: IValue): PreviewJsonValue {
 		switch (value.type) {
 			case 'scalar':
 				return value.value;
 			case 'sequence':
 				return value.items.map(item => this.toPreviewObject(item));
 			case 'map': {
-				const entries: Record<string, unknown> = {};
+				const entries: { [key: string]: PreviewJsonValue } = {};
 				for (const property of value.properties) {
 					entries[property.key.value] = this.toPreviewObject(property.value);
 				}

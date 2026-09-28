@@ -15,7 +15,7 @@ import { ILabelService } from '../../../../../platform/label/common/label.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { IPathService } from '../../../../services/path/common/pathService.js';
-import { IAICustomizationWorkspaceService, AICustomizationManagementSection } from '../../common/aiCustomizationWorkspaceService.js';
+import { AICustomizationSources, AICustomizationManagementSection, IAICustomizationWorkspaceService } from '../../common/aiCustomizationWorkspaceService.js';
 import { ICustomizationHarnessService, isPluginCustomizationItem } from '../../common/customizationHarnessService.js';
 import { IAgentPluginService } from '../../common/plugins/agentPluginService.js';
 import { PromptsType } from '../../common/promptSyntax/promptTypes.js';
@@ -343,6 +343,22 @@ function sectionToPromptType(section: ItemsModelSection): PromptsType {
 		case AICustomizationManagementSection.Prompts:
 		default: return PromptsType.prompt;
 	}
+}
+
+/**
+ * Filters a section's raw items down to what the management UI displays for
+ * that section. The Agents section shows only agents contributed through the
+ * extension API (the pi connector's custom agent provider): agent files
+ * discovered from workspace, user or built-in storages are not part of this
+ * product's agent surface. The model itself stays unfiltered so sidebar
+ * surfaces and tests observe the full provider answer; call this at the
+ * rendering/counting sites that must agree with what the Agents list shows.
+ */
+export function filterVisibleSectionItems(section: ItemsModelSection, items: readonly IAICustomizationListItem[]): readonly IAICustomizationListItem[] {
+	if (section !== AICustomizationManagementSection.Agents) {
+		return items;
+	}
+	return items.filter(item => item.source === AICustomizationSources.extension);
 }
 
 registerSingleton(IAICustomizationItemsModel, AICustomizationItemsModel, InstantiationType.Delayed);

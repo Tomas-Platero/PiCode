@@ -47,7 +47,7 @@ import { ITelemetryService } from '../../../../../platform/telemetry/common/tele
 import { ICustomizationHarnessService } from '../../common/customizationHarnessService.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IAICustomizationListItem } from './aiCustomizationItemSource.js';
-import { IAICustomizationItemsModel, ItemsModelSection } from './aiCustomizationItemsModel.js';
+import { IAICustomizationItemsModel, ItemsModelSection, filterVisibleSectionItems } from './aiCustomizationItemsModel.js';
 
 export { truncateToFirstLine } from './aiCustomizationListWidgetUtils.js';
 
@@ -930,7 +930,7 @@ export class AICustomizationListWidget extends Disposable {
 		const observable = this.itemsModel.getItems(modelSection);
 		this.currentSectionSubscription.value = autorun(reader => {
 			const items = observable.read(reader);
-			this.allItems = items;
+			this.allItems = filterVisibleSectionItems(modelSection, items);
 			this.filterItems();
 			this._onDidChangeItemCount.fire(items.length);
 		});
@@ -1042,6 +1042,17 @@ export class AICustomizationListWidget extends Disposable {
 			}];
 		}
 
+		// Skills: a single "Browse Skill" button opens the skill gallery in the
+		// external browser. AI generation and manual creation are not offered
+		// for this section (product decision D6).
+		if (this.currentSection === AICustomizationManagementSection.Skills) {
+			return [{
+				label: `$(${Codicon.linkExternal.id}) ${localize('browseSkill', "Browse Skill")}`,
+				enabled: true,
+				run: () => { this.openerService.open(URI.parse('https://www.skills.sh/')); },
+			}];
+		}
+
 		// Check for menu-contributed create actions from extensions.
 		// Extensions contribute to AICustomizationManagementCreateMenuId with
 		// when-clauses targeting chatCustomizationSessionType and
@@ -1118,7 +1129,9 @@ export class AICustomizationListWidget extends Disposable {
 
 		if (!override?.rootFile) {
 			// Determine the primary action (first in list)
-			if (!this.workspaceService.isSessionsWindow && !descriptor.hideGenerateButton) {
+			// Agents never offer AI generation: the section lists the agents
+			// provided by the pi connector, so only manual creation is exposed.
+			if (!this.workspaceService.isSessionsWindow && !descriptor.hideGenerateButton && this.currentSection !== AICustomizationManagementSection.Agents) {
 				// Core Local: Generate is primary
 				actions.push({
 					label: `$(${Codicon.sparkle.id}) Generate ${typeLabel}`,
@@ -1253,7 +1266,7 @@ export class AICustomizationListWidget extends Disposable {
 
 	private applyItemsFromModel(): void {
 		const section = toItemsModelSection(this.currentSection);
-		this.allItems = section ? this.itemsModel.getItems(section).get() : [];
+		this.allItems = section ? [...filterVisibleSectionItems(section, this.itemsModel.getItems(section).get())] : [];
 		this.filterItems();
 		this._onDidChangeItemCount.fire(this.allItems.length);
 	}
@@ -1355,6 +1368,17 @@ export class AICustomizationListWidget extends Disposable {
 	 * Groups items by normalized storage/groupKey.
 	 */
 	private groupMatchedItems(matchedItems: IAICustomizationListItem[]): void {
+		// Agents are contributed exclusively by the pi connector through the
+		// extension API, so the section renders as a flat list without group
+		// headers (no Workspace/User/Extensions/Built-in grouping).
+		if (this.currentSection === AICustomizationManagementSection.Agents) {
+			const sorted = [...filterVisibleSectionItems(AICustomizationManagementSection.Agents, matchedItems)]
+				.sort((a, b) => a.name.localeCompare(b.name));
+			this.displayEntries = sorted.map((item): IListEntry => ({ type: 'file-item', item }));
+			this.commitDisplayEntries();
+			return;
+		}
+
 		// Standard provider layout: group by inferred storage/groupKey.
 		// Instructions use semantic categories (matching core path) so
 		// that provider-supplied groupKeys like 'context-instructions'
@@ -1367,13 +1391,13 @@ export class AICustomizationListWidget extends Disposable {
 					{ groupKey: 'on-demand-instructions', label: localize('onDemandInstructionsGroup', "Loaded on Demand"), icon: instructionsIcon, description: localize('onDemandInstructionsGroupDescription', "Instructions loaded only when explicitly referenced."), items: [] },
 					{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
 					{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
-					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
+					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Packages"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed packages."), items: [] },
 					{ groupKey: PromptsStorage.builtIn, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
 				]
 				: [
 					{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
 					{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
-					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
+					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Packages"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed packages."), items: [] },
 					{ groupKey: PromptsStorage.extension, label: localize('extensionGroup', "Extensions"), icon: extensionIcon, description: localize('extensionGroupDescription', "Read-only customizations provided by installed extensions."), items: [] },
 					{ groupKey: PromptsStorage.builtIn, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
 				];
