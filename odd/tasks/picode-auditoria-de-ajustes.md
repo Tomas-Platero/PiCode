@@ -88,3 +88,17 @@ no de corrección). `telemetry.telemetryLevel` puede quedarse como divulgación 
 2. ¿Telemetría: quedan los ajustes como no-ops honestos o se poda toda la fontanería?
 3. ¿Release notes: (a) enlace a Releases o (b) markdown propio en el feed?
 4. ¿`chat.experimental.*` que siguen vivos: se quedan o se podan?
+
+## Post-auditoría: el repo real y la skill de releases
+
+- **Bug encontrado al preparar la skill de releases**: `product.json` apuntaba a
+  `TomasPlatero/PiCode` (sin guion) — el repo real es `Tomas-Platero/PiCode` (el remoto
+  de git). 8 URLs corregidas (`5065ad1f`-siguiente). Ojo: el repo está **privado** —
+  hasta que sea público, updater y usuarios recibirán 404.
+- Creada la **skill `picode-release`** (`~/.pi/agent/skills/picode-release/SKILL.md`):
+  el procedimiento completo de release (versión en `distribution/product-delta.json`,
+  build, zip sin `data/`, tag, release con `gh`, SHA-256, feed con
+  `dev/update-feed.mjs --target archive` — el win32 SIEMPRE pide el target, el README
+  miente —, y el feed debe llegar a `master`, que es lo que `HEAD` sirve).
+  Reglas duras: repo público, nunca `--force`, nunca latest.json a mano, timestamp =
+  hora de build (rollout de 120 h por `update.minReleaseAge`).
