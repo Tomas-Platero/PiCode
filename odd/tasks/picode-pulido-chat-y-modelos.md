@@ -164,3 +164,25 @@ Arreglo:
 - El resultado dice installed / failed / skipped.
 - Apuntado para el futuro (idea del dueño, no construido): una tercera opción de pi en
   **cloud** por URL RPC en la primera página del asistente.
+
+## Segunda tanda de la corrección (`f7362ca1`, `96cb5973`, `d4b7e399`)
+
+Cuatro ajustes sobre la misma prueba en vivo:
+
+- **Fuera la notificación de bienvenida**: el onboarding ya salta al primer arranque; el
+  aviso solo lo interrumpía (quizás NAG_KEY/MAX_NUDGES y su función, fuera).
+- **Barra de progreso de verdad**: el total se cuenta ANTES de mover nada (el settings.json
+  del perfil externo ya nombra los packages), así que nunca arranca a cero ni salta hacia
+  atrás; barra de 8px con relleno a contraste completo y línea con lo que pasa.
+- **Gentle llega instalado**: si el import trae gentle-pi con los packages, el estado se
+  relee al terminar y la página de Gentle lo muestra instalado (con sus filas de agentes);
+  la sesión viva del chat se recicla para que la siguiente conversación cargue lo landed.
+- **Las sesiones importadas aparecen en el chat**: nada en el editor leía el directorio
+  `sessions/` del perfil (el grupo «Local» es el índice interno del chat service). El
+  conector registra ahora un proveedor de sesiones `pi`: lista las transcripciones del
+  perfil en vigor (carpeta por proyecto, más recientes primero, etiquetadas con el primer
+  mensaje del usuario), abre una como historial de solo lectura (prompts y respuestas;
+  thinking y resultados de herramientas quedan fuera del replay) y dispara el evento de
+  cambio cuando el import aterriza un árbol de transcripciones, para que el panel
+  re-liste sin reiniciar. Recorrido con conjunto de visitados (un ciclo no cuelga el
+  panel), líneas a medio escribir toleradas, y cuatro pruebas node:test.
