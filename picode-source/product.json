@@ -170,7 +170,11 @@
     "controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
   },
   "linkProtectionTrustedDomains": [
-    "https://open-vsx.org"
+    "https://open-vsx.org",
+    "https://mcp.directory",
+    "https://www.skills.sh",
+    "https://skills.sh",
+    "https://pi.dev"
   ],
   "releaseNotesUrl": "https://github.com/TomasPlatero/PiCode/releases",
   "requestFeatureUrl": "https://github.com/TomasPlatero/PiCode/issues/new",

@@ -327,3 +327,12 @@
 .models-widget .models-table-container .monaco-table-tr.models-row-hidden .models-gutter-column .model-visibility-toggle {
 	visibility: visible;
 }
+
+.models-widget .models-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 28px 0;
+	color: var(--vscode-descriptionForeground);
+}

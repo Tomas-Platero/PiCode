@@ -370,11 +370,13 @@ export class PiCodeSetup extends Disposable {
 		const external = this.renderPiOption({
 			checked: state.runtime === 'external',
 			available: state.externalAvailable,
-			label: localize('picodeSetup.pi.external', "The pi on this machine"),
-			detail: localize('picodeSetup.pi.externalDetail', "Your own installation, with its own configuration. PiCode reads it and never writes to it."),
+			label: localize('picodeSetup.pi.external', "External Pi"),
+			detail: localize('picodeSetup.pi.externalDetail', "Your own pi, installed on this machine. PiCode reads it and never writes to it."),
 			icon: 'plug',
 			mode: 'external',
-			meta: localize('picodeSetup.pi.externalUnknown', "Looking for it on the PATH…"),
+			meta: state.externalAvailable
+						? localize('picodeSetup.pi.externalFound', "Found on the PATH — ready to use")
+						: localize('picodeSetup.pi.externalUnknown', "Looking for it on the PATH… this can take a few seconds"),
 		});
 		const internal = this.renderPiOption({
 			checked: state.runtime === 'internal',
@@ -1175,6 +1177,9 @@ export class PiCodeSetup extends Disposable {
 				}
 			}
 		}
+		// SAFETY: `found` is keyed by the wanted color keys; the tuple view is the
+		// fixed-shape contract the theme reader below consumes, built from exactly
+		// those keys in the same order.
 		return found as unknown as readonly [string, string, string, string];
 	}
 

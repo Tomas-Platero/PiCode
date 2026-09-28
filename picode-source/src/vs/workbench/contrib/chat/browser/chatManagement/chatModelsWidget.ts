@@ -1139,6 +1139,9 @@ export class ChatModelsWidget extends Disposable {
 	private searchActionsContainer!: HTMLElement;
 	private table!: WorkbenchTable<IViewModelEntry>;
 	private tableContainer!: HTMLElement;
+
+	/** Set once the first model listing has resolved; until then the table shows a loading row. */
+	private hasLoadedOnce = false;
 	private tableViewport!: HTMLElement;
 	private tableInner!: HTMLElement;
 	private tableScrollable: DomScrollableElement | undefined;
@@ -1188,6 +1191,12 @@ export class ChatModelsWidget extends Disposable {
 		});
 
 		const loadingPromise = this.extensionService.whenInstalledExtensionsRegistered().then(() => this.viewModel.refresh());
+		// The table itself says it is loading (some sources take tens of seconds — an
+		// external pi scans its whole profile); the editor progress alone is invisible.
+		loadingPromise.then(() => {
+			this.hasLoadedOnce = true;
+			this.tableContainer.querySelector('.models-loading')?.remove();
+		});
 		this.editorProgressService.showWhile(loadingPromise, 300);
 	}
 
@@ -1342,6 +1351,13 @@ export class ChatModelsWidget extends Disposable {
 			scrollYToX: true,
 		}));
 		this.tableContainer.appendChild(this.tableScrollable.getDomNode());
+
+		// While the first listing has not resolved, say so where the rows will be.
+		if (!this.hasLoadedOnce) {
+			const loading = DOM.append(this.tableContainer, $('.models-loading'));
+			DOM.append(loading, $('span.codicon.codicon-loading.codicon-modifier-spin'));
+			DOM.append(loading, $('.models-loading-text', {}, localize('modelsLoading', "Loading models…")));
+		}
 
 		const gutterColumnRenderer = this.instantiationService.createInstance(GutterColumnRenderer, this.viewModel);
 		const modelNameColumnRenderer = this.instantiationService.createInstance(ModelNameColumnRenderer);

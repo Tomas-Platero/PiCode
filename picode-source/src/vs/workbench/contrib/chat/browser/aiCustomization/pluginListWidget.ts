@@ -241,6 +241,7 @@ interface IPluginPiPackageRowTemplateData {
 	readonly state: HTMLElement;
 	readonly toggleButton: Button;
 	readonly uninstallButton: Button;
+	readonly hint: HTMLElement;
 	readonly disposables: DisposableStore;
 }
 
@@ -271,12 +272,14 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 
 		const toggleButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true });
 		toggleButton.element.classList.add('pi-package-row-action');
-		const uninstallLabel = localize('uninstallPackageButton', "Uninstall");
-		const uninstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: uninstallLabel, ariaLabel: uninstallLabel });
+		const uninstallTooltip = localize('uninstallPackageTooltip', "Remove the package from pi's settings");
+		const uninstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: uninstallTooltip, ariaLabel: uninstallTooltip });
 		uninstallButton.label = `$(${Codicon.trash.id})`;
 		uninstallButton.element.classList.add('pi-package-row-action');
+		const hint = DOM.append(actions, $('.pi-package-row-hint'));
+		hint.style.display = 'none';
 
-		return { container, name, version, source, state, toggleButton, uninstallButton, disposables: new DisposableStore() };
+		return { container, name, version, source, state, toggleButton, uninstallButton, hint, disposables: new DisposableStore() };
 	}
 
 	renderElement(element: IPluginPiPackageItemEntry, _index: number, templateData: IPluginPiPackageRowTemplateData): void {
@@ -288,25 +291,34 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		templateData.source.textContent = row.source ?? '';
 		templateData.source.title = row.source ?? '';
 		const disabled = row.state === 'disabled';
+		const declared = row.source !== undefined;
 		templateData.state.textContent = disabled
 			? localize('packageStateDisabled', "Disabled")
-			: localize('packageStateEnabled', "Enabled");
+			: declared
+				? localize('packageStateEnabled', "Enabled")
+				: localize('packageStateNotDeclared', "Not declared");
 		templateData.state.classList.toggle('disabled', disabled);
 		templateData.container.classList.toggle('disabled', disabled);
 
 		if (row.source === undefined) {
+			// A package the disk scan found without pi's settings spelling it: pi never loads
+			// it, and there is no spelling for the actions to act on — say so instead of
+			// leaving an empty cell.
 			templateData.toggleButton.element.style.display = 'none';
 			templateData.uninstallButton.element.style.display = 'none';
+			templateData.hint.style.display = '';
+			templateData.hint.textContent = localize('packageNotDeclaredHint', "Installed on disk; pi does not load it. Reinstall it to manage it here.");
 			return;
 		}
 		templateData.toggleButton.element.style.display = '';
 		templateData.uninstallButton.element.style.display = '';
+		templateData.hint.style.display = 'none';
 		if (disabled) {
-			templateData.toggleButton.label = `$(${Codicon.check.id}) ${localize('enablePackageAction', "Enable")}`;
-			templateData.toggleButton.setTitle(localize('enablePackageTooltip', "Enable the package again in pi's settings"));
+			templateData.toggleButton.label = `$(${Codicon.play.id}) ${localize('enablePackageAction', "Enable")}`;
+			templateData.toggleButton.setTitle(localize('enablePackageTooltip', "Pi loads this package again"));
 		} else {
-			templateData.toggleButton.label = `$(${Codicon.circleSlash.id}) ${localize('disablePackageAction', "Disable")}`;
-			templateData.toggleButton.setTitle(localize('disablePackageTooltip', "Remove the package from pi's settings without deleting its files"));
+			templateData.toggleButton.label = `$(${Codicon.debugPause.id}) ${localize('disablePackageAction', "Disable")}`;
+			templateData.toggleButton.setTitle(localize('disablePackageTooltip', "Pi stops loading this package. Its files stay on disk."));
 		}
 		templateData.disposables.add(templateData.toggleButton.onDidClick(() => this.onToggle(row)));
 		templateData.disposables.add(templateData.uninstallButton.onDidClick(() => this.onUninstall(row)));

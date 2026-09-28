@@ -1151,7 +1151,7 @@ export class McpListWidget extends Disposable {
 		// browse mode this editor cannot fill.
 		const browseButtonContainer = DOM.append(buttonContainer, $('.list-add-button-container'));
 		this.browseButton = this._register(new Button(browseButtonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
-		this.browseButton.label = `$(${Codicon.library.id}) ${localize('browseMarketplace', "Browse Marketplace")}`;
+		this.browseButton.label = `$(${Codicon.library.id}) ${localize('browseMarketplace', "Browse MCP's")}`;
 		this.browseButton.element.classList.add('list-add-button');
 		this._register(this.browseButton.onDidClick(() => {
 			void this.openerService.open(URI.parse('https://mcp.directory'), { openExternal: true });
