@@ -176,7 +176,7 @@ comparten `extension.ts`, así que su parte va junta y las piezas del núcleo va
 | `32ddb840` | U8 · P1 — notificaciones de actualización con botón Update |
 
 Pruebas: 158 del conector en verde (11 ficheros + `updates-check`), typecheck del
-núcleo y del conector en 0. Build completo en marcha al cierre.
+núcleo y del conector en 0. Build completo en verde (4m 10s, `dev/build.sh`, PiCode 1.135.1 en `PiCode-Win32-x64/`): el empaquetado lleva dentro los símbolos nuevos comprobados — `picode.updates.show`, «updates available», `picode.packages.disable` en el conector; «Browse Skill», «Remove Server», «Uninstall {0}» (el tipo se pone en marcha) en la tabla NLS.
 
 ## Decisiones tomadas (resumen ejecutable)
 
