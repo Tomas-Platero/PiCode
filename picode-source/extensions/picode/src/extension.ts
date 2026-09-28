@@ -14,10 +14,22 @@ import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServers';
-import { mcpServersTextWithAdded, parseKeyValueLines, serverNames, validateDraft, validateServerName, type AddServerDraft } from './mcp-add';
+import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
-import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
+import {
+	DISABLED_PACKAGES_KEY,
+	disablePackageSource,
+	disabledRecordWithout,
+	enablePackageSource,
+	packageDisplayInfo,
+	packageInstallPaths,
+	removePackage,
+	type DisabledRecord,
+	type ManageFs,
+	type PiPackageRow,
+} from './packages-manage';
+import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult } from './packages-data';
 import { loadPiSdk } from './piSdk';
 import { externalProfileDir } from './profile-import';
 import {
@@ -347,13 +359,172 @@ async function addMcpServer(profile: string): Promise<void> {
 	void vscode.window.showInformationMessage(`MCP server ${name} added to pi. It will appear in the list.`);
 }
 
+/** Every file the MCP section's pi servers can live in, in the order `mcpServersFrom` reads them: profile first, then each folder. */
+function piMcpServerFiles(profile: string): string[] {
+	return [path.join(profile, 'mcp.json'), ...workspaceFolderPaths().map(folder => path.join(folder, '.pi', 'mcp.json'))];
+}
+
+/**
+ * The file whose entry is the one pi actually runs for a server, or `undefined` when no file
+ * holds it. The files are read profile-first and a later file's entry of the same name replaces
+ * the earlier one (`mcp-provider.ts`), so the **last** file that declares the name is the
+ * effective one — the same reading the list itself answers with.
+ */
+function locateMcpServerFile(profile: string, name: string): string | undefined {
+	let found: string | undefined;
+	for (const file of piMcpServerFiles(profile)) {
+		const existing = readJsonFile(file);
+		if (existing !== undefined && serverNames(existing).includes(name)) {
+			found = file;
+		}
+	}
+	return found;
+}
+
+/** The command's entry point: the page hands the server's name over; without one, the owner picks it. */
+async function editMcpServerCommand(profile: string, name?: string): Promise<void> {
+	const picked = name ?? await pickPiMcpServerName(profile, 'Which MCP server to edit');
+	if (picked === undefined) {
+		return;
+	}
+	const file = locateMcpServerFile(profile, picked);
+	if (file === undefined) {
+		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in pi's mcp.json.`);
+		return;
+	}
+	await editMcpServer(file, picked);
+}
+
+/**
+ * Asks what one existing server should say now and writes the entry back into the file that
+ * holds it — the same file the list reads, in the shape the adapter documents.
+ *
+ * The name is kept: it is the entry's key and the identity the page handed over. Everything
+ * else starts prefilled from the entry as it is now, and every step can be cancelled. A failure
+ * is said here and the file is left as it was, for the same reason `addMcpServer` never rejects.
+ */
+async function editMcpServer(file: string, name: string): Promise<void> {
+	const existing = readJsonFile(file) ?? {};
+	const current = serverEntry(existing, name);
+
+	// The transport the entry says now is offered first, so accepting the pick keeps it.
+	const transports = current !== undefined && 'command' in current ? ['stdio', 'http'] : ['http', 'stdio'];
+	const picked = await vscode.window.showQuickPick(transports, {
+		placeHolder: `How "${name}" is reached: a local command or a remote URL`,
+	});
+	if (picked === undefined) {
+		return;
+	}
+	const transport: AddServerDraft['transport'] = picked === 'http' ? 'http' : 'stdio';
+
+	let entry: McpServerFileEntry;
+	if (transport === 'stdio') {
+		const command = (await vscode.window.showInputBox({
+			prompt: 'Command that starts the server',
+			placeHolder: 'npx -y some-mcp-server',
+			value: current !== undefined && 'command' in current ? current.command : undefined,
+		}))?.trim();
+		if (command === undefined || command.length === 0) {
+			return;
+		}
+		const argsText = await vscode.window.showInputBox({
+			prompt: 'Arguments of the command, separated by spaces; quote one that holds spaces (optional)',
+			placeHolder: '--port 3000',
+			value: current !== undefined && 'command' in current && current.args.length > 0 ? current.args.join(' ') : undefined,
+		});
+		if (argsText === undefined) {
+			return;
+		}
+		const env = await collectKeyValueLines('Environment variable of the server', current !== undefined && 'command' in current ? { ...current.env } as Record<string, string> : undefined);
+		if (env === undefined) {
+			return;
+		}
+		entry = serverFileEntry({ name, transport, command, args: splitArguments(argsText), ...env });
+	} else {
+		const url = (await vscode.window.showInputBox({
+			prompt: 'URL of the server',
+			placeHolder: 'https://example.test/mcp',
+			value: current !== undefined && 'url' in current ? current.url : undefined,
+		}))?.trim();
+		if (url === undefined || url.length === 0) {
+			return;
+		}
+		const headers = await collectKeyValueLines('Header sent to the server', current !== undefined && 'url' in current ? { ...current.headers } : undefined);
+		if (headers === undefined) {
+			return;
+		}
+		entry = serverFileEntry({ name, transport, url, ...headers });
+	}
+
+	const problems = validateDraft({ ...entry, name, transport });
+	if (problems.length > 0) {
+		// Everything above was validated as it was asked; this is the net under it.
+		void vscode.window.showErrorMessage(`PiCode: the server is not complete — ${problems.join(' ')}`);
+		return;
+	}
+
+	// The file may have changed under the flow; what is on disk now decides whether the entry is
+	// still there to be edited. Rewriting from a stale read would resurrect a removed entry.
+	const text = mcpServersTextWithEdited(readJsonFile(file) ?? {}, name, entry);
+	if (text === undefined) {
+		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${name}" was found in ${file}.`);
+		return;
+	}
+	fs.writeFileSync(file, text, { mode: 0o600 });
+	void vscode.window.showInformationMessage(`MCP server ${name} updated in pi. It will appear in the list.`);
+}
+
+/** The command's entry point: the page hands the server's name over; without one, the owner picks it. */
+async function removeMcpServerCommand(profile: string, name?: string): Promise<void> {
+	const picked = name ?? await pickPiMcpServerName(profile, 'Which MCP server to remove');
+	if (picked === undefined) {
+		return;
+	}
+	const file = locateMcpServerFile(profile, picked);
+	if (file === undefined) {
+		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in pi's mcp.json.`);
+		return;
+	}
+
+	const confirmed = await vscode.window.showWarningMessage(`Remove the MCP server "${picked}" from pi? Its entry is removed from ${path.basename(path.dirname(file)) === '.pi' ? file : file}.`, { modal: true }, 'Remove');
+	if (confirmed !== 'Remove') {
+		return;
+	}
+
+	const text = mcpServersTextWithRemoved(readJsonFile(file) ?? {}, picked);
+	if (text === undefined) {
+		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in ${file}.`);
+		return;
+	}
+	fs.writeFileSync(file, text, { mode: 0o600 });
+	void vscode.window.showInformationMessage(`MCP server ${picked} removed from pi.`);
+}
+
+/** Every server name the files hold, in the order pi reads them, for the pick that runs without a name. */
+async function pickPiMcpServerName(profile: string, subject: string): Promise<string | undefined> {
+	const names = new Set<string>();
+	for (const file of piMcpServerFiles(profile)) {
+		for (const name of serverNames(readJsonFile(file) ?? {})) {
+			names.add(name);
+		}
+	}
+	if (names.size === 0) {
+		void vscode.window.showInformationMessage('pi has no MCP servers to edit.');
+		return undefined;
+	}
+	return vscode.window.showQuickPick([...names], { placeHolder: subject });
+}
+
 /**
  * Asks for `KEY=VALUE` lines one at a time — the editor's input box is single-line — until an
  * empty answer ends it. A malformed line is said inline and asked again. `undefined` is a
  * cancellation; an empty record is "none".
+ *
+ * `initial` prefills the list with what the entry already said, so an edit starts from what is
+ * there rather than from a blank sheet.
  */
-async function collectKeyValueLines(subject: string): Promise<Record<string, string> | undefined> {
-	const lines: string[] = [];
+async function collectKeyValueLines(subject: string, initial?: Record<string, string>): Promise<Record<string, string> | undefined> {
+	const lines: string[] = Object.entries(initial ?? {}).map(([key, value]) => `${key}=${value}`);
 	for (;;) {
 		const line = await vscode.window.showInputBox({
 			prompt: `${subject} as KEY=VALUE${lines.length === 0 ? '' : ' — leave empty to finish'}`,
@@ -402,11 +573,53 @@ export const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
 export const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
 
 /**
+ * The Packages section's disable: pi 0.87.1 has no per-package disable of its own — the
+ * `packages` array of a settings file is a plain list of source strings — so this takes the
+ * declaration out of the settings file that spells it (profile or workspace), keeps the
+ * package's files where pi installed them, and remembers the source per profile so the
+ * listing can still show the row and {@link PACKAGES_ENABLE_COMMAND} can restore it. A
+ * **contract**, like the search and the install: the page hands the source to disable and
+ * shows the one sentence this answers.
+ */
+export const PACKAGES_DISABLE_COMMAND = 'picode.packages.disable';
+
+/**
+ * The Packages section's enable: the declaration goes back into the profile settings file
+ * and the source leaves the disabled record; a package whose files are gone on disk is
+ * installed again through the same flow {@link PACKAGES_INSTALL_COMMAND} uses. A
+ * **contract**, like the disable.
+ */
+export const PACKAGES_ENABLE_COMMAND = 'picode.packages.enable';
+
+/**
+ * The Packages section's uninstall: pi's own `pi remove`, run into the profile in force the
+ * same way the installer runs `pi install`, with the source dropped from the disabled record.
+ * The confirmation is the page's to ask; this command performs. A **contract**, like the
+ * disable and the enable.
+ */
+export const PACKAGES_UNINSTALL_COMMAND = 'picode.packages.uninstall';
+
+/**
  * The MCP section's "Add Server", which the core invokes: it asks this connector for the new
  * server instead of the editor's own add flow, because the servers this page lists live in
  * pi's own `mcp.json` — the editor's flow would write a file pi never reads.
  */
 export const ADD_MCP_SERVER_COMMAND = 'picode.mcp.addServer';
+
+/**
+ * The MCP section's "Edit Server" for a server pi provides: the page hands the server's name
+ * over and this connector asks what the entry should say now, writing it back into the file
+ * that holds it — the profile's `mcp.json` or a project's `.pi/mcp.json`. Like "Add Server",
+ * it exists because the editor's own edit flows open files pi never reads.
+ */
+export const EDIT_MCP_SERVER_COMMAND = 'picode.mcp.editServer';
+
+/**
+ * The MCP section's "Remove Server" for a server pi provides: the page hands the server's name
+ * over, this connector asks the owner to confirm, and the entry leaves the file that holds it.
+ * A **contract** like {@link EDIT_MCP_SERVER_COMMAND}.
+ */
+export const REMOVE_MCP_SERVER_COMMAND = 'picode.mcp.removeServer';
 
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
@@ -448,6 +661,11 @@ function workspaceFolderPaths(): string[] {
  */
 function profileInForce(): string {
 	return readRuntimeMode() === 'external' ? externalProfileDir() : profileDirectory(requireProfileUri());
+}
+
+/** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
+function piCliEntry(): string {
+	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 }
 
 /** A file's text, or `undefined` when it is not there. */
@@ -525,8 +743,12 @@ function mcpDefinition(server: PiMcpServer): vscode.McpServerDefinition {
  * Everything is read from disk on every call — no snapshot is kept of what the files said — and the
  * three watchers below are only a hint that the answer changed. The one thing kept is the package
  * read, which walks `node_modules`; the watchers drop it, so it is never staler than the events.
+ *
+ * The package commands also take the extension context's global state: the disabled-packages
+ * record lives there, keyed per profile directory, the same way `registerSetupCommands` keeps
+ * its state.
  */
-function registerCustomizations(): vscode.Disposable[] {
+function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[] {
 	const changed = new vscode.EventEmitter<void>();
 	const fsReader = nodeFs();
 	const disposables: vscode.Disposable[] = [changed];
@@ -558,6 +780,25 @@ function registerCustomizations(): vscode.Disposable[] {
 		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), pattern));
 		disposables.push(watcher, watcher.onDidCreate(fire), watcher.onDidDelete(fire), watcher.onDidChange(fire));
 	};
+
+	/** The disabled packages, as the global state holds them: one source list per profile directory. */
+	const readDisabledRecord = (): DisabledRecord => {
+		const record = globalState.get<DisabledRecord>(DISABLED_PACKAGES_KEY);
+		return typeof record === 'object' && record !== null ? record : {};
+	};
+	const writeDisabledRecord = (record: DisabledRecord): void => {
+		void globalState.update(DISABLED_PACKAGES_KEY, { ...record });
+	};
+
+	/** The filesystem the package flows run against: the window's real one, nothing beside it. */
+	const manageFs: ManageFs = {
+		readText: readTextFile,
+		writeText: (file, text) => fs.writeFileSync(file, text),
+		exists: file => fs.existsSync(file),
+	};
+
+	/** The folders the project scope reads, empty while the window is untrusted — like the listing. */
+	const trustedWorkspaceDirs = (): string[] => (vscode.workspace.isTrusted ? workspaceFolderPaths() : []);
 
 	const agentsProvider: vscode.ChatCustomAgentProvider = {
 		onDidChangeCustomAgents: changed.event,
@@ -621,7 +862,15 @@ function registerCustomizations(): vscode.Disposable[] {
 	}));
 
 	// The page's own door onto the package list, for the discovery that cannot use a provider.
-	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackage[]> => [...readPackages().packages]));
+	// The answer now carries each package's state: its declaration as the settings file spells
+	// it, Enabled or Disabled, and the scope the declaration was found in — the disabled record
+	// merged in, so a disabled package still appears and the page can offer to enable it.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => {
+		const profileDir = profileInForce();
+		const read = readPackages();
+		const info = packageDisplayInfo(read.packages, packageScopes(profileDir), readDisabledRecord(), profileDir);
+		return read.packages.map(found => ({ ...found, ...info.get(found.path) }));
+	}));
 
 	// The Packages section's catalog and install. The search resolves nothing of the editor —
 	// the rules live in `packages-registry.ts` and its failures are said here, once per session,
@@ -638,6 +887,75 @@ function registerCustomizations(): vscode.Disposable[] {
 		return installPackage(typeof target === 'string' ? target : '', { cliEntry, profileDir: profileInForce() });
 	}));
 
+	// Disable: the declaration out of the settings file(s) that spell it, the source remembered
+	// per profile. The listing's cache is dropped and the page is told, so the row turns
+	// Disabled without waiting for the file watcher.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_DISABLE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
+		const target = typeof source === 'string' ? source.trim() : '';
+		if (target.length === 0) {
+			return { ok: false, message: 'No package source was given.' };
+		}
+		const result = disablePackageSource(target, {
+			profileDir: profileInForce(),
+			workspaceDirs: trustedWorkspaceDirs(),
+			fs: manageFs,
+			record: readDisabledRecord(),
+		});
+		writeDisabledRecord(result.record);
+		fire();
+		return { ok: true, message: `Package ${target} disabled. It is out of pi's settings; its files are untouched.` };
+	}));
+
+	// Enable: the declaration back into the profile settings, the record cleaned, and — when
+	// the package's files are gone from every scope — pi's installer run again, the same flow
+	// the install command uses.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_ENABLE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
+		const target = typeof source === 'string' ? source.trim() : '';
+		if (target.length === 0) {
+			return { ok: false, message: 'No package source was given.' };
+		}
+		const profileDir = profileInForce();
+		const result = enablePackageSource(target, {
+			profileDir,
+			workspaceDirs: trustedWorkspaceDirs(),
+			fs: manageFs,
+			record: readDisabledRecord(),
+		});
+		writeDisabledRecord(result.record);
+		const installed = packageInstallPaths(target, profileDir, trustedWorkspaceDirs());
+		if (!installed.some(file => fs.existsSync(file))) {
+			const cliEntry = piCliEntry();
+			if (!fs.existsSync(cliEntry)) {
+				return { ok: false, message: 'pi runtime not found in this editor' };
+			}
+			const reinstall = await installPackage(target, { cliEntry, profileDir });
+			if (!reinstall.ok) {
+				return reinstall;
+			}
+		}
+		fire();
+		return { ok: true, message: `Package ${target} enabled.` };
+	}));
+
+	// Uninstall: pi's own `pi remove`, the same spawn the install runs, and the source out of
+	// the disabled record. The confirmation is the page's to ask; this command performs.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_UNINSTALL_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
+		const target = typeof source === 'string' ? source.trim() : '';
+		if (target.length === 0) {
+			return { ok: false, message: 'No package source was given.' };
+		}
+		const cliEntry = piCliEntry();
+		if (!fs.existsSync(cliEntry)) {
+			return { ok: false, message: 'pi runtime not found in this editor' };
+		}
+		const result = await removePackage(target, { cliEntry, profileDir: profileInForce() });
+		if (result.ok) {
+			writeDisabledRecord(disabledRecordWithout(readDisabledRecord(), profileInForce(), target));
+			fire();
+		}
+		return result;
+	}));
+
 	// The MCP section's "Add Server": it writes into pi's profile through `addMcpServer`, and a
 	// failure inside it is said there rather than rejected — the core falls back to the editor's
 	// own add flow on a rejection, and that flow writes a file pi never reads.
@@ -647,6 +965,27 @@ function registerCustomizations(): vscode.Disposable[] {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be added (${message}).`);
+		}
+	}));
+
+	// The MCP section's "Edit Server" and "Remove Server" for pi's own rows: the page hands the
+	// server's name over, and the file that holds the entry is located here, where the profile
+	// in force and the workspace folders are known. Like "Add Server", a failure is said here
+	// rather than rejected, and the file is left as it was.
+	disposables.push(vscode.commands.registerCommand(EDIT_MCP_SERVER_COMMAND, async (name?: string) => {
+		try {
+			await editMcpServerCommand(profileInForce(), typeof name === 'string' ? name : undefined);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be edited (${message}).`);
+		}
+	}));
+	disposables.push(vscode.commands.registerCommand(REMOVE_MCP_SERVER_COMMAND, async (name?: string) => {
+		try {
+			await removeMcpServerCommand(profileInForce(), typeof name === 'string' ? name : undefined);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be removed (${message}).`);
 		}
 	}));
 
@@ -1336,9 +1675,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	void maybeNudgeFirstRun(setupDeps);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
-	// so this registers the three providers it reads (and the package command) before anything the
-	// owner opens looks for them.
-	context.subscriptions.push(...registerCustomizations());
+	// so this registers the three providers it reads (and the package commands) before anything the
+	// owner opens looks for them. The global state carries the disabled-packages record.
+	context.subscriptions.push(...registerCustomizations(context.globalState));
 
 	// The model caches are re-read every five minutes, unasked: the picker must never open on
 	// a list that went stale during a quiet stretch, and the subscription catalogue (the slow

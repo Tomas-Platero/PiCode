@@ -131,6 +131,20 @@ function hasEntries(record: Record<string, string> | undefined): boolean {
 	return record !== undefined && Object.keys(record).length > 0;
 }
 
+/** A copy of the file's root object, or an empty one when the file is missing or broken. */
+function rootObjectOf(existing: unknown): Record<string, unknown> {
+	return typeof existing === 'object' && existing !== null && !Array.isArray(existing)
+		? { ...(existing as Record<string, unknown>) }
+		: {};
+}
+
+/** A copy of the root's `mcpServers` object, or an empty one when there is none. */
+function serversObjectOf(root: Record<string, unknown>): Record<string, unknown> {
+	return typeof root.mcpServers === 'object' && root.mcpServers !== null && !Array.isArray(root.mcpServers)
+		? { ...(root.mcpServers as Record<string, unknown>) }
+		: {};
+}
+
 /**
  * The file's content with one server added: everything already there stays exactly as it is,
  * and an entry of the same name is replaced.
@@ -143,12 +157,8 @@ function hasEntries(record: Record<string, string> | undefined): boolean {
  * in the file survives untouched — which is what adding one server means.
  */
 export function mcpServersWithAdded(existing: unknown, draft: AddServerDraft): Record<string, unknown> {
-	const root: Record<string, unknown> = typeof existing === 'object' && existing !== null && !Array.isArray(existing)
-		? { ...(existing as Record<string, unknown>) }
-		: {};
-	const servers: Record<string, unknown> = typeof root.mcpServers === 'object' && root.mcpServers !== null && !Array.isArray(root.mcpServers)
-		? { ...(root.mcpServers as Record<string, unknown>) }
-		: {};
+	const root = rootObjectOf(existing);
+	const servers = serversObjectOf(root);
 	servers[draft.name.trim()] = serverFileEntry(draft);
 	root.mcpServers = servers;
 	return root;
@@ -157,6 +167,99 @@ export function mcpServersWithAdded(existing: unknown, draft: AddServerDraft): R
 /** What is written, as text: two-space indentation and a final newline, like the rest of the profile. */
 export function mcpServersTextWithAdded(existing: unknown, draft: AddServerDraft): string {
 	return `${JSON.stringify(mcpServersWithAdded(existing, draft), null, 2)}\n`;
+}
+
+/**
+ * The entry one file holds for a server, as far as it reads as one of the two shapes the adapter
+ * documents, or `undefined` when the file holds none it can be prefilled from.
+ *
+ * An entry that is there but not recognizable — a string, a transport the editor has no shape for —
+ * reads as `undefined` too: the edit flow still runs (the name's presence is `serverNames`' job), it
+ * just starts from empty fields rather than from something guessed.
+ */
+export function serverEntry(existing: unknown, name: string): McpServerFileEntry | undefined {
+	const servers = serversObjectOf(rootObjectOf(existing));
+	const entry = servers[name.trim()];
+	if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+		return undefined;
+	}
+	const record = entry as Record<string, unknown>;
+	const command = record['command'];
+	if (typeof command === 'string') {
+		return {
+			command,
+			args: Array.isArray(record['args']) ? record['args'].filter((item): item is string => typeof item === 'string') : [],
+			...(hasEntries(stringRecord(record['env'])) ? { env: stringRecord(record['env']) } : {}),
+		};
+	}
+	const url = record['url'];
+	if (typeof url === 'string') {
+		return {
+			type: 'http',
+			url,
+			...(hasEntries(stringRecord(record['headers'])) ? { headers: stringRecord(record['headers']) } : {}),
+		};
+	}
+	return undefined;
+}
+
+/** A record of strings as far as the value is one, for prefilling an edit. */
+function stringRecord(value: unknown): Record<string, string> {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		return {};
+	}
+	const record: Record<string, string> = {};
+	for (const [key, entry] of Object.entries(value)) {
+		if (typeof entry === 'string') {
+			record[key] = entry;
+		}
+	}
+	return record;
+}
+
+/**
+ * The file's content with one server's entry replaced: everything already there stays exactly as
+ * it is, and the file must already hold the entry — editing is not adding, so a name the file does
+ * not hold is **said** (`undefined`) rather than written.
+ */
+export function mcpServersWithEdited(existing: unknown, name: string, entry: McpServerFileEntry): Record<string, unknown> | undefined {
+	const key = name.trim();
+	if (!serverNames(existing).includes(key)) {
+		return undefined;
+	}
+	const root = rootObjectOf(existing);
+	const servers = serversObjectOf(root);
+	servers[key] = entry;
+	root.mcpServers = servers;
+	return root;
+}
+
+/** What an edit writes, as text — same shape as `mcpServersTextWithAdded` — or `undefined` when the file holds no such entry. */
+export function mcpServersTextWithEdited(existing: unknown, name: string, entry: McpServerFileEntry): string | undefined {
+	const edited = mcpServersWithEdited(existing, name, entry);
+	return edited === undefined ? undefined : `${JSON.stringify(edited, null, 2)}\n`;
+}
+
+/**
+ * The file's content with one server removed: everything already there stays exactly as it is, and
+ * a name the file does not hold is **said** (`undefined`) rather than written.
+ */
+export function mcpServersWithRemoved(existing: unknown, name: string): Record<string, unknown> | undefined {
+	const key = name.trim();
+	if (!serverNames(existing).includes(key)) {
+		return undefined;
+	}
+	const root = rootObjectOf(existing);
+	const servers = serversObjectOf(root);
+	delete servers[key];
+	root.mcpServers = servers;
+	return root;
+}
+
+/** What a removal writes, as text — same shape as `mcpServersTextWithAdded` — or `undefined` when the file holds no such entry. */
+export function mcpServersTextWithRemoved(existing: unknown, name: string): string | undefined {
+	const removed = mcpServersWithRemoved(existing, name);
+	return removed === undefined ? undefined : `${JSON.stringify(removed, null, 2)}\n`;
 }
 
 /** The names of the servers already in the file, for the duplicate check. */

@@ -17,8 +17,13 @@ import assert from 'assert';
 import { test } from 'node:test';
 import {
 	mcpServersTextWithAdded,
+	mcpServersTextWithEdited,
+	mcpServersTextWithRemoved,
 	mcpServersWithAdded,
+	mcpServersWithEdited,
+	mcpServersWithRemoved,
 	parseKeyValueLines,
+	serverEntry,
 	serverFileEntry,
 	serverNames,
 	validateDraft,
@@ -183,4 +188,87 @@ test('a server added here survives the settings row rewriting its own servers', 
 		row: { command: 'node', args: [] },
 		added: { command: 'npx', args: [] },
 	});
+});
+
+test('the entry a file holds for one server can be read back to prefill an edit', () => {
+	const existing = {
+		mcpServers: {
+			files: { command: 'node', args: ['server.js'], env: { TOKEN: 'abc' } },
+			remote: { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer k' } },
+		},
+	};
+
+	assert.deepStrictEqual(serverEntry(existing, 'files'), { command: 'node', args: ['server.js'], env: { TOKEN: 'abc' } });
+	assert.deepStrictEqual(serverEntry(existing, 'remote'), { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer k' } });
+});
+
+test('a server the file does not hold, or an entry that is no server at all, reads as none', () => {
+	assert.strictEqual(serverEntry(undefined, 'files'), undefined);
+	assert.strictEqual(serverEntry({ mcpServers: 'broken' }, 'files'), undefined);
+	assert.strictEqual(serverEntry({ mcpServers: { files: {} } }, 'remote'), undefined);
+	assert.strictEqual(serverEntry({ mcpServers: { junk: 'not an object' } }, 'junk'), undefined);
+});
+
+test('editing a server replaces exactly its entry, and everything else survives untouched', () => {
+	const existing = {
+		adapterNote: 'kept',
+		mcpServers: {
+			files: { command: 'node', args: ['old.js'], env: { TOKEN: 'abc' } },
+			remote: { type: 'http', url: 'https://example.test/mcp' },
+		},
+	};
+
+	const edited = mcpServersWithEdited(existing, 'remote', { type: 'http', url: 'https://other.example/mcp', headers: { Authorization: 'Bearer new' } });
+
+	assert.ok(edited !== undefined);
+	assert.strictEqual(edited.adapterNote, 'kept');
+	assert.deepStrictEqual(edited.mcpServers, {
+		files: { command: 'node', args: ['old.js'], env: { TOKEN: 'abc' } },
+		remote: { type: 'http', url: 'https://other.example/mcp', headers: { Authorization: 'Bearer new' } },
+	});
+
+	const text = mcpServersTextWithEdited(existing, 'remote', { type: 'http', url: 'https://other.example/mcp' });
+	assert.ok(text !== undefined && text.endsWith('\n'));
+	const read = mcpServersFrom([{ path: '/profile/mcp.json', text, source: 'user' }]);
+	assert.deepStrictEqual(read.servers.map(server => server.label), ['files', 'remote']);
+	const remote = read.servers.find(server => server.label === 'remote');
+	assert.ok(remote !== undefined && remote.kind === 'http');
+	assert.strictEqual(remote.kind === 'http' ? remote.url : '', 'https://other.example/mcp');
+});
+
+test('editing a server the file does not hold is said, not written', () => {
+	const existing = { mcpServers: { files: { command: 'node', args: [] } } };
+
+	assert.strictEqual(mcpServersWithEdited(existing, 'remote', { type: 'http', url: 'https://example.test/mcp' }), undefined);
+	assert.strictEqual(mcpServersTextWithEdited(existing, 'remote', { type: 'http', url: 'https://example.test/mcp' }), undefined);
+	assert.strictEqual(mcpServersTextWithEdited(undefined, 'remote', { type: 'http', url: 'https://example.test/mcp' }), undefined);
+});
+
+test('removing a server removes exactly its entry, and everything else survives untouched', () => {
+	const existing = {
+		adapterNote: 'kept',
+		mcpServers: {
+			files: { command: 'node', args: ['old.js'], env: { TOKEN: 'abc' } },
+			remote: { type: 'http', url: 'https://example.test/mcp' },
+		},
+	};
+
+	const removed = mcpServersWithRemoved(existing, 'remote');
+
+	assert.ok(removed !== undefined);
+	assert.strictEqual(removed.adapterNote, 'kept');
+	assert.deepStrictEqual(removed.mcpServers, { files: { command: 'node', args: ['old.js'], env: { TOKEN: 'abc' } } });
+
+	const text = mcpServersTextWithRemoved(existing, 'remote');
+	assert.ok(text !== undefined && text.endsWith('\n'));
+	const read = mcpServersFrom([{ path: '/profile/mcp.json', text, source: 'user' }]);
+	assert.deepStrictEqual(read.servers.map(server => server.label), ['files']);
+});
+
+test('removing a server the file does not hold is said, not written', () => {
+	const existing = { mcpServers: { files: { command: 'node', args: [] } } };
+
+	assert.strictEqual(mcpServersWithRemoved(existing, 'remote'), undefined);
+	assert.strictEqual(mcpServersTextWithRemoved(existing, 'remote'), undefined);
+	assert.strictEqual(mcpServersTextWithRemoved(undefined, 'remote'), undefined);
 });
