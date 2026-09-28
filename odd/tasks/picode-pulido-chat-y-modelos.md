@@ -109,3 +109,17 @@ Arreglo:
   cuántos entraron y cuántos fallaron.
 - La regla de siempre se mantiene: el perfil externo solo se lee; en el interno se fusiona,
   nada se borra; las credenciales (`auth.json`) siguen detrás de la casilla explicita.
+
+## Añadido posterior: el asistente habla como la gente (`fe219a17`)
+
+La captura del import funcionando delató el tono: «profile», «PATH», «in force»,
+«auth.json», «copied/overwritten» — y hasta la ruta absoluta del pi externo pintada.
+Todo el texto de la página de pi pasa a responder lo que el dueño está decidiendo:
+
+- Externo: «Found on your computer — ready to use» (con versión; **la ruta absoluta
+  sale de la interfaz para siempre**, regla del dueño).
+- Cabecera: «Using the pi inside PiCode» / «Using your machine's pi».
+- Import: «AI connections» (proveedores), «Conversations» (sesiones), la casilla de
+  logins sin nombre de fichero, y la nota: «Everything is copied into PiCode. Nothing
+  is deleted — your external pi keeps working exactly as it is.»
+- Resultado: «Ready: X items brought over, Y updated. N packages installed, M failed.»
