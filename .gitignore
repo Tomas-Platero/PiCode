@@ -97,6 +97,12 @@ desktop.ini
 # comido cualquier carpeta `legacy/` de la fuente.
 /legacy/
 
+# Local AI-tooling caches: the codegraph index and the repomix pack of the whole
+# repository. Both are generated on demand for development; neither is source,
+# and the repomix pack alone is hundreds of megabytes.
+/.codegraph/
+/repomix-output.xml
+
 # The C# builder: what it compiles, never what it is written from. `dotnet build` writes both, and
 # neither is ever committed: the source is the .csproj and the files beside it.
 # Any build output of the C# builder, whatever it is called: bin, bin2, bin-tmp. `dotnet build` writes
