@@ -146,7 +146,9 @@ export function getTelemetryLevel(configurationService: IConfigurationService): 
 	}
 
 	// Maps new telemetry setting to a telemetry level
-	switch (newConfig === undefined ? TelemetryConfiguration.ON : newConfig) {
+	// PiCode: the telemetry settings are not registered (PiCode sends no telemetry), so an
+	// unset value resolves to OFF — the same level PiCode's removed registered default produced.
+	switch (newConfig === undefined ? TelemetryConfiguration.OFF : newConfig) {
 		case TelemetryConfiguration.ON:
 			return TelemetryLevel.USAGE;
 		case TelemetryConfiguration.ERROR:

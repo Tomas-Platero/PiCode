@@ -27,6 +27,8 @@ suite('TelemetryUtils', () => {
 				}
 			}()),
 		], [
+			// PiCode: with no telemetry setting registered, an unset value resolves to OFF (NONE)
+			TelemetryLevel.NONE,
 			TelemetryLevel.USAGE,
 			TelemetryLevel.USAGE,
 			TelemetryLevel.ERROR,
