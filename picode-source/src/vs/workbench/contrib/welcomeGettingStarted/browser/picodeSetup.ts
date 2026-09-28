@@ -88,6 +88,7 @@ interface ExternalPiInfo {
 interface ProfilePreview {
 	exists: boolean;
 	packages: number;
+	providers: number;
 	mcpServers: number;
 	skills: number;
 	sessions: number;
@@ -102,6 +103,9 @@ interface ImportReport {
 	absent: number;
 	declined: number;
 	failed: number;
+	/** The declared packages the connector installed into this profile after the copy. */
+	packagesInstalled?: number;
+	packagesFailed?: number;
 }
 
 export interface PiCodeSetupServices {
@@ -467,9 +471,10 @@ export class PiCodeSetup extends Disposable {
 
 	private renderImportCta(preview: ProfilePreview): HTMLElement {
 		this.importResult = undefined;
-		const previewBox = this.importPreviewBox = $('.picode-import-preview', { hidden: true },
+		const previewBox = this.importPreviewBox = $('.picode-import-preview', {},
 			$('.picode-import-counts', {},
 				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
+				this.importCount(localize('picodeSetup.import.providers', "Providers"), preview.providers),
 				this.importCount(localize('picodeSetup.import.mcps', "MCP servers"), preview.mcpServers),
 				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
 				this.importCount(localize('picodeSetup.import.sessions', "Sessions"), preview.sessions),
@@ -518,9 +523,12 @@ export class PiCodeSetup extends Disposable {
 				throw new Error('the import answered nothing');
 			}
 			if (this.importResult) {
+				const packagesNote = (report.packagesInstalled ?? 0) + (report.packagesFailed ?? 0) > 0
+					? ' ' + localize('picodeSetup.import.packagesNote', "{0} packages installed, {1} failed.", report.packagesInstalled ?? 0, report.packagesFailed ?? 0)
+					: '';
 				this.importResult.textContent = report.failed > 0
-					? localize('picodeSetup.import.doneWithFailures', "Done with problems: {0} copied, {1} overwritten, {2} failed.", report.copied, report.overwritten, report.failed)
-					: localize('picodeSetup.import.done', "Done: {0} copied, {1} overwritten onto existing content.", report.copied, report.overwritten);
+					? localize('picodeSetup.import.doneWithFailures', "Done with problems: {0} copied, {1} overwritten, {2} failed.", report.copied, report.overwritten, report.failed) + packagesNote
+					: localize('picodeSetup.import.done', "Done: {0} copied, {1} overwritten onto existing content.", report.copied, report.overwritten) + packagesNote;
 			}
 			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
 		} catch (error) {

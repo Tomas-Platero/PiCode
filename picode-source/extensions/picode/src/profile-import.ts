@@ -100,6 +100,8 @@ export function externalProfileDir(): string {
 export interface ProfilePreview {
 	readonly exists: boolean;
 	readonly packages: number;
+	/** The providers declared in the profile's models.json — what the owner would call logins. */
+	readonly providers: number;
 	readonly mcpServers: number;
 	readonly skills: number;
 	readonly sessions: number;
@@ -143,6 +145,10 @@ export function scanExternalProfile(profile: string = externalProfileDir()): Pro
 	const exists = existsSync(profile);
 	const settings = exists ? readJsonObjectFile(path.join(profile, 'settings.json')) : undefined;
 	const packages = settings !== undefined && Array.isArray(settings['packages']) ? settings['packages'].length : 0;
+	const modelsFile = exists ? readJsonObjectFile(path.join(profile, 'models.json')) : undefined;
+	const providers = modelsFile !== undefined && typeof modelsFile['providers'] === 'object' && modelsFile['providers'] !== null
+		? Object.keys(modelsFile['providers'] as Record<string, unknown>).length
+		: 0;
 	const mcpFile = exists ? readJsonObjectFile(path.join(profile, 'mcp.json')) : undefined;
 	const mcpServers = mcpFile !== undefined && typeof mcpFile['mcpServers'] === 'object' && mcpFile['mcpServers'] !== null
 		? Object.keys(mcpFile['mcpServers'] as Record<string, unknown>).length
@@ -150,6 +156,7 @@ export function scanExternalProfile(profile: string = externalProfileDir()): Pro
 	return {
 		exists,
 		packages,
+		providers,
 		mcpServers,
 		skills: exists ? countDirectories(path.join(profile, 'skills')) : 0,
 		sessions: exists ? countFiles(path.join(profile, 'sessions')) : 0,

@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ProfilePreview } from './profile-import';
+import { installPackage } from './packages-registry';
 import { getSessionUsage } from './agent';
 import type { StatusData } from './status-view';
 
@@ -247,11 +248,11 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),
 		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
-		vscode.commands.registerCommand(IMPORT_COMMAND, (credentials: unknown) => {
+		vscode.commands.registerCommand(IMPORT_COMMAND, async (credentials: unknown) => {
 			// Credentials are the one item whose copy is the owner's own decision: the page asks
 			// for them behind an unchecked box, and nothing here turns the import into a way of
 			// copying `auth.json` as a side effect.
-			return importProfile({
+			const report = importProfile({
 				from: externalProfileDir(),
 				to: deps.profileDir,
 				selection: {
@@ -264,6 +265,32 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					credentials: credentials === true,
 				},
 			});
+			// Packages: the settings copy carries the declarations, but the packages' files
+			// stay in the external profile's npm tree. Install each declared source into
+			// this profile, so what the import brings actually runs here.
+			const packagesInstalled = { ok: 0, failed: 0 };
+			const settingsFile = path.join(deps.profileDir, 'settings.json');
+			const settings = report.items.some(i => i.item === 'settings' && (i.status === 'copied' || i.status === 'overwritten'))
+				? ((): Record<string, unknown> | undefined => {
+					try {
+						const value: unknown = JSON.parse(readFileSync(settingsFile, 'utf8'));
+						return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+					} catch {
+						return undefined;
+					}
+				})()
+				: undefined;
+			const declared = settings !== undefined && Array.isArray(settings['packages'])
+				? settings['packages'].filter((entry): entry is string => typeof entry === 'string')
+				: [];
+			const cliEntry = path.join(deps.distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+			if (declared.length > 0 && existsSync(cliEntry)) {
+				for (const source of declared) {
+					const result = await installPackage(source, { cliEntry, profileDir: deps.profileDir });
+					result.ok ? packagesInstalled.ok += 1 : packagesInstalled.failed += 1;
+				}
+			}
+			return { ...report, packagesInstalled: packagesInstalled.ok, packagesFailed: packagesInstalled.failed };
 		}),
 	];
 }
