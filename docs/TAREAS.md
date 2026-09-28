@@ -28,6 +28,7 @@
 | **Los MCP del editor, conectados al pi interno** | pi no trae MCP (lo dice su README) pero deja añadirle herramientas: las herramientas de los servidores MCP del editor se le dan a pi, y las llama a través del editor, con sus permisos y confirmaciones. Trece comprobaciones ejecutadas |
 | **Los ajustes, con los nombres y el orden del producto** | Nodo `PiCode` (antes Chat) y nodo `Settings` (antes pi), con `Providers` y `Settings` delante de las categorías del editor |
 | **Fuera la ventana de agentes de VS Code** | Sus seis acciones no se registran: se acaban el botón «Open in Agents» de la barra, la entrada del menú del chat, el atajo `Ctrl+Shift+A`, los comandos de la paleta y el cartel de bienvenida. Sus dos consejos también fuera |
+| **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`), papel en `odd/tasks/picode-management-round.md`: causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents solo Gentle-AI sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
 
 ## Lo que está a medias
 

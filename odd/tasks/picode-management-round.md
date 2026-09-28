@@ -157,3 +157,45 @@
 Orden: U1 → U2 → U3 → U4 → U5 → U6 → U7 → U8 (U8 al final: toca `extension.ts`, como U2).
 Verificación por unidad: pruebas del conector (`node --experimental-strip-types --test`) en
 verde, typecheck 0 del conector y del núcleo, y al cierre compilación completa.
+
+## Cierre (2026-09-28)
+
+Ocho commits, uno por unidad (U5 y U6 comparten el suyo; el conector de U3 y U4
+comparten `extension.ts`, así que su parte va junta y las piezas del núcleo van separadas):
+
+| Commit | Unidad · puntos |
+| --- | --- |
+| `c7a5dcc5` | U1 · P9 — cabeceras MCP saneadas a ByteString (causa raíz: la raya del `nameLong`) |
+| `3329b40d` | U2 · P10 — modelos resueltos al arrancar + reloj de 5 min en el conector |
+| `721ea308` | U3 (núcleo) · P3 — «Servers», editar/quitar, mcp.directory, `vscode:mcp/install` |
+| `dd242e20` | U7 · P7+P8 — fuera el modo «Agente», MCP siempre activos en las tools |
+| `00f47b1f` | (higiene) — `IToolInvocation.parameters` pasa a `Record<string, unknown>` |
+| `5693feea` | U4 (núcleo) · P2 — la tabla de Packages con acciones |
+| `6d4dc502` | U3+U4 (conector) — `picode.mcp.editServer/removeServer` y `picode.packages.disable/enable/uninstall` |
+| `ae123e61` | U5+U6 · P4+P5+P6 — Skills/Agents/Overview |
+| `32ddb840` | U8 · P1 — notificaciones de actualización con botón Update |
+
+Pruebas: 158 del conector en verde (11 ficheros + `updates-check`), typecheck del
+núcleo y del conector en 0. Build completo en marcha al cierre.
+
+## Decisiones tomadas (resumen ejecutable)
+
+- D1 · P1: los avisos del workbench van donde los pinta el workbench; la superficie
+  «abajo-izquierda» es un elemento de la barra de estado con clic.
+- D2 · P1: tras actualizar se ofrece «Reload Window»: el ESM de pi no se recarga en caliente.
+- D3 · P2: la deshabilitación de packages es del conector (pi 0.87.1 no la trae); el
+  paquete sale del array `packages` y se recuerda en `picode.disabledPackages`.
+- D4 · P3.3: el botón de marketplace abre `https://mcp.directory` en el navegador.
+- D5 · P3.4: el editor acepta `vscode:mcp/install?...` (solo rutas `mcp/`); reclamar el
+  protocolo `vscode:` a nivel de instalador de Windows queda aplazado a propósito.
+- D6 · P4.1: Skills tiene UN solo botón de cabecera («Browse Skill»).
+- D7 · P9: no es el modelo; era la raya (U+2014) del `nameLong` viajando en el user-agent.
+- D8 · P10: el núcleo resuelve los modelos al registrar el proveedor; el conector re-warma
+  cada 5 min; el último modelo ya lo persistía el núcleo y ahora resuelve contra la lista
+  que existe desde el arranque.
+- D9 · P5.1: la lista de Agents muestra solo lo que aporta el conector; un agente creado
+  con «New Agent (Workspace)/(User)» queda en su almacén y NO se ve en la lista — decisión
+  literal del dueño; el filtro es una línea si cambia.
+- D10 · (higiene) — `parameters: Record<string, any>` del upstream pasó a
+  `Record<string, unknown>` con aserciones anotadas en los consumidores; el escáner lo
+  exigía y `unknown` es el tipo honesto.
