@@ -379,8 +379,8 @@ export class PiCodeSetup extends Disposable {
 			icon: 'plug',
 			mode: 'external',
 			meta: state.externalAvailable
-						? localize('picodeSetup.pi.externalFound', "Found on the PATH — ready to use")
-						: localize('picodeSetup.pi.externalUnknown', "Looking for it on the PATH… this can take a few seconds"),
+						? localize('picodeSetup.pi.externalFound', "Found on your computer — ready to use")
+						: localize('picodeSetup.pi.externalUnknown', "Looking for pi on your computer… this can take a few seconds"),
 		});
 		const internal = this.renderPiOption({
 			checked: state.runtime === 'internal',
@@ -396,14 +396,14 @@ export class PiCodeSetup extends Disposable {
 			$('.picode-card-head', {},
 				$('.picode-card-title', {}, localize('picodeSetup.pi.title', "pi")),
 				$('span.picode-hint', {}, state.runtime === 'internal'
-					? localize('picodeSetup.pi.currentInternal', "Internal pi in force")
-					: localize('picodeSetup.pi.currentExternal', "External pi in force")),
+					? localize('picodeSetup.pi.currentInternal', "Using the pi inside PiCode")
+					: localize('picodeSetup.pi.currentExternal', "Using your machine's pi")),
 			),
 			$('.picode-pi-options', {}, internal, external),
 			// The import shows only while the internal pi runs and the machine's profile has
 			// something worth bringing; the counts arrive when the card asks for them.
 			$('.picode-import-area'),
-			this.renderNote(localize('picodeSetup.pi.note.internal', "Internal pi loads: its providers, its MCP servers, its profile inside PiCode. Your machine's profile is untouched.")),
+			this.renderNote(localize('picodeSetup.pi.note.internal', "PiCode runs pi inside the editor, with its own settings and connections. Your machine's pi is not touched.")),
 		);
 
 		// The machine's pi is probed once, after the card is on screen: the version needs a
@@ -414,12 +414,14 @@ export class PiCodeSetup extends Disposable {
 				const meta = external.querySelector('.picode-pi-meta');
 				if (!(meta instanceof HTMLElement)) { return; }
 				if (info.found) {
+					// The absolute path stays out of the UI on purpose: "found on your computer"
+					// is what the owner needs, and the version when we know it.
 					meta.textContent = info.version
-						? localize('picodeSetup.pi.externalMeta', "Version {0} · {1}", info.version, info.path ?? '')
-						: info.path ?? '';
+						? localize('picodeSetup.pi.externalMeta', "Version {0}", info.version)
+						: localize('picodeSetup.pi.externalFound', "Found on your computer — ready to use");
 					meta.classList.remove('picode-warn');
 				} else {
-					meta.textContent = localize('picodeSetup.pi.notFound', "No pi found on the PATH — install pi on this machine, or use the internal one.");
+					meta.textContent = localize('picodeSetup.pi.notFound', "We couldn't find pi on your computer. Install it there, or use the one inside PiCode.");
 					meta.classList.add('picode-warn');
 				}
 			})
@@ -450,7 +452,7 @@ export class PiCodeSetup extends Disposable {
 			{
 				'type': 'button',
 				'tabindex': 0,
-				'title': options.available ? undefined : localize('picodeSetup.pi.notFoundTitle', "No pi was found on this machine's PATH."),
+				'title': options.available ? undefined : localize('picodeSetup.pi.notFoundTitle', "We couldn't find pi on your computer."),
 			},
 			$(`span.codicon.codicon-${options.checked ? 'check' : options.icon}.picode-option-icon`),
 			$('.picode-option-text', {},
@@ -474,13 +476,13 @@ export class PiCodeSetup extends Disposable {
 		const previewBox = this.importPreviewBox = $('.picode-import-preview', {},
 			$('.picode-import-counts', {},
 				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
-				this.importCount(localize('picodeSetup.import.providers', "Providers"), preview.providers),
+				this.importCount(localize('picodeSetup.import.providers', "AI connections"), preview.providers),
 				this.importCount(localize('picodeSetup.import.mcps', "MCP servers"), preview.mcpServers),
 				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
-				this.importCount(localize('picodeSetup.import.sessions', "Sessions"), preview.sessions),
+				this.importCount(localize('picodeSetup.import.sessions', "Conversations"), preview.sessions),
 			),
 			$('.picode-import-credentials', {},
-				this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Also bring my provider logins (auth.json)")),
+				this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Sign me in with my saved logins")),
 			),
 			$('.picode-import-actions', {},
 				this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => this.runImport(preview), 'primary'),
@@ -488,12 +490,12 @@ export class PiCodeSetup extends Disposable {
 					if (this.importPreviewBox) { this.importPreviewBox.hidden = true; }
 				}),
 			),
-			$('.picode-import-note', {}, localize('picodeSetup.import.note', "The import copies into PiCode's own profile and merges; nothing in it is deleted. Your external profile stays exactly as it is.")),
+			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Everything is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
 		);
 		const result = this.importResult = $('.picode-import-result');
 
 		return $('.picode-import-cta', {},
-			this.button('picode-import-open', localize('picodeSetup.import.cta', "Import from my external pi"), () => {
+			this.button('picode-import-open', localize('picodeSetup.import.cta', "Bring everything from your pi"), () => {
 				if (this.importPreviewBox) { this.importPreviewBox.hidden = !this.importPreviewBox.hidden; }
 			}),
 			previewBox,
@@ -527,8 +529,8 @@ export class PiCodeSetup extends Disposable {
 					? ' ' + localize('picodeSetup.import.packagesNote', "{0} packages installed, {1} failed.", report.packagesInstalled ?? 0, report.packagesFailed ?? 0)
 					: '';
 				this.importResult.textContent = report.failed > 0
-					? localize('picodeSetup.import.doneWithFailures', "Done with problems: {0} copied, {1} overwritten, {2} failed.", report.copied, report.overwritten, report.failed) + packagesNote
-					: localize('picodeSetup.import.done', "Done: {0} copied, {1} overwritten onto existing content.", report.copied, report.overwritten) + packagesNote;
+					? localize('picodeSetup.import.doneWithFailures', "Finished with problems: {0} items brought over, {1} updated, {2} failed.", report.copied, report.overwritten, report.failed) + packagesNote
+					: localize('picodeSetup.import.done', "Ready: {0} items brought over, {1} updated.", report.copied, report.overwritten) + packagesNote;
 			}
 			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
 		} catch (error) {
