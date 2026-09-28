@@ -74,12 +74,6 @@ export interface ExternalPiInfo {
 /** The "the setup already happened" mark, in this extension's own global state. */
 const DONE_KEY = 'picode.onboarding.done';
 
-/** How many times the gentle first-run nudge may show before it keeps quiet for good. */
-const MAX_NUDGES = 3;
-
-/** The nudge counter, so a user who answers "not now" three times is never asked again. */
-const NAG_KEY = 'picode.onboarding.nudged';
-
 /** The packages Gentle AI is made of, as pi knows them. */
 const GENTLE_PACKAGES = ['npm:gentle-pi', 'npm:gentle-engram'] as const;
 
@@ -277,7 +271,21 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			importLog.running = true;
 			importLog.lines = [];
 			importLog.step = 0;
-			importLog.total = 2;
+			// The total is known BEFORE the copy: the external profile's own settings name the
+			// packages, so the bar never jumps backwards and never sits at zero while the copy
+			// runs.
+			const externalPackages = ((): string[] => {
+				try {
+					const value: unknown = JSON.parse(readFileSync(path.join(externalProfileDir(), 'settings.json'), 'utf8'));
+					const packages = typeof value === 'object' && value !== null && !Array.isArray(value)
+						? (value as Record<string, unknown>)['packages']
+						: undefined;
+					return Array.isArray(packages) ? packages.filter((entry): entry is string => typeof entry === 'string') : [];
+				} catch {
+					return [];
+				}
+			})();
+			importLog.total = 2 + externalPackages.length;
 			try {
 				logImport('Bringing your packages, connections, skills and conversations…');
 				const report = importProfile({
@@ -346,6 +354,9 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				logImport('Refreshing your models and connections…');
 				deps.forgetRuntime();
 				deps.refreshModels();
+				// Gentle AI may have just arrived with the packages: the running chat session
+				// still holds the pre-import pi. The next conversation loads what landed.
+				deps.resetChat();
 				importLog.step = importLog.total;
 				logImport('Done.');
 				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
@@ -364,41 +375,6 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];
-}
-
-/**
- * The first-run nudge, shown once per start at most and at most `MAX_NUDGES` times ever.
- *
- * It only speaks when there is genuinely nothing configured yet — no choice made, no
- * provider declared, no credential and no models in the profile. A working setup is never
- * interrupted; the welcome page (where the setup lives) is what it offers.
- */
-export async function maybeNudgeFirstRun(deps: SetupDeps): Promise<void> {
-	if (deps.globalState.get<boolean>(DONE_KEY) === true) {
-		return;
-	}
-	const nudges = deps.globalState.get<number>(NAG_KEY, 0);
-	if (nudges >= MAX_NUDGES) {
-		return;
-	}
-
-	const providers = vscode.workspace.getConfiguration('picode').get<unknown[]>('providers');
-	if (Array.isArray(providers) && providers.length > 0) {
-		return;
-	}
-	if (existsSync(path.join(deps.profileDir, 'auth.json')) || existsSync(path.join(deps.profileDir, 'models.json'))) {
-		return;
-	}
-
-	const answer = await vscode.window.showInformationMessage(
-		'Welcome to PiCode. Set up your pi and your theme?',
-		'Set up…',
-		'Not now',
-	);
-	deps.globalState.update(NAG_KEY, nudges + 1);
-	if (answer === 'Set up…') {
-		await vscode.commands.executeCommand(SETUP_COMMAND);
-	}
 }
 
 /** Recursively copies a directory tree, creating the destination as needed. */

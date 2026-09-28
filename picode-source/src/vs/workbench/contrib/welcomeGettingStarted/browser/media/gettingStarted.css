@@ -451,26 +451,28 @@
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress {
-	height: 6px;
+	height: 8px;
 	margin: 6px 0 4px;
-	border-radius: 3px;
-	background: var(--vscode-progressBar-background, var(--vscode-editorWidget-border, rgba(128, 128, 128, .3)));
-	opacity: .35;
+	border-radius: 4px;
+	background: var(--vscode-editorWidget-border, rgba(128, 128, 128, .3));
 	overflow: hidden;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress-fill {
 	height: 100%;
 	width: 0%;
-	border-radius: 3px;
+	border-radius: 4px;
 	background: var(--vscode-progressBar-background, var(--vscode-focusBorder, #0a80ff));
-	transition: width .3s ease-out;
+	transition: width .4s ease-out;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-progress-line {
 	font-size: .88em;
-	opacity: .8;
+	opacity: .85;
 	min-height: 1.2em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 /* Gentle AI */

@@ -42,7 +42,7 @@ import {
 import { registerPiAgent, resetChatSession } from './agent';
 import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
 import { registerWizardModelCommands } from './wizard-models';
-import { maybeNudgeFirstRun, probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
+import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
 import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
@@ -1876,7 +1876,6 @@ export function activate(context: vscode.ExtensionContext): void {
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
 	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
-	void maybeNudgeFirstRun(setupDeps);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the

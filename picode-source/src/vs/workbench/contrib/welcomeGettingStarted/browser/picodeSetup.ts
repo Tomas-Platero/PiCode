@@ -563,10 +563,13 @@ export class PiCodeSetup extends Disposable {
 		}, 500);
 		this.disposables.add({ dispose: () => window.clearInterval(poll) });
 
-		importRun.then(report => {
+		importRun.then(async report => {
 			if (report === undefined || this._store.isDisposed) { return; }
 			this.importReport = report;
 			this.importRunning = false;
+			// Gentle AI may have just arrived with the packages: re-read the state so the
+			// Gentle step shows it as installed instead of offering the install again.
+			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
 			this.renderImportDone(progressArea);
 		}).catch(error => {
 			this.importRunning = false;
