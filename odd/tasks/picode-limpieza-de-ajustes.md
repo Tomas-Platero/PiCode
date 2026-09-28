@@ -67,3 +67,18 @@ descripciones hablando del feed propio en GitHub.
 `telemetry.enableCrashReporter` fuera; `getTelemetryLevel` ahora falla cerrado (unset →
 OFF); AppCenter y la marca Microsoft fuera de `main.ts`; volcados de crash locales
 conservados con subida desactivada para siempre.
+
+## Verificación en el producto construido (build 10, `5065ad1f`)
+
+Comprobado sobre `PiCode-win32-x64/`:
+- Los registros muertos **no están** en el bundle (agentHost, arnés Copilot, entitlement,
+  dictation, experiments, multiChatSessions, claudeCode, update.channel,
+  showPostInstallInfo, telemetría no-op, enableNaturalLanguageSearch).
+- Las excepciones deliberadas **están** (toolSearch.enabled, feedback.enabled, titleBar)
+  y los `picode.*` también.
+- La tabla NLS **no contiene** "Microsoft online service" ni
+  "code.visualstudio.com"… salvo los enlaces de documentación en descripciones de
+  ajustes que sí se usan (terminal, TypeScript) — se quedan: son docs, no llamadas.
+- Nota técnica: el empaquetador redistribuye los registros entre chunks
+  (`sessions.desktop.main.js`, `main.js`) — verificar contra el árbol `out/` completo,
+  no contra un solo fichero.
