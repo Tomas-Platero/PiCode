@@ -68,6 +68,21 @@ function getPluginUriFromCollectionId(collectionId: string | undefined): string 
 	return collectionId?.startsWith(PLUGIN_COLLECTION_PREFIX) ? collectionId.slice(PLUGIN_COLLECTION_PREFIX.length) : undefined;
 }
 
+// PiCode: the connector contributes pi's own servers through its `pi` definition provider, so
+// those rows are extension-sourced builtin rows whose collection carries the connector as its
+// source. They are the rows whose edit and remove go through the connector's commands, which
+// write pi's own `mcp.json` — the editor's own configuration actions never touch that file.
+const PICODE_EXTENSION_ID = 'picode.picode';
+
+/** Whether a builtin row's collection is provided by the PiCode connector. */
+function isPiConnectorCollection(collectionId: string | undefined, mcpRegistry: IMcpRegistry): boolean {
+	if (!collectionId) {
+		return false;
+	}
+	const source = mcpRegistry.collections.get().find(collection => collection.id === collectionId)?.source;
+	return source instanceof ExtensionIdentifier && ExtensionIdentifier.equals(source, PICODE_EXTENSION_ID);
+}
+
 /**
  * Represents a collapsible group header in the MCP server list.
  */
@@ -1131,13 +1146,15 @@ export class McpListWidget extends Disposable {
 			this.toggleBrowseMode(false);
 		}));
 
-		// Browse Marketplace button
+		// Browse Marketplace button. PiCode: the MCP directory is a website, not a gallery service
+		// this product talks to, so the button opens it in the browser instead of an in-widget
+		// browse mode this editor cannot fill.
 		const browseButtonContainer = DOM.append(buttonContainer, $('.list-add-button-container'));
 		this.browseButton = this._register(new Button(browseButtonContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
 		this.browseButton.label = `$(${Codicon.library.id}) ${localize('browseMarketplace', "Browse Marketplace")}`;
 		this.browseButton.element.classList.add('list-add-button');
 		this._register(this.browseButton.onDidClick(() => {
-			this.toggleBrowseMode(!this.browseMode);
+			void this.openerService.open(URI.parse('https://mcp.directory'), { openExternal: true });
 		}));
 
 		this.addButton = this._register(new Button(buttonContainer, {
@@ -1537,11 +1554,11 @@ export class McpListWidget extends Disposable {
 				type: 'group-header',
 				id: 'mcp-group-extension',
 				scope: 'extension',
-				label: localize('extensionGroup', "Extensions"),
+				label: localize('serverGroup', "Servers"),
 				icon: extensionIcon,
 				count: extensionServers.length,
 				isFirst,
-				description: localize('extensionGroupDescription', "MCP servers contributed by installed VS Code extensions."),
+				description: localize('serverGroupDescription', "MCP servers contributed by installed extensions and providers."),
 				collapsed,
 			});
 			if (!collapsed) {
@@ -1751,6 +1768,30 @@ export class McpListWidget extends Disposable {
 				}
 			}
 
+			// PiCode: a row pi's connector provides holds its entry in pi's own `mcp.json`, so its
+			// edit and remove run the connector's commands — which ask, confirm, and write that
+			// file. Every other extension-provided row is its extension's to manage.
+			if (isPiConnectorCollection(collectionId, this.mcpRegistry)) {
+				if (actions.length > 0) {
+					actions.push(new Separator());
+				}
+				const serverName = e.element.label;
+				actions.push(disposables.add(new Action(
+					'mcpServer.pi.edit',
+					localize('editPiServer', "Edit Server"),
+					undefined,
+					true,
+					() => this.commandService.executeCommand('picode.mcp.editServer', serverName)
+				)));
+				actions.push(disposables.add(new Action(
+					'mcpServer.pi.remove',
+					localize('removePiServer', "Remove Server"),
+					undefined,
+					true,
+					() => this.commandService.executeCommand('picode.mcp.removeServer', serverName)
+				)));
+			}
+
 			if (plugin) {
 				if (actions.length > 0) {
 					actions.push(new Separator());
@@ -1830,6 +1871,34 @@ export class McpListWidget extends Disposable {
 			}
 		}
 		const actions = getServerItemContextMenuActions(groups, activeSessionServer, activeSessionLifecycleAction, agentHostEnablementActions);
+
+		// PiCode: removing a server the editor configures deletes its entry from the `mcp.json`
+		// that declares it, which closing the dialog does not undo — so the uninstall action this
+		// page offers names the server and asks first. The uninstall itself stays the workbench
+		// service's own.
+		const uninstallIndex = actions.findIndex(action => action.id === 'extensions.uninstall');
+		if (uninstallIndex >= 0) {
+			const uninstallServer = mcpServer;
+			const removeAction = new Action(
+				'mcpServer.remove',
+				localize('removeServer', "Remove Server"),
+				undefined,
+				true,
+				async () => {
+					const result = await this.dialogService.confirm({
+						message: localize('confirmRemoveServer', "Remove the MCP server '{0}'?", uninstallServer.name),
+						detail: localize('confirmRemoveServerDetail', "The server's entry is removed from the configuration file that declares it."),
+						primaryButton: localize('removeServerButton', "Remove"),
+						type: 'question',
+					});
+					if (result.confirmed) {
+						await this.mcpWorkbenchService.uninstall(uninstallServer);
+					}
+				},
+			);
+			disposables.add(removeAction);
+			actions[uninstallIndex] = removeAction;
+		}
 
 		this.contextMenuService.showContextMenu({
 			getAnchor: () => e.anchor,

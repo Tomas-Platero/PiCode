@@ -8,7 +8,7 @@ import { URI, UriComponents } from '../../../../base/common/uri.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { URLHandlerChannel } from '../../../../platform/url/common/urlIpc.js';
 import { IOpenerService, IOpener } from '../../../../platform/opener/common/opener.js';
-import { matchesScheme } from '../../../../base/common/network.js';
+import { matchesScheme, Schemas } from '../../../../base/common/network.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
@@ -55,13 +55,16 @@ export class RelayURLService extends NativeURLService implements IURLHandler, IO
 
 	override async open(resource: URI | string, options?: IRelayOpenURLOptions): Promise<boolean> {
 
-		if (!matchesScheme(resource, this.productService.urlProtocol)) {
-			return false;
-		}
-
 		if (typeof resource === 'string') {
 			resource = URI.parse(resource);
 		}
+
+		// PiCode: the standard `vscode:mcp/install?...` deep link is accepted alongside this
+		// product's own scheme, but only for MCP paths — no other `vscode:` URI is opened.
+		if (!matchesScheme(resource, this.productService.urlProtocol) && !isVscodeMcpUri(resource)) {
+			return false;
+		}
+
 		return await this.urlService.open(resource, options);
 	}
 
@@ -78,6 +81,10 @@ export class RelayURLService extends NativeURLService implements IURLHandler, IO
 
 		return result;
 	}
+}
+
+function isVscodeMcpUri(uri: URI): boolean {
+	return uri.scheme === Schemas.vscode && uri.path.startsWith('mcp/');
 }
 
 registerSingleton(IURLService, RelayURLService, InstantiationType.Eager);
