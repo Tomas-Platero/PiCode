@@ -36,6 +36,7 @@ export const dirs = [
 	'extensions/merge-conflict',
 	'extensions/npm',
 	'extensions/php-language-features',
+	'extensions/references-view',
 	'extensions/search-result',
 	'extensions/simple-browser',
 	'extensions/tunnel-forwarding',
