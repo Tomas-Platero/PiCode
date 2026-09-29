@@ -9,7 +9,8 @@ import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
 import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
-import { externalProfileDir, importProfile, scanExternalProfile, type ProfilePreview } from './profile-import';
+import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
+import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { npmInstallSpec } from './packages-registry';
 import { getSessionUsage } from './agent';
 import type { StatusData } from './status-view';
@@ -158,6 +159,81 @@ function editProfilePackages(deps: SetupDeps, add: boolean): void {
 	settings['packages'] = next;
 	mkdirSync(deps.profileDir, { recursive: true });
 	writeFileSync(file, JSON.stringify(settings, undefined, '\t') + '\n');
+}
+
+/**
+ * Adds what the import brought to the **editor's own settings rows**.
+ *
+ * The copy already put the providers and MCP servers where pi reads them, and that is
+ * enough for the runtime — but the Settings pages read two editor settings
+ * (`picode.providers` and `picode.mcp.servers`), the stores the owner edits and the ones
+ * the editor projects *into* pi's files. Without this step the import would be invisible
+ * there: a working provider no settings row explains, and one the owner could not edit
+ * without starting over.
+ *
+ * Only items that actually landed are read, and only what the rows do not already name is
+ * added — the owner's own rows are never clobbered. A failure is a line in the import log,
+ * not a thrown error: the runtime already works either way, and the rows can be filled in
+ * by hand if this ever fails.
+ */
+async function syncImportedRowsToSettings(deps: SetupDeps, report: ImportReport): Promise<void> {
+	const landed = (item: ImportItem): boolean =>
+		report.items.some(entry => entry.item === item && (entry.status === 'copied' || entry.status === 'overwritten'));
+	/** The copied file, parsed at its one boundary: the object it holds, or nothing. */
+	const readCopiedFile = (name: string): Record<string, unknown> | undefined => {
+		try {
+			const value: unknown = JSON.parse(readFileSync(path.join(deps.profileDir, name), 'utf8'));
+			return typeof value === 'object' && value !== null && !Array.isArray(value)
+				? (value as Record<string, unknown>)
+				: undefined;
+		} catch {
+			// The copy said it landed, so this is a file that changed underneath the import —
+			// read as "nothing to add" rather than as a failure of the import itself.
+			return undefined;
+		}
+	};
+	const configuration = vscode.workspace.getConfiguration('picode');
+
+	if (landed('models')) {
+		try {
+			const rows = providerRowsFromModelsFile(readCopiedFile('models.json'));
+			if (rows.length > 0) {
+				const current = configuration.get<unknown[]>('providers') ?? [];
+				const merged = mergeRowsById(
+					current,
+					rows,
+					// The settings reader compares ids in lower case, so the merge does too: a
+					// row and an import that differ only in case are the same provider.
+					raw => (typeof (raw as { id?: unknown })['id'] === 'string' ? ((raw as { id: string }).id.trim().toLowerCase()) : ''),
+				);
+				// `Global` is this tree's name for the user-level settings target (the same
+				// value every other write here uses), and the target the rows are read back
+				// from when the Settings pages render them.
+				await configuration.update('providers', merged, vscode.ConfigurationTarget.Global);
+				logImport(`Recorded ${rows.length} provider ${rows.length === 1 ? 'connection' : 'connections'} in Settings > PiCode > Providers.`);
+			}
+		} catch (error) {
+			logImport(`Your imported providers could not be added to the settings (${messageOf(error)}). They still work; pi reads them from its own files.`);
+		}
+	}
+
+	if (landed('mcp')) {
+		try {
+			const rows = mcpRowsFromMcpFile(readCopiedFile('mcp.json'));
+			if (rows.length > 0) {
+				const current = configuration.get<unknown[]>('mcp.servers') ?? [];
+				const merged = mergeRowsById(
+					current,
+					rows,
+					raw => (typeof (raw as { name?: unknown })['name'] === 'string' ? ((raw as { name: string }).name.trim()) : ''),
+				);
+				await configuration.update('mcp.servers', merged, vscode.ConfigurationTarget.Global);
+				logImport(`Recorded ${rows.length} MCP ${rows.length === 1 ? 'server' : 'servers'} in Settings > PiCode > MCP.`);
+			}
+		} catch (error) {
+			logImport(`Your imported MCP servers could not be added to the settings (${messageOf(error)}). They still work; the adapter reads them from its file.`);
+		}
+	}
 }
 
 export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
@@ -351,6 +427,12 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 						importLog.step = 1 + index;
 					}
 				}
+				// The import put the providers and MCP servers where pi reads them, but the
+				// Settings pages read the editor's own rows — the stores the owner edits. What
+				// just arrived is added to those rows here, so the import is visible — and
+				// editable — where it is managed. A failure is a line in the log, not a break:
+				// the runtime already works either way.
+				await syncImportedRowsToSettings(deps, report);
 				// The imported providers and models are files on disk until the editor asks
 				// again: drop the caches and repaint the picker now.
 				logImport('Refreshing your models and connections…');

@@ -33,7 +33,8 @@ export type McpServerEntry =
 	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
 	| { readonly command: string; readonly args: readonly string[] };
 
-const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
+/** The shape a server name must have — the one the settings row is validated against, and the one an imported name is sanitized into. */
+export const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
 
 /**
  * The arguments of a local server's command, as the row writes them.

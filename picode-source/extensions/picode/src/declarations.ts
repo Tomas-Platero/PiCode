@@ -79,6 +79,22 @@ const DIALECTS: Readonly<Record<string, string>> = {
 /** What almost every endpoint speaks, and what a line that does not say gets. */
 export const DEFAULT_DIALECT = 'openai-completions';
 
+/**
+ * The dialect a declaration means, from whatever names it — a settings row's field, or the
+ * `api` an imported `models.json` entry carries.
+ *
+ * The short names a person types (`openai`, `anthropic`, `gemini`) and pi's own full names
+ * (`openai-completions`, …) are both accepted. A dialect nothing here knows is **defaulted**
+ * rather than refused, because an import has no one to ask: an entry whose dialect was not
+ * recognized still names a working endpoint, and connecting it as the OpenAI-compatible one
+ * — what almost every endpoint speaks — is the guess that keeps it usable. A row typed by
+ * hand is held to the stricter rule in `declarationFromValue`, which can refuse and say so.
+ */
+export function normalizeDialect(api: string | undefined): string {
+	const declared = (api ?? '').trim().toLowerCase();
+	return declared.length === 0 ? DEFAULT_DIALECT : (DIALECTS[declared] ?? DEFAULT_DIALECT);
+}
+
 /** The id shape the rest of the connector builds model ids from, so it cannot carry a slash. */
 function isProviderId(value: string): boolean {
 	return /^[a-z0-9][a-z0-9._-]*$/i.test(value) && !value.includes('/');
@@ -232,16 +248,28 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  *
  * A merge and not a replacement: the owner may have several connected, and rewriting the file
  * from one form would silently drop the rest. An existing entry for the same id is replaced,
- * because that is what "connect this provider" means when it is already there.
+ * because that is what "connect this provider" means when it is already there — **except for
+ * the entry's credential**, which a settings row does not carry. A row without a key stands
+ * for "the row does not name one", not "there is none": when the entry already on disk holds
+ * an `apiKey` (often pi's own `$NAME` interpolation, left there by an import) or sets
+ * `authHeader`, those fields are carried into the merged entry. Dropping them because the row
+ * does not name them would break, on the very next projection, a provider that worked before
+ * the row was written — and the projection is the only thing that rewrites this file.
  */
 export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models: readonly ModelDraft[]): Record<string, unknown> {
 	const root = isRecord(existing) ? { ...existing } : {};
-	const providers = isRecord(root.providers) ? { ...root.providers } : {};
+	const providers = isRecord(root['providers']) ? { ...root['providers'] } : {};
+	const previousEntry: unknown = providers[draft.id];
+	const previous = isRecord(previousEntry) ? previousEntry : undefined;
+	const rowCarriesKey = draft.apiKey !== undefined && draft.apiKey.length > 0;
+	const previousKey = previous !== undefined && typeof previous['apiKey'] === 'string' ? previous['apiKey'] : undefined;
+	const apiKey = rowCarriesKey ? draft.apiKey : previousKey;
+	const authHeader = rowCarriesKey ? draft.authHeader === true : draft.authHeader === true || previous?.['authHeader'] === true;
 	providers[draft.id] = {
 		baseUrl: draft.baseUrl,
 		api: draft.api,
-		...(draft.apiKey === undefined || draft.apiKey.length === 0 ? {} : { apiKey: draft.apiKey }),
-		...(draft.authHeader === true ? { authHeader: true } : {}),
+		...(apiKey === undefined || apiKey.length === 0 ? {} : { apiKey }),
+		...(authHeader ? { authHeader: true } : {}),
 		models: models.map(model => ({ id: model.id, ...(model.name === undefined ? {} : { name: model.name }) })),
 	};
 	root.providers = providers;
@@ -265,10 +293,11 @@ export function authFileWith(existing: unknown, providerId: string, key: string)
  * The projection: what a declaration means to pi
  * ------------------------------------------------------------------ */
 
-/** Reads one of pi's own files, treating "missing or broken" as "nothing there yet". */
-function readJson(file: string): unknown {
+/** One of pi's own files, parsed: the object it holds, or `undefined` when there is none. */
+function readJsonObject(file: string): Record<string, unknown> | undefined {
 	try {
-		return JSON.parse(fs.readFileSync(file, 'utf8'));
+		const value: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+		return isRecord(value) ? value : undefined;
 	} catch {
 		// A missing file is the first run; a broken one is a file somebody edited by hand, and
 		// refusing to project anything because of it would leave the owner with no way back but a
@@ -285,8 +314,13 @@ function writeJson(file: string, value: unknown): void {
 	fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
 
-/** Whether a key is one of pi's own interpolations (`$NAME`, `!command`) rather than a literal. */
-function isInterpolated(key: string): boolean {
+/**
+ * Whether a key is one of pi's own interpolations (`$NAME`, `!command`) rather than a literal.
+ *
+ * Exported because an imported `models.json` is read with the same question: only pi's own
+ * interpolations may travel into a settings row, and a literal must stay in pi's own files.
+ */
+export function isInterpolated(key: string): boolean {
 	return key.startsWith('$') || key.startsWith('!');
 }
 
@@ -349,7 +383,7 @@ export function projectDeclaration(
 	writeIfChanged(
 		modelsFile,
 		mergeModelsFile(
-			readJson(modelsFile),
+			readJsonObject(modelsFile),
 			draftFrom(declaration.id, declaration.baseUrl, declaration.api, declaration.key),
 			modelIds.map(id => ({ id })),
 		),
@@ -357,7 +391,7 @@ export function projectDeclaration(
 
 	if (declaration.key !== undefined && declaration.key.length > 0 && !isInterpolated(declaration.key)) {
 		const authFile = path.join(profileDir, 'auth.json');
-		writeIfChanged(authFile, authFileWith(readJson(authFile), declaration.id, declaration.key));
+		writeIfChanged(authFile, authFileWith(readJsonObject(authFile), declaration.id, declaration.key));
 	}
 }
 
