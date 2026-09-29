@@ -47,6 +47,13 @@ export const APPLY_GENTLE_COMMAND = 'picode.setup.applyGentle';
 /** Records that the setup happened (called by the page after a theme choice). */
 export const COMPLETE_COMMAND = 'picode.setup.complete';
 
+/**
+ * Ends the setup for good: the done mark of {@link COMPLETE_COMMAND}, plus the editor
+ * setting that keeps the welcome page from opening again on start. Called by the page's
+ * "End the setup" button.
+ */
+export const END_FOR_GOOD_COMMAND = 'picode.setup.endForGood';
+
 /** Probes the machine's pi: where it is and which version, answered once and cached. */
 export const PROBE_EXTERNAL_COMMAND = 'picode.setup.probeExternal';
 
@@ -334,6 +341,14 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				: { ...after, error: `pi's command line did not ${want} Gentle AI. See the notification for the reason.` };
 		}),
 		vscode.commands.registerCommand(COMPLETE_COMMAND, (): void => markDone()),
+		vscode.commands.registerCommand(END_FOR_GOOD_COMMAND, async (): Promise<void> => {
+			markDone();
+			// Ending for good also quiets the page itself: without this the welcome page would
+			// open again on the next start however finished the setup is. The write lands at
+			// user level — the owner's own choice, not a workspace's — the same target every
+			// other settings write here uses.
+			await vscode.workspace.getConfiguration().update('workbench.startupEditor', 'none', vscode.ConfigurationTarget.Global);
+		}),
 		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),

@@ -17,7 +17,7 @@ import { ColorThemeData } from '../../../services/themes/common/colorThemeData.j
 /**
  * The PiCode setup, as **cards on the welcome page**.
  *
- * The page owns the questions; this module owns the rendering and the calls. Three cards:
+ * The page owns the questions; this module owns the rendering and the calls. Four cards:
  *
  * - **pi** — two option cards with live facts (the internal pi's version; the machine's pi
  *   probed once for path and version). Choosing one applies it and the note under the cards
@@ -27,6 +27,9 @@ import { ColorThemeData } from '../../../services/themes/common/colorThemeData.j
  * - **Gentle AI** — asked about only while the internal pi runs (it lives in PiCode's own
  *   profile). Three states: not installed, working (inline, no popups), installed with its
  *   version and update/remove.
+ * - **pi packages** — the theme's two-source pattern again: what pi already has installed
+ *   (read-only rows) and npm's catalog of pi packages, searched with a pause, paged, and
+ *   installed on click. The step is optional by nature: moving past it changes nothing.
  * - **Theme** — a gallery grid: one card per installed theme, a small preview painted from
  *   the theme's own loaded colors, search and a Dark/Light/High-contrast filter, the active
  *   theme marked, and **live preview on hover**: the theme is applied with the editor's
@@ -40,6 +43,9 @@ import { ColorThemeData } from '../../../services/themes/common/colorThemeData.j
 
 /** How many gallery cards show before "Show more" offers the next page. */
 const THEME_GALLERY_PAGE = 24;
+
+/** How many package rows show before "Show more" offers the next page. */
+const PACKAGE_GALLERY_PAGE = 24;
 
 /** One model of the fetched list, as the connector's modelsList answers it. */
 interface WizardModel {
@@ -66,6 +72,31 @@ interface GalleryPalette {
 	fg: string;
 	ln: string;
 	a: readonly [string, string, string, string];
+}
+
+/** One installed pi package, as the connector's `picode.setup.packages` answers it. */
+interface InstalledPackage {
+	id: string;
+	name: string;
+	version?: string;
+	description?: string;
+	/** The declaration as the settings file spells it (`npm:some-package`). */
+	source?: string;
+	state?: 'enabled' | 'disabled';
+}
+
+/** One row of npm's catalog, as the connector's `picode.packages.search` answers it. */
+interface CatalogPackage {
+	name: string;
+	description?: string;
+	publisher?: string;
+	version?: string;
+}
+
+/** What the connector's install answers: whether it worked, and the one sentence to show. */
+interface PackageInstallResult {
+	ok: boolean;
+	message: string;
 }
 
 /** The facts the connector answers with (`picode.setup.getState`). */
@@ -127,7 +158,7 @@ export class PiCodeSetup extends Disposable {
 	private busy = false;
 
 	/* The wizard: which step is on screen, and what the owner has done in it. */
-	private step: 0 | 1 | 2 | 3 = 0;
+	private step: 0 | 1 | 2 | 3 | 4 = 0;
 	/** Step 1's Next stays disabled until an option card is clicked at least once. */
 	private piChosen = false;
 	/** The wizard ran to the end. */
@@ -154,6 +185,9 @@ export class PiCodeSetup extends Disposable {
 	/** The finished import's counts, kept across re-renders. */
 	private importReport: (ImportReport & { packagesInstalled?: number; packagesFailed?: number; packagesSkipped?: number; credentialsImported?: boolean }) | undefined;
 	private note: HTMLElement | undefined;
+	/** The final screen's one-line ending, set once "End the setup" answers. */
+	private endedNote: string | undefined;
+	private endedWithError = false;
 	private gentleStatus: HTMLElement | undefined;
 	/* The theme card's two sources: what is installed, and what the gallery (Open VSX) has. */
 	private themeSource: 'installed' | 'gallery' = 'installed';
@@ -162,6 +196,17 @@ export class PiCodeSetup extends Disposable {
 	private galleryShown = 0;
 	private galleryLoading = false;
 	private gallerySearchTimer: Timeout | undefined;
+	/* The packages card's two sources: what pi has installed, and what npm's catalog has. */
+	private packageSource: 'installed' | 'gallery' = 'installed';
+	private installedPackages: InstalledPackage[] | undefined;
+	private packageCatalog: CatalogPackage[] | undefined;
+	private packageQuery = '';
+	private packagesShown = PACKAGE_GALLERY_PAGE;
+	private packagesLoading = false;
+	private packagesError = '';
+	/** The catalog row an install is running for; one install at a time, like pi's own queue. */
+	private installingPackage: string | undefined;
+	private packageSearchTimer: Timeout | undefined;
 	/** The Gentle installer's live output, polled while the install runs. */
 	private gentleLogEl: HTMLElement | undefined;
 
@@ -222,23 +267,28 @@ export class PiCodeSetup extends Disposable {
 		}
 		if (this.finished) {
 			reset(this.container as HTMLElement, $('.picode-card', {},
-				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > Chat, or by running this setup again.")),
+				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > PiCode, or by running this setup again.")),
 				$('.picode-gentle-actions', {},
-					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
+					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); }, 'primary'),
+					this.button('picode-setup-end', localize('picodeSetup.end', "End the setup"), () => this.endForGood(), 'secondary')),
+				...(this.endedNote !== undefined ? [$('p.picode-note' + (this.endedWithError ? '.picode-error' : ''), {}, this.endedNote)] : []),
 			));
 			return;
 		}
 
-		// Four steps: pi, then (for the internal pi) the provider and its model, then
-		// Gentle AI with its agents, then the theme. With the external pi the provider
-		// step has nothing to ask (its providers are the machine's) and Gentle is dimmed.
+		// Five steps: pi, then (for the internal pi) the provider and its model, then
+		// Gentle AI with its agents, then the pi packages, then the theme. With the
+		// external pi the provider step has nothing to ask (its providers are the
+		// machine's) and Gentle is dimmed.
 		const body = this.step === 0
 			? this.renderPiCard(state)
 			: this.step === 1
 				? (state.runtime === 'internal' ? this.renderProviderStep() : this.renderSkippedProvider())
 				: this.step === 2
 					? this.renderGentleStep(state)
-					: this.renderThemeCard();
+					: this.step === 3
+						? this.renderPackagesCard()
+						: this.renderThemeCard();
 
 		const foot = this.renderWizardFoot(state);
 		this.wizardFootEl = foot;
@@ -250,34 +300,35 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	/** The three dots and the "1 of 3 — pi" line. */
+	/** The five dots and the "1 of 5 — pi" line. */
 	private renderWizardHead(): HTMLElement {
 		const names = [
 			localize('picodeSetup.step.pi', "pi"),
 			localize('picodeSetup.step.provider', "Provider & model"),
 			localize('picodeSetup.step.gentle', "Gentle AI"),
+			localize('picodeSetup.step.packages', "Packages"),
 			localize('picodeSetup.step.theme', "Theme"),
 		];
 		const dots = $('.picode-step-dots', {});
-		for (let i = 0; i < 4; i += 1) {
+		for (let i = 0; i < 5; i += 1) {
 			dots.appendChild($('.picode-dot' + (i === this.step ? '.on' : '')));
 		}
 		return $('.picode-wizard-head', {},
 			dots,
-			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 4 — {1}", String(this.step + 1), names[this.step])),
+			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 5 — {1}", String(this.step + 1), names[this.step])),
 		);
 	}
 
 	/**
 	 * Back / Next / Skip, the same three on every step, plus "Not now" at the far right.
 	 *
-	 * Step 1's Next is disabled until an option card is clicked. Step 3 has no Skip (there
-	 * is nothing after it) and its Next is "Done".
+	 * Step 1's Next is disabled until an option card is clicked. The last step has no Skip
+	 * (there is nothing after it) and its Next is "Done".
 	 */
 	private renderWizardFoot(state: SetupState): HTMLElement {
 		const back = this.navButton('picode-wizard-back', localize('picodeSetup.nav.back', "Back"), this.step > 0,
-			() => this.goTo((this.step === 2 && state.runtime !== 'internal' ? 0 : this.step - 1) as 0 | 1 | 2 | 3));
-		const nextLabel = this.step === 3 ? localize('picodeSetup.nav.done', "Done")
+			() => this.goTo((this.step === 2 && state.runtime !== 'internal' ? 0 : this.step - 1) as 0 | 1 | 2 | 3 | 4));
+		const nextLabel = this.step === 4 ? localize('picodeSetup.nav.done', "Done")
 			: this.step === 0 ? localize('picodeSetup.nav.next', "Next")
 			: this.step === 1 ? localize('picodeSetup.nav.nextModel', "Next — set the default model")
 				: localize('picodeSetup.nav.next', "Next");
@@ -297,7 +348,7 @@ export class PiCodeSetup extends Disposable {
 			next.title = localize('picodeSetup.nav.chooseModel', "Pick the model your agent will run on.");
 		}
 		const foot = $('.picode-wizard-foot', {}, back, $('.picode-foot-spacer', {}));
-		if (this.step < 3) {
+		if (this.step < 4) {
 			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), !(this.busy && this.step === 2), () => this.advanceFrom(state, true)));
 		}
 		foot.append(
@@ -332,6 +383,10 @@ export class PiCodeSetup extends Disposable {
 			this.goTo(3);
 			return;
 		}
+		if (this.step === 3) {
+			this.goTo(4);
+			return;
+		}
 		this.finish();
 	}
 
@@ -354,7 +409,7 @@ export class PiCodeSetup extends Disposable {
 		}
 	}
 
-	private goTo(step: 0 | 1 | 2 | 3): void {
+	private goTo(step: 0 | 1 | 2 | 3 | 4): void {
 		this.step = step;
 		this.renderWizard(this.state);
 	}
@@ -371,6 +426,25 @@ export class PiCodeSetup extends Disposable {
 		this.skipped = true;
 		this.services.commandService.executeCommand('picode.setup.complete');
 		this.renderWizard(this.state);
+	}
+
+	/**
+	 * "End the setup": the done mark the other exits set, plus the editor setting that
+	 * keeps the welcome page from opening again on start. The connector owns both writes
+	 * (`picode.setup.endForGood`); the page only says what came of them, in one line.
+	 */
+	private endForGood(): void {
+		this.services.commandService.executeCommand('picode.setup.endForGood')
+			.then(() => {
+				this.endedNote = localize('picodeSetup.endNote', "Setup ended. You can bring it back from Settings > PiCode.");
+				this.endedWithError = false;
+				this.renderWizard(this.state);
+			})
+			.catch(error => {
+				this.endedNote = messageOf(error);
+				this.endedWithError = true;
+				this.renderWizard(this.state);
+			});
 	}
 
 	private renderPiCard(state: SetupState): HTMLElement {
@@ -699,7 +773,7 @@ export class PiCodeSetup extends Disposable {
 			$('.picode-card-head', {},
 				$('.picode-card-title', {}, localize('picodeSetup.provider.skippedTitle', "Providers")),
 				$('span.picode-hint', {}, localize('picodeSetup.provider.skippedHint', "Handled by your external pi"))),
-			$('p.picode-row-description', {}, localize('picodeSetup.provider.skippedDetail', "The pi on this machine keeps its own providers and credentials, which this editor never writes to. Next: Gentle AI — which also belongs to the internal pi — and your theme.")),
+			$('p.picode-row-description', {}, localize('picodeSetup.provider.skippedDetail', "The pi on this machine keeps its own providers and credentials, which this editor never writes to. Next: Gentle AI — which also belongs to the internal pi — the pi packages, and your theme.")),
 		);
 	}
 
@@ -870,6 +944,268 @@ export class PiCodeSetup extends Disposable {
 		this.gentleLogEl = $('.picode-gentle-log');
 		card.appendChild(this.gentleLogEl);
 		return card;
+	}
+
+	/**
+	 * The pi packages step, optional by nature: two sources in the theme gallery's pattern.
+	 * "Installed" lists what pi already loads (read-only rows — management lives in the chat
+	 * page's Packages section), and "Gallery" asks npm's catalog, searched with a pause,
+	 * paged, one install per click into the profile in force.
+	 */
+	private renderPackagesCard(): HTMLElement {
+		const grid = $('.picode-package-grid');
+		const toolbar = $('.picode-theme-toolbar', {});
+		const card = $('.picode-card.picode-package-card', {},
+			$('.picode-card-head', {},
+				$('.picode-card-title', {}, localize('picodeSetup.packages.title', "pi packages")),
+				$('span.picode-hint', {}, localize('picodeSetup.packages.hint', "Optional — packages that extend pi. Skip this and nothing breaks.")),
+			),
+			toolbar,
+			grid,
+			$('.picode-theme-more', {}),
+		);
+
+		// Self-clearing, like the theme gallery: every invocation repaints the toolbar, the
+		// rows and the "more" row from scratch, so repeated calls never stack.
+		const repaint = (): void => {
+			const more = card.querySelector('.picode-theme-more');
+			if (!(more instanceof HTMLElement)) { return; }
+			if (this.packageSource === 'gallery') {
+				this.renderPackageGalleryInto(toolbar, grid, more, repaint);
+			} else {
+				this.renderInstalledPackagesInto(toolbar, grid, more, repaint);
+			}
+		};
+		repaint();
+		return card;
+	}
+
+	/** The Installed | Gallery tabs, the same chips the theme card uses. */
+	private packageSourceTabs(onPick: () => void): HTMLElement {
+		const tabs = $('.picode-source-tabs', {});
+		const kinds: ReadonlyArray<{ kind: 'installed' | 'gallery'; label: string }> = [
+			{ kind: 'installed', label: localize('picodeSetup.packages.tabInstalled', "Installed") },
+			{ kind: 'gallery', label: localize('picodeSetup.packages.tabGallery', "Gallery") },
+		];
+		for (const kind of kinds) {
+			const chip = $('button.picode-source-tab' + (this.packageSource === kind.kind ? '.checked' : ''), { 'type': 'button', 'tabindex': 0 }, kind.label);
+			this.disposables.add(addDisposableListener(chip, 'click', () => {
+				if (this.packageSource === kind.kind) { return; }
+				onPick();
+			}));
+			tabs.appendChild(chip);
+		}
+		return tabs;
+	}
+
+	/** Whether a catalog name is already installed here, by npm name or declared source. */
+	private isPackageInstalled(name: string): boolean {
+		return (this.installedPackages ?? []).some(pkg =>
+			pkg.name === name || pkg.id === name || pkg.source === `npm:${name}` || pkg.source === name);
+	}
+
+	/** The line both sources render first when a load is running or the last one failed. */
+	private packageStateRow(): HTMLElement | undefined {
+		if (this.packagesError !== '') {
+			return $('.picode-gallery-loading.picode-error', {},
+				localize('picodeSetup.packages.error', "The package list could not be loaded: {0}", this.packagesError));
+		}
+		if (this.packagesLoading) {
+			return $('.picode-gallery-loading', {}, localize('picodeSetup.packages.loading', "Asking for the packages…"));
+		}
+		return undefined;
+	}
+
+	/** The detail line one row shows: the description when there is one, the version after it. */
+	private packageDetail(description: string | undefined, version: string | undefined): HTMLElement[] {
+		if (description === undefined && version === undefined) { return []; }
+		const text = [description, version !== undefined ? `v${version}` : undefined]
+			.filter((part): part is string => part !== undefined)
+			.join(' · ');
+		return [$('span.picode-theme-publisher', {}, text)];
+	}
+
+	private renderInstalledPackagesInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, repaint: () => void): void {
+		reset(toolbar);
+		toolbar.append(this.packageSourceTabs(() => {
+			this.packageSource = 'gallery';
+			this.packagesShown = PACKAGE_GALLERY_PAGE;
+			repaint();
+		}));
+		clearNode(grid);
+		clearNode(more);
+
+		// The first visit to the tab has nothing cached yet: ask the connector first.
+		if (this.installedPackages === undefined) {
+			void this.loadInstalledPackages(repaint);
+		}
+		const stateRow = this.packageStateRow();
+		if (stateRow !== undefined) {
+			grid.appendChild(stateRow);
+			return;
+		}
+		const rows = this.installedPackages ?? [];
+		if (rows.length === 0) {
+			grid.appendChild($('.picode-gallery-loading', {},
+				localize('picodeSetup.packages.noneInstalled', "No pi packages installed yet — the Gallery tab has some.")));
+			return;
+		}
+		const list = $('.picode-model-list', {});
+		for (const pkg of rows) {
+			list.appendChild($('.picode-agent-row', {},
+				$('.picode-package-meta', {},
+					$('span.picode-package-name', {}, pkg.name),
+					...this.packageDetail(pkg.description, pkg.version)),
+				...(pkg.state === 'disabled'
+					? [$('span.picode-theme-badge', {}, localize('picodeSetup.packages.disabled', "Disabled"))]
+					: []),
+			));
+		}
+		grid.appendChild(list);
+	}
+
+	private renderPackageGalleryInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, repaint: () => void): void {
+		reset(toolbar);
+		toolbar.append(this.packageSourceTabs(() => {
+			this.packageSource = 'installed';
+			repaint();
+		}));
+		clearNode(grid);
+		clearNode(more);
+
+		const search = this.packageSearch(text => {
+			this.packageQuery = text;
+			this.packagesShown = PACKAGE_GALLERY_PAGE;
+			// One request per pause, not per keystroke — the theme gallery's own rhythm.
+			if (this.packageSearchTimer !== undefined) {
+				clearTimeout(this.packageSearchTimer);
+			}
+			this.packageSearchTimer = setTimeout(() => {
+				this.packageSearchTimer = undefined;
+				void this.loadPackageCatalog(repaint);
+			}, 350);
+		});
+		toolbar.append(search);
+
+		more.append(
+			this.button('picode-packages-show-more', localize('picodeSetup.packages.showMore', "Show more packages"), () => {
+				this.packagesShown += PACKAGE_GALLERY_PAGE;
+				this.renderPackageGalleryInto(toolbar, grid, more, repaint);
+			}),
+		);
+
+		// The first visit to the tab has nothing cached yet: ask the catalog first.
+		if (this.packageCatalog === undefined) {
+			void this.loadPackageCatalog(repaint);
+		}
+		const stateRow = this.packageStateRow();
+		if (stateRow !== undefined) {
+			grid.appendChild(stateRow);
+			return;
+		}
+		const rows = (this.packageCatalog ?? []).slice(0, this.packagesShown);
+		if (rows.length === 0) {
+			grid.appendChild($('.picode-gallery-loading', {},
+				localize('picodeSetup.packages.noneFound', "Nothing in the catalog for that search.")));
+			return;
+		}
+		const list = $('.picode-model-list', {});
+		for (const row of rows) {
+			const installed = this.isPackageInstalled(row.name);
+			const install = installed
+				? this.button('picode-package-install', localize('picodeSetup.packages.installed', "Installed"), () => { /* already in place */ }, 'secondary')
+				: this.installingPackage === row.name
+					? this.button('picode-package-install', localize('picodeSetup.packages.installing', "Installing…"), () => { /* already running */ }, 'secondary')
+					: this.button('picode-package-install', localize('picodeSetup.packages.install', "Install"), () => {
+						void this.installCatalogPackage(row, repaint);
+					}, 'secondary');
+			// One install at a time: while one runs, every install button goes inert.
+			if (installed || this.installingPackage !== undefined) {
+				install.classList.add('disabled');
+			}
+			list.appendChild($('.picode-agent-row', {},
+				$('.picode-package-meta', {},
+					$('span.picode-package-name', {}, row.name),
+					...this.packageDetail(row.description, row.version)),
+				install,
+			));
+		}
+		grid.appendChild(list);
+	}
+
+	private async loadInstalledPackages(repaint: () => void): Promise<void> {
+		if (this.packagesLoading) { return; }
+		this.packagesLoading = true;
+		try {
+			const answer = await this.services.commandService.executeCommand<InstalledPackage[]>('picode.setup.packages');
+			if (answer !== undefined) {
+				this.installedPackages = answer;
+				this.packagesError = '';
+			}
+		} catch (error) {
+			this.installedPackages = [];
+			this.packagesError = messageOf(error);
+		}
+		this.packagesLoading = false;
+		repaint();
+	}
+
+	private async loadPackageCatalog(repaint: () => void): Promise<void> {
+		if (this.packagesLoading) { return; }
+		this.packagesLoading = true;
+		try {
+			const answer = await this.services.commandService.executeCommand<CatalogPackage[]>('picode.packages.search', this.packageQuery);
+			if (answer !== undefined) {
+				this.packageCatalog = answer;
+				this.packagesError = '';
+			}
+		} catch (error) {
+			this.packageCatalog = [];
+			this.packagesError = messageOf(error);
+		}
+		this.packagesLoading = false;
+		repaint();
+	}
+
+	/**
+	 * Installs one catalog package, then refreshes the installed rows so both tabs agree.
+	 * The result's own sentence is the error line when pi says no; nothing here throws.
+	 */
+	private async installCatalogPackage(row: CatalogPackage, repaint: () => void): Promise<void> {
+		if (this.installingPackage !== undefined) { return; }
+		this.installingPackage = row.name;
+		this.packagesError = '';
+		repaint();
+		try {
+			const result = await this.services.commandService.executeCommand<PackageInstallResult>('picode.packages.install', row.name);
+			this.installingPackage = undefined;
+			if (result !== undefined && !result.ok) {
+				this.packagesError = result.message;
+			} else {
+				// The rows come back from the connector before the gallery repaints, so the
+				// installed package's own row turns to "Installed" instead of offering a
+				// second install of what is already in place.
+				this.installedPackages = undefined;
+				await this.loadInstalledPackages(repaint);
+			}
+		} catch (error) {
+			this.installingPackage = undefined;
+			this.packagesError = messageOf(error);
+		}
+		repaint();
+	}
+
+	/** The gallery's search box: the theme search's twin, with its own labels. */
+	private packageSearch(onInput: (query: string) => void): HTMLElement {
+		const input = $('input.picode-theme-search', {
+			'type': 'text',
+			'placeholder': localize('picodeSetup.packages.search', "Search packages…"),
+			'aria-label': localize('picodeSetup.packages.searchAria', "Search pi packages"),
+		});
+		this.disposables.add(addDisposableListener(input, 'input', () => onInput((input as HTMLInputElement).value)));
+		// The page around the grid listens for keys; the search box keeps them for typing.
+		this.disposables.add(addDisposableListener(input, 'keydown', event => event.stopPropagation()));
+		return input;
 	}
 
 	/**
