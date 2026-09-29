@@ -88,6 +88,22 @@ Borrado de todo lo gitignored: `extensions/*/node_modules`, `extensions/node_mod
 
 Los comentarios `// eslint-disable-*` que quedan en el código son inertes: no rompen nada.
 
+## Noche del 29-09: puesta a punto del builder y el build (dueño: «quiero que funcione nuevamente»)
+
+- `dev/build-progress.mjs`: el marcador de staging esperaba `step x/6`; el staging ahora
+  imprime 7 pasos → `[0-9]/[0-9]`.
+- `dev/build-requirements.mjs`: comentario obsoleto (ya no se exige jq).
+- `builder/Pipeline.cs`: comentario de CleanBuild actualizado (no hay descarga ni parches).
+- **Defecto propio corregido**: el corte de dotfiles borró `.nvmrc` y `build/npm/preinstall.ts`
+  lo lee para verificar la versión de Node → restaurado y commiteado como fix
+  (`d8338896`). `.mailmap` sigue fuera: nada lo lee.
+- **Lock raíz regenerado** (`c385bc59`): al quitar las 10 devDependencies de ESLint,
+  `package-lock.json` quedó desincronizado y `npm ci` (fase 1) habría fallado.
+- Wiki de GitHub actualizada y publicada (9 páginas al canon fuente; lápida para The Patch
+  System); el espejo `wiki/` ya no existe en el repo.
+- Verificación final: build completo lanzado con `dev/build-run.sh` (el mismo contrato que
+  el builder lee). Resultado: ver reporte de cierre.
+
 ## Resultado ejecutado (2026-09-29)
 
 - Árbol en disco: 3.3G → **242M** (objetivo cumplido de sobra: «menos de la mitad»).

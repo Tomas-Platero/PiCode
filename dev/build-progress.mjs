@@ -102,7 +102,7 @@ function readLog(text) {
 		{ index: 2, pattern: /== phase 2\/5|connector compiled/ },
 		{ index: 3, pattern: /Starting compile-src|Starting .*compilation/ },
 		{ index: 4, pattern: /Finished compile-src|Bundled extension:|Packing/ },
-		{ index: 5, pattern: /== phase 5\/5|--- step [0-9]\/6|staging complete/ },
+		{ index: 5, pattern: /== phase 5\/5|--- step [0-9]\/[0-9]|staging complete/ },
 	];
 
 	// The furthest stage that has left its mark wins. Not the marker that appears latest in the text:

@@ -242,8 +242,9 @@ if (isWindows) {
 }
 
 // Required, or merely recommended. The difference matters: something recommended that is missing must
-// not stop a build that would have worked, and the pipeline itself decides that - it demands only jq,
-// git and node, and the rest is what installing the dependencies needs.
+// not stop a build that would have worked, and the pipeline itself decides that - it demands only
+// git and node (jq left the pipeline with the patch machinery), and the rest is what installing
+// the dependencies needs.
 const blockers = checks.filter(check => !check.ok && !check.optional);
 
 if (json) {

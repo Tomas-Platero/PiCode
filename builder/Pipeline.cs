@@ -455,9 +455,9 @@ public sealed class Pipeline
 
 	/// <summary>
 	/// Removes what a build left behind: the packed editor and the runner's verdict. The source tree is
-	/// deliberately not touched - deleting it means downloading and patching again, which is a different
-	/// decision and one this should not make silently. Refuses while a build is running, because
-	/// deleting the folder a build is writing into is how half of it disappears.
+	/// deliberately not touched - deleting it means compiling again, which is a different decision and
+	/// one this should not make silently. Refuses while a build is running, because deleting the folder
+	/// a build is writing into is how half of it disappears.
 	/// </summary>
 	public static (bool Ok, string Message) CleanBuild()
 	{
