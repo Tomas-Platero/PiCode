@@ -24,8 +24,8 @@ const buildPath = (arch: string) => path.join(path.dirname(repoPath), `PiCode-Wi
 const setupDir = (arch: string, target: string) => path.join(repoPath, '.build', `win32-${arch}`, `${target}-setup`);
 const innoSetupPath = path.join(path.dirname(path.dirname(require.resolve('innosetup'))), 'bin', 'ISCC.exe');
 // The Azure Pipelines machinery (build/azure-pipelines/) was removed with the
-test tree: PiCode builds no installers and never signs with ESRP, so the
-const that pointed at its win32 signing script went with it.
+// test tree: PiCode builds no installers and never signs with ESRP, so the
+// const that pointed at its win32 signing script went with it.
 
 function packageInnoSetup(iss: string, options: { definitions?: Record<string, unknown> }, cb: (err?: Error | null) => void) {
 	const definitions = options.definitions || {};
