@@ -1,40 +1,30 @@
-# PiCode distribution layer (Windows)
+# PiCode distribution layer
 
 Operator guide for `distribution/`. The strategy behind these files is in
 [`docs/DISTRIBUTION.md`](../docs/DISTRIBUTION.md); this file is the short runbook.
 
-PiCode does not compile the editor. It **owns a VSCodium tree** — the archive extracted
-at the repository root — and applies a product delta to it.
+PiCode's source lives in `picode-source/` and `dev/build.sh` compiles it. This folder
+holds the **product identity as data**: the build (and CI, and the release workflow)
+applies the delta to the source tree's `product.json`, and the staging step lays the
+first-run defaults and the brand assets onto the packed output.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `product-delta.json` | The product change **as data**: `set`, `unset`, `unsetNested`, `unsetArrayEntries`. This is the file to edit when the product configuration must change. |
+| `product-delta.json` | The product change **as data**: `set`, `unset`, `unsetNested`, `unsetArrayEntries`. This is the file to edit when the product configuration must change. It also carries the release `version` — the one value that changes release to release. |
 | `apply-product-delta.mjs` | Applies the delta to a target `product.json`. Node rather than PowerShell, because 5.1 caps `ConvertTo-Json` depth at 2 and escapes non-ASCII. Exit `0` already current, `1` needs update, `2` error. |
-| `apply-picode.ps1` | The orchestrator: product delta, portable profile, first-run defaults, the visible names, and staging the panel as a built-in extension. Preview by default; `-Apply` writes. |
 | `settings.json` | First-run defaults. Copied only when the user has no settings file of their own. |
+| `runtime.json` | The pinned pi runtime version the editor ships (`dev/pi-runtime.sh` reads it). |
+| `picode.ico` | The Windows icon; the Linux pack derives its PNG icons from it (`dev/ico-to-png.mjs`). The builder app reads it too. |
+| `picode-icon.svg` / `picode.svg` | The brand marks the staging step lays onto the packed tree: the filled plate for icon surfaces, the strokes-only drawing for watermark surfaces. |
 
-The pinned pi version lives in `distribution/runtime.json` — the one file the build and the
-archive route both read.
+## How the build uses it
 
-## Running it
-
-```powershell
-powershell -File distribution/apply-picode.ps1           # preview: prints what it would do
-powershell -File distribution/apply-picode.ps1 -Apply    # write
-```
-
-It is idempotent, refuses to run outside a VSCodium root, and backs up
-`resources/app/product.json` with a timestamped name before the first write.
-
-## What it touches when `-Apply` is passed
-
-- `resources/app/product.json` — the product delta, after a backup
-- `data/user-data/`, `data/extensions/`, `data/tmp/` — the portable profile
-- `data/user-data/User/settings.json` — only created if it does not exist
-- `PiCode.exe`, `bin/picode.cmd`, `bin/picode`, `PiCode.VisualElementsManifest.xml` — renamed
-  from VSCodium's names, and the two shims and the manifest have their text updated to match
+- Phase 1 of `dev/build.sh` applies `product-delta.json` to `picode-source/product.json`.
+- Phase 5 (`dev/stage-distribution.sh`) stages `settings.json`, the icons and the marks
+  onto the pack output (`./PiCode-Win32-x64`).
+- The release workflow reads the version from `product-delta.json` before tagging.
 
 ## Publishing an update feed
 
@@ -51,7 +41,7 @@ The layout, the URL template and the version-numbering dependency are in
 
 ## Changing the product
 
-Edit `product-delta.json` and run the script. Two rules this file has already learned
+Edit `product-delta.json`; the build applies it. Two rules this file has already learned
 the hard way, both by running the build rather than by reading the diff:
 
 1. **A key the editor iterates must be emptied, not removed.** An absent array where
@@ -63,7 +53,12 @@ the hard way, both by running the build rather than by reading the diff:
 
 ## Retired
 
-An earlier `bootstrap.ps1` branded a *separately installed* VSCodium through a
+- `bootstrap.ps1` branded a *separately installed* VSCodium through a
 user-level overlay. That path could override product keys but never delete one, which is
 why Copilot could not be removed through it. ADR-011 records the change, the owned-tree
 path replaced it, and the retired script and its overlay remain in git history.
+- `apply-picode.ps1` orchestrated the same owned-VSCodium-archive route: it derived its
+root from its own location and could not be pointed at a source-build pack output. The
+source build made it redundant — `dev/build.sh` applies the delta itself and
+`dev/stage-distribution.sh` stages the layer onto the pack output. Removed 2026-09-29;
+it remains in git history.

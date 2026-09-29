@@ -96,10 +96,10 @@ Nothing is lost that a repository should hold:
   until something builds the Rust CLI (`picode-source/cli/`) into the pack.
 - **The announcement injection is not wired.** PiCode ships no announcements, so there is nothing
   to splice.
-- **The staging step duplicates logic from `distribution/apply-picode.ps1`.** The PowerShell
-  script derives its root from its own location, so it can only run against the tree at the
-  repository root; the bash version mirrors its steps 1-6 and both must be kept in sync. It also
-  adds two steps the PowerShell one does not have: `dev/brand-copy.mjs`, and deleting the
+- **The staging step is the single implementation of the layer staging.** The retired
+  `distribution/apply-picode.ps1` used to be the second implementation (it could only run
+  against the owned VSCodium tree at the repository root); it was removed on 2026-09-29. It also
+  adds two steps the retired PowerShell one did not have: `dev/brand-copy.mjs`, and deleting the
   `*.map` files and every `locales/*.pak` except `en-US` and `es`.
 - **A version bump costs one dependency install.** `dev/deps-current.mjs` compares VS Code's
   recorded state by content hash over `package.json`, so writing a new version into it makes the

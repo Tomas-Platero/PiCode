@@ -3,12 +3,11 @@
 #
 # Stages the PiCode distribution layer onto a freshly packed editor tree.
 #
-# The binary release path does this with `distribution/apply-picode.ps1`, which
-# runs against the VSCodium tree at the repository root. A source build produces
-# `./PiCode-Win32-x64` instead, and the PowerShell script derives its root from
-# its own location, so it cannot be pointed at it without moving the pack output
-# onto the frozen release tree. This script performs the same actions on the pack
-# output, in the same order and with the same idempotence.
+# The retired `distribution/apply-picode.ps1` used to do this against the owned
+# VSCodium tree at the repository root; it could not be pointed at a source-build
+# pack output. A source build produces `./PiCode-Win32-x64`, so this script
+# performs the same actions on the pack output, in the same order and with the
+# same idempotence.
 #
 # The Windows ICON inside the packed tree (`resources/app/resources/win32/code.ico`)
 # is still replaced here, but that is now a belt-and-braces copy, not the fix.

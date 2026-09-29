@@ -275,9 +275,9 @@ fi
 # ---------------------------------------------------------------------------
 # The identity
 # ---------------------------------------------------------------------------
-# The identity has ONE home: distribution/product-delta.json. Both paths apply it - this build
-# here, and distribution/apply-picode.ps1 onto the packaged tree - so the compiled editor and the
-# released one cannot disagree. Bumping a release is editing that one value.
+# The identity has ONE home: distribution/product-delta.json. The build applies it to the source
+# tree's product.json, so the compiled editor and the released one cannot disagree. Bumping a
+# release is editing that one value.
 #
 # The delta sets product.json's version; the packer also reads package.json's, so the two are put
 # in agreement here rather than maintained by hand. This is the one thing that changes release to
