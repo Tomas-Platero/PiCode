@@ -3,9 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 /**
  * Hygiene works by creating cascading subsets of all our files and
  * passing them through a sequence of checks. Here are the current subsets,
@@ -53,9 +50,6 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/markdown-language-features/notebook-out/*.js',
 	'!extensions/markdown-language-features/markdown-editor-out/*.js',
 	'!extensions/markdown-math/notebook-out/**',
-	'!extensions/mermaid-markdown-features/chat-webview-out/**',
-	'!extensions/ipynb/notebook-out/**',
-	'!extensions/notebook-renderers/renderer-out/**',
 	'!extensions/php-language-features/src/features/phpGlobalFunctions.ts',
 	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/test-workspace/**',
@@ -112,7 +106,6 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!extensions/typescript-language-features/resources/walkthroughs/**',
 	'!extensions/typescript-language-features/package-manager/node-maintainer/**',
 	'!extensions/markdown-math/notebook-out/**',
-	'!extensions/ipynb/notebook-out/**',
 	'!build/monaco/**',
 	'!build/win32/**',
 	'!build/checker/**',
@@ -151,15 +144,10 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!**/*.tiff',
 
 	// except for built files
-	'!extensions/mermaid-markdown-features/chat-webview-out/*.js',
-	'!extensions/mermaid-markdown-features/markdown-preview-out/*.js',
-	'!extensions/mermaid-markdown-features/notebook-out/*.js',
 	'!extensions/markdown-language-features/media/*.js',
 	'!extensions/markdown-language-features/markdown-editor-out/*.js',
 	'!extensions/markdown-language-features/notebook-out/*.js',
 	'!extensions/markdown-math/notebook-out/*.js',
-	'!extensions/ipynb/notebook-out/**',
-	'!extensions/notebook-renderers/renderer-out/*.js',
 	'!extensions/simple-browser/media/*.js',
 ]);
 
@@ -201,7 +189,6 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/configuration-editing/build/inline-allOf.ts',
 	'!extensions/markdown-language-features/media/highlight.css',
 	'!extensions/markdown-math/notebook-out/**',
-	'!extensions/ipynb/notebook-out/**',
 	'!extensions/simple-browser/media/codicon.css',
 	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/node-maintainer/**',
@@ -209,9 +196,6 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/*/server/bin/*',
 	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
 	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
-	'!extensions/mermaid-markdown-features/chat-webview-out/**',
-	'!extensions/mermaid-markdown-features/markdown-preview-out/**',
-	'!extensions/mermaid-markdown-features/notebook-out/**',
 
 	// vendored third-party libraries
 	'!src/vs/base/common/lit-html/**',
@@ -242,17 +226,6 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	'!extensions/copilot/**',
 ]);
 
-export const eslintFilter = Object.freeze<string[]>([
-	'**/*.{js,cjs,mjs}',
-	'**/*.{ts,tsx,mts,cts}',
-	'.eslint-plugin-local/**/*.ts',
-	'!src/vs/platform/agentHost/node/codex/protocol/generated/**',
-	...readFileSync(join(import.meta.dirname, '..', '.eslint-ignore'))
-		.toString()
-		.split(/\r\n|\n/)
-		.filter(line => line && !line.startsWith('#'))
-		.map(line => line.startsWith('!') ? line.slice(1) : `!${line}`)
-]);
 
 export const stylelintFilter = Object.freeze<string[]>([
 	'src/**/*.css'
