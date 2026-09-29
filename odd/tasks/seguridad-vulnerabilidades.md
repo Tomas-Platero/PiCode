@@ -59,5 +59,5 @@ superficie expuesta; el plazo lo marca upstream, no nosotros.
 
 ## Verificación
 
-Build completo tras los bumps: ver resultado en el reporte de cierre de la sesión
-(lanzado como `build post-audit-fix`).
+Build completo tras los bumps: **superado** (exit 0, 8 min; `dev/build-run.sh`,
+2026-09-29). Producto regenerado con las dependencias parcheadas.
