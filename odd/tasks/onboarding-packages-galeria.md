@@ -81,3 +81,18 @@ ficheros de pi (nunca en settings); las filas que el dueño ya tenía nunca se p
 `mergeModelsFile` preserva la credencial (`apiKey`/`authHeader`) de una entrada existente
 cuando la fila no la nombra, para que la proyección posterior no la borre.
 
+
+## Defecto posterior: las sesiones importadas parpadeaban (commit `c0fe9034`)
+
+**Síntoma:** las sesiones importadas aparecían y desaparecían del panel de Sesiones.
+
+**Causa doble:** (1) `provideChatSessionItems` devolvía `[]` al estar cancelado el token,
+y el puente extension-host hace diff por referencia — una refresco cancelado daba de baja
+todas las sesiones pi hasta el siguiente refresco completo; (2) `listSessionFiles` leía
+enteros los ~195 JSONL en cada refresco, haciéndolos lentos y propensos a solaparse.
+
+**Arreglo:** la cancelación devuelve la última lista aceptada (mismas referencias, cero
+deltas) y el listado lleva caché por fichero clave `mtime` (solo se releen nuevos o
+cambiados).
+
+**Verificado:** build completo (`dev/build-run.sh`) exit 0 tras el arreglo.
