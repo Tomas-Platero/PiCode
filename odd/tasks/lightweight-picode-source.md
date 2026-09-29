@@ -104,6 +104,22 @@ Los comentarios `// eslint-disable-*` que quedan en el código son inertes: no r
 - Verificación final: build completo lanzado con `dev/build-run.sh` (el mismo contrato que
   el builder lee). Resultado: ver reporte de cierre.
 
+- Verificación final: **build completo superado** (`dev/build-run.sh`, exit 0, 2026-09-29).
+  Producto: `PiCode-Win32-x64/` (844M), `PiCode.exe` operativo, payload de extensiones
+  empaquetadas **95M** (antes 163M, −42%). El builder queda servido: mismo contrato
+  (`build-run.sh` + `build-requirements.mjs` + `build-progress.mjs`), ninguna ruta rota.
+
+### Defectos heredados que el build destapó (todos corregidos y subidos)
+
+1. `gulpfile.vscode.win32.ts`: comentario sin `//` de continuación (73990e71) → `405d10b2`.
+2. 9 runners de test de extensiones importando el árbol `test/` eliminado → `ff707e8e`
+   (los `.test.ts` unitarios se quedan).
+3. `references-view` nunca estuvo en `dirs.ts`: sobrevivía por izado de `@types/node` →
+   `fab23d17`.
+4. extensión `npm` sin `@types/mocha` (misma medicina que `git`) → `eb58b8dd`.
+5. scripts npm `test-browser`/`test-node`/`smoketest` apuntando al árbol `test/` muerto →
+   `176dc475`.
+
 ## Resultado ejecutado (2026-09-29)
 
 - Árbol en disco: 3.3G → **242M** (objetivo cumplido de sobra: «menos de la mitad»).
