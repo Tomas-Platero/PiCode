@@ -153,9 +153,25 @@ const nodeFs: SessionsFs = {
 };
 
 /**
+ * Cached listing per transcript, keyed by absolute file path: the label and id computed
+ * from the file's contents, remembered against the mtime they were computed from.
+ *
+ * The listing walks the whole `sessions/` tree on every panel refresh, and pi's transcripts
+ * are append-only JSONL — a file's label only changes when the file does. Keying on the
+ * mtime alone means an edit that leaves the mtime untouched (same-second rewrite) would
+ * serve a stale label; acceptable for a transcript listing, where pi appends and the mtime
+ * moves with every write.
+ */
+const listingCache = new Map<string, { mtime: number; label: string; id: string }>();
+
+/**
  * Lists the session transcripts under the profile's `sessions/` directory — pi keeps one
  * folder per project, and the transcripts sit inside those. Newest first; the label is
  * the first user prompt, falling back to the file's own timestamp.
+ *
+ * Each transcript's label and id are read from `listingCache` when the file's mtime still
+ * matches the cached one, so an unchanged tree costs a `stat` per file instead of a full
+ * read of every transcript. Entries for files the walk no longer sees are dropped.
  */
 export function listSessionFiles(
 	sessionsDir: string,
@@ -164,6 +180,7 @@ export function listSessionFiles(
 	const files: PiSessionFile[] = [];
 	const stack = [sessionsDir];
 	const visited = new Set<string>(stack);
+	const seen = new Set<string>();
 	while (stack.length > 0) {
 		const dir = stack.pop()!;
 		for (const entry of fs.list(dir)) {
@@ -176,16 +193,33 @@ export function listSessionFiles(
 				}
 				continue;
 			}
-			const text = fs.read(entry);
-			const label = firstUserPrompt(text)
-				?? path.basename(entry).replace(/\.jsonl$/, '');
-			const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
+			seen.add(entry);
+			const mtime = fs.mtime(entry);
+			const cached = listingCache.get(entry);
+			let label: string;
+			let id: string;
+			if (cached !== undefined && cached.mtime === mtime) {
+				({ label, id } = cached);
+			} else {
+				// New or modified file: read it and remember the label until it moves again.
+				const firstPrompt = firstUserPrompt(fs.read(entry))
+					?? path.basename(entry).replace(/\.jsonl$/, '');
+				const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
+				label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
+				id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
+				listingCache.set(entry, { mtime, label, id });
+			}
 			files.push({
-				id: idMatch?.[1] ?? path.basename(entry, '.jsonl'),
+				id,
 				file: entry,
-				label: label.length > 80 ? `${label.slice(0, 80)}…` : label,
-				mtime: fs.mtime(entry),
+				label,
+				mtime,
 			});
+		}
+	}
+	for (const cached of listingCache.keys()) {
+		if (!seen.has(cached)) {
+			listingCache.delete(cached);
 		}
 	}
 	return files.sort((a, b) => b.mtime - a.mtime);

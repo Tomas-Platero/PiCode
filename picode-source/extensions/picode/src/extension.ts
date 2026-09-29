@@ -675,6 +675,12 @@ function profileInForce(): string {
  */
 function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposable {
 	const sessionsChangedEmitter = new vscode.EventEmitter<void>();
+	// The last listing the panel accepted. A cancelled refresh must return it, not `[]`:
+	// the extension-host bridge diffs by reference and emits a removal for every item
+	// absent from the returned array, so an empty listing from a cancelled run would
+	// clear the panel — every pi session disappearing — until the next non-cancelled
+	// refresh listed them all again.
+	let lastItems: vscode.ChatSessionItem[] | undefined = undefined;
 	const provider: vscode.ChatSessionItemProvider & {
 		provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Thenable<{ history: ReadonlyArray<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> }>
 	} = {
@@ -682,14 +688,18 @@ function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposab
 		onDidCommitChatSessionItem: new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>().event,
 		provideChatSessionItems(token: vscode.CancellationToken): vscode.ProviderResult<vscode.ChatSessionItem[]> {
 			if (token.isCancellationRequested) {
-				return [];
+				// Return the previous listing: see `lastItems` — a cancelled refresh must
+				// never look like "everything was deleted".
+				return lastItems ?? [];
 			}
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			return listSessionFiles(sessionsDir).map(file => ({
+			const items = listSessionFiles(sessionsDir).map(file => ({
 				resource: vscode.Uri.from({ scheme: 'picode-pi-session', path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
 			}));
+			lastItems = items;
+			return items;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken) {
 			if (token.isCancellationRequested) {
