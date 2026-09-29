@@ -90,11 +90,10 @@ produces it is versioned here.
 | Path | What it is |
 | --- | --- |
 | **`picode-source/`** | **PiCode's own source** — the editor's code with the PiCode changes and identity applied (13,125 files; VS Code 1.135.0 descends recorded in `upstream/stable.json`). This is where product work happens. |
-| `distribution/` | The product layer as data: product delta (the single home of the identity and version), settings, icons, and the apply script for the prebuilt-archive route. |
+| `distribution/` | The product layer as data: product delta (the single home of the identity and version), first-run defaults, the pinned pi runtime, and the brand assets. |
 | `dev/` | The build engine — bash scripts, the build window, progress viewer. |
 | `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
 | `upstream/` | The pin file (`stable.json`) — the VS Code commit the tree descends from. |
-| `wiki/` | The public wiki, page by page — import source for the GitHub Pages wiki. |
 | `docs/` | Internal papers: architecture, decisions, distribution, how-to-build. Index: [`docs/README.md`](docs/README.md). |
 | `odd/tasks/` | The ODD feature records — every non-trivial change left a record with decisions, checks and defects. |
 | `AGENTS.md` | The owner's own words, verbatim. Read it before changing product behaviour. |

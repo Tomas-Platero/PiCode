@@ -5,7 +5,7 @@ Este documento describe cómo se compila PiCode desde su propia fuente: qué es
 versión nueva de VS Code.
 
 No sustituye a la release. El **ZIP precompilado** sigue siendo el camino de quien solo
-quiere usar PiCode (`distribution/apply-picode.ps1`, descrito en
+quiere usar PiCode (montado por `dev/stage-distribution.sh`, descrito en
 [`DISTRIBUTION.md`](DISTRIBUTION.md)). Este es el camino de quien colabora en el núcleo y
 necesita recompilar.
 

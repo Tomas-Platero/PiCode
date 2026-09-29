@@ -45,16 +45,17 @@ the tree itself.
 
 | # | Layer | Artifact | Applied by |
 | --- | --- | --- | --- |
-| 1 | Editor | the VSCodium archive, extracted at the root | the operator |
-| 2 | Product delta | `distribution/product-delta.json` | `apply-product-delta.mjs`, orchestrated by `apply-picode.ps1` |
-| 3 | Portable profile | `data/{user-data,extensions,tmp}` | `apply-picode.ps1` |
-| 4 | ~~Agent panel~~ | *retirado el 2026-09-24; la carpeta `extensions/` fue borrada el 2026-09-27 por decisión del dueño — el panel vuelve como código del núcleo* | — |
-| 5 | Defaults | `distribution/settings.json` → `data/user-data/User/settings.json` | `apply-picode.ps1`, only when absent |
-| 6 | Agent runtime | a pi per `picode.pi.runtime`; PiCode's own installed on demand | the panel |
+| 1 | Editor | `picode-source/`, compiled by `dev/build.sh` | the build |
+| 2 | Product delta | `distribution/product-delta.json` → `picode-source/product.json` | `apply-product-delta.mjs`, in phase 1 of the build |
+| 3 | Portable profile | `data/{user-data,extensions,tmp}` | `dev/stage-distribution.sh` |
+| 4 | ~~Agent panel~~ | *retirado el 2026-09-24; la carpeta `extensions/` fue borrada el 2026-09-27 por decisión del dueño — el panel vive como código del núcleo* | — |
+| 5 | Defaults | `distribution/settings.json` → `data/user-data/User/settings.json` | `dev/stage-distribution.sh`, only when absent |
+| 6 | Agent runtime | a pi per `picode.pi.runtime`; PiCode's own pinned in `distribution/runtime.json` | `dev/pi-runtime.sh` |
 
-`powershell -File distribution/apply-picode.ps1` previews; `-Apply` writes. It is
-idempotent, refuses to run outside a VSCodium root, and backs the product file up
-before the first write.
+The staging step is `dev/stage-distribution.sh [pack-dir]` (default `./PiCode-Win32-x64`).
+It is idempotent — a second run reports every step as already current. The retired
+`apply-picode.ps1` performed the same actions against the owned VSCodium archive; it was
+removed on 2026-09-29 and remains in git history.
 
 ## 3. The product delta
 
@@ -128,11 +129,11 @@ invoked as `node <bundle>/cli.js` rather than through the npm `.cmd` shim, becau
 cannot execute a `.cmd` without a shell since the CVE-2024-27980 hardening, and a shell
 would couple it to quoting rules for wherever the distribution was unpacked.
 
-## 7. Updating VSCodium
+## 7. Updating VS Code
 
-1. Extract the new archive over the root, or into a staging directory and copy.
-2. Run `apply-picode.ps1 -Apply`.
-3. Re-run the checks in section 8.
+A newer VS Code is a **merge against `picode-source/`**, not a download: see
+[`howto-build.md`](howto-build.md). There is no archive to extract and no script to
+re-run — the tree is the source, and the identity is applied by the build.
 
 The in-product updater is disabled (`updateUrl` is empty) so a VSCodium archive cannot
 silently replace the patched tree. Measured in the running editor as

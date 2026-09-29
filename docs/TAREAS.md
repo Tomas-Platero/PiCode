@@ -53,7 +53,7 @@
 | 7 | **Las habilidades de los paquetes de Gentle-AI** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus 13 habilidades |
 | 8 | **Recuperar lo que valía del panel viejo** | 🟡 | Estadísticas de pi, sus comandos y las sesiones — dentro del Chat. El contexto del editor ya viaja con cada mensaje |
 | 9 | **La nube** | 🔴 | Subir y bajar **el perfil como una unidad** |
-| 10 | **Limpiar** | 🟢 | Borrar el archivo de cuarentena cuando ya no haga falta, quitar el paso del panel en la vía del ZIP (`distribution/apply-picode.ps1`) y retirar los papeles viejos |
+| 10 | **Limpiar** | 🟢 | Hecho el 2026-09-29: fuera `apply-picode.ps1` (la vía del ZIP que lo usaba ya no existe), fuera ESLint y `.vscode/` del árbol, y el recorte lightweight de `picode-source/` (`odd/tasks/lightweight-picode-source.md`) |
 
 ## Lo que NO hay que hacer
 

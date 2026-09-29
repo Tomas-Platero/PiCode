@@ -9,7 +9,7 @@ La decisión anterior queda **revertida y fechada aquí**.
 Hay dos workflows:
 
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — **CI**: en cada
-  push a `master`/`feat/**` y en cada PR (ignorando `.md`, `updates/` y `wiki/`),
+  push a `master`/`feat/**` y en cada PR (ignorando `.md` y `updates/`),
   compila, ejecuta los tests del conector y sube el editor empaquetado como
   artefacto. `cancel-in-progress` por rama: los pushes seguidos no acumulan runs.
 - [`.github/workflows/release.yml`](../.github/workflows/release.yml) —

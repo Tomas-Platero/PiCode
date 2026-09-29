@@ -111,3 +111,5 @@ desktop.ini
 /builder/dist*/
 /builder/PiCodeBuilder.zip
 /builder/obj*/
+/odd/assets
+/.vscode
