@@ -142,11 +142,14 @@ export function registerChatModelFeedbackSurveyActions(): void {
 					// control that cannot render. This drops the vote actions'
 					// `lockedToCodingAgent.negate()` because every agent host session is locked to
 					// its agent, which would make the `harnesses` selector unreachable.
+					// pi's responses are excluded as well: the survey targets Copilot models, so it
+					// never applies to them, and a pi answer cannot be rated at all.
 					when: ContextKeyExpr.and(
 						ChatContextKeys.responseHasFeedbackSurvey,
 						ChatContextKeys.isResponse,
 						ChatContextKeys.responseHasError.negate(),
 						ContextKeyExpr.has('config.telemetry.feedback.enabled'),
+						ContextKeyExpr.has('picode.chatActive').negate(),
 					),
 				}],
 			});

@@ -31,6 +31,14 @@ export const MarkHelpfulActionId = 'workbench.action.chat.markHelpful';
 export const MarkUnhelpfulActionId = 'workbench.action.chat.markUnhelpful';
 const enableFeedbackConfig = 'config.telemetry.feedback.enabled';
 
+/**
+ * The pi connector sets this when its participant owns the panel chat (see
+ * `extensions/picode/src/agent.ts`). pi's session has no vote channel, so a vote would
+ * reach no one: the footer's vote actions exclude pi's responses. Agent Host sessions are
+ * already excluded by `lockedToCodingAgent.negate()`.
+ */
+const piChatActive = ContextKeyExpr.has('picode.chatActive');
+
 export function registerChatTitleActions() {
 	registerAction2(class MarkHelpfulAction extends Action2 {
 		constructor() {
@@ -45,7 +53,7 @@ export function registerChatTitleActions() {
 					id: MenuId.ChatMessageFooter,
 					group: 'navigation',
 					order: 2,
-					when: ContextKeyExpr.and(ChatContextKeys.extensionParticipantRegistered, ChatContextKeys.isResponse, ChatContextKeys.responseHasError.negate(), ContextKeyExpr.has(enableFeedbackConfig), ChatContextKeys.lockedToCodingAgent.negate(), ChatContextKeys.responseHasFeedbackSurvey.negate())
+					when: ContextKeyExpr.and(ChatContextKeys.extensionParticipantRegistered, ChatContextKeys.isResponse, ChatContextKeys.responseHasError.negate(), ContextKeyExpr.has(enableFeedbackConfig), ChatContextKeys.lockedToCodingAgent.negate(), ChatContextKeys.responseHasFeedbackSurvey.negate(), piChatActive.negate())
 				}, {
 					id: MENU_INLINE_CHAT_WIDGET_SECONDARY,
 					group: 'navigation',
@@ -90,7 +98,7 @@ export function registerChatTitleActions() {
 					id: MenuId.ChatMessageFooter,
 					group: 'navigation',
 					order: 3,
-					when: ContextKeyExpr.and(ChatContextKeys.extensionParticipantRegistered, ChatContextKeys.isResponse, ContextKeyExpr.has(enableFeedbackConfig), ChatContextKeys.lockedToCodingAgent.negate(), ChatContextKeys.responseHasFeedbackSurvey.negate())
+					when: ContextKeyExpr.and(ChatContextKeys.extensionParticipantRegistered, ChatContextKeys.isResponse, ContextKeyExpr.has(enableFeedbackConfig), ChatContextKeys.lockedToCodingAgent.negate(), ChatContextKeys.responseHasFeedbackSurvey.negate(), piChatActive.negate())
 				}, {
 					id: MENU_INLINE_CHAT_WIDGET_SECONDARY,
 					group: 'navigation',

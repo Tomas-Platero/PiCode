@@ -484,7 +484,7 @@ class MainThreadChatSessionItemController extends Disposable implements IChatSes
 		if (!dto) {
 			return undefined;
 		}
-		const item = this.addOrUpdateItem(dto);
+		const item = await this.addOrUpdateItem(dto);
 		return item;
 	}
 
