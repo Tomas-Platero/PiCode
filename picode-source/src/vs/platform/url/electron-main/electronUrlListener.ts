@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { app, Event as ElectronEvent } from 'electron';
+import * as fs from 'fs';
+import { join } from 'path';
 import { disposableTimeout } from '../../../base/common/async.js';
 import { Event } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
@@ -52,9 +54,42 @@ export class ElectronURLListener extends Disposable {
 		// Skip in portable mode: the registered command wouldn't preserve
 		// portable mode settings, causing issues with OAuth flows.
 		if (isWindows && !environmentMainService.isPortable) {
-			const windowsParameters = environmentMainService.isBuilt ? [] : [`"${environmentMainService.appRoot}"`];
-			windowsParameters.push('--open-url', '--');
-			app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, windowsParameters);
+			if (environmentMainService.isBuilt) {
+				// Built: register the executable directly. Electron quotes argument
+				// values itself when writing the registry entry — do not pre-quote
+				// them here, nested quotes break the registration.
+				app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, ['--open-url', '--']);
+			} else if (process.env['VSCODE_DEV']) {
+				// Development (launched via scripts/code.bat): the process spawned by
+				// the OS does NOT inherit the dev environment (VSCODE_DEV / NODE_ENV),
+				// so it computes a different user data dir and IPC handle and starts a
+				// separate instance instead of handing the URL to the running editor.
+				// Register a PowerShell launcher that re-creates the dev environment
+				// first. PowerShell (NOT cmd) is used deliberately: cmd /c mangles
+				// quoted URLs containing '&' (it splits them as command separators),
+				// which fragments OAuth callback URLs.
+				const launcherPath = join(environmentMainService.appRoot, 'picode-url-handler.ps1');
+				const launcherContents = [
+					"$env:VSCODE_DEV = '1'",
+					"$env:NODE_ENV = 'development'",
+					`& '${process.execPath}' '${environmentMainService.appRoot}' --open-url -- @args`,
+					''
+				].join('\r\n');
+				try {
+					fs.writeFileSync(launcherPath, launcherContents, { flag: 'w' });
+					const systemRoot = process.env['SystemRoot'] || 'C:\\Windows';
+					const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+					app.setAsDefaultProtocolClient(productService.urlProtocol, powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', launcherPath]);
+				} catch (error) {
+					// Fall back to the direct registration; protocol URLs will open a
+					// separate instance in this configuration, but the app still works.
+					this.logService.warn('Failed to write the development protocol launcher; registering the executable directly.', error);
+					app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, [environmentMainService.appRoot, '--open-url', '--']);
+				}
+			} else {
+				// Dev binary launched without the dev environment (standalone).
+				app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, [environmentMainService.appRoot, '--open-url', '--']);
+			}
 		}
 
 		// macOS: listen to `open-url` events from here on to handle
@@ -94,7 +129,7 @@ export class ElectronURLListener extends Disposable {
 	private uriFromRawUrl(url: string): URI | undefined {
 		try {
 			return URI.parse(url);
-		} catch (e) {
+		} catch {
 			return undefined;
 		}
 	}

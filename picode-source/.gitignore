@@ -53,3 +53,5 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+picode-url-handler.cmd
+picode-url-handler.ps1

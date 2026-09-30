@@ -34,6 +34,23 @@
   "nodejsArtifactFeed": "",
   "electronArtifactFeed": "",
   "urlProtocol": "picode",
+  "picode": {
+    "webOrigin": "https://www.getpicode.app",
+    "firebaseApiKey": "AIzaSyD9-rAr8osUnCbCrnxBsKERgr3_CJvG75g"
+  },
+  "configurationSync.store": {
+    "url": "https://www.getpicode.app/api",
+    "insidersUrl": "https://www.getpicode.app/api",
+    "stableUrl": "https://www.getpicode.app/api",
+    "canSwitch": false,
+    "authenticationProviders": {
+      "picode": {
+        "scopes": [
+          "sync"
+        ]
+      }
+    }
+  },
   "builtInExtensions": [
     {
       "name": "ms-vscode.js-debug-companion",
@@ -170,11 +187,8 @@
     "controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
   },
   "linkProtectionTrustedDomains": [
-    "https://open-vsx.org",
-    "https://mcp.directory",
-    "https://www.skills.sh",
-    "https://skills.sh",
-    "https://pi.dev"
+    "https://www.getpicode.app",
+    "https://getpicode.app"
   ],
   "releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
   "requestFeatureUrl": "https://github.com/Tomas-Platero/PiCode/issues/new",

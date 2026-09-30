@@ -7,6 +7,12 @@ import { localize } from '../../../../nls.js';
 import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 
+// The account contribution has no entry of its own in a workbench .main.ts: it is loaded
+// from here, because this module is the one picode file the core already imports at
+// startup (from the chat and preferences contributions). Keeping the registration inside
+// the contrib folder is deliberate — the provider is core code, not an extension.
+import './picodeAccount.js';
+
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.
  *

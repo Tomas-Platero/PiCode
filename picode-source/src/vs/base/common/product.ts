@@ -263,6 +263,9 @@ export interface IProductConfiguration {
 
 	readonly 'configurationSync.store'?: ConfigurationSyncStore;
 
+	/** PiCode's cloud configuration: the web app origin and the public Firebase web API key. Present only in builds that ship the cloud. */
+	readonly picode?: { readonly webOrigin: string; readonly firebaseApiKey: string };
+
 	readonly 'editSessions.store'?: Omit<ConfigurationSyncStore, 'insidersUrl' | 'stableUrl'>;
 	readonly darwinUniversalAssetId?: string;
 	readonly darwinBundleIdentifier?: string;
