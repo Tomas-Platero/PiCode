@@ -48,9 +48,16 @@ prune_platforms() {
 }
 
 if [[ -f "${ENTRY}" ]]; then
-  echo "pi ${VERSION} is already in ${TARGET}"
-  prune_platforms
-  exit 0
+	# The entry existing is NOT enough: an older pinned runtime must be refreshed when the
+	# pin moves, or an editor built today would silently ship the version installed months
+	# ago. Compare the installed version against the pin and reinstall when they differ.
+	INSTALLED=$( node -p "try { require('./' + process.argv[1]).version } catch { '' }" "${TARGET}/node_modules/${PACKAGE}/package.json" 2>/dev/null || true )
+	if [[ "${INSTALLED}" == "${VERSION}" ]]; then
+		echo "pi ${VERSION} is already in ${TARGET}"
+		prune_platforms
+		exit 0
+	fi
+	echo "pi ${INSTALLED:-<none>} is in ${TARGET} but the pin says ${VERSION}; updating."
 fi
 
 # The package names its platform the way node does (`win32`), not the way the build script does
