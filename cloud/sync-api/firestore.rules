@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// PiCode Cloud Sync (project picode-7f24f)
+// These rules protect direct client access to Firestore. The sync API in
+// cloud/sync-api/ uses the Admin SDK, which bypasses rules by design — so the
+// API keeps working while user-level direct access stays locked to the owner
+// of each document.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A user may only ever touch their own sync tree:
+    //   users/{uid}/sync/manifest
+    //   users/{uid}/sync/resources/{resource}/{ref}
+    //   users/{uid}/collections/{id}
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /sync/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /collections/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Everything else is denied by default (no rule = deny).
+  }
+}
