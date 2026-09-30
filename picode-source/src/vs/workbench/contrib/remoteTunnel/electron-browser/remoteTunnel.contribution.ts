@@ -506,11 +506,6 @@ export class RemoteTunnelWorkbenchContribution extends Disposable implements IWo
 					precondition: ContextKeyExpr.equals(REMOTE_TUNNEL_CONNECTION_STATE_KEY, 'disconnected'),
 					menu: [{
 						id: MenuId.CommandPalette,
-					},
-					{
-						id: MenuId.AccountsContext,
-						group: '2_remoteTunnel',
-						when: ContextKeyExpr.equals(REMOTE_TUNNEL_CONNECTION_STATE_KEY, 'disconnected'),
 					}]
 				});
 			}
