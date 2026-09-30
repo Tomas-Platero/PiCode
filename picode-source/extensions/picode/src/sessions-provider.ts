@@ -165,20 +165,59 @@ const nodeFs: SessionsFs = {
 const listingCache = new Map<string, { mtime: number; label: string; id: string }>();
 
 /**
- * Lists the session transcripts under the profile's `sessions/` directory — pi keeps one
- * folder per project, and the transcripts sit inside those. Newest first; the label is
- * the first user prompt, falling back to the file's own timestamp.
+ * pi's per-project session folder name, replicating the runtime's own encoding
+ * (pi `dist/core/session-manager.js`, `getDefaultSessionDirPath`): the resolved cwd
+ * with any leading separator stripped, every `/`, `\` and `:` turned into `-`,
+ * wrapped in `--` … `--` — e.g. `D:\repositorios\PiCode` → `--D--repositorios-PiCode--`.
+ */
+export function piProjectSlug(cwd: string): string {
+	return `--${path.resolve(cwd).replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`;
+}
+
+/**
+ * Lists the session transcripts of the given workspace folders only.
+ *
+ * pi keeps one folder per project under `sessions/`, named by the project's cwd
+ * (see `piProjectSlug`); the panel must show the sessions of the folders actually
+ * open, never the whole profile. With no workspace open, or when no per-project
+ * folder matches, the listing is empty — there is no fall-back to every project.
+ *
+ * On Windows the folder-name match is case-insensitive: NTFS folds case, and the
+ * drive letter's case in a workspace path may differ from the case pi recorded
+ * when the sessions were created.
+ */
+export function listWorkspaceSessionFiles(
+	sessionsDir: string,
+	workspacePaths: readonly string[],
+	fs: SessionsFs = nodeFs,
+): PiSessionFile[] {
+	if (workspacePaths.length === 0) {
+		return [];
+	}
+	const slugs = new Set(workspacePaths.map(piProjectSlug));
+	const foldedSlugs = new Set([...slugs].map(slug => slug.toLowerCase()));
+	const dirs: string[] = [];
+	for (const entry of fs.list(sessionsDir)) {
+		const name = path.basename(entry);
+		if (slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()))) {
+			dirs.push(entry);
+		}
+	}
+	return listFromDirs(dirs, fs);
+}
+
+/**
+ * The listing shared by every entry point: walks the given roots (pi's per-project
+ * folders, or the whole `sessions/` tree), newest first; the label is the first
+ * user prompt, falling back to the file's own timestamp.
  *
  * Each transcript's label and id are read from `listingCache` when the file's mtime still
  * matches the cached one, so an unchanged tree costs a `stat` per file instead of a full
  * read of every transcript. Entries for files the walk no longer sees are dropped.
  */
-export function listSessionFiles(
-	sessionsDir: string,
-	fs: SessionsFs = nodeFs,
-): PiSessionFile[] {
+function listFromDirs(roots: readonly string[], fs: SessionsFs): PiSessionFile[] {
 	const files: PiSessionFile[] = [];
-	const stack = [sessionsDir];
+	const stack = [...roots];
 	const visited = new Set<string>(stack);
 	const seen = new Set<string>();
 	while (stack.length > 0) {
@@ -223,4 +262,13 @@ export function listSessionFiles(
 		}
 	}
 	return files.sort((a, b) => b.mtime - a.mtime);
+}
+
+/**
+ * Lists every session transcript under the profile's `sessions/` directory, across
+ * all of pi's per-project folders. The panel uses `listWorkspaceSessionFiles` instead;
+ * this remains the unfiltered walk for callers that genuinely want every project.
+ */
+export function listSessionFiles(sessionsDir: string, fs: SessionsFs = nodeFs): PiSessionFile[] {
+	return listFromDirs([sessionsDir], fs);
 }

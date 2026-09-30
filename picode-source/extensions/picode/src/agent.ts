@@ -22,6 +22,7 @@ import { toolProgress } from './progress';
 import { activityLines, gentleAgentsHome, readPresenceActivity } from './subagents';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { loadPiSdk } from './piSdk';
+import { piCommandsOfRunner, type PiCommand } from './commands';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 
@@ -616,14 +617,21 @@ function numberOf(value: unknown): number | undefined {
 	return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/** The context key the chat's footer `when` clauses read to leave pi's responses alone. */
+export const CHAT_ACTIVE_CONTEXT = 'picode.chatActive';
+
 /** The live session's reset hook, set by registerPiAgent for `resetChatSession`. */
 let sessionUsageProvider: (() => SessionUsage | undefined) | undefined;
 let sessionResetter: (() => void) | undefined;
+/** The live session's command registry reader, set by registerPiAgent for the slash list. */
+let sessionCommandsProvider: (() => { readonly key: string; readonly commands: readonly PiCommand[] } | undefined) | undefined;
+/** Fires when the chat's session was created, replaced or dropped. */
+const sessionChangedEmitter = new vscode.EventEmitter<void>();
 
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	// The setup bridge needs to drop the live session when Gentle AI is installed or
 	// removed: its agents, skills and commands load when pi's session is created.
-	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; };
+	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; sessionChangedEmitter.fire(); };
 	sessionUsageProvider = () => {
 		if (sessionManager === undefined) {
 			return undefined;
@@ -694,6 +702,18 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		} catch {
 			return undefined;
 		}
+	};
+	// pi is the panel's own participant, and its session has no vote channel: the chat's
+	// footer reads this flag to keep the vote actions off pi's responses (see
+	// `chatTitleActions.ts`). Set once for the window — the panel's chat is pi's.
+	void vscode.commands.executeCommand('setContext', CHAT_ACTIVE_CONTEXT, true);
+	sessionCommandsProvider = () => {
+		if (session === undefined || sessionFolder === undefined) {
+			return undefined;
+		}
+		// The key is the session's identity: a rebuilt session reads again instead of
+		// serving another session's registry.
+		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: piCommandsOfRunner(session) };
 	};
 	let session: PiSession | undefined;
 	let sessionFolder: string | undefined;
@@ -777,6 +797,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				sessionFolder = cwd;
 				sessionAgentDir = agentDir;
 				mcpSignature = signature;
+				sessionChangedEmitter.fire();
 			} else {
 				// The model picked in the chat between two turns is followed here: a session that
 				// answered with the previous model while the picker said otherwise is the defect this
@@ -821,6 +842,17 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 export function resetChatSession(): void {
 	sessionResetter?.();
 }
+
+/**
+ * The live session's pi extension commands and its identity, or `undefined` while no
+ * session runs — what the slash-command list reads (see `commands.ts`).
+ */
+export function liveSessionCommands(): { readonly key: string; readonly commands: readonly PiCommand[] } | undefined {
+	return sessionCommandsProvider?.();
+}
+
+/** Fires when the chat's session was created, replaced or dropped. */
+export const onPiSessionChanged = sessionChangedEmitter.event;
 
 /** The live session's usage totals and current selection, as the status view shows them. */
 export function getSessionUsage(): SessionUsage | undefined {

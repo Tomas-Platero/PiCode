@@ -104,6 +104,16 @@
 				"command": "picode.updates.show",
 				"title": "Show pending updates",
 				"category": "PiCode"
+			},
+			{
+				"command": "picode.backupSessions",
+				"title": "Back up pi sessions to the cloud",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.restoreSessions",
+				"title": "Restore pi sessions from the cloud",
+				"category": "PiCode"
 			}
 		],
 		"configuration": {

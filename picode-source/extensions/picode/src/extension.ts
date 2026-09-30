@@ -17,7 +17,8 @@ import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServ
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
-import { listSessionFiles, sessionTurns } from './sessions-provider';
+import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
+import { listWorkspaceSessionFiles, sessionTurns } from './sessions-provider';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -40,13 +41,14 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { registerPiAgent, resetChatSession } from './agent';
+import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
+import { registerPiCommandPromptFiles } from './commands';
 import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
-import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 
 /**
@@ -665,6 +667,9 @@ function profileInForce(): string {
 	return readRuntimeMode() === 'external' ? externalProfileDir() : profileDirectory(requireProfileUri());
 }
 
+/** The URI scheme pi's session transcripts use; the editor derives the chat session type from it, so it must match the type the providers register under. */
+const PI_SESSION_SCHEME = 'pi';
+
 /**
  * pi's sessions, listed for the editor's Sessions panel.
  *
@@ -673,7 +678,7 @@ function profileInForce(): string {
  * pi's transcripts under a `pi` group, replays one as a read-only history when opened,
  * and fires the change event when the import lands a tree of transcripts.
  */
-function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposable {
+function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fireChanged(): void } & vscode.Disposable {
 	const sessionsChangedEmitter = new vscode.EventEmitter<void>();
 	// The last listing the panel accepted. A cancelled refresh must return it, not `[]`:
 	// the extension-host bridge diffs by reference and emits a removal for every item
@@ -681,9 +686,7 @@ function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposab
 	// clear the panel — every pi session disappearing — until the next non-cancelled
 	// refresh listed them all again.
 	let lastItems: vscode.ChatSessionItem[] | undefined = undefined;
-	const provider: vscode.ChatSessionItemProvider & {
-		provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Thenable<{ history: ReadonlyArray<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> }>
-	} = {
+	const provider: vscode.ChatSessionItemProvider & vscode.ChatSessionContentProvider = {
 		onDidChangeChatSessionItems: sessionsChangedEmitter.event,
 		onDidCommitChatSessionItem: new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>().event,
 		provideChatSessionItems(token: vscode.CancellationToken): vscode.ProviderResult<vscode.ChatSessionItem[]> {
@@ -692,24 +695,37 @@ function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposab
 				// never look like "everything was deleted".
 				return lastItems ?? [];
 			}
+			// Like the pi CLI, the panel shows only the sessions of the folders actually
+			// open: pi files transcripts under one folder per project cwd, so the listing
+			// walks just those folders — no workspace, no match, no sessions.
+			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const items = listSessionFiles(sessionsDir).map(file => ({
-				resource: vscode.Uri.from({ scheme: 'picode-pi-session', path: `/${file.id}` }),
+			const items = listWorkspaceSessionFiles(sessionsDir, workspacePaths).map(file => ({
+				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
+				// The mtime is the one timestamp a transcript file carries: it feeds both the
+				// created marker and the last-activity marker, because a transcript is never
+				// rewritten — pi only appends to it. Without a timestamp the panel renders
+				// every session as dated 1970 ('57y ago').
+				timing: { created: file.mtime, lastRequestEnded: file.mtime },
 			}));
 			lastItems = items;
 			return items;
 		},
-		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken) {
+		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+			// No `requestHandler`: the transcript replays as read-only history, and the
+			// editor disables the input for sessions that cannot take requests.
+			const readSession: vscode.ChatSession = { history: [], requestHandler: undefined };
 			if (token.isCancellationRequested) {
-				return { history: [] };
+				return readSession;
 			}
+			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
 			const id = resource.path.split('/').pop();
-			const file = listSessionFiles(sessionsDir).find(entry => entry.id === id);
+			const file = listWorkspaceSessionFiles(sessionsDir, workspacePaths).find(entry => entry.id === id);
 			if (file === undefined) {
-				return { history: [] };
+				return readSession;
 			}
 			const history: Array<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> = [];
 			for (const turn of sessionTurns(readTextFile(file.file) ?? '')) {
@@ -723,11 +739,21 @@ function registerPiSessionsProvider(): { fireChanged(): void } & vscode.Disposab
 					));
 				}
 			}
-			return { history };
+			return { ...readSession, history };
 		},
 	};
 	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
-	return { fireChanged: () => sessionsChangedEmitter.fire(), dispose: () => registration.dispose() };
+	// The deprecated item-provider interface cannot carry session content, so the same object
+	// registers again as the content provider for the scheme. Without it the editor cannot
+	// resolve a pi session and falls back to a text editor for an unresolvable resource.
+	const contentRegistration = vscode.chat.registerChatSessionContentProvider(PI_SESSION_SCHEME, provider, participant);
+	return {
+		fireChanged: () => sessionsChangedEmitter.fire(),
+		dispose: () => {
+			contentRegistration.dispose();
+			registration.dispose();
+		},
+	};
 }
 
 /** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
@@ -1898,13 +1924,25 @@ export function activate(context: vscode.ExtensionContext): void {
 	// `@pi` in the editor's own chat. This is what makes the chat exist: the editor hides its
 	// chat when there is no agent to talk to, and this supplies one — the editor's agent, not a
 	// surface of ours. Nothing to configure: it finds pi and its profile by itself.
-	registerPiAgent(context, {
+	// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
+	// runtime switch takes effect without a window reload. What PiCode projects for pi
+	// keeps going to PiCode's own profile either way.
+	const piParticipant = registerPiAgent(context, {
 		distributionRoot: distributionRoot(context.extensionUri),
-		// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
-		// runtime switch takes effect without a window reload. What PiCode projects for pi
-		// keeps going to PiCode's own profile either way.
 		log: line => console.error(`[pi] ${line}`),
 	});
+
+	// pi's own extension commands (`/omni` and its fellows) in the input's slash list,
+	// read from the runtime in force — the external pi's registry when it runs, the live
+	// session's own otherwise. A runtime switch re-reads; a session change fires through
+	// `onPiSessionChanged`.
+	const piCommands = registerPiCommandPromptFiles(context, {
+		distributionRoot: distributionRoot(context.extensionUri),
+		log: line => console.error(`[pi] ${line}`),
+		liveSessionCommands,
+		onSessionChanged: onPiSessionChanged,
+	});
+	context.subscriptions.push(piCommands);
 
 	// The MCP servers pi runs are written from the settings row, and followed while the editor is
 	// open: adding one in the form is what makes it available to pi.
@@ -1913,6 +1951,11 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('picode.mcp.servers')) {
 				void applyMcpServers(profileDirectory(context.extensionUri));
+			}
+			// The runtime in force changed, so the command list belongs to another pi's
+			// registry: the slash list re-reads.
+			if (event.affectsConfiguration(PICODE_RUNTIME_SETTING)) {
+				piCommands.refresh();
 			}
 			// The declared rows changed, so the answers the endpoint cache holds can no longer be
 			// trusted: they are dropped and the picker is told to ask again — which serves the
@@ -1923,6 +1966,9 @@ export function activate(context: vscode.ExtensionContext): void {
 			}
 		}),
 	);
+	// A folder added or removed changes the working directory a discovery session would
+	// read, so the command list is read again.
+	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => piCommands.refresh()));
 
 	// Connecting a provider with a subscription. It is a **list** and not a chain of windows: pi
 	// says which of its providers can be logged in with an account the owner already pays for,
@@ -1931,7 +1977,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own sessions, in the editor's Sessions panel. Nothing in the editor lists the
 	// runtime profile's sessions directory; this provider is the bridge, and the import
 	// fires it when a tree of transcripts lands.
-	const piSessions = registerPiSessionsProvider();
+	const piSessions = registerPiSessionsProvider(piParticipant);
 	context.subscriptions.push(piSessions);
 
 	const setupDeps = {
@@ -1961,6 +2007,14 @@ export function activate(context: vscode.ExtensionContext): void {
 	// so this registers the three providers it reads (and the package commands) before anything the
 	// owner opens looks for them. The global state carries the disabled-packages record.
 	context.subscriptions.push(...registerCustomizations(context.globalState));
+
+	// pi's sessions, backed up to PiCode Cloud and restored from it. A **backup channel**, not a
+	// live sync: every transcript is its own opaque ref on the `piSessionsBackup` resource, and
+	// the per-file hash state that makes a run incremental lives in the window's global state.
+	context.subscriptions.push(...registerSessionsBackupCommands({
+		globalState: context.globalState,
+		sessionsDir: piSessionsDir(),
+	}));
 
 	// The update check: pi, Gentle AI and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.
