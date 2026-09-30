@@ -28,6 +28,7 @@ import { SettingsSynchroniser } from './settingsSync.js';
 import { SnippetsSynchroniser } from './snippetsSync.js';
 import { TasksSynchroniser } from './tasksSync.js';
 import { McpSynchroniser } from './mcpSync.js';
+import { PiProfileSynchroniser } from './piProfileSync.js';
 import { UserDataProfilesManifestSynchroniser } from './userDataProfilesManifestSync.js';
 import {
 	ALL_SYNC_RESOURCES, createSyncHeaders, IUserDataManualSyncTask, IUserDataSyncResourceConflicts, IUserDataSyncResourceError,
@@ -509,7 +510,13 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 
 	async extractActivityData(activityDataResource: URI, location: URI): Promise<void> {
 		const content = (await this.fileService.readFile(activityDataResource)).value.toString();
-		const activityData: IUserDataSyncActivityData = JSON.parse(content);
+		let activityData: IUserDataSyncActivityData;
+		try {
+			activityData = JSON.parse(content);
+		} catch (e) {
+			this.logService.error(e);
+			throw e;
+		}
 
 		if (activityData.resources) {
 			for (const resource in activityData.resources) {
@@ -616,7 +623,7 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 			const disposables = new DisposableStore();
 			const profileSynchronizer = disposables.add(this.instantiationService.createInstance(ProfileSynchronizer, profile, syncProfile?.collection));
 			disposables.add(profileSynchronizer.onDidChangeStatus(e => this.setStatus(e)));
-			disposables.add(profileSynchronizer.onDidChangeConflicts(conflicts => this.updateConflicts()));
+			disposables.add(profileSynchronizer.onDidChangeConflicts(() => this.updateConflicts()));
 			disposables.add(profileSynchronizer.onDidChangeLocal(e => this._onDidChangeLocal.fire(e)));
 			this.activeProfileSynchronizers.set(profile.id, activeProfileSynchronizer = [profileSynchronizer, disposables]);
 		}
@@ -710,7 +717,11 @@ class ProfileSynchronizer extends Disposable {
 		if (syncResource === SyncResource.WorkspaceState) {
 			return;
 		}
-		if (syncResource !== SyncResource.Profiles && this.profile.useDefaultFlags?.[syncResource]) {
+		if (syncResource === SyncResource.PiProfile && !this.profile.isDefault) {
+			// The pi profile is application wide: sync it only from the default profile
+			return;
+		}
+		if (syncResource !== SyncResource.Profiles && syncResource !== SyncResource.PiProfile && this.profile.useDefaultFlags?.[syncResource]) {
 			this.logService.debug(`Skipping syncing ${syncResource} in ${this.profile.name} because it is already synced by default profile`);
 			return;
 		}
@@ -744,6 +755,7 @@ class ProfileSynchronizer extends Disposable {
 			case SyncResource.GlobalState: return this.instantiationService.createInstance(GlobalStateSynchroniser, this.profile, this.collection);
 			case SyncResource.Extensions: return this.instantiationService.createInstance(ExtensionsSynchroniser, this.profile, this.collection);
 			case SyncResource.Profiles: return this.instantiationService.createInstance(UserDataProfilesManifestSynchroniser, this.profile, this.collection);
+			case SyncResource.PiProfile: return this.instantiationService.createInstance(PiProfileSynchroniser, this.profile, this.collection);
 		}
 	}
 
@@ -899,6 +911,7 @@ class ProfileSynchronizer extends Disposable {
 			case SyncResource.Prompts: return 7;
 			case SyncResource.Profiles: return 8;
 			case SyncResource.WorkspaceState: return 9;
+			case SyncResource.PiProfile: return 10;
 		}
 	}
 }

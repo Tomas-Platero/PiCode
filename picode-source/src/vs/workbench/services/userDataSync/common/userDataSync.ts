@@ -64,6 +64,7 @@ export function getSyncAreaLabel(source: SyncResource): string {
 		case SyncResource.Extensions: return localize('extensions', "Extensions");
 		case SyncResource.GlobalState: return localize('ui state label', "UI State");
 		case SyncResource.Profiles: return localize('profiles', "Profiles");
+		case SyncResource.PiProfile: return localize('pi profile', "Pi Profile");
 		case SyncResource.WorkspaceState: return localize('workspace state label', "Workspace State");
 	}
 }

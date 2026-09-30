@@ -226,7 +226,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 	private async acceptRemote(syncResource: IUserDataSyncResource, conflict: IResourcePreview) {
 		try {
 			await this.userDataSyncService.accept(syncResource, conflict.remoteResource, undefined, this.userDataSyncEnablementService.isEnabled());
-		} catch (e) {
+		} catch {
 			this.notificationService.error(localize('accept failed', "Error while accepting changes. Please check [logs]({0}) for more details.", `command:${SHOW_SYNC_LOG_COMMAND_ID}`));
 		}
 	}
@@ -234,7 +234,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 	private async acceptLocal(syncResource: IUserDataSyncResource, conflict: IResourcePreview): Promise<void> {
 		try {
 			await this.userDataSyncService.accept(syncResource, conflict.localResource, undefined, this.userDataSyncEnablementService.isEnabled());
-		} catch (e) {
+		} catch {
 			this.notificationService.error(localize('accept failed', "Error while accepting changes. Please check [logs]({0}) for more details.", `command:${SHOW_SYNC_LOG_COMMAND_ID}`));
 		}
 	}
@@ -618,6 +618,10 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}, {
 			id: SyncResource.Prompts,
 			label: getSyncAreaLabel(SyncResource.Prompts)
+		}, {
+			id: SyncResource.PiProfile,
+			label: getSyncAreaLabel(SyncResource.PiProfile),
+			description: localize('pi profile sync description', "Agents, subagents and skills of your Pi profile")
 		}];
 
 
@@ -635,7 +639,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 	}
 
 	private async configureSyncOptions(): Promise<void> {
-		return new Promise((c, e) => {
+		return new Promise((c, _e) => {
 			const disposables: DisposableStore = new DisposableStore();
 			const quickPick = this.quickInputService.createQuickPick<ConfigureSyncQuickPickItem>();
 			disposables.add(quickPick);
@@ -684,6 +688,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 			case SyncResource.Extensions: return this.userDataSyncEnablementService.setResourceEnablement(SyncResource.Extensions, false);
 			case SyncResource.GlobalState: return this.userDataSyncEnablementService.setResourceEnablement(SyncResource.GlobalState, false);
 			case SyncResource.Profiles: return this.userDataSyncEnablementService.setResourceEnablement(SyncResource.Profiles, false);
+			case SyncResource.PiProfile: return this.userDataSyncEnablementService.setResourceEnablement(SyncResource.PiProfile, false);
 		}
 	}
 
@@ -939,8 +944,8 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					],
 				});
 			}
-			run(accessor: ServicesAccessor): unknown {
-				return new Promise<void>((c, e) => {
+			run(accessor: ServicesAccessor): Promise<void> {
+				return new Promise<void>((c, _e) => {
 					const quickInputService = accessor.get(IQuickInputService);
 					const commandService = accessor.get(ICommandService);
 					const disposables = new DisposableStore();
@@ -993,7 +998,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}
 				});
 			}
-			run(accessor: ServicesAccessor): Promise<void> {
+			run(_accessor: ServicesAccessor): Promise<void> {
 				return that.userDataSyncWorkbenchService.showSyncActivity();
 			}
 		}));
@@ -1013,7 +1018,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}
 				});
 			}
-			run(accessor: ServicesAccessor): Promise<void> {
+			run(_accessor: ServicesAccessor): Promise<void> {
 				return that.userDataSyncWorkbenchService.syncNow();
 			}
 		}));
@@ -1067,7 +1072,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}]
 				});
 			}
-			run(): unknown { return that.configureSyncOptions(); }
+			run(): Promise<void> { return that.configureSyncOptions(); }
 		}));
 	}
 
@@ -1091,7 +1096,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}],
 				});
 			}
-			run(): unknown { return that.showSyncActivity(); }
+			run(): Promise<void> { return that.showSyncActivity(); }
 		}));
 	}
 
@@ -1128,7 +1133,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}],
 				});
 			}
-			run(): unknown { return that.openerService.open(URI.parse('https://aka.ms/vscode-settings-sync-help')); }
+			run(): Promise<boolean> { return that.openerService.open(URI.parse('https://aka.ms/vscode-settings-sync-help')); }
 		}));
 		MenuRegistry.appendMenuItem(MenuId.ViewContainerTitle, {
 			command: {
@@ -1221,7 +1226,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}],
 				});
 			}
-			run(): unknown { return that.userDataSyncWorkbenchService.resetSyncedData(); }
+			run(): Promise<void> { return that.userDataSyncWorkbenchService.resetSyncedData(); }
 		}));
 	}
 

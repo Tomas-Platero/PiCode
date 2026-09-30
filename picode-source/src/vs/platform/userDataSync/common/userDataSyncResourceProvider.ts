@@ -6,12 +6,12 @@
 import { IExtUri } from '../../../base/common/resources.js';
 import { URI } from '../../../base/common/uri.js';
 import { localize } from '../../../nls.js';
-import { IEnvironmentService } from '../../environment/common/environment.js';
+import { INativeEnvironmentService } from '../../environment/common/environment.js';
 import { IFileService } from '../../files/common/files.js';
 import { getServiceMachineId } from '../../externalServices/common/serviceMachineId.js';
 import { IStorageService } from '../../storage/common/storage.js';
 import { IUriIdentityService } from '../../uriIdentity/common/uriIdentity.js';
-import { ISyncData, ISyncResourceHandle, IUserData, IUserDataSyncLocalStoreService, IUserDataSyncLogService, IUserDataSyncStoreService, SyncResource, UserDataSyncError, UserDataSyncErrorCode, USER_DATA_SYNC_SCHEME, IUserDataSyncResourceProviderService, ISyncUserDataProfile, CONFIG_SYNC_KEYBINDINGS_PER_PLATFORM, IUserDataSyncResource } from './userDataSync.js';
+import { ISyncData, ISyncResourceHandle, IUserData, IUserDataSyncLocalStoreService, IUserDataSyncLogService, IUserDataSyncStoreService, SyncResource, UserDataSyncError, UserDataSyncErrorCode, USER_DATA_SYNC_SCHEME, IUserDataSyncResourceProviderService, ISyncUserDataProfile, CONFIG_SYNC_KEYBINDINGS_PER_PLATFORM, IUserDataSyncResource, IGlobalState } from './userDataSync.js';
 import { IUserDataProfile, IUserDataProfilesService } from '../../userDataProfile/common/userDataProfile.js';
 import { isSyncData } from './abstractSynchronizer.js';
 import { parseSnippets } from './snippetsSync.js';
@@ -20,6 +20,7 @@ import { getKeybindingsContentFromSyncContent } from './keybindingsSync.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { getTasksContentFromSyncContent } from './tasksSync.js';
 import { getMcpContentFromSyncContent } from './mcpSync.js';
+import { parsePiProfileSyncContent } from './piProfileSync.js';
 import { LocalExtensionsProvider, parseExtensions, stringify as stringifyExtensions } from './extensionsSync.js';
 import { LocalGlobalStateProvider, stringify as stringifyGlobalState } from './globalStateSync.js';
 import { IInstantiationService } from '../../instantiation/common/instantiation.js';
@@ -54,7 +55,7 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 		@IUserDataSyncLocalStoreService private readonly userDataSyncLocalStoreService: IUserDataSyncLocalStoreService,
 		@IUserDataSyncLogService protected readonly logService: IUserDataSyncLogService,
 		@IUriIdentityService uriIdentityService: IUriIdentityService,
-		@IEnvironmentService private readonly environmentService: IEnvironmentService,
+		@INativeEnvironmentService private readonly environmentService: INativeEnvironmentService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IFileService private readonly fileService: IFileService,
 		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
@@ -90,7 +91,13 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 		if (refs.length) {
 			const content = await this.userDataSyncLocalStoreService.resolveResourceContent('machines', refs[0].ref, undefined, location);
 			if (content) {
-				const machinesData: IMachinesData = JSON.parse(content);
+				let machinesData: IMachinesData;
+				try {
+					machinesData = JSON.parse(content);
+				} catch (e) {
+					this.logService.error(e);
+					throw e;
+				}
 				return machinesData.machines.map(m => ({ ...m, isCurrent: false }));
 			}
 		}
@@ -152,6 +159,7 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 			case SyncResource.GlobalState: return this.getGlobalStateAssociatedResources(uri, profile);
 			case SyncResource.Extensions: return this.getExtensionsAssociatedResources(uri, profile);
 			case SyncResource.Profiles: return this.getProfilesAssociatedResources(uri, profile);
+			case SyncResource.PiProfile: return this.getPiProfileAssociatedResources(uri, profile);
 			case SyncResource.WorkspaceState: return [];
 		}
 	}
@@ -231,6 +239,7 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 			case SyncResource.GlobalState: return this.resolveGlobalStateNodeContent(syncData, node);
 			case SyncResource.Extensions: return this.resolveExtensionsNodeContent(syncData, node);
 			case SyncResource.Profiles: return this.resolveProfileNodeContent(syncData, node);
+			case SyncResource.PiProfile: return this.resolvePiProfileNodeContent(syncData, node);
 			case SyncResource.WorkspaceState: return null;
 		}
 	}
@@ -250,6 +259,7 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 			case SyncResource.Mcp: return null;
 			case SyncResource.Snippets: return null;
 			case SyncResource.Prompts: return null;
+			case SyncResource.PiProfile: return null;
 			case SyncResource.WorkspaceState: return null;
 		}
 	}
@@ -389,8 +399,16 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 
 	private resolveGlobalStateNodeContent(syncData: ISyncData, node: string): string | null {
 		switch (node) {
-			case 'globalState.json':
-				return stringifyGlobalState(JSON.parse(syncData.content), true);
+			case 'globalState.json': {
+				let parsed: IGlobalState;
+				try {
+					parsed = JSON.parse(syncData.content);
+				} catch (e) {
+					this.logService.error(e);
+					throw e;
+				}
+				return stringifyGlobalState(parsed, true);
+			}
 		}
 		return null;
 	}
@@ -400,7 +418,7 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 		return stringifyGlobalState(localGlobalState, true);
 	}
 
-	private getProfilesAssociatedResources(uri: URI, profile: IUserDataProfile | undefined): { resource: URI; comparableResource: URI }[] {
+	private getProfilesAssociatedResources(uri: URI, _profile: IUserDataProfile | undefined): { resource: URI; comparableResource: URI }[] {
 		const resource = this.extUri.joinPath(uri, 'profiles.json');
 		const comparableResource = this.toUri({
 			remote: false,
@@ -416,13 +434,21 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 
 	private resolveProfileNodeContent(syncData: ISyncData, node: string): string | null {
 		switch (node) {
-			case 'profiles.json':
-				return toFormattedString(JSON.parse(syncData.content), {});
+			case 'profiles.json': {
+				let parsed: unknown;
+				try {
+					parsed = JSON.parse(syncData.content);
+				} catch (e) {
+					this.logService.error(e);
+					throw e;
+				}
+				return toFormattedString(parsed, {});
+			}
 		}
 		return null;
 	}
 
-	private async resolveLatestProfilesContent(profile: IUserDataProfile): Promise<string | null> {
+	private async resolveLatestProfilesContent(_profile: IUserDataProfile): Promise<string | null> {
 		return stringifyLocalProfiles(this.userDataProfilesService.profiles.filter(p => !p.isDefault && !p.isTransient), true);
 	}
 
@@ -529,6 +555,27 @@ export class UserDataSyncResourceProviderService implements IUserDataSyncResourc
 				return getMcpContentFromSyncContent(syncData.content, this.logService);
 		}
 		return null;
+	}
+
+	private async getPiProfileAssociatedResources(uri: URI, profile: IUserDataProfile | undefined): Promise<{ resource: URI; comparableResource: URI }[]> {
+		const content = await this.resolveContent(uri);
+		if (content) {
+			const syncData = this.parseSyncData(content, SyncResource.PiProfile);
+			if (syncData) {
+				const files = parsePiProfileSyncContent(syncData);
+				if (files) {
+					return Object.keys(files).map(key => ({
+						resource: this.extUri.joinPath(uri, key),
+						comparableResource: profile?.isDefault ? this.extUri.joinPath(this.environmentService.userHome, '.pi', 'agent', key) : this.extUri.joinPath(uri, UserDataSyncResourceProviderService.NOT_EXISTING_RESOURCE)
+					}));
+				}
+			}
+		}
+		return [];
+	}
+
+	private resolvePiProfileNodeContent(syncData: ISyncData, node: string): string | null {
+		return parsePiProfileSyncContent(syncData)?.[node] ?? null;
 	}
 
 }
