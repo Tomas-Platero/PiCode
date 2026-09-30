@@ -4,9 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { addDisposableListener, $, reset, clearNode } from '../../../../base/browser/dom.js';
+import { URI } from '../../../../base/common/uri.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
+import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { IExtensionResourceLoaderService } from '../../../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
 import { editorBackground, editorForeground } from '../../../../platform/theme/common/colors/editorColors.js';
 import { editorLineNumbers } from '../../../../editor/common/core/editorColorRegistry.js';
@@ -19,6 +22,9 @@ import { ColorThemeData } from '../../../services/themes/common/colorThemeData.j
  *
  * The page owns the questions; this module owns the rendering and the calls. Four cards:
  *
+ * - **Sign in** — the first step: the PiCode Account state as the authentication service
+ *   sees it, the provider's own browser sign-in behind one button, and the pricing line
+ *   for the Pro plan the sync needs.
  * - **pi** — two option cards with live facts (the internal pi's version; the machine's pi
  *   probed once for path and version). Choosing one applies it and the note under the cards
  *   says what the choice loads. When the internal pi runs and the machine's profile holds
@@ -46,6 +52,30 @@ const THEME_GALLERY_PAGE = 24;
 
 /** How many package rows show before "Show more" offers the next page. */
 const PACKAGE_GALLERY_PAGE = 24;
+
+/** The authentication provider id of the PiCode Account, as the accounts menu shows it. */
+const PICODE_AUTH_PROVIDER_ID = 'picode';
+
+/** The scopes the setup asks for: the same `sync` scope the Settings Sync engine uses. */
+const PICODE_AUTH_SCOPES = ['sync'];
+
+/** The pricing page, where the Pro plan the sync needs is described. */
+const PICODE_PRICING_URL = 'https://www.getpicode.app/pricing';
+
+/** Asks the authentication service for the PiCode Account state. */
+const PICODE_ACCOUNT_STATE_COMMAND = 'picode.setup.accountState';
+
+/** Runs the PiCode Account sign-in (the provider's own browser flow). */
+const PICODE_SIGN_IN_COMMAND = 'picode.setup.accountSignIn';
+
+/** What the account commands answer with: whether a session exists, and who for. */
+interface AccountStatus {
+	readonly signedIn: boolean;
+	/** The account label — the email the PiCode Account is signed in with. */
+	readonly label?: string;
+	/** The account avatar, when the sign-in provider returned one. */
+	readonly avatar?: string;
+}
 
 /** One model of the fetched list, as the connector's modelsList answers it. */
 interface WizardModel {
@@ -158,7 +188,9 @@ export class PiCodeSetup extends Disposable {
 	private busy = false;
 
 	/* The wizard: which step is on screen, and what the owner has done in it. */
-	private step: 0 | 1 | 2 | 3 | 4 = 0;
+	private step: 0 | 1 | 2 | 3 | 4 | 5 = 0;
+	/** The PiCode Account state, asked once and repainted when the sign-in lands. */
+	private accountStatus: AccountStatus | undefined;
 	/** Step 1's Next stays disabled until an option card is clicked at least once. */
 	private piChosen = false;
 	/** The wizard ran to the end. */
@@ -276,19 +308,21 @@ export class PiCodeSetup extends Disposable {
 			return;
 		}
 
-		// Five steps: pi, then (for the internal pi) the provider and its model, then
-		// Gentle AI with its agents, then the pi packages, then the theme. With the
-		// external pi the provider step has nothing to ask (its providers are the
-		// machine's) and Gentle is dimmed.
+		// Six steps: the PiCode Account sign-in, then pi, then (for the internal pi) the
+		// provider and its model, then Gentle AI with its agents, then the pi packages,
+		// then the theme. With the external pi the provider step has nothing to ask (its
+		// providers are the machine's) and Gentle is dimmed.
 		const body = this.step === 0
-			? this.renderPiCard(state)
+			? this.renderLoginStep()
 			: this.step === 1
-				? (state.runtime === 'internal' ? this.renderProviderStep() : this.renderSkippedProvider())
+				? this.renderPiCard(state)
 				: this.step === 2
-					? this.renderGentleStep(state)
+					? (state.runtime === 'internal' ? this.renderProviderStep() : this.renderSkippedProvider())
 					: this.step === 3
-						? this.renderPackagesCard()
-						: this.renderThemeCard();
+						? this.renderGentleStep(state)
+						: this.step === 4
+							? this.renderPackagesCard()
+							: this.renderThemeCard();
 
 		const foot = this.renderWizardFoot(state);
 		this.wizardFootEl = foot;
@@ -300,9 +334,10 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	/** The five dots and the "1 of 5 — pi" line. */
+	/** The six dots and the "1 of 6 — Sign in" line. */
 	private renderWizardHead(): HTMLElement {
 		const names = [
+			localize('picodeSetup.step.login', "Sign in"),
 			localize('picodeSetup.step.pi', "pi"),
 			localize('picodeSetup.step.provider', "Provider & model"),
 			localize('picodeSetup.step.gentle', "Gentle AI"),
@@ -310,46 +345,48 @@ export class PiCodeSetup extends Disposable {
 			localize('picodeSetup.step.theme', "Theme"),
 		];
 		const dots = $('.picode-step-dots', {});
-		for (let i = 0; i < 5; i += 1) {
+		for (let i = 0; i < 6; i += 1) {
 			dots.appendChild($('.picode-dot' + (i === this.step ? '.on' : '')));
 		}
 		return $('.picode-wizard-head', {},
 			dots,
-			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 5 — {1}", String(this.step + 1), names[this.step])),
+			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 6 — {1}", String(this.step + 1), names[this.step])),
 		);
 	}
 
 	/**
 	 * Back / Next / Skip, the same three on every step, plus "Not now" at the far right.
 	 *
-	 * Step 1's Next is disabled until an option card is clicked. The last step has no Skip
-	 * (there is nothing after it) and its Next is "Done".
+	 * The pi chooser's Next is disabled until an option card is clicked. The last step has
+	 * no Skip (there is nothing after it) and its Next is "Done". On the sign-in step the
+	 * Next reads "Continue" once the owner is signed in.
 	 */
 	private renderWizardFoot(state: SetupState): HTMLElement {
 		const back = this.navButton('picode-wizard-back', localize('picodeSetup.nav.back', "Back"), this.step > 0,
-			() => this.goTo((this.step === 2 && state.runtime !== 'internal' ? 0 : this.step - 1) as 0 | 1 | 2 | 3 | 4));
-		const nextLabel = this.step === 4 ? localize('picodeSetup.nav.done', "Done")
-			: this.step === 0 ? localize('picodeSetup.nav.next', "Next")
-			: this.step === 1 ? localize('picodeSetup.nav.nextModel', "Next — set the default model")
+			() => this.goTo((this.step === 3 && state.runtime !== 'internal' ? 1 : this.step - 1) as 0 | 1 | 2 | 3 | 4 | 5));
+		const nextLabel = this.step === 5 ? localize('picodeSetup.nav.done', "Done")
+			: this.step === 1 ? localize('picodeSetup.nav.next', "Next")
+			: this.step === 2 ? localize('picodeSetup.nav.nextModel', "Next — set the default model")
+			: this.step === 0 && this.accountStatus?.signedIn ? localize('picodeSetup.nav.continue', "Continue")
 				: localize('picodeSetup.nav.next', "Next");
 		const next = this.navButton(
 			'picode-wizard-next',
 			nextLabel,
-			this.step === 0 ? this.piChosen : this.step === 1 ? this.wizardModel !== undefined : !(this.busy && this.step === 2),
+			this.step === 1 ? this.piChosen : this.step === 2 ? this.wizardModel !== undefined : !(this.busy && this.step === 3),
 			() => this.advanceFrom(state),
 			'primary',
 		);
-		if (this.step === 0 && !this.piChosen) {
+		if (this.step === 1 && !this.piChosen) {
 			next.classList.add('disabled');
 			next.title = localize('picodeSetup.nav.chooseFirst', "Choose a pi first — click one of the two options above.");
 		}
-		if (this.step === 1 && this.wizardModel === undefined) {
+		if (this.step === 2 && this.wizardModel === undefined) {
 			next.classList.add('disabled');
 			next.title = localize('picodeSetup.nav.chooseModel', "Pick the model your agent will run on.");
 		}
 		const foot = $('.picode-wizard-foot', {}, back, $('.picode-foot-spacer', {}));
-		if (this.step < 4) {
-			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), !(this.busy && this.step === 2), () => this.advanceFrom(state, true)));
+		if (this.step < 5) {
+			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), !(this.busy && this.step === 3), () => this.advanceFrom(state, true)));
 		}
 		foot.append(
 			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
@@ -364,10 +401,14 @@ export class PiCodeSetup extends Disposable {
 		*/
 	private async advanceFrom(state: SetupState, skipping = false): Promise<void> {
 		if (this.step === 0) {
-			this.goTo(state.runtime === 'internal' ? 1 : 2);
+			this.goTo(1);
 			return;
 		}
 		if (this.step === 1) {
+			this.goTo(state.runtime === 'internal' ? 2 : 3);
+			return;
+		}
+		if (this.step === 2) {
 			if (!skipping && this.wizardModel !== undefined) {
 				try {
 					await this.services.commandService.executeCommand('picode.setup.modelDefault', this.wizardModel);
@@ -376,15 +417,15 @@ export class PiCodeSetup extends Disposable {
 					return;
 				}
 			}
-			this.goTo(2);
-			return;
-		}
-		if (this.step === 2) {
 			this.goTo(3);
 			return;
 		}
 		if (this.step === 3) {
 			this.goTo(4);
+			return;
+		}
+		if (this.step === 4) {
+			this.goTo(5);
 			return;
 		}
 		this.finish();
@@ -409,7 +450,7 @@ export class PiCodeSetup extends Disposable {
 		}
 	}
 
-	private goTo(step: 0 | 1 | 2 | 3 | 4): void {
+	private goTo(step: 0 | 1 | 2 | 3 | 4 | 5): void {
 		this.step = step;
 		this.renderWizard(this.state);
 	}
@@ -431,7 +472,11 @@ export class PiCodeSetup extends Disposable {
 	/**
 	 * "End the setup": the done mark the other exits set, plus the editor setting that
 	 * keeps the welcome page from opening again on start. The connector owns both writes
-	 * (`picode.setup.endForGood`); the page only says what came of them, in one line.
+	 * (`picode.setup.endForGood`); the page only says what came of them, in one line —
+	 * and, the tab having served its purpose, the Welcome editor closes. The button lives
+	 * in that editor, so it is the active one and closing the active editor is exactly
+	 * this tab; "Review the setup" keeps working before the end, and the setup itself
+	 * comes back from Settings > PiCode.
 	 */
 	private endForGood(): void {
 		this.services.commandService.executeCommand('picode.setup.endForGood')
@@ -439,6 +484,7 @@ export class PiCodeSetup extends Disposable {
 				this.endedNote = localize('picodeSetup.endNote', "Setup ended. You can bring it back from Settings > PiCode.");
 				this.endedWithError = false;
 				this.renderWizard(this.state);
+				void this.services.commandService.executeCommand('workbench.action.closeActiveEditor');
 			})
 			.catch(error => {
 				this.endedNote = messageOf(error);
@@ -447,13 +493,102 @@ export class PiCodeSetup extends Disposable {
 			});
 	}
 
+	/**
+	 * Step 1, the PiCode Account sign-in: the status as the authentication service sees
+	 * it, the provider's own one-time-code flow behind one button, and the pricing line
+	 * for the Pro plan the sync needs. Signing in is offered, never forced — the Next
+	 * stays enabled for the owner who would rather set the editor up first (a Free
+	 * account cannot sign in here at all).
+	 */
+	private renderLoginStep(): HTMLElement {
+		const status = $('.picode-login-status');
+		const card = $('.picode-card.picode-login-card', {},
+			$('.picode-card-head', {},
+				$('.picode-card-title', {}, localize('picodeSetup.login.title', "Sign in to PiCode")),
+				$('span.picode-hint', {}, localize('picodeSetup.login.hint', "PiCode Account")),
+			),
+			$('p.picode-row-description', {}, localize('picodeSetup.login.detail',
+				"Sync your settings, extensions and your pi profile across devices with a PiCode Account.")),
+			status,
+			$('.picode-login-pricing', {},
+				localize('picodeSetup.login.pricing', "PiCode Sync requires a Pro account. Plans at "),
+				this.pricingLink()),
+		);
+		// The state is asked once; the sign-in's own completion repaints it, as does any
+		// later re-render of this step.
+		if (this.accountStatus === undefined) {
+			void this.services.commandService.executeCommand<AccountStatus>(PICODE_ACCOUNT_STATE_COMMAND)
+				.then(answer => {
+					if (answer === undefined || this._store.isDisposed || this.step !== 0) { return; }
+					this.accountStatus = answer;
+					const area = this.container.querySelector('.picode-login-status');
+					if (area instanceof HTMLElement) { this.paintLoginStatus(area); }
+					this.repaintFoot();
+				})
+				.catch(() => { /* the checking line stays; the sign-in button answers for itself */ });
+		}
+		this.paintLoginStatus(status);
+		return card;
+	}
+
+	/** Repaints the login step's status area from the account status in hand. */
+	private paintLoginStatus(area: HTMLElement): void {
+		const status = this.accountStatus;
+		if (status === undefined) {
+			reset(area, $('.picode-gallery-loading', {}, localize('picodeSetup.login.checking', "Checking your account…")));
+			return;
+		}
+		if (status.signedIn) {
+			reset(area, $('.picode-login-signed-in', {},
+				...(status.avatar !== undefined ? [$('img.picode-login-avatar', { 'src': status.avatar, 'alt': '' })] : []),
+				$('span.picode-login-state', {}, localize('picodeSetup.login.signedInAs', "Signed in as {0}", status.label ?? '')),
+			));
+			return;
+		}
+		reset(area, $('.picode-login-signed-out', {},
+			$('span.picode-login-state', {}, localize('picodeSetup.login.notSignedIn', "Not signed in")),
+			this.button('picode-login-signin', localize('picodeSetup.login.signIn', "Sign in / Create account"), () => { void this.signIn(); }, 'primary'),
+		));
+	}
+
+	/**
+	 * "Sign in / Create account": the account provider's own browser flow, then the
+	 * status repaints from the session it minted. Every failure — a cancelled sign-in,
+	 * a Free account, an unreachable service — is one honest line in the card's note.
+	 */
+	private async signIn(): Promise<void> {
+		this.setNote(localize('picodeSetup.login.opening', "Opening your browser to sign in…"), false);
+		try {
+			this.accountStatus = await this.services.commandService.executeCommand<AccountStatus>(PICODE_SIGN_IN_COMMAND);
+			this.setNote('', false);
+		} catch (error) {
+			this.setNote(messageOf(error), true);
+			this.accountStatus = { signedIn: false };
+		}
+		if (this.step === 0 && !this._store.isDisposed) {
+			const area = this.container.querySelector('.picode-login-status');
+			if (area instanceof HTMLElement) { this.paintLoginStatus(area); }
+			this.repaintFoot();
+		}
+	}
+
+	/** The pricing line's link, opened with the editor's own `vscode.open`. */
+	private pricingLink(): HTMLElement {
+		const link = $('a.picode-link', { 'href': PICODE_PRICING_URL, 'title': PICODE_PRICING_URL }, PICODE_PRICING_URL);
+		this.disposables.add(addDisposableListener(link, 'click', event => {
+			event.preventDefault();
+			void this.services.commandService.executeCommand('vscode.open', URI.parse(PICODE_PRICING_URL));
+		}));
+		return link;
+	}
+
 	private renderPiCard(state: SetupState): HTMLElement {
 		const external = this.renderPiOption({
 			checked: state.runtime === 'external',
 			available: state.externalAvailable,
-			label: localize('picodeSetup.pi.external', "External Pi"),
-			detail: localize('picodeSetup.pi.externalDetail', "Your own pi, installed on this machine. PiCode reads it and never writes to it."),
-			icon: 'plug',
+			label: localize('picodeSetup.pi.external', "Your installed pi"),
+			detail: localize('picodeSetup.pi.externalDetail', "The pi already on this machine. PiCode reads it and never writes to it."),
+			icon: 'folder-library',
 			mode: 'external',
 			meta: state.externalAvailable
 						? localize('picodeSetup.pi.externalFound', "Found on your computer — ready to use")
@@ -462,8 +597,8 @@ export class PiCodeSetup extends Disposable {
 		const internal = this.renderPiOption({
 			checked: state.runtime !== 'external',
 			available: true,
-			label: localize('picodeSetup.pi.internal', "PiCode's internal pi"),
-			detail: localize('picodeSetup.pi.internalDetail', "Kept and updated by PiCode; its configuration lives inside the editor."),
+			label: localize('picodeSetup.pi.internal', "Built-in pi (recommended)"),
+			detail: localize('picodeSetup.pi.internalDetail', "Kept and updated by PiCode — its configuration lives inside the editor."),
 			icon: 'vm',
 			mode: 'internal',
 			meta: state.internalPiVersion ? localize('picodeSetup.pi.internalVersion', "Version {0}", state.internalPiVersion) : undefined,
@@ -471,16 +606,18 @@ export class PiCodeSetup extends Disposable {
 
 		const card = $('.picode-card.picode-pi-card', {},
 			$('.picode-card-head', {},
-				$('.picode-card-title', {}, localize('picodeSetup.pi.title', "pi")),
+				$('span.picode-pi-mark'),
+				$('.picode-card-title', {}, localize('picodeSetup.pi.title', "Choose your pi")),
 				$('span.picode-hint', {}, state.runtime === 'internal'
-					? localize('picodeSetup.pi.currentInternal', "Using the pi inside PiCode")
-					: localize('picodeSetup.pi.currentExternal', "Using your machine's pi")),
+					? localize('picodeSetup.pi.currentInternal', "In use: built-in pi")
+					: localize('picodeSetup.pi.currentExternal', "In use: your installed pi")),
 			),
+			$('p.picode-pi-lede', {}, localize('picodeSetup.pi.lede', "PiCode comes with its own pi — ready from the first launch. Prefer your own installed pi? Point PiCode at it.")),
 			$('.picode-pi-options', {}, internal, external),
 			// The import shows only while the internal pi runs and the machine's profile has
 			// something worth bringing; the counts arrive when the card asks for them.
 			$('.picode-import-area'),
-			this.renderNote(localize('picodeSetup.pi.note.internal', "PiCode runs pi inside the editor, with its own settings and connections. Your machine's pi is not touched.")),
+			this.renderNote(localize('picodeSetup.pi.note.internal', "Nothing is deleted: PiCode never writes to the pi installed on your machine.")),
 		);
 
 		// The machine's pi is probed once, after the card is on screen: the version needs a
@@ -1749,3 +1886,58 @@ export function renderPiCodeSetup(container: HTMLElement, services: PiCodeSetupS
 	void setup.render();
 	return setup;
 }
+
+/* ------------------------------------------------------------------ *
+ * The PiCode Account commands the sign-in step calls
+ * ------------------------------------------------------------------ */
+
+let accountCommandsRegistered = false;
+
+/**
+ * Registers the two account commands behind the sign-in step, once per session.
+ *
+ * They are plain workbench commands rather than extension contributions: the PiCode
+ * Account is the editor's own first-party provider, and calling the authentication
+ * service directly is what keeps the owner's sign-in inside the flow the provider
+ * already owns (the one-time code in the browser) with no extra consent detour.
+ */
+function registerAccountCommands(): void {
+	if (accountCommandsRegistered) {
+		return;
+	}
+	accountCommandsRegistered = true;
+
+	CommandsRegistry.registerCommand(PICODE_ACCOUNT_STATE_COMMAND, async (accessor: ServicesAccessor): Promise<AccountStatus> => {
+		const authenticationService = accessor.get(IAuthenticationService);
+		// The provider registers as the workbench finishes restoring; give it a moment
+		// rather than answering "not signed in" while the window is still starting.
+		for (let waited = 0; !authenticationService.isAuthenticationProviderRegistered(PICODE_AUTH_PROVIDER_ID) && waited < 6; waited += 1) {
+			await new Promise<void>(resolve => setTimeout(resolve, 500));
+		}
+		if (!authenticationService.isAuthenticationProviderRegistered(PICODE_AUTH_PROVIDER_ID)) {
+			return { signedIn: false };
+		}
+		try {
+			const sessions = await authenticationService.getSessions(PICODE_AUTH_PROVIDER_ID, PICODE_AUTH_SCOPES);
+			const session = sessions[0];
+			return session === undefined
+				? { signedIn: false }
+				: { signedIn: true, label: session.account.label, avatar: session.account.icon?.toString(true) };
+		} catch {
+			// A state that cannot be read is a state without a session to show; the
+			// sign-in button is the honest way forward either way.
+			return { signedIn: false };
+		}
+	});
+
+	CommandsRegistry.registerCommand(PICODE_SIGN_IN_COMMAND, async (accessor: ServicesAccessor): Promise<AccountStatus> => {
+		const authenticationService = accessor.get(IAuthenticationService);
+		// The provider's own flow: the browser opens, the web app sends back a one-time
+		// code, and the session is minted here. Cancellations, timeouts and a Free plan
+		// reject — the page reports what came of it in one line.
+		const session = await authenticationService.createSession(PICODE_AUTH_PROVIDER_ID, PICODE_AUTH_SCOPES);
+		return { signedIn: true, label: session.account.label, avatar: session.account.icon?.toString(true) };
+	});
+}
+
+registerAccountCommands();

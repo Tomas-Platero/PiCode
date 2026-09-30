@@ -131,7 +131,6 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-setup {
 	max-width: 100%;
 }
-}
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
 .monaco-workbench .part.editor > .content .gettingStartedContainer.height-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer,
@@ -259,6 +258,27 @@
 	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
 }
 
+/* the pi robot, as a theme-aware silhouette next to the pi step's title */
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-pi-mark {
+	flex: none;
+	align-self: center;
+	width: 18px;
+	height: 18px;
+	-webkit-mask: url('../../../picode/browser/media/picode.svg') no-repeat center / contain;
+	mask: url('../../../picode/browser/media/picode.svg') no-repeat center / contain;
+	background-color: var(--vscode-foreground);
+	opacity: .9;
+}
+
+/* the pi step's one-line pitch, under the title row */
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-pi-lede {
+	margin: 0 0 10px 0;
+	opacity: .75;
+	font-size: .92em;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-hint {
 	opacity: .7;
 }
@@ -346,24 +366,27 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card {
 	display: flex;
 	align-items: flex-start;
-	gap: 8px;
-	padding: 8px 10px;
+	gap: 10px;
+	padding: 10px 12px;
 	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
 	border-radius: 6px;
 	text-align: left;
 	cursor: pointer;
 	background: transparent;
+	color: inherit;
 	transition: border-color 0.15s ease-out, background-color 0.15s ease-out;
 }
 
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card:hover {
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card:hover:not(.checked) {
+	border-color: var(--vscode-focusBorder);
 	background: var(--vscode-list-hoverBackground);
 }
 
+/* selected: an accent border over a quiet tint of the theme's own active color, so the
+   card reads as picked without shouting; text keeps the normal foreground. */
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card.checked {
 	border-color: var(--vscode-focusBorder);
-	background: var(--vscode-list-activeSelectionBackground);
-	color: var(--vscode-list-activeSelectionForeground);
+	background: var(--vscode-list-hoverBackground);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card.unavailable {
@@ -372,6 +395,10 @@
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-option-card .codicon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
 	margin-top: 2px;
 	color: var(--vscode-focusBorder);
 }
@@ -411,24 +438,28 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-counts {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 14px;
+	gap: 4px 24px;
 	margin-bottom: 8px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-count {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
+	align-items: flex-start;
+	min-width: 56px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-value {
 	font-size: 1.3em;
 	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
+	line-height: 1.25;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-label {
-	font-size: .85em;
+	font-size: .82em;
 	opacity: .75;
+	line-height: 1.3;
+	white-space: nowrap;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-checkbox-row {
@@ -473,6 +504,53 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+/* PiCode Account sign-in */
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-login-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 4px 0 8px 0;
+	min-height: 24px;
+}
+
+/* Signed-out stacks vertically: the primary button gets its own row instead of
+   squeezing beside the status text in the narrow column. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-login-signed-out {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	width: 100%;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-login-state {
+	opacity: .85;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-login-avatar {
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-login-pricing {
+	margin: 4px 0 0 0;
+	font-size: .88em;
+	opacity: .8;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-link {
+	color: var(--vscode-textLink-foreground);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-link:hover {
+	text-decoration: underline;
 }
 
 /* Gentle AI */
@@ -620,8 +698,6 @@
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer.width-constrained .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-grid {
 	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-}
-
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-right {
