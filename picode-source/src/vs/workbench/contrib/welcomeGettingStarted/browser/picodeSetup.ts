@@ -615,9 +615,7 @@ export class PiCodeSetup extends Disposable {
 			$('p.picode-pi-lede', {}, localize('picodeSetup.pi.lede', "PiCode comes with its own pi — ready from the first launch. Prefer your own installed pi? Point PiCode at it.")),
 			$('.picode-pi-options', {}, internal, external),
 			// The import shows only while the internal pi runs and the machine's profile has
-			// something worth bringing; the counts arrive when the card asks for them.
-			$('.picode-import-area'),
-			this.renderNote(localize('picodeSetup.pi.note.internal', "Nothing is deleted: PiCode never writes to the pi installed on your machine.")),
+			// something worth bringing; the counts arrive when the card asks for them.,
 		);
 
 		// The machine's pi is probed once, after the card is on screen: the version needs a
@@ -1365,7 +1363,14 @@ export class PiCodeSetup extends Disposable {
 		);
 
 		const applyTheme = async (theme: IWorkbenchColorTheme, persist: boolean): Promise<void> => {
-			await this.services.themeService.setColorTheme(theme.settingsId, persist ? undefined : 'preview');
+			try {
+				await this.services.themeService.setColorTheme(theme.settingsId, persist ? undefined : 'preview');
+			} catch (error) {
+				// A failed apply is said on the card, never swallowed — the user would
+				// otherwise click a theme and see nothing happen at all.
+				this.setNote(messageOf(error), true);
+				return;
+			}
 			if (persist) {
 				this.appliedThemeId = theme.settingsId;
 				this.services.commandService.executeCommand('picode.setup.complete');

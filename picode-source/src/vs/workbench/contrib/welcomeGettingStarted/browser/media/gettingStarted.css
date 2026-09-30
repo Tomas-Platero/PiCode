@@ -619,6 +619,14 @@
 	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 	gap: 8px;
 	margin-bottom: 8px;
+	/* The gallery scrolls inside its own region with a themed thin bar — the
+	   column's wide scrollbar never shows over the cards. */
+	max-height: calc(100vh - 430px);
+	min-height: 160px;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--vscode-scrollbarSlider.background) transparent;
+	padding-right: 6px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card {
@@ -1948,4 +1956,10 @@
 	font-size: .85em;
 	opacity: .75;
 	margin-bottom: 4px;
+}
+
+/* Product decision: the welcome-startup checkbox is noise inside the setup flow. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .getting-started-checkbox,
+.monaco-workbench .part.editor > .content .gettingStartedContainer label[for='showOnStartup'] {
+	display: none;
 }
