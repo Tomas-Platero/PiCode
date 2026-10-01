@@ -22,6 +22,47 @@ export const STATUS_DATA_COMMAND = 'picode.setup.status';
 /** How often the rows are re-read while the panel is on screen. */
 const STATUS_REFRESH_MS = 5000;
 
+/** One of pi's MCP servers, as the panel lists it: the name, and whether pi will start it. */
+export interface McpServerSwitch {
+	readonly name: string;
+	readonly on: boolean;
+}
+
+/**
+ * The count the MCP row shows: how many servers there are, and how many are switched off.
+ *
+ * The switch is pi's own `enabled`, read from the profile's file — no connection and no side effect,
+ * which is why the panel can say it on every refresh and the MCP page cannot.
+ */
+function mcpCountDescription(servers: readonly McpServerSwitch[]): string {
+	const off = servers.filter(server => !server.on).length;
+	return off === 0 ? String(servers.length) : `${servers.length} · ${off} off`;
+}
+
+/**
+ * The children of the MCP row: one per server, and the row itself is the switch.
+ *
+ * A click runs the connector's `picode.mcp.toggleServer`, which flips pi's `enabled` key in the file
+ * that holds the entry. There are no children at all when there is nothing to list, so the row does not
+ * offer an arrow that opens onto nothing.
+ */
+function mcpServerRows(servers: readonly McpServerSwitch[]): { children?: StatusItem[] } {
+	if (servers.length === 0) {
+		return {};
+	}
+	return {
+		children: servers.map(server => new StatusItem(server.name, {
+			description: server.on ? 'on' : 'off',
+			icon: new vscode.ThemeIcon(server.on ? 'circle-filled' : 'circle-slash'),
+			command: {
+				command: 'picode.mcp.toggleServer',
+				title: server.on ? 'Turn off' : 'Turn on',
+				arguments: [server.name],
+			},
+		})),
+	};
+}
+
 export interface StatusData {
 	runtime?: string;
 	piVersion?: string;
@@ -31,9 +72,8 @@ export interface StatusData {
 	defaultModel?: string;
 	model?: string;
 	thinkingLevel?: string;
-	mcpServers?: number;
-	/** How many of them are switched off (`enabled: false`): a row that is not offered is still counted. */
-	mcpServersOff?: number;
+	/** pi's MCP servers, with the switch pi reads: the panel shows them and can flip them. */
+	mcpServers?: readonly McpServerSwitch[];
 	skills?: number;
 	gitBranch?: string;
 	gitChanges?: number;
@@ -79,7 +119,7 @@ class StatusItem extends vscode.TreeItem {
 
 	constructor(
 		label: string,
-		options: { description?: string; children?: StatusItem[]; icon?: StatusIcon } = {},
+		options: { description?: string; children?: StatusItem[]; icon?: StatusIcon; command?: vscode.Command } = {},
 	) {
 		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 		if (options.description !== undefined) {
@@ -87,6 +127,9 @@ class StatusItem extends vscode.TreeItem {
 		}
 		if (options.icon !== undefined) {
 			this.iconPath = options.icon;
+		}
+		if (options.command !== undefined) {
+			this.command = options.command;
 		}
 		if (options.children) {
 			this.children = options.children;
@@ -187,8 +230,12 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			// The servers live in pi's own profile, which is where this counts them — not the project's
 			// business, which is where the row used to sit.
 			new StatusItem('MCP servers', {
-				description: d.mcpServersOff === undefined || d.mcpServersOff === 0 ? String(d.mcpServers ?? 0) : `${d.mcpServers ?? 0} · ${d.mcpServersOff} off`,
+				description: mcpCountDescription(d.mcpServers ?? []),
 				icon: new vscode.ThemeIcon('server-process'),
+				// One row per server, and the row *is* the switch: `enabled` is pi's own key, and the panel is
+				// the only place a switched-off server is still listed — the page stops offering it the moment
+				// it is off (`mcp-provider.ts`), so without these rows it could not be switched back on.
+				...(mcpServerRows(d.mcpServers ?? [])),
 			}),
 		];
 		const model = d.model ?? d.defaultModel;

@@ -12,7 +12,7 @@ import { declarationsFromSetting, isRecord } from './declarations';
 import { isGentleInstalled, probeExternalPi, readGentleVersion, readInternalPiVersion } from './onboarding';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode } from './runtime';
-import { STATUS_DATA_COMMAND, type StatusData } from './status-view';
+import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
 import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKey } from './usage-data';
 
 /**
@@ -96,17 +96,16 @@ function countProviders(profileDir: string): number {
 	return ids.size;
 }
 
-/** pi's MCP servers in the profile: how many there are, and how many are switched off. */
-function countMcpServers(profileDir: string): { readonly servers: number; readonly off: number } {
+/** pi's MCP servers in the profile, one row each: the name, and whether pi will start it. */
+function readMcpServers(profileDir: string): readonly McpServerSwitch[] {
 	const file = readJsonObject(path.join(profileDir, 'mcp.json'));
 	const servers = file?.['mcpServers'];
 	if (!isRecord(servers)) {
-		return { servers: 0, off: 0 };
+		return [];
 	}
-	const entries = Object.values(servers);
-	// `enabled: false` is pi's switch, and the one this connector honours too (`mcp-provider.ts`):
-	// counting the switched-off ones is what keeps them visible once they stop being rows.
-	return { servers: entries.length, off: entries.filter(entry => isRecord(entry) && entry['enabled'] === false).length };
+	// `enabled: false` is pi's switch, and the one this connector honours too (`mcp-provider.ts`): this
+	// is the list that keeps a switched-off server visible once it stops being offered as a row.
+	return Object.entries(servers).map(([name, entry]) => ({ name, on: !(isRecord(entry) && entry['enabled'] === false) }));
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
@@ -280,7 +279,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const defaultModel = readDefaultModel(profileDir);
 	const usage = getSessionUsage();
 	const gentleInstalled = isGentleInstalled(profileDir);
-	const mcp = countMcpServers(profileDir);
+	const mcpServers = readMcpServers(profileDir);
 	const gitInfo = await readGit(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
 
 	return {
@@ -290,8 +289,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		gentleVersion: gentleInstalled ? readGentleVersion(profileDir) : undefined,
 		providers: countProviders(profileDir),
 		defaultModel,
-		mcpServers: mcp.servers,
-		mcpServersOff: mcp.off,
+		mcpServers,
 		skills: countDirectories(path.join(profileDir, 'skills')),
 		gitBranch: gitInfo.branch,
 		gitChanges: gitInfo.changes,

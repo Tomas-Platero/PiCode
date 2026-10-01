@@ -19,6 +19,7 @@ import {
 	mcpServersTextWithAdded,
 	mcpServersTextWithEdited,
 	mcpServersTextWithRemoved,
+	mcpServersTextWithToggled,
 	mcpServersWithAdded,
 	mcpServersWithEdited,
 	mcpServersWithRemoved,
@@ -331,4 +332,33 @@ test('removing a server the file does not hold is said, not written', () => {
 	assert.strictEqual(mcpServersWithRemoved(existing, 'remote'), undefined);
 	assert.strictEqual(mcpServersTextWithRemoved(existing, 'remote'), undefined);
 	assert.strictEqual(mcpServersTextWithRemoved(undefined, 'remote'), undefined);
+});
+
+// pi's own switch, and the one the status panel's rows flip: off writes `enabled: false`, on removes
+// the key (pi's default is on, and a file that says only what it means stays readable). Everything else
+// — the rest of the entry, the rest of the file — is untouched in both directions.
+test('the switch flips both ways and leaves everything else exactly as it was', () => {
+	const existing = {
+		settings: { toolPrefix: 'short' },
+		mcpServers: { vercel: { type: 'http', url: 'https://mcp.vercel.com', headers: { Authorization: 'Bearer t' } } },
+	};
+
+	const off = mcpServersTextWithToggled(existing, 'vercel');
+	assert.ok(off !== undefined);
+	assert.strictEqual(off.on, false);
+	assert.deepStrictEqual(JSON.parse(off.text), {
+		settings: { toolPrefix: 'short' },
+		mcpServers: { vercel: { type: 'http', url: 'https://mcp.vercel.com', headers: { Authorization: 'Bearer t' }, enabled: false } },
+	});
+
+	const backOn = mcpServersTextWithToggled(JSON.parse(off.text), 'vercel');
+	assert.ok(backOn !== undefined);
+	assert.strictEqual(backOn.on, true);
+	assert.deepStrictEqual(JSON.parse(backOn.text), existing);
+});
+
+test('switching a name the file does not hold, or an entry it cannot read, is said not written', () => {
+	assert.strictEqual(mcpServersTextWithToggled({ mcpServers: { other: {} } }, 'vercel'), undefined);
+	assert.strictEqual(mcpServersTextWithToggled({ mcpServers: { vercel: 'broken' } }, 'vercel'), undefined);
+	assert.strictEqual(mcpServersTextWithToggled(undefined, 'vercel'), undefined);
 });

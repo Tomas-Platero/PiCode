@@ -267,6 +267,36 @@ export function mcpServersTextWithRemoved(existing: unknown, name: string): stri
 	return removed === undefined ? undefined : `${JSON.stringify(removed, null, 2)}\n`;
 }
 
+/**
+ * The file with one server's switch flipped, and where the switch ended up.
+ *
+ * `enabled` is pi's own key: the entry stays exactly where it is and pi simply does not start it. A
+ * server switched back **on** loses the key rather than gaining `true`, because pi's default is on and
+ * a file that says only what it means is a file the owner can still read.
+ *
+ * `undefined` is "this file has nothing this module can switch": the name is not there, or its entry is
+ * not an object (a hand-broken line is the owner's to fix, not this module's to overwrite).
+ */
+export function mcpServersTextWithToggled(existing: unknown, name: string): { readonly text: string; readonly on: boolean } | undefined {
+	const key = name.trim();
+	const entry = serversObjectOf(rootObjectOf(existing))[key];
+	if (!serverNames(existing).includes(key) || typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+		return undefined;
+	}
+	const root = rootObjectOf(existing);
+	const servers = serversObjectOf(root);
+	const record: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
+	const wasOn = record['enabled'] !== false;
+	if (wasOn) {
+		record['enabled'] = false;
+	} else {
+		delete record['enabled'];
+	}
+	servers[key] = record;
+	root.mcpServers = servers;
+	return { text: `${JSON.stringify(root, null, 2)}\n`, on: !wasOn };
+}
+
 /** The names of the servers already in the file, for the duplicate check. */
 export function serverNames(existing: unknown): readonly string[] {
 	const root = typeof existing === 'object' && existing !== null && !Array.isArray(existing)

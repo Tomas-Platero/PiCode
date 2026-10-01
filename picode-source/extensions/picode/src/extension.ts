@@ -16,7 +16,7 @@ import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-prov
 import { authorizationUrlIn, lastLineOf, loginArguments, logoutArguments, serverTarget } from './mcp-login';
 import { mcpStateReport, oneLine, stateSentence } from './mcp-state';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
-import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
+import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
@@ -626,6 +626,16 @@ export const LOGOUT_MCP_SERVER_COMMAND = 'picode.mcp.logoutServer';
  * A **contract** like {@link LOGIN_MCP_SERVER_COMMAND}.
  */
 export const CHECK_MCP_SERVER_COMMAND = 'picode.mcp.checkServer';
+
+/**
+ * The MCP switch, run from the status panel's rows: pi reads `enabled` in the file that holds the
+ * entry, so flipping it turns a server off without losing it.
+ *
+ * The panel is the only place a switched-off server is still listed — the MCP page stops offering it
+ * the moment it is off (`mcp-provider.ts`), by design — which is why its rows are the switch. A
+ * **contract** like {@link CHECK_MCP_SERVER_COMMAND}.
+ */
+export const TOGGLE_MCP_SERVER_COMMAND = 'picode.mcp.toggleServer';
 
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
@@ -1288,6 +1298,36 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			return;
 		}
 		void vscode.window.showWarningMessage(`PiCode: ${sentence}`);
+	}));
+
+	// The MCP switch, run from the status panel's rows: pi reads `enabled` in the file that holds the
+	// entry, so flipping it turns a server off without losing it. The entry lives in the profile's file or
+	// in a workspace folder's; the first that holds it is the one that owns it, because a project entry
+	// replaces the profile's of the same name.
+	disposables.push(vscode.commands.registerCommand(TOGGLE_MCP_SERVER_COMMAND, (name?: string): void => {
+		const server = serverTarget(name);
+		if (server.length === 0) {
+			return;
+		}
+		for (const file of mcpConfigFiles(profileInForce())) {
+			const toggled = mcpServersTextWithToggled(readJsonFile(file.path), server);
+			if (toggled === undefined) {
+				continue;
+			}
+			try {
+				fs.writeFileSync(file.path, toggled.text, { mode: 0o600 });
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				void vscode.window.showErrorMessage(`PiCode: "${server}" could not be switched (${message}).`);
+				return;
+			}
+			// The editor's own list follows: an entry that is off stops being offered as a server, so the
+			// page re-reads and the panel's rows move by one.
+			fire();
+			void vscode.window.showInformationMessage(`PiCode: "${server}" is ${toggled.on ? 'on' : 'off'}.`);
+			return;
+		}
+		void vscode.window.showErrorMessage(`PiCode: no MCP entry named "${server}" was found to switch.`);
 	}));
 
 	return disposables;
