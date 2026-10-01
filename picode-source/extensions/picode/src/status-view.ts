@@ -19,6 +19,9 @@ import type { TaskRow } from './session-tasks';
 export const STATUS_VIEW_TYPE = 'picode.statusView';
 export const STATUS_DATA_COMMAND = 'picode.setup.status';
 
+/** How often the rows are re-read while the panel is on screen. */
+const STATUS_REFRESH_MS = 5000;
+
 export interface StatusData {
 	runtime?: string;
 	piVersion?: string;
@@ -52,9 +55,19 @@ export interface StatusData {
 	error?: string;
 }
 
+/**
+ * Registers the view, with a provider that only works while the view is on screen.
+ *
+ * The reading behind it costs a `git` call per folder plus the profile, and the rhythm used to be
+ * five seconds of that **for ever**: with the panel closed, nobody was reading the answers. The tree
+ * says when it appears and when it goes away, and the timer lives in between.
+ */
 export function registerStatusTreeView(extensionUri: vscode.Uri): vscode.Disposable {
 	const provider = new StatusTreeProvider(extensionUri);
-	return vscode.window.registerTreeDataProvider(STATUS_VIEW_TYPE, provider);
+	const view = vscode.window.createTreeView(STATUS_VIEW_TYPE, { treeDataProvider: provider });
+	const visibility = view.onDidChangeVisibility(event => provider.setWatched(event.visible));
+	provider.setWatched(view.visible);
+	return vscode.Disposable.from(provider, view, visibility);
 }
 
 /** What a row's icon can be: a codicon, a mark, or a mark with one file per theme. */
@@ -87,10 +100,31 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
 	private data: StatusData | undefined;
-	private readonly timer = setInterval(() => { void this.refresh(); }, 5000);
+	private timer: ReturnType<typeof setInterval> | undefined;
+	private watched = false;
 
-	constructor(private readonly extensionUri: vscode.Uri) {
+	constructor(private readonly extensionUri: vscode.Uri) { }
+
+	/**
+	 * Starts or stops the refresh, as the panel is shown or hidden.
+	 *
+	 * `watched` comes from the tree itself: nothing here guesses whether the owner is looking. Coming
+	 * back on screen refreshes at once, because what was left on screen is as old as the time away.
+	 */
+	setWatched(watched: boolean): void {
+		if (watched === this.watched) {
+			return;
+		}
+		this.watched = watched;
+		if (!watched) {
+			if (this.timer !== undefined) {
+				clearInterval(this.timer);
+				this.timer = undefined;
+			}
+			return;
+		}
 		void this.refresh();
+		this.timer = setInterval(() => { void this.refresh(); }, STATUS_REFRESH_MS);
 	}
 
 	async refresh(): Promise<void> {
@@ -100,8 +134,10 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				this.data = data;
 			}
 		} catch (error) {
-			// The connector may not be activated yet; the next tick tries again.
-			this.data = { error: error instanceof Error ? error.message : String(error) };
+			// The connector may not be activated yet, and a command can fail once and answer the next
+			// time. The rows already on screen are worth more than an empty panel, so the failure is
+			// **added** to the last reading — and a good reading, which carries no error, replaces it.
+			this.data = { ...(this.data ?? {}), error: error instanceof Error ? error.message : String(error) };
 		}
 		this._onDidChangeTreeData.fire(undefined);
 	}
@@ -229,6 +265,8 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 	}
 
 	dispose(): void {
-		clearInterval(this.timer);
+		if (this.timer !== undefined) {
+			clearInterval(this.timer);
+		}
 	}
 }
