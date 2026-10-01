@@ -9,6 +9,9 @@
  * `node --test` runs this file directly (Node's own type stripping), which is why
  * `permissions.ts` carries no `vscode`: which tool asks and how an answer is read are the
  * parts worth exercising, and none of them needs an editor.
+ *
+ * The MCP half of the rule is here because the gap was real: pi's MCP tools ran with no question
+ * at all, however much they changed (see `odd/tasks/picode-pi-0992.md`).
  */
 
 import assert from 'assert';
@@ -58,6 +61,27 @@ test('shouldAsk never asks for read-only tools', () => {
 		assert.strictEqual(shouldAsk('default', tool), false, tool);
 		assert.strictEqual(shouldAsk('assisted', tool), false, tool);
 	}
+});
+
+// pi's own MCP tools are somebody else's: nothing in the name says whether a call reads or writes,
+// so they ask like the mutating built-ins do. The field that would let a name be classified is not
+// there, and guessing from it would let `delete_*` through the day a server names it differently.
+test("shouldAsk asks for pi's MCP tools at the levels that ask", () => {
+	assert.strictEqual(shouldAsk('default', 'mcp__supabase-mcp-server__execute_sql'), true);
+	assert.strictEqual(shouldAsk('assisted', 'mcp__sentry__list_issues'), true);
+	assert.strictEqual(shouldAsk(undefined, 'mcp__github__create_issue'), true);
+});
+
+test("shouldAsk asks nothing for pi's MCP tools at the approving levels", () => {
+	assert.strictEqual(shouldAsk('autoApprove', 'mcp__supabase-mcp-server__execute_sql'), false);
+	assert.strictEqual(shouldAsk('autopilot', 'mcp__supabase-mcp-server__execute_sql'), false);
+});
+
+// The editor's own MCP tools arrive through `lm.invokeTool`, which runs the editor's confirmation
+// first: asking here as well would be the same question twice.
+test("shouldAsk leaves the editor's MCP tools to the editor", () => {
+	assert.strictEqual(shouldAsk('default', 'mcp_github_search'), false);
+	assert.strictEqual(shouldAsk('assisted', 'mcp_firebase_firebase_list_projects'), false);
 });
 
 test('decisionFromAnswer allows an explicit allow answer', () => {

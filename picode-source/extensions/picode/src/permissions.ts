@@ -12,6 +12,11 @@
  * stays four-way: ask for the mutating tools at the asking levels, run free at the
  * approving ones, and degrade to asking only where a level is explicitly known to ask.
  *
+ * Mutating means pi's own `bash`/`powershell`/`edit`/`write` **and every tool of an MCP server pi
+ * runs** (`mcp__…`): those are third-party tools this bridge cannot classify, and the safe reading
+ * of "I do not know what this does" is to ask. The editor's own MCP tools are not asked here — the
+ * editor asks for them itself before it runs one.
+ *
  * This file is pure: no `vscode`, no pi — `node --test` runs it directly, and `agent.ts`
  * calls into it at tool-call time.
  */
@@ -21,6 +26,22 @@ export type PermissionLevel = 'default' | 'assisted' | 'autoApprove' | 'autopilo
 
 /** pi's native tools that change the machine when they run; everything else only looks. */
 export const MUTATING_TOOLS = ['bash', 'powershell', 'edit', 'write'] as const;
+
+/**
+ * pi's own MCP tools, named `mcp__<server>__<tool>` (`dist/extensions/mcp/index.js`).
+ *
+ * Every one of them is treated as mutating, because this bridge cannot know which of them only
+ * reads: they are servers somebody else wrote, and a call can delete a row or send a message. The
+ * editor's own MCP tools are a different shape — the editor's prefix is one underscore
+ * (`mcp_<server>_<tool>`, `mcpTypes.ts`) — and are deliberately left out: the editor already asks
+ * before it runs one, and a second question here would be the same question twice.
+ */
+const MCP_TOOL_PREFIX = 'mcp__';
+
+/** Whether `toolName` can change something outside this conversation. */
+function changesSomething(toolName: string): boolean {
+	return (MUTATING_TOOLS as readonly string[]).includes(toolName) || toolName.startsWith(MCP_TOOL_PREFIX);
+}
 
 /** The question carousel's single question id; the answer record is keyed by it. */
 export const PERMISSION_QUESTION_ID = 'picode-tool-permission';
@@ -42,7 +63,7 @@ const KNOWN_LEVELS: ReadonlySet<string> = new Set([...ASKING_LEVELS, 'autoApprov
  * host writing newer names than this bridge reads: do not gate on what we cannot name.
  */
 export function shouldAsk(level: string | undefined, toolName: string): boolean {
-	if (!(MUTATING_TOOLS as readonly string[]).includes(toolName)) {
+	if (!changesSomething(toolName)) {
 		return false;
 	}
 	return level === undefined || ASKING_LEVELS.has(level);
