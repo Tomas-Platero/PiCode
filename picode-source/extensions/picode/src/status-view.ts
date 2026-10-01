@@ -57,11 +57,14 @@ export function registerStatusTreeView(extensionUri: vscode.Uri): vscode.Disposa
 	return vscode.window.registerTreeDataProvider(STATUS_VIEW_TYPE, provider);
 }
 
+/** What a row's icon can be: a codicon, a mark, or a mark with one file per theme. */
+type StatusIcon = NonNullable<vscode.TreeItem['iconPath']>;
+
 class StatusItem extends vscode.TreeItem {
 
 	constructor(
 		label: string,
-		options: { description?: string; children?: StatusItem[]; icon?: vscode.ThemeIcon | vscode.Uri } = {},
+		options: { description?: string; children?: StatusItem[]; icon?: StatusIcon } = {},
 	) {
 		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 		if (options.description !== undefined) {
@@ -126,10 +129,26 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		// a codicon the library does not register renders as a broken box, so no guesses.
 		const media = (name: string): vscode.Uri => vscode.Uri.joinPath(this.extensionUri, 'media', name);
 
+		/**
+		 * A brand mark, as the two files a tree row needs.
+		 *
+		 * A row's icon is an **image**, so the ink inside the file is the ink that is drawn — there is no
+		 * mask and no theme colour. One file per mark meant one theme where it vanished: the rose is pure
+		 * black (invisible on a dark background) and the PiCode mark a pale grey (barely there on a light
+		 * one). The pair is what makes both marks the same weight in either theme.
+		 */
+		const mark = (lightThemeFile: string, darkThemeFile: string): StatusIcon => ({
+			light: media(lightThemeFile),
+			dark: media(darkThemeFile),
+		});
+
 		const piRows: StatusItem[] = [
 			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'External (machine)' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
+			// The servers live in pi's own profile, which is where this counts them — not the project's
+			// business, which is where the row used to sit.
+			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0), icon: new vscode.ThemeIcon('server-process') }),
 		];
 		const model = d.model ?? d.defaultModel;
 		if (model !== undefined) {
@@ -138,7 +157,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		if (d.thinkingLevel !== undefined) {
 			piRows.push(new StatusItem('Effort', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
 		}
-		out.push(new StatusItem('pi', { children: piRows, icon: media('picode.svg') }));
+		out.push(new StatusItem('pi', { children: piRows, icon: mark('picode-light.svg', 'picode.svg') }));
 
 		// Gentle AI lives in the internal profile; with the external pi it appears only
 		// when the machine's own profile happens to carry it.
@@ -151,7 +170,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 					new StatusItem('Skills', { description: String(d.skills ?? 0), icon: new vscode.ThemeIcon('lightbulb') }),
 				);
 			}
-			out.push(new StatusItem('Gentle AI', { children: gentleRows, icon: media('gentle-ai.svg') }));
+			out.push(new StatusItem('Gentle AI', { children: gentleRows, icon: mark('gentle-ai.svg', 'gentle-ai-dark.svg') }));
 		}
 
 		const sessionRows: StatusItem[] = [];
@@ -201,7 +220,6 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		out.push(new StatusItem('Project', { children: [
 			new StatusItem('Branch', { description: d.gitBranch || '—', icon: new vscode.ThemeIcon('git-branch') }),
 			new StatusItem('Changes', { description: changes, icon: new vscode.ThemeIcon('diff') }),
-			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0), icon: new vscode.ThemeIcon('server-process') }),
 		], icon: new vscode.ThemeIcon('root-folder') }));
 
 		if (d.error !== undefined) {
