@@ -13,7 +13,7 @@ import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
-import { mcpServersText, splitArguments, type McpServerSetting } from './mcpServers';
+import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
@@ -213,11 +213,21 @@ function writeMcpServers(profile: string, servers: readonly McpServerSetting[]):
 	fs.writeFileSync(file, text, { mode: 0o600 });
 }
 
-/** The file's content as an object, or `undefined` when there is none, it is broken, or it is not an object. */
+/**
+ * The file's content as an object, or `undefined` when there is none, it is broken, or it is not an
+ * object.
+ *
+ * Every entry comes back **normalized** (`mcpServers.ts`): a file that arrived with the old
+ * adapter's `auth: "oauth"` / `oauth: false` is healed by the next write, which is what makes the
+ * entries usable by pi's own MCP. It happens here, where the file is read for writing, so both
+ * writers inherit it — the settings row's and the Add Server flow's.
+ */
 function readJsonFile(file: string): Record<string, unknown> | undefined {
 	try {
 		const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-		return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
+		return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+			? normalizedServersFile(parsed as Record<string, unknown>)
+			: undefined;
 	} catch {
 		return undefined;
 	}

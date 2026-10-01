@@ -101,6 +101,27 @@ solo uno deja el resultado a medias.
 defecto): forzar `direct` metería todas las herramientas de todos los servidores en el
 prompt, y el dueño no lo ha pedido. Se deja escrito aquí como decisión abierta.
 
+## Forma vieja y nueva: una entrada que leen los dos
+
+Petición del dueño: *«haz que cualquier mcp que se agregue manualmente se cree de la forma vieja
+y nueva»*. Se cumple con **una sola entrada**, que resulta ser la nueva, porque el adaptador
+entiende la nueva y pi no entiende la vieja:
+
+| Servidor | Lo que se escribe | Lo lee pi 0.99.2 | Lo lee `pi-mcp-adapter` |
+| --- | --- | --- | --- |
+| Local | `{ command, args, env? }` | sí | sí |
+| Remoto con token | `{ type: 'http', url, headers: { Authorization: 'Bearer …' } }` | sí | sí |
+| Remoto que pide iniciar sesión | `{ type: 'http', url, oauth: {} }` | sí (`usesOAuth`, `runtime.js:36`) | sí (`oauth` objeto → `auth: "oauth"`, `config.ts:1215`) |
+
+Lo que **nunca** se escribe es la grafía vieja que pi rechaza: `auth: "oauth"`
+(`auth.provider must be a provider name`) y `oauth: false` (`oauth must be an object`). No se
+pierde nada: el adaptador deriva su `auth` del objeto `oauth`, así que `oauth: {}` le sirve igual.
+
+Y como el fichero ya tenía entradas con esas grafías viejas, todo lo que se lee para escribir
+pasa por `normalizedServersFile`: la entrada se repara (fuera `auth`/`oauth` booleanos, dentro
+`oauth: {}` si pedía iniciar sesión) y **todo lo demás se queda igual**, incluidas las claves del
+adaptador que pi ignora (`lifecycle`, `directTools`) y las que no son del adaptador.
+
 ## Fuera de alcance
 
 - Cambiar el puente del MCP **del editor** (`mcp.ts`, `lm.invokeTool`): ese camino sigue
@@ -120,7 +141,7 @@ Primera tanda — el pin y lo que sirve para decidirlo:
 | El pi de la terminal lee `mcp.json` | `PI_CODING_AGENT_DIR=<tmp> pi mcp list --json` con un servidor de prueba | Listado como `scope: global`, `exposure: codemode`, sin adapter instalado |
 | El nombre con punto era un fallo real | El mismo listado con `my.server` | `servers: []` y `invalid server name "my.server" (use letters, digits, "_" and "-")` |
 | Lo que escribe el conector es lo que pi lee | `mcpServersText` + `mcpServersTextWithAdded` reales → fichero → `pi mcp list --json` | Los tres servidores (stdio, http con `headers`, y el de Add Server) aceptados con `errors: []` |
-| El conector | `node --test test/*.test.ts` | 164 pasan, 0 fallan |
+| El conector | `node --test test/*.test.ts` | 167 pasan, 0 fallan |
 | El conector, tipos | `tsc -p extensions/picode/tsconfig.json --noEmit` | 0 |
 | El editor, tipos | `tsc -p src/tsconfig.json --noEmit` | 0 |
 
@@ -132,10 +153,17 @@ del runtime del pack, con perfiles temporales):
 | El chat no carga las built-in de pi | `createAgentSessionServices` con un perfil **sin** paquetes | 0 extensiones cargadas |
 | El chat no emite `session_start` | La built-in de MCP de pi (`createMcpExtension()`) en `extensionFactories` + sesión creada | La extensión carga (`<inline:picode-mcp>`) y su lista de herramientas queda **vacía** |
 | El adaptador resuelve el perfil externo | `pi-mcp-adapter` declarado en el perfil temporal que se pasa como `agentDir`, con `marker` en su `mcp-adapter.json` | Registró `mcp__firebase` (del `~/.pi/agent` real) y **nunca** `marker` |
-| El fichero que declara la fila usa formato viejo | `validateMcpServerConfig` de pi 0.99.2 (importado por ruta, sin conectar a ningún servidor) sobre el `mcp.json` real del perfil | 7 de 10 aceptados; **3 rechazados**: `atlassian-rovo-mcp` y `sentry` por `auth: "oauth"` (`auth.provider must be a provider name`) y `github` por `auth: false` / `oauth: false` (`oauth must be an object`) — claves del adaptador viejo |
+| El fichero que declara la fila usa formato viejo | `validateMcpServerConfig` de pi 0.99.2 (importado por ruta, sin conectar a ningún servidor) sobre el `mcp.json` real del perfil | Antes: 7 de 10 aceptados; **3 rechazados**. Después de reparar: **10 de 10** |
+| Lo que escribe PiCode lo acepta pi, y lo viejo reparado también | `mcpServerEntry` y `serverFileEntry` reales + `normalizedServerEntry` → `validateMcpServerConfig` | Las 9 formas escritas **aceptadas**; las dos formas viejas sin reparar, **rechazadas** (`auth.provider must be a provider name`, `oauth must be an object`) |
 
 ## Registro
 
+- 2026-10-01 · **forma vieja y nueva** (petición del dueño): los dos escritores
+  (`mcpServerEntry` y `serverFileEntry`) escriben `oauth: {}` cuando un servidor remoto no lleva
+  token —forma que aceptan pi y el adaptador— y `readJsonFile` repara las entradas viejas al leer
+  el fichero (`normalizedServersFile`), sin tocar nada más. El `mcp.json` del pack quedó reparado
+  (4 claves fuera; copia previa en `.scratch/mcp-json-before-normalize.json`) y verificado
+  **10/10** con el validador real de pi. 167 tests, tipos 0.
 - 2026-10-01 · **build**: dos construcciones verificadas sobre el árbol. La primera con
   `dev/build.sh` (dejó el pack sin perfil; se restauró a mano) y la segunda con
   `dev/build-run.sh`, que guarda y devuelve el perfil solo: `profile restored: 71028 files`,

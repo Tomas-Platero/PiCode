@@ -35,7 +35,7 @@ export interface McpServerSetting {
 
 /** One server as pi's file declares it. */
 export type McpServerEntry =
-	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
+	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string>; readonly oauth?: Record<string, never> }
 	| { readonly command: string; readonly args: readonly string[] };
 
 /**
@@ -85,14 +85,87 @@ export function isUsableServer(server: McpServerSetting | undefined | null): boo
 		&& typeof server.target === 'string' && server.target.trim().length > 0;
 }
 
-/** One server, in the shape pi's `mcp.json` reads. */
+/**
+ * One server, in the shape pi's `mcp.json` reads.
+ *
+ * A remote server with a token carries it as an `Authorization` header, and one without carries
+ * `oauth: {}` — the empty object, not `auth: "oauth"`. Those two spellings are the whole point:
+ * pi's own MCP refuses `auth: "oauth"` (`auth.provider must be a provider name`) and refuses
+ * `oauth: false`, while it reads `oauth: {}` as "this one signs in" (`usesOAuth`, `runtime.js:36`);
+ * and `pi-mcp-adapter` maps that same object back to `auth: "oauth"` for itself (`config.ts:1215`).
+ * One entry, both readers.
+ */
 export function mcpServerEntry(server: McpServerSetting): McpServerEntry {
 	const key = typeof server.key === 'string' ? server.key.trim() : '';
 	const headers = key.length === 0 ? undefined : { Authorization: `Bearer ${key}` };
 	if (server.transport === 'stdio') {
 		return { command: server.target.trim(), args: splitArguments(typeof server.args === 'string' ? server.args : '') };
 	}
-	return { type: 'http', url: server.target.trim(), ...(headers === undefined ? {} : { headers }) };
+	return headers === undefined
+		? { type: 'http', url: server.target.trim(), oauth: {} }
+		: { type: 'http', url: server.target.trim(), headers };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * One entry of the file's `mcpServers`, as it was read: the keys this module does not interpret
+ * travel to the file untouched, which is what keeps a hand-written entry from being pruned.
+ */
+export type FileServerEntry = Record<string, unknown>;
+
+/**
+ * One server entry with the two keys pi's own MCP refuses repaired, and nothing else touched.
+ *
+ * Entries written for the old adapter carry `auth: "oauth"` (which pi rejects with
+ * `auth.provider must be a provider name`) and `auth: false` / `oauth: false` (pi rejects the
+ * second: `oauth must be an object`). Neither is needed by anything: the old adapter derives its
+ * `auth` from the `oauth` object, so dropping the legacy spelling and keeping `oauth: {}` leaves
+ * both readers working, and the entry stops being skipped.
+ *
+ * Deliberately conservative: an entry whose `auth` already names a provider is returned exactly as
+ * it came. `oauth: false` — "this server must not sign in" — has no equivalent in pi's file and is
+ * dropped, which is what makes the entry usable at all; a server that then has no `Authorization`
+ * header will be asked to sign in the first time pi uses it.
+ */
+export function normalizedServerEntry(entry: FileServerEntry): FileServerEntry {
+	const next: FileServerEntry = { ...entry };
+	const auth = next['auth'];
+	if (auth !== undefined && !(isRecord(auth) && typeof auth['provider'] === 'string')) {
+		const wantedSignIn = auth === 'oauth' || next['oauth'] === true;
+		delete next['auth'];
+		if (!isRecord(next['oauth'])) {
+			if (wantedSignIn) {
+				next['oauth'] = {};
+			} else {
+				delete next['oauth'];
+			}
+		}
+	} else if (next['oauth'] !== undefined && !isRecord(next['oauth'])) {
+		delete next['oauth'];
+	}
+	return next;
+}
+
+/**
+ * The parsed file with every server entry normalized, and everything else exactly as it was.
+ *
+ * Applied where the file is read for writing, so a file that arrived with the old adapter's keys is
+ * repaired by the next write instead of staying half-readable. A file that is not an object, or
+ * whose `mcpServers` is not one, comes back untouched: there is nothing to normalize.
+ */
+export function normalizedServersFile(parsed: Record<string, unknown>): Record<string, unknown> {
+	const servers = parsed['mcpServers'];
+	if (!isRecord(servers)) {
+		return parsed;
+	}
+	const normalized: Record<string, unknown> = {};
+	for (const [name, entry] of Object.entries(servers)) {
+		normalized[name] = isRecord(entry) ? normalizedServerEntry(entry) : entry;
+	}
+	return { ...parsed, mcpServers: normalized };
 }
 
 /**

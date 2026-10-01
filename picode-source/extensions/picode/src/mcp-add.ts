@@ -37,7 +37,7 @@ export interface AddServerDraft {
 
 /** One server as the file holds it, in the shape pi's own MCP documents. */
 export type McpServerFileEntry =
-	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
+	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string>; readonly oauth?: Record<string, never> }
 	| { readonly command: string; readonly args: readonly string[]; readonly env?: Record<string, string> };
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
@@ -111,7 +111,14 @@ export function parseKeyValueLines(lines: readonly string[]): { values: Record<s
 	return { values, malformed };
 }
 
-/** One server, in the file's shape. An empty collection is left out: the file says what there is. */
+/**
+ * One server, in the file's shape. An empty collection is left out: the file says what there is.
+ *
+ * A remote server with no headers is written with `oauth: {}` and not with `auth: "oauth"`: pi's own
+ * MCP refuses the second spelling and a remote server with no authorization header is one it signs
+ * in anyway, while the adapter reads that same object as its own `auth: "oauth"`. One entry, both
+ * readers — the rule `mcpServers.ts` follows, kept here for the Add Server flow.
+ */
 export function serverFileEntry(draft: AddServerDraft): McpServerFileEntry {
 	if (draft.transport === 'stdio') {
 		return {
@@ -120,11 +127,9 @@ export function serverFileEntry(draft: AddServerDraft): McpServerFileEntry {
 			...(hasEntries(draft.env) ? { env: { ...draft.env } } : {}),
 		};
 	}
-	return {
-		type: 'http',
-		url: (draft.url ?? '').trim(),
-		...(hasEntries(draft.headers) ? { headers: { ...draft.headers } } : {}),
-	};
+	return hasEntries(draft.headers)
+		? { type: 'http', url: (draft.url ?? '').trim(), headers: { ...draft.headers } }
+		: { type: 'http', url: (draft.url ?? '').trim(), oauth: {} };
 }
 
 function hasEntries(record: Record<string, string> | undefined): boolean {

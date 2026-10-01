@@ -30,7 +30,7 @@ import {
 	validateServerName,
 	type AddServerDraft,
 } from '../src/mcp-add.ts';
-import { mcpServersFile, type McpServerSetting } from '../src/mcpServers.ts';
+import { mcpServerEntry, mcpServersFile, normalizedServerEntry, normalizedServersFile, type McpServerSetting } from '../src/mcpServers.ts';
 import { mcpServersFrom } from '../src/mcp-provider.ts';
 
 test('a local server becomes the command, its arguments and its environment', () => {
@@ -60,11 +60,61 @@ test('a remote server becomes its url and headers', () => {
 	assert.deepStrictEqual(entry, { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer k' } });
 });
 
-test('a remote server with no headers carries no headers key', () => {
+test('a remote server with no headers is written to sign in, in the shape both readers take', () => {
 	assert.deepStrictEqual(
 		serverFileEntry({ name: 'remote', transport: 'http', url: 'https://example.test/mcp' }),
-		{ type: 'http', url: 'https://example.test/mcp' },
+		{ type: 'http', url: 'https://example.test/mcp', oauth: {} },
 	);
+});
+
+// The settings row and the Add Server flow must agree on the shape: one entry has to be read by
+// pi's own MCP and by the adapter the owner may still have installed. `auth: "oauth"` is the
+// spelling pi refuses, and `oauth: {}` is the one both understand.
+test('the settings row writes a remote server the same way, token or sign-in', () => {
+	const row = (key: string): McpServerSetting => ({ name: 'remote', transport: 'http', target: 'https://example.test/mcp', args: '', key });
+
+	assert.deepStrictEqual(mcpServerEntry(row('')), { type: 'http', url: 'https://example.test/mcp', oauth: {} });
+	assert.deepStrictEqual(mcpServerEntry(row(' tok ')), { type: 'http', url: 'https://example.test/mcp', headers: { Authorization: 'Bearer tok' } });
+});
+
+test('an entry written for the old adapter is repaired, and one already in shape is left alone', () => {
+	assert.deepStrictEqual(
+		normalizedServerEntry({ type: 'http', url: 'https://a.test/mcp', auth: 'oauth', oauth: {} }),
+		{ type: 'http', url: 'https://a.test/mcp', oauth: {} },
+	);
+	assert.deepStrictEqual(
+		normalizedServerEntry({ url: 'https://a.test/mcp', auth: 'oauth' }),
+		{ url: 'https://a.test/mcp', oauth: {} },
+	);
+	assert.deepStrictEqual(
+		normalizedServerEntry({ url: 'https://a.test/mcp', headers: { Authorization: 'Bearer t' }, auth: false, oauth: false }),
+		{ url: 'https://a.test/mcp', headers: { Authorization: 'Bearer t' } },
+	);
+	assert.deepStrictEqual(
+		normalizedServerEntry({ url: 'https://a.test/mcp', auth: { provider: 'vercel' } }),
+		{ url: 'https://a.test/mcp', auth: { provider: 'vercel' } },
+	);
+});
+
+test('everything else in the file survives the repair untouched', () => {
+	const file = {
+		settings: { autoAuth: false, toolPrefix: 'short' },
+		mcpServers: {
+			legacy: { type: 'http', url: 'https://a.test/mcp', auth: 'oauth', oauth: {}, lifecycle: 'lazy' },
+			broken: 'not an object',
+			kept: { command: 'node', args: ['x.js'], directTools: false },
+		},
+	};
+
+	assert.deepStrictEqual(normalizedServersFile(file), {
+		settings: { autoAuth: false, toolPrefix: 'short' },
+		mcpServers: {
+			legacy: { type: 'http', url: 'https://a.test/mcp', oauth: {}, lifecycle: 'lazy' },
+			broken: 'not an object',
+			kept: { command: 'node', args: ['x.js'], directTools: false },
+		},
+	});
+	assert.deepStrictEqual(normalizedServersFile({ mcpServers: 'broken' }), { mcpServers: 'broken' });
 });
 
 test('a draft is refused while it is not yet a server the adapter could run', () => {
@@ -143,7 +193,7 @@ test('the same name replaces the entry it names, and only that one', () => {
 		{ name: ' files ', transport: 'http', url: 'https://example.test/mcp' },
 	);
 
-	assert.deepStrictEqual(merged.mcpServers, { files: { type: 'http', url: 'https://example.test/mcp' } });
+	assert.deepStrictEqual(merged.mcpServers, { files: { type: 'http', url: 'https://example.test/mcp', oauth: {} } });
 });
 
 test('no file yet, or one that is not an object of servers, is an empty profile to add to', () => {
