@@ -220,6 +220,47 @@ error de Windows entero. Los tests usan esas dos formas tal cual.
 **El chequeo conecta todos los servidores** (es lo que hace el comando), así que es un clic
 deliberado y nunca algo que el panel haga por su cuenta.
 
+## Decisión del dueño: **el editor manda** (2026-10-01, «la mejor que siempre sea el editor»)
+
+Esta sección **corrige** las dos anteriores de esta misma página («Iniciar sesión…» y «Comprobar un
+servidor…»): lo que cuentan se construyó, se midió, y después se retiró por esta decisión.
+
+### Lo que se midió, y que obligó a elegir
+
+1. El conector ofrece los servidores de `mcp.json` **al editor** como definiciones
+   (`lm.registerMcpServerDefinitionProvider('pi', …)`).
+2. El núcleo registra las herramientas de **toda definición habilitada** y conecta ese servidor para
+   tenerlas (`mcpLanguageModelToolContribution`: «Skip disabled servers — don't register their tools»).
+3. El puente del chat toma esas herramientas (`mcp_…`) y se las da a pi como herramientas propias.
+
+Y desde el arreglo del chat, pi cargaba **además** su propio MCP, que lee **el mismo fichero**. Total:
+cada servidor corría **dos veces** (dos procesos, dos clientes) y sus herramientas llegaban al modelo
+por **dos vías** (`mcp__servidor__herramienta` desde pi y `mcp_servidor_herramienta` desde el editor).
+Eso es exactamente el «segundo camino al mismo servidor» que este producto se había prohibido.
+
+### La decisión
+
+**Los servidores son del editor y pi los usa a través de él**, con sus confirmaciones y sus permisos.
+Consecuencias, aplicadas en el fuente:
+
+| Qué | Estado |
+| --- | --- |
+| Las built-in de pi en el chat (`mcp`, `codemode`, `tool-search`) | **No se cargan.** El SDK no las trae; cargarlas era lo que duplicaba todo |
+| Sign In / Sign Out / Check Server (y sus módulos `mcp-login.ts` y `mcp-state.ts`, con sus 14 tests) | **Retirados**: operaban sobre un MCP que ya no es el del chat. El editor ya ofrece arrancar, parar y autenticar en la propia fila — tener dos botones para lo mismo es lo que sobra |
+| El comando de paleta «Check an MCP server» | Retirado con ellos |
+| El perfil fijado en el entorno (`PI_CODING_AGENT_DIR`) | **Se queda**: sin él las extensiones leían `~/.pi/agent` |
+| `session.bindExtensions(...)` (`session_start`) | **Se queda**: es el contrato de toda extensión, y sin él cargaban y no arrancaban |
+| La regla de permisos para `mcp__…` | **Se queda**: hoy no la usa nada del chat, pero es la dirección segura si esa forma de nombre vuelve a aparecer |
+| Las entradas en formato que pi acepta (`oauth: {}`, sin `auth: "oauth"`) y su reparación | **Se quedan**: es lo que el fichero debe decir |
+| `enabled: false` respetado, y el interruptor del panel de estado | **Se quedan**: es la única forma de apagar un servidor sin perderlo, y el panel es el único sitio donde sigue visible |
+| `dev/check-mcp-entries.mjs` (lo escrito contra el validador de pi, en CI) | **Se queda**: vale con cualquiera de las dos arquitecturas |
+
+### Lo que esto deja pendiente
+
+El editor arranca los servidores de `mcp.json` **porque el conector se los ofrece**, y eso es lo que
+hace que la página de MCP los liste. Si algún día se quiere que **pi** sea el dueño (la opción B), hay
+que aceptar que esa página pierde sus filas, porque las filas *son* definiciones del editor.
+
 ## Fuera de alcance
 
 - Cambiar el puente del MCP **del editor** (`mcp.ts`, `lm.invokeTool`): ese camino sigue
