@@ -66,6 +66,21 @@ prompt, y el dueño no lo ha pedido. Se deja escrito aquí como decisión abiert
   pi ignora lo que no sea `mcpServers`, así que no estorba.
 - Desinstalar `pi-mcp-adapter` de un perfil que ya lo tenga.
 
+## Evidencia (ejecutada, no leída)
+
+| Qué | Cómo se comprobó | Resultado |
+| --- | --- | --- |
+| El pin instala y deja el runtime donde el conector lo busca | `bash dev/pi-runtime.sh /tmp/packcheck` (el paso real de la fase 5) | `pi 0.99.2 in place`, `dist/index.js` y `dist/cli.js` presentes; podadas 20 plataformas ajenas, conservado win32/x64 |
+| La superficie del SDK que usa el conector sigue ahí | `import()` real del entry instalado + `createAgentSessionServices` | `createAgentSessionFromServices`, `modelRuntime.login/getProviders/hasConfiguredAuth` presentes; 42 proveedores |
+| pi lee `mcp.json` por sí mismo | `PI_CODING_AGENT_DIR=<tmp> pi mcp list --json` con un servidor de prueba | Listado como `scope: global`, `exposure: codemode`, sin adapter instalado |
+| El nombre con punto era un fallo real | El mismo listado con `my.server` | `servers: []` y `invalid server name "my.server" (use letters, digits, "_" and "-")` |
+| Lo que escribe el conector es lo que pi lee | `mcpServersText` + `mcpServersTextWithAdded` reales → fichero → `pi mcp list --json` | Los tres servidores (stdio, http con `headers`, y el de Add Server) aceptados con `errors: []` |
+| El conector | `node --test test/*.test.ts` | 164 pasan, 0 fallan |
+| El conector, tipos | `tsc -p extensions/picode/tsconfig.json --noEmit` | 0 |
+
 ## Registro
 
-- 2026-10-01 · medido, decidido y ejecutado en la misma sesión (ver commits de trabajo).
+- 2026-10-01 · medido, decidido y ejecutado en la misma sesión. Commits de trabajo:
+  `89f4c227` (pin) y `3b66ca1c` (MCP). Los restos sin versionar que había en el
+  árbol (`theme-catalog.ts`, `gettingStarted.*`, `picodeSetup.ts`, `picode-cloud-sync.md`)
+  son de la sesión anterior y **no** se tocaron.
