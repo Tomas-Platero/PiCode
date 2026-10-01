@@ -146,9 +146,10 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				"Give pi the tools of your MCP servers. The servers themselves are the editor's — [add one](command:workbench.mcp.addConfiguration), [see them](command:workbench.mcp.listServer) or [edit the configuration](command:workbench.mcp.openUserMcpJson) — and pi calls them through the editor, so its confirmations and permissions apply."
 			),
 		},
-		// MCP **for pi**: the servers are declared here and written into pi's own profile
-		// (`data/pi-agent/mcp.json`), the file pi's own MCP reads from 0.99 on. The editor's own MCP
-		// screen is a different thing, for a different agent.
+		// MCP **for pi**: the servers are declared here and written into PiCode's own profile
+		// (`data/pi-agent/mcp.json`), which the connector hands to the editor as MCP definitions — the
+		// editor runs them and pi uses their tools through it, one path and one set of credentials. The
+		// editor's own MCP screen is a different thing, for a different agent.
 		[PICODE_MCP_SERVERS_SETTING]: {
 			type: 'array',
 			items: {
@@ -166,7 +167,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize(
 				'picode.mcp.servers',
-				"The MCP servers **pi** runs. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. They are written into pi's own profile, at `data/pi-agent/mcp.json`. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
+				"The MCP servers **pi** uses. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. The editor runs them and pi calls their tools through it, so the editor's own confirmations apply. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
 			),
 		},
 		[PICODE_CONTEXT_ATTACH_SETTING]: {

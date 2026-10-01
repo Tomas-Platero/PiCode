@@ -17,9 +17,11 @@
  * or an older adapter left its own keys there, which pi ignores — so the merge keeps every entry it
  * does not own.
  *
- * What reads this file, and from where, is narrower than it looks: the editor's chat builds its
- * session through pi's SDK, which loads neither pi's built-in extensions nor `session_start`, so
- * these servers are not served there yet. The measurements are in `odd/tasks/picode-pi-0992.md`.
+ * What reads this file, and who runs what: the connector hands these entries to the **editor** as MCP
+ * definitions, the editor runs them (`mcp-provider.ts`), and their tools reach pi through the bridge
+ * (`mcp.ts`). pi's own MCP reads the same file — the terminal does, and `pi mcp` does — but the editor's
+ * chat does **not** run pi's own MCP: that made every server run twice, and the owner decided the editor
+ * owns them. The measurement and the decision are in `odd/tasks/picode-pi-0992.md`.
  *
  * No `vscode` import: the translation can be exercised by running it.
  */
