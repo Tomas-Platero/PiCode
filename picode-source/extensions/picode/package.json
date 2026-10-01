@@ -114,6 +114,11 @@
 				"command": "picode.restoreSessions",
 				"title": "Restore pi sessions from the cloud",
 				"category": "PiCode"
+			},
+			{
+				"command": "picode.mcp.checkServer",
+				"title": "Check an MCP server",
+				"category": "PiCode"
 			}
 		],
 		"configuration": {

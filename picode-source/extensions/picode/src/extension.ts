@@ -827,6 +827,26 @@ function notListedSentence(server: string, errors: readonly string[]): string {
 	return `"${server}" is not in pi's list — ${oneLine(errors.join(' '))}`;
 }
 
+/**
+ * Asks which of pi's servers to check, for the call that arrives without a name.
+ *
+ * The list is the servers pi would start, read from the same files its list shows — so the palette's
+ * check and the row's check always offer the same names. `undefined` is "there are none" or "the
+owner closed the list", and both end the command quietly.
+ */
+async function pickMcpServer(profileDir: string): Promise<string | undefined> {
+	const read = mcpServersFrom(mcpConfigFiles(profileDir));
+	if (read.servers.length === 0) {
+		void vscode.window.showInformationMessage('PiCode: pi has no MCP servers to check.');
+		return undefined;
+	}
+	return await vscode.window.showQuickPick(read.servers.map(server => server.label), {
+		title: 'PiCode: check an MCP server',
+		placeHolder: 'Which server should pi try?',
+		ignoreFocusOut: true,
+	});
+}
+
 /** A file's text, or `undefined` when it is not there. */
 function readTextFile(file: string): string | undefined {
 	try {
@@ -1210,9 +1230,11 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// connects every configured server (that is what `pi mcp list` does), so it is a deliberate click
 	// and not something the panel does on its own.
 	disposables.push(vscode.commands.registerCommand(CHECK_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
-		const server = serverTarget(name);
-		if (server.length === 0) {
-			void vscode.window.showErrorMessage('PiCode: no MCP server was named for the check.');
+		const asked = serverTarget(name);
+		// Called from the palette there is no name yet, so the servers pi knows are offered: one command
+		// serves the row's menu and the palette, instead of a second entry point for the same check.
+		const server = asked.length > 0 ? asked : await pickMcpServer(profileInForce());
+		if (server === undefined) {
 			return;
 		}
 		const cliEntry = piCliEntry();
@@ -2175,11 +2197,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	// surfaced as a notification and a status-bar item, and run from there.
 	registerUpdateChecks(context);
 
-	// The model caches are re-read every five minutes, unasked: the picker must never open on
-	// a list that went stale during a quiet stretch, and the subscription catalogue (the slow
-	// one with the external pi) is read the moment the window exists.
+	// The model caches are read the moment the window exists (the subscription catalogue, the slow one
+	// with the external pi, included) and then re-read on a slow rhythm. The picker does not wait for
+	// that rhythm: serving it *is* a read, and the refresh fires the change event the list listens to
+	// (`onDidChangeModels`). So this is the safety net behind that, not a drumbeat: every five minutes
+	// it was two network calls an hour per source, for a window nobody was looking at.
 	warmUpModels();
-	const modelsTimer = setInterval(() => warmUpModels(), 5 * 60_000);
+	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
 
 	// The wizard's provider/model/agents commands (the welcome page's step 2 and the

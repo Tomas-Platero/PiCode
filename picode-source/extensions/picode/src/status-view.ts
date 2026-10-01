@@ -179,7 +179,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		});
 
 		const piRows: StatusItem[] = [
-			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'External (machine)' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
+			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'Your own pi' : "PiCode's own pi", icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
 			// The servers live in pi's own profile, which is where this counts them — not the project's
