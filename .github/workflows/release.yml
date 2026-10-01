@@ -39,17 +39,17 @@ jobs:
       # fetch-depth 0 because the feed commit is pushed to master below;
       # persist-credentials (default) is what lets that push authenticate
       # with the workflow token.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
       # Same caches as CI so a release right after a green build is warm.
       - name: Cache node_modules and npm cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
         with:
@@ -60,7 +60,7 @@ jobs:
           restore-keys: picode-nm-${{ runner.os }}-
 
       - name: Cache electron binary
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
         with:
@@ -332,7 +332,7 @@ jobs:
 
       # Convenience copy for debugging without downloading the release.
       - name: Upload the zip as a workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PiCode-win32-x64-${{ env.VERSION }}
           path: PiCode-win32-x64-${{ env.VERSION }}.zip

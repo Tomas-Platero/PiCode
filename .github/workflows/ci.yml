@@ -35,9 +35,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      # Nothing here pushes, so the token stays out of the git config: the
+      # artifact this job uploads is built from this checkout, and a persisted
+      # credential is one way for a token to end up inside something published.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Pin to the repo's .nvmrc instead of a float so CI and local dev
           # never drift apart.
@@ -48,7 +53,7 @@ jobs:
       # restore-keys keeps a stale tree usable — build.sh detects the
       # mismatch and reinstalls over it.
       - name: Cache node_modules and npm cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
         with:
@@ -62,7 +67,7 @@ jobs:
       # @vscode/gulp-electron's cache (ELECTRON_SKIP_BINARY_DOWNLOAD
       # keeps it out of node_modules).
       - name: Cache electron binary
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
         with:
@@ -106,21 +111,23 @@ jobs:
             node --experimental-strip-types --test "$f" || exit 1
           done
 
-      # The suites' own types. They run here, but nothing typechecked them before this config
-      # existed, and a test calling a function with the wrong shape still passes at runtime.
+      # The suites' own types. They run here, but nothing typechecked them
+      # before this config existed, and a test calling a function with the wrong
+      # shape still passes at runtime.
       - name: Connector test types
         shell: bash
         working-directory: picode-source
         run: node_modules/.bin/tsc -p extensions/picode/tsconfig.test.json
 
-      # What the connector writes into pi's `mcp.json`, through pi's own validator: an entry pi
-      # refuses is a server that is configured and silently does nothing.
+      # What the connector writes into pi's `mcp.json`, through pi's own
+      # validator: an entry pi refuses is a server that is configured and
+      # silently does nothing.
       - name: MCP entries against pi's validator
         shell: bash
         run: node dev/check-mcp-entries.mjs
 
       - name: Upload the packed editor
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PiCode-win32-x64
           # The output directory is EXACTLY 'PiCode-Win32-x64' (capital W,
@@ -131,9 +138,12 @@ jobs:
       - name: Job summary
         if: always()
         shell: bash
+        env:
+          # Through the environment, never expanded into the script itself.
+          JOB_STATUS: ${{ job.status }}
         run: |
           {
-            echo "## CI: ${{ job.status }}"
+            echo "## CI: ${JOB_STATUS}"
             echo
             # Guard: a failed build must not break the summary step.
             PROD=PiCode-Win32-x64/resources/app/product.json
