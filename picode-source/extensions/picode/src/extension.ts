@@ -13,8 +13,6 @@ import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
-import { authorizationUrlIn, lastLineOf, loginArguments, logoutArguments, serverTarget } from './mcp-login';
-import { mcpStateReport, oneLine, stateSentence } from './mcp-state';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
@@ -601,33 +599,6 @@ export const EDIT_MCP_SERVER_COMMAND = 'picode.mcp.editServer';
 export const REMOVE_MCP_SERVER_COMMAND = 'picode.mcp.removeServer';
 
 /**
- * The MCP section's "Sign In" for a server pi provides: the page hands the server's name over and
- * this connector runs pi's own `mcp login` against PiCode's profile.
- *
- * OAuth is not re-implemented here. pi starts the callback, opens the browser and writes the tokens
- * into the profile — the same profile the chat now runs against — so the credentials land where pi
- * looks for them and nowhere else. A **contract** like {@link EDIT_MCP_SERVER_COMMAND}.
- */
-export const LOGIN_MCP_SERVER_COMMAND = 'picode.mcp.loginServer';
-
-/**
- * The MCP section's "Sign Out" for a server pi provides: the pair of {@link LOGIN_MCP_SERVER_COMMAND},
- * and the same contract. pi deletes the credentials it stored for that server, and nothing else
- * changes — the entry stays, so the next sign-in has somewhere to land.
- */
-export const LOGOUT_MCP_SERVER_COMMAND = 'picode.mcp.logoutServer';
-
-/**
- * The MCP section's "Check Server": pi's own answer about one server, asked for on the spot.
- *
- * `pi mcp list --json` connects every configured server and reports what it reached — its state, its
- * tools and, when it failed, the reason. That is the one thing the file cannot say: a server that is
- * configured and dead looks exactly like one that works, and the owner's question is which it is.
- * A **contract** like {@link LOGIN_MCP_SERVER_COMMAND}.
- */
-export const CHECK_MCP_SERVER_COMMAND = 'picode.mcp.checkServer';
-
-/**
  * The MCP switch, run from the status panel's rows: pi reads `enabled` in the file that holds the
  * entry, so flipping it turns a server off without losing it.
  *
@@ -788,89 +759,6 @@ function externalProfileRefusal(): string | undefined {
 	return 'Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.';
 }
 
-/** How long a sign-in may wait for the browser: pi's own default, with room for the round trip. */
-const MCP_LOGIN_TIMEOUT_MS = 330_000;
-
-/** How long a check may take: pi connects every server before it answers. */
-const MCP_CHECK_TIMEOUT_MS = 120_000;
-
-/** One `pi mcp …` run: what it printed, whether it finished, and whether it was cancelled. */
-interface McpCommandOutcome {
-	readonly ok: boolean;
-	readonly cancelled: boolean;
-	readonly output: string;
-}
-
-/** What one `pi mcp …` run needs: where pi is, which profile, the arguments, and the leash. */
-interface McpCommandRun {
-	readonly cliEntry: string;
-	readonly profileDir: string;
-	readonly args: readonly string[];
-	readonly token: vscode.CancellationToken;
-	/** Defaults to the sign-in leash; a check answers sooner than a browser round trip. */
-	readonly timeoutMs?: number;
-}
-
-/**
- * Runs one of pi's MCP commands for one server, against PiCode's profile.
- *
- * pi opens the browser and catches the redirect on a local callback, so nothing here has to
- * understand OAuth. Its output is kept because the address it prints is the one thing to offer if
- * the browser did not open, and its last line is what a failure has to repeat. Cancelling the
- * notification kills the run: the sign-in is the owner's to abandon.
- */
-async function runMcpCommand(run: McpCommandRun): Promise<McpCommandOutcome> {
-	const { execFile } = await import('node:child_process');
-	return new Promise<McpCommandOutcome>(resolve => {
-		let cancelled = false;
-		const child = execFile(process.execPath, [run.cliEntry, ...run.args], {
-			// The editor's executable is Electron: without this flag it would try to open an app
-			// instead of running pi's script as Node — the same invocation the installer uses.
-			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: run.profileDir },
-			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
-			windowsHide: true,
-			timeout: run.timeoutMs ?? MCP_LOGIN_TIMEOUT_MS,
-			maxBuffer: 1024 * 1024,
-		}, (error, stdout, stderr) => {
-			resolve({ ok: error === null, cancelled, output: `${stdout}${stderr}` });
-		});
-		run.token.onCancellationRequested(() => {
-			cancelled = true;
-			child.kill();
-		});
-	});
-}
-
-/**
- * What to say about a server pi did not list: its own file refused it, and the file's words are the
- * reason — worth more than "not found".
- */
-function notListedSentence(server: string, errors: readonly string[]): string {
-	if (errors.length === 0) {
-		return `"${server}" is not in pi's list.`;
-	}
-	return `"${server}" is not in pi's list — ${oneLine(errors.join(' '))}`;
-}
-
-/**
- * Asks which of pi's servers to check, for the call that arrives without a name.
- *
- * The list is the servers pi would start, read from the same files its list shows — so the palette's
- * check and the row's check always offer the same names. `undefined` is "there are none" or "the
-owner closed the list", and both end the command quietly.
- */
-async function pickMcpServer(profileDir: string): Promise<string | undefined> {
-	const read = mcpServersFrom(mcpConfigFiles(profileDir));
-	if (read.servers.length === 0) {
-		void vscode.window.showInformationMessage('PiCode: pi has no MCP servers to check.');
-		return undefined;
-	}
-	return await vscode.window.showQuickPick(read.servers.map(server => server.label), {
-		title: 'PiCode: check an MCP server',
-		placeHolder: 'Which server should pi try?',
-		ignoreFocusOut: true,
-	});
-}
 
 /** A file's text, or `undefined` when it is not there. */
 function readTextFile(file: string): string | undefined {
@@ -1209,103 +1097,13 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 	}));
 
-	/**
-	 * The two MCP account commands, which differ in the verb and in nothing else.
-	 *
-	 * pi owns the credentials and pi does the work, so this host has three jobs: show the wait, repeat
-	 * what pi said, and re-read the list — a server that just gained or lost credentials is a row whose
-	 * state changed. Only a sign-in has an address to offer: if the browser never opened, that address
-	 * is the one thing that saves the flow.
-	 */
-	const runMcpAccountCommand = async (direction: 'in' | 'out', name?: string): Promise<void> => {
-		const server = serverTarget(name);
-		const noun = direction === 'in' ? 'sign-in' : 'sign-out';
-		const preposition = direction === 'in' ? 'to' : 'of';
-		const gerund = direction === 'in' ? 'signing in to' : 'signing out of';
-		if (server.length === 0) {
-			void vscode.window.showErrorMessage(`PiCode: no MCP server was named for the ${noun}.`);
-			return;
-		}
-		const cliEntry = piCliEntry();
-		if (!fs.existsSync(cliEntry)) {
-			void vscode.window.showErrorMessage('PiCode: pi runtime not found in this editor.');
-			return;
-		}
-		const outcome = await vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: `PiCode: ${gerund} "${server}"…`, cancellable: true },
-			(_progress, token) => runMcpCommand({ cliEntry, profileDir: profileInForce(), args: direction === 'in' ? loginArguments(server) : logoutArguments(server), token }),
-		);
-		if (outcome.cancelled) {
-			void vscode.window.showInformationMessage(`PiCode: the ${noun} ${preposition} "${server}" was cancelled.`);
-			return;
-		}
-		if (outcome.ok) {
-			// The credentials changed, so the list re-reads: the row's state is not what it was.
-			fire();
-			// pi's own sentence is the one shown — it says what happened, including a server that was
-			// already signed in (or already signed out) and how many tools it found.
-			const said = lastLineOf(outcome.output);
-			void vscode.window.showInformationMessage(said === undefined ? `PiCode: the ${noun} ${preposition} "${server}" finished.` : `PiCode: ${said}`);
-			return;
-		}
-		const reason = lastLineOf(outcome.output);
-		const message = `PiCode: the ${noun} ${preposition} "${server}" did not finish${reason === undefined ? '.' : ` (${reason}).`}`;
-		// Only a sign-in has an address to offer.
-		const url = direction === 'in' ? authorizationUrlIn(outcome.output) : undefined;
-		if (url === undefined) {
-			void vscode.window.showWarningMessage(message);
-			return;
-		}
-		void vscode.window.showWarningMessage(message, 'Open in browser').then(choice => {
-			if (choice !== undefined) {
-				void vscode.env.openExternal(vscode.Uri.parse(url));
-			}
-		});
-	};
-
-	disposables.push(vscode.commands.registerCommand(LOGIN_MCP_SERVER_COMMAND, (name?: string) => runMcpAccountCommand('in', name)));
-	disposables.push(vscode.commands.registerCommand(LOGOUT_MCP_SERVER_COMMAND, (name?: string) => runMcpAccountCommand('out', name)));
-
-	// The MCP section's "Check Server": pi is asked about the server the owner pointed at, and the
-	// answer is one sentence — its state, how many tools it found, or the reason it failed. The check
-	// connects every configured server (that is what `pi mcp list` does), so it is a deliberate click
-	// and not something the panel does on its own.
-	disposables.push(vscode.commands.registerCommand(CHECK_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
-		const asked = serverTarget(name);
-		// Called from the palette there is no name yet, so the servers pi knows are offered: one command
-		// serves the row's menu and the palette, instead of a second entry point for the same check.
-		const server = asked.length > 0 ? asked : await pickMcpServer(profileInForce());
-		if (server === undefined) {
-			return;
-		}
-		const cliEntry = piCliEntry();
-		if (!fs.existsSync(cliEntry)) {
-			void vscode.window.showErrorMessage('PiCode: pi runtime not found in this editor.');
-			return;
-		}
-		const outcome = await vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: `PiCode: asking pi about "${server}"…`, cancellable: true },
-			(_progress, token) => runMcpCommand({ cliEntry, profileDir: profileInForce(), args: ['mcp', 'list', '--json'], token, timeoutMs: MCP_CHECK_TIMEOUT_MS }),
-		);
-		if (outcome.cancelled) {
-			return;
-		}
-		const report = mcpStateReport(outcome.output);
-		const state = report.servers.find(entry => entry.name === server);
-		const sentence = state === undefined ? notListedSentence(server, report.errors) : stateSentence(state);
-		if (state?.state === 'connected') {
-			void vscode.window.showInformationMessage(`PiCode: ${sentence}`);
-			return;
-		}
-		void vscode.window.showWarningMessage(`PiCode: ${sentence}`);
-	}));
 
 	// The MCP switch, run from the status panel's rows: pi reads `enabled` in the file that holds the
 	// entry, so flipping it turns a server off without losing it. The entry lives in the profile's file or
 	// in a workspace folder's; the first that holds it is the one that owns it, because a project entry
 	// replaces the profile's of the same name.
 	disposables.push(vscode.commands.registerCommand(TOGGLE_MCP_SERVER_COMMAND, (name?: string): void => {
-		const server = serverTarget(name);
+		const server = (name ?? '').trim();
 		if (server.length === 0) {
 			return;
 		}

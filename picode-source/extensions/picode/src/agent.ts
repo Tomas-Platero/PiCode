@@ -158,8 +158,13 @@ interface PiSdk {
 		customTools?: unknown[];
 	}): Promise<{ session: PiSession }>;
 	/**
-	 * pi's own MCP, codemode and tool search, as the CLI loads them. A pi old enough not to export
-	 * them leaves these undefined and the session simply has no built-in MCP — never a broken one.
+	 * pi's own session tools, as the CLI loads them: `createMcpExtension`, `createCodemodeExtension` and
+	 * `createToolSearchExtension`. None of them is loaded here, on purpose — the chat's MCP servers are
+	 * the **editor's**, and loading pi's MCP as well made every server run twice with its tools
+	 * reachable by two routes. They stay declared so the decision is visible where the session is built,
+	 * and so a future decision to use them has the shape already written down.
+	 *
+	 * See `odd/tasks/picode-pi-0992.md`: the measurement, and why the editor owns the servers.
 	 */
 	createMcpExtension?: () => PiExtensionFactory;
 	createCodemodeExtension?: () => PiExtensionFactory;
@@ -621,37 +626,6 @@ function pinAgentDir(agentDir: string | undefined): void {
 }
 
 /**
- * pi's own MCP, codemode and tool search, as the session's inline extensions.
- *
- * pi's CLI spreads `builtInExtensions` into every session it builds, and the SDK does not: a session
- * built from `createAgentSessionServices` alone has none of them. Two consequences were measured:
- * the servers in the profile's `mcp.json` had no reader in the chat, and the tools pi's MCP reaches
- * through codemode or tool search had nothing to be reached with. Loading the three here is what
- * makes the chat work like the terminal, with the exposure each server declares in the file — pi's
- * default is `codemode`, and it is pi who activates codemode or tool search when a server needs it.
- *
- * Not `llama.cpp`: that is the local-classifier extension, it has nothing to do with this, and
- * loading it would add a surface nobody asked for.
- *
- * Each factory is checked before it is called, so a pi that does not export them yields no
- * extension instead of a session that fails to start.
- */
-function piBuiltinExtensions(sdk: PiSdk): PiInlineExtension[] {
-	const built: PiInlineExtension[] = [];
-	const add = (name: string, factory: (() => PiExtensionFactory) | undefined): void => {
-		if (typeof factory === 'function') {
-			built.push({ name, factory: factory(), hidden: true });
-		}
-	};
-	// Named `mcp` on purpose: pi's own adapter detects the built-in MCP by that name
-	// (`<inline:mcp>`), and a name it does not recognise is how it ends up taking `/mcp` over.
-	add('mcp', sdk.createMcpExtension);
-	add('codemode', sdk.createCodemodeExtension);
-	add('tool-search', sdk.createToolSearchExtension);
-	return built;
-}
-
-/**
  * How long the session's extensions have to start before the turn goes ahead without them.
  *
  * pi's own MCP bounds its server wait the same way; here it covers every extension the owner has
@@ -662,10 +636,10 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
 /**
  * Starts the session's extensions — the one thing that emits `session_start`.
  *
- * Every extension that has work to do before the first prompt hangs it there, pi's own MCP among
- * them: that event is where its servers connect (`dist/extensions/mcp/index.js`). A session built
- * through the SDK without this call has its extensions loaded and idle — measured: pi's MCP
- * extension loaded and registered no tools at all.
+ * Every extension that has work to do before the first prompt hangs it there; that is the contract,
+ * and a session built through the SDK without this call has its extensions loaded and idle (measured:
+ * one loaded and registered nothing at all). Which extensions the owner has is his business — this is
+ * the door they all wait behind, and it opens before the first turn.
  *
  * Only the error listener is bound. This host has no terminal UI, and an extension that wants one
  * asks `ctx.hasUI` first — which is why the bound context has to be "no UI" rather than invented.
@@ -897,14 +871,17 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const profileChanged = sessionAgentDir !== agentDir;
 			if (session === undefined || folderChanged || toolsChanged || profileChanged) {
 				session?.dispose();
-				// The profile is pinned in the environment *before* anything pi loads can resolve it, and
-				// the session is given pi's own MCP beside the permission gate. What each one fixes, and
-				// the probes that showed it was broken, are in `odd/tasks/picode-pi-0992.md`.
+				// The profile is pinned in the environment *before* anything pi loads can resolve it, and the
+				// session is given the permission gate as its only inline extension. pi's own MCP is
+				// **deliberately not** loaded beside it: the servers are the editor's — it runs them and asks
+				// before one of their tools is used — and loading pi's copy made every server run twice, with
+				// its tools reachable by two routes. The measurement and the decision are in
+				// `odd/tasks/picode-pi-0992.md`.
 				pinAgentDir(agentDir);
 				services = await sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
-					resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log), ...piBuiltinExtensions(sdk)] },
+					resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log)] },
 				});
 				if (folderChanged || sessionManager === undefined || profileChanged) {
 					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
