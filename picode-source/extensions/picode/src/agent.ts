@@ -873,7 +873,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		};
 		const sdk = await loadSdk(deps.distributionRoot, deps.log);
 		if (sdk === undefined) {
-			stream.markdown('PiCode: this editor has no pi to talk to. Reinstall it so the agent can answer.');
+			stream.markdown('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.');
 			return {};
 		}
 

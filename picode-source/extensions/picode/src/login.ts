@@ -110,10 +110,17 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 	// to — so instead of a credential landing where the running pi cannot see it (or worse,
 	// outside the product), the honest answer is the way that does work.
 	if (readRuntimeMode() === 'external') {
+		// The sentence explains the boundary; the button is the way out of it. A notification cannot
+		// render a command link, so the action is an item, which is what the owner can press.
 		void vscode.window.showErrorMessage(
 			'PiCode: the external pi keeps its own credentials, which this editor never writes to. '
-			+ 'Connect your providers with a key in Settings > Chat > Providers, or switch to PiCode\'s internal pi to log in with a subscription.',
-		);
+			+ 'Use a provider key instead, or set up PiCode\'s own pi.',
+			'Set up PiCode',
+		).then(choice => {
+			if (choice !== undefined) {
+				void vscode.commands.executeCommand('picode.setup');
+			}
+		});
 		return;
 	}
 	const loaded = await loadPiSdk<PiLoginSdk>(sdkEntryCandidates(deps.distributionRoot));
@@ -137,7 +144,14 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 	}
 
 	if (typeof runtime.login !== 'function') {
-		void vscode.window.showErrorMessage('PiCode: this pi cannot log a provider in. Update the pi that ships with the editor.');
+		void vscode.window.showErrorMessage(
+			'PiCode: this pi cannot log a provider in. Updating pi is what brings the feature.',
+			'Show updates',
+		).then(choice => {
+			if (choice !== undefined) {
+				void vscode.commands.executeCommand('picode.updates.show');
+			}
+		});
 		return;
 	}
 
