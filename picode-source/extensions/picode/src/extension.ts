@@ -14,6 +14,7 @@ import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { authorizationUrlIn, lastLineOf, loginArguments, logoutArguments, serverTarget } from './mcp-login';
+import { mcpStateReport, oneLine, stateSentence } from './mcp-state';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
@@ -616,6 +617,16 @@ export const LOGIN_MCP_SERVER_COMMAND = 'picode.mcp.loginServer';
  */
 export const LOGOUT_MCP_SERVER_COMMAND = 'picode.mcp.logoutServer';
 
+/**
+ * The MCP section's "Check Server": pi's own answer about one server, asked for on the spot.
+ *
+ * `pi mcp list --json` connects every configured server and reports what it reached — its state, its
+ * tools and, when it failed, the reason. That is the one thing the file cannot say: a server that is
+ * configured and dead looks exactly like one that works, and the owner's question is which it is.
+ * A **contract** like {@link LOGIN_MCP_SERVER_COMMAND}.
+ */
+export const CHECK_MCP_SERVER_COMMAND = 'picode.mcp.checkServer';
+
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
 
@@ -755,11 +766,24 @@ function piCliEntry(): string {
 /** How long a sign-in may wait for the browser: pi's own default, with room for the round trip. */
 const MCP_LOGIN_TIMEOUT_MS = 330_000;
 
+/** How long a check may take: pi connects every server before it answers. */
+const MCP_CHECK_TIMEOUT_MS = 120_000;
+
 /** One `pi mcp …` run: what it printed, whether it finished, and whether it was cancelled. */
 interface McpCommandOutcome {
 	readonly ok: boolean;
 	readonly cancelled: boolean;
 	readonly output: string;
+}
+
+/** What one `pi mcp …` run needs: where pi is, which profile, the arguments, and the leash. */
+interface McpCommandRun {
+	readonly cliEntry: string;
+	readonly profileDir: string;
+	readonly args: readonly string[];
+	readonly token: vscode.CancellationToken;
+	/** Defaults to the sign-in leash; a check answers sooner than a browser round trip. */
+	readonly timeoutMs?: number;
 }
 
 /**
@@ -770,26 +794,37 @@ interface McpCommandOutcome {
  * the browser did not open, and its last line is what a failure has to repeat. Cancelling the
  * notification kills the run: the sign-in is the owner's to abandon.
  */
-async function runMcpCommand(cliEntry: string, profileDir: string, args: readonly string[], token: vscode.CancellationToken): Promise<McpCommandOutcome> {
+async function runMcpCommand(run: McpCommandRun): Promise<McpCommandOutcome> {
 	const { execFile } = await import('node:child_process');
 	return new Promise<McpCommandOutcome>(resolve => {
 		let cancelled = false;
-		const child = execFile(process.execPath, [cliEntry, ...args], {
+		const child = execFile(process.execPath, [run.cliEntry, ...run.args], {
 			// The editor's executable is Electron: without this flag it would try to open an app
 			// instead of running pi's script as Node — the same invocation the installer uses.
-			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: profileDir },
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: run.profileDir },
 			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
 			windowsHide: true,
-			timeout: MCP_LOGIN_TIMEOUT_MS,
+			timeout: run.timeoutMs ?? MCP_LOGIN_TIMEOUT_MS,
 			maxBuffer: 1024 * 1024,
 		}, (error, stdout, stderr) => {
 			resolve({ ok: error === null, cancelled, output: `${stdout}${stderr}` });
 		});
-		token.onCancellationRequested(() => {
+		run.token.onCancellationRequested(() => {
 			cancelled = true;
 			child.kill();
 		});
 	});
+}
+
+/**
+ * What to say about a server pi did not list: its own file refused it, and the file's words are the
+ * reason — worth more than "not found".
+ */
+function notListedSentence(server: string, errors: readonly string[]): string {
+	if (errors.length === 0) {
+		return `"${server}" is not in pi's list.`;
+	}
+	return `"${server}" is not in pi's list — ${oneLine(errors.join(' '))}`;
 }
 
 /** A file's text, or `undefined` when it is not there. */
@@ -1137,7 +1172,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const outcome = await vscode.window.withProgress(
 			{ location: vscode.ProgressLocation.Notification, title: `PiCode: ${gerund} "${server}"…`, cancellable: true },
-			(_progress, token) => runMcpCommand(cliEntry, profileInForce(), direction === 'in' ? loginArguments(server) : logoutArguments(server), token),
+			(_progress, token) => runMcpCommand({ cliEntry, profileDir: profileInForce(), args: direction === 'in' ? loginArguments(server) : logoutArguments(server), token }),
 		);
 		if (outcome.cancelled) {
 			void vscode.window.showInformationMessage(`PiCode: the ${noun} ${preposition} "${server}" was cancelled.`);
@@ -1169,6 +1204,38 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	disposables.push(vscode.commands.registerCommand(LOGIN_MCP_SERVER_COMMAND, (name?: string) => runMcpAccountCommand('in', name)));
 	disposables.push(vscode.commands.registerCommand(LOGOUT_MCP_SERVER_COMMAND, (name?: string) => runMcpAccountCommand('out', name)));
+
+	// The MCP section's "Check Server": pi is asked about the server the owner pointed at, and the
+	// answer is one sentence — its state, how many tools it found, or the reason it failed. The check
+	// connects every configured server (that is what `pi mcp list` does), so it is a deliberate click
+	// and not something the panel does on its own.
+	disposables.push(vscode.commands.registerCommand(CHECK_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
+		const server = serverTarget(name);
+		if (server.length === 0) {
+			void vscode.window.showErrorMessage('PiCode: no MCP server was named for the check.');
+			return;
+		}
+		const cliEntry = piCliEntry();
+		if (!fs.existsSync(cliEntry)) {
+			void vscode.window.showErrorMessage('PiCode: pi runtime not found in this editor.');
+			return;
+		}
+		const outcome = await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: `PiCode: asking pi about "${server}"…`, cancellable: true },
+			(_progress, token) => runMcpCommand({ cliEntry, profileDir: profileInForce(), args: ['mcp', 'list', '--json'], token, timeoutMs: MCP_CHECK_TIMEOUT_MS }),
+		);
+		if (outcome.cancelled) {
+			return;
+		}
+		const report = mcpStateReport(outcome.output);
+		const state = report.servers.find(entry => entry.name === server);
+		const sentence = state === undefined ? notListedSentence(server, report.errors) : stateSentence(state);
+		if (state?.state === 'connected') {
+			void vscode.window.showInformationMessage(`PiCode: ${sentence}`);
+			return;
+		}
+		void vscode.window.showWarningMessage(`PiCode: ${sentence}`);
+	}));
 
 	return disposables;
 }
