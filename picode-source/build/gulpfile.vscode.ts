@@ -595,24 +595,49 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 		}
 		const baseVersion = packageJson.version.replace(/-.*$/, '');
 
+		/**
+		 * Stamps one binary, retried.
+		 *
+		 * Windows hands out transient locks on a freshly written executable — Defender, the search indexer
+		 * and Explorer's preview all open one — and `rcedit` answers "Unable to commit changes" while any of
+		 * them holds it. One such lock cost a whole build, minutes into the pack, on 2026-10-01, so the stamp
+		 * is tried three times with a growing pause. The retries are silent (they end in success, and this
+		 * file has no voice of its own); giving up names the file that stayed locked, which is the part a
+		 * build log has to answer. The signature is stripped again before every attempt, because stripping
+		 * it is what makes the file writable at all.
+		 */
+		const stamp = async (fullPath: string, basename: string): Promise<void> => {
+			for (let attempt = 1; ; attempt += 1) {
+				try {
+					await stripAuthenticodeSignature(fullPath);
+					await rcedit(fullPath, {
+						'file-version': baseVersion,
+						'version-string': {
+							'CompanyName': 'TomasPlatero',
+							'FileDescription': product.nameLong,
+							'FileVersion': packageJson.version,
+							'InternalName': basename,
+							'LegalCopyright': 'Copyright (C) 2026 TomasPlatero. All rights reserved',
+							'OriginalFilename': basename,
+							'ProductName': product.nameLong,
+							'ProductVersion': packageJson.version,
+						}
+					});
+					return;
+				} catch (error) {
+					if (attempt >= 3) {
+						throw new Error(`Could not stamp ${basename} after ${attempt} attempts — something keeps holding it: ${error instanceof Error ? error.message : String(error)}`);
+					}
+					await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+				}
+			}
+		};
+
 		const patchPromises = deps.map<Promise<unknown>>(async dep => {
 			const basename = path.basename(dep);
 			const fullPath = path.join(cwd, dep);
 
-			await stripAuthenticodeSignature(fullPath);
-			await rcedit(fullPath, {
-				'file-version': baseVersion,
-				'version-string': {
-					'CompanyName': 'TomasPlatero',
-					'FileDescription': product.nameLong,
-					'FileVersion': packageJson.version,
-					'InternalName': basename,
-					'LegalCopyright': 'Copyright (C) 2026 TomasPlatero. All rights reserved',
-					'OriginalFilename': basename,
-					'ProductName': product.nameLong,
-					'ProductVersion': packageJson.version,
-				}
-			});
+			await stamp(fullPath, basename);
 		});
 
 		await Promise.all(patchPromises);
