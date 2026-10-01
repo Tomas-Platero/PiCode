@@ -57,12 +57,12 @@ Medido el 2026-10-01 contra npm y contra el paquete `@earendil-works/pi-coding-a
    descripción del ajuste **ya no promete** que pi lo lea en el chat: dice dónde se
    escribe.
 
-## Defectos encontrados al verificar (no arreglados aquí)
+## Defectos encontrados al verificar
 
-Salieron al comprobar la premisa anterior con sondas sobre el SDK real, y son más gordos
-que la subida de pi. **No se tocan en este cambio** porque los dos alteran cómo se comporta
-**cualquier** extensión en el chat (el perfil que resuelve y los eventos que recibe), y eso
-no se cambia de paso.
+Salieron al comprobar la premisa anterior con sondas sobre el SDK real, y son más gordos que la
+subida de pi. Los tres primeros **ya están arreglados** — ver «Arreglado: los tres a la vez» — y no
+se tocaron en el mismo cambio porque alteran cómo se comporta **cualquier** extensión en el chat (el
+perfil que resuelve y los eventos que recibe).
 
 1. **El chat resuelve el perfil externo (`~/.pi/agent`).** `agent.ts` pasa `agentDir` como
    parámetro de `createAgentSessionServices`, pero **no** define `PI_CODING_AGENT_DIR`, que
@@ -182,6 +182,19 @@ del dueño): hace falta un `sentry` o un `atlassian` real y el consentimiento de
 
 También: `docs/DISTRIBUTION.md` decía «siete suites» y nombraba una extensión que ya no existe
 (`picode.picode-pi-chat`); corregido a las suites reales del conector y a `picode.picode`.
+
+## Mejoras entregadas después (2026-10-01, «haz lo que creas mejor»)
+
+De la lista de recomendaciones se hicieron las cuatro que más valen por lo que cuestan: la única
+que podía acabar en algo que el dueño no quería, el par del botón que acababa de estrenar, y las
+dos que evitan que esto se rompa otra vez.
+
+| Mejora | Qué hace | Cómo se comprueba |
+| --- | --- | --- |
+| **Los MCP piden permiso** (`permissions.ts`) | Las herramientas de un servidor de pi (`mcp__…`) cuentan como mutantes: ninguna corre sin preguntar en los niveles que preguntan. Las del editor (`mcp_…`, un guion bajo) se dejan, porque el editor ya pregunta por ellas | 4 tests nuevos; y las llamadas anidadas de `codemode` pasan por el mismo evento (`agent-session.js:308`), así que también preguntan |
+| **Sign Out** (`picode.mcp.logoutServer`) | El par de Sign In: pi borra las credenciales que guardó y la entrada se queda, para que el siguiente inicio de sesión tenga dónde caer | `pi mcp logout` responde `Signed out of MCP server "x".` o `No stored credentials for MCP server "x".`; contrato y acción comprobados en el pack |
+| **Los tests se comprueban de tipos** (`tsconfig.test.json`) | Los 15 ficheros corrían en CI pero nadie miraba sus tipos, y un test que llama mal a una función pasa igual en tiempo de ejecución. **12 errores preexistentes** corregidos | `tsc -p extensions/picode/tsconfig.test.json` → 0; los 177 tests siguen pasando |
+| **Lo que escribimos, contra el validador de pi** (`dev/check-mcp-entries.mjs`) | Las 12 formas que produce el conector pasan por `validateMcpServerConfig` del runtime instalado, con **control positivo**: las dos grafías viejas tienen que seguir siendo rechazadas, o el chequeo no valdría nada | `node dev/check-mcp-entries.mjs` → 12/12 como se espera; paso nuevo en CI |
 
 ## Fuera de alcance
 

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { extractTasks, type TaskRow } from '../src/session-tasks.ts';
+import { extractTasks } from '../src/session-tasks.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 

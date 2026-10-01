@@ -158,6 +158,7 @@ Machine-checkable, in the order that catches the most:
 | Runtime in use | the PiCode output channel prints `[pi] starting from <mode> runtime: <path>` |
 | No renderer errors | no `Uncaught` or `TypeError` with `ELECTRON_ENABLE_LOGGING=1` |
 | Connector logic | `node --test picode-source/extensions/picode/test/*.test.ts` — the connector's hermetic suites, no editor needed |
+| MCP entries pi accepts | `node dev/check-mcp-entries.mjs` — what the connector writes into pi's `mcp.json`, through pi's own validator (an entry pi refuses is a server that silently does nothing) |
 | Protocol and CLI | nothing automated: what needs a real `pi` on PATH — a login, an MCP sign-in — is exercised by hand and recorded in `odd/tasks/` |
 
 A view cannot be opened from the command line, and `onView:` activation is invisible

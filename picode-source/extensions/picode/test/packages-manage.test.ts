@@ -140,7 +140,7 @@ test('disable declared in both scopes removes it from both and leaves a file wit
 		record: {},
 	});
 
-	assert.deepStrictEqual(result.changedFiles.sort(), [profileSettingsFile('/profile'), workspaceSettingsFile('/project')]);
+	assert.deepStrictEqual(result.changedFiles.toSorted(), [profileSettingsFile('/profile'), workspaceSettingsFile('/project')]);
 	assert.deepStrictEqual(JSON.parse(files.get(profileSettingsFile('/profile'))!).packages, ['git:github.com/user/repo']);
 	assert.deepStrictEqual(JSON.parse(files.get(workspaceSettingsFile('/project'))!).packages, ['./local-package']);
 });

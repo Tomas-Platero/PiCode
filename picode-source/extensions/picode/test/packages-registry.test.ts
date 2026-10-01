@@ -43,8 +43,16 @@ const {
 } = await import('../src/packages-registry.ts');
 
 type FetchFn = NonNullable<Parameters<typeof searchPackages>[1]>['fetchFn'];
-type SpawnFn = NonNullable<Parameters<typeof installPackage>[1]>['spawn'];
+type InstallContext = NonNullable<Parameters<typeof installPackage>[1]>;
+type SpawnFn = NonNullable<InstallContext['spawn']>;
 type SpawnOptions = Parameters<SpawnFn>[2];
+
+/** One call the fake spawn recorded, which is what the assertions read. */
+interface RecordedSpawn {
+	readonly file: string;
+	readonly args: readonly string[];
+	readonly options: SpawnOptions;
+}
 
 /** One fetch that answers `body` and counts how often it was asked. */
 function fetchAnswering(body: unknown, status = 200): FetchFn & { calls: string[] } {
@@ -57,11 +65,11 @@ function fetchAnswering(body: unknown, status = 200): FetchFn & { calls: string[
 }
 
 /** One spawn that records what it was handed and answers `outcome`. */
-function spawnAnswering(outcome: { ok: boolean; stderr: string }): SpawnFn & { calls: { file: string; args: readonly string[]; options: SpawnOptions }[] } {
+function spawnAnswering(outcome: { ok: boolean; stderr: string }): SpawnFn & { calls: RecordedSpawn[] } {
 	const spawn = ((file: string, args: readonly string[], options: SpawnOptions) => {
 		spawn.calls.push({ file, args, options });
 		return Promise.resolve(outcome);
-	}) as SpawnFn & { calls: { file: string; args: readonly string[]; options: SpawnOptions }[] };
+	}) as SpawnFn & { calls: RecordedSpawn[] };
 	spawn.calls = [];
 	return spawn;
 }
@@ -269,8 +277,8 @@ test('installs queue one at a time and each caller gets its own package and resu
 		return new Promise(resolve => {
 			releases.push(() => resolve({ ok: true, stderr: '' }));
 		});
-	}) as SpawnFn & { calls: unknown[] };
-	(spawn as unknown as { calls: unknown[] }).calls = [];
+	}) as SpawnFn & { calls: RecordedSpawn[] };
+	(spawn as unknown as { calls: RecordedSpawn[] }).calls = [];
 
 	const first = installPackage('first', { cliEntry: '/cli.js', profileDir: '/profile', spawn });
 	const second = installPackage('second', { cliEntry: '/cli.js', profileDir: '/profile', spawn });

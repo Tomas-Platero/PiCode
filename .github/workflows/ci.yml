@@ -106,6 +106,19 @@ jobs:
             node --experimental-strip-types --test "$f" || exit 1
           done
 
+      # The suites' own types. They run here, but nothing typechecked them before this config
+      # existed, and a test calling a function with the wrong shape still passes at runtime.
+      - name: Connector test types
+        shell: bash
+        working-directory: picode-source
+        run: node_modules/.bin/tsc -p extensions/picode/tsconfig.test.json
+
+      # What the connector writes into pi's `mcp.json`, through pi's own validator: an entry pi
+      # refuses is a server that is configured and silently does nothing.
+      - name: MCP entries against pi's validator
+        shell: bash
+        run: node dev/check-mcp-entries.mjs
+
       - name: Upload the packed editor
         uses: actions/upload-artifact@v4
         with:

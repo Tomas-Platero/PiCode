@@ -38,7 +38,8 @@ const {
 } = await import('../src/updates-check.ts');
 
 type FetchFn = NonNullable<Parameters<typeof fetchNpmLatest>[1]>['fetchFn'];
-type SpawnFn = NonNullable<Parameters<typeof runPiUpdate>[0]>['spawn'];
+type UpdateContext = Parameters<typeof runPiUpdate>[0];
+type SpawnFn = NonNullable<UpdateContext['spawn']>;
 type SpawnOptions = Parameters<SpawnFn>[2];
 
 /** One fetch that answers `body` once per URL and records what it was asked. */

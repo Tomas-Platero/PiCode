@@ -68,8 +68,10 @@ test('sameIds compares the ids and not their order', () => {
 	assert.strictEqual(sameIds([row('a')], [row('b')]), false);
 	// A duplicate is a different list, not one the order can hide.
 	assert.strictEqual(sameIds([row('a'), row('a')], [row('a')]), false);
-	// Extra fields are not part of the comparison.
-	assert.strictEqual(sameIds([{ id: 'a', name: 'x' }], [row('a')]), true);
+	// Extra fields are not part of the comparison. Held in a variable on purpose: the point is a
+	// row wider than the type it is compared through, and a literal in the call would not build.
+	const wider = { id: 'a', name: 'x' };
+	assert.strictEqual(sameIds([wider], [row('a')]), true);
 });
 
 test('singleFlight runs one task per key while one is in flight', async () => {

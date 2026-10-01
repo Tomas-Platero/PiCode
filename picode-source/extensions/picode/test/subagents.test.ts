@@ -119,7 +119,10 @@ test('readPresenceActivity parses a valid activity and prefers the given incarna
 	const newest = readPresenceActivity('abc', 'C:/home', readJson, undefined, listDir);
 	assert.ok(newest !== undefined);
 	assert.strictEqual(newest.incarnation, 'new');
-	assert.strictEqual(newest.activity.tasks?.[0]?.summary?.agent, 'worker');
+	// `tasks` is `unknown` in the reading — it is another program's JSON — so the test says the shape
+	// it is about to check instead of indexing something the type does not describe.
+	const tasks = newest.activity.tasks as Array<{ summary?: { agent?: string } }> | undefined;
+	assert.strictEqual(tasks?.[0]?.summary?.agent, 'worker');
 
 	const pinned = readPresenceActivity('abc', 'C:/home', readJson, 'old', listDir);
 	assert.ok(pinned !== undefined);
