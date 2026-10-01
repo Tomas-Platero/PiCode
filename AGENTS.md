@@ -40,8 +40,12 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"Tengo un svg para el menú de la izq para gentle-ai"*
 > *"Es una rosa, es el logo de gentle-ai"*
+>
+> *"lo de la rosa cambialo por el de picode"* — 2026-10-01
 
-* **Barra de actividad de Gentle AI:** Usa su rosa; hoy vive en `picode-source/src/vs/workbench/contrib/picode/browser/media/gentle-ai.svg` (SVG monocromo sin fondo). Antes estaba en `extensions/picode-pi-chat/media/`; esa carpeta se borró el 27-S con la decisión del dueño, y el icono se rescató a su destino de núcleo.
+* **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor). El registro decía antes que ahí iba la rosa; el dueño lo corrigió el 1 de octubre.
+* **La rosa es de Gentle AI** y se usa **donde aparece Gentle AI**: la fila *Gentle AI* del panel de estado (`extensions/picode/media/gentle-ai.svg`).
+* **Las dos marcas viven en el conector** (`picode-source/extensions/picode/media/`) y cada una lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
 > *"El logo que cambiamos en el centro de la pantalla... no uses el png usa el svg"*
@@ -176,3 +180,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
 * **2026-09-27** · Regla de los iconos: la rosa y la marca de agua cambian de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasan al núcleo (`picode-source/.../contrib/picode/browser/media/`). La intención —la rosa de la izquierda, el dibujo de trazos en el editor vacío— no cambia.
 * **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi/gentle (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
+* **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). La rosa sigue siendo el logo de Gentle AI y se usa donde aparece Gentle AI (su fila del panel de estado). Se añade que cada marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
