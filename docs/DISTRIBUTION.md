@@ -164,8 +164,8 @@ Machine-checkable, in the order that catches the most:
 A view cannot be opened from the command line, and `onView:` activation is invisible
 until one is shown, so an end-to-end check of a view needs a **temporary built-in
 extension** that focuses it. That technique is recorded here because it is how the
-panel, the popup and the launcher were verified; it is also how the editor's saved
-layout can be steered to leave the chat in front.
+status view was verified; it is also how the editor's saved layout can be steered to
+leave the chat in front.
 
 ## 9. What this path does not give you
 

@@ -87,7 +87,6 @@ Nothing is lost that a repository should hold:
   executable during the pack, so replacing `code.ico` afterwards changes nothing. To re-brand
   it: replace `picode-source/resources/win32/code.ico` (from `distribution/picode.ico` there is
   no automated conversion wired) and pack again. Phase 1 fails if the file is missing.
-- **`dev/build-requirements.mjs`** (the list the collaborator window reads) still names `jq`.
 - **Telemetry URLs are not rewritten.** Reporting is already disabled in the tree and in the
   product delta, but the endpoint strings themselves still point at Microsoft's URLs. Nobody
   calls them; a future pass should clean them in the source.
