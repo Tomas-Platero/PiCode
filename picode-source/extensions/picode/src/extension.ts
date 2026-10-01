@@ -1937,6 +1937,14 @@ function isInside(dir: string, file: string): boolean {
  * simply not a claim the check makes.
  */
 async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
+	// With the machine's own pi in force there is nothing PiCode may update: that pi and its packages
+	// are the owner's, and this product promises never to change them (the setting says so in as many
+	// words). The check goes quiet instead of offering an update it must refuse to perform — an
+	// unavailable update is not news, and a status-bar item leading to "no" is worse than none.
+	if (readRuntimeMode() === 'external') {
+		return [];
+	}
+
 	const candidates: CandidateTarget[] = [];
 	const profile = profileDirectory(requireProfileUri());
 
@@ -2010,6 +2018,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 
 	/** The update itself: stop the chat's pi, let pi update everything, then reload. */
 	const runUpdateFlow = async (): Promise<void> => {
+		// The check is quiet with the machine's pi in force, but a snapshot from before a runtime switch
+		// (or the status-bar item it left) must not be able to talk this flow into writing there.
+		if (readRuntimeMode() === 'external') {
+			void vscode.window.showInformationMessage('PiCode: your own pi and its packages update where they live — this editor never writes to them.');
+			return;
+		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
 			void vscode.window.showInformationMessage('PiCode could not be updated: the pi CLI is missing from this installation.');
