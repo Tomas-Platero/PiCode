@@ -97,10 +97,18 @@ interface PiExtensionApi {
 	on(event: 'tool_call', handler: (event: PiToolCallEvent) => Promise<PiToolCallResult | undefined>): () => void;
 }
 
+/**
+ * A factory pi's built-in extensions return: it registers that extension's tools on the session.
+ *
+ * `createMcpExtension()`, `createCodemodeExtension()` and `createToolSearchExtension()` are all the
+ * same shape — call one and it hands back a function pi runs with the session's API.
+ */
+type PiExtensionFactory = (pi: PiExtensionApi) => void | Promise<void>;
+
 /** pi's inline extension shape (`resourceLoaderOptions.extensionFactories`). */
 interface PiInlineExtension {
 	name: string;
-	factory: (pi: PiExtensionApi) => void | Promise<void>;
+	factory: PiExtensionFactory;
 	hidden?: boolean;
 }
 
@@ -119,6 +127,13 @@ interface PiSession {
 	subscribe(listener: (event: PiEvent) => void): () => void;
 	setModel(model: PiModel): Promise<void>;
 	setThinkingLevel(level: string): void;
+	/**
+	 * Starts the session's extensions, and **that** is what emits `session_start`. Absent in a pi
+	 * old enough not to have it, so the caller checks — see `bindSessionExtensions`.
+	 */
+	bindExtensions?(bindings: {
+		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
+	}): Promise<void>;
 	dispose(): void;
 }
 
@@ -131,7 +146,7 @@ interface PiSdk {
 	createAgentSessionServices(options: {
 		cwd: string;
 		agentDir?: string;
-		/** Inline extensions of this embedded session — here, the permission gate. */
+		/** Inline extensions of this embedded session — here, the permission gate and pi's MCP. */
 		resourceLoaderOptions?: { extensionFactories?: PiInlineExtension[] };
 	}): Promise<PiServices>;
 	createAgentSessionFromServices(options: {
@@ -142,6 +157,13 @@ interface PiSdk {
 		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
 		customTools?: unknown[];
 	}): Promise<{ session: PiSession }>;
+	/**
+	 * pi's own MCP, codemode and tool search, as the CLI loads them. A pi old enough not to export
+	 * them leaves these undefined and the session simply has no built-in MCP — never a broken one.
+	 */
+	createMcpExtension?: () => PiExtensionFactory;
+	createCodemodeExtension?: () => PiExtensionFactory;
+	createToolSearchExtension?: () => PiExtensionFactory;
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
 		// default, which is right for the external pi and a leak for the internal one.
@@ -574,6 +596,108 @@ function permissionExtension(log: (line: string) => void): PiInlineExtension {
 }
 
 /* ------------------------------------------------------------------ *
+ * The profile, pi's own extensions, and the event that starts them
+ * ------------------------------------------------------------------ */
+
+/**
+ * The profile the session runs against, pinned where pi's own code looks for it.
+ *
+ * `agentDir` is a parameter of the SDK; pi's `getAgentDir()` reads `PI_CODING_AGENT_DIR`
+ * (`dist/config.js`). An extension that resolves the profile by itself therefore ignored the
+ * parameter: pi's MCP looked for `~/.pi/agent/mcp.json`, and the adapter loaded the servers of the
+ * machine's own profile — measured, not assumed (see `odd/tasks/picode-pi-0992.md`). Pinning the
+ * variable is what puts every extension inside PiCode's profile; the chat holds one session at a
+ * time, and a profile change is exactly what rebuilds it.
+ *
+ * External mode passes `undefined`, and then the variable is **removed**: the machine's own profile
+ * is the point there, and a value left over from an internal session would silently override it.
+ */
+function pinAgentDir(agentDir: string | undefined): void {
+	if (agentDir === undefined) {
+		delete process.env.PI_CODING_AGENT_DIR;
+		return;
+	}
+	process.env.PI_CODING_AGENT_DIR = agentDir;
+}
+
+/**
+ * pi's own MCP, codemode and tool search, as the session's inline extensions.
+ *
+ * pi's CLI spreads `builtInExtensions` into every session it builds, and the SDK does not: a session
+ * built from `createAgentSessionServices` alone has none of them. Two consequences were measured:
+ * the servers in the profile's `mcp.json` had no reader in the chat, and the tools pi's MCP reaches
+ * through codemode or tool search had nothing to be reached with. Loading the three here is what
+ * makes the chat work like the terminal, with the exposure each server declares in the file — pi's
+ * default is `codemode`, and it is pi who activates codemode or tool search when a server needs it.
+ *
+ * Not `llama.cpp`: that is the local-classifier extension, it has nothing to do with this, and
+ * loading it would add a surface nobody asked for.
+ *
+ * Each factory is checked before it is called, so a pi that does not export them yields no
+ * extension instead of a session that fails to start.
+ */
+function piBuiltinExtensions(sdk: PiSdk): PiInlineExtension[] {
+	const built: PiInlineExtension[] = [];
+	const add = (name: string, factory: (() => PiExtensionFactory) | undefined): void => {
+		if (typeof factory === 'function') {
+			built.push({ name, factory: factory(), hidden: true });
+		}
+	};
+	// Named `mcp` on purpose: pi's own adapter detects the built-in MCP by that name
+	// (`<inline:mcp>`), and a name it does not recognise is how it ends up taking `/mcp` over.
+	add('mcp', sdk.createMcpExtension);
+	add('codemode', sdk.createCodemodeExtension);
+	add('tool-search', sdk.createToolSearchExtension);
+	return built;
+}
+
+/**
+ * How long the session's extensions have to start before the turn goes ahead without them.
+ *
+ * pi's own MCP bounds its server wait the same way; here it covers every extension the owner has
+ * installed, none of which was written for a host with no terminal.
+ */
+const EXTENSION_START_TIMEOUT_MS = 15_000;
+
+/**
+ * Starts the session's extensions — the one thing that emits `session_start`.
+ *
+ * Every extension that has work to do before the first prompt hangs it there, pi's own MCP among
+ * them: that event is where its servers connect (`dist/extensions/mcp/index.js`). A session built
+ * through the SDK without this call has its extensions loaded and idle — measured: pi's MCP
+ * extension loaded and registered no tools at all.
+ *
+ * Only the error listener is bound. This host has no terminal UI, and an extension that wants one
+ * asks `ctx.hasUI` first — which is why the bound context has to be "no UI" rather than invented.
+ * A session whose extensions fail to start still answers: the failure is said and the turn runs.
+ */
+async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+	if (typeof session.bindExtensions !== 'function') {
+		return;
+	}
+	let timer: NodeJS.Timeout | undefined;
+	try {
+		// Bounded, like pi does with its own MCP wait: an extension that sits waiting for something
+		// this host never gives it — a terminal prompt, say — must not hold the first turn open. The
+		// work that arrives late is still applied; the registry refreshes when tools appear.
+		await Promise.race([
+			session.bindExtensions({
+				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
+			}),
+			new Promise<void>(resolve => {
+				timer = setTimeout(resolve, EXTENSION_START_TIMEOUT_MS);
+			}),
+		]);
+	} catch (error) {
+		log(`the session's extensions could not be started: ${error instanceof Error ? error.message : String(error)}`);
+	} finally {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+		}
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * Registration
  * ------------------------------------------------------------------ */
 
@@ -773,19 +897,15 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const profileChanged = sessionAgentDir !== agentDir;
 			if (session === undefined || folderChanged || toolsChanged || profileChanged) {
 				session?.dispose();
-				// Two limits of building a session this way are known and measured, not assumed; both are
-				// recorded in `odd/tasks/picode-pi-0992.md` with the probe that showed them:
-				//   * `agentDir` is a parameter of this call, not `PI_CODING_AGENT_DIR`, so an extension that
-				//     resolves the agent directory itself (`getAgentDir()`) reads the machine's `~/.pi/agent`
-				//     instead of PiCode's profile — the adapter's servers came from there.
-				//   * nothing here emits `session_start`, which only `session.bindExtensions(...)` does, so
-				//     extension work bound to that event — pi's own built-in MCP among it — never runs.
-				// Both are changes to how every extension behaves, so neither is made in passing.
+				// The profile is pinned in the environment *before* anything pi loads can resolve it, and
+				// the session is given pi's own MCP beside the permission gate. What each one fixes, and
+				// the probes that showed it was broken, are in `odd/tasks/picode-pi-0992.md`.
+				pinAgentDir(agentDir);
 				services = await sdk.createAgentSessionServices({
-				cwd,
-				...(agentDir === undefined ? {} : { agentDir }),
-				resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log)] },
-			});
+					cwd,
+					...(agentDir === undefined ? {} : { agentDir }),
+					resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log), ...piBuiltinExtensions(sdk)] },
+				});
 				if (folderChanged || sessionManager === undefined || profileChanged) {
 					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
 				}
@@ -802,6 +922,9 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
 				});
 				session = created.session;
+				// The session exists and its extensions are loaded; this is what starts them. Called
+				// before the first turn, because `session_start` is where they do their startup work.
+				await bindSessionExtensions(session, deps.log);
 				sessionFolder = cwd;
 				sessionAgentDir = agentDir;
 				mcpSignature = signature;

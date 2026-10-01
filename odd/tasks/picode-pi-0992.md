@@ -91,15 +91,44 @@ no se cambia de paso.
    migración es quitar las claves del adaptador (`auth`, `oauth`, `lifecycle`, `directTools`)
    y dejar que pi use OAuth por defecto; **es dato del dueño y no se toca sin decirlo**.
 
-**Arreglo recomendado (una decisión, no un parche)**: definir `PI_CODING_AGENT_DIR` con el
-perfil interno al construir la sesión; llamar a `session.bindExtensions(...)` para que
-`session_start` exista; y decidir si el chat carga las built-in de pi (MCP propio) o deja el
-MCP en el puente del editor. Los tres puntos a la vez devuelven la fila a la vida; hacer
-solo uno deja el resultado a medias.
+## Arreglado: los tres a la vez (2026-10-01, petición «arregla todo»)
 
-**No se toca** la exposición de las herramientas (se queda la de pi, `codemode` por
-defecto): forzar `direct` metería todas las herramientas de todos los servidores en el
-prompt, y el dueño no lo ha pedido. Se deja escrito aquí como decisión abierta.
+En `agent.ts`, al construir la sesión del chat:
+
+1. **`pinAgentDir(agentDir)`** fija `PI_CODING_AGENT_DIR` al perfil en fuerza **antes** de que pi
+   cargue nada. En modo externo la variable se **borra** (dejarla puesta haría que el pi de la
+   máquina corriera contra el perfil interno).
+2. **`piBuiltinExtensions(sdk)`** añade a `extensionFactories` las tres built-in de pi —`mcp`,
+   `codemode` y `tool-search`— cada una con detección previa del export. No carga `llama.cpp`:
+   no tiene nada que ver con esto. La extensión se llama **`mcp`** a propósito: el adaptador
+   detecta la MCP built-in por ese nombre (`<inline:mcp>`) y así no se queda con `/mcp`.
+3. **`bindSessionExtensions(session)`** llama a `session.bindExtensions({ onError })`, que es lo
+   único que emite `session_start`. Va con **tope de 15 s**: una extensión que se quede esperando
+   algo que este host no da no puede congelar el primer turno. Solo se enlaza el escucha de
+   errores: aquí no hay interfaz de terminal, y quien la necesite pregunta `ctx.hasUI`.
+
+La exposición de cada servidor se queda como la declare el fichero (pi las trae en `codemode`
+por defecto y activa `codemode` o `tool_search` cuando un servidor lo necesita). No se fuerza
+`direct`: serían todas las herramientas de los 10 servidores en el prompt.
+
+### Verificado con sondas sobre el SDK real (perfil temporal con un servidor `marker`)
+
+| Qué | Antes | Ahora |
+| --- | --- | --- |
+| Extensiones cargadas en el chat | 0 (o solo el adaptador) | `picode-permissions`, `mcp`, `codemode`, `tool-search` |
+| Herramientas registradas | ninguna | `codemode`, `tool_search` y **`mcp__marker__echo`** |
+| Servidor del perfil que se le pasa | no aparecía | aparece |
+| Servidor del `~/.pi/agent` real (`firebase`) | aparecía | **no aparece** |
+| Errores y avisos | — | ninguno |
+
+### Tidy-up del perfil
+
+`pi-mcp-adapter` seguía declarado en el perfil del dueño. Con el perfil ya fijado, el adaptador
+lee `mcp-adapter.json` **de PiCode** (que no existe) y solo aporta dos herramientas vacías
+(`mcp`, `mcpScript`) al chat. Se quita de la lista `packages` del perfil interno (copia previa en
+`.scratch/settings-json-before-adapter-removal.json`); los ficheros instalados se dejan, no
+estorban. Las configuraciones compartidas que el adaptador importaba (`~/.config/mcp/mcp.json`,
+`~/.agents/mcp.json`) no existen en esta máquina, así que no se pierde ningún servidor.
 
 ## Forma vieja y nueva: una entrada que leen los dos
 
