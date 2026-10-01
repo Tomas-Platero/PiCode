@@ -318,8 +318,8 @@ async function runInstall(rawTarget: string, context: InstallContext): Promise<I
 	try {
 		outcome = await (context.spawn ?? defaultSpawn)(process.execPath, [context.cliEntry, 'install', spec], {
 			// The editor's executable is Electron: without this flag it would try to open an
-			// app instead of running pi's script as Node — the same invocation
-			// `ensureMcpAdapter` uses for the MCP adapter.
+			// app instead of running pi's script as Node — the same invocation the MCP
+			// server writer uses for pi.
 			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: context.profileDir },
 			windowsHide: true,
 			timeoutMs: INSTALL_TIMEOUT_MS,

@@ -8,7 +8,7 @@
  *
  * The chat's management page lists pi's servers out of `<profile>/mcp.json` and each folder's
  * `.pi/mcp.json`; its "Add Server" button asks the connector to write the new one into the
- * **profile** file — the same file that list reads, in the shape the adapter documents. The
+ * **profile** file — the same file that list reads, in the shape pi's own MCP documents. The
  * editor's own add flow would put the entry in the editor's user `mcp.json`, a file and a
  * shape pi never reads, which is why this translation exists instead of that command.
  *
@@ -35,12 +35,12 @@ export interface AddServerDraft {
 	readonly env?: Record<string, string>;
 }
 
-/** One server as the file holds it, in the shape the adapter documents. */
+/** One server as the file holds it, in the shape pi's own MCP documents. */
 export type McpServerFileEntry =
 	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
 	| { readonly command: string; readonly args: readonly string[]; readonly env?: Record<string, string> };
 
-const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
+const NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
 
 /** The one problem with a proposed name, or `undefined` when it can be used. */
 export function validateServerName(name: string): string | undefined {
@@ -49,7 +49,7 @@ export function validateServerName(name: string): string | undefined {
 		return 'The server needs a name.';
 	}
 	if (!NAME_PATTERN.test(trimmed)) {
-		return 'A name holds letters, digits, dots, dashes and underscores, and starts with a letter or a digit.';
+		return 'A name holds letters, digits, dashes and underscores, and starts with a letter or a digit.';
 	}
 	return undefined;
 }
@@ -170,7 +170,7 @@ export function mcpServersTextWithAdded(existing: unknown, draft: AddServerDraft
 }
 
 /**
- * The entry one file holds for a server, as far as it reads as one of the two shapes the adapter
+ * The entry one file holds for a server, as far as it reads as one of the two shapes pi's own MCP
  * documents, or `undefined` when the file holds none it can be prefilled from.
  *
  * An entry that is there but not recognizable — a string, a transport the editor has no shape for —

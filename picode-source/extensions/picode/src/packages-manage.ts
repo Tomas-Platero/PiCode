@@ -6,8 +6,8 @@
 /**
  * Enabling, disabling and removing the packages pi declares, run on their own.
  *
- * The management page's Packages section shows what pi has, and now acts on it too. pi 0.87.1
- * has no per-package disable of its own — the `packages` array of a settings file is a plain
+ * The management page's Packages section shows what pi has, and now acts on it too. pi has
+ * no per-package disable of its own — the `packages` array of a settings file is a plain
  * list of source strings — so **disable** is a connector-level act: the declaration is taken
  * out of the settings file that wrote it, the package's files stay where pi installed them,
  * and the source is remembered in a per-profile "disabled" record so the listing can still

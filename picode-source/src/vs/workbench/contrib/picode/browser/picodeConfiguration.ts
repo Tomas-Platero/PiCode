@@ -147,7 +147,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			),
 		},
 		// MCP **for pi**: the servers are declared here and written into pi's own profile
-		// (`data/pi-agent/mcp.json`), which is the file `pi-mcp-adapter` reads. The editor's own MCP
+		// (`data/pi-agent/mcp.json`), the file pi's own MCP reads from 0.99 on. The editor's own MCP
 		// screen is a different thing, for a different agent.
 		[PICODE_MCP_SERVERS_SETTING]: {
 			type: 'array',
@@ -166,7 +166,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize(
 				'picode.mcp.servers',
-				"The MCP servers **pi** runs. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. They are written to pi's own profile and read by `pi-mcp-adapter`, which PiCode installs the first time you add a server. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com` — it signs in with OAuth the first time it is used, so no token is needed."
+				"The MCP servers **pi** runs. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. They are written into pi's own profile, which pi reads by itself. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
 			),
 		},
 		[PICODE_CONTEXT_ATTACH_SETTING]: {

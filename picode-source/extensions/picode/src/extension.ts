@@ -183,20 +183,19 @@ function toChatInformation(models: PiModelsFile): vscode.LanguageModelChatInform
  * The MCP servers pi runs
  * ------------------------------------------------------------------ */
 
-/** The adapter that gives pi MCP: installed into PiCode's own profile, never the machine's. */
-const MCP_ADAPTER_PACKAGE = 'npm:pi-mcp-adapter';
-
-/** Where the adapter's own file lives, inside PiCode's profile. */
+/** Where pi's own MCP file lives, inside PiCode's profile. */
 function mcpServersFile(profile: string): string {
 	return path.join(profile, 'mcp.json');
 }
 
 /**
- * Writes the MCP servers the owner declared, in the shape the adapter reads.
+ * Writes the MCP servers the owner declared, in the shape pi's own MCP reads.
  *
  * The setting is the surface and this file is the projection, the same arrangement the model
  * providers use: what the owner fills in the form becomes what pi reads. The write is skipped when
  * the file already says exactly this, because activation and every settings change call it.
+ *
+ * No package has to be installed for it to work: pi has read this file by itself since 0.99.
  */
 function writeMcpServers(profile: string, servers: readonly McpServerSetting[]): void {
 	const file = mcpServersFile(profile);
@@ -222,51 +221,14 @@ function readJsonFile(file: string): Record<string, unknown> | undefined {
 	}
 }
 
-/**
- * Installs the adapter once, if the profile does not have it.
- *
- * pi owns its packages, so the install is pi's own command, run against **PiCode's** profile
- * (`PI_CODING_AGENT_DIR`), which is what keeps this inside the product. It runs in the background
- * and its result is reported: a server whose adapter is missing would look connected and do
- * nothing.
- */
-async function ensureMcpAdapter(profile: string): Promise<void> {
-	if (fs.existsSync(path.join(profile, 'npm', 'node_modules', 'pi-mcp-adapter'))) {
-		return;
-	}
-	const entry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
-	if (!fs.existsSync(entry)) {
-		return;
-	}
-	try {
-		const { execFile } = await import('node:child_process');
-		await new Promise<void>((resolve, reject) => {
-			execFile(process.execPath, [entry, 'install', MCP_ADAPTER_PACKAGE], {
-				// The editor's executable is Electron: without this flag it would try to open an
-				// app instead of running pi's script as Node.
-				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: profile },
-				windowsHide: true,
-			}, error => (error === null ? resolve() : reject(error)));
-		});
-		void vscode.window.showInformationMessage('PiCode: the MCP adapter is installed for pi. Its servers are in Settings > PiCode > MCP.');
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		void vscode.window.showErrorMessage(`PiCode: the MCP adapter could not be installed (${message}). The servers you declared will not be reachable until it is.`);
-	}
-}
-
 /** The servers the settings declare. */
 function declaredMcpServers(): McpServerSetting[] {	const configured = vscode.workspace.getConfiguration('picode').get<McpServerSetting[]>('mcp.servers');
 	return Array.isArray(configured) ? configured : [];
 }
 
-/** Writes the servers pi reads, and installs the adapter the first time one is declared. */
-async function applyMcpServers(profile: string): Promise<void> {
-	const servers = declaredMcpServers();
-	writeMcpServers(profile, servers);
-	if (servers.length > 0) {
-		await ensureMcpAdapter(profile);
-	}
+/** Writes the servers pi reads. Nothing is installed: pi's own MCP owns the file, and reads it. */
+function applyMcpServers(profile: string): void {
+	writeMcpServers(profile, declaredMcpServers());
 }
 
 /**
@@ -357,9 +319,8 @@ async function addMcpServer(profile: string): Promise<void> {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	fs.writeFileSync(file, mcpServersTextWithAdded(existing, draft), { mode: 0o600 });
 
-	// The list repaints itself through the file watcher; the adapter only decides whether pi can
-	// actually run the server, and installing it is idempotent, so it is checked every time.
-	void ensureMcpAdapter(profile);
+	// The list repaints itself through the file watcher: pi reads the server from the file, so
+	// nothing else has to be told that one was added.
 	void vscode.window.showInformationMessage(`MCP server ${name} added to pi. It will appear in the list.`);
 }
 
@@ -401,7 +362,7 @@ async function editMcpServerCommand(profile: string, name?: string): Promise<voi
 
 /**
  * Asks what one existing server should say now and writes the entry back into the file that
- * holds it — the same file the list reads, in the shape the adapter documents.
+ * holds it — the same file the list reads, in the shape pi's own MCP documents.
  *
  * The name is kept: it is the entry's key and the identity the page handed over. Everything
  * else starts prefilled from the entry as it is now, and every step can be cancelled. A failure
@@ -577,7 +538,7 @@ export const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
 export const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
 
 /**
- * The Packages section's disable: pi 0.87.1 has no per-package disable of its own — the
+ * The Packages section's disable: pi has no per-package disable of its own — the
  * `packages` array of a settings file is a plain list of source strings — so this takes the
  * declaration out of the settings file that spells it (profile or workspace), keeps the
  * package's files where pi installed them, and remembers the source per profile so the
@@ -1946,11 +1907,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// The MCP servers pi runs are written from the settings row, and followed while the editor is
 	// open: adding one in the form is what makes it available to pi.
-	void applyMcpServers(profileDirectory(context.extensionUri));
+	applyMcpServers(profileDirectory(context.extensionUri));
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('picode.mcp.servers')) {
-				void applyMcpServers(profileDirectory(context.extensionUri));
+				applyMcpServers(profileDirectory(context.extensionUri));
 			}
 			// The runtime in force changed, so the command list belongs to another pi's
 			// registry: the slash list re-reads.

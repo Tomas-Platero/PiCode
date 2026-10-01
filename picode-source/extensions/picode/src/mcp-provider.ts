@@ -8,9 +8,10 @@ import type { ResourceSource } from './customizations';
 /**
  * pi's MCP servers, as the editor's own MCP screen needs to see them.
  *
- * pi has no MCP of its own — the owner installs `pi-mcp-adapter`, and this connector is what
- * writes the servers into the file that adapter reads. So the editor's MCP list has to show what
- * pi will actually start, which is the same file this connector writes and reads.
+ * pi has MCP of its own since 0.99 and reads the servers the owner declares from
+ * `<profile>/mcp.json` and each folder's `.pi/mcp.json`, which is the same file this connector
+ * writes and reads. So the editor's MCP list has to show what pi will actually start, which is the
+ * same file.
  *
  * ## The shape, quoted from the code that owns it
  *
@@ -145,7 +146,7 @@ const HTTP_TRANSPORTS = ['http', 'streamable-http', 'streamable_http'];
 /**
  * One entry of a `mcpServers` object, as a server or as a refusal.
  *
- * `command` wins over `url` when an entry carries both, because that is what the adapter does
+ * `command` wins over `url` when an entry carries both, because that is what pi does
  * (`mcpServerEntry` writes one or the other, so an entry with both was hand-written) and starting
  * the process the owner named is the reading that cannot silently reach somewhere else.
  */

@@ -1812,9 +1812,9 @@ function mcpFieldError(item: { name: string; transport: string; target: string }
 /**
  * The settings row that edits PiCode's MCP servers: one server per row, each one a small form.
  *
- * The servers are the **adapter's** (`pi-mcp-adapter`), and they live in PiCode's own pi profile, so
- * nothing is read or written outside the product. What the owner fills in here becomes the
- * `mcpServers` of that profile's `mcp.json`, which is the file the adapter reads.
+ * The servers live in PiCode's own pi profile, so nothing is read or written outside the product.
+ * What the owner fills in here becomes the `mcpServers` of that profile's `mcp.json`, which is the
+ * file pi's own MCP reads.
  */
 export class McpServerListSettingWidget extends AbstractListSettingWidget<IMcpServerDataItem> {
 

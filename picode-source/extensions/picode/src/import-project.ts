@@ -83,14 +83,15 @@ export function providerRowsFromModelsFile(modelsJson: unknown): ImportedProvide
  * nothing usable is left.
  *
  * A name from another machine's file is not held to a standard: characters the settings
- * pattern does not accept become `-`, and leading characters it would still refuse (a name
- * that began with a symbol) are dropped. An empty result is no name.
+ * pattern does not accept become `-` — the dot included, which pi's own MCP refuses — and leading
+ * characters it would still refuse (a name that began with a symbol) are dropped. An empty result
+ * is no name.
  */
 function sanitizedServerName(raw: unknown): string | undefined {
 	if (typeof raw !== 'string') {
 		return undefined;
 	}
-	let name = raw.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+	let name = raw.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
 	while (name.length > 0 && !/^[a-z0-9]/i.test(name)) {
 		name = name.slice(1);
 	}
@@ -101,9 +102,9 @@ function sanitizedServerName(raw: unknown): string | undefined {
  * The servers of a copied `mcp.json`, as settings rows.
  *
  * A local server (`command`) and a remote one (`type: "http"` with a `url`) are the two
- * shapes the adapter documents and the settings row can express. An `Authorization: Bearer`
+ * shapes pi's own MCP documents and the settings row can express. An `Authorization: Bearer`
  * header becomes the row's key — a header a person typed by hand; anything else there is
- * left in the file, which the adapter still reads. An entry that is neither shape, or whose
+ * left in the file, which pi still reads. An entry that is neither shape, or whose
  * name cannot be made to fit, is skipped.
  */
 export function mcpRowsFromMcpFile(mcpJson: unknown): McpServerSetting[] {

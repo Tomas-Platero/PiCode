@@ -238,7 +238,7 @@ async function syncImportedRowsToSettings(deps: SetupDeps, report: ImportReport)
 				logImport(`Recorded ${rows.length} MCP ${rows.length === 1 ? 'server' : 'servers'} in Settings > PiCode > MCP.`);
 			}
 		} catch (error) {
-			logImport(`Your imported MCP servers could not be added to the settings (${messageOf(error)}). They still work; the adapter reads them from its file.`);
+			logImport(`Your imported MCP servers could not be added to the settings (${messageOf(error)}). They still work; pi reads them from its own file.`);
 		}
 	}
 }

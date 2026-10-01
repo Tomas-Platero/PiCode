@@ -9,11 +9,12 @@ import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './m
 /**
  * The MCP servers of the editor, given to pi as tools of its own.
  *
- * pi has **no MCP**, and it says so itself: its README lists "MCP server integration" among the
- * things it deliberately leaves out ("**No MCP.** Build CLI tools with READMEs, or build an
- * extension that adds MCP support"). What pi does have is `customTools`: tools a host registers
- * for a session. And the editor *does* have MCP — its own servers, its own screen to add them,
- * its own permissions — and it exposes every MCP tool as a language model tool.
+ * pi has MCP of its own since 0.99, but that is not this: pi's own MCP reads the servers declared
+ * in its profile's `mcp.json` and reaches them itself. This module is the **other** path, and the
+ * one the owner asked for — the editor's own servers and its own screen, handed to pi through the
+ * editor. What pi does not have is a way to call them with the editor's permissions, and the editor
+ * *does* have MCP — its own servers, its own screen to add them, its own permissions — and it
+ * exposes every MCP tool as a language model tool.
  *
  * So this module is the bridge the owner asked for: *"hay una que es 'MCP' necesito que esas
  * opciones puedan usarse para conectar los MCP con el PI interno de PiCode."* The editor keeps
@@ -43,8 +44,25 @@ export interface ToolTokenHolder {
 }
 
 /** The MCP tools of the editor, as pi tool definitions. */
-export function piToolsFromEditor(token: ToolTokenHolder): unknown[] {
+export function piToolsFromEditor(token: ToolTokenHolder): PiToolDefinition[] {
 	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token));
+}
+
+/** What a pi tool answers with: the text the model reads, and nothing else. */
+export interface PiToolResult {
+	readonly content: readonly { readonly type: 'text'; readonly text: string }[];
+	readonly details?: undefined;
+}
+
+/** One pi tool definition, as the `customTools` of a session reads it. */
+export interface PiToolDefinition {
+	readonly name: string;
+	readonly label: string;
+	readonly description: string;
+	/** The one line pi lists with the tool in its system prompt. */
+	readonly promptSnippet: string;
+	readonly parameters: Record<string, unknown>;
+	readonly execute: (toolCallId: string, params: unknown, signal?: AbortSignal) => Promise<PiToolResult>;
 }
 
 /**
@@ -55,7 +73,7 @@ export function piToolsFromEditor(token: ToolTokenHolder): unknown[] {
  * server. A failure is thrown rather than encoded in the result, which is what pi's tool contract
  * asks for and what makes the reason visible in the chat.
  */
-function editorTool(tool: McpTool, token: ToolTokenHolder): unknown {
+function editorTool(tool: McpTool, token: ToolTokenHolder): PiToolDefinition {
 	return {
 		name: tool.name,
 		label: tool.label,
@@ -64,7 +82,7 @@ function editorTool(tool: McpTool, token: ToolTokenHolder): unknown {
 		// left out of that list and the model never learns it exists.
 		promptSnippet: `${tool.name}: ${tool.description}`,
 		parameters: tool.parameters,
-		execute: async (_toolCallId: string, params: unknown, signal?: AbortSignal): Promise<unknown> => {
+		execute: async (_toolCallId: string, params: unknown, signal?: AbortSignal): Promise<PiToolResult> => {
 			const result = await vscode.lm.invokeTool(
 				tool.name,
 				{ input: (params ?? {}) as object, toolInvocationToken: token.current },

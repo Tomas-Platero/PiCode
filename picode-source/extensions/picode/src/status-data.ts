@@ -96,7 +96,7 @@ function countProviders(profileDir: string): number {
 	return ids.size;
 }
 
-/** The MCP servers pi's adapter reads from the profile. */
+/** The MCP servers pi reads from the profile. */
 function countMcpServers(profileDir: string): number {
 	const file = readJsonObject(path.join(profileDir, 'mcp.json'));
 	const servers = file?.['mcpServers'];

@@ -78,7 +78,7 @@ test('a draft is refused while it is not yet a server the adapter could run', ()
 test('a complete draft of either transport is accepted', () => {
 	assert.deepStrictEqual(validateDraft({ name: 'files', transport: 'stdio', command: 'node' }), []);
 	assert.deepStrictEqual(validateDraft({ name: 'remote', transport: 'http', url: 'https://example.test/mcp' }), []);
-	assert.deepStrictEqual(validateDraft({ name: 'a.b-c_d', transport: 'stdio', command: 'node' }), []);
+	assert.deepStrictEqual(validateDraft({ name: 'a-b_c', transport: 'stdio', command: 'node' }), []);
 });
 
 test('a name is told what it may hold, as it is typed', () => {
@@ -86,6 +86,16 @@ test('a name is told what it may hold, as it is typed', () => {
 	assert.ok(validateServerName('has spaces') !== undefined);
 	assert.ok(validateServerName('-leading') !== undefined);
 	assert.ok(validateServerName('files') === undefined);
+});
+
+// pi's own MCP validates server names with `^[A-Za-z0-9_-]+$` and refuses the rest, so a dot that
+// got written would be a server listed in the file that never connects. Left as its own test
+// because the reason is not the shape of a name, it is who reads the file.
+test('a name with a dot is refused: pi would never start that server', () => {
+	assert.ok(validateServerName('my.server') !== undefined);
+	assert.deepStrictEqual(validateDraft({ name: 'my.server', transport: 'http', url: 'https://example.test/mcp' }), [
+		'A name holds letters, digits, dashes and underscores, and starts with a letter or a digit.',
+	]);
 });
 
 test('KEY=VALUE lines become the record they say, and nothing else', () => {

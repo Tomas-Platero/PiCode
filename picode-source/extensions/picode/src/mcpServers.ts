@@ -6,15 +6,16 @@
 /**
  * The MCP servers the owner declares, as the file **pi** reads.
  *
- * PiCode's pi has no MCP of its own: the owner installs `pi-mcp-adapter`, a pi extension that adds
- * it, and that adapter reads `<Pi agent dir>/mcp.json` — which for PiCode is
- * `data/pi-agent/mcp.json`, **inside the product**, never the machine's `~/.config/mcp/mcp.json`.
- * This module is the translation between the row in the settings (`picode.mcp.servers`, a form) and
- * that file, in the shape the adapter documents: a `mcpServers` object whose entries are either a
- * remote server (`type`, `url`) or a local one (`command`, `args`).
+ * pi has had MCP of its own since 0.99: it reads `<agent dir>/mcp.json` — which for PiCode is
+ * `data/pi-agent/mcp.json`, **inside the product**, never the machine's `~/.config/mcp/mcp.json` —
+ * and, for a trusted project, `<project>/.pi/mcp.json`. This module is the translation between the
+ * row in the settings (`picode.mcp.servers`, a form) and that file, in the shape pi documents: a
+ * `mcpServers` object whose entries are either a remote server (`type`, `url`) or a local one
+ * (`command`, `args`).
  *
- * The file may already hold things that are not ours — the adapter keeps its own overrides there,
- * and the owner may have added a server by hand — so the merge keeps every entry it does not own.
+ * The file may already hold things that are not ours — the owner may have added a server by hand,
+ * or an older adapter left its own keys there, which pi ignores — so the merge keeps every entry it
+ * does not own.
  *
  * No `vscode` import: the translation can be exercised by running it.
  */
@@ -28,13 +29,20 @@ export interface McpServerSetting {
 	readonly key: string;
 }
 
-/** One server as the adapter's file declares it. */
+/** One server as pi's file declares it. */
 export type McpServerEntry =
 	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string> }
 	| { readonly command: string; readonly args: readonly string[] };
 
-/** The shape a server name must have — the one the settings row is validated against, and the one an imported name is sanitized into. */
-export const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
+/**
+ * The shape a server name must have — the one the settings row is validated against, and the one an
+ * imported name is sanitized into.
+ *
+ * The dot is deliberately absent: pi's own MCP validates names with `^[A-Za-z0-9_-]+$` and refuses
+ * the rest, so a name this pattern let through with a dot would be written to `mcp.json` and never
+ * connect. The leading letter-or-digit rule is PiCode's, stricter than pi's, and harmless.
+ */
+export const NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
 
 /**
  * The arguments of a local server's command, as the row writes them.
@@ -66,14 +74,14 @@ export function splitArguments(args: string): string[] {
 	return pieces;
 }
 
-/** Whether the row describes a server the adapter could use. */
+/** Whether the row describes a server pi could use. */
 export function isUsableServer(server: McpServerSetting | undefined | null): boolean {
 	return !!server
 		&& typeof server.name === 'string' && NAME_PATTERN.test(server.name.trim())
 		&& typeof server.target === 'string' && server.target.trim().length > 0;
 }
 
-/** One server, in the adapter's shape. */
+/** One server, in the shape pi's `mcp.json` reads. */
 export function mcpServerEntry(server: McpServerSetting): McpServerEntry {
 	const key = typeof server.key === 'string' ? server.key.trim() : '';
 	const headers = key.length === 0 ? undefined : { Authorization: `Bearer ${key}` };
@@ -88,8 +96,8 @@ export function mcpServerEntry(server: McpServerSetting): McpServerEntry {
  *
  * An entry with the same name is replaced — that is what editing the row means — and a name the
  * settings no longer declare is **removed**, because a server deleted from the form has to stop
- * being offered. What is left alone is everything that is not a server of ours: the adapter's own
- * settings, plugin paths, and any entry the owner added by hand in a shape this row cannot express.
+ * being offered. What is left alone is everything that is not a server of ours: keys an older
+ * adapter left behind, and any entry the owner added by hand in a shape this row cannot express.
  */
 export function mcpServersFile(existing: unknown, servers: readonly McpServerSetting[]): Record<string, unknown> {
 	const root = typeof existing === 'object' && existing !== null && !Array.isArray(existing)
