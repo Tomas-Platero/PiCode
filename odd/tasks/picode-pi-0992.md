@@ -77,6 +77,7 @@ prompt, y el dueño no lo ha pedido. Se deja escrito aquí como decisión abiert
 | Lo que escribe el conector es lo que pi lee | `mcpServersText` + `mcpServersTextWithAdded` reales → fichero → `pi mcp list --json` | Los tres servidores (stdio, http con `headers`, y el de Add Server) aceptados con `errors: []` |
 | El conector | `node --test test/*.test.ts` | 164 pasan, 0 fallan |
 | El conector, tipos | `tsc -p extensions/picode/tsconfig.json --noEmit` | 0 |
+| El editor, tipos (los dos ficheros de textos que se tocaron) | `tsc -p src/tsconfig.json --noEmit` | 0 |
 
 ## Registro
 
