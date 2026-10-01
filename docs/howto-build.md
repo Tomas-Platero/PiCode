@@ -118,7 +118,6 @@ Comprobación rápida del `PATH`, desde Git Bash:
 ```bash
 node --version    # debe casar con .nvmrc (24.18.0)
 npm --version
-jq --version
 python3 --version # debe ser 3.11.x
 cargo --version
 7z i 2>&1 | head -1

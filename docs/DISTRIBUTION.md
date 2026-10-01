@@ -48,7 +48,7 @@ the tree itself.
 | 1 | Editor | `picode-source/`, compiled by `dev/build.sh` | the build |
 | 2 | Product delta | `distribution/product-delta.json` → `picode-source/product.json` | `apply-product-delta.mjs`, in phase 1 of the build |
 | 3 | Portable profile | `data/{user-data,extensions,tmp}` | `dev/stage-distribution.sh` |
-| 4 | ~~Agent panel~~ | *retirado el 2026-09-24; la carpeta `extensions/` fue borrada el 2026-09-27 por decisión del dueño — el panel vive como código del núcleo* | — |
+| 4 | ~~Agent panel~~ | *retired 2026-09-24; the `extensions/` folder was deleted on 2026-09-27 by the owner's decision — the panel lives on as core code* | — |
 | 5 | Defaults | `distribution/settings.json` → `data/user-data/User/settings.json` | `dev/stage-distribution.sh`, only when absent |
 | 6 | Agent runtime | a pi per `picode.pi.runtime`; PiCode's own pinned in `distribution/runtime.json` | `dev/pi-runtime.sh` |
 
