@@ -988,8 +988,11 @@ export class AICustomizationManagementEditor extends EditorPane {
 			}));
 		}
 
-		// Container for MCP content
-		if (hasSections.has(AICustomizationManagementSection.McpServers)) {
+		// Container for MCP content. A section with a contribution paints the contributed
+		// widget instead of its built-in one (the container, the list and the detail view are
+		// all skipped together) — otherwise a contribution would add a second list, not
+		// replace the built-in one.
+		if (hasSections.has(AICustomizationManagementSection.McpServers) && !aiCustomizationManagementSectionRegistry.has(AICustomizationManagementSection.McpServers)) {
 			this.mcpContentContainer = DOM.append(contentInner, $('.mcp-content-container'));
 			this.mcpListWidget = this.editorDisposables.add(this.instantiationService.createInstance(McpListWidget));
 			this.mcpListWidget.setCloseCustomizationEditor(async () => {
@@ -2009,7 +2012,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 		if (this.modelsContentContainer) {
 			this.modelsContentContainer.style.display = !isEditorMode && !isMigrationMode && !isDetailMode && isModelsSection ? '' : 'none';
 		}
-		if (this.mcpContentContainer) {
+		if (this.mcpContentContainer && !aiCustomizationManagementSectionRegistry.has(AICustomizationManagementSection.McpServers)) {
 			this.mcpContentContainer.style.display = !isEditorMode && !isMigrationMode && !isDetailMode && isMcpSection ? '' : 'none';
 		}
 		if (this.mcpDetailContainer) {
@@ -2277,7 +2280,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 			this.welcomePage?.focus();
 			return;
 		}
-		if (this.selectedSection === AICustomizationManagementSection.McpServers) {
+		if (this.selectedSection === AICustomizationManagementSection.McpServers && !aiCustomizationManagementSectionRegistry.has(AICustomizationManagementSection.McpServers)) {
 			this.mcpListWidget?.focusSearch();
 		} else if (this.selectedSection === AICustomizationManagementSection.Plugins) {
 			this.pluginListWidget?.focusSearch();

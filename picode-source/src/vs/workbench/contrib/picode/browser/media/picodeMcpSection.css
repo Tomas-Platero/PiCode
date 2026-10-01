@@ -1,0 +1,122 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The MCP Servers section of the Agent Customizations page, as PiCode owns it
+   (picodeMcpSection.ts). The header row above the list and every server row share one
+   grid so the columns line up: Name · Runs · Address or command · State · Actions. */
+
+.picode-mcp-section {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+	padding: 8px 16px 16px;
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.picode-mcp-section-description {
+	margin: 0 0 12px;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-mcp-section-toolbar {
+	margin-bottom: 12px;
+	flex-shrink: 0;
+}
+
+.picode-mcp-table-header,
+.picode-mcp-row {
+	display: grid;
+	grid-template-columns: minmax(100px, 1.5fr) minmax(64px, 0.7fr) minmax(140px, 2fr) minmax(64px, 0.7fr) minmax(230px, auto);
+	gap: 8px;
+	box-sizing: border-box;
+}
+
+.picode-mcp-table-header {
+	flex-shrink: 0;
+	padding: 2px 8px 4px;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+	border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.picode-mcp-table-header .picode-mcp-table-column {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-mcp-rows {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.picode-mcp-row {
+	align-items: center;
+	padding: 6px 8px;
+	border-radius: var(--vscode-cornerRadius-small);
+	min-height: 32px;
+	overflow: hidden;
+}
+
+.picode-mcp-row:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.picode-mcp-row.off .picode-mcp-cell-name,
+.picode-mcp-row.off .picode-mcp-cell-runs,
+.picode-mcp-row.off .picode-mcp-cell-target {
+	opacity: 0.7;
+}
+
+.picode-mcp-cell-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-body1);
+	line-height: 18px;
+}
+
+.picode-mcp-cell-runs,
+.picode-mcp-cell-target {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-mcp-cell-state {
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.picode-mcp-cell-state.disabled {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-mcp-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	justify-content: flex-end;
+	flex-wrap: nowrap;
+}
+
+.picode-mcp-row-actions .monaco-button {
+	min-width: 0;
+	min-height: var(--vscode-spacing-size240);
+	padding: 0 var(--vscode-spacing-size80);
+	font-size: var(--vscode-agents-fontSize-label1);
+	border-radius: var(--vscode-cornerRadius-small);
+}
+
+.picode-mcp-empty-state {
+	margin-top: 24px;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+}

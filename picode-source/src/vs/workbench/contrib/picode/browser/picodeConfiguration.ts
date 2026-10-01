@@ -12,6 +12,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // startup (from the chat and preferences contributions). Keeping the registration inside
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
+import './picodeMcpSection.js';
 
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.
@@ -135,41 +136,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		},
 		// The MCP servers are the **editor's** (its screen, its `mcp.json`, its trust and its
 		// credentials) and the connector gives their tools to pi, through `lm.invokeTool` — one path
-		// to a server, not two. So this row does not configure servers: it decides whether pi gets
-		// them, and it says where they are added, because that is the question anyone reading it
-		// has.
-		[PICODE_MCP_ENABLED_SETTING]: {
-			type: 'boolean',
-			default: true,
-			markdownDescription: localize(
-				'picode.mcp.enabled',
-				"Give pi the tools of your MCP servers. The servers themselves are the editor's — [add one](command:workbench.mcp.addConfiguration), [see them](command:workbench.mcp.listServer) or [edit the configuration](command:workbench.mcp.openUserMcpJson) — and pi calls them through the editor, so its confirmations and permissions apply."
-			),
-		},
-		// MCP **for pi**: the servers are declared here and written into PiCode's own profile
-		// (`data/pi-agent/mcp.json`), which the connector hands to the editor as MCP definitions — the
-		// editor runs them and pi uses their tools through it, one path and one set of credentials. The
-		// editor's own MCP screen is a different thing, for a different agent.
-		[PICODE_MCP_SERVERS_SETTING]: {
-			type: 'array',
-			items: {
-				type: 'object',
-				required: ['name', 'target'],
-				properties: {
-					name: { type: 'string', description: localize('picode.mcp.servers.name', "The name the server is called by (for example vercel).") },
-					transport: { type: 'string', enum: ['http', 'stdio'], enumDescriptions: [localize('picode.mcp.servers.http', "Remote (with an address): the server runs elsewhere and PiCode talks to its address."), localize('picode.mcp.servers.stdio', "Local (with a command): PiCode starts it on this machine.")], description: localize('picode.mcp.servers.transport', "Where the server runs: remote, with an address — or local, with a command.") },
-					target: { type: 'string', description: localize('picode.mcp.servers.target', "The address of a remote server, or the command of a local one.") },
-					args: { type: 'string', description: localize('picode.mcp.servers.args', "Arguments for a local server's command, separated by spaces.") },
-					key: { type: 'string', description: localize('picode.mcp.servers.key', "The server's token, when it needs one. PiCode keeps it in its own profile.") },
-				},
-			},
-			default: [],
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize(
-				'picode.mcp.servers',
-				"The MCP servers **pi** uses. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. You are asked before one of their tools is used. For example Vercel: call it vercel, run it remotely, at the address https://mcp.vercel.com."
-			),
-		},
+		// to a server, not two.
+		//
+		// Neither `picode.mcp.enabled` nor `picode.mcp.servers` is declared here any more: they
+		// are configured on the Agent Customizations page's MCP Servers section now, whose form
+		// is the connector's commands. The keys stay the stores the connector reads and writes
+		// (`PICODE_MCP_ENABLED_SETTING`, `PICODE_MCP_SERVERS_SETTING`), and every reader of them
+		// carries its own default (`enabled` → true, `servers` → an empty list), because the
+		// declaration that used to supply one is gone.
 		[PICODE_CONTEXT_ATTACH_SETTING]: {
 			type: 'boolean',
 			default: true,
