@@ -48,6 +48,7 @@ import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
+import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 
@@ -2060,6 +2061,10 @@ export function activate(context: vscode.ExtensionContext): void {
 		sessionsChanged: () => piSessions.fireChanged(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
+	// The theme step of Set up PiCode lives in the core, so its three questions — list the gallery,
+	// read one theme's colours, install it — travel as commands. Without this registration they do
+	// not exist, and the gallery answers an empty list as if the search had found nothing.
+	context.subscriptions.push(...registerThemeGalleryCommands(context));
 	// The activity-bar status view is a native tree (declared `type: "tree"` in the manifest), so
 	// its rows come from the data command. The command is registered before the view, because the
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
