@@ -763,6 +763,21 @@ function piCliEntry(): string {
 	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 }
 
+/**
+ * The sentence a package action gives back when the profile in force is not PiCode's to write.
+ *
+ * With PiCode's own pi every write belongs here. With the machine's it never does: that pi and its
+ * packages are the owner's, the setting that selects it says PiCode "uses it and never changes it",
+ * and the whole product is built around writing inside its own profile only. The page keeps listing
+ * them — reading is what the external mode is for — so what stops is the actions, not the list.
+ */
+function externalProfileRefusal(): string | undefined {
+	if (readRuntimeMode() !== 'external') {
+		return undefined;
+	}
+	return 'Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.';
+}
+
 /** How long a sign-in may wait for the browser: pi's own default, with room for the round trip. */
 const MCP_LOGIN_TIMEOUT_MS = 330_000;
 
@@ -1059,6 +1074,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_SEARCH_COMMAND, async (query?: string) =>
 		searchPackages(typeof query === 'string' ? query : '', { log: report })));
 	disposables.push(vscode.commands.registerCommand(PACKAGES_INSTALL_COMMAND, async (target?: string) => {
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
+		}
 		const cliEntry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 		if (!fs.existsSync(cliEntry)) {
 			return { ok: false, message: 'pi runtime not found in this editor' };
@@ -1073,6 +1092,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
 			return { ok: false, message: 'No package source was given.' };
+		}
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
 		}
 		const result = disablePackageSource(target, {
 			profileDir: profileInForce(),
@@ -1092,6 +1115,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
 			return { ok: false, message: 'No package source was given.' };
+		}
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
 		}
 		const profileDir = profileInForce();
 		const result = enablePackageSource(target, {
@@ -1122,6 +1149,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
 			return { ok: false, message: 'No package source was given.' };
+		}
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
