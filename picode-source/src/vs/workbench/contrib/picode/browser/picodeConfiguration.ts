@@ -79,7 +79,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 					},
 					key: {
 						type: 'string',
-						description: localize('picode.providers.key', "The key itself, or `$NAME` to take it from an environment variable instead of writing it here. Leave it empty when the endpoint needs none."),
+						description: localize('picode.providers.key', "The provider's key. Leave it empty when the endpoint needs none. To keep the key out of your settings, write `$NAME` instead — pi then reads it from an environment variable called NAME when it runs."),
 					},
 				},
 			},
@@ -157,7 +157,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				required: ['name', 'target'],
 				properties: {
 					name: { type: 'string', description: localize('picode.mcp.servers.name', "The name the server is called by (for example vercel).") },
-					transport: { type: 'string', enum: ['http', 'stdio'], enumDescriptions: [localize('picode.mcp.servers.http', "Remote: the server runs elsewhere and PiCode talks to its address."), localize('picode.mcp.servers.stdio', "Local: PiCode starts the command.")], description: localize('picode.mcp.servers.transport', "Where the server runs.") },
+					transport: { type: 'string', enum: ['http', 'stdio'], enumDescriptions: [localize('picode.mcp.servers.http', "Remote (with an address): the server runs elsewhere and PiCode talks to its address."), localize('picode.mcp.servers.stdio', "Local (with a command): PiCode starts it on this machine.")], description: localize('picode.mcp.servers.transport', "Where the server runs: remote, with an address — or local, with a command.") },
 					target: { type: 'string', description: localize('picode.mcp.servers.target', "The address of a remote server, or the command of a local one.") },
 					args: { type: 'string', description: localize('picode.mcp.servers.args', "Arguments for a local server's command, separated by spaces.") },
 					key: { type: 'string', description: localize('picode.mcp.servers.key', "The server's token, when it needs one. PiCode keeps it in its own profile.") },
@@ -167,7 +167,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize(
 				'picode.mcp.servers',
-				"The MCP servers **pi** uses. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. You are asked before one of their tools is used. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
+				"The MCP servers **pi** uses. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. You are asked before one of their tools is used. For example Vercel: call it vercel, run it remotely, at the address https://mcp.vercel.com."
 			),
 		},
 		[PICODE_CONTEXT_ATTACH_SETTING]: {

@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../../nls.js';
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
-import { PiCodeAccountProvider, PICODE_AUTH_PROVIDER_ID } from './picodeAccountProvider.js';
+import { PiCodeAccountProvider, PICODE_ACCOUNT_LABEL, PICODE_AUTH_PROVIDER_ID } from './picodeAccountProvider.js';
 
 /**
  * Registers PiCode's first-party account provider with the authentication service, so it
@@ -36,7 +35,8 @@ export class PiCodeAccountContribution extends Disposable implements IWorkbenchC
 
 		authenticationService.registerDeclaredAuthenticationProvider({
 			id: PICODE_AUTH_PROVIDER_ID,
-			label: localize('picode.account.label', "PiCode Account"),
+			// The label lives with the provider, so both declarations read the same words.
+			label: PICODE_ACCOUNT_LABEL,
 		});
 		const provider = this._register(instantiationService.createInstance(PiCodeAccountProvider, picode));
 		authenticationService.registerAuthenticationProvider(PICODE_AUTH_PROVIDER_ID, provider);

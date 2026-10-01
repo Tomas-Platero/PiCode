@@ -7,6 +7,8 @@ import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
+import { toAction } from '../../../../base/common/actions.js';
+import { createErrorWithActions } from '../../../../base/common/errorMessage.js';
 import { IRequestContext } from '../../../../base/parts/request/common/request.js';
 import { URI } from '../../../../base/common/uri.js';
 import { decodeBase64 } from '../../../../base/common/buffer.js';
@@ -35,6 +37,12 @@ import { AuthenticationSession, AuthenticationSessionAccount, AuthenticationSess
 
 /** The authentication provider id. Also the key used in `product.json` under `configurationSync.store.authenticationProviders`. */
 export const PICODE_AUTH_PROVIDER_ID = 'picode';
+
+/** The provider's label, declared once here and reused by the contribution that registers it. */
+export const PICODE_ACCOUNT_LABEL = localize('picode.account.label', "PiCode Account");
+
+/** Where the plans and their prices are described. */
+const PICODE_PRICING_URL = 'https://www.getpicode.app/pricing';
 
 /** Secret storage key for the refresh token of the editor's own Firebase session. */
 const PICODE_REFRESH_TOKEN_SECRET_KEY = 'picode.account.refreshToken';
@@ -78,7 +86,7 @@ interface FirebaseTokenResponse {
 export class PiCodeAccountProvider extends Disposable implements IAuthenticationProvider {
 
 	readonly id = PICODE_AUTH_PROVIDER_ID;
-	readonly label = localize('picode.account.label', "PiCode Account");
+	readonly label = PICODE_ACCOUNT_LABEL;
 	readonly supportsMultipleAccounts = false;
 
 	private readonly _onDidChangeSessions = this._register(new Emitter<AuthenticationSessionsChangeEvent>());
@@ -119,7 +127,15 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		//    Nothing is minted or persisted before this check passes, so a Free sign-in
 		//    leaves no refresh token, account data or cached ID token behind.
 		if (exchange.plan !== 'pro') {
-			throw new Error(localize('picode.account.proRequired', "PiCode Sync requires a Pro account. You can upgrade at https://www.getpicode.app/pricing"));
+			// The URL never shows up as text: wherever this failure is surfaced as a notification,
+			// it carries the button that opens the plans page instead.
+			throw createErrorWithActions(localize('picode.account.proRequired', "PiCode Sync requires a Pro account."), [
+				toAction({
+					id: 'picode.account.upgrade',
+					label: localize('picode.account.upgrade', "See plans"),
+					run: () => { this._openerService.open(URI.parse(PICODE_PRICING_URL), { openExternal: true }); },
+				}),
+			]);
 		}
 
 		// 4. Mint the editor's own session: a custom token is exchanged at the identitytoolkit
@@ -333,7 +349,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 	}
 
 	private async _exchangeOneTimeCode(code: string): Promise<{ customToken: string; plan: 'free' | 'pro' }> {
-		const response = await this._postJson<{ customToken?: string; plan?: string }>(`${this._config.webOrigin}/api/auth/editor-exchange`, { code }, 'exchanging the sign-in code');
+		const response = await this._postJson<{ customToken?: string; plan?: string }>(`${this._config.webOrigin}/api/auth/editor-exchange`, { code }, 'finishing the sign-in');
 		if (response.statusCode !== 200 || !response.json?.customToken) {
 			// The most common failure is a code that expired or was already used.
 			throw new Error(localize('picode.account.codeExchangeFailed', "Sign-in could not be completed. The sign-in request may have expired or was already used — please try signing in again."));
@@ -360,7 +376,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		return this._postJson<CustomTokenExchangeResponse>(
 			`${FIREBASE_CUSTOM_TOKEN_ENDPOINT}?key=${this._config.firebaseApiKey}`,
 			{ token: customToken, returnSecureToken: true },
-			'creating your session',
+			'setting up your account',
 		);
 	}
 
