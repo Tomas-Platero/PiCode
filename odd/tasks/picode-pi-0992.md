@@ -193,6 +193,12 @@ del runtime del pack, con perfiles temporales):
   el fichero (`normalizedServersFile`), sin tocar nada más. El `mcp.json` del pack quedó reparado
   (4 claves fuera; copia previa en `.scratch/mcp-json-before-normalize.json`) y verificado
   **10/10** con el validador real de pi. 167 tests, tipos 0.
+- 2026-10-01 · **arreglo del chat entregado y construido**: `8326328c`. Build por `dev/build-run.sh`,
+  exit 0, `profile restored: 71028 files`. Verificado **dentro del pack**, no en el fuente:
+  `agent.js` compilado lleva `PI_CODING_AGENT_DIR`, `bindExtensions` y las tres built-in
+  (`createMcpExtension`, `createCodemodeExtension`, `createToolSearchExtension`); pi **0.99.2**;
+  el perfil con **19 paquetes** (sin `pi-mcp-adapter`) y sus **10/10** servidores aceptados por el
+  validador de pi.
 - 2026-10-01 · **build**: dos construcciones verificadas sobre el árbol. La primera con
   `dev/build.sh` (dejó el pack sin perfil; se restauró a mano) y la segunda con
   `dev/build-run.sh`, que guarda y devuelve el perfil solo: `profile restored: 71028 files`,
