@@ -366,7 +366,7 @@ async function editMcpServerCommand(profile: string, name?: string): Promise<voi
 	}
 	const file = locateMcpServerFile(profile, picked);
 	if (file === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in pi's mcp.json.`);
+		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
 		return;
 	}
 	await editMcpServer(file, picked);
@@ -444,7 +444,7 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 	// still there to be edited. Rewriting from a stale read would resurrect a removed entry.
 	const text = mcpServersTextWithEdited(readJsonFile(file) ?? {}, name, entry);
 	if (text === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${name}" was found in ${file}.`);
+		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${name}" any more.`);
 		return;
 	}
 	fs.writeFileSync(file, text, { mode: 0o600 });
@@ -459,18 +459,21 @@ async function removeMcpServerCommand(profile: string, name?: string): Promise<v
 	}
 	const file = locateMcpServerFile(profile, picked);
 	if (file === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in pi's mcp.json.`);
+		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
 		return;
 	}
 
-	const confirmed = await vscode.window.showWarningMessage(`Remove the MCP server "${picked}" from pi? Its entry is removed from ${path.basename(path.dirname(file)) === '.pi' ? file : file}.`, { modal: true }, 'Remove');
+	// Where the entry lives, in the words of the person reading the question: the path is PiCode's own
+	// business, and the scope is what decides whether removing it affects this project or everything.
+	const declaredIn = path.basename(path.dirname(file)) === '.pi' ? 'this project' : 'your profile';
+	const confirmed = await vscode.window.showWarningMessage(`Remove the MCP server "${picked}" from pi? It is declared in ${declaredIn}.`, { modal: true }, 'Remove');
 	if (confirmed !== 'Remove') {
 		return;
 	}
 
 	const text = mcpServersTextWithRemoved(readJsonFile(file) ?? {}, picked);
 	if (text === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: no MCP server named "${picked}" was found in ${file}.`);
+		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
 		return;
 	}
 	fs.writeFileSync(file, text, { mode: 0o600 });
@@ -486,7 +489,7 @@ async function pickPiMcpServerName(profile: string, subject: string): Promise<st
 		}
 	}
 	if (names.size === 0) {
-		void vscode.window.showInformationMessage('pi has no MCP servers to edit.');
+		void vscode.window.showInformationMessage('there are no MCP servers to edit.');
 		return undefined;
 	}
 	return vscode.window.showQuickPick([...names], { placeHolder: subject });
@@ -978,7 +981,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi is missing from this installation' };
+			return { ok: false, message: 'pi is missing from this installation.' };
 		}
 		return installPackage(typeof target === 'string' ? target : '', { cliEntry, profileDir: profileInForce() });
 	}));
@@ -1030,7 +1033,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		if (!installed.some(file => fs.existsSync(file))) {
 			const cliEntry = piCliEntry();
 			if (!fs.existsSync(cliEntry)) {
-				return { ok: false, message: 'pi is missing from this installation' };
+				return { ok: false, message: 'pi is missing from this installation.' };
 			}
 			const reinstall = await installPackage(target, { cliEntry, profileDir });
 			if (!reinstall.ok) {
@@ -1054,7 +1057,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi is missing from this installation' };
+			return { ok: false, message: 'pi is missing from this installation.' };
 		}
 		const result = await removePackage(target, { cliEntry, profileDir: profileInForce() });
 		if (result.ok) {
@@ -1691,11 +1694,11 @@ async function openSubagentTranscript(taskId?: string): Promise<void> {
 					description: record?.endedAt === undefined ? undefined : relativeTime(record.endedAt, now),
 				}));
 			if (picks.length === 0) {
-				void vscode.window.showInformationMessage('PiCode: no subagent transcripts yet. They appear after gentle launches a subagent.');
+				void vscode.window.showInformationMessage('PiCode: no subagent activity yet. It appears when Gentle AI runs one.');
 				return;
 			}
 			const picked = await vscode.window.showQuickPick(picks, {
-				placeHolder: 'Which subagent transcript do you want to open?',
+				placeHolder: 'Which subagent do you want to look at?',
 			});
 			if (picked === undefined) {
 				return;
@@ -1705,7 +1708,7 @@ async function openSubagentTranscript(taskId?: string): Promise<void> {
 
 		const sessionPath = readTaskTranscriptPath(chosen, home);
 		if (sessionPath === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: no transcript was recorded for subagent ${chosen}.`);
+			void vscode.window.showInformationMessage(`PiCode: no activity was recorded for that subagent.`);
 			return;
 		}
 		let text: string | undefined;
@@ -1715,7 +1718,7 @@ async function openSubagentTranscript(taskId?: string): Promise<void> {
 			text = undefined;
 		}
 		if (text === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: the subagent's session file could not be read (${sessionPath}).`);
+			void vscode.window.showInformationMessage(`PiCode: that subagent's activity could not be read.`);
 			return;
 		}
 		const document = await vscode.workspace.openTextDocument({
@@ -1725,7 +1728,7 @@ async function openSubagentTranscript(taskId?: string): Promise<void> {
 		await vscode.window.showTextDocument(document, { preview: true });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		void vscode.window.showErrorMessage(`PiCode: the subagent transcript could not be opened (${message}).`);
+		void vscode.window.showErrorMessage(`PiCode: that subagent's activity could not be opened (${message}).`);
 	}
 }
 

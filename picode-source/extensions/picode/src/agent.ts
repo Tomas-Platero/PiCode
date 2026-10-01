@@ -486,7 +486,11 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 			if (event.type === 'message_end') {
 				const message = event.message;
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
-					stream.markdown(`\n\n> PiCode: ${message.errorMessage}\n`);
+					// What happened first, then pi's own sentence — except for the one failure whose advice only works
+					// in a terminal, which is answered with the settings where a provider is added.
+					stream.markdown(needsProvider(message.errorMessage)
+						? '\n\n> PiCode: this model has no provider connected. [Open the provider settings](command:workbench.action.openSettings?%5B%22picode.providers%22%5D) to add one.\n'
+						: `\n\n> PiCode: the answer could not be finished — ${message.errorMessage}\n`);
 				}
 				return;
 			}
@@ -623,6 +627,17 @@ function pinAgentDir(agentDir: string | undefined): void {
 		return;
 	}
 	process.env.PI_CODING_AGENT_DIR = agentDir;
+}
+
+/**
+ * Whether pi's failure is "this model has no provider", told from pi's own words.
+ *
+ * The match is deliberately narrow. pi says `No API key found for the selected model.` and then points
+ * at its terminal's `/login`, which the editor does not have — so that one case gets the door where a
+ * provider is actually connected, and everything else keeps pi's sentence, framed for a chat.
+ */
+function needsProvider(errorMessage: string): boolean {
+	return /no api key|invalid api key|missing api key|api key not found/i.test(errorMessage);
 }
 
 /**
@@ -926,7 +941,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);
-			stream.markdown(`\n\n> PiCode: ${message}\n`);
+			stream.markdown(`\n\n> PiCode: the turn could not finish — ${message}\n`);
 		}
 		return {};
 	};

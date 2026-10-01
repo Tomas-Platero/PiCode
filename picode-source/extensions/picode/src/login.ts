@@ -125,8 +125,13 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 	}
 	const loaded = await loadPiSdk<PiLoginSdk>(sdkEntryCandidates(deps.distributionRoot));
 	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
-		const why = 'problem' in loaded ? loaded.problem : 'the pi that loaded has no session services';
-		void vscode.window.showErrorMessage(`PiCode: no subscription can be connected from here — ${why}.`);
+		// What went wrong technically (a pi that could not be loaded, a missing method) is the log's business;
+		// the owner gets the sentence about what they can do, and the door that does it.
+		void vscode.window.showErrorMessage('PiCode: no subscription can be connected from here.', 'Set up PiCode').then(choice => {
+			if (choice !== undefined) {
+				void vscode.commands.executeCommand('picode.setup');
+			}
+		});
 		return;
 	}
 	const sdk = loaded.sdk;
