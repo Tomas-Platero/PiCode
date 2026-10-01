@@ -978,7 +978,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi runtime not found in this editor' };
+			return { ok: false, message: 'pi is missing from this installation' };
 		}
 		return installPackage(typeof target === 'string' ? target : '', { cliEntry, profileDir: profileInForce() });
 	}));
@@ -1030,7 +1030,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		if (!installed.some(file => fs.existsSync(file))) {
 			const cliEntry = piCliEntry();
 			if (!fs.existsSync(cliEntry)) {
-				return { ok: false, message: 'pi runtime not found in this editor' };
+				return { ok: false, message: 'pi is missing from this installation' };
 			}
 			const reinstall = await installPackage(target, { cliEntry, profileDir });
 			if (!reinstall.ok) {
@@ -1054,7 +1054,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi runtime not found in this editor' };
+			return { ok: false, message: 'pi is missing from this installation' };
 		}
 		const result = await removePackage(target, { cliEntry, profileDir: profileInForce() });
 		if (result.ok) {
@@ -1122,10 +1122,10 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// The editor's own list follows: an entry that is off stops being offered as a server, so the
 			// page re-reads and the panel's rows move by one.
 			fire();
-			void vscode.window.showInformationMessage(`PiCode: "${server}" is ${toggled.on ? 'on' : 'off'}.`);
+			void vscode.window.showInformationMessage(`PiCode: "${server}" is now ${toggled.on ? 'on' : 'off'}.`);
 			return;
 		}
-		void vscode.window.showErrorMessage(`PiCode: no MCP entry named "${server}" was found to switch.`);
+		void vscode.window.showErrorMessage(`PiCode: "${server}" is not one of pi's servers any more.`);
 	}));
 
 	return disposables;
@@ -1895,7 +1895,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			void vscode.window.showInformationMessage('PiCode could not be updated: the pi CLI is missing from this installation.');
+			void vscode.window.showInformationMessage('PiCode could not be updated: pi is missing from this installation.');
 			return;
 		}
 		// The chat runs pi in this very process: its session must be gone before the files under

@@ -122,7 +122,7 @@
 				"picode.updates.check": {
 								"type": "boolean",
 								"default": true,
-								"description": "Periodically check for pi, Gentle AI and package updates (30 seconds after startup, then every six hours), and offer to install them from a notification and the status bar."
+								"description": "Check for updates in the background and offer to install them when there are any."
 				}
 			}
 		},

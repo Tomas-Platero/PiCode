@@ -224,7 +224,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		});
 
 		const piRows: StatusItem[] = [
-			new StatusItem('Runtime', { description: d.runtime === 'external' ? 'Your own pi' : "PiCode's own pi", icon: new vscode.ThemeIcon('circuit-board') }),
+			new StatusItem('Which pi', { description: d.runtime === 'external' ? 'Your own pi' : "PiCode's own pi", icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
 			// The servers live in pi's own profile, which is where this counts them — not the project's
@@ -243,7 +243,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			piRows.push(new StatusItem('Model', { description: model, icon: new vscode.ThemeIcon('chip') }));
 		}
 		if (d.thinkingLevel !== undefined) {
-			piRows.push(new StatusItem('Effort', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
+			piRows.push(new StatusItem('Thinking', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
 		}
 		out.push(new StatusItem('pi', { children: piRows, icon: mark('picode-light.svg', 'picode.svg') }));
 
@@ -311,7 +311,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		], icon: new vscode.ThemeIcon('root-folder') }));
 
 		if (d.error !== undefined) {
-			out.push(new StatusItem('Status error: ' + d.error));
+			out.push(new StatusItem('The status could not be read', { description: d.error }));
 		}
 		return out;
 	}
