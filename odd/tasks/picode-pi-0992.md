@@ -84,6 +84,12 @@ no se cambia de paso.
    chat no hay quien lo lea: la built-in de pi no se carga (`builtInExtensions` las añade
    solo `main.js`, el entry del CLI) y, aunque se cargara, no conectaría nada sin
    `session_start`. El `pi-mcp-adapter` que se instalaba tampoco, porque lee otro fichero.
+4. **El `mcp.json` del perfil está en formato viejo del adaptador.** De los 10 servidores
+   declarados, pi 0.99.2 acepta 7 y rechaza 3 (`atlassian-rovo-mcp` y `sentry` por
+   `auth: "oauth"`; `github` por `auth: false` / `oauth: false`). No molesta hoy —nadie lee
+   ese fichero en el chat— pero hay que migrarlo antes de activar el MCP propio de pi. La
+   migración es quitar las claves del adaptador (`auth`, `oauth`, `lifecycle`, `directTools`)
+   y dejar que pi use OAuth por defecto; **es dato del dueño y no se toca sin decirlo**.
 
 **Arreglo recomendado (una decisión, no un parche)**: definir `PI_CODING_AGENT_DIR` con el
 perfil interno al construir la sesión; llamar a `session.bindExtensions(...)` para que
@@ -126,13 +132,17 @@ del runtime del pack, con perfiles temporales):
 | El chat no carga las built-in de pi | `createAgentSessionServices` con un perfil **sin** paquetes | 0 extensiones cargadas |
 | El chat no emite `session_start` | La built-in de MCP de pi (`createMcpExtension()`) en `extensionFactories` + sesión creada | La extensión carga (`<inline:picode-mcp>`) y su lista de herramientas queda **vacía** |
 | El adaptador resuelve el perfil externo | `pi-mcp-adapter` declarado en el perfil temporal que se pasa como `agentDir`, con `marker` en su `mcp-adapter.json` | Registró `mcp__firebase` (del `~/.pi/agent` real) y **nunca** `marker` |
+| El fichero que declara la fila usa formato viejo | `validateMcpServerConfig` de pi 0.99.2 (importado por ruta, sin conectar a ningún servidor) sobre el `mcp.json` real del perfil | 7 de 10 aceptados; **3 rechazados**: `atlassian-rovo-mcp` y `sentry` por `auth: "oauth"` (`auth.provider must be a provider name`) y `github` por `auth: false` / `oauth: false` (`oauth must be an object`) — claves del adaptador viejo |
 
 ## Registro
 
-- 2026-10-01 · medido, decidido y ejecutado en la misma sesión. Commits de trabajo:
-  `89f4c227` (pin), `3b66ca1c` (MCP) y los de documentación. Los restos sin versionar que
-  había en el árbol (`theme-catalog.ts`, `gettingStarted.*`, `picodeSetup.ts`,
-  `picode-cloud-sync.md`) son de la sesión anterior y **no** se tocaron.
+- 2026-10-01 · **build**: dos construcciones verificadas sobre el árbol. La primera con
+  `dev/build.sh` (dejó el pack sin perfil; se restauró a mano) y la segunda con
+  `dev/build-run.sh`, que guarda y devuelve el perfil solo: `profile restored: 71028 files`,
+  `build.status` 0. Medido en el pack: pi **0.99.2**, connector compilado sin la instalación
+  del adaptador y con el patrón sin punto, y la descripción corregida dentro de la tabla de
+  mensajes del editor (`out/nls.messages.json`). Perfil intacto: 20 paquetes, modelo y tema
+  del dueño, y el adaptador aún declarado (no se desinstala nada).
 - 2026-10-01 · **corrección de un error propio**: la primera versión de este documento (y el
   informe al dueño) afirmaba que, desde pi 0.99, «pi lee `mcp.json` por sí mismo» y que por
   eso los servidores seguían funcionando sin el adaptador. Cierto para el pi de la
