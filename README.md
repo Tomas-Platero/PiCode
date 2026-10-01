@@ -23,7 +23,7 @@
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
-| [Download a release](https://github.com/TomasPlatero/PiCode/releases) · unzip · run `PiCode.exe` · [getpicode.app](https://www.getpicode.app) | [Source build guide](#building-from-source) · [Contributing docs](CONTRIBUTING.md) · [How to compile](docs/howto-build.md) |
+| [Download a release](https://github.com/Tomas-Platero/PiCode/releases) · unzip · run `PiCode.exe` · [getpicode.app](https://www.getpicode.app) | [Source build guide](#building-from-source) · [Contributing docs](CONTRIBUTING.md) · [How to compile](docs/howto-build.md) |
 
 <br />
 
@@ -51,7 +51,7 @@ The free plan covers the essentials. **Pro** raises the ceiling for heavy use �
 
 ## Download
 
-Grab the latest release from [GitHub Releases](https://github.com/TomasPlatero/PiCode/releases), unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
+Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases), unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
 
 ## Building from source
 
