@@ -15,6 +15,7 @@ import { editorBackground, editorForeground } from '../../../../platform/theme/c
 import { editorLineNumbers } from '../../../../editor/common/core/editorColorRegistry.js';
 import { Color } from '../../../../base/common/color.js';
 import { IWorkbenchColorTheme, IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
+import { IUserDataSyncService, SyncStatus } from '../../../../platform/userDataSync/common/userDataSync.js';
 import { ColorThemeData } from '../../../services/themes/common/colorThemeData.js';
 
 /**
@@ -173,6 +174,7 @@ export interface PiCodeSetupServices {
 	readonly commandService: ICommandService;
 	readonly themeService: IWorkbenchThemeService;
 	readonly extensionResourceLoaderService: IExtensionResourceLoaderService;
+	readonly userDataSyncService: IUserDataSyncService;
 }
 
 /** How many theme cards render before the "Show more" button offers the next page. */
@@ -543,6 +545,16 @@ export class PiCodeSetup extends Disposable {
 				...(status.avatar !== undefined ? [$('img.picode-login-avatar', { 'src': status.avatar, 'alt': '' })] : []),
 				$('span.picode-login-state', {}, localize('picodeSetup.login.signedInAs', "Signed in as {0}", status.label ?? '')),
 			));
+			// The sync status, live from the sync service — the step says what the cloud is doing.
+			const syncLine = $('.picode-sync-status', {},
+				localize('picodeSetup.login.syncing', "Syncing your settings…"));
+			const paintSync = (): void => {
+				syncLine.textContent = this.services.userDataSyncService.status === SyncStatus.Syncing
+					? localize('picodeSetup.login.syncing', "Syncing your settings…")
+					: localize('picodeSetup.login.synced', "Everything is in sync");
+			};
+			paintSync();
+			this.disposables.add(this.services.userDataSyncService.onDidChangeStatus(paintSync));
 			return;
 		}
 		reset(area, $('.picode-login-signed-out', {},
@@ -1364,7 +1376,10 @@ export class PiCodeSetup extends Disposable {
 
 		const applyTheme = async (theme: IWorkbenchColorTheme, persist: boolean): Promise<void> => {
 			try {
-				await this.services.themeService.setColorTheme(theme.settingsId, persist ? undefined : 'preview');
+				// `auto` is the target VS Code's own theme picker persists with, and `undefined` is what
+				// it uses to **revert** a preview — which is why clicking a theme used to apply it and
+				// keep nothing.
+				await this.services.themeService.setColorTheme(theme.settingsId, persist ? 'auto' : 'preview');
 			} catch (error) {
 				// A failed apply is said on the card, never swallowed — the user would
 				// otherwise click a theme and see nothing happen at all.

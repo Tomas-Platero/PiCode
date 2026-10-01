@@ -547,9 +547,19 @@ export async function searchThemes(options: SearchThemesOptions = {}): Promise<T
   const answer = await requestJson(url, { fetchLike, ...(options.signal === undefined ? {} : { signal: options.signal }) });
   const rows = (isRecord(answer) && Array.isArray(answer.extensions) ? answer.extensions : [])
     .map(searchRow)
-    .filter((row): row is SearchRow => row !== undefined && row.manifestUrl !== undefined);
+    .filter((row): row is SearchRow => row !== undefined && row.downloadUrl !== undefined);
+  // Open VSX search rows omit files.manifest — derive it from the download URL:
+  // the manifest is the package.json packaged next to the VSIX, served at
+  // `.../file/package.json` (it 302s to the versioned file; fetch follows).
+  for (const row of rows) {
+    if (row.manifestUrl === undefined && row.downloadUrl !== undefined) {
+      row.manifestUrl = row.downloadUrl.replace(/\/file\/[^/]+\.vsix$/, "/file/package.json");
+    }
+  }
+  const withManifest = rows.filter((row): row is SearchRow =>
+    row.manifestUrl !== undefined && row.downloadUrl !== undefined);
 
-  const manifests = await mapWithLimit(rows, options.concurrency ?? DEFAULT_CONCURRENCY, async (row) => {
+  const manifests = await mapWithLimit(withManifest, options.concurrency ?? DEFAULT_CONCURRENCY, async (row) => {
     try {
       const manifest = await requestJson(row.manifestUrl as string, {
         fetchLike,

@@ -31,6 +31,7 @@ import { IMarkdownRendererService } from '../../../../platform/markdown/browser/
 import { localize } from '../../../../nls.js';
 import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IUserDataSyncService } from '../../../../platform/userDataSync/common/userDataSync.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
@@ -206,6 +207,7 @@ export class GettingStartedPage extends EditorPane {
 	constructor(
 		group: IEditorGroup,
 		@ICommandService private readonly commandService: ICommandService,
+	@IUserDataSyncService private readonly userDataSyncService: IUserDataSyncService,
 		@IProductService private readonly productService: IProductService,
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@IWalkthroughsService private readonly gettingStartedService: IWalkthroughsService,
@@ -1014,6 +1016,7 @@ export class GettingStartedPage extends EditorPane {
 		this.setupRenderer?.dispose();
 		this.setupRenderer = this._register(renderPiCodeSetup(this.setupContainer, {
 			commandService: this.commandService,
+			userDataSyncService: this.userDataSyncService,
 			themeService: this.themeService,
 			extensionResourceLoaderService: this.extensionResourceLoaderService,
 		}));

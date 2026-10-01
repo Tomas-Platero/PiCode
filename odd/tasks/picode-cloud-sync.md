@@ -312,3 +312,10 @@ Cloud Functions descartadas por requerir plan Blaze).
   "Your last week of AI conversations, always with you". La barra de uso de /account lee de
   plans.ts (se corrigió sola). Paridad total web ↔ API ↔ editor en la cuota. Bonus: fix de un
   import de releaseUrl dropeado en su refactor. Lado web cerrado.
+* **2026-09-30 (CAUSA RAÍZ de la galería vacía + fix)** — Diagnóstico con la API real de Open
+  VSX: la respuesta de búsqueda NO incluye files.manifest en NINGUNA candidatura (0/48) y el
+  conector descartaba toda fila sin manifestUrl → la galería se pintaba vacía ("no funciona
+  para nada"). FIX: derivar manifestUrl del download URL (…/file/{vsix} → …/file/package.json,
+  el manifest servido por Open VSX con 302 que fetch sigue). Verificación replicada con la
+  lógica exacta del conector: 48/48 candidaturas con manifest → **36 temas de color reales**
+  (One Dark Pro, Catppuccin, Dracula, GitHub Theme…). Reconstrucción de la app en marcha.
