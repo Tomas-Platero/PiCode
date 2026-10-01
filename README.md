@@ -8,7 +8,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
 [![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fdistribution%2Fproduct-delta.json&query=%24.set.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./odd/tasks/picode-versionado.md)
 [![Status: beta](https://img.shields.io/badge/status-beta-FFB000?style=flat-square)](./CHANGELOG.md)
-[![Built on VS Code](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fupstream%2Fstable.json&query=%24.tag&label=VS%20Code&color=1E1E1E&style=flat-square)](./upstream/stable.json)
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square&logo=windows&logoColor=3B9BFF)](#download)
 [![Website](https://img.shields.io/badge/website-getpicode.app-3B9BFF?style=flat-square)](https://www.getpicode.app)
@@ -69,9 +68,13 @@ Create a free account and PiCode keeps your editor the same everywhere:
 
 The free plan syncs a small allowance — enough for your settings and extensions — and **Pro** is what covers the heavy things: your whole pi profile, its sessions and the Gentle AI setup. See [plans](https://www.getpicode.app/pricing).
 
+<a id="download"></a>
+
 ## ⬇️ Download
 
 Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases), unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
+
+<a id="building-from-source"></a>
 
 ## 🛠️ Building from source
 
