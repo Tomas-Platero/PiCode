@@ -195,7 +195,9 @@ function mcpServersFile(profile: string): string {
  * providers use: what the owner fills in the form becomes what pi reads. The write is skipped when
  * the file already says exactly this, because activation and every settings change call it.
  *
- * No package has to be installed for it to work: pi has read this file by itself since 0.99.
+ * Nothing is installed beside it: this is the file pi's own MCP reads, by name and shape. Whether
+ * the editor's chat sessions reach it is a separate question, recorded in
+ * `odd/tasks/picode-pi-0992.md`.
  */
 function writeMcpServers(profile: string, servers: readonly McpServerSetting[]): void {
 	const file = mcpServersFile(profile);
@@ -226,7 +228,7 @@ function declaredMcpServers(): McpServerSetting[] {	const configured = vscode.wo
 	return Array.isArray(configured) ? configured : [];
 }
 
-/** Writes the servers pi reads. Nothing is installed: pi's own MCP owns the file, and reads it. */
+/** Writes the servers pi reads. Nothing is installed beside it: the file is pi's own. */
 function applyMcpServers(profile: string): void {
 	writeMcpServers(profile, declaredMcpServers());
 }
@@ -930,7 +932,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// the rules live in `packages-registry.ts` and its failures are said here, once per session,
 	// the way the package listing's are. The install resolves the editor-only parts first: the
 	// bundled pi CLI (a missing one is a sentence, not an error) and the profile in force, which
-	// is the directory pi installs into — the same resolution `ensureMcpAdapter` makes.
+	// is the directory pi installs into.
 	disposables.push(vscode.commands.registerCommand(PACKAGES_SEARCH_COMMAND, async (query?: string) =>
 		searchPackages(typeof query === 'string' ? query : '', { log: report })));
 	disposables.push(vscode.commands.registerCommand(PACKAGES_INSTALL_COMMAND, async (target?: string) => {

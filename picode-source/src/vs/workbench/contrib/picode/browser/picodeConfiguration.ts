@@ -166,7 +166,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize(
 				'picode.mcp.servers',
-				"The MCP servers **pi** runs. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. They are written into pi's own profile, which pi reads by itself. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
+				"The MCP servers **pi** runs. Each row is one server: its name, where it runs, its address or command, and a token when it needs one. They are written into pi's own profile, at `data/pi-agent/mcp.json`. For example Vercel: name `vercel`, remote, `https://mcp.vercel.com`."
 			),
 		},
 		[PICODE_CONTEXT_ATTACH_SETTING]: {

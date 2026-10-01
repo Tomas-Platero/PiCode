@@ -773,6 +773,14 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const profileChanged = sessionAgentDir !== agentDir;
 			if (session === undefined || folderChanged || toolsChanged || profileChanged) {
 				session?.dispose();
+				// Two limits of building a session this way are known and measured, not assumed; both are
+				// recorded in `odd/tasks/picode-pi-0992.md` with the probe that showed them:
+				//   * `agentDir` is a parameter of this call, not `PI_CODING_AGENT_DIR`, so an extension that
+				//     resolves the agent directory itself (`getAgentDir()`) reads the machine's `~/.pi/agent`
+				//     instead of PiCode's profile — the adapter's servers came from there.
+				//   * nothing here emits `session_start`, which only `session.bindExtensions(...)` does, so
+				//     extension work bound to that event — pi's own built-in MCP among it — never runs.
+				// Both are changes to how every extension behaves, so neither is made in passing.
 				services = await sdk.createAgentSessionServices({
 				cwd,
 				...(agentDir === undefined ? {} : { agentDir }),

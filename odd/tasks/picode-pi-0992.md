@@ -40,19 +40,56 @@ Medido el 2026-10-01 contra npm y contra el paquete `@earendil-works/pi-coding-a
 
 1. **Pin a 0.99.2** en `distribution/runtime.json`. El script del build ya refresca un
    runtime viejo cuando el pin se mueve (`dev/pi-runtime.sh`).
-2. **Fuera la instalación de `pi-mcp-adapter`.** Con pi ≥0.99 el fichero
-   `data/pi-agent/mcp.json` lo lee pi por sí mismo; el paquete ya no aporta nada a los
-   servidores que declara la fila de ajustes, y encima es una trampa: una versión que se
-   quede con `/mcp` desactiva la built-in y dejaría los servidores **mudos sin decirlo**.
-   Sin instalar nada, los servidores siguen funcionando y se leen con la exposición por
-   defecto de pi (`codemode`, que pi activa solo cuando hace falta).
+2. **Fuera la instalación de `pi-mcp-adapter`.** El paquete no lee el fichero que PiCode
+   escribe (`mcp-adapter.json` ≠ `mcp.json`), así que no aportaba nada a los servidores de
+   la fila de ajustes. Y era peor que inútil: al cargarse en el chat resolvía su
+   configuración en el perfil **externo** de la máquina (ver «Defectos encontrados»), o sea
+   que metía servidores de `~/.pi/agent` en el chat de PiCode — justo lo que la regla del
+   proyecto prohíbe. Quitarlo reduce esa fuga.
    - Se deja de instalar; **no** se desinstala lo que el perfil del dueño ya tenga: la
      declaración en `settings.json` es suya y no es asunto de este cambio.
 3. **Sin punto en el nombre.** `NAME_PATTERN` pasa a `^[a-z0-9][a-z0-9_-]*$` en
    `mcpServers.ts` y `mcp-add.ts`, y el importador convierte el punto en guion en vez de
-   descartar el servidor entero.
-4. **La copia dice la verdad.** Los encabezados que afirmaban «pi has no MCP» y las frases
-   que decían que el fichero lo lee `pi-mcp-adapter` pasan a contar lo que pasa: lo lee pi.
+   descartar el servidor entero. pi rechaza el nombre entero con un punto, así que el
+   servidor se escribía y no conectaba nunca.
+4. **La copia dice lo que se puede probar.** Los encabezados que afirmaban «pi has no MCP»
+   y las frases que decían que el fichero lo lee `pi-mcp-adapter` se corrigen. La
+   descripción del ajuste **ya no promete** que pi lo lea en el chat: dice dónde se
+   escribe.
+
+## Defectos encontrados al verificar (no arreglados aquí)
+
+Salieron al comprobar la premisa anterior con sondas sobre el SDK real, y son más gordos
+que la subida de pi. **No se tocan en este cambio** porque los dos alteran cómo se comporta
+**cualquier** extensión en el chat (el perfil que resuelve y los eventos que recibe), y eso
+no se cambia de paso.
+
+1. **El chat resuelve el perfil externo (`~/.pi/agent`).** `agent.ts` pasa `agentDir` como
+   parámetro de `createAgentSessionServices`, pero **no** define `PI_CODING_AGENT_DIR`, que
+   es lo que lee `getAgentDir()` de pi (`dist/config.js:434,450`). Una extensión que resuelve
+   su perfil por su cuenta acaba leyendo (y potencialmente escribiendo) el pi de la máquina.
+   *Prueba*: con un perfil temporal pasado como `agentDir` y `mcp-adapter.json` propio con
+   un servidor `marker`, la extensión `pi-mcp-adapter` cargada en esa sesión registró
+   **`mcp__firebase`** — el servidor del `~/.pi/agent/mcp-adapter.json` real del dueño — y
+   **nunca** el `marker` del perfil que se le pasó.
+2. **El chat nunca emite `session_start`.** Ese evento lo emite
+   `session.bindExtensions(...)` (`dist/core/agent-session.js:2556`), y solo lo llaman los
+   modos CLI (`interactive-mode.js`, `print-mode.js`, `rpc-mode.js`); ni `sdk.js`, ni
+   `agent-session-services.js`, ni `agent-session-runtime.js` lo llaman. *Prueba*: cargada
+   la extensión built-in de MCP del propio pi (`createMcpExtension()`) en una sesión del
+   SDK, y creada la sesión, su lista de herramientas se quedó **vacía**. Consecuencia:
+   cualquier extensión que haga su trabajo en `session_start` es inerte en el chat.
+3. **Por lo anterior, la fila Settings > PiCode > MCP no sirve nada en el chat.** El fichero
+   que escribe lo lee el pi de la terminal (comprobado: `pi mcp list` lo lista), y en el
+   chat no hay quien lo lea: la built-in de pi no se carga (`builtInExtensions` las añade
+   solo `main.js`, el entry del CLI) y, aunque se cargara, no conectaría nada sin
+   `session_start`. El `pi-mcp-adapter` que se instalaba tampoco, porque lee otro fichero.
+
+**Arreglo recomendado (una decisión, no un parche)**: definir `PI_CODING_AGENT_DIR` con el
+perfil interno al construir la sesión; llamar a `session.bindExtensions(...)` para que
+`session_start` exista; y decidir si el chat carga las built-in de pi (MCP propio) o deja el
+MCP en el puente del editor. Los tres puntos a la vez devuelven la fila a la vida; hacer
+solo uno deja el resultado a medias.
 
 **No se toca** la exposición de las herramientas (se queda la de pi, `codemode` por
 defecto): forzar `direct` metería todas las herramientas de todos los servidores en el
@@ -68,20 +105,37 @@ prompt, y el dueño no lo ha pedido. Se deja escrito aquí como decisión abiert
 
 ## Evidencia (ejecutada, no leída)
 
+Primera tanda — el pin y lo que sirve para decidirlo:
+
 | Qué | Cómo se comprobó | Resultado |
 | --- | --- | --- |
 | El pin instala y deja el runtime donde el conector lo busca | `bash dev/pi-runtime.sh /tmp/packcheck` (el paso real de la fase 5) | `pi 0.99.2 in place`, `dist/index.js` y `dist/cli.js` presentes; podadas 20 plataformas ajenas, conservado win32/x64 |
 | La superficie del SDK que usa el conector sigue ahí | `import()` real del entry instalado + `createAgentSessionServices` | `createAgentSessionFromServices`, `modelRuntime.login/getProviders/hasConfiguredAuth` presentes; 42 proveedores |
-| pi lee `mcp.json` por sí mismo | `PI_CODING_AGENT_DIR=<tmp> pi mcp list --json` con un servidor de prueba | Listado como `scope: global`, `exposure: codemode`, sin adapter instalado |
+| El pi de la terminal lee `mcp.json` | `PI_CODING_AGENT_DIR=<tmp> pi mcp list --json` con un servidor de prueba | Listado como `scope: global`, `exposure: codemode`, sin adapter instalado |
 | El nombre con punto era un fallo real | El mismo listado con `my.server` | `servers: []` y `invalid server name "my.server" (use letters, digits, "_" and "-")` |
 | Lo que escribe el conector es lo que pi lee | `mcpServersText` + `mcpServersTextWithAdded` reales → fichero → `pi mcp list --json` | Los tres servidores (stdio, http con `headers`, y el de Add Server) aceptados con `errors: []` |
 | El conector | `node --test test/*.test.ts` | 164 pasan, 0 fallan |
 | El conector, tipos | `tsc -p extensions/picode/tsconfig.json --noEmit` | 0 |
-| El editor, tipos (los dos ficheros de textos que se tocaron) | `tsc -p src/tsconfig.json --noEmit` | 0 |
+| El editor, tipos | `tsc -p src/tsconfig.json --noEmit` | 0 |
+
+Segunda tanda — las sondas que destaparon los defectos de arriba (todas sobre el SDK real
+del runtime del pack, con perfiles temporales):
+
+| Qué | Cómo se comprobó | Resultado |
+| --- | --- | --- |
+| El chat no carga las built-in de pi | `createAgentSessionServices` con un perfil **sin** paquetes | 0 extensiones cargadas |
+| El chat no emite `session_start` | La built-in de MCP de pi (`createMcpExtension()`) en `extensionFactories` + sesión creada | La extensión carga (`<inline:picode-mcp>`) y su lista de herramientas queda **vacía** |
+| El adaptador resuelve el perfil externo | `pi-mcp-adapter` declarado en el perfil temporal que se pasa como `agentDir`, con `marker` en su `mcp-adapter.json` | Registró `mcp__firebase` (del `~/.pi/agent` real) y **nunca** `marker` |
 
 ## Registro
 
 - 2026-10-01 · medido, decidido y ejecutado en la misma sesión. Commits de trabajo:
-  `89f4c227` (pin) y `3b66ca1c` (MCP). Los restos sin versionar que había en el
-  árbol (`theme-catalog.ts`, `gettingStarted.*`, `picodeSetup.ts`, `picode-cloud-sync.md`)
-  son de la sesión anterior y **no** se tocaron.
+  `89f4c227` (pin), `3b66ca1c` (MCP) y los de documentación. Los restos sin versionar que
+  había en el árbol (`theme-catalog.ts`, `gettingStarted.*`, `picodeSetup.ts`,
+  `picode-cloud-sync.md`) son de la sesión anterior y **no** se tocaron.
+- 2026-10-01 · **corrección de un error propio**: la primera versión de este documento (y el
+  informe al dueño) afirmaba que, desde pi 0.99, «pi lee `mcp.json` por sí mismo» y que por
+  eso los servidores seguían funcionando sin el adaptador. Cierto para el pi de la
+  terminal, **falso para el chat**, que es el producto: allí no se cargan las built-in ni se
+  emite `session_start`. Lo corrigieron las sondas de la segunda tanda; la copia del
+  ajuste y los encabezados se ajustaron a lo que se puede probar.
