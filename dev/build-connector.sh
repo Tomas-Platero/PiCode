@@ -30,6 +30,13 @@ if [[ ! -f "./${TSC}" ]]; then
   exit 2
 fi
 
+# `tsc` writes what the sources produce and forgets what they no longer have: a module deleted from
+# `src/` leaves its `out/*.js` behind, the packer copies it inside the editor, and a dead file ships
+# next to the live ones. Seen on 2026-10-01 — two removed modules stayed in the pack, referenced by
+# nobody and found only by looking. `out/` is the compiler's own directory (42 sources produce 42 .js
+# and 42 maps, nothing else), so it is cleared before every compile instead of pruned case by case.
+rm -rf "./${CONNECTOR}/out"
+
 echo "compiling ${CONNECTOR}"
 node "./${TSC}" --project "${CONNECTOR}/tsconfig.json"
 
