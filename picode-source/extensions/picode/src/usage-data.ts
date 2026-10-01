@@ -384,8 +384,9 @@ export function resolveNanApiKey(sources: NanKeySources): string | undefined {
  * The one-line summary the Status row prints, or `undefined` when there is no meter to name.
  *
  * Tightest window first — the rolling `4h` before the billing period — because that is the one
- * that runs out first. A window without a label of its own is the model's allowance, and it
- * prints as `periodo`. The model id leads, so the row says which meter it is.
+ * that runs out first. Every part speaks: the model the meter belongs to, what share of the
+ * rolling window is used, and what share of the billing period. A window without a label of
+ * its own is the model's billing-period allowance.
  */
 export function nanUsageSummary(usage: NanUsage, modelId: string | undefined): string | undefined {
 	const limit = nanModelUsage(usage, modelId);
@@ -394,8 +395,32 @@ export function nanUsageSummary(usage: NanUsage, modelId: string | undefined): s
 	}
 	const labelled = limit.windows.filter(window => window.label.length > 0).sort((left, right) => left.windowSeconds - right.windowSeconds);
 	const unlabelled = limit.windows.filter(window => window.label.length === 0);
-	const parts = [...labelled, ...unlabelled].map(window => `${window.label.length > 0 ? window.label : 'periodo'} ${Math.round(window.usedPercent)}%`);
-	return `${limit.name} ${parts.join(' · ')}`;
+	const parts = [...labelled, ...unlabelled].map(window =>
+		window.label.length > 0
+			? `${Math.round(window.usedPercent)}% of the ${spokenWindowLabel(window.label)} window`
+			: `${Math.round(window.usedPercent)}% of the billing period`);
+	return `${limit.name}: ${parts.join(' · ')}`;
+}
+
+/** A window label spoken as a length, so a part reads as time: `4h` becomes `4-hour`. */
+function spokenWindowLabel(label: string): string {
+	// The week-long window is the one label that is not a count of hours, days or minutes.
+	if (label === 'week') {
+		return 'weekly';
+	}
+	const length = /^(?:(\d+)h|(\d+)d|(\d+)m)$/.exec(label);
+	if (length?.[1] !== undefined) {
+		return `${length[1]}-hour`;
+	}
+	if (length?.[2] !== undefined) {
+		return `${length[2]}-day`;
+	}
+	if (length?.[3] !== undefined) {
+		return `${length[3]}-minute`;
+	}
+	// A label this does not know is passed through instead of guessed at: the sentence would then
+	// read oddly, which is better than reading wrongly. Every label `windowLabel` writes is above.
+	return label;
 }
 
 /** The cache key: a digest of the key, so the key itself is never held past the request. */

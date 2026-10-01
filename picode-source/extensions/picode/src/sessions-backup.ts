@@ -313,7 +313,7 @@ export interface SessionsBackupDeps {
 export async function runSessionsBackup(deps: SessionsBackupDeps): Promise<BackupReport> {
 	const idToken = await picodeIdToken();
 	if (idToken === undefined) {
-		throw new Error('Not signed in to PiCode — sign in first (Settings > Accounts).');
+		throw new NotSignedInError();
 	}
 
 	const backupFs = deps.backupFs ?? nodeBackupFs;
@@ -443,7 +443,7 @@ export async function runSessionsBackup(deps: SessionsBackupDeps): Promise<Backu
 export async function planSessionsRestore(deps: SessionsBackupDeps): Promise<RestorePlan> {
 	const idToken = await picodeIdToken();
 	if (idToken === undefined) {
-		throw new Error('Not signed in to PiCode — sign in first (Settings > Accounts).');
+		throw new NotSignedInError();
 	}
 
 	const fetchFn = deps.fetchFn ?? fetch;
@@ -558,6 +558,33 @@ function tooLargeSentence(skipped: readonly string[]): string {
 }
 
 /**
+ * Thrown when a run starts without a PiCode account signed in. The commands catch it and end
+ * with a Sign in button, so the answer to it is one press rather than a hunt through settings.
+ */
+export class NotSignedInError extends Error {
+	constructor() {
+		super('Not signed in to PiCode — sign in first.');
+	}
+}
+
+/** The not-signed-in ending: one sentence, and the button that opens the product's own sign-in. */
+/**
+ * Asks for the sign-in the backup needs, and offers the button that starts it.
+ *
+ * The button asks for the **account** session — the same provider and scopes the backup reads a
+ * few lines below — and not the provider-subscription command, which connects an AI provider
+ * (ChatGPT, Claude…) and would leave the owner signed in everywhere except the account this
+ * feature needs.
+ */
+function offerSignIn(): void {
+	void vscode.window.showErrorMessage('PiCode: sign in to use your account.', 'Sign in').then(choice => {
+		if (choice !== undefined) {
+			void vscode.authentication.getSession(PICODE_AUTH_PROVIDER_ID, PICODE_AUTH_SCOPES, { createIfNone: true });
+		}
+	});
+}
+
+/**
  * The two backup commands, registered against the editor's own surfaces.
  *
  * Both run under a progress window because either can move hundreds of megabytes, and both
@@ -570,10 +597,19 @@ export function registerSessionsBackupCommands(deps: SessionsBackupDeps): vscode
 		vscode.commands.registerCommand(BACKUP_SESSIONS_COMMAND, () => vscode.window.withProgress(
 			{ location: vscode.ProgressLocation.Notification, title: 'Backing up pi sessions to PiCode Cloud…' },
 			async (progress: vscode.Progress<{ message?: string }>) => {
-				const report = await runSessionsBackup({
-					...deps,
-					onProgress: message => progress.report({ message }),
-				});
+				let report: BackupReport;
+				try {
+					report = await runSessionsBackup({
+						...deps,
+						onProgress: message => progress.report({ message }),
+					});
+				} catch (error) {
+					if (error instanceof NotSignedInError) {
+						offerSignIn();
+						return;
+					}
+					throw error;
+				}
 				const parts = [
 					`${report.uploaded} uploaded`,
 					`${report.unchanged} already backed up`,
@@ -591,10 +627,19 @@ export function registerSessionsBackupCommands(deps: SessionsBackupDeps): vscode
 		vscode.commands.registerCommand(RESTORE_SESSIONS_COMMAND, () => vscode.window.withProgress(
 			{ location: vscode.ProgressLocation.Notification, title: 'Reading pi sessions from PiCode Cloud…' },
 			async (progress: vscode.Progress<{ message?: string }>) => {
-				const plan = await planSessionsRestore({
-					...deps,
-					onProgress: message => progress.report({ message }),
-				});
+				let plan: RestorePlan;
+				try {
+					plan = await planSessionsRestore({
+						...deps,
+						onProgress: message => progress.report({ message }),
+					});
+				} catch (error) {
+					if (error instanceof NotSignedInError) {
+						offerSignIn();
+						return;
+					}
+					throw error;
+				}
 				if (plan.files.size === 0) {
 					void vscode.window.showInformationMessage('PiCode: the cloud holds no pi sessions to restore.'
 						+ (plan.unreadableRefs > 0 ? ` (${plan.unreadableRefs} unreadable refs were skipped.)` : ''));

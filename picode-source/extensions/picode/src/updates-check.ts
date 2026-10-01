@@ -180,25 +180,26 @@ export function updatableTargets(candidates: readonly CandidateTarget[]): readon
 }
 
 /**
- * The one sentence the notification carries after `PiCode: updates available — `.
+ * The one sentence the notification and the status-bar tooltip carry after
+ * `PiCode: updates available — `.
  *
- * The runtime and Gentle are named with their versions (`pi 0.87.1 → 0.88.0`); the packages
- * are counted and named (`2 packages (pi-pretty, pi-lint)`), because a profile can hold many
- * and the count is what the sentence needs to stay readable.
+ * Every part says what can be had and what is installed: the runtime and Gentle as one update
+ * each, the packages as the product word counts them — because a profile can hold many, and
+ * the count is what the sentence needs to stay readable.
  */
 export function describeTargets(targets: readonly UpdateTarget[]): string {
 	const parts: string[] = [];
 	const packages = targets.filter(target => target.kind === 'package');
 	for (const target of targets) {
 		if (target.kind !== 'package') {
-			parts.push(`${target.name} ${target.installed} → ${target.latest}`);
+			parts.push(`${target.name}: update to ${target.latest} available (now ${target.installed})`);
 		}
 	}
 	if (packages.length === 1) {
 		const [only] = packages;
-		parts.push(`1 package (${only.name} ${only.installed} → ${only.latest})`);
+		parts.push(`1 package: ${only.name}, update to ${only.latest} available (now ${only.installed})`);
 	} else if (packages.length > 1) {
-		parts.push(`${packages.length} packages (${packages.map(target => target.name).join(', ')})`);
+		parts.push(`${packages.length} packages have updates available: ${packages.map(target => target.name).join(', ')}`);
 	}
 	return parts.join(', ');
 }

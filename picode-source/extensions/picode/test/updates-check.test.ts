@@ -161,14 +161,14 @@ test('the sentence names the runtime and Gentle individually and packages by cou
 		{ kind: 'package', name: 'pi-pretty', installed: '0.1.0', latest: '0.2.0' },
 		{ kind: 'package', name: 'pi-lint', installed: '1.0.0', latest: '1.1.0' },
 	]);
-	assert.strictEqual(sentence, 'pi 0.87.1 → 0.88.0, gentle-pi 1.2.0 → 1.3.0, 2 packages (pi-pretty, pi-lint)');
+	assert.strictEqual(sentence, 'pi: update to 0.88.0 available (now 0.87.1), gentle-pi: update to 1.3.0 available (now 1.2.0), 2 packages have updates available: pi-pretty, pi-lint');
 });
 
 test('one package reads as a singular package with its versions', () => {
 	const sentence = describeTargets([
 		{ kind: 'package', name: 'pi-pretty', installed: '0.1.0', latest: '0.2.0' },
 	]);
-	assert.strictEqual(sentence, '1 package (pi-pretty 0.1.0 → 0.2.0)');
+	assert.strictEqual(sentence, '1 package: pi-pretty, update to 0.2.0 available (now 0.1.0)');
 });
 
 /* ------------------------------------------------------------------ *

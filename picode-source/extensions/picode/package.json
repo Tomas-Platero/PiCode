@@ -73,6 +73,18 @@
 								"anthropic-messages",
 								"google-generative-ai"
 							],
+							"enumItemLabels": [
+								"OpenAI (compatible)",
+								"OpenAI (Responses)",
+								"Anthropic",
+								"Google"
+							],
+							"enumDescriptions": [
+								"The usual OpenAI-style endpoint; also the one most compatible providers offer.",
+								"OpenAI's newer Responses-style endpoint.",
+								"Anthropic's own endpoint (Claude).",
+								"Google's own endpoint (Gemini)."
+							],
 							"default": "openai-completions",
 							"description": "The dialect that endpoint speaks."
 						},

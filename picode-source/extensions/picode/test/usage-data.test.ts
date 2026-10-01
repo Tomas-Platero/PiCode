@@ -71,7 +71,7 @@ test('parseNanQuota reads the period allowance and the rolling window', () => {
 	assert.strictEqual(rolling.windowSeconds, 4 * 3_600);
 	assert.strictEqual(rolling.resetAt, null);
 
-	assert.strictEqual(nanUsageSummary(usage, 'glm5.3-flash'), 'glm5.3-flash 4h 33% · periodo 20%');
+	assert.strictEqual(nanUsageSummary(usage, 'glm5.3-flash'), 'glm5.3-flash: 33% of the 4-hour window · 20% of the billing period');
 });
 
 test('parseNanQuota fails the whole read when a metered model reports no usage', () => {
@@ -131,7 +131,7 @@ test('nanUsageSummary prints tightest window first, and nothing without a meter'
 		fullWindowTokens: 400_000_000,
 	}]), NOW);
 
-	assert.strictEqual(nanUsageSummary(usage, 'glm5.3-flash'), 'glm5.3-flash 4h 50% · periodo 12%');
+	assert.strictEqual(nanUsageSummary(usage, 'glm5.3-flash'), 'glm5.3-flash: 50% of the 4-hour window · 12% of the billing period');
 
 	// The fail-whole payload carries no meter, so the row has nothing to say.
 	assert.strictEqual(nanUsageSummary(parseNanQuota(quotaPayload([{ model: 'glm5.3-flash', fullCap: 600 }]), NOW), 'glm5.3-flash'), undefined);
