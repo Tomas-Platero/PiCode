@@ -14,7 +14,15 @@ import { readUserPlan } from "./quota";
  *
  * A missing/invalid token answers 401 (the client clears its token and
  * re-authenticates). A valid token from a disallowed client answers 403.
- * Firebase ID tokens are verified with full revocation checking.
+ *
+ * **Revocation is not checked per request.** `verifyIdToken(token, true)` makes
+ * the Admin SDK ask Google whether the token was revoked, on every call — and
+ * this API is called on a timer by every client, most of the time only to be
+ * told there is nothing new. That was a network round trip added to every poll.
+ * Without it the token is verified the ordinary way (signature and expiry), and
+ * a revoked session stays usable for at most the token's own lifetime, an hour.
+ * The authority is unchanged: the plan is still read on every request, the Pro
+ * gate still runs, and writes are not privileged beyond the owner's own data.
  */
 
 const ALLOWED_CLIENT_NAMES = new Set(
@@ -72,7 +80,7 @@ export async function authenticateRequest(
 
   let decoded: DecodedIdToken;
   try {
-    decoded = await getAuth(firebaseAdmin()).verifyIdToken(token, true);
+    decoded = await getAuth(firebaseAdmin()).verifyIdToken(token, false);
   } catch {
     throw new HttpError(401, "Unauthorized", "Invalid or expired token.");
   }
@@ -87,7 +95,7 @@ export async function authenticateRequest(
     throw new HttpError(403, "Forbidden", `Client not allowed: ${clientName}`);
   }
 
-  // One extra Firestore read per request (plan); acceptable, no caching.
+  // One Firestore read per request (plan), cached briefly: see `readUserPlan`.
   const plan = await readUserPlan(decoded.uid);
 
   return {

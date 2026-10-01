@@ -19,7 +19,6 @@ import {
   listResourceRefs,
   writeResource,
 } from "@/lib/store";
-import { checkStorageQuota } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -79,27 +78,16 @@ export async function POST(
 
     const ifMatch = normalizeIfHeader(request.headers.get("if-match"));
 
-    // Plan-based storage quota. `plan` lives on users/{uid} and is written
-    // only by the website's Stripe webhooks; this API reads it with Admin.
-    const quota = await checkStorageQuota(
-      context.uid,
-      Buffer.byteLength(body, "utf8"),
-    );
-    if (!quota.allowed) {
-      return jsonResponse(
-        {
-          error: "TooLarge",
-          message: `Storage quota exceeded for plan "${quota.plan}" (used ${quota.usedBytes} of ${quota.limitBytes} bytes).`,
-        },
-        413,
-      );
-    }
-
+    // The plan-based quota is enforced inside `writeResource`, in the same transaction that would
+    // change the total — see the note there. Checking it here used to mean reading every stored
+    // revision of the user before the transaction even opened, which was the bulk of the sync's
+    // cost and grew with every sync. `context.plan` is already read for the Pro gate.
     const newRef = await writeResource(
       context.uid,
       params.r,
       payload,
       ifMatch,
+      context.plan,
     );
     return emptyResponse(200, etagHeader(newRef));
   } catch (error) {

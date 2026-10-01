@@ -12,6 +12,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "jsx": "preserve",
     "noEmit": true,
     "incremental": true,
@@ -29,6 +30,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "test/**/*.ts",
     "next-env.d.ts",
     ".next/types/**/*.ts"
   ],
