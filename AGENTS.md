@@ -32,6 +32,14 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * Antes de asimilar que un arreglo falló, verificar **dónde se ve exactamente** (pantalla, esquina, contexto). Evitar asumir que ambas partes están mirando lo mismo.
 
+### Los iconos y el emoji son el estilo
+>
+> *"añade siempre iconos, de marcas, de emojis etc que le de un mejor estilo visual"*
+
+* **Un icono antes que texto**: los encabezados, y cada fila de una lista o tabla, llevan su icono o su emoji. Un badge sin logo o una sección sin marca visual es una ocasión perdida.
+* **Marcas de verdad**: los logos de terceros (GitHub, Node, TypeScript, Electron…) se ponen con su identificador real y **comprobado antes de usarlo**. Medido el 1-10: `windows` y `visualstudiocode` ya **no existen** en simple-icons (Microsoft los retiró), así que ahí no va logo: mejor sin él que roto.
+* **Nada que no lleve a ningún sitio**: un badge que no enlaza a nada, o que promete algo que no existe, es una mentira. Si no hay a dónde ir, no se pone.
+
 ---
 
 ## 2. Marca e Iconografía
@@ -181,3 +189,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-27** · Regla de los iconos: la rosa y la marca de agua cambian de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasan al núcleo (`picode-source/.../contrib/picode/browser/media/`). La intención —la rosa de la izquierda, el dibujo de trazos en el editor vacío— no cambia.
 * **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi/gentle (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). La rosa sigue siendo el logo de Gentle AI y se usa donde aparece Gentle AI (su fila del panel de estado). Se añade que cada marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
+* **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
