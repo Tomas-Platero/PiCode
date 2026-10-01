@@ -14,16 +14,20 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { authorizationUrlIn, lastLineOf, loginArguments, loginTarget } from '../src/mcp-login.ts';
+import { authorizationUrlIn, lastLineOf, loginArguments, logoutArguments, serverTarget } from '../src/mcp-login.ts';
 
 test('the sign-in is pi\'s own command, with the server it was handed', () => {
 	assert.deepStrictEqual(loginArguments('sentry'), ['mcp', 'login', 'sentry']);
 });
 
+test('the sign-out is pi\'s own command too, and it only removes the credentials', () => {
+	assert.deepStrictEqual(logoutArguments('sentry'), ['mcp', 'logout', 'sentry']);
+});
+
 test('a server name is trimmed, and a name that is not one reads as empty', () => {
-	assert.strictEqual(loginTarget(' sentry '), 'sentry');
-	assert.strictEqual(loginTarget(''), '');
-	assert.strictEqual(loginTarget(undefined), '');
+	assert.strictEqual(serverTarget(' sentry '), 'sentry');
+	assert.strictEqual(serverTarget(''), '');
+	assert.strictEqual(serverTarget(undefined), '');
 });
 
 test('the address pi printed is read, on the line it printed it', () => {

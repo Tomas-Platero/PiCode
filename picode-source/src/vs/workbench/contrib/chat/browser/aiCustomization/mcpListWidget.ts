@@ -1769,8 +1769,9 @@ export class McpListWidget extends Disposable {
 			}
 
 			// PiCode: a row pi's connector provides holds its entry in pi's own `mcp.json`, so its
-			// sign-in, edit and remove run the connector's commands — which sign in, ask, confirm, and
-			// write that file. Every other extension-provided row is its extension's to manage.
+			// sign-in, sign-out, edit and remove run the connector's commands — which sign in, sign out,
+			// ask, confirm, and write that file. Every other extension-provided row is its extension's to
+			// manage.
 			if (isPiConnectorCollection(collectionId, this.mcpRegistry)) {
 				if (actions.length > 0) {
 					actions.push(new Separator());
@@ -1778,7 +1779,7 @@ export class McpListWidget extends Disposable {
 				const serverName = e.element.label;
 				// Only a remote server signs in: pi's own rule is that HTTP servers without an
 				// Authorization header authenticate with OAuth, and a local command has nobody to
-				// sign in to.
+				// sign in to. The same row gets the way back out.
 				const piDefinition = e.element.localServer?.readDefinitions().get()?.server;
 				if (piDefinition && 'uri' in piDefinition) {
 					actions.push(disposables.add(new Action(
@@ -1787,6 +1788,13 @@ export class McpListWidget extends Disposable {
 						undefined,
 						true,
 						() => this.commandService.executeCommand('picode.mcp.loginServer', serverName)
+					)));
+					actions.push(disposables.add(new Action(
+						'mcpServer.pi.signOut',
+						localize('signOutPiServer', "Sign Out"),
+						undefined,
+						true,
+						() => this.commandService.executeCommand('picode.mcp.logoutServer', serverName)
 					)));
 				}
 				actions.push(disposables.add(new Action(

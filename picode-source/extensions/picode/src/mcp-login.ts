@@ -7,10 +7,11 @@
  * Signing in to one MCP server, as far as it can be decided without running anything.
  *
  * A server that authenticates with OAuth keeps its credentials in pi's own profile, and **pi is the
- * one that signs in**: `pi mcp login <server>` starts a local callback, opens the browser and stores
- * the tokens (`dist/extensions/mcp/cli.js`, `login()`). This connector does not implement OAuth a
- * second time; it runs that command against PiCode's profile, which is where the credentials then
- * live, and reads out of what pi printed the address to offer if the browser did not open.
+ * one that owns them**: `pi mcp login <server>` starts a local callback, opens the browser and stores
+ * the tokens, and `pi mcp logout <server>` deletes them (`dist/extensions/mcp/cli.js`). This
+ * connector does not implement OAuth a second time; it runs those commands against PiCode's profile,
+ * which is where the credentials then live, and reads out of what pi printed the address to offer if
+ * the browser did not open.
  *
  * The rules for that reading are here, pure, so they can be exercised by running them —
  * `extension.ts` is the part that needs the editor.
@@ -21,8 +22,13 @@ export function loginArguments(server: string): string[] {
 	return ['mcp', 'login', server];
 }
 
-/** A server name as the command takes it: trimmed, or empty when there is nothing usable. */
-export function loginTarget(name: string | undefined): string {
+/** The arguments pi's CLI needs to sign out of one server, which deletes its stored credentials. */
+export function logoutArguments(server: string): string[] {
+	return ['mcp', 'logout', server];
+}
+
+/** A server name as either command takes it: trimmed, or empty when there is nothing usable. */
+export function serverTarget(name: string | undefined): string {
 	return name?.trim() ?? '';
 }
 
