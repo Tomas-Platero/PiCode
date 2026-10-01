@@ -63,6 +63,24 @@ test('a remote server is mapped with its url and headers', () => {
 	assert.deepStrictEqual(server.kind === 'http' ? server.headers : {}, { Authorization: 'Bearer k' });
 });
 
+// pi's own switch: the entry stays in the file and pi does not start it. The editor must not start it
+// either — its client would, and its tools would then reach pi by the bridge, so "off" would have
+// turned nothing off. On (the default) and an explicit `true` are both just servers.
+test('a server pi is told not to start is not offered to the editor, and the reason is said', () => {
+	const read = mcpServersFrom([
+		config('/profile/mcp.json', {
+			off: { command: 'node', args: ['server.js'], enabled: false },
+			on: { command: 'node', args: ['server.js'] },
+			explicitOn: { command: 'node', args: ['server.js'], enabled: true },
+		}),
+	]);
+
+	assert.deepStrictEqual(read.servers.map(server => server.label), ['on', 'explicitOn']);
+	assert.strictEqual(read.skipped.length, 1);
+	assert.ok(read.skipped[0].includes('off'), read.skipped[0]);
+	assert.ok(read.skipped[0].includes('turned off'), read.skipped[0]);
+});
+
 test('an entry that names a command is started as a command even when it also carries a url', () => {
 	const mapped = mcpServerFrom('both', { command: 'npx', url: 'https://example.test/mcp' });
 

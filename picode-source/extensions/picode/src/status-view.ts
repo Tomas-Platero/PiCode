@@ -32,6 +32,8 @@ export interface StatusData {
 	model?: string;
 	thinkingLevel?: string;
 	mcpServers?: number;
+	/** How many of them are switched off (`enabled: false`): a row that is not offered is still counted. */
+	mcpServersOff?: number;
 	skills?: number;
 	gitBranch?: string;
 	gitChanges?: number;
@@ -184,7 +186,10 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
 			// The servers live in pi's own profile, which is where this counts them — not the project's
 			// business, which is where the row used to sit.
-			new StatusItem('MCP servers', { description: String(d.mcpServers ?? 0), icon: new vscode.ThemeIcon('server-process') }),
+			new StatusItem('MCP servers', {
+				description: d.mcpServersOff === undefined || d.mcpServersOff === 0 ? String(d.mcpServers ?? 0) : `${d.mcpServers ?? 0} · ${d.mcpServersOff} off`,
+				icon: new vscode.ThemeIcon('server-process'),
+			}),
 		];
 		const model = d.model ?? d.defaultModel;
 		if (model !== undefined) {

@@ -96,11 +96,17 @@ function countProviders(profileDir: string): number {
 	return ids.size;
 }
 
-/** The MCP servers pi reads from the profile. */
-function countMcpServers(profileDir: string): number {
+/** pi's MCP servers in the profile: how many there are, and how many are switched off. */
+function countMcpServers(profileDir: string): { readonly servers: number; readonly off: number } {
 	const file = readJsonObject(path.join(profileDir, 'mcp.json'));
 	const servers = file?.['mcpServers'];
-	return isRecord(servers) ? Object.keys(servers).length : 0;
+	if (!isRecord(servers)) {
+		return { servers: 0, off: 0 };
+	}
+	const entries = Object.values(servers);
+	// `enabled: false` is pi's switch, and the one this connector honours too (`mcp-provider.ts`):
+	// counting the switched-off ones is what keeps them visible once they stop being rows.
+	return { servers: entries.length, off: entries.filter(entry => isRecord(entry) && entry['enabled'] === false).length };
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
@@ -274,6 +280,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const defaultModel = readDefaultModel(profileDir);
 	const usage = getSessionUsage();
 	const gentleInstalled = isGentleInstalled(profileDir);
+	const mcp = countMcpServers(profileDir);
 	const gitInfo = await readGit(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
 
 	return {
@@ -283,7 +290,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		gentleVersion: gentleInstalled ? readGentleVersion(profileDir) : undefined,
 		providers: countProviders(profileDir),
 		defaultModel,
-		mcpServers: countMcpServers(profileDir),
+		mcpServers: mcp.servers,
+		mcpServersOff: mcp.off,
 		skills: countDirectories(path.join(profileDir, 'skills')),
 		gitBranch: gitInfo.branch,
 		gitChanges: gitInfo.changes,

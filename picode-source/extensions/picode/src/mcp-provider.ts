@@ -149,10 +149,17 @@ const HTTP_TRANSPORTS = ['http', 'streamable-http', 'streamable_http'];
  * `command` wins over `url` when an entry carries both, because that is what pi does
  * (`mcpServerEntry` writes one or the other, so an entry with both was hand-written) and starting
  * the process the owner named is the reading that cannot silently reach somewhere else.
+ *
+ * `enabled: false` is pi's own switch: the entry stays in the file and pi does not start it. It is
+ * refused here for the same reason — offering it to the editor would start it anyway, through the
+ * editor's own client, whose tools then reach pi by the bridge, so "off" would turn nothing off.
  */
 export function mcpServerFrom(label: string, entry: unknown): PiMcpEntry | RefusedEntry {
 	if (!isRecord(entry)) {
 		return { reason: 'the entry is not an object' };
+	}
+	if (entry['enabled'] === false) {
+		return { reason: 'it is turned off (`"enabled": false`)' };
 	}
 	const command = text(entry['command']);
 	if (command !== undefined) {
