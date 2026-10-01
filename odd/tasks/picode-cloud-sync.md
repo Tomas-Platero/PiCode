@@ -344,3 +344,22 @@ Cloud Functions descartadas por requerir plan Blaze).
   900 KB (1.639.040 guardados) lo excede de sobra. Pendiente:
   NO ejercitado contra producción — los despliegues del proyecto están fallando, así que el
   build en producción es anterior a este fix.
+* **2026-10-01 (despliegue automático reparado + el fix de tamaño ya en producción)** — Causa
+  raíz de los despliegues en rojo: el proyecto `picode-sync-api` tenía **`rootDirectory: null`**,
+  así que los despliegues disparados por GitHub compilaban en la **raíz del repo PiCode**, donde
+  no hay `app/` ni `pages/` → `Couldn't find any pages or app directory` (log de
+  `dpl_HyN5PD8WmD32VwJ5rQbgVqgnnaiR`: `next` resolviendo desde `/vercel/path0/node_modules`).
+  Los despliegues READY anteriores (último: 2026-09-30 20:55) no venían de git: su log dice
+  «Downloading 28 deployment files» + `Running "npm run build"` con `picode-sync-api@0.1.0`, es
+  decir publicados **por CLI desde `cloud/sync-api`**; el histórico de 43 despliegues muestra
+  ERROR en todos los de git desde 2026-10-01 18:04. FIX: `PATCH /v9/projects/
+  prj_GswcgD4mZLxAPmT030NjYtBVdu43` → `rootDirectory: "cloud/sync-api"` (framework `nextjs`,
+  `productionBranch: master` y las 10 variables de entorno ya estaban bien). VERIFICADO: commit
+  `c4dcc8cb` de `master` desplegado por la vía de git (**`dpl_8hEGsrxA9RYZ6W9twyA6p5u8HWLG`**,
+  READY en 23 s, `Cloning github.com/Tomas-Platero/PiCode (Branch: master)` + las 11 rutas del
+  contrato compiladas), el dominio `picode-sync-api.vercel.app` apunta ya a ese despliegue y
+  responde `GET /api/health` → 200 `{"ok":true,...}` y `GET /api/v1/manifest` sin token → 401
+  con el shape del contrato (`Missing bearer token.`). Con ello **el fix de
+  `MAX_STORED_CONTENT_BYTES` está por fin en producción** (presente en `c4dcc8cb`, verificado
+  con `git grep` sobre el commit). Las 10 variables de entorno (Firebase + cifrado + cuotas)
+  siguen puestas en Preview y Production.
