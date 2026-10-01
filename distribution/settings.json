@@ -1,0 +1,21 @@
+{
+  "files.autoSave": "off",
+  "editor.fontFamily": "'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace",
+  "editor.fontLigatures": true,
+  "editor.fontSize": 13,
+  "editor.lineHeight": 1.5,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": false,
+  "editor.minimap.enabled": false,
+  "editor.renderWhitespace": "selection",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.eol": "\n",
+  "telemetry.telemetryLevel": "off",
+  "chat.disableAIFeatures": false,
+  "agents.voice.enabled": false,
+  "agents.voice.backendUrl": "",
+  "security.workspace.trust.enabled": true,
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}

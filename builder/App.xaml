@@ -1,0 +1,22 @@
+<Application
+    x:Class="PiCode.Builder.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- PiCode's blue, from the mark itself. This is where WinUI reads an accent while it
+                 builds its own resources: assigning these from code afterwards crashes the app, which
+                 is how this ended up here. -->
+            <Color x:Key="SystemAccentColor">#FF3B9BFF</Color>
+            <Color x:Key="SystemAccentColorLight1">#FF5AABFF</Color>
+            <Color x:Key="SystemAccentColorLight2">#FF79BBFF</Color>
+            <Color x:Key="SystemAccentColorLight3">#FF98CBFF</Color>
+            <Color x:Key="SystemAccentColorDark1">#FF2F7DD1</Color>
+            <Color x:Key="SystemAccentColorDark2">#FF2360A3</Color>
+            <Color x:Key="SystemAccentColorDark3">#FF174375</Color>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,11 @@
+# What does NOT travel inside the editor.
+#
+# The source is compiled to `out/` by `dev/build-connector.sh` before packing, and the editor
+# only ever loads `out/extension.js`. Shipping the TypeScript as well would put a copy of the
+# source inside every installation for no reader, and would let a stale `.ts` disagree with
+# the `.js` the editor actually runs.
+src/**
+tsconfig.json
+**/*.ts
+**/*.map
+node_modules/**

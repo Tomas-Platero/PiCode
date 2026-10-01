@@ -1,0 +1,130 @@
+# Local Pi runtime state
+.atl/
+
+# ---------------------------------------------------------------------------
+# VSCodium runtime tree
+#
+# The repository root doubles as the PiCode distribution root: VSCodium is
+# extracted in place so a `data/` folder next to the executable enables portable
+# mode. The 1 GB payload is NOT versioned: it cannot be. GitHub refuses any push carrying a
+# file over 100 MB and the editor's own executable is 212 MB, so putting this tree in git
+# would need Git LFS (whose free quota is 1 GB, smaller than the payload) or an archive
+# published as a release asset. What is versioned is the modification layer that turns a
+# stock VSCodium archive into PiCode:
+#
+#   distribution/apply-picode.ps1     applies the delta
+#   distribution/product-delta.json   the delta itself, as data
+#   distribution/settings.json        first-run defaults
+#
+# Reproduce the payload with a stock VSCodium archive, then run the apply script.
+# ---------------------------------------------------------------------------
+
+# Portable profile: user settings, installed extensions, session state, cache.
+# Disposable by design - deleting it yields a clean PiCode.
+# El perfil portable del editor instalado EN LA RAIZ de este repositorio. Anclado: sin la
+# barra inicial también se habría comido los `.vscode` de la fuente, que son parte del
+# producto y sí se versionan.
+/.vscode
+/data/
+# Electron / Chromium runtime artifacts at the distribution root.
+# Matched by extension, not by name: Step 5 renames the executable and its Start Menu
+# manifest, and an ignore rule written with the VSCodium names left 222 MB exposed after
+# the rename.
+/*.exe
+/*.dll
+/*.pak
+/*.dat
+/*.bin
+/vk_swiftshader_icd.json
+/LICENSES.chromium.html
+/*.VisualElementsManifest.xml
+
+# The same payload on the other platforms a collaborator may unpack here: the patterns
+# above are Windows-shaped because this tree was first built on Windows, and a Linux or
+# macOS archive dropped in the same place must not be committed either.
+/*.so
+/*.dylib
+/chrome-sandbox
+/*.AppImage
+/PiCode.app/
+/lib/
+# The archive's own root launcher. `bin/picode` and `bin/picode.cmd` are PiCode's and stay
+# versioned; these two are VSCodium's and do not.
+/picode
+/codium
+
+# Runtime directories owned by the VSCodium archive.
+/bin/
+/locales/
+/policies/
+/resources/
+
+# Node tooling: the extension has its own nested ignore file, and this covers a stray
+# `npm install` at the distribution root.
+/node_modules/
+
+# Operating-system noise: a collaborator on macOS or Windows leaves these behind without
+# ever asking for them.
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Source-build pipeline (VSCodium-era). The build outputs live beside the source and are
+# never versioned. Since 2026-09-27 the source itself IS versioned: `picode-source/` is the
+# product's own tree, committed in this repository. Its build artifacts (node_modules, out*/,
+# .build/) stay out because the .gitignore tracked INSIDE that folder is what governs them.
+# `/assets/` is deliberately NOT here: nothing in the pipeline writes it, and the
+# repository's own assets (the README banner) live in that directory.
+# The pack output, by its real names. NOT `/PiCode-*/`: on a case-insensitive filesystem that
+# glob also matches `picode-source/` — the source folder — and would silently exclude the whole
+# tree from the repository. It bit exactly there on 2026-09-27.
+/PiCode-Win32-*/
+/PiCode-linux-*/
+/PiCode-darwin*/
+/PiCode-Web-*/
+/PiCode-user-rev*
+/VSCode-*/
+/vscode-*/
+/sourcemaps/
+
+# Agent/verification scaffolding: inside the project so it is easy to find, but
+# never part of the repository. Everything temporary belongs here.
+/.scratch/
+
+# Material en migración al núcleo: el código de la extensión vieja, conservado solo para
+# copiar de él lo que sirve. No es producto, no se compila y se borra cuando la migración
+# termine — por eso tampoco se revisa. Anclado: sin la barra inicial también se habría
+# comido cualquier carpeta `legacy/` de la fuente.
+/legacy/
+
+# Local AI-tooling caches: the codegraph index and the repomix pack of the whole
+# repository. Both are generated on demand for development; neither is source,
+# and the repomix pack alone is hundreds of megabytes.
+/.codegraph/
+/repomix-output.xml
+
+# The C# builder: what it compiles, never what it is written from. `dotnet build` writes both, and
+# neither is ever committed: the source is the .csproj and the files beside it.
+# Any build output of the C# builder, whatever it is called: bin, bin2, bin-tmp. `dotnet build` writes
+# them, and a scratch folder used while testing must not end up in the repository either.
+/builder/bin*/
+/builder/dist*/
+/builder/PiCodeBuilder.zip
+/builder/obj*/
+/odd/assets
+/.vscode
+
+# Ficheros de entorno y credenciales locales (defensa en profundidad; cloud/sync-api
+# tiene las suyas). Ninguno debe llegar al repositorio, ni por descuido.
+/.env
+/.env.*
+*.env.local
+/auth.json
+/credentials.json
+*.pem
+*.key
+service-account*.json
+*.log
+.vercel
+*.tsbuildinfo
+.eslintcache

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "include": [],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "parsableStyle": false,
+    "compress": false,
+    "headerText": "",
+    "topFilesLength": 5,
+    "showLineNumbers": false,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "copyToClipboard": false
+  },
+  "security": {
+    "enableSecurityCheck": true
+  }
+}

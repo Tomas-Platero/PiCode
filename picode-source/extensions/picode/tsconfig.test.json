@@ -1,0 +1,26 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"types": [
+			"node"
+		],
+		"typeRoots": [
+			"../../node_modules/@types"
+		],
+		"skipLibCheck": true
+	},
+	"include": [
+		"src/**/*",
+		"test/**/*",
+		"../../src/vscode-dts/vscode.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatProvider.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatPromptFiles.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatParticipantAdditions.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatParticipantPrivate.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatSessionsProvider.d.ts"
+	]
+}

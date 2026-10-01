@@ -1,0 +1,78 @@
+{
+  "set": {
+    "version": "1.135.1",
+    "picodeVersion": "0.1.0-beta",
+    "nameShort": "PiCode",
+    "nameLong": "PiCode — Agentic Code Editor",
+    "urlProtocol": "picode",
+    "applicationName": "picode",
+    "dataFolderName": ".picode",
+    "sharedDataFolderName": ".picode-shared",
+    "serverApplicationName": "picode-server",
+    "serverDataFolderName": ".picode-server",
+    "tunnelApplicationName": "picode-tunnel",
+    "darwinBundleIdentifier": "com.picode",
+    "linuxIconName": "picode",
+    "win32DirName": "PiCode",
+    "win32NameVersion": "PiCode",
+    "win32RegValueName": "PiCode",
+    "win32ShellNameShort": "PiCode",
+    "win32AppUserModelId": "PiCode.PiCode",
+    "win32MutexName": "picode",
+    "win32TunnelServiceMutex": "picode-tunnelservice",
+    "win32TunnelMutex": "picode-tunnel",
+    "licenseUrl": "https://github.com/Tomas-Platero/PiCode/blob/HEAD/LICENSE",
+    "serverLicenseUrl": "https://github.com/Tomas-Platero/PiCode/blob/HEAD/LICENSE",
+    "extensionsGallery": {
+      "serviceUrl": "https://open-vsx.org/vscode/gallery",
+      "itemUrl": "https://open-vsx.org/vscode/item",
+      "latestUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest",
+      "controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
+    },
+    "documentationUrl": "https://github.com/Tomas-Platero/PiCode#readme",
+    "releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
+    "requestFeatureUrl": "https://github.com/Tomas-Platero/PiCode/issues/new",
+    "reportIssueUrl": "https://github.com/Tomas-Platero/PiCode/issues/new",
+    "downloadUrl": "https://github.com/Tomas-Platero/PiCode/releases",
+    "updateUrl": "https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates",
+    "builtInExtensionsEnabledWithAutoUpdates": [],
+    "defaultChatAgent": null
+  },
+  "unset": [
+    "trustedExtensionAuthAccess",
+    "agentsTelemetryAppName",
+    "voiceWsUrl",
+    "webviewContentExternalBaseUrlTemplate",
+    "checksumFailMoreInfoUrl",
+    "twitterUrl",
+    "tipsAndTricksUrl",
+    "introductoryVideosUrl",
+    "keyboardShortcutsUrlWin",
+    "keyboardShortcutsUrlMac",
+    "keyboardShortcutsUrlLinux"
+  ],
+  "unsetNested": {
+    "extensionEnabledApiProposals": [
+      "GitHub.copilot",
+      "GitHub.copilot-chat",
+      "GitHub.copilot-nightly",
+      "ms-vscode.vscode-websearchforcopilot",
+      "ms-vscode.vscode-copilot-vision",
+      "ms-vscode.vscode-chat-customizations-evaluations",
+      "ms-azuretools.vscode-azure-github-copilot",
+      "ms-toolsai.vscode-ai",
+      "ms-toolsai.vscode-ai-remote",
+      "TeamsDevApp.vscode-ai-foundry",
+      "ms-windows-ai-studio.vscode-foundry-training",
+      "FoundryLocal.foundry-local-chat",
+      "Microsoft.foundry-local-chat",
+      "openai.chatgpt"
+    ]
+  },
+  "unsetArrayEntries": {
+    "extensionsEnabledWithApiProposalVersion": [
+      "GitHub.copilot-chat",
+      "ms-vscode.vscode-copilot-vision"
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "picode-sync-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PiCode Cloud Sync API — Settings Sync backend backed by Firebase Auth + Firestore",
+  "scripts": {
+    "dev": "next dev --port 3400",
+    "build": "next build",
+    "start": "next start --port 3400",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "next": "^14.2.15"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "19.3.0",
+    "typescript": "^5.5.4"
+  }
+}

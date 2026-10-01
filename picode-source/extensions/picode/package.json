@@ -1,0 +1,201 @@
+{
+	"name": "picode",
+	"publisher": "picode",
+	"displayName": "PiCode",
+	"description": "The bridge between the editor and pi: providers, models and the agent's own runtime.",
+	"version": "1.0.0",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"main": "./out/extension.js",
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"enabledApiProposals": [
+		"chatSessionsProvider",
+		"defaultChatParticipant",
+		"chatProvider",
+		"chatPromptFiles",
+		"chatParticipantAdditions",
+		"chatParticipantPrivate"
+	],
+	"activationEvents": [
+		"onLanguageModelChatProvider:picode",
+		"onChatParticipant:picode.pi",
+		"onCustomAgentProvider",
+		"onSkillProvider",
+		"onMcpCollection:pi",
+		"onCommand:picode.setup.gallerySearch",
+		"onCommand:picode.setup.galleryThumb",
+		"onCommand:picode.setup.galleryInstall",
+		"onStartupFinished"
+	],
+	"contributes": {
+		"chatParticipants": [
+			{
+				"id": "picode.pi",
+				"name": "picode",
+				"fullName": "PiCode",
+				"description": "PiCode's agent: reads and edits your code with your own models.",
+				"isDefault": true,
+				"modes": [
+					"ask",
+					"agent",
+					"edit"
+				]
+			}
+		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "pi",
+				"label": "pi"
+			}
+		],
+		"languageModelChatProviders": [
+			{
+				"vendor": "picode",
+				"displayName": "pi",
+				"configuration": {
+					"properties": {
+						"endpoint": {
+							"type": "string",
+							"description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
+						},
+						"api": {
+							"type": "string",
+							"enum": [
+								"openai-completions",
+								"openai-responses",
+								"anthropic-messages",
+								"google-generative-ai"
+							],
+							"enumItemLabels": [
+								"OpenAI (compatible)",
+								"OpenAI (Responses)",
+								"Anthropic",
+								"Google"
+							],
+							"enumDescriptions": [
+								"The usual OpenAI-style endpoint; also the one most compatible providers offer.",
+								"OpenAI's newer Responses-style endpoint.",
+								"Anthropic's own endpoint (Claude).",
+								"Google's own endpoint (Gemini)."
+							],
+							"default": "openai-completions",
+							"description": "The dialect that endpoint speaks."
+						},
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "The provider's key. It is stored encrypted and never shown again."
+						},
+						"id": {
+							"type": "string",
+							"description": "A short name for this provider, with no spaces (for example omni)."
+						}
+					}
+				}
+			}
+		],
+		"commands": [
+			{
+				"command": "picode.connectProvider",
+				"title": "Connect a subscription",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.setup",
+				"title": "Set up PiCode",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.updates.show",
+				"title": "Show pending updates",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.backupSessions",
+				"title": "Back up pi sessions to the cloud",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.restoreSessions",
+				"title": "Restore pi sessions from the cloud",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.setup.gallerySearch",
+				"title": "List themes from the gallery",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.setup.galleryThumb",
+				"title": "Read the colours of a gallery theme",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.setup.galleryInstall",
+				"title": "Install a theme from the gallery",
+				"category": "PiCode"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "picode.setup.gallerySearch",
+					"when": "false"
+				},
+				{
+					"command": "picode.setup.galleryThumb",
+					"when": "false"
+				},
+				{
+					"command": "picode.setup.galleryInstall",
+					"when": "false"
+				}
+			]
+		},
+		"configuration": {
+			"title": "PiCode",
+			"properties": {
+				"picode.updates.check": {
+								"type": "boolean",
+								"default": true,
+								"description": "Check for updates in the background and offer to install them when there are any."
+				}
+			}
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "picode-status",
+					"title": "PiCode",
+					"icon": "media/picode-status.svg"
+				}
+			]
+		},
+		"views": {
+			"picode-status": [
+				{
+					"type": "tree",
+					"id": "picode.statusView",
+					"name": "Status"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:picode",
+		"watch": "gulp watch-extension:picode"
+	},
+	"devDependencies": {
+		"@types/node": "24.x"
+	}
+}

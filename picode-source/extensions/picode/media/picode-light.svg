@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="118 116 788 788" width="788" height="788">
+  <title>PiCode</title>
+  <g transform="translate(0,92)" fill="none" stroke="#424242" stroke-width="84" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 200 V152" stroke-width="60"/>
+    <circle cx="512" cy="112" r="48" fill="#424242" stroke="none"/>
+    <path d="M360 640 V262 Q360 200 422 200 H602 Q664 200 664 262 V640"/>
+    <path d="M268 432 H756"/>
+    <circle cx="452" cy="316" r="34" fill="#424242" stroke="none"/>
+    <circle cx="572" cy="316" r="34" fill="#424242" stroke="none"/>
+    <path d="M424 590 L360 660 L424 730"/>
+    <path d="M600 590 L664 660 L600 730"/>
+  </g>
+</svg>

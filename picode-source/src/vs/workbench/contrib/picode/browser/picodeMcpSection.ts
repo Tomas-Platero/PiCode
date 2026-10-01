@@ -1,0 +1,277 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import './media/picodeMcpSection.css';
+import { $ } from '../../../../base/browser/dom.js';
+import * as DOM from '../../../../base/browser/dom.js';
+import { Button } from '../../../../base/browser/ui/button/button.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { localize } from '../../../../nls.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { defaultButtonStyles } from '../../../../platform/theme/browser/defaultStyles.js';
+import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionContribution, IAICustomizationManagementSectionWidget } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
+import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
+import { PICODE_MCP_SERVERS_SETTING } from './picodeConfiguration.js';
+
+/**
+ * The MCP Servers section of the Agent Customizations page, as PiCode owns it.
+ *
+ * This is the one place pi's MCP servers are configured. The list reads the servers the
+ * `picode.mcp.servers` store holds — name, where the server runs, its address or command —
+ * and each row's on/off state, which is not part of that store: pi holds it in its own
+ * profile. The state comes from the same command the status panel reads
+ * (`picode.setup.status`), never from the profile's files themselves — those belong to the
+ * connector, not to the core.
+ *
+ * Every action hands over to the connector's existing commands, which are the form:
+ * `picode.mcp.addServer`, `editServer`, `removeServer` and `toggleServer`. No form is
+ * written here, and a server's token is never shown.
+ */
+
+/** One server as the `picode.mcp.servers` store holds it. The token (`key`) is never shown. */
+interface IMcpServerSettingRow {
+	readonly name: string;
+	readonly transport?: string;
+	readonly target?: string;
+	readonly args?: string;
+}
+
+/** One server's switch, as the status panel's data reports it. */
+interface IMcpServerStateRow {
+	readonly name: string;
+	readonly on: boolean;
+}
+
+/** The slice of the status panel's answer this widget reads. */
+interface IStatusDataSlice {
+	readonly mcpServers?: readonly IMcpServerStateRow[];
+}
+
+const STATUS_DATA_COMMAND = 'picode.setup.status';
+
+/** The management commands the connector registers; they are the form this page uses. */
+const ADD_SERVER_COMMAND = 'picode.mcp.addServer';
+const EDIT_SERVER_COMMAND = 'picode.mcp.editServer';
+const REMOVE_SERVER_COMMAND = 'picode.mcp.removeServer';
+const TOGGLE_SERVER_COMMAND = 'picode.mcp.toggleServer';
+
+/** One row of the table: the store's facts plus the state pi reports. */
+interface IServerRow {
+	readonly name: string;
+	readonly transport?: string;
+	readonly target?: string;
+	readonly args?: string;
+	/** `undefined` when pi's state could not be read; the row then shows no switch. */
+	readonly on?: boolean;
+	/** A server pi runs that the store does not spell out (added through the connector). */
+	readonly undeclared?: boolean;
+}
+
+export class PicodeMcpServersWidget extends Disposable implements IAICustomizationManagementSectionWidget {
+
+	private readonly root: HTMLElement;
+	private readonly rowsContainer: HTMLElement;
+	private readonly emptyContainer: HTMLElement;
+	/** The buttons of the rows on screen; cleared and refilled on every render. */
+	private readonly rowDisposables = this._register(new DisposableStore());
+	/** Guards a slow status answer against a newer render. */
+	private renderSequence = 0;
+	/** Coalesces the refreshes `layout` asks for: a resize calls it many times in a row. */
+	private layoutTimer: ReturnType<typeof setTimeout> | undefined;
+
+	get element(): HTMLElement {
+		return this.root;
+	}
+
+	constructor(
+		container: HTMLElement,
+		@ICommandService private readonly commandService: ICommandService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) {
+		super();
+
+		this.root = DOM.append(container, $('.picode-mcp-section'));
+
+		const description = DOM.append(this.root, $('.picode-mcp-section-description'));
+		description.textContent = localize('picodeMcpSectionDescription', "The MCP servers pi uses. You are asked before one of their tools runs.");
+
+		const toolbar = DOM.append(this.root, $('.picode-mcp-section-toolbar'));
+		const addButton = this._register(new Button(toolbar, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
+		addButton.label = `$(${Codicon.add.id}) ${localize('picodeMcpSectionAdd', "Add server")}`;
+		addButton.setTitle(localize('picodeMcpSectionAddTooltip', "Add an MCP server for pi"));
+		this._register(addButton.onDidClick(() => { void this.runCommand(ADD_SERVER_COMMAND); }));
+
+		const tableHeader = DOM.append(this.root, $('.picode-mcp-table-header'));
+		for (const label of [
+			localize('picodeMcpSectionColumnName', "Name"),
+			localize('picodeMcpSectionColumnRuns', "Runs"),
+			localize('picodeMcpSectionColumnTarget', "Address or command"),
+			localize('picodeMcpSectionColumnState', "State"),
+			localize('picodeMcpSectionColumnActions', "Actions"),
+		]) {
+			DOM.append(tableHeader, $('.picode-mcp-table-column')).textContent = label;
+		}
+
+		this.rowsContainer = DOM.append(this.root, $('.picode-mcp-rows'));
+		this.emptyContainer = DOM.append(this.root, $('.picode-mcp-empty-state'));
+		this.emptyContainer.textContent = localize('picodeMcpSectionEmpty', "No MCP servers yet. Add one to give pi more tools.");
+
+		// The store changed somewhere else (an import, the setup wizard): repaint.
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(PICODE_MCP_SERVERS_SETTING)) {
+				void this.refresh();
+			}
+		}));
+
+		void this.refresh();
+	}
+
+	layout(_dimension: DOM.Dimension): void {
+		// The layout call is the moment to catch up on servers the connector added or switched
+		// since last time — but it also fires on every step of a resize, and each refresh asks
+		// the status command, which reads git. Only the last answer matters, so they are one.
+		if (this.layoutTimer !== undefined) {
+			clearTimeout(this.layoutTimer);
+		}
+		this.layoutTimer = setTimeout(() => {
+			this.layoutTimer = undefined;
+			void this.refresh();
+		}, 250);
+	}
+
+	override dispose(): void {
+		if (this.layoutTimer !== undefined) {
+			clearTimeout(this.layoutTimer);
+			this.layoutTimer = undefined;
+		}
+		super.dispose();
+	}
+
+	private async refresh(): Promise<void> {
+		const sequence = ++this.renderSequence;
+
+		const stored = this.configurationService.getValue<readonly IMcpServerSettingRow[]>(PICODE_MCP_SERVERS_SETTING);
+		const declared = Array.isArray(stored) ? stored : [];
+
+		// The on/off state is pi's, not the store's: the same command the status panel
+		// reads answers it. Without it the rows still list, but show no switch.
+		const states = new Map<string, boolean>();
+		try {
+			const data = await this.commandService.executeCommand<IStatusDataSlice>(STATUS_DATA_COMMAND);
+			for (const server of data?.mcpServers ?? []) {
+				states.set(server.name, server.on);
+			}
+		} catch {
+			// The connector is not answering; the rows stay honest about not knowing.
+		}
+
+		if (sequence !== this.renderSequence) {
+			return;
+		}
+		this.render(declared, states);
+	}
+
+	private render(declared: readonly IMcpServerSettingRow[], states: ReadonlyMap<string, boolean>): void {
+		this.rowDisposables.clear();
+		DOM.clearNode(this.rowsContainer);
+
+		const rows: IServerRow[] = declared.map(row => ({
+			name: row.name,
+			transport: row.transport,
+			target: row.target,
+			args: row.args,
+			on: states.get(row.name),
+		}));
+		for (const [name, on] of states) {
+			if (!declared.some(row => row.name === name)) {
+				rows.push({ name, on, undeclared: true });
+			}
+		}
+
+		this.emptyContainer.style.display = rows.length === 0 ? '' : 'none';
+		for (const row of rows) {
+			this.rowsContainer.appendChild(this.renderRow(row));
+		}
+	}
+
+	private renderRow(row: IServerRow): HTMLElement {
+		const rowElement = $('.picode-mcp-row');
+		rowElement.classList.toggle('off', row.on === false);
+
+		const name = DOM.append(rowElement, $('.picode-mcp-cell-name'));
+		name.textContent = row.name;
+
+		const runs = DOM.append(rowElement, $('.picode-mcp-cell-runs'));
+		if (row.undeclared || row.transport === undefined) {
+			runs.textContent = '';
+		} else {
+			runs.textContent = row.transport === 'http'
+				? localize('picodeMcpSectionRemote', "Remote")
+				: localize('picodeMcpSectionLocal', "Local");
+		}
+
+		const target = DOM.append(rowElement, $('.picode-mcp-cell-target'));
+		target.textContent = row.target === undefined ? '' : row.args ? `${row.target} ${row.args}` : row.target;
+		target.title = target.textContent ?? '';
+
+		const state = DOM.append(rowElement, $('.picode-mcp-cell-state'));
+		state.classList.toggle('disabled', row.on === false);
+		if (row.on === undefined) {
+			state.textContent = '';
+		} else {
+			state.textContent = row.on ? localize('picodeMcpSectionOn', "On") : localize('picodeMcpSectionOff', "Off");
+		}
+
+		const actions = DOM.append(rowElement, $('.picode-mcp-row-actions'));
+		const disposables = this.rowDisposables;
+
+		const editButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+		editButton.label = localize('picodeMcpSectionEdit', "Edit");
+		editButton.setTitle(localize('picodeMcpSectionEditTooltip', "Change what this server says"));
+		disposables.add(editButton.onDidClick(() => { void this.runCommand(EDIT_SERVER_COMMAND, row.name); }));
+
+		const toggleLabel = row.on === false
+			? localize('picodeMcpSectionEnable', "Enable")
+			: localize('picodeMcpSectionDisable', "Disable");
+		if (row.on !== undefined) {
+			const toggleButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+			toggleButton.label = toggleLabel;
+			toggleButton.setTitle(row.on
+				? localize('picodeMcpSectionDisableTooltip', "pi stops starting this server. It stays in the list.")
+				: localize('picodeMcpSectionEnableTooltip', "pi starts this server again."));
+			disposables.add(toggleButton.onDidClick(() => { void this.runCommand(TOGGLE_SERVER_COMMAND, row.name); }));
+		}
+
+		const removeButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+		removeButton.label = localize('picodeMcpSectionRemove', "Remove");
+		removeButton.setTitle(localize('picodeMcpSectionRemoveTooltip', "Remove this server from pi"));
+		disposables.add(removeButton.onDidClick(() => { void this.runCommand(REMOVE_SERVER_COMMAND, row.name); }));
+
+		return rowElement;
+	}
+
+	/** Runs one of the connector's commands — the form — and repaints what it changed. */
+	private async runCommand(command: string, name?: string): Promise<void> {
+		try {
+			await this.commandService.executeCommand(command, name);
+		} catch {
+			// The connector already reports its own failures; here they would only be the
+			// command being absent, which has nothing this page can say better.
+		}
+		await this.refresh();
+	}
+}
+
+const contribution: IAICustomizationManagementSectionContribution = {
+	id: AICustomizationManagementSection.McpServers,
+	label: localize('picodeMcpSectionLabel', "MCP Servers"),
+	icon: Codicon.server,
+	description: localize('picodeMcpSectionNavigationDescription', "The MCP servers pi uses. You are asked before one of their tools runs."),
+	supportsHarness: () => true,
+	create: (instantiationService, container) => instantiationService.createInstance(PicodeMcpServersWidget, container),
+};
+aiCustomizationManagementSectionRegistry.register(contribution);

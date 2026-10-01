@@ -1,0 +1,61 @@
+name: Feature request
+description: A change to what PiCode is or does
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PiCode's product rules are written down (see
+        `AGENTS.md` and `docs/DISENO.md`): no PiCode-
+        owned panel, tab or settings page; nothing is
+        reimplemented that Pi or Gentle AI already
+        ships; a datum appears once; anything
+        requiring action is a button.
+        Saying how your idea fits those rules saves a
+        round of questions.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What hurts today
+      description: >
+        The situation and what you actually wanted to
+        do. Not the solution — the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: wish
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer would it touch
+      description: Guesses are fine.
+      options:
+        - Editor patches (patches/picode)
+        - Product / distribution layer
+        - Agent integration (core chat, connector, agent host)
+        - Build pipeline or CI
+        - Documentation
+        - Don't know
+    validations:
+      required: true
+  - type: textarea
+    id: no
+    attributes:
+      label: What you considered and rejected
+      placeholder: Alternatives that would not solve it, and why.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues (open and closed)
+          required: true
+        - label: >-
+            It does not contradict a decision in
+            docs/DECISIONS.md (or I explain why the
+            ADR should change)
+          required: true

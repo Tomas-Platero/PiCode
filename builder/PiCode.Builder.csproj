@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>PiCode.Builder</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- PiCode's own icon, baked into the executable: the window sets one at runtime too, but
+         this is the one Explorer and a shortcut show, and they read it from inside the file.
+         The path leaves this folder on purpose: the icon lives with the distribution's art. -->
+    <ApplicationIcon>..\distribution\picode.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Self-contained needs the architecture said one way, not as a list: it is the difference
+         between "here are the ones it could be" and "this is the one". -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+  </ItemGroup>
+</Project>

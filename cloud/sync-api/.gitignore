@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env.local
+.env.*.local
+service-account*.json
+*.pem
+
+.vercel
+.env*
+.probe-token
+
+*.tsbuildinfo
