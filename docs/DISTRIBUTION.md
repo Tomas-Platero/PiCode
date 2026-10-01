@@ -154,11 +154,11 @@ Machine-checkable, in the order that catches the most:
 | Branding | `bin/picode.cmd --help` prints `PiCode — Agentic Code Editor <version>` and a usage line reading `picode.exe` |
 | Icons | the window and task bar show the PiCode mark, and the left bar shows `media/picode.svg` |
 | Portable profile | the newest log directory is under `data/user-data/logs/`, and `%APPDATA%` is untouched |
-| Extension activated | `_doActivateExtension picode.picode-pi-chat` in `window1/exthost/exthost.log` |
+| Extension activated | `_doActivateExtension picode.picode` in `window1/exthost/exthost.log` |
 | Runtime in use | the PiCode output channel prints `[pi] starting from <mode> runtime: <path>` |
 | No renderer errors | no `Uncaught` or `TypeError` with `ELECTRON_ENABLE_LOGGING=1` |
-| Panel logic | `npm test` in the extension: seven hermetic suites |
-| Protocol and CLI | `npm run test:live`: needs a real `pi` on PATH, and a real `gentle-ai` for the gentle checks |
+| Connector logic | `node --test picode-source/extensions/picode/test/*.test.ts` — the connector's hermetic suites, no editor needed |
+| Protocol and CLI | nothing automated: what needs a real `pi` on PATH — a login, an MCP sign-in — is exercised by hand and recorded in `odd/tasks/` |
 
 A view cannot be opened from the command line, and `onView:` activation is invisible
 until one is shown, so an end-to-end check of a view needs a **temporary built-in

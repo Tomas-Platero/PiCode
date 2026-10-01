@@ -151,6 +151,38 @@ pasa por `normalizedServersFile`: la entrada se repara (fuera `auth`/`oauth` boo
 `oauth: {}` si pedía iniciar sesión) y **todo lo demás se queda igual**, incluidas las claves del
 adaptador que pi ignora (`lifecycle`, `directTools`) y las que no son del adaptador.
 
+## Iniciar sesión en un servidor MCP desde la página (2026-10-01)
+
+Cierra el hueco declarado arriba: los dos servidores del perfil que piden OAuth
+(`atlassian-rovo-mcp`, `sentry`) necesitaban una terminal.
+
+**No se implementa OAuth aquí.** pi ya lo hace: `pi mcp login <server>` levanta un callback local,
+**abre el navegador solo** (`openUrl = options.openUrl ?? openBrowser`, `dist/extensions/mcp/cli.js:436`)
+y guarda los tokens en el perfil. Lo que añade PiCode es el botón y el sitio donde vive la espera:
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| Contrato `picode.mcp.loginServer` | `extension.ts` | recibe el nombre, exige que exista el runtime y lanza pi contra el **perfil en fuerza** (`PI_CODING_AGENT_DIR`) |
+| `runMcpLogin` | `extension.ts` | `execFile` como Node, con progreso cancelable (cancelar mata el proceso) y tope de 330 s (pi espera 300) |
+| Reglas puras | `mcp-login.ts` | `loginArguments`, `loginTarget`, `authorizationUrlIn`, `lastLineOf` — con 6 tests |
+| Acción **Sign In** | `mcpListWidget.ts` | en la fila de un servidor de pi **solo si es remoto** (`'uri' in definition`), junto a Edit y Remove |
+
+Al terminar: si salió bien, se muestra **la frase de pi** (`Signed in to MCP server "x" (N tools).`,
+que también cubre el «ya estaba dentro») y se refresca la lista; si falló, la **última línea** que
+escribió pi, con botón **Open in browser** usando la dirección que pi imprimió — porque si el
+navegador no llegó a abrirse, esa dirección es lo único que salva el flujo.
+
+**Verificado ejecutando** (contra el perfil del pack, sin abrir navegador): `pi mcp login
+does-not-exist` → `No MCP server named "does-not-exist". Configured: aikido, atlassian-rovo-mcp,
+codegraph, engram, github, sentry, sequential-thinking, supabase-mcp-server, vercel, repomix.`; y
+`pi mcp login codegraph` (local) → `MCP server "codegraph" does not use OAuth. Only HTTP servers
+without an Authorization header do.` Los dos textos son los que el botón repite por mensaje. **Lo
+único que no se ejecutó aquí es el viaje al navegador** (abriría una pestaña de verdad en la máquina
+del dueño): hace falta un `sentry` o un `atlassian` real y el consentimiento de él.
+
+También: `docs/DISTRIBUTION.md` decía «siete suites» y nombraba una extensión que ya no existe
+(`picode.picode-pi-chat`); corregido a las suites reales del conector y a `picode.picode`.
+
 ## Fuera de alcance
 
 - Cambiar el puente del MCP **del editor** (`mcp.ts`, `lm.invokeTool`): ese camino sigue

@@ -13,6 +13,7 @@ import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
+import { authorizationUrlIn, lastLineOf, loginArguments, loginTarget } from './mcp-login';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
@@ -598,6 +599,16 @@ export const EDIT_MCP_SERVER_COMMAND = 'picode.mcp.editServer';
  */
 export const REMOVE_MCP_SERVER_COMMAND = 'picode.mcp.removeServer';
 
+/**
+ * The MCP section's "Sign In" for a server pi provides: the page hands the server's name over and
+ * this connector runs pi's own `mcp login` against PiCode's profile.
+ *
+ * OAuth is not re-implemented here. pi starts the callback, opens the browser and writes the tokens
+ * into the profile — the same profile the chat now runs against — so the credentials land where pi
+ * looks for them and nowhere else. A **contract** like {@link EDIT_MCP_SERVER_COMMAND}.
+ */
+export const LOGIN_MCP_SERVER_COMMAND = 'picode.mcp.loginServer';
+
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
 
@@ -732,6 +743,46 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 /** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
 function piCliEntry(): string {
 	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+}
+
+/** How long a sign-in may wait for the browser: pi's own default, with room for the round trip. */
+const MCP_LOGIN_TIMEOUT_MS = 330_000;
+
+/** One `pi mcp login` run: what it printed, whether it finished, and whether it was cancelled. */
+interface McpLoginOutcome {
+	readonly ok: boolean;
+	readonly cancelled: boolean;
+	readonly output: string;
+}
+
+/**
+ * Runs pi's own sign-in for one server, against PiCode's profile.
+ *
+ * pi opens the browser and catches the redirect on a local callback, so nothing here has to
+ * understand OAuth. Its output is kept because the address it prints is the one thing to offer if
+ * the browser did not open, and its last line is what a failure has to repeat. Cancelling the
+ * notification kills the run: the sign-in is the owner's to abandon.
+ */
+async function runMcpLogin(cliEntry: string, profileDir: string, server: string, token: vscode.CancellationToken): Promise<McpLoginOutcome> {
+	const { execFile } = await import('node:child_process');
+	return new Promise<McpLoginOutcome>(resolve => {
+		let cancelled = false;
+		const child = execFile(process.execPath, [cliEntry, ...loginArguments(server)], {
+			// The editor's executable is Electron: without this flag it would try to open an app
+			// instead of running pi's script as Node — the same invocation the installer uses.
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: profileDir },
+			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+			windowsHide: true,
+			timeout: MCP_LOGIN_TIMEOUT_MS,
+			maxBuffer: 1024 * 1024,
+		}, (error, stdout, stderr) => {
+			resolve({ ok: error === null, cancelled, output: `${stdout}${stderr}` });
+		});
+		token.onCancellationRequested(() => {
+			cancelled = true;
+			child.kill();
+		});
+	});
 }
 
 /** A file's text, or `undefined` when it is not there. */
@@ -1053,6 +1104,53 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			const message = error instanceof Error ? error.message : String(error);
 			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be removed (${message}).`);
 		}
+	}));
+
+	// The MCP section's "Sign In": pi owns the credentials and pi is the one that signs in, so this
+	// runs its own command against the profile in force and reports what happened. The progress stays
+	// on screen while the owner finishes in the browser, and the address pi printed is offered if
+	// that browser never opened — the one part of the flow this host cannot do for them.
+	disposables.push(vscode.commands.registerCommand(LOGIN_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
+		const server = loginTarget(name);
+		if (server.length === 0) {
+			void vscode.window.showErrorMessage('PiCode: no MCP server was named for the sign-in.');
+			return;
+		}
+		const cliEntry = piCliEntry();
+		if (!fs.existsSync(cliEntry)) {
+			void vscode.window.showErrorMessage('PiCode: pi runtime not found in this editor.');
+			return;
+		}
+		const outcome = await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: `PiCode: signing in to "${server}"…`, cancellable: true },
+			(_progress, token) => runMcpLogin(cliEntry, profileInForce(), server, token),
+		);
+		if (outcome.cancelled) {
+			void vscode.window.showInformationMessage(`PiCode: the sign-in to "${server}" was cancelled.`);
+			return;
+		}
+		if (outcome.ok) {
+			// The credentials are in the profile now, so the list re-reads: a row that needed a sign-in
+			// is a row that can connect.
+			fire();
+			// pi's own sentence is the one shown — it says what happened, including the case of a server
+			// that was already signed in, and how many tools it found.
+			const said = lastLineOf(outcome.output);
+			void vscode.window.showInformationMessage(said === undefined ? `PiCode: signed in to "${server}".` : `PiCode: ${said}`);
+			return;
+		}
+		const reason = lastLineOf(outcome.output);
+		const message = `PiCode: the sign-in to "${server}" did not finish${reason === undefined ? '.' : ` (${reason}).`}`;
+		const url = authorizationUrlIn(outcome.output);
+		if (url === undefined) {
+			void vscode.window.showWarningMessage(message);
+			return;
+		}
+		void vscode.window.showWarningMessage(message, 'Open in browser').then(choice => {
+			if (choice !== undefined) {
+				void vscode.env.openExternal(vscode.Uri.parse(url));
+			}
+		});
 	}));
 
 	return disposables;
