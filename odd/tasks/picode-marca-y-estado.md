@@ -64,6 +64,22 @@ Nota menor: la copia de `gentle-ai.svg` que vive en el núcleo
 (`src/vs/workbench/contrib/picode/browser/media/`) **no la usa nadie** — la del conector es la que
 pinta el panel. Se dejó sincronizada y limpia; borrarla o darle uso es otra decisión.
 
+## El panel y los mensajes (segunda tanda)
+
+| Qué | Antes | Ahora |
+| --- | --- | --- |
+| El panel de estado | refrescaba cada 5 s **siempre** — un `git` por carpeta y el perfil leídos con el panel cerrado, sin nadie mirando la respuesta | el árbol le dice al proveedor cuándo aparece y cuándo se va; el temporizador vive en medio. Al volver refresca al instante, porque lo que quedó en pantalla es tan viejo como el tiempo ausente |
+| Una lectura que falla | vaciaba el panel: quedaba una fila de error y nada más | el error **se añade** a la última lectura buena, y una lectura buena (que no trae error) la sustituye |
+| «Reinstall it», «Update the pi that ships with the editor», «switch to PiCode's internal pi» | instrucciones en texto, con el comando existiendo | el chat, que renderiza markdown, lleva el enlace (`[Set up PiCode](command:picode.setup)`); los avisos, que no renderizan enlaces, llevan **botón** y ejecutan lo que se pulsa |
+
+Lo que **no** se tocó, y se comprobó antes de tocarlo: la paleta ya agrupa los cinco comandos del
+producto bajo *PiCode* con títulos claros; el aviso de actualización ya aparece solo **cuando hay
+algo** y trae botones (*Update/Later*, *Reload Window*). Estaban bien.
+
 ## Registro
 
 - 2026-10-01 · medido, cambiado y verificado en la sesión de «mejoras de diseño y estética».
+- 2026-10-01 · segunda tanda: el panel deja de trabajar cuando nadie mira y no se vacía al fallar;
+  los mensajes con acción llevan la acción. Comprobado además que la marca **sí** llega al editor
+  construido: el pack aplana los `media` de los contribuidores en `out/media/`, y ahí está
+  `picode.svg` con el lienzo nuevo (`118 116 788 788`).

@@ -193,8 +193,32 @@ dos que evitan que esto se rompa otra vez.
 | --- | --- | --- |
 | **Los MCP piden permiso** (`permissions.ts`) | Las herramientas de un servidor de pi (`mcp__…`) cuentan como mutantes: ninguna corre sin preguntar en los niveles que preguntan. Las del editor (`mcp_…`, un guion bajo) se dejan, porque el editor ya pregunta por ellas | 4 tests nuevos; y las llamadas anidadas de `codemode` pasan por el mismo evento (`agent-session.js:308`), así que también preguntan |
 | **Sign Out** (`picode.mcp.logoutServer`) | El par de Sign In: pi borra las credenciales que guardó y la entrada se queda, para que el siguiente inicio de sesión tenga dónde caer | `pi mcp logout` responde `Signed out of MCP server "x".` o `No stored credentials for MCP server "x".`; contrato y acción comprobados en el pack |
+| **Check Server** (`picode.mcp.checkServer`) | Pregunta a pi por un servidor: estado, herramientas y, si falló, el motivo | Verificado contra pi 0.99.2 real (conectado / fallido con el error entero); 7 tests sobre las formas que imprime |
 | **Los tests se comprueban de tipos** (`tsconfig.test.json`) | Los 15 ficheros corrían en CI pero nadie miraba sus tipos, y un test que llama mal a una función pasa igual en tiempo de ejecución. **12 errores preexistentes** corregidos | `tsc -p extensions/picode/tsconfig.test.json` → 0; los 177 tests siguen pasando |
 | **Lo que escribimos, contra el validador de pi** (`dev/check-mcp-entries.mjs`) | Las 12 formas que produce el conector pasan por `validateMcpServerConfig` del runtime instalado, con **control positivo**: las dos grafías viejas tienen que seguir siendo rechazadas, o el chequeo no valdría nada | `node dev/check-mcp-entries.mjs` → 12/12 como se espera; paso nuevo en CI |
+
+## Comprobar un servidor contra pi (2026-10-01)
+
+Un servidor configurado y muerto se ve igual que uno que funciona: el fichero no los distingue, y esa
+es justo la pregunta del dueño. `pi mcp list --json` es la respuesta de pi: el estado que alcanzó,
+las herramientas que encontró y, si falló, **el motivo** — lo que nadie puede deducir desde fuera.
+
+| Pieza | Qué hace |
+| --- | --- |
+| Contrato `picode.mcp.checkServer` | corre `pi mcp list --json` contra el perfil en fuerza (reutiliza `runMcpCommand`, con tope de 120 s y cancelable) |
+| `mcp-state.ts` | lee la respuesta de pi: `mcpStateReport`, `stateSentence`, `oneLine`. Puro, con 7 tests |
+| Acción **Check Server** | en cualquier fila de pi, junto a Sign In/Sign Out/Edit/Remove |
+
+Dice una frase: `"probe": connected, 1 tool` o `"broken": failed — MCP connection closed · "no-such-command" …`.
+Un servidor que pi **no lista** se cuenta con el error de fichero que lo explica (así el nombre con
+punto sale como motivo y no como misterio).
+
+**Verificado ejecutando** contra pi 0.99.2 real: con un servidor bueno y otro con un comando
+inexistente, la respuesta trae `state: connected` con sus herramientas y `state: failed` con el
+error de Windows entero. Los tests usan esas dos formas tal cual.
+
+**El chequeo conecta todos los servidores** (es lo que hace el comando), así que es un clic
+deliberado y nunca algo que el panel haga por su cuenta.
 
 ## Fuera de alcance
 
