@@ -77,27 +77,39 @@ jobs:
             echo "distribution/product-delta.json." >&2
             exit 1
           fi
+          # PiCode's own version: what a release is named after, and what moves
+          # by the minor each time (0.1.0, 0.2.0 …). Deliberately NOT
+          # `set.version`: that number is the editor's, it tracks VS Code —
+          # extensions are validated against it — and the updater compares it.
+          PICODE_VERSION=$(node -p \
+            "require('./distribution/product-delta.json').set.picodeVersion")
+          if [ -z "${PICODE_VERSION}" ]; then
+            echo "error: set.picodeVersion is empty in" >&2
+            echo "distribution/product-delta.json." >&2
+            exit 1
+          fi
           # A tag push must carry the version the delta file declares;
           # otherwise the release and the feed would tell different stories.
           if [ "${{ github.event_name }}" = "push" ] \
-             && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+             && [ "${GITHUB_REF_NAME}" != "v${PICODE_VERSION}" ]; then
             echo "error: tag '${GITHUB_REF_NAME}' does not match" >&2
-            echo "v${VERSION}." >&2
-            echo "The release version lives only in" >&2
-            echo "distribution/product-delta.json (set.version);" >&2
+            echo "v${PICODE_VERSION}." >&2
+            echo "PiCode's own version lives in" >&2
+            echo "distribution/product-delta.json (set.picodeVersion);" >&2
             echo "re-tag or bump the file so both agree." >&2
             exit 1
           fi
-          # Refuse to publish a version that is not strictly newer than the
-          # last release: the updater would never offer it.
+          # Refuse a PiCode version that is not strictly newer than the last
+          # release, and an editor version the updater would never offer.
           PREV_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
             --jq .tag_name 2>/dev/null || true)
           ver_le() {
-            # ver_le <a> <b>: true when a <= b, segment by segment.
+            # ver_le <a> <b>: true when a <= b, one segment at a time, on the
+            # numeric part only, so `0.2.0-beta` compares as its number.
             local IFS=.
             local -a x y
-            read -ra x <<< "$1"
-            read -ra y <<< "$2"
+            read -ra x <<< "${1%%-*}"
+            read -ra y <<< "${2%%-*}"
             local i
             for i in 0 1 2; do
               if [ "${y[i]:-0}" -ne "${x[i]:-0}" ]; then
@@ -107,15 +119,32 @@ jobs:
             return 0
           }
           if [ -n "${PREV_TAG}" ] \
-             && ver_le "${VERSION}" "${PREV_TAG#v}"; then
-            echo "error: ${VERSION} is not strictly newer than the last" >&2
-            echo "release ${PREV_TAG}. Bump set.version in" >&2
+             && ver_le "${PICODE_VERSION}" "${PREV_TAG#v}"; then
+            echo "error: ${PICODE_VERSION} is not newer than the last" >&2
+            echo "release ${PREV_TAG}. Bump set.picodeVersion in" >&2
             echo "distribution/product-delta.json before tagging." >&2
             exit 1
           fi
+          # The editor's number is what the updater compares, so it has to move
+          # too: a release whose editor version does not grow is one nobody
+          # gets offered.
+          FEED=updates/stable/win32/x64/archive/latest.json
+          FEED_VERSION=""
+          if [ -f "${FEED}" ]; then
+            FEED_VERSION=$(node -p \
+              "require('./${FEED}').productVersion" 2>/dev/null || true)
+            if [ -n "${FEED_VERSION}" ] \
+               && ver_le "${VERSION}" "${FEED_VERSION}"; then
+              echo "error: ${VERSION} is not newer than the feed's" >&2
+              echo "${FEED_VERSION}; bump set.version too." >&2
+              exit 1
+            fi
+          fi
           {
             echo "VERSION=${VERSION}"
+            echo "PICODE_VERSION=${PICODE_VERSION}"
             echo "PREV_TAG=${PREV_TAG}"
+            echo "FEED_VERSION=${FEED_VERSION}"
           } >> "$GITHUB_ENV"
 
       # preinstall.ts looks for Visual Studio only under fixed Program Files
@@ -173,13 +202,15 @@ jobs:
           # data/ is the portable profile, never the product.
           (
             cd PiCode-Win32-x64
-            "$ZIP" a -tzip "../PiCode-win32-x64-${VERSION}.zip" . "-x!data"
+            "$ZIP" a -tzip \
+              "../PiCode-win32-x64-${PICODE_VERSION}.zip" . "-x!data"
           )
 
       - name: SHA-256
         shell: bash
         run: |
-          SHA=$(sha256sum "PiCode-win32-x64-${VERSION}.zip" | cut -d' ' -f1)
+          SHA=$(sha256sum \
+            "PiCode-win32-x64-${PICODE_VERSION}.zip" | cut -d' ' -f1)
           echo "SHA=${SHA}" >> "$GITHUB_ENV"
 
       - name: Create the GitHub release
@@ -189,22 +220,27 @@ jobs:
         run: |
           # On workflow_dispatch this also creates the v-tag; on a tag
           # push --target just points the notes at the right commit.
-          gh release create "v${VERSION}" "PiCode-win32-x64-${VERSION}.zip" \
-            --title "PiCode ${VERSION}" --generate-notes \
+          gh release create "v${PICODE_VERSION}" \
+            "PiCode-win32-x64-${PICODE_VERSION}.zip" \
+            --title "PiCode ${PICODE_VERSION}" --generate-notes \
             --target "${GITHUB_SHA}"
 
       - name: Generate the update feed
         shell: bash
         run: |
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
-          URL="${URL}/PiCode-win32-x64-${VERSION}.zip"
+          URL="https://github.com/${GITHUB_REPOSITORY}\
+            /releases/download/v${PICODE_VERSION}"
+          URL="${URL}/PiCode-win32-x64-${PICODE_VERSION}.zip"
+          # The feed carries the EDITOR version: the number the updater compares
+          # against the installed product. The release around it is named with
+          # PiCode's own version. `--installed` is what the feed published.
           # No --installed for the FIRST release; --force is forbidden:
           # if the generator refuses, this job fails by design.
-          if [ -n "${PREV_TAG}" ]; then
+          if [ -n "${FEED_VERSION}" ]; then
             node dev/update-feed.mjs --version "${VERSION}" \
               --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
               --platform win32 --arch x64 --target archive \
-              --installed "${PREV_TAG#v}"
+              --installed "${FEED_VERSION}"
           else
             node dev/update-feed.mjs --version "${VERSION}" \
               --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
@@ -231,7 +267,8 @@ jobs:
           if git diff --cached --quiet; then
             echo "Feed on master is already identical; nothing to push."
           else
-            git commit -m "release: update feed for v${VERSION} [skip ci]"
+            git commit -m \
+              "release: update feed for v${PICODE_VERSION} [skip ci]"
             git push origin HEAD:master
           fi
 
@@ -245,7 +282,7 @@ jobs:
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
           FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
           FEED_REF="updates/stable/win32/x64/archive/latest.json"
-          ASSET="PiCode-win32-x64-${VERSION}.zip"
+          ASSET="PiCode-win32-x64-${PICODE_VERSION}.zip"
           # On a PRIVATE repo raw.githubusercontent.com 404s for anonymous
           # readers, so the anonymous check would fail even with a correct
           # feed. Until the repo is public, verify the exact bytes on

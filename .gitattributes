@@ -13,3 +13,6 @@
 
 # Shell scripts, so the shebang keeps working when the tree is used from Git Bash.
 *.sh text eol=lf
+
+# The workflows are read by linters that require LF, and they carry no patches.
+/.github/workflows/*.yml text eol=lf
