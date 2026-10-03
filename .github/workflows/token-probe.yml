@@ -1,0 +1,24 @@
+name: token-probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Can the Actions token write to releases?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "--- token permissions from the runner header are above ---"
+          URL="repos/${GITHUB_REPOSITORY}/releases/tags/v0.1.0-beta"
+          if gh api -X PATCH "${URL}" \
+               -f name="PiCode 0.1.0-beta" --silent; then
+            echo "PROBE_RESULT=write-ok"
+          else
+            echo "PROBE_RESULT=write-failed"
+          fi
