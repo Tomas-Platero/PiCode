@@ -303,7 +303,10 @@ const fs = require('fs');
 const file = 'picode-source/package.json';
 const version = process.env.APP_VERSION;
 const raw = fs.readFileSync(file, 'utf8');
-const next = raw.replace(/^(\t"version":\s*")[^"]*(")/m, `$1${version}$2`);
+// The indentation is the file's to choose, and this tree indents package.json with four spaces. A
+// pattern that only accepted a tab made the line unreachable: the build could say "already
+// reports" but never move the number, which is how the tree stayed on one version.
+const next = raw.replace(/^([ \t]+"version":\s*")[^"]*(")/m, `$1${version}$2`);
 
 if (next === raw) {
   if (raw.indexOf(`"version": "${version}"`) === -1) {
