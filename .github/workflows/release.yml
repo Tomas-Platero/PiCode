@@ -226,14 +226,18 @@ jobs:
           # push --target just points the notes at the right commit.
           gh release create "v${PICODE_VERSION}" \
             "PiCode-win32-x64-${PICODE_VERSION}.zip" \
+            "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
             --title "PiCode ${PICODE_VERSION}" --generate-notes \
             --target "${GITHUB_SHA}"
 
       - name: Generate the update feed
         shell: bash
         run: |
-          URL="https://github.com/${GITHUB_REPOSITORY}\
-            /releases/download/v${PICODE_VERSION}"
+          # One line: a trailing backslash inside quotes keeps the next
+          # line's indentation in the string, and the published feed came out
+          # with two spaces in the middle of its URL.
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          URL="${REPO_URL}/releases/download/v${PICODE_VERSION}"
           URL="${URL}/PiCode-win32-x64-${PICODE_VERSION}.zip"
           # The feed carries the EDITOR version: the number the updater compares
           # against the installed product. The release around it is named with
@@ -337,18 +341,23 @@ jobs:
         run: |
           VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
             --json visibility --jq .visibility)
-          SIZE=$(stat -c%s "PiCode-win32-x64-${VERSION}.zip" \
+          SIZE=$(stat -c%s "PiCode-win32-x64-${PICODE_VERSION}.zip" \
+            2>/dev/null || echo unknown)
+          SETUP_SIZE=$(stat -c%s \
+            "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
             2>/dev/null || echo unknown)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
           FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
           {
-            echo "## Release PiCode ${VERSION}"
+            echo "## Release PiCode ${PICODE_VERSION}"
             echo
             echo "- Commit: ${COMMIT}"
-            echo "- Zip: PiCode-win32-x64-${VERSION}.zip (${SIZE} bytes)"
-            echo "- SHA-256: ${SHA}"
+            echo "- Zip: PiCode-win32-x64-${PICODE_VERSION}.zip (${SIZE} bytes)"
+            echo "- Installer: PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
+            echo "  (${SETUP_SIZE} bytes)"
+            echo "- SHA-256 (zip): ${SHA}"
             echo "- Release: https://github.com/${GITHUB_REPOSITORY}"
-            echo "/releases/tag/v${VERSION}"
+            echo "/releases/tag/v${PICODE_VERSION}"
             echo "- Feed: updates/stable/win32/x64/archive/latest.json"
             echo "- Feed URL: ${FEED_URL}"
             echo
@@ -371,10 +380,12 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Convenience copy for debugging without downloading the release.
-      - name: Upload the zip as a workflow artifact
+      # Convenience copies for debugging without downloading the release.
+      - name: Upload the release files as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: PiCode-win32-x64-${{ env.VERSION }}
-          path: PiCode-win32-x64-${{ env.VERSION }}.zip
+          name: PiCode-win32-x64-${{ env.PICODE_VERSION }}
+          path: |
+            PiCode-win32-x64-${{ env.PICODE_VERSION }}.zip
+            PiCode-win32-x64-${{ env.PICODE_VERSION }}-setup.exe
           if-no-files-found: error

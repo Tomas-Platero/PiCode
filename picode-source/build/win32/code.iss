@@ -1,27 +1,39 @@
-#define RootLicenseFileName FileExists(RepoDir + '\LICENSE.rtf') ? 'LICENSE.rtf' : 'LICENSE.txt'
+// The licence page. The tree ships neither LICENSE.rtf (the RTF VSCodium generates) nor
+// LICENSE.txt, and Inno Setup aborts rather than compile a page whose file is missing - which is
+// how `vscode-win32-x64-user-setup` died with "Could not read ...\picode-source\LICENSE.txt".
+// The parameter is written only when a file is really there; drop one into picode-source/ and
+// the page comes back.
+#define RootLicenseFileName \
+    FileExists(RepoDir + '\LICENSE.rtf') ? 'LICENSE.rtf' \
+      : FileExists(RepoDir + '\LICENSE.txt') ? 'LICENSE.txt' \
+      : ''
 #define LocalizedLanguageFile(Language = "") \
     DirExists(RepoDir + "\licenses") && Language != "" \
       ? ('; LicenseFile: "' + RepoDir + '\licenses\LICENSE-' + Language + '.rtf"') \
-      : '; LicenseFile: "' + RepoDir + '\' + RootLicenseFileName + '"'
+      : (RootLicenseFileName == '' ? '' : ('; LicenseFile: "' + RepoDir + '\' + RootLicenseFileName + '"'))
 
 [Setup]
 AppId={#AppId}
 AppName={#NameLong}
 AppVerName={#NameVersion}
-AppPublisher=Microsoft Corporation
-AppPublisherURL=https://code.visualstudio.com/
-AppSupportURL=https://code.visualstudio.com/
-AppUpdatesURL=https://code.visualstudio.com/
+AppPublisher=PiCode
+AppPublisherURL=https://github.com/Tomas-Platero/PiCode
+AppSupportURL=https://github.com/Tomas-Platero/PiCode/issues
+AppUpdatesURL=https://github.com/Tomas-Platero/PiCode/releases
 DefaultGroupName={#NameLong}
 AllowNoIcons=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=VSCodeSetup
+OutputBaseFilename=PiCodeSetup
 Compression=lzma
 SolidCompression=yes
 AppMutex={code:GetAppMutex}
 SetupMutex={code:GetSetupMutex}
-WizardImageFile="{#RepoDir}\resources\win32\inno-big-100.bmp,{#RepoDir}\resources\win32\inno-big-125.bmp,{#RepoDir}\resources\win32\inno-big-150.bmp,{#RepoDir}\resources\win32\inno-big-175.bmp,{#RepoDir}\resources\win32\inno-big-200.bmp,{#RepoDir}\resources\win32\inno-big-225.bmp,{#RepoDir}\resources\win32\inno-big-250.bmp"
-WizardSmallImageFile="{#RepoDir}\resources\win32\inno-small-100.bmp,{#RepoDir}\resources\win32\inno-small-125.bmp,{#RepoDir}\resources\win32\inno-small-150.bmp,{#RepoDir}\resources\win32\inno-small-175.bmp,{#RepoDir}\resources\win32\inno-small-200.bmp,{#RepoDir}\resources\win32\inno-small-225.bmp,{#RepoDir}\resources\win32\inno-small-250.bmp"
+		// The sidebar picture. Nothing in the tree is 164x314 - every PiCode drawing is square - so
+		// dev/make-inno-images.mjs lays the finished mark on a PiCode-coloured panel at each size of
+		// the ladder. The small picture is the mark itself: resources/win32/code_150x150.png, the
+		// same tile Windows shows in the Start menu, so the wizard reuses one finished drawing.
+		WizardImageFile={#RepoDir}\resources\win32\inno-big-100.png,{#RepoDir}\resources\win32\inno-big-125.png,{#RepoDir}\resources\win32\inno-big-150.png,{#RepoDir}\resources\win32\inno-big-175.png,{#RepoDir}\resources\win32\inno-big-200.png,{#RepoDir}\resources\win32\inno-big-225.png,{#RepoDir}\resources\win32\inno-big-250.png
+		WizardSmallImageFile={#RepoDir}\resources\win32\code_150x150.png
 SetupIconFile={#RepoDir}\resources\win32\code.ico
 UninstallDisplayIcon={app}\{#ExeBasename}.exe
 ChangesEnvironment=true
@@ -95,7 +107,11 @@ Name: "runcode"; Description: "{cm:RunAfter,{#NameShort}}"; GroupDescription: "{
 Name: "{app}"; AfterInstall: DisableAppDirInheritance
 
 [Files]
-Source: "*"; Excludes: "\CodeSignSummary*.md,\tools,\tools\*,\policies,\policies\*,\appx,\appx\*,\{#ProductJsonRelativePath},\{#ExeBasename}.exe,\{#ExeBasename}.VisualElementsManifest.xml,\bin,\bin\*"; DestDir: "{code:GetDestDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
+// data/ is the portable profile - what the editor writes for whoever is using it: settings,
+// installed extensions, the pi agent's own state. It is never the product, and a build directory
+// carries the profile of the machine that built it, which must not travel in a published
+// installer. The release's zip leaves it out for the same reason ("-x!data").
+Source: "*"; Excludes: "\CodeSignSummary*.md,\data,\data\*,\tools,\tools\*,\policies,\policies\*,\appx,\appx\*,\{#ProductJsonRelativePath},\{#ExeBasename}.exe,\{#ExeBasename}.VisualElementsManifest.xml,\bin,\bin\*"; DestDir: "{code:GetDestDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ExeBasename}.exe"; DestDir: "{code:GetDestDir}"; DestName: "{code:GetExeBasename}"; Flags: ignoreversion
 Source: "{#ExeBasename}.VisualElementsManifest.xml"; DestDir: "{code:GetDestDir}"; DestName: "{code:GetVisualElementsManifest}"; Flags: ignoreversion
 Source: "tools\*"; DestDir: "{app}\{#VersionedResourcesFolder}\tools"; Flags: ignoreversion

@@ -28,7 +28,8 @@
 #   * It does not use jq. The JSON this script touches is read and written by node.
 #
 # The phases are PiCode's: prepare (the source, the identity and the dependencies), the
-# connector, compile, pack, stage. `-o` stops inside the first one.
+# connector, compile, pack, stage, and - on Windows - the installer. `-o` stops inside the first
+# one.
 
 set -eo pipefail
 
@@ -469,6 +470,17 @@ echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
 bash dev/stage-distribution.sh "${PACK_DIR}"
+
+# ---------------------------------------------------------------------------
+# The Windows installer
+# ---------------------------------------------------------------------------
+# Built here, from the tree that was just packed and staged, so that `dev/build.sh` - which is
+# what a person runs and what a release runs - produces every artifact a release has. On anything
+# but Windows the script says so and stops, and the build carries on.
+echo ""
+echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
+
+bash dev/build-installer.sh "${PACK_DIR}"
 
 echo ""
 echo "== done"
