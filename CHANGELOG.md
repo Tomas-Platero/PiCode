@@ -7,6 +7,19 @@ All notable changes to PiCode are documented here. The format is based on
 Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
 (the owner removed them; the process lives in `docs/CI.md`).
 
+## [Unreleased]
+
+### Added
+- **El chat hospeda la UI interactiva de las extensiones de pi.** El conector enlazaba las
+  extensiones **sin** contexto de UI (`mode` por defecto `"print"`, `ctx.hasUI === false`), así que
+  una extensión que necesita preguntar —el guard de comandos destructivos de gentle-ai, su tool
+  `ask_user_question`, sus paneles— o bloqueaba con una frase que el modelo solo podía repetir, o
+  respondía «unavailable». Ahora se enlazan con `mode: "rpc"` y un `uiContext` que traduce
+  `ctx.ui.confirm/select/input` al carrusel de preguntas del chat y `ctx.ui.notify` a una línea en
+  él; lo de terminal (`custom`, `setWidget`, `setFooter`, `theme`…) queda inerte. Se marca además el
+  proceso con `GENTLE_SHELL_INTERACTIVE_HOST=1`, el contrato de host interactivo que gentle-pi lee
+  (`lib/rpc-host.ts`). Detalle en `odd/tasks/picode-gentle-chat.md`.
+
 ## [0.1.1-beta] — 2026-10-03
 
 ### Changed

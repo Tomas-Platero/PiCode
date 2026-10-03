@@ -133,6 +133,14 @@ interface PiSession {
 	 * old enough not to have it, so the caller checks — see `bindSessionExtensions`.
 	 */
 	bindExtensions?(bindings: {
+		/**
+		 * pi's interactive UI for extensions. The chat's question carousel stands in for the
+		 * terminal: `confirm`/`select`/`input` become questions, `notify` a chat line, and the
+		 * terminal-only methods are inert. Set, this is what makes `ctx.hasUI` true.
+		 */
+		uiContext?: unknown;
+		/** `"rpc"`: dialogs available, no terminal. Extensions gate TUI components on `"tui"`. */
+		mode?: string;
 		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
 	}): Promise<void>;
 	dispose(): void;
@@ -628,6 +636,189 @@ function permissionExtension(log: (line: string) => void): PiInlineExtension {
 }
 
 /* ------------------------------------------------------------------ *
+ * pi's interactive UI, as the chat can host it
+ * ------------------------------------------------------------------ */
+
+/**
+ * The answer key of the bridge's questions. One live question per kind at a time, so one id is
+ * enough; the carousel answer record is keyed by it.
+ */
+const EXTENSION_UI_QUESTION_ID = 'picode-extension-ui';
+
+/** The longest extension-supplied text shown in a question; the rest is trimmed with an ellipsis. */
+const EXTENSION_UI_TEXT_LIMIT = 600;
+
+function trimExtensionText(text: string): string {
+	return text.length <= EXTENSION_UI_TEXT_LIMIT ? text : `${text.slice(0, EXTENSION_UI_TEXT_LIMIT)}…`;
+}
+
+/**
+ * One question an extension asked through `ctx.ui`, shown on the current turn's carousel.
+ *
+ * `undefined` when there is no turn to ask on — an extension that asks outside a turn (a
+ * `session_start` handler, say) gets no answer rather than an invented one, and every caller of
+ * this bridge reads that as "not approved"/"cancelled", which is the safe direction.
+ */
+async function askExtensionInChat(
+	kind: 'text' | 'select',
+	title: string,
+	message: string | undefined,
+	options: readonly string[] | undefined,
+	log: (line: string) => void,
+): Promise<unknown> {
+	const stream = turnContext.current?.stream;
+	if (stream === undefined || typeof stream.questionCarousel !== 'function') {
+		log(`extension asked a ${kind} question outside a chat turn: ${title}`);
+		return undefined;
+	}
+	const question = new vscode.ChatQuestion(
+		EXTENSION_UI_QUESTION_ID,
+		kind === 'text' ? vscode.ChatQuestionType.Text : vscode.ChatQuestionType.SingleSelect,
+		trimExtensionText(title),
+		{
+			...(message !== undefined && message !== '' ? { message: trimExtensionText(message) } : {}),
+			...(options !== undefined
+				? { options: options.map((option, index) => ({ id: `option-${index}`, label: trimExtensionText(option), value: option })) }
+				: {}),
+		},
+	);
+	try {
+		const answer = await stream.questionCarousel([question]);
+		return answer?.[EXTENSION_UI_QUESTION_ID];
+	} catch (error) {
+		log(`extension ${kind} question failed: ${error instanceof Error ? error.message : String(error)}`);
+		return undefined;
+	}
+}
+
+/**
+ * The colour helpers a `Theme` answers with. Here they return the text unchanged: the chat paints
+ * its own colours, and a widget this host never renders only needs the call not to throw.
+ */
+type ChatThemeStyle = (colorOrText?: unknown, text?: unknown) => string;
+
+/** The colour surface an extension may reach through `ctx.ui.theme`. */
+type ChatTheme = Record<string, ChatThemeStyle>;
+
+/**
+ * pi's `ExtensionUIContext`, reduced to the surface this host answers.
+ *
+ * Typed rather than `unknown` so the bridge itself is checkable. pi reads the object structurally,
+ * so the properties it declares and this one does not are simply absent, and the terminal-only
+ * methods are inert no-ops rather than missing — an extension that calls `setStatus` on a host
+ * without a status bar must not fail the turn.
+ */
+interface PiExtensionUiContext {
+	confirm(title: string, message: string): Promise<boolean>;
+	select(title: string, options: string[]): Promise<string | undefined>;
+	input(title: string, placeholder?: string): Promise<string | undefined>;
+	notify(message: string, type?: 'info' | 'warning' | 'error'): void;
+	onTerminalInput(): () => void;
+	setStatus(key: string, text: string | undefined): void;
+	setWorkingMessage(message?: string): void;
+	setWorkingVisible(visible: boolean): void;
+	setWorkingIndicator(options?: unknown): void;
+	setHiddenThinkingLabel(label?: string): void;
+	setWidget(key: string, content?: unknown, options?: unknown): void;
+	setFooter(factory?: unknown): void;
+	setHeader(factory?: unknown): void;
+	setTitle(title: string): void;
+	custom(): Promise<undefined>;
+	pasteToEditor(text: string): void;
+	setEditorText(text: string): void;
+	getEditorText(): string;
+	editor(title: string, prefill?: string): Promise<undefined>;
+	addAutocompleteProvider(factory: unknown): void;
+	setEditorComponent(factory?: unknown): void;
+	getEditorComponent(): undefined;
+	readonly theme: ChatTheme;
+	getAllThemes(): readonly unknown[];
+	getTheme(name: string): undefined;
+	setTheme(theme: unknown): { success: boolean; error: string };
+	getToolsExpanded(): boolean;
+	setToolsExpanded(expanded: boolean): void;
+}
+
+/**
+ * A theme good enough for an extension that asks before drawing. A proxy rather than a hand-written
+ * object, because pi's `Theme` has more methods than any one extension uses and a missing one must
+ * not fail the turn.
+ */
+const CHAT_THEME: ChatTheme = new Proxy({} as ChatTheme, {
+	get: () => (colorOrText?: unknown, text?: unknown) =>
+		typeof text === 'string' ? text : typeof colorOrText === 'string' ? colorOrText : '',
+});
+
+/**
+ * pi's interactive UI, as the chat can host it.
+ *
+ * pi gives extensions `ctx.ui.confirm/select/input/notify` and a `ctx.hasUI` flag, and this host
+ * used to bind extensions with **no** UI context: an extension that needed a question — gentle-pi's
+ * destructive-command guard, its `ask_user_question` tool, its panels — saw `hasUI === false` and
+ * either blocked with a reason the model could only relay, or answered "unavailable". The owner
+ * approved the command and it still did not run.
+ *
+ * Binding this context makes `hasUI` true and turns those calls into the chat's own question
+ * carousel, so the owner answers where the work is. The mode is `"rpc"`, not `"tui"`: the chat has
+ * dialogs but no terminal, and extensions that draw terminal components gate on `mode === "tui"`.
+ * Everything the chat cannot show is a no-op or `undefined`, never a throw — an extension that
+ * calls `setStatus` on a host without a status bar must not fail the turn.
+ *
+ * `custom` (a terminal component) resolves `undefined`, exactly as pi's own RPC mode does; callers
+ * already handle that as "she did not pick anything".
+ */
+function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
+	const noop = (): void => { /* the chat owns this surface */ };
+	return {
+		confirm: async (title: string, message: string): Promise<boolean> =>
+			(await askExtensionInChat('select', title, message, ['Allow', 'Deny'], log)) === 'Allow',
+		select: async (title: string, options: string[]): Promise<string | undefined> => {
+			const answer = await askExtensionInChat('select', title, undefined, options, log);
+			return typeof answer === 'string' ? answer : undefined;
+		},
+		input: async (title: string, placeholder?: string): Promise<string | undefined> => {
+			const answer = await askExtensionInChat('text', title, placeholder, undefined, log);
+			return typeof answer === 'string' ? answer : undefined;
+		},
+		notify: (message: string, type?: 'info' | 'warning' | 'error'): void => {
+			const stream = turnContext.current?.stream;
+			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
+				return;
+			}
+			const mark = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+			try {
+				stream.markdown(`\n${mark} ${trimExtensionText(message.trim())}\n`);
+			} catch { /* a stream that already closed is not an error to report */ }
+		},
+		// Terminal surfaces the chat does not have; inert on purpose.
+		onTerminalInput: () => () => { /* nothing to unsubscribe */ },
+		setStatus: noop,
+		setWorkingMessage: noop,
+		setWorkingVisible: noop,
+		setWorkingIndicator: noop,
+		setHiddenThinkingLabel: noop,
+		setWidget: noop,
+		setFooter: noop,
+		setHeader: noop,
+		setTitle: noop,
+		custom: async (): Promise<undefined> => undefined,
+		pasteToEditor: noop,
+		setEditorText: noop,
+		getEditorText: (): string => '',
+		editor: async (): Promise<undefined> => undefined,
+		addAutocompleteProvider: noop,
+		setEditorComponent: noop,
+		getEditorComponent: (): undefined => undefined,
+		theme: CHAT_THEME,
+		getAllThemes: (): readonly unknown[] => [],
+		getTheme: (): undefined => undefined,
+		setTheme: (): { success: boolean; error: string } => ({ success: false, error: 'Themes are managed by the editor.' }),
+		getToolsExpanded: (): boolean => false,
+		setToolsExpanded: noop,
+	};
+}
+
+/* ------------------------------------------------------------------ *
  * The profile, pi's own extensions, and the event that starts them
  * ------------------------------------------------------------------ */
 
@@ -679,14 +870,20 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * one loaded and registered nothing at all). Which extensions the owner has is his business — this is
  * the door they all wait behind, and it opens before the first turn.
  *
- * Only the error listener is bound. This host has no terminal UI, and an extension that wants one
- * asks `ctx.hasUI` first — which is why the bound context has to be "no UI" rather than invented.
- * A session whose extensions fail to start still answers: the failure is said and the turn runs.
+ * The extensions are bound with the chat's UI (see `extensionUiContext`) and `mode: "rpc"`, which is
+ * the host contract gentle-pi reads: with a UI context its `confirm`/`select`/`input`/`notify`
+ * reach the chat instead of blocking with "requires interactive confirmation". `onError` is bound so
+ * a broken extension is said and the turn still runs.
  */
 async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
+	// gentle-pi's interactive-host contract (`lib/rpc-host.ts`): `mode === "rpc"` plus this variable
+	// set to `"1"` is how a desktop host declares that its dialogs are answerable. Without it its
+	// destructive-command guard and ask-user tools see no UI and refuse. The value is a host
+	// capability, not a permission: the questions are still asked before anything runs.
+	process.env.GENTLE_SHELL_INTERACTIVE_HOST = '1';
 	let timer: NodeJS.Timeout | undefined;
 	try {
 		// Bounded, like pi does with its own MCP wait: an extension that sits waiting for something
@@ -694,6 +891,8 @@ async function bindSessionExtensions(session: PiSession, log: (line: string) => 
 		// work that arrives late is still applied; the registry refreshes when tools appear.
 		await Promise.race([
 			session.bindExtensions({
+				uiContext: extensionUiContext(log),
+				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
 			new Promise<void>(resolve => {
