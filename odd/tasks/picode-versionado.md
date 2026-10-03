@@ -11,9 +11,10 @@
 Dos números, porque hacen dos trabajos distintos:
 
 - **`set.version`** — el número del **editor**. Sigue siempre a VS Code: base de upstream más el parche
-  de PiCode (hoy `1.135.1` sobre la base `1.135.0`).
+  de PiCode (hoy `1.135.3` sobre la base `1.135.0`).
 - **`set.picodeVersion`** — el número de **PiCode**. Es el que da nombre a la release y el que sube por
-  el minor en cada una (`0.1.0-beta`, `0.2.0`, `0.3.0`…).
+  el minor en cada una (`0.1.0-beta`, `0.1.1-beta`, `0.1.2-beta`…). **El sufijo `-beta` no se
+  quita solo**: se mantiene hasta que el dueño decida que toca la 1.0 RC.
 
 ## Por qué no pueden ser el mismo número (comprobado en la fuente)
 
@@ -39,7 +40,8 @@ anuncia es el de PiCode. VSCodium y Cursor hacen lo mismo.
 
 ## Decisión
 
-- `set.picodeVersion` = `0.1.0-beta` (y el minor en cada release).
+- `set.picodeVersion` = `0.1.0-beta` (y el minor en cada release, **siempre con `-beta`** hasta que el
+  dueño diga la 1.0 RC).
 - El **tag** y el **título** de la release usan la versión de PiCode; el nombre del ZIP también.
 - El **feed** sigue llevando la versión del **editor**: es la que el actualizador compara contra el
   producto instalado. Por eso cada release **también** mueve `set.version` (el parche, o la base

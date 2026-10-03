@@ -78,7 +78,8 @@ jobs:
             exit 1
           fi
           # PiCode's own version: what a release is named after, and what moves
-          # by the minor each time (0.1.0, 0.2.0 …). Deliberately NOT
+          # by the minor each time (0.1.0-beta, 0.1.1-beta … — the `-beta`
+          # suffix stays until the owner decides the 1.0 RC). Deliberately NOT
           # `set.version`: that number is the editor's, it tracks VS Code —
           # extensions are validated against it — and the updater compares it.
           PICODE_VERSION=$(node -p \
