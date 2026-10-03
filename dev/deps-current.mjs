@@ -94,4 +94,21 @@ if (canonical(saved.fileHashes) !== canonical(current.fileHashes)) {
 	);
 }
 
+// The hashes above prove the inputs have not changed; they say nothing about whether the
+// install is still on disk. The CI cache restores the root node_modules - which carries the
+// state file - without the nested projects' node_modules, so an unchanged tree with a missing
+// build/node_modules would otherwise read as "up to date" and the build would fail on the first
+// import that lives there (gulp-merge-json, for one). postinstall installs every dir in
+// build/npm/dirs.ts into its own node_modules, so require each recorded project to still have one.
+for (const key of Object.keys(current.fileHashes ?? {})) {
+	if (path.basename(key) !== 'package.json') {
+		continue;
+	}
+	const project = path.dirname(key);
+	const nodeModules = path.join(tree, project === '.' ? '' : project, 'node_modules');
+	if (!fs.existsSync(nodeModules)) {
+		no(`the recorded install has no ${path.relative(tree, nodeModules)}; installing`);
+	}
+}
+
 console.log(`  the recorded dependency state matches this tree (node ${current.nodeVersion})`);
