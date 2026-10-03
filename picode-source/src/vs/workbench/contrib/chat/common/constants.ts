@@ -73,8 +73,6 @@ export enum ChatConfiguration {
 	NotifyWindowOnConfirmation = 'chat.notifyWindowOnConfirmation',
 	NotifyWindowOnResponseReceived = 'chat.notifyWindowOnResponseReceived',
 	ChatViewSessionsEnabled = 'chat.viewSessions.enabled',
-	SessionSyncEnabled = 'chat.sessionSync.enabled',
-	SessionSyncExcludeRepositories = 'chat.sessionSync.excludeRepositories',
 	ChatViewSessionsGrouping = 'chat.viewSessions.grouping',
 	ChatViewSessionsOrientation = 'chat.viewSessions.orientation',
 	ChatViewProgressBadgeEnabled = 'chat.viewProgressBadge.enabled',
@@ -90,18 +88,14 @@ export enum ChatConfiguration {
 	ExplainChangesEnabled = 'chat.editing.explainChanges.enabled',
 	RevealNextChangeOnResolve = 'chat.editing.revealNextChangeOnResolve',
 	OpenChangedFileInDiffEditor = 'chat.editing.openChangedFileInDiffEditor',
-	GrowthNotificationEnabled = 'chat.growthNotification.enabled',
 	TitleBarSignInEnabled = 'chat.titleBar.signIn.enabled',
 	TitleBarOpenInAgentsWindowEnabled = 'chat.titleBar.openInAgentsWindow.enabled',
 
 	ChatCustomizationsStructuredPreviewEnabled = 'chat.customizations.structuredPreview.enabled',
 	ChatCustomizationsPromptMigrationEnabled = 'chat.customizations.promptMigration.enabled',
 	ChatCustomizationsUserDataMigrationEnabled = 'chat.customizations.userDataMigration.enabled',
-	AutopilotAdvancedEnabled = 'chat.autopilot.advanced.enabled',
 	DefaultPermissionLevel = 'chat.permissions.default',
-	AssistedPermissionsEnabled = 'chat.assistedPermissions.enabled',
 	PermissionsSandboxToggleEnabled = 'chat.experimental.permissionsSandboxToggle.enabled',
-	DefaultConfiguration = 'chat.defaultConfiguration',
 	DefaultModel = 'chat.defaultModel',
 	ImageCarouselEnabled = 'imageCarousel.chat.enabled',
 	ArtifactsEnabled = 'chat.artifacts.enabled',
@@ -112,9 +106,6 @@ export enum ChatConfiguration {
 	ToolRiskAssessmentEnabled = 'chat.tools.riskAssessment.enabled',
 	ToolRiskAssessmentModel = 'chat.tools.riskAssessment.model',
 	DefaultNewSessionMode = 'chat.newSession.defaultMode',
-	EditorPreferCopilotHarness = 'chat.editor.preferCopilotHarness',
-	DefaultToCopilotHarness = 'chat.defaultToCopilotHarness',
-	EditorLocalAgentEnabled = 'chat.editor.localAgent.enabled',
 	AgentsHandoffTipMode = 'chat.agentsHandoffTip.mode',
 	TurnStatusPills = 'chat.turnStatusPills',
 
@@ -158,35 +149,20 @@ export function isChatPermissionLevel(level: unknown | undefined): level is Chat
 }
 
 /**
- * Shape of the {@link ChatConfiguration.DefaultConfiguration}
- * object setting. Controls the starting `mode` and `approvals` for new agent-host
- * sessions (such as Copilot CLI). All properties are optional — a missing property
- * falls back to the per-axis default.
+ * Legacy approval values accepted by
+ * {@link getChatPermissionLevelFromDefaultConfiguration}.
  */
-export type AgentSessionMode = 'interactive' | 'plan' | 'autopilot';
-
-/** Approval values exposed by the `chat.defaultConfiguration` setting. */
 export enum ChatDefaultPermissionLevel {
 	Manual = 'manual',
-	Assisted = 'assisted',
 	AllowAll = 'allowAll',
 }
 
-export interface IChatDefaultConfiguration {
-	/** Starting agent mode: `interactive` / `plan` / `autopilot`. */
-	readonly mode?: AgentSessionMode;
-	/** Starting approval level: `manual` / `assisted` / `allowAll`. */
-	readonly approvals?: ChatDefaultPermissionLevel;
-}
-
-/** Maps a default-configuration value to the internal Agent Host permission level. */
+/** Maps a legacy default-configuration value to the internal Agent Host permission level. */
 export function getChatPermissionLevelFromDefaultConfiguration(value: unknown): ChatPermissionLevel | undefined {
 	switch (value) {
 		case ChatDefaultPermissionLevel.Manual:
 		case ChatPermissionLevel.Default:
 			return ChatPermissionLevel.Default;
-		case ChatDefaultPermissionLevel.Assisted:
-			return ChatPermissionLevel.Assisted;
 		case ChatDefaultPermissionLevel.AllowAll:
 		case ChatPermissionLevel.AutoApprove:
 			return ChatPermissionLevel.AutoApprove;
@@ -474,12 +450,10 @@ export function recordUserSelectedSessionType(
 
 /**
  * Whether new editor and panel chats should default to the Agent Host Copilot SDK. Enterprises
- * whose managed settings mandate the SDK sandbox floor get this behavior without opting into
- * `chat.defaultToCopilotHarness`.
+ * whose managed settings mandate the SDK sandbox floor get this behavior.
  */
 function isCopilotHarnessDefault(configurationService: IConfigurationService, managedSandboxEnforced = false): boolean {
-	return configurationService.getValue<boolean>(ChatConfiguration.DefaultToCopilotHarness) === true
-		|| managedSandboxEnforced;
+	return managedSandboxEnforced;
 }
 
 /**
@@ -487,8 +461,7 @@ function isCopilotHarnessDefault(configurationService: IConfigurationService, ma
  * otherwise be picked for a new chat. Implied by an enterprise-mandated sandbox floor.
  */
 function isCopilotHarnessPreferred(configurationService: IConfigurationService, managedSandboxEnforced = false): boolean {
-	return configurationService.getValue<boolean>(ChatConfiguration.EditorPreferCopilotHarness) === true
-		|| managedSandboxEnforced;
+	return managedSandboxEnforced;
 }
 
 /**
@@ -505,7 +478,7 @@ export function isEditorLocalAgentEnabled(configurationService: IConfigurationSe
 		return false;
 	}
 
-	return configurationService.getValue<boolean>(ChatConfiguration.EditorLocalAgentEnabled) ?? true;
+	return true;
 }
 
 export function isVisibleEditorChatSessionType(

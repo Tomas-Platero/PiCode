@@ -86,7 +86,6 @@ suite('PromptFilesLocator', () => {
 	const setLocations = (value: unknown) => {
 		configValues[PromptsConfig.PROMPT_LOCATIONS_KEY] = value;
 		configValues[PromptsConfig.INSTRUCTIONS_LOCATION_KEY] = value;
-		configValues[PromptsConfig.MODE_LOCATION_KEY] = value;
 		configValues[PromptsConfig.SKILLS_LOCATION_KEY] = value;
 	};
 
@@ -132,7 +131,7 @@ suite('PromptFilesLocator', () => {
 		instantiationService.stub(IWorkbenchEnvironmentService, {} as IWorkbenchEnvironmentService);
 		instantiationService.stub(IUserDataProfileService, new TestUserDataProfileService());
 		instantiationService.stub(ISearchService, {
-			schemeHasFileSearchProvider(scheme: string): boolean {
+			schemeHasFileSearchProvider(): boolean {
 				return true;
 			},
 			async fileSearch(query: IFileQuery) {
@@ -146,7 +145,8 @@ suite('PromptFilesLocator', () => {
 								await findFilesInLocation(child.resource, results);
 							}
 						}
-					} catch (error) {
+					} catch {
+						// A location that does not exist is expected in these fixtures.
 					}
 					return results;
 				};

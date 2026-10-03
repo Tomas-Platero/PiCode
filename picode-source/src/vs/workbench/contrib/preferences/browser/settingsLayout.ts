@@ -240,7 +240,6 @@ export const tocData: ITOCEntry<string> = {
 						'chat.codeBlock.*',
 						'chat.editing.explainChanges.enabled',
 						'chat.editorAssociations',
-						'chat.extensionUnification.*',
 						'chat.inlineReferences.*',
 						'chat.notifyWindow*',
 						'chat.statusWidget.*',
@@ -285,16 +284,13 @@ export const tocData: ITOCEntry<string> = {
 						'chat.implicitContext.*',
 						'chat.promptFilesLocations',
 						'chat.instructionsFilesLocations',
-						'chat.modeFilesLocations',
 						'chat.agentFilesLocations',
 						'chat.agentSkillsLocations',
-						'chat.hookFilesLocations',
 						'chat.promptFilesRecommendations',
 						'chat.useAgentsMdFile',
 						'chat.useNestedAgentsMdFiles',
 						'chat.useAgentSkills',
 						'chat.experimental.useSkillAdherencePrompt',
-						'chat.useHooks',
 						'chat.includeApplyingInstructions',
 						'chat.includeReferencedInstructions',
 						'chat.useClaudeMdFile'
@@ -309,8 +305,7 @@ export const tocData: ITOCEntry<string> = {
 					id: 'chat/miscellaneous',
 					label: localize('chatMiscellaneous', "Miscellaneous"),
 					settings: [
-						ChatAIDisabledSettingId,
-						'chat.allowAnonymousAccess'
+						ChatAIDisabledSettingId
 					]
 				},
 			]

@@ -67,7 +67,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		'security.restrictUNCAccess',
 		'accessibility.verbosity.debug',
 		'telemetry.feedback.enabled',
-		'chat.extensionUnification.enabled',
 		'chat.agentHost.claudeAgent.enabled',
 		'chat.editor.codex.preferAgentHost',
 		'chat.agentHost.otel.enabled',
@@ -91,7 +90,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 	private readonly restrictUNCAccess = new ChangeObserver('boolean');
 	private readonly accessibilityVerbosityDebug = new ChangeObserver('boolean');
 	private readonly telemetryFeedbackEnabled = new ChangeObserver('boolean');
-	private readonly extensionUnificationEnabled = new ChangeObserver('boolean');
 	private readonly agentHostClaudeAgentEnabled = new ChangeObserver('boolean');
 	private readonly editorCodexPreferAgentHost = new ChangeObserver('boolean');
 	private readonly agentHostOTelEnabled = new ChangeObserver('boolean');
@@ -114,7 +112,7 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 
 		this.update(false);
 		this._register(this.configurationService.onDidChangeConfiguration(e => this.onConfigurationChange(e)));
-		this._register(userDataSyncWorkbenchService.onDidTurnOnSync(e => this.update(true)));
+		this._register(userDataSyncWorkbenchService.onDidTurnOnSync(() => this.update(true)));
 	}
 
 	private onConfigurationChange(e: IConfigurationChangeEvent): void {
@@ -188,9 +186,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 
 		// Enable Feedback
 		processChanged(this.telemetryFeedbackEnabled.handleChange(config.telemetry?.feedback?.enabled));
-
-		// Extension Unification (only when turning on)
-		processChanged(this.extensionUnificationEnabled.handleChange(config.chat?.extensionUnification?.enabled) && config.chat?.extensionUnification?.enabled === true);
 
 		// Agent provider registration and implementation preferences are read at spawn.
 		processChanged(this.agentHostClaudeAgentEnabled.handleChange(config.chat?.agentHost?.claudeAgent?.enabled));

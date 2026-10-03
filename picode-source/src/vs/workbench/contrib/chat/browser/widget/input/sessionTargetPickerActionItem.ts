@@ -34,7 +34,7 @@ import { AgentSessionProviders, AgentSessionTarget, getAgentSessionProvider, get
 import { getSessionTypeAvailability, getSessionTypePickerAvailability, getSessionTypeUnavailableDescription, getSessionTypeUnavailableHover, SessionTypeAvailability } from '../../agentSessions/sessionTypeAvailability.js';
 import { hasAgentSdkSetupNotification } from '../../agentSessions/agentHost/agentHostSdkSetupNotification.js';
 import { IChatInputNotificationService } from './chatInputNotificationService.js';
-import { ChatConfiguration, getDefaultNewChatSessionType, isVisibleEditorChatSessionType, recordUserSelectedSessionType } from '../../../common/constants.js';
+import { getDefaultNewChatSessionType, isVisibleEditorChatSessionType, recordUserSelectedSessionType } from '../../../common/constants.js';
 import { ChatInputPickerActionViewItem, IChatInputPickerOptions } from './chatInputPickerActionItem.js';
 import { ISessionTypePickerDelegate } from '../../chat.js';
 import { IActionProvider } from '../../../../../../base/browser/ui/dropdown/dropdown.js';
@@ -191,17 +191,6 @@ export class SessionTypePickerActionItem extends ChatInputPickerActionViewItem {
 
 		this._register(this.chatSessionsService.onDidChangeAvailability(() => {
 			this._updateAgentSessionItems();
-		}));
-
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ChatConfiguration.EditorPreferCopilotHarness) ||
-				e.affectsConfiguration(ChatConfiguration.DefaultToCopilotHarness) ||
-				e.affectsConfiguration(ChatConfiguration.EditorLocalAgentEnabled)) {
-				this._updateAgentSessionItems();
-				if (this.element) {
-					this.renderLabel(this.element);
-				}
-			}
 		}));
 
 		// The managed sandbox floor is delivered by managed settings, not configuration, so it needs

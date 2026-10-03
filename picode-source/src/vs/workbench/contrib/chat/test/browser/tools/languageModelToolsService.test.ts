@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import { Barrier } from '../../../../../../base/common/async.js';
 import { VSBuffer } from '../../../../../../base/common/buffer.js';
-import { CancellationToken, CancellationTokenSource } from '../../../../../../base/common/cancellation.js';
+import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { CancellationError, isCancellationError } from '../../../../../../base/common/errors.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
@@ -25,9 +25,9 @@ import { ConfirmationOptionKind } from '../../../../../../platform/agentHost/com
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { workbenchInstantiationService } from '../../../../../test/browser/workbenchTestServices.js';
 import { LanguageModelToolsService } from '../../../browser/tools/languageModelToolsService.js';
-import { IChatToolRiskAssessmentService, IToolRiskAssessment, ToolRiskLevel, ToolRiskPromptKind } from '../../../browser/tools/chatToolRiskAssessmentService.js';
+import { IChatToolRiskAssessmentService, IToolRiskAssessment, ToolRiskPromptKind } from '../../../browser/tools/chatToolRiskAssessmentService.js';
 import { ChatModel, IChatModel } from '../../../common/model/chatModel.js';
-import { IChatService, IChatProgress, IChatInfoMessage, IChatToolInputInvocationData, IChatToolInvocation, ToolConfirmKind } from '../../../common/chatService/chatService.js';
+import { IChatService, IChatToolInputInvocationData, IChatToolInvocation, ToolConfirmKind } from '../../../common/chatService/chatService.js';
 import { ChatConfiguration, ChatPermissionLevel } from '../../../common/constants.js';
 import { SpecedToolAliases, isToolResultInputOutputDetails, IToolData, IToolImpl, IToolInvocation, ToolDataSource, IToolResultTextPart, ToolAndToolSetEnablementMap } from '../../../common/tools/languageModelToolsService.js';
 import { MockChatService } from '../../common/chatService/mockChatService.js';
@@ -64,7 +64,7 @@ class TestAccessibilitySignalService implements Partial<IAccessibilitySignalServ
 class TestTelemetryService implements Partial<ITelemetryService> {
 	public events: Array<{ eventName: string; data: any }> = [];
 
-	publicLog2<E extends Record<string, any>, T extends Record<string, any>>(eventName: string, data?: E): void {
+	publicLog2<E extends Record<string, any>>(eventName: string, data?: E): void {
 		this.events.push({ eventName, data });
 	}
 
@@ -236,40 +236,6 @@ function createTestToolsService(store: ReturnType<typeof ensureNoDisposablesAreL
 
 	const service = store.add(instaService.createInstance(LanguageModelToolsService));
 	return { configurationService, chatService, service, contextKeyService, riskAssessmentService };
-}
-
-/**
- * Registers a confirmable tool in an Autopilot session for exercising the Autopilot risk
- * gate. Enables Advanced Autopilot, registers a tool whose `prepareToolInvocation`
- * optionally returns confirmation messages, stamps the session with the given permission
- * level, and returns an `invoke()` plus a `wasInvoked()` flag for the tool's `invoke`.
- */
-function setupRiskGateTool(
-	setup: TestToolsServiceSetup,
-	store: any,
-	opts?: { withConfirmation?: boolean; permissionLevel?: ChatPermissionLevel; advancedEnabled?: boolean; toolId?: string },
-): { invoke: (token?: CancellationToken) => Promise<{ content: { value: string }[] }>; wasInvoked: () => boolean } {
-	const withConfirmation = opts?.withConfirmation ?? true;
-	const permissionLevel = opts?.permissionLevel ?? ChatPermissionLevel.Autopilot;
-	const advancedEnabled = opts?.advancedEnabled ?? true;
-	const toolId = opts?.toolId ?? 'riskGateTool';
-
-	setup.configurationService.setUserConfiguration(ChatConfiguration.AutopilotAdvancedEnabled, advancedEnabled);
-	setup.configurationService.setUserConfiguration('chat.tools.global.autoApprove', false);
-
-	let invoked = false;
-	const tool = registerToolForTest(setup.service, store, toolId, {
-		prepareToolInvocation: async () => (withConfirmation ? { confirmationMessages: { title: 'Confirm?', message: 'Proceed?' } } : {}),
-		invoke: async () => { invoked = true; return { content: [{ kind: 'text', value: 'ran' }] }; },
-	});
-
-	const sessionId = 'riskGateSession';
-	stubGetSession(setup.chatService, sessionId, { requestId: 'req-risk', modeInfo: { permissionLevel } });
-
-	return {
-		invoke: (token: CancellationToken = CancellationToken.None) => setup.service.invokeTool(tool.makeDto({ x: 1 }, { sessionId }), async () => 0, token) as Promise<{ content: { value: string }[] }>,
-		wasInvoked: () => invoked,
-	};
 }
 
 suite('LanguageModelToolsService', () => {
@@ -992,7 +958,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames = ['tool1RefName'];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 1, 'Expected 1 tool to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 1, 'Expected 1 tool to be enabled');
 			assert.strictEqual(result1.get(tool1), true, 'tool1 should be enabled');
 
 			const fullReferenceNames1 = service.toFullReferenceNames(result1);
@@ -1004,7 +970,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames = ['my.extension/extTool1RefName', 'mcpToolSetRefName/*', 'internalToolSetRefName/internalToolSetTool1RefName'];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 4, 'Expected 4 tools to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 4, 'Expected 4 tools to be enabled');
 			assert.strictEqual(result1.get(extTool1), true, 'extTool1 should be enabled');
 			assert.strictEqual(result1.get(mcpToolSet), true, 'mcpToolSet should be enabled');
 			assert.strictEqual(result1.get(mcpTool1), true, 'mcpTool1 should be enabled because the set is enabled');
@@ -1017,7 +983,7 @@ suite('LanguageModelToolsService', () => {
 		{
 			const result1 = service.toToolAndToolSetEnablementMap(allFullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 12, 'Expected 12 tools to be enabled'); // +4 including the vscode, execute, read, agent toolsets
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 12, 'Expected 12 tools to be enabled'); // +4 including the vscode, execute, read, agent toolsets
 
 			const fullReferenceNames1 = service.toFullReferenceNames(result1);
 			const expectedFullReferenceNames = ['tool1RefName', 'Tool2 Display Name', 'my.extension/extTool1RefName', 'mcpToolSetRefName/*', 'internalToolSetRefName', 'vscode', 'execute', 'read', 'agent'];
@@ -1028,7 +994,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames: string[] = [];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 0, 'Expected 0 tools to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 0, 'Expected 0 tools to be enabled');
 
 			const fullReferenceNames1 = service.toFullReferenceNames(result1);
 			assert.deepStrictEqual(fullReferenceNames1.sort(), fullReferenceNames.sort(), 'toFullReferenceNames should return the original enabled names');
@@ -1038,7 +1004,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames: string[] = ['unknownToolRefName'];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 0, 'Expected 0 tools to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 0, 'Expected 0 tools to be enabled');
 
 			const fullReferenceNames1 = service.toFullReferenceNames(result1);
 			assert.deepStrictEqual(fullReferenceNames1.sort(), [], 'toFullReferenceNames should return no enabled names');
@@ -1048,7 +1014,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames: string[] = ['extTool1RefName', 'mcpToolSetRefName', 'internalToolSetTool1RefName'];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 4, 'Expected 4 tools to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 4, 'Expected 4 tools to be enabled');
 			assert.strictEqual(result1.get(extTool1), true, 'extTool1 should be enabled');
 			assert.strictEqual(result1.get(mcpToolSet), true, 'mcpToolSet should be enabled');
 			assert.strictEqual(result1.get(mcpTool1), true, 'mcpTool1 should be enabled because the set is enabled');
@@ -1063,7 +1029,7 @@ suite('LanguageModelToolsService', () => {
 			const fullReferenceNames = ['Tool2 Display Name'];
 			const result1 = service.toToolAndToolSetEnablementMap(fullReferenceNames, undefined);
 			assert.strictEqual(result1.size, numOfTools, `Expected ${numOfTools} tools and tool sets`);
-			assert.strictEqual([...result1.entries()].filter(([_, enabled]) => enabled).length, 2, 'Expected 1 tool and user tool set to be enabled');
+			assert.strictEqual([...result1.entries()].filter(([, enabled]) => enabled).length, 2, 'Expected 1 tool and user tool set to be enabled');
 			assert.strictEqual(result1.get(tool2), true, 'tool2 should be enabled');
 			assert.strictEqual(result1.get(userToolSet), true, 'userToolSet should be enabled');
 
@@ -1832,275 +1798,6 @@ suite('LanguageModelToolsService', () => {
 		assert.strictEqual(result.content[0].value, 'terminal executed');
 	});
 
-	test('autopilot risk gate skips a tool assessed as high-risk (red)', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Deletes source files irreversibly.' };
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{
-				invoked: t.wasInvoked(),
-				assessCalls: setup.riskAssessmentService.assessCalls.length,
-				mentionsRisk: String(result.content[0].value).includes('Deletes source files irreversibly.'),
-			},
-			{ invoked: false, assessCalls: 1, mentionsRisk: true },
-		);
-	});
-
-	test('autopilot risk gate allows a low-risk (green) tool call', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Green, explanation: 'Reads a file.' };
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 1, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate allows a medium-risk (orange) tool call (red-only threshold)', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Orange, explanation: 'Edits a file.' };
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 1, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate fails open when the classifier returns no assessment', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = undefined;
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 1, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate fails open when the classifier throws', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessError = new Error('network down');
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), value: result.content[0].value },
-			{ invoked: true, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate does not assess tool calls that have no confirmation', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'should not matter' };
-		const t = setupRiskGateTool(setup, store, { withConfirmation: false });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 0, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate classifies a terminal command even when it has no confirmation', async () => {
-		// run_in_terminal suppresses its own confirmation under auto-approve sessions, so the
-		// gate must classify it anyway; a red command is skipped despite the missing confirmation.
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Force-pushes main, overwriting history.' };
-		const t = setupRiskGateTool(setup, store, { withConfirmation: false, toolId: 'run_in_terminal' });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{
-				invoked: t.wasInvoked(),
-				assessCalls: setup.riskAssessmentService.assessCalls.length,
-				isRiskMessage: String(result.content[0].value).startsWith('Autopilot skipped this tool call'),
-			},
-			{ invoked: false, assessCalls: 1, isRiskMessage: true },
-		);
-	});
-
-	test('autopilot risk gate runs a non-red terminal command that has no confirmation', async () => {
-		// A terminal command is always classified in Autopilot, but a non-red verdict still runs.
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Orange, explanation: 'Installs a package.' };
-		const t = setupRiskGateTool(setup, store, { withConfirmation: false, toolId: 'run_in_terminal' });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 1, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate classifies a fetch web page call even when it has no confirmation', async () => {
-		// Fetch web page tools auto-approve themselves (URL in the prompt / trusted domain) and so
-		// surface no confirmation; the gate must classify them anyway so a dangerous URL (e.g. one
-		// injected into the prompt to exfiltrate secrets) is still skipped when assessed red.
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Sends workspace secrets to an untrusted host.' };
-		const t = setupRiskGateTool(setup, store, { withConfirmation: false, toolId: 'vscode_fetchWebPage_internal' });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{
-				invoked: t.wasInvoked(),
-				assessCalls: setup.riskAssessmentService.assessCalls.length,
-				isRiskMessage: String(result.content[0].value).startsWith('Autopilot skipped this tool call'),
-			},
-			{ invoked: false, assessCalls: 1, isRiskMessage: true },
-		);
-	});
-
-	test('autopilot risk gate runs a non-red fetch web page call that has no confirmation', async () => {
-		// A fetch is always classified in Autopilot, but a non-red verdict still runs.
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Green, explanation: 'Fetches public documentation.' };
-		const t = setupRiskGateTool(setup, store, { withConfirmation: false, toolId: 'copilot_fetchWebPage' });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 1, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate is inert when Advanced Autopilot is disabled', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'should not matter' };
-		const t = setupRiskGateTool(setup, store, { advancedEnabled: false });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 0, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate does not apply at the plain Auto-Approve level', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'should not matter' };
-		const t = setupRiskGateTool(setup, store, { permissionLevel: ChatPermissionLevel.AutoApprove });
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length, value: result.content[0].value },
-			{ invoked: true, assessCalls: 0, value: 'ran' },
-		);
-	});
-
-	test('autopilot risk gate runs even when the risk assessment badge setting is disabled', async () => {
-		// The gate is independent of chat.tools.riskAssessment.enabled (which only controls the
-		// confirmation risk badge): a red verdict still skips the call. Also verifies the gate
-		// passes ignoreEnablement — without it the stub would return undefined and the tool would run.
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = false;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Deletes source files irreversibly.' };
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		assert.deepStrictEqual(
-			{
-				invoked: t.wasInvoked(),
-				assessCalls: setup.riskAssessmentService.assessCalls.length,
-				isRiskMessage: String(result.content[0].value).startsWith('Autopilot skipped this tool call'),
-			},
-			{ invoked: false, assessCalls: 1, isRiskMessage: true },
-		);
-	});
-
-	test('autopilot risk gate skips on red even when the classifier explanation is empty', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: '' };
-		const t = setupRiskGateTool(setup, store);
-
-		const result = await t.invoke();
-
-		// The skip must still read as an automated risk-skip, never the user-skip fallback message.
-		assert.deepStrictEqual(
-			{
-				invoked: t.wasInvoked(),
-				assessCalls: setup.riskAssessmentService.assessCalls.length,
-				isRiskMessage: String(result.content[0].value).startsWith('Autopilot skipped this tool call'),
-				isUserSkipMessage: String(result.content[0].value).includes('The user chose to skip'),
-			},
-			{ invoked: false, assessCalls: 1, isRiskMessage: true, isUserSkipMessage: false },
-		);
-	});
-
-	test('autopilot risk gate does not skip when cancelled during assessment', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Deletes source files irreversibly.' };
-		const t = setupRiskGateTool(setup, store);
-
-		// Cancel synchronously while the classifier is running: the gate must abandon the
-		// assessment and propagate cancellation rather than mask it as a risk-skip result.
-		const cts = store.add(new CancellationTokenSource());
-		setup.riskAssessmentService.onAssess = () => cts.cancel();
-
-		await assert.rejects(() => t.invoke(cts.token), err => isCancellationError(err));
-		assert.deepStrictEqual(
-			{ invoked: t.wasInvoked(), assessCalls: setup.riskAssessmentService.assessCalls.length },
-			{ invoked: false, assessCalls: 1 },
-		);
-	});
-
-	test('autopilot risk gate surfaces an info note to the user when it skips a high-risk tool', async () => {
-		const setup = createTestToolsService(store);
-		setup.riskAssessmentService.enabled = true;
-		setup.riskAssessmentService.assessment = { risk: ToolRiskLevel.Red, explanation: 'Deletes source files irreversibly.' };
-		const t = setupRiskGateTool(setup, store);
-
-		// The tool invocation part hides itself after completion, so the reason is surfaced
-		// as a separate info note appended to the response stream.
-		const progresses: IChatProgress[] = [];
-		setup.chatService.appendProgress = (_request, progress) => { progresses.push(progress); };
-
-		await t.invoke();
-
-		const info = progresses.find((p): p is IChatInfoMessage => p.kind === 'info');
-		assert.deepStrictEqual(
-			{
-				hasInfo: !!info,
-				mentionsRisk: !!info && info.content.value.includes('Deletes source files irreversibly.'),
-			},
-			{ hasInfo: true, mentionsRisk: true },
-		);
-	});
-
 	test('bypass approvals auto-approves terminal tool with confirmation messages', async () => {
 		const { service: testService, chatService: testChatService } = createTestToolsService(store, {
 			configureServices: config => {
@@ -2415,7 +2112,7 @@ suite('LanguageModelToolsService', () => {
 
 		const tool = registerToolForTest(service, store, toolData.id, {
 			prepareToolInvocation: async () => ({}),
-			invoke: async (invocation) => ({
+			invoke: async () => ({
 				content: [
 					{ kind: 'text', value: 'Text result' },
 					{ kind: 'data', value: { data: VSBuffer.fromByteArray([1, 2, 3]), mimeType: 'application/octet-stream' } }
@@ -2501,7 +2198,7 @@ suite('LanguageModelToolsService', () => {
 				CancellationToken.None
 			);
 			assert.fail('Should have thrown');
-		} catch (err) {
+		} catch {
 			// Expected
 		}
 

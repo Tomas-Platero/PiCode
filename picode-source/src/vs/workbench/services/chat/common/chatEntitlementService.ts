@@ -309,22 +309,8 @@ interface IChatQuotasAccessor {
 	acceptQuotas(quotas: IQuotas): void;
 }
 
-const CHAT_ALLOW_ANONYMOUS_CONFIGURATION_KEY = 'chat.allowAnonymousAccess';
-
 function isAnonymous(configurationService: IConfigurationService, entitlement: ChatEntitlement, sentiment: IChatSentiment): boolean {
-	if (configurationService.getValue(CHAT_ALLOW_ANONYMOUS_CONFIGURATION_KEY) !== true) {
-		return false; // only enabled behind an experimental setting
-	}
-
-	if (entitlement !== ChatEntitlement.Unknown) {
-		return false; // only consider signed out users
-	}
-
-	if (sentiment.hidden || sentiment.disabledInWorkspace) {
-		return false; // only consider enabled scenarios
-	}
-
-	return true;
+	return false;
 }
 
 type ChatEntitlementClassification = {
@@ -572,12 +558,6 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 				this._onDidChangeAnonymous.fire();
 			}
 		};
-
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(CHAT_ALLOW_ANONYMOUS_CONFIGURATION_KEY)) {
-				updateAnonymousUsage();
-			}
-		}));
 
 		this._register(this.onDidChangeEntitlement(() => updateAnonymousUsage()));
 		this._register(this.onDidChangeSentiment(() => updateAnonymousUsage()));
@@ -1160,8 +1140,8 @@ export class ChatEntitlementRequests extends Disposable {
 	}
 
 	private async request(url: string, type: 'GET', body: undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string): Promise<IRequestContext | undefined>;
-	private async request(url: string, type: 'POST', body: object, sessions: AuthenticationSession[], token: CancellationToken, callSite: string): Promise<IRequestContext | undefined>;
-	private async request(url: string, type: 'GET' | 'POST', body: object | undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string): Promise<IRequestContext | undefined> {
+	private async request(url: string, type: 'POST', body: Record<string, unknown>, sessions: AuthenticationSession[], token: CancellationToken, callSite: string): Promise<IRequestContext | undefined>;
+	private async request(url: string, type: 'GET' | 'POST', body: Record<string, unknown> | undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string): Promise<IRequestContext | undefined> {
 		let lastRequest: IRequestContext | undefined;
 
 		for (const session of sessions) {

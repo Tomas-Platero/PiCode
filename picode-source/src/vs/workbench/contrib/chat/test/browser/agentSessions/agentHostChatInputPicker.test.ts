@@ -123,15 +123,15 @@ suite('AgentHostChatInputPicker - resolveConfigChipValue', () => {
 
 		suite('AgentHostChatInputPicker - approval controls', () => {
 
-			test('shows Assisted permissions only when the setting is enabled', () => {
+			test('hides Assisted permissions, which this product does not offer', () => {
 				assert.deepStrictEqual({
-					enabled: isPermissionLevelVisible(ChatPermissionLevel.Assisted, true),
-					disabled: isPermissionLevelVisible(ChatPermissionLevel.Assisted, false),
-					bypass: isPermissionLevelVisible(ChatPermissionLevel.AutoApprove, false),
+					assisted: isPermissionLevelVisible(ChatPermissionLevel.Assisted),
+					bypass: isPermissionLevelVisible(ChatPermissionLevel.AutoApprove),
+					manual: isPermissionLevelVisible(ChatPermissionLevel.Default),
 				}, {
-					enabled: true,
-					disabled: false,
+					assisted: false,
 					bypass: true,
+					manual: true,
 				});
 			});
 

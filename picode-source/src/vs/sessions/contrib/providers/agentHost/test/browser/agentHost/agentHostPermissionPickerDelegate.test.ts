@@ -16,7 +16,7 @@ import { getAgentHostCopilotSandboxSettingId } from '../../../../../../../platfo
 import { IAgentHostEnablementService } from '../../../../../../../platform/agentHost/common/agentHostEnablementService.js';
 import { AgentHostCustomTerminalToolEnabledSettingId } from '../../../../../../../platform/agentHost/common/copilotCliConfig.js';
 import type { RootConfigState } from '../../../../../../../platform/agentHost/common/state/protocol/state.js';
-import { ChatConfiguration, ChatPermissionLevel } from '../../../../../../../workbench/contrib/chat/common/constants.js';
+import { ChatPermissionLevel } from '../../../../../../../workbench/contrib/chat/common/constants.js';
 import { AgentHostPermissionPickerDelegate, isWellKnownAutoApproveSchema, isWellKnownClaudePermissionModeSchema, isWellKnownModeSchema, isWellKnownModeValue } from '../../../browser/agentHostPermissionPickerDelegate.js';
 import { getPermissionLevelMeta } from '../../../../copilotChatSessions/browser/permissionPicker.js';
 import { IAgentHostSessionsProvider } from '../../../../../../common/agentHostSessionsProvider.js';
@@ -86,7 +86,6 @@ interface ITestRig {
 	readonly delegate: AgentHostPermissionPickerDelegate;
 	readonly provider: FakeProvider;
 	readonly activeSessionObs: ReturnType<typeof observableValue<IActiveSession | undefined>>;
-	readonly setAssistedPermissionsEnabled: (enabled: boolean) => void;
 	readonly setCustomTerminalToolEnabled: (enabled: boolean) => void;
 	readonly setManagedSandboxEnforced: (enforced: boolean) => void;
 }
@@ -107,7 +106,6 @@ function setup(store: Pick<DisposableStore, 'add'>, activeSession: IActiveSessio
 	})();
 	const activeSessionObs = observableValue<IActiveSession | undefined>('activeSession', activeSession);
 	const managedSandboxEnforced = observableValue('managedSandboxEnforced', false);
-	let assistedPermissionsEnabled = true;
 	let customTerminalToolEnabled = false;
 	const configurationService = new class extends mock<IConfigurationService>() {
 		override getValue<T>(): T;
@@ -115,11 +113,9 @@ function setup(store: Pick<DisposableStore, 'add'>, activeSession: IActiveSessio
 		override getValue<T>(overrides: IConfigurationOverrides): T;
 		override getValue<T>(section: string, overrides: IConfigurationOverrides): T;
 		override getValue<T>(section?: string | IConfigurationOverrides): T {
-			return (section === ChatConfiguration.AssistedPermissionsEnabled
-				? assistedPermissionsEnabled
-				: section === AgentHostCustomTerminalToolEnabledSettingId
-					? customTerminalToolEnabled
-					: undefined) as T;
+			return (section === AgentHostCustomTerminalToolEnabledSettingId
+				? customTerminalToolEnabled
+				: undefined) as T;
 		}
 	}();
 	const sessionsManagementService = new (class extends mock<ISessionsService>() {
@@ -141,7 +137,6 @@ function setup(store: Pick<DisposableStore, 'add'>, activeSession: IActiveSessio
 		delegate,
 		provider,
 		activeSessionObs,
-		setAssistedPermissionsEnabled: enabled => assistedPermissionsEnabled = enabled,
 		setCustomTerminalToolEnabled: enabled => customTerminalToolEnabled = enabled,
 		setManagedSandboxEnforced: enforced => managedSandboxEnforced.set(enforced, undefined),
 	};
@@ -286,9 +281,8 @@ suite('AgentHostPermissionPickerDelegate', () => {
 		]);
 	});
 
-	test('hides and rejects Assisted permissions when the setting is disabled', () => {
-		const { delegate, provider, setAssistedPermissionsEnabled } = setup(store, makeActiveSession(), 'default');
-		setAssistedPermissionsEnabled(false);
+	test('hides and rejects Assisted permissions, which this product does not offer', () => {
+		const { delegate, provider } = setup(store, makeActiveSession(), 'default');
 
 		delegate.setPermissionLevel(ChatPermissionLevel.Assisted);
 

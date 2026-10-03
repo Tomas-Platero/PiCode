@@ -1423,9 +1423,9 @@ export class ChatService extends Disposable implements IChatService {
 			options,
 			enableCommandDetection,
 			isVirtualWorkspace: isVirtualWorkspace(this.workspaceContextService.getWorkspace()),
-			settingDefaultToCopilotHarness: this.configurationService.getValue<boolean>(ChatConfiguration.DefaultToCopilotHarness) ?? false,
-			settingPreferCopilotHarness: this.configurationService.getValue<boolean>(ChatConfiguration.EditorPreferCopilotHarness) ?? false,
-			settingLocalAgentEnabled: this.configurationService.getValue<boolean>(ChatConfiguration.EditorLocalAgentEnabled) ?? true,
+			settingDefaultToCopilotHarness: false,
+			settingPreferCopilotHarness: false,
+			settingLocalAgentEnabled: true,
 		});
 
 		let gotProgress = false;

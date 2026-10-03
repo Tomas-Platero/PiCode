@@ -20,7 +20,7 @@ import { ISessionsProvider } from '../../../../services/sessions/common/sessions
 import { ISessionsProvidersService } from '../../../../services/sessions/browser/sessionsProvidersService.js';
 import { IActiveSession } from '../../../../services/sessions/common/sessionsManagement.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
-import { isAssistedPermissionsEnabled, isPermissionLevelVisible } from '../../../../../workbench/contrib/chat/common/agentHostConfigPolicy.js';
+import { isPermissionLevelVisible } from '../../../../../workbench/contrib/chat/common/agentHostConfigPolicy.js';
 import { AgentSandboxSettingId } from '../../../../../platform/sandbox/common/settings.js';
 import { CopilotCLISessionType } from './baseAgentHostSessionsProvider.js';
 
@@ -102,16 +102,15 @@ export class AgentHostPermissionPickerDelegate extends Disposable implements IPe
 		const provider = this._getProvider(session.providerId);
 		const schema = provider?.getSessionConfig(session.sessionId)?.schema.properties[SessionConfigKey.AutoApprove];
 		const values = schema?.type === 'string' && Array.isArray(schema.enum) ? schema.enum : [];
-		const assistedPermissionsEnabled = isAssistedPermissionsEnabled(this._configurationService);
 		return [
 			ChatPermissionLevel.Default,
 			ChatPermissionLevel.Assisted,
 			ChatPermissionLevel.AutoApprove,
-		].filter(level => values.includes(level) && isPermissionLevelVisible(level, assistedPermissionsEnabled));
+		].filter(level => values.includes(level) && isPermissionLevelVisible(level));
 	}
 
 	/** Agent-host sessions seed their default approval level from this setting. */
-	readonly defaultSettingKey = ChatConfiguration.DefaultConfiguration;
+	readonly defaultSettingKey = ChatConfiguration.DefaultPermissionLevel;
 
 	getPermissionLevelMeta(level: ChatPermissionLevel, meta: IPermissionLevelMeta): IPermissionLevelMeta {
 		switch (level) {
@@ -162,7 +161,7 @@ export class AgentHostPermissionPickerDelegate extends Disposable implements IPe
 	}
 
 	setPermissionLevel(level: ChatPermissionLevel): void {
-		if (!isPermissionLevelVisible(level, isAssistedPermissionsEnabled(this._configurationService))) {
+		if (!isPermissionLevelVisible(level)) {
 			return;
 		}
 		const session = this._session.get();

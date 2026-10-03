@@ -102,11 +102,6 @@ export const PROMPT_DEFAULT_SOURCE_FOLDER = '.github/prompts';
 export const INSTRUCTIONS_DEFAULT_SOURCE_FOLDER = '.github/instructions';
 
 /**
- * Default modes source folder.
- */
-export const LEGACY_MODE_DEFAULT_SOURCE_FOLDER = '.github/chatmodes';
-
-/**
  * Agents folder.
  */
 export const AGENTS_SOURCE_FOLDER = '.github/agents';

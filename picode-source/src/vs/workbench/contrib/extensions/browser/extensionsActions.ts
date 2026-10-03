@@ -652,7 +652,7 @@ export class InstallAction extends ExtensionAction {
 			return runningExtension;
 		}
 		if (this.runtimeExtensionService.canAddExtension(toExtensionDescription(extension))) {
-			return new Promise<IExtensionDescription | null>((c, e) => {
+			return new Promise<IExtensionDescription | null>(c => {
 				const disposable = this.runtimeExtensionService.onDidChangeExtensions(async () => {
 					const runningExtension = await this.runtimeExtensionService.getExtension(extension.identifier.id);
 					if (runningExtension) {
@@ -1067,7 +1067,7 @@ export class ToggleAutoUpdateForExtensionAction extends ExtensionAction {
 				this.update();
 			}
 		}));
-		this._register(allowedExtensionsService.onDidChangeAllowedExtensionsConfigValue(e => this.update()));
+		this._register(allowedExtensionsService.onDidChangeAllowedExtensionsConfigValue(() => this.update()));
 		this.update();
 	}
 
@@ -1617,7 +1617,7 @@ export class InstallAnotherVersionAction extends ExtensionAction {
 			return;
 		}
 
-		const picks = allVersions.map((v, i) => {
+		const picks = allVersions.map(v => {
 			return {
 				id: v.version,
 				label: v.version,
@@ -2515,7 +2515,7 @@ export abstract class AbstractConfigureRecommendedExtensionsAction extends Actio
 	private getOrCreateExtensionsFile(extensionsFileResource: URI): Promise<{ created: boolean; extensionsFileResource: URI; content: string }> {
 		return Promise.resolve(this.fileService.readFile(extensionsFileResource)).then(content => {
 			return { created: false, extensionsFileResource, content: content.value.toString() };
-		}, err => {
+		}, () => {
 			return this.textFileService.write(extensionsFileResource, ExtensionsConfigurationInitialContent).then(() => {
 				return { created: true, extensionsFileResource, content: ExtensionsConfigurationInitialContent };
 			});
@@ -2916,12 +2916,6 @@ export class ExtensionStatusAction extends ExtensionAction {
 				this.updateStatus({ icon: warningIcon, message: new MarkdownString(details ? escapeMarkdownSyntaxTokens(details) : localize('extension limited because of virtual workspace', "This extension has limited features because the current workspace is virtual.")) }, true);
 				return;
 			}
-		}
-
-		// Unification
-		if (this.extension.enablementState === EnablementState.DisabledByUnification) {
-			this.updateStatus({ icon: infoIcon, message: new MarkdownString(localize('extension disabled because of unification', "All GitHub Copilot functionality is now being served from the GitHub Copilot Chat extension. To temporarily opt out of this extension unification, toggle the {0} setting.", '`chat.extensionUnification.enabled`')) }, true);
-			return;
 		}
 
 		if (!this.workspaceTrustService.isWorkspaceTrusted() &&
@@ -3332,8 +3326,8 @@ export class InstallLocalExtensionsInRemoteAction extends AbstractInstallExtensi
 			}
 			const vsix = await this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.zip(extension.local!);
 			vsixs.push(vsix);
+			return;
 		}));
-
 		await Promises.settled(galleryExtensions.map(gallery => this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.installFromGallery(gallery)));
 		try {
 			await Promises.settled(vsixs.map(vsix => this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.install(vsix)));
@@ -3391,6 +3385,7 @@ export class InstallRemoteExtensionsInLocalAction extends AbstractInstallExtensi
 			}
 			const vsix = await this.extensionManagementServerService.remoteExtensionManagementServer!.extensionManagementService.zip(extension.local!);
 			vsixs.push(vsix);
+			return;
 		}));
 
 		await Promises.settled(galleryExtensions.map(gallery => this.extensionManagementServerService.localExtensionManagementServer!.extensionManagementService.installFromGallery(gallery)));

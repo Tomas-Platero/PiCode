@@ -84,7 +84,6 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 		@IExtensionService private readonly extensionService: IExtensionService,
 		@IEnvironmentService private readonly environmentService: IEnvironmentService,
 		@IChatSessionsService private readonly chatSessionsService: IChatSessionsService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -191,7 +190,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 		const growthSessionDisposables = markAsSingleton(new MutableDisposable());
 
 		const updateGrowthSession = () => {
-			const experimentEnabled = this.configurationService.getValue<boolean>(ChatConfiguration.GrowthNotificationEnabled) === true;
+			const experimentEnabled = false;
 			// Show for users who don't have completed the Chat setup yet.
 			// Additional conditions (e.g., anonymous, entitlement) can be layered here.
 			const shouldShow = experimentEnabled && !chatEntitlementService.sentiment.completed;
@@ -581,7 +580,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 
 		function registerGenerateCodeCommand(coreCommand: 'chat.internal.explain' | 'chat.internal.fix' | 'chat.internal.review', actualCommand: string): void {
 
-			CommandsRegistry.registerCommand(coreCommand, async (accessor, ...args) => {
+			CommandsRegistry.registerCommand(coreCommand, async (accessor) => {
 				const commandService = accessor.get(ICommandService);
 				const codeEditorService = accessor.get(ICodeEditorService);
 				const markerService = accessor.get(IMarkerService);

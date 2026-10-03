@@ -72,7 +72,7 @@ import { IUriIdentityService } from '../../../../../../platform/uriIdentity/comm
 import { IWorkspaceContextService, IWorkspaceFoldersChangeEvent, WorkbenchState } from '../../../../../../platform/workspace/common/workspace.js';
 import { IWorkspaceTrustManagementService } from '../../../../../../platform/workspace/common/workspaceTrust.js';
 import { IWorkbenchEnvironmentService } from '../../../../../services/environment/common/environmentService.js';
-import { ChatConfiguration, getChatPermissionLevelFromDefaultConfiguration, type IChatDefaultConfiguration } from '../../../common/constants.js';
+import { ChatConfiguration, ChatPermissionLevel } from '../../../common/constants.js';
 import { isUntitledChatSession } from '../../../common/model/chatUri.js';
 import { IChatService } from '../../../common/chatService/chatService.js';
 import { IAgentHostNewSessionFolderService, computeDesiredWorkingDirectories, computeWorkingDirectories, hasImmutablePrimaryWorkingDirectory, supportsMultipleWorkingDirectories } from './agentHostNewSessionFolderService.js';
@@ -1043,11 +1043,9 @@ export class AgentHostUntitledProvisionalSessionService extends Disposable imple
 	 * drops the workbench defaults.
 	 *
 	 * - `isolation`: workbench has no isolation picker, so always `'folder'`.
-	 * - `mode` / `autoApprove`: seeded from the single
-	 *   `chat.defaultConfiguration` object setting (`mode` and
-	 *   `approvals` properties). The approval seed is clamped to `'default'`
-	 *   when the `chat.tools.global.autoApprove` policy is off. The local-only
-	 *   `chat.permissions.default` setting is NOT used.
+	 * - `mode` / `autoApprove`: seeded from `chat.newSession.defaultMode` and
+	 *   `chat.permissions.default`. The approval seed is clamped to `'default'`
+	 *   when the `chat.tools.global.autoApprove` policy is off.
 	 *
 	 * Skipped entirely in the Agents window, where the sessions provider
 	 * supplies config via `request.agentHostSessionConfig` instead.
@@ -1058,10 +1056,9 @@ export class AgentHostUntitledProvisionalSessionService extends Disposable imple
 		}
 		const config: Record<string, unknown> = { [SessionConfigKey.Isolation]: 'folder' };
 
-		const configuredDefaults = this._configurationService.getValue<IChatDefaultConfiguration>(ChatConfiguration.DefaultConfiguration);
 		const policyValue = this._configurationService.inspect<boolean>(ChatConfiguration.GlobalAutoApprove).policyValue;
 
-		const configuredApprovals = getChatPermissionLevelFromDefaultConfiguration(configuredDefaults?.approvals);
+		const configuredApprovals = this._configurationService.getValue<ChatPermissionLevel>(ChatConfiguration.DefaultPermissionLevel);
 		if (configuredApprovals) {
 			const policyRestricted = policyValue === false;
 			// Bypass and (legacy) Autopilot auto-approve at least some tool
@@ -1069,7 +1066,7 @@ export class AgentHostUntitledProvisionalSessionService extends Disposable imple
 			config[SessionConfigKey.AutoApprove] = policyRestricted && configuredApprovals !== 'default' ? 'default' : configuredApprovals;
 		}
 
-		const configuredMode = configuredDefaults?.mode;
+		const configuredMode = this._configurationService.getValue<string>(ChatConfiguration.DefaultNewSessionMode);
 		if (typeof configuredMode === 'string' && KNOWN_MODE_VALUES.has(configuredMode)) {
 			config[SessionConfigKey.Mode] = configuredMode;
 		}

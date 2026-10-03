@@ -11,7 +11,7 @@ import { PromptsStorage } from '../service/promptsService.js';
 
 /**
  * Configuration helper for the `reusable prompts` feature.
- * @see {@link PromptsConfig.PROMPT_LOCATIONS_KEY}, {@link PromptsConfig.INSTRUCTIONS_LOCATION_KEY}, {@link PromptsConfig.MODE_LOCATION_KEY}, or {@link PromptsConfig.PROMPT_FILES_SUGGEST_KEY}.
+ * @see {@link PromptsConfig.PROMPT_LOCATIONS_KEY}, {@link PromptsConfig.INSTRUCTIONS_LOCATION_KEY}, or {@link PromptsConfig.PROMPT_FILES_SUGGEST_KEY}.
  *
  * ### Functions
  *
@@ -54,11 +54,6 @@ export namespace PromptsConfig {
 	 * Configuration key for the locations of instructions files.
 	 */
 	export const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
-	/**
-	 * Configuration key for the locations of mode files.
-	 * @deprecated Use {@link AGENTS_LOCATION_KEY} instead
-	 */
-	export const MODE_LOCATION_KEY = 'chat.modeFilesLocations';
 
 	/**
 	 * Configuration key for the locations of agent files (with simplified path support).

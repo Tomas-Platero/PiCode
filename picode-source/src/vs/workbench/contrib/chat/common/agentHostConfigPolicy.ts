@@ -11,23 +11,17 @@ export function isAutoApprovePolicyRestricted(configurationService: IConfigurati
 	return configurationService.inspect<boolean>(ChatConfiguration.GlobalAutoApprove).policyValue === false;
 }
 
-export function isAssistedPermissionsEnabled(configurationService: IConfigurationService): boolean {
-	return configurationService.getValue<boolean>(ChatConfiguration.AssistedPermissionsEnabled) === true;
-}
-
-export function isPermissionLevelVisible(value: unknown, assistedPermissionsEnabled: boolean): boolean {
-	return value !== ChatPermissionLevel.Assisted || assistedPermissionsEnabled;
+export function isPermissionLevelVisible(value: unknown): boolean {
+	return value !== ChatPermissionLevel.Assisted;
 }
 
 export function isAutoApproveValuePolicyRestricted(value: unknown, policyRestricted: boolean): boolean {
 	return policyRestricted && value !== ChatPermissionLevel.Default;
 }
 
-export function normalizeSessionConfigValue(property: string, value: string, policyRestricted: boolean): string;
-export function normalizeSessionConfigValue(property: string, value: unknown, policyRestricted: boolean): unknown;
-export function normalizeSessionConfigValue(property: string, value: unknown, policyRestricted: boolean): unknown {
+export function normalizeSessionConfigValue<T>(property: string, value: T, policyRestricted: boolean): T {
 	if (property === SessionConfigKey.AutoApprove && isAutoApproveValuePolicyRestricted(value, policyRestricted)) {
-		return ChatPermissionLevel.Default;
+		return ChatPermissionLevel.Default as T;
 	}
 	return value;
 }

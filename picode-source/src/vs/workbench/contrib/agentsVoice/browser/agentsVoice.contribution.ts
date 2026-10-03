@@ -8,7 +8,7 @@ import '../../chat/browser/voiceClient/micCaptureService.js';
 import '../../chat/browser/voiceClient/ttsPlaybackService.js';
 import '../../chat/browser/voiceClient/voiceClientService.js';
 import { IVoiceSessionController, isVoiceEntitled } from '../../chat/browser/voiceClient/voiceSessionController.js';
-import { normalizeAgentsVoiceId, VOICE_AGENT_PROGRESS_SETTING } from '../../chat/common/voiceClient/voiceClientService.js';
+import { normalizeAgentsVoiceId } from '../../chat/common/voiceClient/voiceClientService.js';
 import '../../chat/browser/voiceClient/voiceToolDispatchService.js';
 import '../../chat/common/voicePlaybackService.js';
 
@@ -587,24 +587,6 @@ configurationRegistry.registerConfiguration({
 	title: nls.localize('agentsVoiceConfigurationTitle', "Voice Mode"),
 	type: 'object',
 	properties: {
-		'agents.voice.enabled': {
-			type: 'boolean',
-			description: nls.localize('agents.voice.enabled', "Enable the Voice Mode panel in the chat view for voice-driven coding conversations."),
-			default: false,
-			experiment: {
-				mode: 'auto',
-			},
-			tags: ['experimental'],
-			scope: ConfigurationScope.APPLICATION,
-			restricted: true,
-		},
-		[AgentsVoiceSettingId.ShowButton]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.showButton', "Controls whether the Voice Mode button is shown in the chat input. When hidden, Voice Mode can still be started with its keyboard shortcut."),
-			default: true,
-			tags: ['experimental'],
-			scope: ConfigurationScope.APPLICATION,
-		},
 		'agents.voice.backendUrl': {
 			type: 'string',
 			description: nls.localize('agents.voice.backendUrl', "Voice backend WebSocket URL. Leave empty to use the default hosted backend. Set to e.g. `ws://localhost:8000/api/v1/realtime/voice` to point at a backend running on your machine."),
@@ -616,13 +598,6 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			markdownDescription: nls.localize('agents.voice.speakResponses', "When enabled, the assistant reads responses aloud. When disabled, responses are not spoken; enable `#agents.voice.showTranscript#` to read them as a text transcript instead."),
 			default: true,
-			scope: ConfigurationScope.APPLICATION,
-		},
-		[VOICE_AGENT_PROGRESS_SETTING]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.agentProgress', "Allow Agent mode to speak brief semantic progress updates while it investigates, plans, edits, validates, or recovers from a problem."),
-			default: true,
-			tags: ['experimental'],
 			scope: ConfigurationScope.APPLICATION,
 		},
 		'agents.voice.voice': {

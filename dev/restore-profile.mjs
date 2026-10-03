@@ -28,11 +28,10 @@ const PACK = packFlag === -1 ? path.join(REPO, 'PiCode-Win32-x64') : path.resolv
 const DATA = path.join(PACK, 'data');
 const BACKUP = path.join(REPO, '.scratch', 'payload-data-backup');
 
-/** Settings whose pi does not exist any more: the two-pi model and the panel's voice features. */
+/** Settings whose pi does not exist any more: the old panel's transport and voice features. */
 const RETIRED_SETTINGS = [
 	'picode.pi.executablePath',
 	'picode.pi.extraArgs',
-	'picode.pi.runtime',
 	'picode.pi.transport',
 	'picode.pi.defaultModel',
 ];

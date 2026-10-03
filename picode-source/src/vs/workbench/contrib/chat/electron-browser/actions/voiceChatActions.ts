@@ -19,12 +19,10 @@ import { IAccessibilityService } from '../../../../../platform/accessibility/com
 import { Action2, IAction2Options, MenuId } from '../../../../../platform/actions/common/actions.js';
 import { CommandsRegistry, ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
-import { Extensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr, ContextKeyExpression, IContextKeyService, RawContextKey } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../../platform/keybinding/common/keybinding.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { contrastBorder, focusBorder } from '../../../../../platform/theme/common/colorRegistry.js';
 import { editorInfoForeground } from '../../../../../platform/theme/common/colors/editorColors.js';
 import { spinningLoading, syncing } from '../../../../../platform/theme/common/iconRegistry.js';
@@ -36,7 +34,7 @@ import { IEditorService } from '../../../../services/editor/common/editorService
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { IStatusbarEntry, IStatusbarEntryAccessor, IStatusbarService, StatusbarAlignment } from '../../../../services/statusbar/browser/statusbar.js';
-import { AccessibilityVoiceSettingId, SpeechTimeoutDefault, accessibilityConfigurationNodeBase } from '../../../accessibility/browser/accessibilityConfiguration.js';
+import { AccessibilityVoiceSettingId, SpeechTimeoutDefault } from '../../../accessibility/browser/accessibilityConfiguration.js';
 import { InlineChatController } from '../../../inlineChat/browser/inlineChatController.js';
 import { CTX_INLINE_CHAT_FOCUSED, MENU_INLINE_CHAT_WIDGET_SECONDARY } from '../../../inlineChat/common/inlineChat.js';
 import { NOTEBOOK_EDITOR_FOCUSED } from '../../../notebook/common/notebookContextKeys.js';
@@ -991,7 +989,7 @@ export class StopReadChatItemAloud extends Action2 {
 		});
 	}
 
-	async run(accessor: ServicesAccessor, ...args: unknown[]) {
+	async run(accessor: ServicesAccessor) {
 		ChatSynthesizerSessions.getInstance(accessor.get(IInstantiationService)).stop();
 	}
 }
@@ -1069,33 +1067,6 @@ export class KeywordActivationContribution extends Disposable implements IWorkbe
 		if (!this.speechService.hasSpeechProvider || !this.chatAgentService.getDefaultAgent(ChatAgentLocation.Chat)) {
 			return; // these settings require a speech and chat provider
 		}
-
-		const registry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
-		registry.registerConfiguration({
-			...accessibilityConfigurationNodeBase,
-			properties: {
-				[KEYWORD_ACTIVIATION_SETTING_ID]: {
-					'type': 'string',
-					'enum': [
-						KeywordActivationContribution.SETTINGS_VALUE.OFF,
-						KeywordActivationContribution.SETTINGS_VALUE.VIEW_CHAT,
-						KeywordActivationContribution.SETTINGS_VALUE.QUICK_CHAT,
-						KeywordActivationContribution.SETTINGS_VALUE.INLINE_CHAT,
-						KeywordActivationContribution.SETTINGS_VALUE.CHAT_IN_CONTEXT
-					],
-					'enumDescriptions': [
-						localize('voice.keywordActivation.off', "Keyword activation is disabled."),
-						localize('voice.keywordActivation.chatInView', "Keyword activation is enabled and listening for 'Hey Code' to start a voice chat session in the chat view."),
-						localize('voice.keywordActivation.quickChat', "Keyword activation is enabled and listening for 'Hey Code' to start a voice chat session in the quick chat."),
-						localize('voice.keywordActivation.inlineChat', "Keyword activation is enabled and listening for 'Hey Code' to start a voice chat session in the active editor if possible."),
-						localize('voice.keywordActivation.chatInContext', "Keyword activation is enabled and listening for 'Hey Code' to start a voice chat session in the active editor or view depending on keyboard focus.")
-					],
-					'description': localize('voice.keywordActivation', "Controls whether the keyword phrase 'Hey Code' is recognized to start a voice chat session. Enabling this will start recording from the microphone but the audio is processed locally and never sent to a server."),
-					'default': 'off',
-					'tags': ['accessibility']
-				}
-			}
-		});
 	}
 
 	private handleKeywordActivation(): void {

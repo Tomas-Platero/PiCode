@@ -41,7 +41,7 @@ export async function applyAgentHostCompletionAction(
 	const elevatedLevel = getElevatedAutoApproveLevel(config[SessionConfigKey.AutoApprove]);
 	if (elevatedLevel !== undefined) {
 		const confirmed = await maybeConfirmElevatedPermissionLevel(elevatedLevel, dialogService, storageService, {
-			defaultSettingKey: ChatConfiguration.DefaultConfiguration,
+			defaultSettingKey: ChatConfiguration.DefaultPermissionLevel,
 		});
 		if (!confirmed) {
 			return false;

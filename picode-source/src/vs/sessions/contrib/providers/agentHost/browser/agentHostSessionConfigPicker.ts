@@ -208,7 +208,7 @@ async function confirmAutoApproveLevel(value: string, label: string, dialogServi
 	if (!isChatPermissionLevel(value)) {
 		return true;
 	}
-	return maybeConfirmElevatedPermissionLevel(value, dialogService, storageService, { defaultSettingKey: ChatConfiguration.DefaultConfiguration, levelLabel: label });
+	return maybeConfirmElevatedPermissionLevel(value, dialogService, storageService, { defaultSettingKey: ChatConfiguration.DefaultPermissionLevel, levelLabel: label });
 }
 
 /**

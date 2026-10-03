@@ -43,7 +43,7 @@ import { IChatWidgetService } from '../../../../../workbench/contrib/chat/browse
 import { ChatMode } from '../../../../../workbench/contrib/chat/common/chatModes.js';
 import { IChatSendRequestOptions, IChatService, type IChatModelReference } from '../../../../../workbench/contrib/chat/common/chatService/chatService.js';
 import { IChatSessionFileChange, IChatSessionFileChange2, IChatSessionsService } from '../../../../../workbench/contrib/chat/common/chatSessionsService.js';
-import { ChatAgentLocation, ChatConfiguration, ChatModeKind, ChatPermissionLevel, getChatPermissionLevelFromDefaultConfiguration, isChatPermissionLevel, type IChatDefaultConfiguration } from '../../../../../workbench/contrib/chat/common/constants.js';
+import { ChatAgentLocation, ChatConfiguration, ChatModeKind, ChatPermissionLevel, getChatPermissionLevelFromDefaultConfiguration, isChatPermissionLevel } from '../../../../../workbench/contrib/chat/common/constants.js';
 import { isAutoApprovePolicyRestricted, normalizeSessionConfigValue } from '../../../../../workbench/contrib/chat/common/agentHostConfigPolicy.js';
 import { ILanguageModelChatMetadata, ILanguageModelsService } from '../../../../../workbench/contrib/chat/common/languageModels.js';
 import { getRegisteredLanguageModels, resolveConfiguredModel, resolveModelIdentifier, resolveModelIdentifierFromLanguageModels } from '../../../../../workbench/contrib/chat/common/modelSelection.js';
@@ -3298,15 +3298,10 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 	 * the profile-scoped remembered session-config map and then normalized
 	 * against policy/feature constraints.
 	 *
-	 * The agent-host defaults are controlled by the single
-	 * `chat.defaultConfiguration` object setting (with `mode` and
-	 * `approvals` properties). Per axis the precedence is: enterprise
-	 * **policy** value > the user's **remembered** last pick > the ordinary
-	 * configured **setting** value (treated as a plain default) > schema
-	 * default. So a normal setting behaves as a default that the remembered
-	 * pick overrides, while an enterprise policy still wins outright. The
-	 * local-only `chat.permissions.default` setting is intentionally NOT
-	 * consulted here.
+	 * The agent-host defaults come from `chat.newSession.defaultMode` (mode)
+	 * and `chat.permissions.default` (approvals). Per axis the precedence is:
+	 * the user's **remembered** last pick > the ordinary configured
+	 * **setting** value (treated as a plain default) > schema default.
 	 *
 	 * If enterprise policy disables global auto-approval
 	 * (`chat.tools.global.autoApprove` policy value `false`), the approval seed
@@ -3332,29 +3327,23 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 		}
 		const remembered = migrateLegacyAutopilotConfig(config);
 
-		// `chat.defaultConfiguration` controls both axes. Per axis the
-		// precedence is: enterprise policy > remembered pick > effective
-		// configured value (`inspect().value`, which is the user's setting or
-		// the schema default). `inspect().value` is used instead of
-		// `getValue()` only so the policy layer can be lifted above the
-		// remembered pick.
-		const inspected = this._baseConfigurationService.inspect<IChatDefaultConfiguration>(ChatConfiguration.DefaultConfiguration);
-		const policyDefaults = inspected.policyValue;
-		const effectiveDefaults = inspected.value;
+		// The mode axis is seeded by `chat.newSession.defaultMode` and the
+		// approval axis by `chat.permissions.default`.
+		const configuredPermissions = this._baseConfigurationService.getValue<ChatPermissionLevel>(ChatConfiguration.DefaultPermissionLevel);
+		const configuredMode = this._baseConfigurationService.getValue<string>(ChatConfiguration.DefaultNewSessionMode);
 
-		// Approval axis: policy > remembered > effective.
+		// Approval axis: remembered > configured.
 		const resolvedAutoApprove =
-			normalizeAutoApproveValue(policyDefaults?.approvals, policyRestricted)
-			?? normalizeAutoApproveValue(remembered[SessionConfigKey.AutoApprove], policyRestricted)
-			?? normalizeAutoApproveValue(effectiveDefaults?.approvals, policyRestricted);
+			normalizeAutoApproveValue(remembered[SessionConfigKey.AutoApprove], policyRestricted)
+			?? normalizeAutoApproveValue(configuredPermissions, policyRestricted);
 		if (resolvedAutoApprove) {
 			remembered[SessionConfigKey.AutoApprove] = resolvedAutoApprove;
 		} else {
 			delete remembered[SessionConfigKey.AutoApprove];
 		}
 
-		// Mode axis: policy > remembered > effective.
-		const resolvedMode = [policyDefaults?.mode, remembered[SessionConfigKey.Mode], effectiveDefaults?.mode]
+		// Mode axis: remembered > configured.
+		const resolvedMode = [remembered[SessionConfigKey.Mode], configuredMode]
 			.find((value): value is string => typeof value === 'string' && KNOWN_MODE_VALUES.has(value));
 		if (resolvedMode) {
 			remembered[SessionConfigKey.Mode] = resolvedMode;

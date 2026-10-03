@@ -3,9 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Extensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
-
 // ⚠️  WARNING — DO NOT ADD SETTINGS HERE ⚠️
 //
 // This file overrides default configuration values for the Agents window using
@@ -35,12 +32,6 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 //
 // Only add entries to this file if the setting is declared by a third party and
 // cannot be annotated with `agentsWindow`, AND you have exhausted all other options.
-
-Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
-	overrides: {
-		'chat.customizationsMenu.userStoragePath': '~/.copilot',
-	},
-	donotCache: true,
-	preventExperimentOverride: true,
-	source: 'sessionsDefaults'
-}]);
+//
+// PiCode registers no default overrides here: the Agents-window defaults it needs are
+// declared with `agentsWindow` on their own schema.

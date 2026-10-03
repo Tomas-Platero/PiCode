@@ -68,3 +68,36 @@ ejecución de herramientas; sin colgar el turno si el dueño cancela (cancelar =
   cada rebuild leyendo el holder en tiempo de llamada — el nivel es siempre el del turno en
   curso. Typecheck 0 errores (tsc nativo, propuestas resueltas); out/ emitido; 74/74 tests
   del directorio (61 existentes + 13 nuevas).
+
+## Retirada completa de las opciones Autopilot/Assisted (2026-10-03)
+
+El dueño pidió «revisa settings y quita todo lo que haya sobre este tipo de opciones». P5 había
+dejado solo dos posiciones **en el picker**, pero quedaban rastros en los ajustes y en el código.
+Se ha retirado todo:
+
+- **Ajustes fuera del registro** (`chat.shared.contribution.ts`): `chat.autopilot.advanced.enabled`
+  (Advanced Autopilot) y `chat.assistedPermissions.enabled` (mostrar Assisted en los pickers del
+  agent host). Ya no aparecen en Settings.
+- **`chat.defaultConfiguration`**: el enum de `mode` queda en `interactive` / `plan` (fuera
+  `autopilot`) y el de `approvals` en `manual` / `allowAll` (fuera `assisted`).
+- **Vocabulario del ajuste**: `ChatDefaultPermissionLevel.Assisted` eliminado (y su caso en
+  `getChatPermissionLevelFromDefaultConfiguration`); `AgentSessionMode` sin `autopilot`.
+- **Plumbing muerto**: `ChatConfiguration.AutopilotAdvancedEnabled` y
+  `ChatConfiguration.AssistedPermissionsEnabled` eliminados; `isAssistedPermissionsEnabled` fuera y
+  `isPermissionLevelVisible(value)` ahora oculta Assisted siempre (antes lo mostraba si el ajuste
+  estaba activo). `normalizeSessionConfigValue` pasa a genérico para no devolver `unknown`.
+- **Lectores del ajuste Autopilot eliminados del núcleo**:
+  - `languageModelToolsService`: fuera el *risk gate* de Autopilot (`_maybeApplyAutopilotRiskGate`,
+    `_isSessionInAutopilotLevel`, `_isSessionLiveAutopilotLevel`, `fetchWebPageToolIds`) y su bloque
+    de «skip» en la ruta de confirmación.
+  - `chatWidget` + `chatGoalSummaryService`: fuera el *goal banner* de Advanced Autopilot y el
+    servicio completo (`chatGoalSummaryService.ts` y su test, borrados).
+- **Tests actualizados**: se eliminaron los 303 renglones de tests del risk gate y los del goal
+  summary; el test de «Assisted solo si el ajuste está activo» pasa a «Assisted siempre oculto»; el
+  mock del delegate ya no sirve el ajuste.
+- `ChatPermissionLevel.Assisted` y `.Autopilot` **se conservan** como vocabulario interno: son
+  compartidos con otros proveedores de sesiones (Copilot CLI, agent host) y con la lectura de
+  valores obsoletos. Lo que se ha quitado es su exposición como *settings* y el código que
+  dependía de los ajustes retirados.
+
+Verificación: `tsc --noEmit` limpio; build de la app en curso. Diff: 13 ficheros, +57/−854.

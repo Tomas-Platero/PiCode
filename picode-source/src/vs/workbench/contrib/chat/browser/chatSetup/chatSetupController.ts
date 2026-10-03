@@ -322,7 +322,6 @@ export class ChatSetupController extends Disposable {
 				}
 			}
 		});
-
 		if (options.useEnterpriseProvider) {
 			const success = await this.handleEnterpriseInstance();
 			if (!success) {

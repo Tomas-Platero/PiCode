@@ -686,11 +686,6 @@ export class ChatRepoInfoContribution extends Disposable implements IWorkbenchCo
 			title: nls.localize('chatRepoInfoConfigurationTitle', "Chat Repository Info"),
 			type: 'object',
 			properties: {
-				[ChatConfiguration.RepoInfoEnabled]: {
-					type: 'boolean',
-					description: nls.localize('chat.repoInfo.enabled', "Controls whether lightweight repository metadata (branch, commit, remotes) is captured when a chat request is submitted for internal diagnostics."),
-					default: false,
-				}
 			}
 		});
 

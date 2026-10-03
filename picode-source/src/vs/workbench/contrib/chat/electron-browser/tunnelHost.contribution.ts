@@ -9,20 +9,18 @@ import { localize, localize2 } from '../../../../nls.js';
 import { IActionViewItemService, type IActionViewItemFactory } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
 import { CONFIGURATION_KEY_HOST_NAME, MAX_TUNNEL_NAME_LENGTH } from '../../../../platform/remoteTunnel/common/remoteTunnel.js';
 import { IsSessionsWindowContext, RemoteNameContext } from '../../../common/contextkeys.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IOutputService } from '../../../services/output/common/output.js';
 import { ChatContextKeyExprs, ChatContextKeys } from '../common/actions/chatContextKeys.js';
 import { ITunnelHostService } from '../common/tunnelHost.js';
-import { CONFIGURATION_KEY_MICROSOFT_AUTH, RENAME_TUNNEL_ID, SHOW_TUNNEL_HOST_OUTPUT_ID, TunnelHostService } from './tunnelHostService.js';
+import { RENAME_TUNNEL_ID, SHOW_TUNNEL_HOST_OUTPUT_ID, TunnelHostService } from './tunnelHostService.js';
 import { TUNNEL_HOST_LOG_ID } from '../../../../platform/agentHost/common/tunnelAgentHost.js';
 import { ToggleRemoteConnectionsActionViewItem } from './toggleRemoteConnectionsActionViewItem.js';
 
@@ -174,16 +172,3 @@ registerAction2(class RenameTunnelAction extends Action2 {
 });
 
 registerWorkbenchContribution2(TunnelHostContribution.ID, TunnelHostContribution, WorkbenchPhase.AfterRestored);
-
-Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
-	type: 'object',
-	properties: {
-		[CONFIGURATION_KEY_MICROSOFT_AUTH]: {
-			description: localize('tunnelHost.enableMicrosoftAuth', "Enable Microsoft account authentication for agent host tunnels. When disabled, only GitHub authentication is used."),
-			type: 'boolean',
-			scope: ConfigurationScope.APPLICATION,
-			default: false,
-			tags: ['usesOnlineServices'],
-		},
-	}
-});

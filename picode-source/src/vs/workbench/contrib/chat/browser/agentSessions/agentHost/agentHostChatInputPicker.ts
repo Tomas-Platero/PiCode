@@ -41,7 +41,7 @@ import { IWorkspaceContextService } from '../../../../../../platform/workspace/c
 import type { IChatWidget } from '../../chat.js';
 import { ChatConfiguration, ChatPermissionLevel, isChatPermissionLevel } from '../../../common/constants.js';
 import { SessionType } from '../../../common/chatSessionsService.js';
-import { isAssistedPermissionsEnabled, isAutoApprovePolicyRestricted, isAutoApproveValuePolicyRestricted, isPermissionLevelVisible, normalizeSessionConfigValue } from '../../../common/agentHostConfigPolicy.js';
+import { isAutoApprovePolicyRestricted, isAutoApproveValuePolicyRestricted, isPermissionLevelVisible, normalizeSessionConfigValue } from '../../../common/agentHostConfigPolicy.js';
 import { maybeConfirmElevatedPermissionLevel } from '../../../common/chatPermissionWarnings.js';
 import { getChatSessionType, isUntitledChatSession } from '../../../common/model/chatUri.js';
 import { withChatInputPickerMotion } from '../../widget/input/chatInputPickerActionItem.js';
@@ -333,7 +333,7 @@ export function isClaimedByDedicatedPicker(property: string, schema: SessionConf
  *    Autopilot when the user approves a plan) must win, otherwise a stale
  *    overlay value would shadow them.
  */
-export function resolveConfigChipValue(isUntitled: boolean, serverValue: unknown, overlayValue: unknown, schemaDefault: unknown): unknown {
+export function resolveConfigChipValue<T>(isUntitled: boolean, serverValue: T, overlayValue: T, schemaDefault: T): T {
 	const preferred = isUntitled
 		? (overlayValue ?? serverValue)
 		: (serverValue ?? overlayValue);
@@ -778,10 +778,8 @@ export class AgentHostChatInputPicker extends Disposable {
 		if (this._property !== SessionConfigKey.AutoApprove) {
 			return items;
 		}
-		const assistedPermissionsEnabled = isAssistedPermissionsEnabled(this._configurationService);
-		return items.filter(item => isPermissionLevelVisible(item.value, assistedPermissionsEnabled));
+		return items.filter(item => isPermissionLevelVisible(item.value));
 	}
-
 	private _fromCompletion(item: SessionConfigValueItem): IConfigPickerItem {
 		return { value: item.value, label: item.label, description: item.description };
 	}
@@ -815,7 +813,7 @@ export class AgentHostChatInputPicker extends Disposable {
 	 */
 	private async _confirmAndSetValue(backendSession: URI, item: IConfigPickerItem): Promise<void> {
 		const value = item.value;
-		if (this._property === SessionConfigKey.AutoApprove && !isPermissionLevelVisible(value, isAssistedPermissionsEnabled(this._configurationService))) {
+		if (this._property === SessionConfigKey.AutoApprove && !isPermissionLevelVisible(value)) {
 			return;
 		}
 		if (this._property === SessionConfigKey.AutoApprove) {
@@ -824,7 +822,7 @@ export class AgentHostChatInputPicker extends Disposable {
 				: (value !== ChatPermissionLevel.Default ? ChatPermissionLevel.AutoApprove : undefined);
 			if (levelToConfirm) {
 				const confirmed = await maybeConfirmElevatedPermissionLevel(levelToConfirm, this._dialogService, this._storageService, {
-					defaultSettingKey: ChatConfiguration.DefaultConfiguration,
+					defaultSettingKey: ChatConfiguration.DefaultPermissionLevel,
 					levelLabel: item.label,
 				});
 				if (!confirmed) {

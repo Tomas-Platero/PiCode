@@ -102,3 +102,91 @@ no de corrección). `telemetry.telemetryLevel` puede quedarse como divulgación 
   miente —, y el feed debe llegar a `master`, que es lo que `HEAD` sirve).
   Reglas duras: repo público, nunca `--force`, nunca latest.json a mano, timestamp =
   hora de build (rollout de 120 h por `update.minReleaseAge`).
+
+## Segunda pasada — mapa completo del chat (2026-10-03)
+
+Auditoría nueva (subagente, leyendo cada bloque del chat y sus lectores): 145 ajustes clasificados
+en **118 MANTENER, 12 QUITAR, 15 DUDA**. Aplicado lo claro:
+
+| Retirado | Motivo |
+| --- | --- |
+| `chat.implicitContext.includeActiveEditor` | La descripción dice «solo Agent Host (como Copilot)»; único lector el handler del agent host. |
+| `chat.terminal.agentHost.enabled` | Terminal Chat sobre el arnés del agent host. |
+| `chat.inlineChat.agentHost.enabled` | Igual, inline chat. |
+| `chat.byokUtilityModelDefault` | Huérfano de producción; concepto BYOK/Copilot. |
+| `chat.titleBar.signIn.enabled` | Botón «Copilot Sign In». |
+| `chat.repoInfo.enabled` | Diagnóstico interno de Microsoft. |
+| `remote.tunnels.access.enableMicrosoftAuth` | Auth Microsoft del agent host. |
+| `accessibility.voice.keywordActivation` | Voz que necesita `vscode-speech`, sin empaquetar. |
+| Claves vacías de `chatSetupController.ts` | `copilot.setup` con `defaultChatAgent: null`. |
+
+**Restaurado**: `chat.tools.edits.autoApprove` — la auditoría nueva lo marcó QUITAR (sin lector local)
+pero la primera (bloque C) lo daba como *load-bearing* de aprobación de ediciones; ante el conflicto
+se deja. Pasa a DUDA.
+
+### Dudas (15, sin tocar)
+
+`chat.experimental.permissionsSandboxToggle.enabled`, `chat.tools.riskAssessment.model` (default
+`copilot-utility-small`), `chat.defaultConfiguration`, `chat.plugins.marketplaces` (defaults a repos
+de Copilot), `chat.plugins.extraMarketplaces`, `chat.plugins.strictMarketplaces`,
+`chat.customizations.strictPluginOnlyCustomization`, `chat.mcp.allowManagedServersOnly`,
+`mcp.enterpriseManagedAuth.idp`, `chat.hookFilesLocations`, `chat.useHooks`, `chat.useClaudeHooks`,
+`chat.customizations.userDataMigration.enabled`, `chat.agentHost.allowSignedOutWhenUsable`,
+`chat.tools.edits.autoApprove`.
+
+### Nota sobre el bloque (A) de esta auditoría
+
+El bloque (A) original (`chat.agentHost.*` ~50 ajustes, entitlement Copilot, `dictation.*`,
+`workbench.enableExperiments`) **no se ejecuta en bloque**: la auditoría nueva mostró que parte de
+`chat.agentHost.*` sí sirve al agent host de pi (debug AHP, debug log), así que hay que ir ajuste por
+ajuste con su lector, no borrar el prefijo. Sigue pendiente de decisión del dueño.
+
+## Tercera pasada — decisiones del dueño (2026-10-03), uno por uno
+
+El dueño pidió ir ajuste por ajuste, con explicación, y decidió. Resumen de lo aplicado:
+
+**Retirados del registro (Settings):**
+- Hooks: `chat.useHooks`, `chat.hookFilesLocations`, `chat.useClaudeHooks`.
+- `chat.plugins.marketplaces`.
+- Gobernanza de plugins: `chat.plugins.extraMarketplaces`, `chat.plugins.strictMarketplaces`, `chat.customizations.strictPluginOnlyCustomization`.
+- MCP empresarial: `chat.mcp.allowManagedServersOnly`, `mcp.enterpriseManagedAuth.idp`.
+- `chat.experimental.permissionsSandboxToggle.enabled`.
+- `chat.customizations.userDataMigration.enabled`.
+- `chat.agentHost.cloudSandbox.enabled` (el único Copilot real del bloque `chat.agentHost.*`; el resto del bloque o es genérico-pi o es código interno, no Settings).
+- Entitlement/selectores Copilot: `chat.defaultToCopilotHarness`, `chat.editor.preferCopilotHarness`, `chat.editor.localAgent.enabled`, `chat.growthNotification.enabled`, `chat.allowAnonymousAccess`, `chat.approvedAccountOrganizations`, `chat.extensionUnification.enabled`.
+- `chat.defaultConfiguration` (+ `IChatDefaultConfiguration`, `AgentSessionMode`): las sesiones nuevas del agent host toman el **modo** de `chat.newSession.defaultMode` y los **permisos** de `chat.permissions.default`.
+
+**Cambiados:**
+- `chat.tools.riskAssessment.model` → default `''` (usa el modelo utility de pi, no `copilot-utility-small`).
+- `chat.agentHost.allowSignedOutWhenUsable` → default `true`.
+
+**Decidido NO tocar:**
+- `chat.tools.edits.autoApprove` (llega al agent host que usa pi; es de seguridad).
+
+**Sin registro en el repo (nada que quitar):** `workbench.enableExperiments`, los `dictation.*` y los deprecados `telemetry.enableTelemetry`/`enableCrashReporter`/`update.channel` no tienen `registerConfiguration` en el árbol (venían de extensiones retiradas o ya se limpiaron); sus constantes/lectores con ruta viva se quedan.
+
+**Pendiente de pulido (anotado por el obrero):** `constants.test.ts` conserva aserciones que describen el comportamiento anterior (sustituyó constantes por literales para compilar); y `extensionsActions.ts` guarda una cadena que menciona `chat.extensionUnification.enabled` en una rama ya muerta.
+
+**Corrección posterior al obrero:** `chat.tools.riskAssessment.model` cambiaba el default del ajuste a `''`, pero el lector seguía cayendo a `'copilot-utility-small'` (modelo de Copilot). Se corrigió `chatToolRiskAssessmentService._invokeModel` para que, si el ajuste está vacío, use `chat.utilitySmallModel` y devuelva sin evaluación si tampoco hay modelo. Verificado en el binario: el risk assessment ya no cae a `copilot-utility-small` (las otras apariciones de ese id son de Explain Changes, títulos de thinking y dictado, que son otra cosa).
+
+## Cuarta pasada — auditoría de sessions/contrib y extensiones/telemetría/update (2026-10-03)
+
+**`sessions/contrib/**`**: solo registra **17 ajustes** (los `agentHostSettings.contribution.ts` y
+`agentSessionSettings.contribution.ts` NO registran ajustes; montan un editor sintético de config del
+agent host). Resultado: 1 QUITAR, 14 MANTENER, 2 DUDA. Quitado:
+`chat.customizationsMenu.userStoragePath` (override de default `~/.copilot`, **sin esquema y sin
+lector** — triple motivo: path de Copilot, ajuste inexistente, huérfano). DUDA: `chat.automations.*`
+(huevo propio, oculto en stable).
+
+**Extensiones / telemetría / update**: 0 QUITAR inequívocos en esas zonas. `extensions.*` es todo
+Open VSX/genérico; los 5 `update.*` ya dicen PiCode y usan el feed propio; `telemetry.feedback.enabled`
+**no es telemetría** (es el gate del *issue reporter*: si se quita, desaparece). La telemetría muerta
+de verdad estaba fuera: se quitaron `telemetry.performance.inputLatencySamplingProbability` y
+`telemetry.editStats.enabled` / `telemetry.editStats.details.enabled` (solo emitían telemetría que no
+existe). Se dejan `telemetry.editStats.showStatusBar`/`showDecorations` y `editor.aiStats.enabled`
+(pintan UI local). Candidatos DUDA no tocados: `extensions.supportAgentsWindow` (no-op honesto),
+`extensions.verifySignature`, `extensions.allowed`, `extensions.showRecommendationsOnlyOnDemand`.
+
+**Bloque B (texto/marca)**: ya estaba resuelto en el código actual — `releaseNotesUrl` apunta a las
+Releases de PiCode, el User-Agent de update usa `productName` (PiCode), y las descripciones de
+`update.*` ya dicen «PiCode update feed… hosted on GitHub». Sin fetch a Microsoft.

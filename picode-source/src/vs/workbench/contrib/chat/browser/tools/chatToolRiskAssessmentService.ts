@@ -116,7 +116,11 @@ export class ChatToolRiskAssessmentService implements IChatToolRiskAssessmentSer
 	}
 
 	private async _invokeModel(tool: IToolData, parameters: unknown, kind: ToolRiskPromptKind, token: CancellationToken): Promise<IToolRiskAssessment | undefined> {
-		const modelId = this._configurationService.getValue<string>(ChatConfiguration.ToolRiskAssessmentModel) || 'copilot-utility-small';
+		const modelId = this._configurationService.getValue<string>(ChatConfiguration.ToolRiskAssessmentModel)
+			|| this._configurationService.getValue<string>(ChatConfiguration.UtilitySmallModel);
+		if (!modelId) {
+			return undefined;
+		}
 
 		const models = await this._languageModelsService.selectLanguageModels({ vendor: 'copilot', id: modelId });
 		if (!models.length || token.isCancellationRequested) {

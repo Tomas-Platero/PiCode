@@ -10,6 +10,14 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 ## [Unreleased] — 2026-09-27
 
 ### Changed
+- **Gentle AI sube a `gentle-pi` 4.0.0 en el perfil interno.** El paquete que el propio
+  producto instala pasa de 3.7.0 a 4.0.0 (el salto mayor del que se tenía registro). Antes de
+  subir se comprobó el acoplamiento del conector con los contratos de gentle que espeja:
+  `lib/agents-config.ts`, `lib/agent-home.ts` y `lib/orchestrator-presence.ts` son
+  **idénticos** entre 3.7.0 y 4.0.0, y la clave `gentleTodo` (`{tasks, nextId}`) no cambia, así
+  que **el conector no necesita tocar código**. Lo que sí cambia para el usuario: la v4 saca
+  del paquete los **13 agentes del ciclo SDD** y la extensión `sdd-init`, sube las extensiones
+  de 13 a 18 y deja de traer `@earendil-works/pi-tui` (lo aporta el host).
 - **esbuild is back on — at upstream's factory value.** VSCodium had flipped
   `useEsbuildTranspile` to `false` without recording a reason anywhere; PiCode restored it to
   `true` (2026-09-27) and closed the one real gap the route has: the product chain no longer
@@ -34,6 +42,51 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   no longer matches the tree; `-f` refuses instead of deleting the source; `-o` checks the
   source and identity in seconds.
 - **`jq` is gone as a dependency** — nothing needs it any more.
+
+### Fixed
+- **El sync deja de agotarse solo, y el perfil de Pi deja de perder ficheros.** El error `Too many
+  requests. Only 100 requests allowed in 5 minutes` no lo lanzaba el servidor: es el freno del
+  cliente y saltaba porque el motor hacía ~14 syncs completos en cuatro minutos. Dos disparadores: el
+  hub de customizaciones guardaba la sección activa como estado **sincronizado** (cada clic
+  despertaba un sync) y el recurso `piProfile` leía el perfil **externo** `~/.pi/agent`, cuyo
+  `models.json` reescribe el pi del PATH sin parar. Ahora la sección activa es estado local y
+  `piProfile` sincroniza el perfil propio de PiCode (`<dist>/data/pi-agent`), nunca `~/.pi`
+  (AGENTS.md §4). Además `piProfile` **aplanaba las rutas**: su `getKey` comparaba un URI `file://`
+  con uno `userDataSync://`, `relativePath` devolvía `undefined` y caía al `basename`, así que
+  `memory/MEMORY.md` viajaba como `MEMORY.md` y los ficheros con el mismo nombre se pisaban (de 6
+  `SKILL.md` solo sobrevivía uno). Ahora conserva la ruta completa. Detalle en
+  `odd/tasks/picode-cloud-sync.md`.
+
+### Removed
+- **Autopilot y Assisted, fuera de Settings.** El picker del chat ya ofrecía solo dos posiciones
+  (Ask y Allow all) desde el 27‑09, pero los ajustes seguían ahí. Se retiran
+  `chat.autopilot.advanced.enabled` y `chat.assistedPermissions.enabled` del registro, y el ajuste
+  `chat.defaultConfiguration` deja de ofrecer `autopilot` en `mode` y `assisted` en `approvals`.
+  Con ellos se va el código que solo existía para esos ajustes: el *risk gate* de Autopilot en la
+  confirmación de herramientas, el *goal banner* de Advanced Autopilot y su servicio. El vocabulario
+  interno `ChatPermissionLevel.Assisted`/`.Autopilot` se conserva: lo comparten otros proveedores de
+  sesiones. Detalle en `odd/tasks/permisos-pi-chat.md`.
+- **17 ajustes experimentales fuera del registro, restos de Copilot o de otros proveedores.**
+  Auditoría de los 62 ajustes con etiqueta `experimental`: se retiran sus bloques de registro los que
+  no sirven a PiCode — sync de sesiones Copilot (`chat.sessionSync.*`), migración de sesiones Copilot
+  CLI, sesiones de agentes ajenos (`chat.agentSessions.showExternal`), Codex
+  (`chat.editor.codex.preferAgentHost`), puente y tool-search del Copilot SDK, semantic search de
+  Copilot, sandbox del SDK en macOS/Linux y Windows, `chat.modeFilesLocations` (deprecado, sin lector),
+  instrucciones por la extensión GitHub Copilot Chat, la migración prompt→skill, y los tres ajustes de
+  Voice Mode (`agents.voice.*`, atados a un entitlement Pro de Copilot). Ya no aparecen en Settings.
+  Los 42 restantes configuran el chat de pi y se quedan. Detalle en
+  `odd/tasks/picode-settings-experimentales.md`.
+- **Más ajustes de Copilot/empresa, fuera de Settings.** Tras revisarlos uno por uno con el dueño:
+  hooks (`chat.useHooks`, `chat.hookFilesLocations`, `chat.useClaudeHooks`), marketplaces de plugins,
+  gobernanza empresarial de plugins y de MCP, `chat.experimental.permissionsSandboxToggle.enabled`,
+  la migración de customizations, `chat.agentHost.cloudSandbox.enabled`, el entitlement/selectores de
+  Copilot (`defaultToCopilotHarness`, `preferCopilotHarness`, `localAgent.enabled`,
+  `growthNotification.enabled`, `allowAnonymousAccess`, `approvedAccountOrganizations`,
+  `extensionUnification.enabled`) y `chat.defaultConfiguration` (las sesiones nuevas del agent host
+  toman ahora modo de `chat.newSession.defaultMode` y permisos de `chat.permissions.default`).
+  `chat.tools.riskAssessment.model` pasa a default vacío (usa el modelo utility de pi, no
+  `copilot-utility-small`) y `chat.agentHost.allowSignedOutWhenUsable` a `true`. Detalle en
+  `odd/tasks/picode-auditoria-de-ajustes.md`.
 
 ### Measured
 - A full steady-state Windows build on a 16-core machine, with the esbuild route restored
