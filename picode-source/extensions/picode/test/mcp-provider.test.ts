@@ -81,6 +81,28 @@ test('a server pi is told not to start is not offered to the editor, and the rea
 	assert.ok(read.skipped[0].includes('turned off'), read.skipped[0]);
 });
 
+// pi 1.0.1: a project's `.pi/mcp.json` may carry an entry with no `command` and no `url` whose only
+// job is to tune the user-level server of the same name. `enabled: false` there means pi does not
+// start that server for this project, so the editor must not offer it either; the other keys only
+// change how pi exposes its tools. Either way the entry declares no server of its own, so it is not
+// a malformed entry to report.
+test('a project entry that only overrides a user-level server is applied, not reported', () => {
+	const read = mcpServersFrom([
+		config('/profile/mcp.json', {
+			remote: { type: 'http', url: 'https://example.test/mcp' },
+			keep: { command: 'node', args: ['keep.js'] },
+		}),
+		config('/project/.pi/mcp.json', {
+			remote: { enabled: false },
+			keep: { enabled: true, exposure: 'direct', toolExposure: { tools: 'codemode' } },
+		}, 'local'),
+	]);
+
+	assert.deepStrictEqual(read.servers.map(server => server.label), ['keep']);
+	assert.strictEqual(only(read.servers).file, '/profile/mcp.json');
+	assert.deepStrictEqual(read.skipped, []);
+});
+
 test('an entry that names a command is started as a command even when it also carries a url', () => {
 	const mapped = mcpServerFrom('both', { command: 'npx', url: 'https://example.test/mcp' });
 

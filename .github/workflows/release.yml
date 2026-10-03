@@ -215,7 +215,10 @@ jobs:
         run: |
           SHA=$(sha256sum \
             "PiCode-win32-x64-${PICODE_VERSION}.zip" | cut -d' ' -f1)
+          SHA_SETUP=$(sha256sum \
+            "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" | cut -d' ' -f1)
           echo "SHA=${SHA}" >> "$GITHUB_ENV"
+          echo "SHA_SETUP=${SHA_SETUP}" >> "$GITHUB_ENV"
 
       - name: Create the GitHub release
         env:
@@ -237,50 +240,68 @@ jobs:
           # line's indentation in the string, and the published feed came out
           # with two spaces in the middle of its URL.
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
-          URL="${REPO_URL}/releases/download/v${PICODE_VERSION}"
-          URL="${URL}/PiCode-win32-x64-${PICODE_VERSION}.zip"
+          BASE="${REPO_URL}/releases/download/v${PICODE_VERSION}"
+          URL_ZIP="${BASE}/PiCode-win32-x64-${PICODE_VERSION}.zip"
+          URL_SETUP="${BASE}/PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
           # The feed carries the EDITOR version: the number the updater compares
           # against the installed product. The release around it is named with
-          # PiCode's own version. `--installed` is what the feed published.
-          # No --installed for the FIRST release; --force is forbidden:
+          # PiCode's own version, which the updater shows (`--picode-version`).
+          # Two layouts are written from the same release:
+          #   * `archive` - the portable zip, what a tree run in place
+          #                 updates from (it has no `target`).
+          #   * `system`  - the Inno setup exe: an installed build has no
+          #                 `target` either, so buildUpdateFeedUrl resolves
+          #                 it to `system`. Without this file the installed
+          #                 editor asks for a feed nobody wrote and the check
+          #                 answers `Server returned 404`.
+          # `--installed` is what the feed published; --force is forbidden:
           # if the generator refuses, this job fails by design.
           if [ -n "${FEED_VERSION}" ]; then
-            node dev/update-feed.mjs --version "${VERSION}" \
-              --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
-              --platform win32 --arch x64 --target archive \
-              --installed "${FEED_VERSION}"
+            INSTALLED=(--installed "${FEED_VERSION}")
           else
-            node dev/update-feed.mjs --version "${VERSION}" \
-              --commit "${COMMIT}" --url "${URL}" --sha256 "${SHA}" \
-              --platform win32 --arch x64 --target archive
+            INSTALLED=()
           fi
+          node dev/update-feed.mjs --version "${VERSION}" \
+            --commit "${COMMIT}" --url "${URL_ZIP}" --sha256 "${SHA}" \
+            --picode-version "${PICODE_VERSION}" \
+            --platform win32 --arch x64 --target archive \
+            "${INSTALLED[@]}"
+          node dev/update-feed.mjs --version "${VERSION}" \
+            --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
+            --picode-version "${PICODE_VERSION}" \
+            --platform win32 --arch x64 --target system \
+            "${INSTALLED[@]}"
 
-      - name: Land the feed on master
+      - name: Land the feeds on master
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email \
             "github-actions[bot]@users.noreply.github.com"
-          FEED=updates/stable/win32/x64/archive/latest.json
-          TMP=$(mktemp)
+          FEED_ARCHIVE=updates/stable/win32/x64/archive/latest.json
+          FEED_SYSTEM=updates/stable/win32/x64/system/latest.json
+          TMP_ARCHIVE=$(mktemp)
+          TMP_SYSTEM=$(mktemp)
           # mv, not cp: an untracked file still on disk would make the
           # checkout below refuse to run on the second release, when
           # master already tracks a different latest.json.
-          mv "${FEED}" "${TMP}"
+          mv "${FEED_ARCHIVE}" "${TMP_ARCHIVE}"
+          mv "${FEED_SYSTEM}" "${TMP_SYSTEM}"
           git fetch origin master
           git checkout -B feed-ship origin/master
-          mkdir -p "$(dirname "${FEED}")"
-          mv "${TMP}" "${FEED}"
+          mkdir -p "$(dirname "${FEED_ARCHIVE}")" "$(dirname "${FEED_SYSTEM}")"
+          mv "${TMP_ARCHIVE}" "${FEED_ARCHIVE}"
+          mv "${TMP_SYSTEM}" "${FEED_SYSTEM}"
           git add updates/
           if git diff --cached --quiet; then
-            echo "Feed on master is already identical; nothing to push."
+            echo "Feeds on master are already identical; nothing to push."
           else
             git commit -m \
               "release: update feed for v${PICODE_VERSION} [skip ci]"
             git push origin HEAD:master
           fi
 
-      - name: Verify the feed is live
+      - name: Verify the feeds are live
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -288,51 +309,63 @@ jobs:
           VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
             --json visibility --jq .visibility)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
-          FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
-          FEED_REF="updates/stable/win32/x64/archive/latest.json"
-          ASSET="PiCode-win32-x64-${PICODE_VERSION}.zip"
           # On a PRIVATE repo raw.githubusercontent.com 404s for anonymous
           # readers, so the anonymous check would fail even with a correct
           # feed. Until the repo is public, verify the exact bytes on
           # master through the authenticated contents API instead; the
           # anonymous check takes over the moment the repo goes public.
           fetch_feed() {
+            local ref="$1"
+            local bust="$2"
             if [ "${VIS}" = "PUBLIC" ]; then
               # raw.githubusercontent caches ~5 min, hence the bust query.
-              curl -fsSL "${FEED_URL}?bust=${1}"
+              curl -fsSL "${RAW}/${ref}?bust=${bust}"
             else
               # The contents API reads the exact bytes master serves.
               gh api \
-                "repos/${GITHUB_REPOSITORY}/contents/${FEED_REF}?ref=master" \
+                "repos/${GITHUB_REPOSITORY}/contents/${ref}?ref=master" \
                 --jq .content | base64 -d
             fi
           }
-          ok=""
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if fetch_feed "${i}" \
-               | VERSION="${VERSION}" ASSET="${ASSET}" node -e '
-                const f = JSON.parse(
-                  require("fs").readFileSync(0, "utf8"));
-                const ok = f.productVersion === process.env.VERSION &&
-                  f.url.includes(process.env.ASSET);
-                if (!ok) {
-                  console.error("feed mismatch:",
-                    JSON.stringify(f, null, 2));
-                  process.exit(1);
-                }
-              '; then
-              ok=y
-              break
-            fi
-            echo "attempt ${i}: feed not live yet; retrying in 20 s."
-            sleep 20
-          done
-          if [ "${ok}" != "y" ]; then
-            echo "error: the feed did not land on master after 10" >&2
-            echo "attempts. No update will be offered to users; check" >&2
-            echo "the push step above." >&2
-            exit 1
-          fi
+          check_feed() {
+            local ref="$1"
+            local asset="$2"
+            local i
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if fetch_feed "${ref}" "${i}" \
+                 | VERSION="${VERSION}" \
+                   PICODE_VERSION="${PICODE_VERSION}" \
+                   ASSET="${asset}" node -e '
+                  const f = JSON.parse(
+                    require("fs").readFileSync(0, "utf8"));
+                  const ok = f.productVersion === process.env.VERSION &&
+                    f.picodeVersion === process.env.PICODE_VERSION &&
+                    f.url.includes(process.env.ASSET);
+                  if (!ok) {
+                    console.error("feed mismatch:",
+                      JSON.stringify(f, null, 2));
+                    process.exit(1);
+                  }
+                '; then
+                return 0
+              fi
+              echo "${ref}: attempt ${i}: feed not live yet; retrying in 20 s."
+              sleep 20
+            done
+            return 1
+          }
+          check_feed "updates/stable/win32/x64/archive/latest.json" \
+            "PiCode-win32-x64-${PICODE_VERSION}.zip" || {
+              echo "error: the archive feed did not land on master after 10" >&2
+              echo "attempts. No update will be offered to portable users." >&2
+              exit 1
+            }
+          check_feed "updates/stable/win32/x64/system/latest.json" \
+            "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" || {
+              echo "error: the system feed did not land on master after" >&2
+              echo "10 attempts. Installed users would see a 404." >&2
+              exit 1
+            }
 
       - name: Visibility and summary
         env:
@@ -347,7 +380,8 @@ jobs:
             "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
             2>/dev/null || echo unknown)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
-          FEED_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
+          FEED_ARCHIVE_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
+          FEED_SYSTEM_URL="${RAW}/updates/stable/win32/x64/system/latest.json"
           {
             echo "## Release PiCode ${PICODE_VERSION}"
             echo
@@ -358,8 +392,12 @@ jobs:
             echo "- SHA-256 (zip): ${SHA}"
             echo "- Release: https://github.com/${GITHUB_REPOSITORY}"
             echo "/releases/tag/v${PICODE_VERSION}"
-            echo "- Feed: updates/stable/win32/x64/archive/latest.json"
-            echo "- Feed URL: ${FEED_URL}"
+            echo "- Feed (portable):"
+            echo "  updates/stable/win32/x64/archive/latest.json"
+            echo "  ${FEED_ARCHIVE_URL}"
+            echo "- Feed (installed):"
+            echo "  updates/stable/win32/x64/system/latest.json"
+            echo "  ${FEED_SYSTEM_URL}"
             echo
             echo "Updates roll out gradually: the updater's"
             echo "\`update.minReleaseAge\` defaults to 120 h, so users"

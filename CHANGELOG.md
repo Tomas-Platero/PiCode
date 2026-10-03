@@ -7,9 +7,36 @@ All notable changes to PiCode are documented here. The format is based on
 Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
 (the owner removed them; the process lives in `docs/CI.md`).
 
-## [Unreleased] — 2026-09-27
+## [0.1.1-beta] — 2026-10-03
 
 ### Changed
+- **El actualizador muestra la versión de PiCode, no la del editor.** El diálogo de actualización
+  leía `productService.version` (el número de VS Code, `1.135.x`) en «Current Version» y en «Latest».
+  Ahora ambos leen `picodeVersion` (`0.1.1-beta`), que es lo que el dueño nombra y reconoce; la
+  comparación de verdad sigue con el número del editor, que es el que las extensiones validan. El
+  feed lleva los dos (`productVersion` y `picodeVersion`) y `dev/update-feed.mjs` acepta
+  `--picode-version`.
+- **El tema por defecto de una instalación nueva es Abyss.** El conector declara
+  `workbench.colorTheme: "Abyss"` como valor por defecto (la extensión `theme-abyss` ya viaja
+  incorporada) y el perfil portable de primera ejecución lo repite en `distribution/settings.json`.
+- **Los comandos de solo lectura del chat dejan de pedir permiso.** `bash`/`powershell` se
+  inspeccionan antes de preguntar: si **todos** los tramos de la cadena (`&&`, `||`, `;`, `|`) son de
+  lectura —inspección de ficheros, `git` de lectura (`status`/`log`/`diff`/`show`/…), etc.— la llamada
+  corre sin la rueda de Allow/Deny. Cualquier redirección, sustitución de comando o binario fuera de
+  la lista blanca vuelve a preguntar. Detalle en `picode-source/extensions/picode/src/permissions.ts`.
+- **pi sube a `1.0.1` en el pin del editor.** `distribution/runtime.json` pasa de `1.0.0` a `1.0.1` y
+  el runtime del pack se refresca con el paso real del build. Antes de subir se midió el salto contra
+  el paquete publicado: las **7 entradas del SDK** que resuelve el conector están
+  (`createAgentSessionServices`, `createAgentSessionFromServices`, `createMcpExtension`,
+  `createCodemodeExtension`, `createToolSearchExtension`, `SessionManager`, `main`), `dist/cli.js`
+  sigue donde el conector lo busca, el **validador de MCP de 1.0.1 acepta los 12 escritores** de
+  PiCode y sigue rechazando las dos grafías heredadas que el check usa como control, y los **176
+  tests** y el typecheck del conector pasan. **El conector no cambia de contrato**: el único cambio
+  que obliga la versión nueva es el ajuste de MCP por proyecto (en *Fixed*). Dos cosas que conviene
+  saber: la 1.0.1 **retira `npm-shrinkwrap.json`** del paquete, así que sus transitivas se resuelven
+  al instalar (la versión directa va fijada por el pin, y ahora también literal en el `package.json`
+  del runtime con `--save-exact`), y trae la corrección de seguridad de `brace-expansion`. Detalle
+  en `odd/tasks/picode-pi-101.md`.
 - **Gentle AI sube a `gentle-pi` 4.0.0 en el perfil interno.** El paquete que el propio
   producto instala pasa de 3.7.0 a 4.0.0 (el salto mayor del que se tenía registro). Antes de
   subir se comprobó el acoplamiento del conector con los contratos de gentle que espeja:
@@ -44,6 +71,42 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 - **`jq` is gone as a dependency** — nothing needs it any more.
 
 ### Fixed
+- **El importador del pi externo vuelve a aparecer en el asistente.** La tarjeta «Choose your pi»
+  construía el contenedor donde aterriza la oferta de importar (`.picode-import-area`) pero **no lo
+  añadía a la tarjeta**, así que `querySelector` no lo encontraba y la oferta nunca se pintaba. El
+  nodo ya existe en la tarjeta.
+- **«Switching pi…» deja de quedarse pegado.** `applyRuntime` pintaba la frase antes del cambio y no
+  la borraba al terminar, así que sobrevivía al repintado y parecía que el cambio no acababa nunca.
+  Ahora se limpia en cuanto la operación responde (como ya hacía el instalador de Gentle).
+- **La galería de temas deja de ofrecer herramientas con apariencia de tema.** El filtro de Open VSX
+  `category=themes` devuelve PowerShell —que sí declara `contributes.themes` («PowerShell ISE»)—, así
+  que la comprobación de manifiesto lo dejaba pasar y elegirlo instalaba un depurador y levantaba el
+  aviso de confianza del editor. Ahora se descartan los manifiestos que además contribuyen
+  `debuggers`, `languages`, `notebooks` o un `extensionPack`; los temas reales (One Dark Pro,
+  Catppuccin, Dracula…) no traen ninguno. Con prueba.
+- **El actualizador deja de responder «Server returned 404».** El editor instalado con el `.exe` de
+  Inno no tiene `target` en su `product.json`, así que el updater resuelve el destino a `system` y
+  pide `updates/stable/win32/x64/system/latest.json`; la release solo escribía el feed `archive` (el
+  del zip portable). Ahora se generan y publican ambos: `archive` apunta al zip y `system` al
+  `-setup.exe`.
+- **El instalador de Windows ya arranca: «Bitmap image is not valid» eran dos defectos en las
+  imágenes del asistente.** Inno Setup **6.4.1** —la versión que trae el build— **no lee PNG** en
+  `WizardImageFile`/`WizardSmallImageFile`: un PNG compila sin queja y luego mata el asistente al
+  abrirlo, porque `Setup` busca la firma PNG, no la encuentra, cae al lector de mapas de bits y este
+  responde —con razón— que un PNG no es un BMP. Y los BMP que se habían generado a mano llevaban la
+  cabecera **dos bytes corrida** (`biPlanes=0`, `biBitCount=1`, `biCompression=24`), así que tampoco
+  valían. `dev/make-inno-images.mjs` ahora escribe **BMP de 24 bits con la cabecera campo a campo** y
+  el `.iss` nombra `inno-big-*.bmp` e `inno-small.bmp`, con el cuadrado de la esquina hecho del mismo
+  dibujo que el panel. Verificado arrancando un instalador compilado con la configuración real y
+  leyendo el título de su ventana. Detalle en `odd/tasks/picode-instalador-windows.md`.
+- **Un ajuste de MCP de un proyecto deja de leerse como un error.** pi 1.0.1 permite que el
+  `.pi/mcp.json` de un proyecto lleve una entrada **sin `command` y sin `url`** cuyo único trabajo es
+  encender, apagar o cambiar la exposición del servidor de usuario del mismo nombre. El lector del
+  conector (`mcp-provider.ts`) la daba por mala y la reportaba en el log. Ahora la reconoce:
+  `enabled: false` **quita ese servidor de la lista** —si se ofreciera al editor, el cliente del
+  editor lo arrancaría igual y sus herramientas llegarían a pi por el puente, así que «apagado» no
+  apagaría nada— y `exposure` y `toolExposure` deciden cómo expone pi las herramientas al modelo, que
+  no es cosa de esta lista. Con prueba.
 - **El sync deja de agotarse solo, y el perfil de Pi deja de perder ficheros.** El error `Too many
   requests. Only 100 requests allowed in 5 minutes` no lo lanzaba el servidor: es el freno del
   cliente y saltaba porque el motor hacía ~14 syncs completos en cuatro minutos. Dos disparadores: el
@@ -58,6 +121,12 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   `odd/tasks/picode-cloud-sync.md`.
 
 ### Removed
+- **Los ajustes de sandbox del agente salen de Settings.** Se retiran del registro
+  `chat.agent.sandbox.enabled`, `...enabledWindows`, `...allowNetwork`,
+  `...allowUnsandboxedCommands`, `...retryWithAllowNetworkRequests`, `...allowAutoApprove`,
+  `...fileSystem.linux|mac|windows`, `...advanced.windows.schemaVersion` y `...advanced.runtime`
+  (el bloque que el dueño vio como «Chat › Agent › Sandbox: Enabled Windows»). El motor sigue en el
+  árbol pero ya no es alcanzable desde la interfaz ni desde un ajuste por defecto.
 - **Autopilot y Assisted, fuera de Settings.** El picker del chat ya ofrecía solo dos posiciones
   (Ask y Allow all) desde el 27‑09, pero los ajustes seguían ahí. Se retiran
   `chat.autopilot.advanced.enabled` y `chat.assistedPermissions.enabled` del registro, y el ajuste

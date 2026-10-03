@@ -22,7 +22,10 @@
  *     --version 1.135.1 --commit <sha> \
  *     --url https://github.com/TomasPlatero/PiCode/releases/download/v1.135.1/PiCode-win32-x64-1.135.1.zip \
  *     --sha256 <hex> --platform win32 --arch x64 [--target user] \
- *     [--installed 1.135.0] [--out updates] [--force]
+ *     [--picode-version 0.1.0-beta] [--installed 1.135.0] [--out updates] [--force]
+ *
+ * `--version` is the editor's number the updater compares; `--picode-version` is PiCode's own
+ * number the updater UI shows. They are different on purpose (see updates/README.md).
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -62,7 +65,7 @@ function usage(message) {
   if (message) {
     console.error(`error: ${message}`);
   }
-  console.error("usage: node dev/update-feed.mjs --version <v> --commit <sha> --url <asset> --sha256 <hex> --platform <p> --arch <a> [--target <t>] [--quality stable] [--installed <v>] [--out updates] [--force]");
+  console.error("usage: node dev/update-feed.mjs --version <v> --commit <sha> --url <asset> --sha256 <hex> --platform <p> --arch <a> [--target <t>] [--picode-version <v>] [--quality stable] [--installed <v>] [--out updates] [--force]");
   process.exit(2);
 }
 
@@ -162,6 +165,7 @@ function main() {
   const feed = {
     version: commit,
     productVersion: version,
+    ...(flags["picode-version"] === undefined ? {} : { picodeVersion: flags["picode-version"].trim() }),
     timestamp: Date.now(),
     url,
     sha256hash: sha256,

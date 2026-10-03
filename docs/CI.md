@@ -35,16 +35,22 @@ Hay dos workflows:
 La guía `picode-release` (skill) documenta el procedimiento y sus reglas. El
 workflow las lleva dentro para que no puedan ejecutarse mal:
 
-1. La versión vive **solo** en `distribution/product-delta.json → set.version`;
-   el tag debe coincidir con ella.
-2. La versión nueva debe ser **estrictamente mayor** que la última release
-   publicada (comparación numérica por segmentos).
+1. La versión del **editor** vive en `distribution/product-delta.json →
+   set.version`; la de **PiCode** (la que nombra la release y muestra el
+   updater) en el mismo fichero, `set.picodeVersion`. El tag debe coincidir con
+   `v<picodeVersion>`, y `set.version` debe ser estrictamente mayor que el del
+   feed anterior.
+2. La `picodeVersion` nueva debe ser **estrictamente mayor** que la última
+   release publicada (comparación numérica por segmentos, sin el sufijo).
 3. El commit del feed se lee del `product.json` **construido**, no de HEAD.
-4. El feed se genera con `dev/update-feed.mjs --target archive --platform
-   win32 --arch x64` y `--installed <versión anterior>`; **nunca** se pasa
-   `--force` — si el generador se niega, la release se para.
-5. El feed se compromete en `master` (rama efímera `feed-ship` → push), se
-   verifica contra `raw.githubusercontent.com` hasta verlo en vivo (10
+4. El feed se genera **dos veces** con `dev/update-feed.mjs --platform win32
+   --arch x64` y `--installed <versión anterior del editor>`, una por destino:
+   `--target archive` (zip portable) y `--target system` (el `.exe` de Inno, que
+   es el destino que resuelve una instalación sin `target`). Ambas llevan
+   `--picode-version`. **Nunca** se pasa `--force` — si el generador se niega,
+   la release se para.
+5. Los dos feeds se comprometen en `master` (rama efímera `feed-ship` → push)
+   y se verifican contra `raw.githubusercontent.com` hasta verlos en vivo (10
    intentos de 20 s, con bust de la caché CDN), y el resumen del job avisa si
    el repositorio sigue **privado** — el feed solo llega a usuarios con el
    repositorio público.
@@ -55,9 +61,10 @@ descargar la release.
 
 ## Cómo se publica una release
 
-1. Bump de versión en `distribution/product-delta.json → set.version`
-   (estrictamente mayor que la última).
-2. Commit, push y tag: `git tag v<versión> && git push origin master --tags`.
+1. Bump de versión en `distribution/product-delta.json`: `set.picodeVersion`
+   (el nombre de la release, `0.1.1-beta`) y `set.version` (el número del
+   editor, estrictamente mayor que el del feed anterior).
+2. Commit, push y tag: `git tag v<picodeVersion> && git push origin master --tags`.
    El workflow hace el resto: release + zip + SHA-256 + feed en `master`.
 3. El resumen del run (Actions → Release → summary) lleva la versión, el
    commit, el SHA-256, la URL de la release y del feed, y el aviso de

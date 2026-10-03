@@ -645,7 +645,10 @@ export class PiCodeSetup extends Disposable {
 			$('p.picode-pi-lede', {}, localize('picodeSetup.pi.lede', "PiCode comes with its own pi — ready from the first launch. Prefer your own installed pi? Point PiCode at it.")),
 			$('.picode-pi-options', {}, internal, external),
 			// The import shows only while the internal pi runs and the machine's profile has
-			// something worth bringing; the counts arrive when the card asks for them.,
+			// something worth bringing; the counts arrive when the card asks for them. The
+			// element below is where that offer lands, so it has to exist in the card even
+			// while it is empty.
+			$('.picode-import-area'),
 		);
 
 		// The machine's pi is probed once, after the card is on screen: the version needs a
@@ -1828,6 +1831,9 @@ export class PiCodeSetup extends Disposable {
 		try {
 			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.applyRuntime', mode);
 			this.piChosen = true;
+			// The switch is done: the note is cleared before the repaint, or the sentence
+			// would outlive the work it describes and read as a switch that never finished.
+			this.setNote('', false);
 		} catch (error) {
 			this.setNote(messageOf(error), true);
 			this.busy = false;

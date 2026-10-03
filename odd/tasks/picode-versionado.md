@@ -54,9 +54,24 @@ anuncia es el de PiCode. VSCodium y Cursor hacen lo mismo.
 - [ ] **Subir la base a la última estable de VS Code (1.140.0).** Es un trabajo de otro tamaño:
       traer el árbol de upstream y reconciliar lo nuestro, con la build como juez. Cinco versiones
       por detrás (1.136.0 → 1.140.0).
-- [ ] **Enseñar la versión en la interfaz** (vista de estado o página de arranque): hoy la versión de
-      PiCode no se ve en ningún sitio que el dueño mire.
-- [ ] Actualizar la skill `picode-release` y `docs/CI.md` con la regla de los dos números.
+- [x] **Enseñar la versión en la interfaz**: el diálogo de actualización muestra ahora
+      `productService.picodeVersion` en «Current Version» y `update.picodeVersion` en «Latest»
+      (`updateTooltip.ts`), con retroceso a `productVersion` cuando el feed no lo trae.
+- [x] Actualizar la skill `picode-release` y `docs/CI.md` con la regla de los dos números.
+- [x] **El feed lleva `picodeVersion`.** `dev/update-feed.mjs` acepta `--picode-version`; el
+      workflow lo pasa y publica **dos** feeds por release: `archive` (zip portable) y `system`
+      (el `.exe` de Inno, que es el destino que resuelve una instalación sin `target`). Sin el
+      segundo, la instalación pedía `.../system/latest.json` y el updater decía
+      «Server returned 404».
+
+## 2026-10-03 — lo que se hizo al publicar 0.1.1-beta
+
+- `set.version` sube a `1.135.3` (el feed anterior era `1.135.2`) y `set.picodeVersion` a
+  `0.1.1-beta`.
+- El updater ya no «apunta a la versión de VS Code»: la comparación sigue siendo el número del
+  editor (`productVersion`), pero lo que el dueño lee —versión actual y versión nueva— es la de
+  PiCode.
+- La release escribe los dos feeds, así que la instalación de Inno deja de dar 404.
 
 ## Fuera de alcance
 

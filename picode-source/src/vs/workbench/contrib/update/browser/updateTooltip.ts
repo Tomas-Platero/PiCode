@@ -139,7 +139,9 @@ export class UpdateTooltip extends Disposable {
 	}
 
 	private updateCurrentVersion() {
-		const productVersion = this.productService.version;
+		// PiCode's own version is what the owner reads; the editor's number is the internal one
+		// the updater compares and extensions are validated against, so it is not shown here.
+		const productVersion = this.productService.picodeVersion ?? this.productService.version;
 		if (productVersion) {
 			const currentCommitId = this.productService.commit?.substring(0, 7);
 			this.currentVersionNode.textContent = currentCommitId
@@ -377,8 +379,8 @@ export class UpdateTooltip extends Disposable {
 		this.titleNode.textContent = title;
 
 		// Latest version
-		const version = update?.productVersion;
-		if (version) {
+		const version = update?.picodeVersion ?? update?.productVersion;
+		if (version !== undefined && update !== undefined) {
 			const updateCommitId = update.version?.substring(0, 7);
 			this.latestVersionNode.textContent = updateCommitId
 				? localize('updateTooltip.latestVersionLabelWithCommit', "Latest Version: {0} ({1})", version, updateCommitId)

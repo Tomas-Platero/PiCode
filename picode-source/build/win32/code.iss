@@ -30,10 +30,11 @@ AppMutex={code:GetAppMutex}
 SetupMutex={code:GetSetupMutex}
 		// The sidebar picture. Nothing in the tree is 164x314 - every PiCode drawing is square - so
 		// dev/make-inno-images.mjs lays the finished mark on a PiCode-coloured panel at each size of
-		// the ladder. The small picture is the mark itself: resources/win32/code_150x150.png, the
-		// same tile Windows shows in the Start menu, so the wizard reuses one finished drawing.
-		WizardImageFile={#RepoDir}\resources\win32\inno-big-100.png,{#RepoDir}\resources\win32\inno-big-125.png,{#RepoDir}\resources\win32\inno-big-150.png,{#RepoDir}\resources\win32\inno-big-175.png,{#RepoDir}\resources\win32\inno-big-200.png,{#RepoDir}\resources\win32\inno-big-225.png,{#RepoDir}\resources\win32\inno-big-250.png
-		WizardSmallImageFile={#RepoDir}\resources\win32\code_150x150.png
+		// the ladder. The small picture is the same panel at the corner's size, from the same drawing.
+		// Both are BMP on purpose: Inno Setup 6.4.1, the version the build bundles, does not read PNG
+		// wizard images - a PNG compiles and then kills the wizard with "Bitmap image is not valid".
+		WizardImageFile={#RepoDir}\resources\win32\inno-big-100.bmp,{#RepoDir}\resources\win32\inno-big-125.bmp,{#RepoDir}\resources\win32\inno-big-150.bmp,{#RepoDir}\resources\win32\inno-big-175.bmp,{#RepoDir}\resources\win32\inno-big-200.bmp,{#RepoDir}\resources\win32\inno-big-225.bmp,{#RepoDir}\resources\win32\inno-big-250.bmp
+		WizardSmallImageFile={#RepoDir}\resources\win32\inno-small.bmp
 SetupIconFile={#RepoDir}\resources\win32\code.ico
 UninstallDisplayIcon={app}\{#ExeBasename}.exe
 ChangesEnvironment=true

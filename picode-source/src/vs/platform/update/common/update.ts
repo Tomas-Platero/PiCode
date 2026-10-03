@@ -10,6 +10,12 @@ import { createDecorator } from '../../instantiation/common/instantiation.js';
 export interface IUpdate {
 	version: string; // Build commit ID
 	productVersion?: string; // Product version like 1.2.3
+	/**
+	 * PiCode's own version, when the feed carries one. The release the owner sees is named after
+	 * this number; `productVersion` stays the editor's number the updater compares. The tooltip
+	 * shows this one when present and falls back to `productVersion` otherwise.
+	 */
+	picodeVersion?: string;
 	timestamp?: number;
 	url?: string;
 	sha256hash?: string;

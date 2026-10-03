@@ -98,6 +98,13 @@ export interface IDictationRuntimeProductConfig {
 
 export interface IProductConfiguration {
 	readonly version: string;
+	/**
+	 * PiCode's own version, apart from the editor's. The release is named after this number and
+	 * it moves by the minor (`0.1.0-beta`, `0.2.0`, …); `version` above stays VS Code's because
+	 * extensions are validated against it and the updater compares it. The updater UI shows this
+	 * one, so the owner reads PiCode's version rather than the editor's underneath.
+	 */
+	readonly picodeVersion?: string;
 	readonly date?: string;
 	readonly quality?: string;
 	readonly commit?: string;

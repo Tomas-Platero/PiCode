@@ -433,8 +433,9 @@ cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 # rtf/make.sh`, called by VSCodium as `. ../build/windows/rtf/make.sh`), not in
 # VS Code and not in any patch, so `bash build/windows/rtf/make.sh` from inside
 # `./picode-source` aborted the phase with exit 127 -- `./picode-source/build/windows/` does not
-# exist. It is also not needed: its only product is `LICENSE.rtf`, which is read
-# by `build/win32/code.iss`, the Inno installer, and PiCode builds no installer.
+# exist. It is also not needed: its only product is `LICENSE.rtf`, and the one reader of that
+# file is `build/win32/code.iss`, which omits the licence page when the file is not there instead
+# of aborting over it.
 node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js vscode-min-prepack
 
 # The policy files are per system: the DTO copies are Windows' (read by Windows tooling), and the

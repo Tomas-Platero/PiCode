@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
+	isReadOnlyShellCommand,
 	permissionLevelOf,
 	PERMISSION_ALLOW,
 	PERMISSION_QUESTION_ID,
@@ -607,7 +608,7 @@ function permissionExtension(log: (line: string) => void): PiInlineExtension {
 		hidden: true,
 		factory: pi => {
 			void pi.on('tool_call', async event => {
-				if (!shouldAsk(turnContext.current?.level, event.toolName)) {
+				if (!shouldAsk(turnContext.current?.level, event.toolName) || isReadOnlyShellCommand(event.toolName, event.input)) {
 					return undefined;
 				}
 				const stream = turnContext.current?.stream;

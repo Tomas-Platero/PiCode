@@ -74,7 +74,13 @@ mkdir -p "${TARGET}"
 # `--prefix` and not a `cd`: the install belongs to that directory and nothing about the
 # caller's working directory should leak into it. npm's own cache means a second build does
 # not download it again.
-npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error "${PACKAGE}@${VERSION}"
+#
+# `--save-exact` because the pin is the whole point: without it npm writes `^1.0.1` and the one
+# line that says which pi the editor carries stops saying it. Since pi 1.0.1 the package no
+# longer ships `npm-shrinkwrap.json`, so its transitive dependencies resolve at install time
+# and a lockfile of our own is the only thing that could hold them - the direct version is
+# therefore the only pin left to keep exact.
+npm install --prefix "${TARGET}" --no-audit --no-fund --loglevel=error --save-exact "${PACKAGE}@${VERSION}"
 
 # The check that matters: the connector looks for this exact file, and a runtime that
 # installed "successfully" without it would leave the editor saying it cannot find pi.

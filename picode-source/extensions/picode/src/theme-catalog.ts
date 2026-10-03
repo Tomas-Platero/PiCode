@@ -119,6 +119,37 @@ export function declaredThemes(manifest: unknown): DeclaredTheme[] {
   return declared;
 }
 
+/**
+ * Whether a manifest is a theme extension rather than a tool that ships a theme.
+ *
+ * Open VSX's `category=themes` filter is loose enough to return PowerShell: it really does
+ * declare `contributes.themes` (its "PowerShell ISE" theme), so the manifest check alone keeps
+ * it — and choosing it in the gallery installs a debugger, raising the publisher-trust prompt on
+ * the way. The registry rows are theme searches, so what the picker offers should only paint:
+ * an extension that also contributes a debugger, a language, or a pack of other extensions is a
+ * different product wearing a theme's coat. Real themes (One Dark Pro, Catppuccin, Dracula,
+ * GitHub, Gruvbox, Night Owl — measured by hand) ship neither.
+ */
+export function isThemeOnlyManifest(manifest: unknown): boolean {
+  if (!isRecord(manifest)) {
+    return false;
+  }
+  if (Array.isArray(manifest.extensionPack) && manifest.extensionPack.length > 0) {
+    return false;
+  }
+  const contributes = isRecord(manifest.contributes) ? manifest.contributes : undefined;
+  if (contributes === undefined) {
+    return false;
+  }
+  for (const key of ["debuggers", "languages", "notebooks", "notebookRenderer", "taskDefinitions", "problemMatchers"]) {
+    const value = contributes[key];
+    if (Array.isArray(value) ? value.length > 0 : isRecord(value) ? Object.keys(value).length > 0 : value !== undefined) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /* ------------------------------------------------------------------ *
  * The ZIP reader
  * ------------------------------------------------------------------ */
@@ -565,6 +596,9 @@ export async function searchThemes(options: SearchThemesOptions = {}): Promise<T
         fetchLike,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
       });
+      if (!isThemeOnlyManifest(manifest)) {
+        return undefined;
+      }
       const declared = declaredThemes(manifest);
       if (declared.length === 0) {
         return undefined;

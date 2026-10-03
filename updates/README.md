@@ -13,11 +13,11 @@ With the updater change baked into the source tree (VSCodium's
 ```
 
 where `quality` is `stable` or `insider`, `platform` is `win32`, `linux` or `darwin`, and
-`architecture` is `x64`, `arm64`, ... (the optional `target` is the packaging target; the
-Windows portable build uses `archive`, and macOS uses `archive`/`msi`/`system`/`user`). The
-GitHub Releases API does not answer in that shape, so `updateUrl`
-points at this directory instead, and `dev/update-feed.mjs` writes the document from a
-published release.
+`architecture` is `x64`, `arm64`, ... The optional `target` is how the running build was
+packaged, and **the target the editor asks for is the one its own `product.json` resolves
+to**, not the one the release happens to be named after. The GitHub Releases API does not
+answer in that shape, so `updateUrl` points at this directory instead, and
+`dev/update-feed.mjs` writes the document from a published release.
 
 `updateUrl` is set in `distribution/product-delta.json` to
 
@@ -25,55 +25,75 @@ published release.
 https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates
 ```
 
-so a Windows x64 release feed lands at `updates/stable/win32/x64/archive/latest.json`.
+## The two Windows feeds (why there are two)
 
-## Publishing one
+PiCode ships one release with two artifacts, and each is updated from a different path:
 
-After `gh release create` has uploaded the asset:
+| Build | Update type | Target the editor asks for | Feed |
+| --- | --- | --- | --- |
+| Portable zip, run in place | `Archive` | `archive` | `updates/stable/win32/x64/archive/latest.json` |
+| Installed with the Inno setup exe | `Setup` | `system` (the product has no `target`, so the updater falls back to `system`) | `updates/stable/win32/x64/system/latest.json` |
+
+The installed feed is not optional. Without it the installed editor requests
+`.../system/latest.json`, finds nothing, and the update dialog answers **`Server returned
+404`** — which is exactly what the 0.1.0-beta release shipped without. Both feeds point at
+the same release; they differ in the asset they name (zip vs `-setup.exe`).
+
+## Publishing them
+
+After `gh release create` has uploaded both assets:
 
 ```bash
+# 1. The portable feed (zip)
 node dev/update-feed.mjs \
-  --version 1.135.1 \
+  --version 1.135.3 \
+  --picode-version 0.1.1-beta \
   --commit <the commit the build was made from> \
-  --url https://github.com/Tomas-Platero/PiCode/releases/download/v1.135.1/PiCode-win32-x64-1.135.1.zip \
-  --sha256 <sha256 of the asset> \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.1.1-beta/PiCode-win32-x64-0.1.1-beta.zip \
+  --sha256 <sha256 of the zip> \
   --platform win32 --arch x64 --target archive \
-  --installed <the version the previous release shipped>
+  --installed <the editor version the previous release shipped>
+
+# 2. The installed feed (setup exe)
+node dev/update-feed.mjs \
+  --version 1.135.3 \
+  --picode-version 0.1.1-beta \
+  --commit <the same commit> \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.1.1-beta/PiCode-win32-x64-0.1.1-beta-setup.exe \
+  --sha256 <sha256 of the setup exe> \
+  --platform win32 --arch x64 --target system \
+  --installed <the editor version the previous release shipped>
 ```
 
-Then commit the written `latest.json`. The `--installed` check is not optional
+Then commit both written `latest.json` files. The `--installed` check is not optional
 bookkeeping: a feed whose `productVersion` is not newer than what is installed makes the
 editor claim an update is available forever. That is the known failure mode of this
 mechanism and the reason the generator refuses to write such a feed without `--force`.
 
-## Which version the feed must name
+## Which versions the feed must name
 
-The feed's `productVersion` has to be comparable to what the installed build reports, and
-it is the same version on both paths. It has **one home**:
+Two numbers, because they do two jobs:
 
-```text
-distribution/product-delta.json  →  set.version
-```
+- **`productVersion`** — the **editor's** number, the one the updater compares against the
+  installed product. It has **one home**: `distribution/product-delta.json → set.version`.
+  Both build paths apply that file (the build's prepare phase, and the staging step onto
+  the packed tree), so the compiled editor and the released one cannot disagree. Bumping a
+  release is editing that one value, and it must be **strictly greater** than the version
+  the previous release shipped; the `--installed` check refuses otherwise.
+- **`picodeVersion`** — **PiCode's** own number (`0.1.0-beta`, `0.1.1-beta`, …). It names
+  the release and is what the updater UI shows the owner. It comes from
+  `distribution/product-delta.json → set.picodeVersion`.
 
-That file is what both paths already apply — this build in the prepare phase, and
-`distribution/apply-picode.ps1` onto the packaged tree — so the compiled editor and the
-released one cannot disagree. Bumping a release is editing that one value.
-
-The major.minor stay VS Code's on purpose: every extension's `engines.vscode` (`^1.90.0`)
-is matched against the product version, so an independent `0.x` numbering would make every
-extension look incompatible. Today it reads `1.135.1`.
-
-Before publishing a feed, raise that value so it is **strictly greater** than the version
-the previous release shipped. The `--installed` check in `dev/update-feed.mjs` refuses
-otherwise.
+The major.minor of `productVersion` stay VS Code's on purpose: every extension's
+`engines.vscode` (`^1.90.0`) is matched against the product version, so an independent
+`0.x` numbering would make every extension look incompatible. Today it reads `1.135.3`.
 
 ### What is still not unified
 
-**Unified**: both paths now take the version from `set.version`, so a tree branded by
-either one reports the same number.
+**Unified**: both build paths take `set.version` as the product version, so a tree branded
+by either one reports the same number; and the updater UI reads `picodeVersion` when the
+feed carries one, falling back to `productVersion` for an older feed.
 
-**Not unified**: an installation that was released *before* this change still reports
-VSCodium's `1.135.06055` (not valid strict semver, which is why the vendored update patch
-carries a `normalizeVersion` helper at all). That number sorts above `1.135.1`, so those
-installs would never be offered an update. Nothing can be done about it from here — it is
-the version they already have — but it is worth knowing before publishing the first feed.
+**Not unified**: an installation released *before* the two-number split still reports
+VSCodium's `1.135.06055`. It sorts above a normal `1.135.x`, so those installs would never
+be offered an update. Nothing can be done from here — it is the version they already have.

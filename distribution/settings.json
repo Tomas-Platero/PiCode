@@ -17,5 +17,6 @@
   "agents.voice.enabled": false,
   "agents.voice.backendUrl": "",
   "security.workspace.trust.enabled": true,
+  "workbench.colorTheme": "Abyss",
   "terminal.integrated.defaultProfile.windows": "PowerShell"
 }

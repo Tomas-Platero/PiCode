@@ -69,6 +69,157 @@ export function shouldAsk(level: string | undefined, toolName: string): boolean 
 	return level === undefined || ASKING_LEVELS.has(level);
 }
 
+/* ------------------------------------------------------------------ *
+ * Read-only shell commands run without a question
+ * ------------------------------------------------------------------ */
+
+/** The shell tools whose command line this rule can read. */
+const SHELL_TOOLS: ReadonlySet<string> = new Set(['bash', 'powershell']);
+
+/**
+ * First tokens that only look at the machine: files, text, processes, environment. A command
+ * whose first token is not here is a question, always — the safe direction for an allowlist.
+ *
+ * Deliberately absent, though they are common: `node`, `npm`, `npx`, `python`, `sed`, `awk`,
+ * `xargs`, `tee`, `curl`, `wget`. Each of them can execute arbitrary code or write a file, so
+ * auto-approving the token would auto-approve everything behind it. `sed` is handled below
+ * without its in-place flag.
+ */
+const READ_ONLY_COMMANDS: ReadonlySet<string> = new Set([
+	// POSIX file and text inspection
+	'cat', 'type', 'head', 'tail', 'less', 'more', 'ls', 'dir', 'pwd', 'echo', 'printf',
+	'grep', 'rg', 'find', 'fd', 'wc', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'file',
+	'stat', 'readlink', 'realpath', 'basename', 'dirname', 'tree', 'du', 'df', 'nl', 'rev',
+	'which', 'where', 'whoami', 'hostname', 'uname', 'env', 'printenv', 'date', 'id', 'groups',
+	'jq', 'yq', 'true', 'test', '[',
+	// PowerShell read-only cmdlets
+	'get-content', 'gc', 'get-childitem', 'gci', 'select-string', 'sls', 'get-item', 'gi',
+	'test-path', 'get-location', 'get-command', 'gcm', 'get-member', 'gm', 'measure-object',
+	'select-object', 'sort-object', 'where-object', 'format-table', 'format-list', 'out-string',
+]);
+
+/** `git` subcommands that only read, with the shapes that stay read-only. */
+const READ_ONLY_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
+	'status', 'log', 'diff', 'show', 'rev-parse', 'rev-list', 'ls-files', 'ls-tree', 'describe',
+	'blame', 'shortlog', 'cat-file', 'merge-base', 'whatchanged', 'reflog', 'name-rev',
+	'for-each-ref', 'cherry', 'count-objects', 'var', 'symbolic-ref',
+]);
+
+/**
+ * Whether a `git` segment only reads.
+ *
+ * The plain subcommands are read-only by definition. The ambiguous ones — `branch`, `tag`,
+ * `remote`, `stash`, `config`, `worktree`, `submodule` — read only in a narrow shape, so their
+ * shape is checked rather than the name: listing forms pass, anything else asks.
+ */
+function isReadOnlyGit(segment: string, tokens: readonly string[]): boolean {
+	let index = 1;
+	while (index < tokens.length) {
+		const token = tokens[index];
+		if (token === '-C' || token === '--git-dir' || token === '--work-tree') {
+			index += 2;
+			continue;
+		}
+		if (token.startsWith('-')) {
+			index += 1;
+			continue;
+		}
+		break;
+	}
+	const sub = tokens[index]?.toLowerCase();
+	if (sub === undefined) {
+		return false;
+	}
+	if (READ_ONLY_GIT_SUBCOMMANDS.has(sub)) {
+		return true;
+	}
+	switch (sub) {
+		case 'branch':
+		case 'tag':
+			// `branch`/`tag` list with no name or with a listing flag; a bare name creates one.
+			return /(^|\s)(-l\b|--list|-a\b|--all|-r\b|--remotes|-v\b|-vv|--contains|--merged|--no-merged|--points-at|--format|--sort)(\s|$)/.test(segment)
+				&& !/(^|\s)(-d\b|-D\b|-m\b|-M\b|--delete|--move)(\s|$)/.test(segment);
+		case 'remote':
+			return /\bremote\s+(-v|--verbose|show|get-url|show-url)\b/.test(segment) || /\bremote\s*$/.test(segment);
+		case 'stash':
+			return /\bstash\s+(list|show)\b/.test(segment);
+		case 'config':
+			return /\bconfig\s+.*(--get\b|--get-all\b|--list\b|-l\b|--get-regexp\b)/.test(segment);
+		case 'worktree':
+			return /\bworktree\s+list\b/.test(segment);
+		case 'submodule':
+			return /\bsubmodule\s+(status|summary)\b/.test(segment);
+		default:
+			return false;
+	}
+}
+
+/** Splits a shell line on the operators that chain commands, so each one is checked. */
+function shellSegments(command: string): string[] | undefined {
+	// Command substitution and redirection run or write something the whitelist cannot see.
+	if (/[$`]|<<|\(|\)/.test(command) || />/.test(command)) {
+		return undefined;
+	}
+	return command
+		.split(/&&|\|\||;|\|/)
+		.map(segment => segment.trim())
+		.filter(segment => segment.length > 0);
+}
+
+/** The argv word an assignment prefix (`FOO=bar cmd`) wraps, or `undefined` when there is none. */
+function commandToken(segment: string): string | undefined {
+	const tokens = segment.split(/\s+/).filter(token => token.length > 0);
+	let index = 0;
+	while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) {
+		index += 1;
+	}
+	return tokens[index];
+}
+
+/** Whether one shell segment only reads. */
+function isReadOnlySegment(segment: string): boolean {
+	const tokens = segment.split(/\s+/).filter(token => token.length > 0);
+	const first = (commandToken(segment) ?? '').toLowerCase();
+	if (first === '') {
+		return false;
+	}
+	if (first === 'cd') {
+		return true;
+	}
+	if (first === 'git') {
+		return isReadOnlyGit(segment, tokens);
+	}
+	if (first === 'sed') {
+		// Only `sed -i` writes, and that is the shape that matters here.
+		return !/(^|\s)-i\b|--in-place/.test(segment);
+	}
+	return READ_ONLY_COMMANDS.has(first);
+}
+
+/**
+ * Whether a shell tool call is read-only end to end and can run without asking.
+ *
+ * Every segment of a chain has to pass, so `ls && rm -rf x` asks; so does any redirection, any
+ * command substitution, and any binary not on the allowlist. `undefined` input (a call this
+ * bridge cannot read) is not read-only.
+ */
+export function isReadOnlyShellCommand(toolName: string, input: unknown): boolean {
+	if (!SHELL_TOOLS.has(toolName)) {
+		return false;
+	}
+	const command = input !== null && typeof input === 'object' && typeof (input as { command?: unknown }).command === 'string'
+		? (input as { command: string }).command
+		: undefined;
+	if (command === undefined || command.trim() === '') {
+		return false;
+	}
+	const segments = shellSegments(command);
+	if (segments === undefined || segments.length === 0) {
+		return false;
+	}
+	return segments.every(isReadOnlySegment);
+}
+
 export interface ToolCallDecision {
 	readonly block: boolean;
 	readonly reason: string;

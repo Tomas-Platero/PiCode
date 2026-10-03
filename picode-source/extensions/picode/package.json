@@ -38,6 +38,9 @@
 		"onStartupFinished"
 	],
 	"contributes": {
+		"configurationDefaults": {
+			"workbench.colorTheme": "Abyss"
+		},
 		"chatParticipants": [
 			{
 				"id": "picode.pi",

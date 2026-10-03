@@ -18,6 +18,7 @@ import assert from 'assert';
 import { test } from 'node:test';
 import {
 	decisionFromAnswer,
+	isReadOnlyShellCommand,
 	permissionLevelOf,
 	shouldAsk,
 	PERMISSION_ALLOW,
@@ -124,4 +125,45 @@ test('permissionLevelOf degrades unknown input to default', () => {
 	assert.strictEqual(permissionLevelOf('garbage', undefined), 'default');
 	assert.strictEqual(permissionLevelOf(42, { level: 'autopilot' }), 'default');
 	assert.strictEqual(permissionLevelOf(undefined, undefined), 'default');
+});
+
+/* ------------------------------------------------------------------ *
+ * Read-only shell commands
+ * ------------------------------------------------------------------ */
+
+test('isReadOnlyShellCommand allows the file inspection and chained pipeline the owner hit', () => {
+	assert.strictEqual(
+		isReadOnlyShellCommand('bash', { command: 'cd d:/repositorios/PiCode-Website && cat -n src/config/plans.ts | tail -40' }),
+		true,
+	);
+});
+
+test('isReadOnlyShellCommand allows read-only git and rejects the mutating subcommands', () => {
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git status --short && git log --oneline -3' }), true);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git diff HEAD~1' }), true);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git -C d:/repo status' }), true);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git branch -a' }), true);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git add src/config/plans.ts' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git commit -m "x"' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git push origin master' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git branch -D feature' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git remote add origin url' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'git tag v1.0.0' }), false);
+});
+
+test('isReadOnlyShellCommand rejects writes hidden in a chain, redirection or substitution', () => {
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'ls && rm -rf build' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'cat file > out.txt' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'echo $(rm -rf build)' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'sed -i s/a/b/ file' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'sed s/a/b/ file' }), true);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'node -e "require(\'fs\').rmSync(\'/\')"' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', { command: 'npm install' }), false);
+});
+
+test('isReadOnlyShellCommand only reads shell tools, and requires a command', () => {
+	assert.strictEqual(isReadOnlyShellCommand('edit', { path: 'x' }), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', undefined), false);
+	assert.strictEqual(isReadOnlyShellCommand('bash', {}), false);
+	assert.strictEqual(isReadOnlyShellCommand('powershell', { command: 'Get-Content file | Select-String foo' }), true);
 });

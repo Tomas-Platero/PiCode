@@ -144,6 +144,24 @@ interface RefusedEntry {
 const HTTP_TRANSPORTS = ['http', 'streamable-http', 'streamable_http'];
 
 /**
+ * The keys of an entry that only tunes a user-level server, which pi 1.0.1 introduced.
+ *
+ * In pi 1.0.1 a project's `.pi/mcp.json` may carry an entry with no `command` and no `url` whose
+ * only job is to turn the user-level server of the same name on or off for that project, or to
+ * change how its tools are exposed to the model. Such an entry declares no server of its own.
+ */
+const OVERRIDE_KEYS = ['enabled', 'exposure', 'toolExposure'];
+
+/** Whether an entry is a project's tune-up of a user-level server rather than a server of its own. */
+function isOverrideEntry(entry: unknown): entry is Record<string, unknown> {
+	if (!isRecord(entry)) {
+		return false;
+	}
+	const keys = Object.keys(entry);
+	return keys.length > 0 && keys.every(key => OVERRIDE_KEYS.includes(key));
+}
+
+/**
  * One entry of a `mcpServers` object, as a server or as a refusal.
  *
  * `command` wins over `url` when an entry carries both, because that is what pi does
@@ -219,6 +237,17 @@ function readFile(file: McpConfigFile, into: Map<string, PiMcpServer>, skipped: 
 		const name = label.trim();
 		if (name.length === 0) {
 			skipped.push(`${file.path}: an entry has no name`);
+			continue;
+		}
+		// pi 1.0.1: a project file may carry an entry that only tunes the user-level server of the
+		// same name. `enabled: false` is the one that changes this list — pi would not start that
+		// server in this project, and offering it to the editor would start it anyway, through the
+		// editor's own client, so "off" would turn nothing off. The other two keys decide how pi
+		// exposes the server's tools to the model, which is not something this list gives out.
+		if (isOverrideEntry(entry)) {
+			if (entry['enabled'] === false) {
+				into.delete(name);
+			}
 			continue;
 		}
 		const mapped = mcpServerFrom(name, entry);
