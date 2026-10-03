@@ -13,18 +13,19 @@ With the updater change baked into the source tree (VSCodium's
 ```
 
 where `quality` is `stable` or `insider`, `platform` is `win32`, `linux` or `darwin`, and
-`architecture` is `x64`, `arm64`, ... (the optional `target` is macOS's `archive`/`msi`/
-`system`/`user`). The GitHub Releases API does not answer in that shape, so `updateUrl`
+`architecture` is `x64`, `arm64`, ... (the optional `target` is the packaging target; the
+Windows portable build uses `archive`, and macOS uses `archive`/`msi`/`system`/`user`). The
+GitHub Releases API does not answer in that shape, so `updateUrl`
 points at this directory instead, and `dev/update-feed.mjs` writes the document from a
 published release.
 
 `updateUrl` is set in `distribution/product-delta.json` to
 
 ```text
-https://raw.githubusercontent.com/TomasPlatero/PiCode/HEAD/updates
+https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates
 ```
 
-so a Windows x64 release feed lands at `updates/stable/win32/x64/latest.json`.
+so a Windows x64 release feed lands at `updates/stable/win32/x64/archive/latest.json`.
 
 ## Publishing one
 
@@ -34,9 +35,9 @@ After `gh release create` has uploaded the asset:
 node dev/update-feed.mjs \
   --version 1.135.1 \
   --commit <the commit the build was made from> \
-  --url https://github.com/TomasPlatero/PiCode/releases/download/v1.135.1/PiCode-win32-x64-1.135.1.zip \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v1.135.1/PiCode-win32-x64-1.135.1.zip \
   --sha256 <sha256 of the asset> \
-  --platform win32 --arch x64 \
+  --platform win32 --arch x64 --target archive \
   --installed <the version the previous release shipped>
 ```
 
