@@ -1913,8 +1913,11 @@ export class AICustomizationManagementEditor extends EditorPane {
 		this.selectedSection = section;
 		this.sectionContextKey.set(section);
 
-		// Persist selection
-		this.storageService.store(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, section, StorageScope.PROFILE, StorageTarget.USER);
+		// Persist selection locally. The section you were last looking at is transient
+		// navigation state, not a preference: storing it with StorageTarget.USER pushed
+		// every click in this editor into settings sync and, with the whole engine's
+		// per-resource reads, exhausted the client's 100-requests-per-5-minutes budget.
+		this.storageService.store(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, section, StorageScope.PROFILE, StorageTarget.MACHINE);
 
 		// Update content visibility
 		this.updateContentVisibility();
@@ -2321,7 +2324,9 @@ export class AICustomizationManagementEditor extends EditorPane {
 			}
 			this.selectedSection = sectionId;
 			this.sectionContextKey.set(sectionId);
-			this.storageService.store(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, sectionId, StorageScope.PROFILE, StorageTarget.USER);
+			// Local only, for the reason in selectSection: transient navigation state must
+			// not wake the cloud sync engine.
+			this.storageService.store(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, sectionId, StorageScope.PROFILE, StorageTarget.MACHINE);
 			this.updateContentVisibility();
 			if (this.isPromptsSection(sectionId)) {
 				void this.listWidget.setSection(sectionId);

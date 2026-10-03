@@ -363,3 +363,94 @@ Cloud Functions descartadas por requerir plan Blaze).
   `MAX_STORED_CONTENT_BYTES` está por fin en producción** (presente en `c4dcc8cb`, verificado
   con `git grep` sobre el commit). Las 10 variables de entorno (Firebase + cifrado + cuotas)
   siguen puestas en Preview y Production.
+
+* **2026-10-01 (el sync manual deja de pedir `download/latest`)** — Cada sync manual empezaba con
+  un `GET /api/v1/download/latest` que el servidor rechaza por diseño con un 404
+  (`Download is not supported in v1.`), y el motor **volvía a pedir el manifiesto acto seguido**:
+  una petición fallida por sync y una línea `[info] Request failed` en el registro, más un evento
+  de telemetría (`sync.download.latest`), por nada. FIX en el núcleo
+  (`userDataSyncService.createManualSyncTask`): va **directo al manifiesto**, el mismo camino que ya
+  usaba el sync automático (`createSyncTask`), con el `reportUserDataSyncError` del caso de fallo
+  real. Comprobado antes de tocar nada que el 404 no se puede sustituir por un 200: `getLatestData`
+  transforma la respuesta leyendo `resources[r][0]`, así que un manifiesto haría `const [x] =
+  undefined`, y un «latest-data vacío» haría que `isUserDataManifest` (exige `session` y `ref`) no
+  lo reconociese y el editor creyese que **la nube está vacía**. El stub del servidor se queda como
+  está: el que preguntaba de más era el cliente.
+
+* **2026-10-03 (CAUSA RAÍZ del «Too many requests»: dos disparadores de sync, no el servidor)** —
+  El dueño pega el error `LocalTooManyRequests ... Only 100 requests allowed in 5 minutes`. No es
+  cuota del servidor: es el freno **del propio cliente** (`RequestsSession`, 100 peticiones / 5 min
+  en `userDataSyncStoreService.ts`) saltando porque el motor hizo ~14 syncs completos en 4 minutos.
+  Cada sync completo cuesta ~7 peticiones (manifest + `latest` de cada recurso + POST del recurso
+  que cambió). Traza real leída del log de la app en marcha
+  (`PiCode-win32-x64/data/user-data/logs/20261003T064324/userDataSync.log`): entre 06:43:27 y
+  06:47:24, 14 `[AutoSync] Triggered by Activity`, y en **todos** los ciclos
+  `PiProfile: Updated remote pi profile`. Dos disparadores independientes:
+  1. **El hub de customizaciones escribía estado transitorio en storage sincronizado.**
+     `AICustomizationManagementEditor` guardaba `aiCustomizationManagement.selectedSection` en
+     `StorageScope.PROFILE` + `StorageTarget.USER` en cada clic de sección; `globalStateSync`
+     reacciona exactamente a cambios con `StorageTarget.USER`, así que **cada clic en el hub
+     despertaba un sync completo**. Es navegación, no una preferencia: pasa a
+     `StorageTarget.MACHINE` (local, sigue recordando la sección en esta máquina, deja de viajar a
+     la nube y de disparar el motor).
+  2. **El recurso `piProfile` sincronizaba `~/.pi/agent`, no el perfil interno.** `models.json`
+     (146 KB) del perfil externo lo reescribe continuamente el pi del PATH / su sync de OmniRoute;
+     cada reescritura re-subía el bundle entero en el siguiente sync. Además incumplía AGENTS.md
+     §4 (PiCode no lee ni escribe `~/.pi`; pi resuelve su perfil externo por sí solo). FIX en el
+     núcleo (`piProfileSync.ts`): el recurso apunta a **`<dist>/data/pi-agent`**, el perfil propio
+     que el extension host y el agent host ya resuelven (`distributionRoot` + `data/pi-agent`,
+     `dev/build.sh` lo crea y gentle-pi se instala ahí). Se resuelve por `process.execPath`
+     (`dirname` = raíz de la distribución) con guarda `/picode/i`, igual que
+     `sessionCustomizationDiscovery.ts`; en desarrollo/tests cae a
+     `<userData>/../pi-agent`, que es el mismo layout portable. Se añadió además una línea de log
+     `Found N pi profile file(s) to consider under <ruta>`: el bundle del perfil externo que quedó
+     en `User/sync/piProfile/lastSyncpiProfile.json` contenía **solo los 5 ficheros raíz** pese a
+     que `~/.pi/agent` tenía 162 ficheros en las carpetas sincronizadas (agents/skills/memory/
+     chains/gentle-ai) — el siguiente arranque con este cambio lo evidencia en el log en vez de
+     fallar en silencio. Verificación de que el walk funciona: reproducido el algoritmo real con
+     el `FileService`+`DiskFileSystemProvider` compilados sobre `~/.pi/agent` → 167 candidatos/162
+     de carpetas, así que el cero observado apunta a la ruta/perfil usado en runtime, que es
+     justo lo que el fix cambia. Pendiente: typecheck (en marcha) y build.
+
+* **2026-10-03 (BUG DE FONDO: `piProfile` aplanaba todas las rutas y perdía ficheros)** — Verificado
+  en vivo arrancando la app: con el cambio de perfil anterior el log ya dice
+  `PiProfile: Using pi profile at ...\data\pi-agent` y `Found 37 pi profile file(s)`, o sea el walk
+  de carpetas sí funciona. Pero el bundle subido a la nube salió con **32 claves planas**
+  (`MEMORY.md`, `SKILL.md`, `2026-09-10.md`…) en vez de rutas (`memory/MEMORY.md`,
+  `skills/agent-md-refactor/SKILL.md`), con **una sola `SKILL.md`** pese a que hay 6 skills: los
+  ficheros con el mismo nombre colisionaban y se perdían. CAUSA: `PiProfileSynchroniser.getKey`
+  hacía `extUri.relativePath(this.syncPreviewFolder, resource)`, pero `syncPreviewFolder` es un URI
+  `file://` y el recurso de preview es `userDataSync://local|remote|base/…`; `ExtUri.relativePath`
+  devuelve `undefined` cuando difieren scheme o authority (`resources.ts`), así que caía al
+  `basename` y aplanaba. Reproducido con los módulos compilados: old → `"MEMORY.md"`, nuevo →
+  `"memory/MEMORY.md"`. FIX: construir la carpeta de preview con el scheme+authority del recurso
+  antes de comparar. Esto afecta a `updateLocalBackup`, `updateLocalFiles` y `updateRemotePiProfile`
+  (los tres usan `getKey`), así que además evitaba que los ficheros remotos se escribieran en su
+  subcarpeta. El bundle anterior de 5 ficheros raíz del perfil externo también encaja con este
+  aplanado/colisión. Migración de transición aplicada en local (una vez): se borró
+  `piProfile.lastSyncUserData` y `User/sync/piProfile/lastSyncpiProfile.json` para que el remoto
+  (del mismo `machineId`, verificado `8be8ba58-…`) actúe de base y el primer sync del perfil interno
+  sea limpio, sin el conflicto que apareció al cambiar de perfil. Verificado: `Last sync data state
+  does not exist` → `Found 37` → `Updated remote pi profile` → `Sync done (4896 ms)`, un solo sync y
+  cero `Too many requests`. Pendiente: recompilar con el fix de `getKey` y reconfirmar las claves con
+  barra.
+* **2026-10-03 (el build borra `data/`)** — Nota operativa: `dev/build.sh` estagía reescribiendo
+  `PiCode-Win32-x64/` y el pack **borra la carpeta de plataforma**, así que `data/` (perfil
+  portable: sesión de cuenta, estado de sync, perfil pi interno) se va con ella. Usar
+  **`dev/build-run.sh`**, que copia `data/` a `.scratch/payload-data-backup` antes y la restaura con
+  `dev/restore-profile.mjs` después. En esta sesión `build.sh` se usó una vez y se restauró a mano
+  desde esa copia. Además se corrigió `restore-profile.mjs`, que tenía `picode.pi.runtime` en la
+  lista de ajustes retirados y **resetaba al usuario a interno**: el runtime interno/externo sigue
+  vivo (`runtime.ts`, `picodeConfiguration.ts`), así que se quitó de esa lista.
+
+* **2026-10-03 (CIERRE verificado del storm + pérdida de ficheros)** — Recompilado con
+  `dev/build-run.sh` (perfil preservado) y verificado en vivo con la app: primer sync
+  `PiProfile: Using pi profile at ...\data\pi-agent` → `Found 37 pi profile file(s)` →
+  `Updated remote pi profile` (re-clave única a rutas completas) → **segundo sync
+  `PiProfile: No changes found during synchronizing pi profile`**, sin `Too many requests`. El
+  bundle final tiene **37 ficheros, 35 con carpeta**, y conserva los **6 `SKILL.md`** distintos
+  (`skills/*/SKILL.md`) que antes colisionaban en uno solo. `models.json`+`settings.json` siguen
+  en la raíz. Perfil del usuario intacto (runtime `external`, tema, sesión de cuenta, sync).
+  Nota: una verificación intermedia marcó `[AutoSync] Disabled` porque la app arrancó 5 s antes de
+  que `restore-profile.mjs` terminase de copiar `data/` (carrera de reloj, no un fallo del sync);
+  repetida sin build en vuelo, arrancó `Enabled` y sincronizó.

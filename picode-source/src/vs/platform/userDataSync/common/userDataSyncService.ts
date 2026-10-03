@@ -169,27 +169,15 @@ export class UserDataSyncService extends Disposable implements IUserDataSyncServ
 		const syncHeaders = createSyncHeaders(executionId);
 		let latestUserDataOrManifest: IUserDataSyncLatestData | IUserDataManifest | null;
 		try {
-			latestUserDataOrManifest = await this.userDataSyncStoreService.getLatestData(syncHeaders);
+			// The PiCode store speaks the manifest protocol; it answers `download/latest` with a
+			// 404. Every manual sync paid for that refusal — a failed round trip the engine
+			// immediately replaced with this very call. Asking for the manifest first is the same
+			// conversation, one request shorter, and it stops reporting an error nobody can act on.
+			latestUserDataOrManifest = await this.userDataSyncStoreService.manifest(null, syncHeaders);
 		} catch (error) {
 			const userDataSyncError = UserDataSyncError.toUserDataSyncError(error);
-			this.telemetryService.publicLog2<SyncErrorEvent, SyncErrorClassification>('sync.download.latest',
-				{
-					code: userDataSyncError.code,
-					serverCode: userDataSyncError instanceof UserDataSyncStoreError ? String(userDataSyncError.serverCode) : undefined,
-					url: userDataSyncError instanceof UserDataSyncStoreError ? userDataSyncError.url : undefined,
-					resource: userDataSyncError.resource,
-					executionId,
-					service: this.userDataSyncStoreManagementService.userDataSyncStore!.url.toString()
-				});
-
-			// Fallback to manifest in stable
-			try {
-				latestUserDataOrManifest = await this.userDataSyncStoreService.manifest(null, syncHeaders);
-			} catch (error) {
-				const userDataSyncError = UserDataSyncError.toUserDataSyncError(error);
-				reportUserDataSyncError(userDataSyncError, executionId, this.userDataSyncStoreManagementService, this.telemetryService);
-				throw userDataSyncError;
-			}
+			reportUserDataSyncError(userDataSyncError, executionId, this.userDataSyncStoreManagementService, this.telemetryService);
+			throw userDataSyncError;
 		}
 
 		/* Manual sync shall start on clean local state */

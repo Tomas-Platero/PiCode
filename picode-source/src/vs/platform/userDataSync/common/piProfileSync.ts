@@ -8,6 +8,7 @@ import { CancellationToken } from '../../../base/common/cancellation.js';
 import { IStringDictionary } from '../../../base/common/collections.js';
 import { Event } from '../../../base/common/event.js';
 import { deepClone } from '../../../base/common/objects.js';
+import { dirname, join } from '../../../base/common/path.js';
 import { isObject } from '../../../base/common/types.js';
 import { URI } from '../../../base/common/uri.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
@@ -22,13 +23,15 @@ import { areSame, IMergeResult as IPiProfileFilesMergeResult, merge } from './sn
 import { Change, IRemoteUserData, ISyncData, IUserDataSyncLocalStoreService, IUserDataSynchroniser, IUserDataSyncLogService, IUserDataSyncEnablementService, IUserDataSyncStoreService, SyncResource, USER_DATA_SYNC_SCHEME } from './userDataSync.js';
 
 /**
- * Synchronises the Pi profile home folder (`~/.pi/agent`) so that agents,
+ * Synchronises PiCode's own pi profile (`<dist>/data/pi-agent`) so that agents,
  * subagents and skills follow the user across machines.
  *
- * Only the `agents`, `subagents` and `skills` subtrees are bundled. The remote
- * content is a JSON document `{ "version": 1, "files": { "<relativePosixPath>": "<fileContent>" } }`.
- * Merging is last-writer-wins per file; a file changed on both sides becomes a
- * whole-file conflict (no line merging).
+ * The `agents`, `subagents`, `skills`, `memory`, `chains`, `gentle-ai` and `specpi` subtrees
+ * plus the profile's own config files are bundled. The remote content is a JSON document
+ * `{ "version": 1, "files": { "<relativePosixPath>": "<fileContent>" } }`. Merging is
+ * last-writer-wins per file; a file changed on both sides becomes a whole-file conflict (no
+ * line merging). The pi on the PATH (`~/.pi/agent`) is a different product and is never read
+ * or written here.
  */
 
 interface IPiProfileSyncContent {
@@ -45,8 +48,8 @@ interface IPiProfileAcceptedResourcePreview extends IFileResourcePreview {
 }
 
 const PI_PROFILE_DATA_VERSION = 1;
-const PI_PROFILE_FOLDER = '.pi';
-const PI_PROFILE_AGENT_FOLDER = 'agent';
+/** PiCode's own pi profile inside the distribution: `<dist>/data/pi-agent`. */
+const PI_PROFILE_DISTRIBUTION_SUBPATH = ['data', 'pi-agent'];
 const PI_PROFILE_SYNCED_FOLDERS = ['agents', 'subagents', 'skills', 'memory', 'chains', 'gentle-ai', 'specpi'];
 // Root-level config files of the pi profile, synced alongside the folders.
 const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json'];
@@ -69,6 +72,23 @@ export function parsePiProfileSyncContent(syncData: ISyncData): IStringDictionar
 	return null;
 }
 
+/**
+ * PiCode's own pi profile — `<dist>/data/pi-agent`, the directory beside the running
+ * executable that the extension host and the agent host already resolve (`distributionRoot`
+ * plus `data/pi-agent`). The pi on the PATH keeps its profile in `~/.pi/agent`; that is a
+ * different product and PiCode never reads or writes it, so the cloud sync must not either.
+ *
+ * Development and tests fall back to the data folder that belongs to the running instance,
+ * which is the same layout the portable distribution uses.
+ */
+function resolvePiProfileFolder(environmentService: INativeEnvironmentService): string {
+	if (/picode/i.test(process.execPath)) {
+		// Packaged PiCode: dirname(PiCode.exe) is the distribution root.
+		return join(dirname(process.execPath), ...PI_PROFILE_DISTRIBUTION_SUBPATH);
+	}
+	return join(dirname(environmentService.userDataPath), PI_PROFILE_DISTRIBUTION_SUBPATH[1]);
+}
+
 export class PiProfileSynchroniser extends AbstractSynchroniser implements IUserDataSynchroniser {
 
 	protected readonly version: number = PI_PROFILE_DATA_VERSION;
@@ -89,7 +109,8 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 		@IUriIdentityService uriIdentityService: IUriIdentityService,
 	) {
 		super({ syncResource: SyncResource.PiProfile, profile }, collection, fileService, environmentService, storageService, userDataSyncStoreService, userDataSyncLocalStoreService, userDataSyncEnablementService, telemetryService, logService, configurationService, uriIdentityService);
-		this.piProfileFolder = this.extUri.joinPath(environmentService.userHome, PI_PROFILE_FOLDER, PI_PROFILE_AGENT_FOLDER);
+		this.piProfileFolder = URI.file(resolvePiProfileFolder(environmentService));
+		this.logService.info(`${this.syncResourceLogLabel}: Using pi profile at ${this.piProfileFolder.fsPath}`);
 		for (const folder of PI_PROFILE_SYNCED_FOLDERS) {
 			this._register(this.fileService.watch(this.extUri.joinPath(this.piProfileFolder, folder)));
 		}
@@ -504,7 +525,13 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	}
 
 	private getKey(resource: URI): string {
-		const relativePath = this.extUri.relativePath(this.syncPreviewFolder, resource);
+		// The preview resource uses the user-data-sync scheme with a `local`/`remote`/`base`
+		// authority, while `syncPreviewFolder` is a `file` URI. `relativePath` returns undefined
+		// when scheme or authority differ, so comparing against the folder as-is fell back to the
+		// basename and flattened every nested file (`memory/MEMORY.md` became `MEMORY.md`), which
+		// collided same-named files and silently dropped all but one of them. Match both first.
+		const previewFolder = this.syncPreviewFolder.with({ scheme: resource.scheme, authority: resource.authority });
+		const relativePath = this.extUri.relativePath(previewFolder, resource);
 		return relativePath ? relativePath.replace(/\\/g, '/') : this.extUri.basename(resource);
 	}
 
@@ -549,6 +576,10 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 
 		// Sort smallest first so that, when the bundle cap is hit, the largest files are skipped
 		candidates.sort((a, b) => a.size - b.size || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+		// One line per sync makes an unexpected empty folder walk visible instead of silently
+		// uploading a root-files-only bundle.
+		this.logService.info(`${this.syncResourceLogLabel}: Found ${candidates.length} pi profile file(s) to consider under ${this.piProfileFolder.fsPath}`);
 
 		const files: IStringDictionary<IFileContent> = {};
 		let total = 0;
