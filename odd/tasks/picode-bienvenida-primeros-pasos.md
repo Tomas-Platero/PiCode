@@ -204,3 +204,61 @@ de extensiones para instalar temas nuevos. La galería completa de la extensión
   correcciones del dueño, `b07fdb9` (ojos del logo + regeneración del parche 19 sobre línea
   base limpia) y `d5c97c1` (setup dentro de la página + Gentle AI solo para el interno +
   regeneración del parche 20). Todos sobre `Master`, como el resto del historial.
+## La galería de temas del paso 6 salía vacía (2026-10-01, noche)
+
+**Síntoma que reportó el dueño:** en «Set up PiCode», paso *6 of 6 — Theme*, la pestaña
+**Gallery** contestaba «Nothing in the gallery for that search.» y nada más.
+
+**Causa raíz, medida.** El **conector empaquetado** no registraba los comandos de la galería.
+`extensions/picode/src/extension.ts` llama a `registerThemeGalleryCommands(context)` y la
+propia fuente lo avisa por escrito («Without this registration they do not exist, and the
+gallery answers an empty list as if the search had found nothing»), pero el `out/extension.js`
+que llevaba el editor **no requería `./theme-gallery`**: cero menciones a «theme» en todo el
+fichero. Los tres comandos viajan del núcleo al conector (`picode.setup.gallerySearch`,
+`galleryThumb`, `galleryInstall`), así que la página pedía un comando que **no existía**,
+`executeCommand` rechazaba la llamada, y el `catch` de la página pintaba la lista vacía.
+
+Lo que se descartó antes de acusar al conector, para no volver a mirarlo:
+- El catálogo está sano: el módulo compilado del propio conector (`theme-catalog.js`) devuelve
+  **40 candidaturas y 233 temas** contra Open VSX en vivo, con `manifestUrl` derivado del
+  `downloadUrl` (la búsqueda no trae `files.manifest` en ninguna fila: 0 de 40).
+- La base del registro se deriva bien de `product.json` → `https://open-vsx.org/api`.
+- No hay proxy en los ajustes del perfil, y el editor **sí** está activado (`picode.picode`,
+  `activationEvent: 'onChatParticipant:picode.pi'` en `exthost.log`).
+- El núcleo **sí** trae el paso de temas: el bundle empaquetado contiene `picode-theme-grid`,
+  `picode.setup.galleryThumb` y `picode-theme-show-more`.
+
+**Por qué nadie lo vio en pantalla.** El paso de temas no podía decir nada: la nota de error se
+creaba dentro de la tarjeta del paso *Provider* (`renderNote`) y `setNote` escribía en ese nodo,
+que ya no está en el documento al cambiar de paso. **Un error en el paso 6 era invisible.** El
+defecto real no era un fallo silencioso: era un fallo **mudo**.
+
+**Arreglos (núcleo, `picodeSetup.ts`).**
+1. `galleryError`, separado de la lista vacía: la rejilla dice ahora *«The gallery could not be
+   read: …»* con el motivo, en vez de afirmar que la galería no tiene nada.
+2. Una respuesta ausente del conector cuenta como error explícito, no como lista vacía.
+3. `paintGalleryGrid` pinta solo la rejilla: al llegar una respuesta ya no se vuelve a montar la
+   tarjeta entera (antes añadía **una segunda caja de búsqueda** por cada respuesta).
+4. `noteLine` ya no secuestra `this.note`; la nota viva la crea `renderWizard` en cada paso, así
+   que `setNote` siempre tiene dónde escribir (afecta también a los fallos al aplicar un tema).
+5. El conector se recompila antes de empaquetar (`dev/build-connector.sh`, fase 2 de
+   `dev/build.sh`): el paquete que llevaba el editor era anterior al registro de los comandos.
+
+6. `installFromGallery` aplicaba el tema con el destino `undefined`, que **no escribe nada**
+   (`themeConfiguration.writeConfiguration` sale antes de tocar los ajustes: `undefined` y
+   `'preview'` son «no guardar»). Elegir un tema en la galería cambiaba la ventana y no quedaba
+   en `workbench.colorTheme`: al reiniciar, el tema era otro. La rejilla de instalados ya usaba
+   `'auto'` desde una corrección anterior; la galería se había quedado atrás. Ahora usa `'auto'`.
+7. La instalación daba por hecho lo que no había comprobado: `workbench.extensions.installExtension`
+   resuelve **cuando el paquete está en disco**, no cuando el registro de temas lo conoce, así que
+   pedir la lista en la línea siguiente podía volver sin el tema recién instalado y el paso decía
+   «installed and applied» sobre una ventana que no había cambiado. Ahora espera al registro
+   (`waitForInstalledTheme`, 10 intentos de 300 ms) y, si no aparece, lo dice en vez de afirmarlo.
+8. De paso: `startImport` recibía un `result` que no leía (usaba `this.importResult`).
+
+**Evidencia.** `dev/build-run.sh` completo, estado **0**: `picode-typecheck-min` sin errores
+(10,7 s), paquete reconstruido y perfil restaurado (71.475 ficheros). El conector se recompila en
+la fase 2, que es lo que faltaba para que los comandos existan.
+
+**Pendiente tras esta anotación:** prueba del dueño en el editor reconstruido (galería con temas y
+tema aplicado y guardado al elegirlo).

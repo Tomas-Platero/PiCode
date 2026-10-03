@@ -248,10 +248,11 @@ between pi releases (ADR-007 records a corrected assumption that came directly
 from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
-PiCode therefore pins the runtime it is verified against: pi `0.86.1` and
-gentle-pi `3.3.0`. Neither pin requires toolchains the user does not have — pi
-requires Node `22.19.0` or newer, and the `gentle-ai` CLI is a Go binary bundled
-inside the gentle-pi package, so no Go installation is needed.
+PiCode therefore pins the runtime it is verified against: pi `1.0.0` and
+gentle-pi `4.0.0`. Neither pin requires toolchains the user does not have — pi
+requires Node `22.19.0` or newer, and the `gentle-ai` CLI is a binary bundled
+inside the gentle-pi package (a prebuilt archive on macOS and Linux; a Go source
+build on Windows, which the machine running PiCode is expected to have).
 
 **Decision:** PiCode pins and ships its own pi and gentle-pi, and installs them
 through their own supported mechanisms (`npm install -g` for pi, `pi install` for

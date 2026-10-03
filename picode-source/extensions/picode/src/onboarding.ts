@@ -64,6 +64,16 @@ export const IMPORT_COMMAND = 'picode.setup.importFromExternal';
 /** Brings only the saved logins (auth.json), as a follow-up to the main import. */
 export const IMPORT_CREDENTIALS_COMMAND = 'picode.setup.importCredentials';
 
+/**
+ * Brings the external pi's conversations in again, on demand.
+ *
+ * The setup import is a one-shot copy, so the profile it leaves behind is a snapshot of the day
+ * it ran: every conversation the external pi has had since is in the other profile and nowhere
+ * else. This is the same copy for `sessions` alone — the rest of the profile is NOT re-imported,
+ * because doing that would overwrite the settings this editor has since been configured with.
+ */
+export const IMPORT_SESSIONS_COMMAND = 'picode.importExternalSessions';
+
 /** The import's live state, answered to the page's poll — the same pattern as the Gentle log. */
 export const IMPORT_LOG_COMMAND = 'picode.setup.importLog';
 
@@ -303,7 +313,14 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					editProfilePackages(deps, true);
 					gentleLog.step = 1;
 					logGentle('[2/5] Installing the packages with npm (this downloads the agent)…');
-					await runNpm(deps, ['install', '--save', 'gentle-pi', 'gentle-engram']);
+					// `--legacy-peer-deps` is what makes an UPDATE possible. gentle-pi declares the pi
+					// host as an OPTIONAL peer (`@earendil-works/pi-coding-agent`, v4 asks for
+					// `>=0.99.1`), and the profile's npm tree already hoists an older pi as the peer of
+					// every other package. npm's strict resolver then aborts the update with ERESOLVE
+					// even though the host that actually runs — the pinned pi under
+					// `resources/pi-runtime` — satisfies gentle. The nested copy is not the host, so
+					// ignoring peers is the honest resolution rather than a workaround.
+					await runNpm(deps, ['install', '--save', '--legacy-peer-deps', 'gentle-pi', 'gentle-engram']);
 					gentleLog.step = 2;
 					logGentle('[3/5] Approving install scripts…');
 					await runNpm(deps, ['approve-scripts', 'gentle-pi']);
@@ -470,6 +487,27 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				to: deps.profileDir,
 				selection: { credentials: true },
 			});
+		}),
+		vscode.commands.registerCommand(IMPORT_SESSIONS_COMMAND, () => {
+			// Conversations only. `importProfile` merges and never deletes, so this cannot cost a
+			// conversation that exists here and not there.
+			const report = importProfile({
+				from: externalProfileDir(),
+				to: deps.profileDir,
+				selection: { sessions: true },
+			});
+			const sessions = report.items.find(entry => entry.item === 'sessions');
+			// The panel re-lists even when nothing came over: an import that finds nothing must not
+			// leave the owner wondering whether it ran.
+			deps.sessionsChanged();
+			if (sessions === undefined || sessions.status === 'failed') {
+				throw new Error(`PiCode: the external pi's conversations could not be brought in — ${sessions?.reason ?? 'the copy reported nothing for them'}.`);
+			}
+			if (sessions.status === 'absent' || (sessions.files ?? 0) === 0) {
+				void vscode.window.showInformationMessage('PiCode: your external pi has no conversations to bring in.');
+				return;
+			}
+			void vscode.window.showInformationMessage(`PiCode: your external pi's ${sessions.files} conversations are in this profile now. Nothing was moved or deleted.`);
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];

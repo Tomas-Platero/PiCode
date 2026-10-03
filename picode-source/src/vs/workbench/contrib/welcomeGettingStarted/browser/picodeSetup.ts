@@ -219,6 +219,9 @@ export class PiCodeSetup extends Disposable {
 	/** The finished import's counts, kept across re-renders. */
 	private importReport: (ImportReport & { packagesInstalled?: number; packagesFailed?: number; packagesSkipped?: number; credentialsImported?: boolean }) | undefined;
 	private note: HTMLElement | undefined;
+	/** What the note says, kept across a re-render: `renderWizard` rebuilds the element. */
+	private noteText = '';
+	private noteIsError = false;
 	/** The final screen's one-line ending, set once "End the setup" answers. */
 	private endedNote: string | undefined;
 	private endedWithError = false;
@@ -230,6 +233,8 @@ export class PiCodeSetup extends Disposable {
 	private galleryShown = 0;
 	private galleryLoading = false;
 	private gallerySearchTimer: Timeout | undefined;
+	/** Why the gallery could not be read. A failed request is not an empty gallery. */
+	private galleryError: string | undefined;
 	/* The packages card's two sources: what pi has installed, and what npm's catalog has. */
 	private packageSource: 'installed' | 'gallery' = 'installed';
 	private installedPackages: InstalledPackage[] | undefined;
@@ -285,6 +290,9 @@ export class PiCodeSetup extends Disposable {
 	private renderWizard(state: SetupState | undefined): void {
 		this.disposables.clear();
 		clearNode(this.container);
+		// Whatever is on screen is about to be replaced: a note written after this would land
+		// on a node that is no longer in the document.
+		this.note = undefined;
 
 		if (state === undefined) {
 			const note = $('p.picode-note', {}, localize('picodeSetup.unavailable', "The setup is not available yet — it will appear in a moment."));
@@ -328,10 +336,17 @@ export class PiCodeSetup extends Disposable {
 
 		const foot = this.renderWizardFoot(state);
 		this.wizardFootEl = foot;
+		// The note belongs to the step, not to whichever card happens to ask for one. The cards
+		// are rebuilt on every step, and a note created inside one of them kept `setNote`
+		// writing into a node nobody could see — which is how a missing command stayed silent
+		// for a whole session. One live note per step, always in the tree.
+		const note = this.noteLine(this.noteText);
+		note.classList.toggle('picode-error', this.noteIsError);
+		this.note = note;
 		reset(
 			this.container as HTMLElement,
 			this.renderWizardHead(),
-			$('.picode-step-body', {}, body),
+			$('.picode-step-body', {}, body, note),
 			foot,
 		);
 	}
@@ -454,6 +469,9 @@ export class PiCodeSetup extends Disposable {
 
 	private goTo(step: 0 | 1 | 2 | 3 | 4 | 5): void {
 		this.step = step;
+		// A note belongs to the step that produced it, and must not follow the owner forward.
+		this.noteText = '';
+		this.noteIsError = false;
 		this.renderWizard(this.state);
 	}
 
@@ -724,7 +742,7 @@ export class PiCodeSetup extends Disposable {
 				this.renderImportProgress(progressArea);
 				const box = credentialsRow.querySelector('input');
 				const withLogins = box instanceof HTMLInputElement && box.checked;
-				this.startImport(progressArea, result, withLogins);
+				this.startImport(progressArea, withLogins);
 			}, 'primary'),
 		);
 
@@ -754,7 +772,7 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	private startImport(progressArea: HTMLElement, result: HTMLElement, withLogins: boolean): void {
+	private startImport(progressArea: HTMLElement, withLogins: boolean): void {
 		this.importRunning = true;
 		const fill = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-fill');
 		const line = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-line');
@@ -844,7 +862,7 @@ export class PiCodeSetup extends Disposable {
 			),
 			form,
 			modelArea,
-			this.renderNote(localize('picodeSetup.provider.note', "The model you pick below is what the agent runs by default — you can change it per conversation.")),
+			this.noteLine(localize('picodeSetup.provider.note', "The model you pick below is what the agent runs by default — you can change it per conversation.")),
 		);
 
 		if (this.wizardModels === undefined && !this.modelsLoading) {
@@ -1376,10 +1394,17 @@ export class PiCodeSetup extends Disposable {
 
 		const applyTheme = async (theme: IWorkbenchColorTheme, persist: boolean): Promise<void> => {
 			try {
-				// `auto` is the target VS Code's own theme picker persists with, and `undefined` is what
-				// it uses to **revert** a preview — which is why clicking a theme used to apply it and
-				// keep nothing.
-				await this.services.themeService.setColorTheme(theme.settingsId, persist ? 'auto' : 'preview');
+				// The theme goes in as the OBJECT, never as its `settingsId`. `setColorTheme` resolves
+				// a string through `findThemeById`, and a contributed theme's registry id is
+				// `<uiTheme> <selector>` (`vs-dark default-themes-Red-json`) while `settingsId` is what
+				// the setting holds (`Red`). A string that is not a registry id is not found, is not a
+				// ColorThemeData either, and the service answers `null` **without throwing** — no
+				// theme, no write, no message. Measured on 2026-10-02: clicking a theme in this step
+				// left `workbench.colorTheme` untouched and the window unchanged.
+				//
+				// `auto` is the target VS Code's own picker persists with; `preview` applies without
+				// writing, which is what hovering a card does.
+				await this.services.themeService.setColorTheme(theme, persist ? 'auto' : 'preview');
 			} catch (error) {
 				// A failed apply is said on the card, never swallowed — the user would
 				// otherwise click a theme and see nothing happen at all.
@@ -1410,7 +1435,7 @@ export class PiCodeSetup extends Disposable {
 			clearNode(more);
 			if (this.themeSource === 'gallery') {
 				currentLabel.textContent = '';
-				this.renderGalleryInto(toolbar, grid, more, applyTheme);
+				this.renderGalleryInto(toolbar, grid, more);
 				return;
 			}
 			toolbar.append(
@@ -1467,7 +1492,7 @@ export class PiCodeSetup extends Disposable {
 			* per keystroke, which multiplied the toolbar and the "Show more" buttons into a
 			* hall of mirrors.
 		*/
-	private renderGalleryInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, applyTheme: (theme: IWorkbenchColorTheme, persist: boolean) => Promise<void>): void {
+	private renderGalleryInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement): void {
 		reset(toolbar);
 		toolbar.append(this.themeSourceTabs(() => {
 			this.themeSource = 'installed';
@@ -1485,7 +1510,7 @@ export class PiCodeSetup extends Disposable {
 			}
 			this.gallerySearchTimer = setTimeout(() => {
 				this.gallerySearchTimer = undefined;
-				void this.loadGallery(() => this.renderGalleryInto(toolbar, grid, more, applyTheme));
+				void this.loadGallery(() => this.paintGalleryGrid(grid));
 			}, 350);
 		});
 		toolbar.append(search);
@@ -1493,18 +1518,37 @@ export class PiCodeSetup extends Disposable {
 		more.append(
 			this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
 				this.galleryShown += THEME_GALLERY_PAGE;
-				this.renderGalleryInto(toolbar, grid, more, applyTheme);
+				this.paintGalleryGrid(grid);
 			}),
 		);
 
 		// The first visit to the tab has nothing cached yet: ask the gallery before
 		// declaring it empty.
 		if (this.galleryItems === undefined) {
-			void this.loadGallery(() => this.renderGalleryInto(toolbar, grid, more, applyTheme));
+			void this.loadGallery(() => this.paintGalleryGrid(grid));
 		}
 
+		this.paintGalleryGrid(grid);
+	}
+
+	/**
+		* The gallery grid, painted on its own so that an answer can land without rebuilding the
+		* toolbar: re-entering the whole card on arrival appended a second search box every time.
+		*
+		* An empty grid says which of the two things happened. “Nothing found” is a claim about
+		* the gallery, and it must not be made when the question could not be asked at all — the
+		* first version reported a failed request as an empty gallery, and that sentence is what
+		* hid a missing command for a whole session.
+		*/
+	private paintGalleryGrid(grid: HTMLElement): void {
+		clearNode(grid);
 		const items = (this.galleryItems ?? []).slice(0, this.galleryShown);
 		if (items.length === 0) {
+			if (this.galleryError !== undefined) {
+				grid.appendChild($('.picode-gallery-loading.picode-error', {},
+					localize('picodeSetup.gallery.failed', "The gallery could not be read: {0}", this.galleryError)));
+				return;
+			}
 			grid.appendChild(this.galleryLoading
 				? $('.picode-gallery-loading', {}, localize('picodeSetup.gallery.loading', "Asking the gallery…"))
 				: $('.picode-gallery-loading', {}, localize('picodeSetup.gallery.empty', "Nothing in the gallery for that search.")));
@@ -1537,12 +1581,16 @@ export class PiCodeSetup extends Disposable {
 		this.galleryLoading = true;
 		try {
 			const answer = await this.services.commandService.executeCommand<{ items: GalleryItem[] }>('picode.setup.gallerySearch', this.galleryQuery);
-			if (answer !== undefined) {
-				this.galleryItems = answer.items;
+			if (answer === undefined) {
+				throw new Error('The connector did not answer the gallery search.');
 			}
+			this.galleryItems = answer.items;
+			this.galleryError = undefined;
 		} catch (error) {
+			// Kept apart from the empty list: the grid has to be able to say that the question
+			// failed rather than answer that the gallery has nothing.
 			this.galleryItems = [];
-			this.setNote(messageOf(error), true);
+			this.galleryError = messageOf(error);
 		}
 		this.galleryLoading = false;
 		repaint();
@@ -1582,28 +1630,53 @@ export class PiCodeSetup extends Disposable {
 		];
 	}
 
-	/** Installs a gallery theme, then applies it once it is an installed theme. */
+	/** Installs a gallery theme, then applies it — and keeps it — once the editor lists it. */
 	private async installFromGallery(item: GalleryItem): Promise<void> {
 		if (this.busy) { return; }
 		this.busy = true;
 		this.setNote(localize('picodeSetup.gallery.installing', "Installing {0}…", item.label), false);
 		try {
 			await this.services.commandService.executeCommand('picode.setup.galleryInstall', item.id);
-			this.themes = await this.services.themeService.getColorThemes();
-			const applied = (this.themes ?? []).find(theme => theme.label === item.variant.label);
-			if (applied !== undefined) {
-				await this.services.themeService.setColorTheme(applied.settingsId, undefined);
+			const applied = await this.waitForInstalledTheme(item);
+			if (applied === undefined) {
+				// Installed but not listed yet: calling it “applied” was a claim nobody could
+				// check, and the window had not changed.
+				this.setNote(localize('picodeSetup.gallery.notListed', "{0} is installed, but the editor has not listed its theme yet — it will appear under Installed.", item.label), true);
+			} else {
+				// The object, not `settingsId` — see the note on the theme card: a registry id and a
+				// settings id are different strings, and only the object resolves either way.
+				await this.services.themeService.setColorTheme(applied, 'auto');
 				this.appliedThemeId = applied.settingsId;
+				this.setNote(localize('picodeSetup.gallery.installedNote', "{0} installed and applied.", item.label), false);
 			}
-			this.setNote(localize('picodeSetup.gallery.installedNote', "{0} installed and applied.", item.label), false);
 		} catch (error) {
 			this.setNote(messageOf(error), true);
-			this.busy = false;
-			return;
 		}
 		this.busy = false;
 		this.themeSource = 'installed';
 		await this.render();
+	}
+
+	/**
+		* The just-installed theme, once the editor knows about it.
+		*
+		* `installExtension` resolves when the package is on disk, not when the theme registry has
+		* it: asking for the list on the very next line came back without the theme that had just
+		* been installed, and the step then reported “installed and applied” over a window that had
+		* not changed. Bounded on purpose — a theme that never shows up is said out loud instead of
+		* being waited for for ever.
+		*/
+	private async waitForInstalledTheme(item: GalleryItem): Promise<IWorkbenchColorTheme | undefined> {
+		for (let attempt = 0; attempt < 10; attempt += 1) {
+			this.themes = await this.services.themeService.getColorThemes();
+			const found = (this.themes ?? []).find(theme =>
+				theme.settingsId === item.variant.id || theme.label === item.variant.label);
+			if (found !== undefined) {
+				return found;
+			}
+			await new Promise<void>(resolve => setTimeout(resolve, 300));
+		}
+		return undefined;
 	}
 
 	private visibleThemes(query: string, filter: 'all' | 'dark' | 'light' | 'hc'): readonly IWorkbenchColorTheme[] {
@@ -1872,12 +1945,13 @@ export class PiCodeSetup extends Disposable {
 		return chips;
 	}
 
-	private renderNote(message: string): HTMLElement {
-		this.note = $('p.picode-note', {}, message);
-		return this.note;
+	private noteLine(message: string): HTMLElement {
+		return $('p.picode-note', {}, message);
 	}
 
 	private setNote(message: string, isError: boolean): void {
+		this.noteText = message;
+		this.noteIsError = isError;
 		if (this.note !== undefined) {
 			this.note.innerText = message;
 			this.note.classList.toggle('picode-error', isError);

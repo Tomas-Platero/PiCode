@@ -106,21 +106,29 @@ declara `commands`, `mcp` ni `hooks`.
 
 | Pieza | Cuántas | Dónde |
 | --- | --- | --- |
-| **Habilidades** | 13 | `skills/*/SKILL.md` |
-| **Subagentes** | 23 | `assets/agents/*.md` — los instala su CLI en `~/.pi/agent/agents/` |
-| **Cadenas** | 4 | `assets/chains/*.chain.md` |
+| **Habilidades** | 12 | `skills/*/SKILL.md` (+ `_shared`, que no es una skill) |
+| **Subagentes** | 10 | `assets/agents/*.md` — los instala su CLI en `~/.pi/agent/agents/` |
+| **Cadenas** | 1 | `assets/chains/*.chain.md` |
 | **Plantillas de prompt** | 1 | `prompts/skill-creation.md` |
 | **Temas** | 3 | `themes/` |
-| **Instrucciones del orquestador** | 5 | `assets/orchestrator*.md` — **inyectadas en tiempo de ejecución**, no son ficheros que pi descubra |
-| **Extensiones** | 13 | Registran las herramientas de review, los subagentes, la TUI… |
-| **Binario de review nativo** | 1 | `.gentle-ai/v3.7.0/gentle-ai.exe`, compilado en Go |
+| **Instrucciones del orquestador** | 4 | `assets/orchestrator*.md` — **inyectadas en tiempo de ejecución**, no son ficheros que pi descubra |
+| **Extensiones** | 18 | Registran las herramientas de review, los subagentes, la TUI… |
+| **Binario de review nativo** | 1 | `.gentle-ai/v4.0.0/gentle-ai.exe`, compilado en Go |
 
-Los 23 subagentes se reparten así: 3 de delegación, 4 lentes de revisión, 3 de «judgment day»
-y 13 del ciclo SDD.
+Los 10 subagentes se reparten así: 3 de delegación, 4 lentes de revisión y 3 de «judgment day».
+
+> **v4.0.0 (medido el 2026-10-02), el salto que motivó esta actualización.** Los **13 agentes
+del ciclo SDD salieron de `assets/agents/`** y la extensión `sdd-init` ya no viaja en el
+paquete (quedan las skills). Las **extensiones subieron de 13 a 18**: entran `child-context`,
+`child-safety`, `gentle-stats`, `history`, `nan-provider` y `resume-hint`, y sale la
+dependencia `@earendil-works/pi-tui` (la aporta el host de pi). Un perfil ya instalado que se
+actualice **conserva los agentes viejos como copias huérfanas** en `<perfil>/agents/` si su
+CLI los había dejado ahí; `assets/agents/` no los vuelve a traer.
 
 ## Qué espera del entorno
 
-- **Node ≥ 24** y **Go 1.25.10+** — porque **compila su binario en la instalación**.
+- **Node ≥ 22.19.0** (el `engines` del paquete). En Windows el postinstall **compila el
+  binario Go desde la fuente** (Go 1.25.10+); macOS y Linux descargan un archivo firmado.
 - Sus propios directorios: config en `~/.pi/gentle-ai`, y respeta `PI_CODING_AGENT_DIR` para
   el perfil del agente.
 - Un **CLI propio**, nunca desde el PATH: siempre el suyo, dentro del paquete.
@@ -159,5 +167,5 @@ herramientas de memoria (`mem_*`). PiCode lo trata como una herramienta más de 
 - Que el SDK de pi cubra todo lo que el host de agentes del editor pide (queda por probar
   `materializeChat`, y lo demás ya está enfrentado y encaja).
 - Cómo se comporta Gentle-AI cuando el perfil es el de PiCode y no el suyo.
-- El paquete de Gentle-AI de la máquina es la versión **v3.7.0**; sus docs de GitHub pueden
+- El paquete de Gentle-AI de la máquina es la versión **v4.0.0**; sus docs de GitHub pueden
   ir por delante.

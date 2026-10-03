@@ -67,10 +67,11 @@ Two properties of the layer shape everything above it:
 
 ### Layer 2 — Extensions
 
-- **The agent runtime**: `pi` and the `gentle-pi` package, pinned in
-  `distribution/runtime.json` and installed into the pack by `dev/pi-runtime.sh`. They
-  are executables the agent layer talks to, decoupled from the editor so they update
-  independently. Which one runs is the owner's choice (`picode.pi.runtime`).
+- **The agent runtime**: `pi` is pinned in `distribution/runtime.json` and installed into
+  the pack by `dev/pi-runtime.sh`; `gentle-pi` is a pi package the connector installs into
+  the internal profile's npm project (its source of truth is npm, once the script gate is
+  approved). Both are executables the agent layer talks to, decoupled from the editor so
+  they update independently. Which one runs is the owner's choice (`picode.pi.runtime`).
 - **The built-in extensions**: the trimmed set the source tree ships (language
   colorizers for every language, `git`, TypeScript, JSON/HTML/CSS language features,
   markdown preview without mermaid, `emmet`, themes, the `picode` connector).

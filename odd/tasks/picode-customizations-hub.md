@@ -30,7 +30,11 @@ Servers, Plugins; Tools oculto en Local). Un tipo custom no crea sección nueva,
 catálogo de **proveedores** no cabe aquí: necesita otra superficie (ver la feature de
 proveedores).
 
-## Mapa de gentle-ai (gentle-pi v3.7.0, medido en el paquete local)
+## Mapa de gentle-ai (gentle-pi v4.0.0, medido en el paquete local)
+
+> Re-medido el 2026-10-02 sobre la v4.0.0; la primera medición de este mapa fue la 3.7.0.
+> El salto mayor se llevó los 13 agentes del ciclo SDD de `assets/agents/` y la extensión
+> `sdd-init`; las cifras de las filas de abajo son las de la 4.0.0.
 
 Ojo con el repositorio: `github.com/Gentleman-Programming/gentle-ai` es el **CLI en Go** que
 instala; el **paquete de pi** es `gentle-pi` (marca *gentle-shell*). Manda el paquete local.
@@ -40,26 +44,26 @@ Se carga desde la clave `pi` de su `package.json`: `extensions`, `themes`, `prom
 
 | Sección del hub | Qué de gentle-ai encaja | Desajuste |
 | --- | --- | --- |
-| **Skills** | `skills/*/SKILL.md` — 13 skills (`gentle-ai`, `branch-pr`, `chained-pr`, `cognitive-doc-design`, `comment-writer`, `issue-creation`, `judgment-day`, `rdd-defect-workflow`, `skill-creator`, `skill-improver`, `skill-registry`, `work-unit-commits`) | Limpio. `_shared/review-ledger-contract.md` **no** es una skill |
-| **Agents** | `assets/agents/*.md` — **23**: 3 de delegación, 4 lentes de review, 3 de Judgment Day, 13 de SDD | **No** están en la clave `pi`: los instala el CLI en `~/.pi/agent/agents/`. Además hay 4 *chains* (`assets/chains/*.chain.md`), que son otro tipo de pi y **no tienen sección** |
+| **Skills** | `skills/*/SKILL.md` — 12 skills (`gentle-ai`, `branch-pr`, `chained-pr`, `cognitive-doc-design`, `comment-writer`, `issue-creation`, `judgment-day`, `rdd-defect-workflow`, `skill-creator`, `skill-improver`, `skill-registry`, `work-unit-commits`) | Limpio. `_shared/review-ledger-contract.md` **no** es una skill |
+| **Agents** | `assets/agents/*.md` — **10**: 3 de delegación, 4 lentes de review, 3 de Judgment Day. El ciclo SDD **ya no viene como agentes** | **No** están en la clave `pi`: los instala el CLI en `~/.pi/agent/agents/`. Queda 1 *chain* (`assets/chains/4r-review.chain.md`), que es otro tipo de pi y **no tiene sección** |
 | **Instructions** | `assets/orchestrator*.md` (5), `sdd-orchestrator-workflow.md`, el contrato espejado | **No** son ficheros que pi descubra: los **inyecta en runtime** `gentle-ai.ts`. Un hub puede mostrarlos, no gobernarlos |
 | **Prompts** | `prompts/skill-creation.md` | Limpio |
-| **Hooks** | — | **No hay ficheros**: todo es `pi.on(...)` dentro de 13 extensiones. Se pueden mostrar, no registrar |
+| **Hooks** | — | **No hay ficheros**: todo es `pi.on(...)` dentro de 18 extensiones. Se pueden mostrar, no registrar |
 | **MCP Servers** | — | **Ninguno**. Llegan por paquetes compañeros (`pi-mcp-adapter`, `gentle-engram`) editados en `settings.json` |
-| **Plugins** | el propio paquete npm + deps (`@earendil-works/pi-tui`, `@heyhuynhgiabuu/pi-pretty`) + el binario nativo | Sin manifiesto por plugin: la unidad es el paquete npm |
+| **Plugins** | el propio paquete npm + deps (`@heyhuynhgiabuu/pi-pretty`) + el binario nativo | Sin manifiesto por plugin: la unidad es el paquete npm |
 
 **Sin sección en el hub**: `themes/` (3 temas), `contracts/`, `docs/`, `lib/`, `runtime/`,
-`scripts/`, `assets/migrations/`, el binario `.gentle-ai/v3.7.0/gentle-ai.exe`.
+`scripts/`, `assets/migrations/`, el binario `.gentle-ai/v4.0.0/gentle-ai.exe`.
 
 ### Lo que gentle-ai espera del host
 
-- pi ≥ 0.85.1 y Node ≥ 24. En Windows **compila su binario Go en el postinstall** (Go 1.25.10+).
+- pi ≥ 1.0.0 y Node ≥ 22.19.0. En Windows **compila su binario Go en el postinstall** (Go 1.25.10+); macOS y Linux descargan un archivo firmado.
 - Homes: `GENTLE_PI_AGENT_HOME` → `PI_CODING_AGENT_DIR` → `~/.pi/agent`; config en
   `~/.pi/gentle-ai`.
 - Estado que escribe: `~/.pi/gentle-ai/{models,profiles,persona,background-subagents,double-esc-cancel}.json`,
   `~/.pi/agent/subagents.json` o `.pi/subagents.json`, `openspec/config.yaml`,
   `.atl/skill-registry.md`.
-- CLI propio en `.gentle-ai/v3.7.0/gentle-ai[.exe]`, **nunca** desde el PATH.
+- CLI propio en `.gentle-ai/v4.0.0/gentle-ai[.exe]`, **nunca** desde el PATH.
 
 ## Decisions
 

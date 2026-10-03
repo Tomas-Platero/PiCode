@@ -131,6 +131,11 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.importExternalSessions",
+				"title": "Import pi sessions from the external pi",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.setup.gallerySearch",
 				"title": "List themes from the gallery",
 				"category": "PiCode"
