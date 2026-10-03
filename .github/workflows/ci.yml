@@ -101,6 +101,10 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          # Authenticates @vscode/ripgrep's GitHub download; a cold
+          # npm ci without it hits the unauthenticated rate limit (403).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./dev/build.sh
 
       - name: Connector tests
