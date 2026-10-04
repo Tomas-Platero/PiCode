@@ -21,14 +21,18 @@
 //
 // ## OAuth credentials, and why they are used READ-ONLY
 //
-// Remote servers whose `mcp.json` entry is a `url` need a bearer token. pi already stores
-// one per server in its agent directory (`~/.pi/agent/mcp-auth.json`, written by pi's own
-// `mcp login` / `/mcp login`) — this bridge reads it and never writes it. Not even a
-// refresh: OAuth servers commonly ROTATE refresh tokens on use, so a refresh here would
-// invalidate the grant pi has stored whether or not the new tokens were kept, and the
-// owner's standing rule is that PiCode never writes into pi's directory. A token is sent
-// only while it is still valid; an expired or missing one fails with the exact command
-// that fixes it (`pi mcp login <server>`), which only the owner can run.
+// Remote servers whose `mcp.json` entry is a `url` need a bearer token. **PiCode's own
+// profile** keeps them in a `mcp-auth.json` next to the `mcp.json` this bridge already
+// reads (`data/pi-agent/mcp-auth.json`), written by that profile's own login. The
+// external pi's directory is neither read nor written: the owner's rule is that `~/.pi`
+// is never touched, for storing or for reading, so a sign-in that only exists there does
+// not exist here, and this bridge says so instead of borrowing it.
+//
+// The file is read and never written. Not even a refresh: OAuth servers commonly ROTATE
+// refresh tokens on use, so a refresh would invalidate whatever grant the profile holds
+// whether or not the new tokens were kept. A token is sent only while it is still valid,
+// and an expired or missing one fails with a line saying what is missing — and that nothing
+// signs into that profile yet.
 //
 // ## Replay
 //
@@ -39,7 +43,6 @@
 // what decides, and a server that does not annotate its tools gets the cautious treatment.
 
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
@@ -134,11 +137,14 @@ export function loadMcpConfig(profileDir, cwd = process.cwd()) {
 // --- OAuth credentials pi already stored (READ-ONLY; see the file header) --------
 
 /**
- * Where pi (the CLI and the editor) keeps MCP OAuth credentials. Override with
- * `PI_MCP_AUTH_FILE`, the same way `PI_AGENT_PROFILE` overrides the profile directory.
+ * Where the profile in force keeps its MCP OAuth credentials: next to its own `mcp.json`.
+ *
+ * The profile is required, never inferred: the whole point of the parameter is that this
+ * must be PiCode's own profile and never the external pi's directory. `PI_MCP_AUTH_FILE`
+ * overrides the file itself, the same way `PI_AGENT_PROFILE` overrides the profile.
  */
-export function mcpAuthPath() {
-	return process.env.PI_MCP_AUTH_FILE || join(homedir(), ".pi", "agent", "mcp-auth.json");
+export function mcpAuthPath(profileDir) {
+	return process.env.PI_MCP_AUTH_FILE || join(profileDir, "mcp-auth.json");
 }
 
 /**
@@ -147,19 +153,26 @@ export function mcpAuthPath() {
  * is the URL-only key older pi versions wrote; it is read for compatibility, never written.
  */
 export function mcpAuthKey(name, serverUrl) {
-	const urlKey = String(new URL(serverUrl));
+	let urlKey;
+	try {
+		urlKey = String(new URL(serverUrl));
+	} catch {
+		// A `url` that cannot be parsed has no stored key to look up, and "no sign-in" is a
+		// clearer outcome than a TypeError escaping the key builder.
+		return {};
+	}
 	return { key: `mcp__${String(name).replace(/-/g, "_")}|${urlKey}`, legacyKey: urlKey };
 }
 
 /**
- * pi's `McpOAuthStateStore` over pi's own `mcp-auth.json`, READ-ONLY.
+ * pi's `McpOAuthStateStore` over the profile's `mcp-auth.json`, READ-ONLY.
  *
  * Why read-only — so nobody "fixes" this into a refresh later: the file stores a refresh
  * token next to the access token, and many OAuth servers ROTATE refresh tokens on use. A
- * refresh here would hand out a new refresh token and leave pi's stored one dead — whether
- * or not the new tokens were kept — breaking the sign-ins the owner already has in pi. The
- * owner's standing rule is also that PiCode never writes into pi's directory. So `save()`
- * throws instead of writing: every write path of the OAuth flow is unreachable by design.
+ * refresh here would hand out a new refresh token and leave the stored one dead — whether
+ * or not the new tokens were kept — breaking the sign-ins that profile already has. So
+ * `save()` throws instead of writing: every write path of the OAuth flow is unreachable by
+ * design, and a future attempt fails loudly rather than quietly.
  */
 class ReadOnlyMcpAuthStore {
 	#file;
@@ -184,8 +197,12 @@ class ReadOnlyMcpAuthStore {
 	}
 }
 
-/** The one line the owner can act on, naming the server as pi's CLI knows it. */
-const loginAdvice = (name) => `run: pi mcp login ${name}`;
+/**
+ * The one line a person can act on. It does not point at `pi mcp login`, because that pi
+ * is the external one and this bridge neither reads nor writes it: the sign-in has to be
+ * in PiCode's own profile, and nothing signs in there yet.
+ */
+const loginAdvice = (name) => `PiCode's own profile needs a sign-in for "${name}", and nothing signs in there yet`;
 
 /**
  * The transport's `authProvider` for one HTTP server, built ONLY from what pi already
@@ -198,7 +215,10 @@ const loginAdvice = (name) => `run: pi mcp login ${name}`;
  * Outcome `"none"` (pi has no sign-in for the server) is NOT an error here: the entry may
  * authenticate itself through configured `headers` (github does), so the caller decides.
  */
-export function storedMcpAuth(name, serverUrl, { authFile = mcpAuthPath(), now = Date.now() } = {}) {
+export function storedMcpAuth(name, serverUrl, { authFile, now = Date.now() } = {}) {
+	if (typeof authFile !== "string" || authFile.length === 0) {
+		throw new Error("storedMcpAuth needs the profile's mcp-auth.json path");
+	}
 	const store = new ReadOnlyMcpAuthStore(authFile, name, serverUrl);
 	const provider = new McpOAuthProvider({
 		serverUrl,
@@ -242,7 +262,7 @@ export function storedMcpAuth(name, serverUrl, { authFile = mcpAuthPath(), now =
  * with neither fails fast with the `pi mcp login` line instead of a request that cannot
  * succeed. An expired stored sign-in always fails fast: a doomed request would say less.
  */
-export async function connectMcpServers(servers, { timeoutMs = CONNECT_TIMEOUT_MS, cwd = process.cwd(), authFile = mcpAuthPath() } = {}) {
+export async function connectMcpServers(servers, { profileDir, timeoutMs = CONNECT_TIMEOUT_MS, cwd = process.cwd(), authFile = mcpAuthPath(profileDir) } = {}) {
 	const connections = [];
 	for (const [name, entry] of servers) {
 		const connection = { name, entry, status: "failed", tools: [], error: undefined, client: undefined };
@@ -525,7 +545,7 @@ export const NO_BRIDGE = { connections: [], extension: undefined, filter: undefi
  * printed for both ways round: the experiment's whole claim about size is that number.
  * Why the bridge is on or off was already printed by the [settings] lines.
  */
-export async function connectBridge(enabled, profileDir, { authFile = mcpAuthPath() } = {}) {
+export async function connectBridge(enabled, profileDir, { authFile = mcpAuthPath(profileDir) } = {}) {
 	if (!enabled) {
 		console.error("[mcp] disabled: the agent runs without MCP tools.");
 		return NO_BRIDGE;
@@ -539,7 +559,7 @@ export async function connectBridge(enabled, profileDir, { authFile = mcpAuthPat
 	if ([...config.servers.values()].some(entry => entry.url)) {
 		console.error(`[mcp] oauth credentials: READ-ONLY from ${authFile} (never written, never refreshed)`);
 	}
-	const connections = await connectMcpServers(config.servers, { authFile });
+	const connections = await connectMcpServers(config.servers, { profileDir, authFile });
 	for (const connection of connections) {
 		console.error(connection.status === "connected"
 			? `[mcp] ${connection.name}: connected, ${connection.tools.length} tools`
