@@ -231,13 +231,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          # On workflow_dispatch this also creates the v-tag; on a tag
-          # push --target just points the notes at the right commit.
-          gh release create "v${PICODE_VERSION}" \
-            "PiCode-win32-x64-${PICODE_VERSION}.zip" \
-            "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
-            --title "PiCode ${PICODE_VERSION}" --generate-notes \
-            --target "${GITHUB_SHA}"
+          # `--target` is for CREATING a tag. When the tag already exists — the
+          # normal tag-push release — passing it makes gh resolve/recreate an
+          # annotated tag and the API answers 403 "Resource not accessible by
+          # integration"; a lightweight tag happened to survive it, which is why
+          # this only started failing with the first annotated tag. Only point a
+          # tag that does not exist yet at the built commit.
+          if git ls-remote --exit-code --tags origin \
+               "refs/tags/v${PICODE_VERSION}" >/dev/null 2>&1; then
+            TARGET=()
+          else
+            TARGET=(--target "${GITHUB_SHA}")
+          fi
+          # Idempotent: a re-run after a partial failure must not die on an
+          # existing release and must still refresh the assets.
+          if gh release view "v${PICODE_VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${PICODE_VERSION}" \
+              "PiCode-win32-x64-${PICODE_VERSION}.zip" \
+              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" --clobber
+          else
+            gh release create "v${PICODE_VERSION}" \
+              "PiCode-win32-x64-${PICODE_VERSION}.zip" \
+              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
+              --title "PiCode ${PICODE_VERSION}" --generate-notes \
+              "${TARGET[@]}"
+          fi
 
       - name: Generate the update feed
         shell: bash
