@@ -742,6 +742,6 @@
       "default": false
     }
   },
-  "version": "1.135.3",
-  "picodeVersion": "0.1.1-beta"
+  "version": "1.135.4",
+  "picodeVersion": "0.1.2-beta"
 }
