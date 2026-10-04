@@ -673,7 +673,10 @@
 	overflow-wrap: anywhere;
 }
 
-.chat-list-at-bottom .chat-progress-reservable > .value:has(> .rendered-markdown:last-child) {
+/* PiCode: reserve the room the input part needs for any streaming response, not only one
+   that ends in markdown. A response whose last part is a tool call (the common shape while
+   the agent works) was getting no padding and its last row was clipped at the bottom edge. */
+.chat-list-at-bottom .chat-progress-reservable > .value {
 	padding-bottom: calc(var(--vscode-spacing-size360) + var(--vscode-strokeThickness));
 }
 

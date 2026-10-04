@@ -36,6 +36,14 @@ export const SETUP_COMMAND = 'picode.setup';
 /** The state the welcome page renders: which pi, is it there, is Gentle AI in. */
 export const GET_STATE_COMMAND = 'picode.setup.getState';
 
+/**
+ * The versions the editor's About dialog shows: the pi **in force** and Gentle AI when it is
+ * installed. A dedicated command rather than {@link GET_STATE_COMMAND} because the About wants
+ * the running pi (the external one when that is the runtime), not the shipped one, and nothing
+ * else the setup state carries.
+ */
+export const ABOUT_VERSIONS_COMMAND = 'picode.setup.aboutVersions';
+
 /** Applies a runtime choice and answers with the resulting state. */
 export const APPLY_RUNTIME_COMMAND = 'picode.setup.applyRuntime';
 
@@ -127,6 +135,12 @@ export interface SetupState {
 /** The answer of an action that may fail, with the reason for a failed one. */
 export interface SetupActionError {
 	readonly error?: string;
+}
+
+/** What the About dialog shows: the pi in force, and Gentle AI only when it is installed. */
+export interface AboutVersions {
+	readonly piVersion?: string;
+	readonly gentleVersion?: string;
 }
 
 /** The Gentle installer's live state, answered to the page's poll. */
@@ -267,6 +281,18 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 	return [
 		vscode.commands.registerCommand(SETUP_COMMAND, () => vscode.commands.executeCommand('workbench.action.openWalkthrough')),
 		vscode.commands.registerCommand(GET_STATE_COMMAND, (): SetupState => state()),
+		vscode.commands.registerCommand(ABOUT_VERSIONS_COMMAND, async (): Promise<AboutVersions> => {
+			// The pi in force: the machine's when that is the runtime, the shipped one otherwise.
+			const piVersion = readRuntimeMode() === 'external'
+				? (await probeExternalPi()).version
+				: readInternalPiVersion(deps.distributionRoot);
+			// Gentle lives in PiCode's own profile, so with the external pi it is simply absent.
+			const gentleVersion = isGentleInstalled(deps.profileDir) ? readGentleVersion(deps.profileDir) : undefined;
+			return {
+				...(piVersion === undefined ? {} : { piVersion }),
+				...(gentleVersion === undefined ? {} : { gentleVersion }),
+			};
+		}),
 		vscode.commands.registerCommand(APPLY_RUNTIME_COMMAND, async (mode: unknown): Promise<SetupState> => {
 			// An unknown value is ignored rather than guessed at: the page sends only what it
 			// rendered, and anything else is a bug worth surfacing as no-change.

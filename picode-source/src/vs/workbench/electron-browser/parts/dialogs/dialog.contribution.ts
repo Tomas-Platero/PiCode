@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IDialogHandler, IDialogResult, IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
@@ -39,6 +40,7 @@ export class DialogHandlerContribution extends Disposable implements IWorkbenchC
 		@IClipboardService clipboardService: IClipboardService,
 		@INativeHostService private nativeHostService: INativeHostService,
 		@IWorkbenchEnvironmentService private environmentService: IWorkbenchEnvironmentService,
+		@ICommandService private commandService: ICommandService,
 	) {
 		super();
 
@@ -87,7 +89,14 @@ export class DialogHandlerContribution extends Disposable implements IWorkbenchC
 
 				// About
 				else {
-					const aboutDialogDetails = createNativeAboutDialogDetails(this.productService, await this.nativeHostService.getOSProperties());
+					// The agent versions come from the connector: the pi in force and Gentle AI when
+					// it is installed. The About must open even when the connector is not up yet, so
+					// a failure is simply no agent lines.
+					let agents: { piVersion?: string; gentleVersion?: string } | undefined;
+					try {
+						agents = await this.commandService.executeCommand<{ piVersion?: string; gentleVersion?: string }>('picode.setup.aboutVersions');
+					} catch { /* no connector: the editor's own facts are still shown */ }
+					const aboutDialogDetails = createNativeAboutDialogDetails(this.productService, await this.nativeHostService.getOSProperties(), agents);
 
 					if (this.useCustomDialog) {
 						await this.browserImpl.value.about(aboutDialogDetails.title, aboutDialogDetails.details, aboutDialogDetails.detailsToCopy);

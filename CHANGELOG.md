@@ -7,6 +7,27 @@ All notable changes to PiCode are documented here. The format is based on
 Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
 (the owner removed them; the process lives in `docs/CI.md`).
 
+## [Unreleased]
+
+### Changed
+- **El chat ya no pide permiso para lo que PiCode no considera peligroso.** Las sesiones nuevas
+  arrancan en **Bypass Approvals** (`chat.permissions.default`), así que la única puerta que
+  pregunta es la de las extensiones del runtime —el guard de comandos destructivos de Gentle AI—.
+  Antes, PiCode pedía permiso por cada `bash`/`edit`/`write` además de lo que pidiera gentle, y el
+  dueño veía dos preguntas por el mismo comando. «Default Permissions» sigue a un clic en el
+  picker para quien lo quiera.
+- **El About enseña PiCode, pi y Gentle AI.** Se quitan las dos líneas de Copilot
+  (`@github/copilot`, `@github/copilot-sdk`) y en su lugar aparecen `PiCode` (la versión propia),
+  `pi` (el pi en vigor) y `Gentle AI` (solo cuando está instalado). El conector responde las dos
+  últimas con el comando `picode.setup.aboutVersions`. De paso, `ElectronBuildId` deja de
+  imprimir `undefined`.
+
+### Fixed
+- **El texto del chat no se corta por abajo.** El margen inferior de la respuesta en curso solo
+  se reservaba cuando su último bloque era markdown; con la respuesta terminando en una llamada a
+  herramienta —lo normal mientras el agente trabaja— la última fila quedaba cortada. Ahora se
+  reserva siempre.
+
 ## [0.1.2-beta] — 2026-10-04
 
 ### Added
