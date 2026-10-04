@@ -326,7 +326,7 @@ MCP library** (`@earendil-works/pi-mcp@1.0.2`), so the transports are the ones t
 already lives with. Every server tool becomes a durable tool named `mcp__<server>__<tool>`
 (anything that is not a letter, a digit or `_` becomes `_`, as pi does it).
 
-What it found on this machine — **11 configured, 8 connected, 174 tools**:
+What it found on this machine — **11 configured, 9 connected, 188 tools**:
 
 | Server | Tools | Note |
 | --- | --- | --- |
@@ -334,23 +334,35 @@ What it found on this machine — **11 configured, 8 connected, 174 tools**:
 | codegraph | 1 | stdio |
 | engram | 19 | stdio |
 | firebase | 62 | stdio |
-| github | 46 | streamable HTTP |
+| github | 46 | streamable HTTP, authenticates through its configured `Authorization` header |
 | repomix | 6 | stdio |
+| sentry | 14 | streamable HTTP, authenticated with pi's stored OAuth token (see below) |
 | sequential-thinking | 1 | stdio |
 | supabase-mcp-server | 29 | stdio |
-| atlassian-rovo-mcp | — | `McpAuthRequiredError`: needs OAuth |
-| sentry | — | `McpAuthRequiredError`: needs OAuth |
-| vercel | — | `McpAuthRequiredError`: needs OAuth |
+| atlassian-rovo-mcp | — | `stored sign-in expired — run: pi mcp login atlassian-rovo-mcp` |
+| vercel | — | `stored sign-in expired — run: pi mcp login vercel` |
 
-The three OAuth servers fail with pi-mcp's own error. **Wiring the tokens the owner already
-has is not done yet** — that is the next step, not a hidden limitation. A server that is down
-is reported rather than quietly dropped from the list, and `firebase` shows why that matters:
-it timed out on one run and connected with 62 tools on the next. The connection is flaky; the
-bridge is not.
+The remaining two fail with the exact command that fixes them, and nothing else: pi already
+holds OAuth credentials for them in `~/.pi/agent/mcp-auth.json` (written by pi's own
+`mcp login` / `/mcp login`), but their stored access tokens have expired.
+
+**The bridge uses those credentials READ-ONLY, deliberately.** It sends a stored token only
+while it is still valid, and never refreshes. That is not missing functionality: OAuth
+servers commonly ROTATE refresh tokens on use, so a refresh here would invalidate the grant
+pi has stored — whether or not the new tokens were kept — and break sign-ins the owner
+already has in pi. The owner's standing rule says the same thing from the other side:
+PiCode never writes into pi's directory. So the store's `save()` throws, the OAuth flow is
+never started, and a server whose token is gone fails with `pi mcp login <server>` — a
+step only the owner can take. A sign-in or refresh pi performs in ANOTHER process is
+picked up live, since consuming a rotation pi made is fine; making one here is not.
+
+A server that is down is reported rather than quietly dropped from the list, and `firebase`
+shows why that matters: it timed out on one run and connected with 62 tools on the next.
+The connection is flaky; the bridge is not.
 
 #### The size problem, solved by not declaring them
 
-Those 174 tools declared would be **≈ 238.7 KiB of schemas in every single request**. So they
+Those 188 tools declared would be **≈ 275.6 KiB of schemas in every single request**. So they
 are not declared. Durable has the mechanism for exactly this (spec 7.3): a conversation may
 carry a `tools` **filter**, and a tool result may ask for names through `control.addTools`,
 which the generation's tools phase adds to that filter — offered from the next preparation
@@ -361,14 +373,17 @@ place, and prints both numbers every time:
 
 ```text
 [mcp] 11 server(s) configured (profile mcp.json)
-[mcp] atlassian-rovo-mcp: NOT CONNECTED (McpAuthRequiredError: MCP server requires authentication)
+[mcp] oauth credentials: READ-ONLY from C:\Users\tapla\.pi\agent\mcp-auth.json (never written, never refreshed)
+[mcp] atlassian-rovo-mcp: NOT CONNECTED (stored sign-in expired — run: pi mcp login atlassian-rovo-mcp)
 [mcp] codegraph: connected, 1 tools
 [mcp] firebase: connected, 62 tools
 [mcp] github: connected, 46 tools
-[mcp] prompt cost: all 174 tool(s) declared ≈ 238.7 KiB; deferred ≈ 0.9 KiB
+[mcp] sentry: connected, 14 tools
+[mcp] vercel: NOT CONNECTED (stored sign-in expired — run: pi mcp login vercel)
+[mcp] prompt cost: all 188 tool(s) declared ≈ 275.6 KiB; deferred ≈ 0.9 KiB
 ```
 
-That is the whole argument for the deferral, measured rather than asserted: **238.7 KiB → 0.9
+That is the whole argument for the deferral, measured rather than asserted: **275.6 KiB → 0.9
 KiB**, in one request you are not paying, and the number is printed every run instead of
 being quoted from a plan.
 
@@ -388,6 +403,20 @@ And end to end, the model using one of them — note that nothing in the prompt 
 
 That run answered `57` on stdout. The tool it called was not offered, and could not have
 been: it was taken out of the conversation's filter at creation and put back by the search.
+
+The same shape proves the OAuth wiring end to end — `sentry` authenticates with pi's stored
+token, the bridge never sees or handles the token itself beyond handing it to pi-mcp's
+transport (annotated `readOnlyHint: true`, so `replay: "safe"`):
+
+```text
+[tool] mcp_tools {"query":"find_organizations"}
+[tool result] sentry (connected):
+  mcp__sentry__find_organizations — Find organizations that the user has access to in Sentry. …
+
+[tool] mcp__sentry__find_organizations {}
+[tool result] { "organizations": [ { "slug": "tomasplatero", … } ], "hasMore": false }
+tomasplatero
+```
 
 **Replay.** Durable's `replay` policy decides what happens to a call that a crash
 interrupted: `"safe"` reruns it, the default (`"unsafe"`) does not and the model is told

@@ -19,6 +19,17 @@
 // the prompt. The model searches with it and the matches become callable. `mcpPromptCost()`
 // reports both numbers, so the saving is measured rather than asserted.
 //
+// ## OAuth credentials, and why they are used READ-ONLY
+//
+// Remote servers whose `mcp.json` entry is a `url` need a bearer token. pi already stores
+// one per server in its agent directory (`~/.pi/agent/mcp-auth.json`, written by pi's own
+// `mcp login` / `/mcp login`) — this bridge reads it and never writes it. Not even a
+// refresh: OAuth servers commonly ROTATE refresh tokens on use, so a refresh here would
+// invalidate the grant pi has stored whether or not the new tokens were kept, and the
+// owner's standing rule is that PiCode never writes into pi's directory. A token is sent
+// only while it is still valid; an expired or missing one fails with the exact command
+// that fixes it (`pi mcp login <server>`), which only the owner can run.
+//
 // ## Replay
 //
 // Durable's `replay` policy decides what happens to a call that was interrupted by a crash.
@@ -28,10 +39,12 @@
 // what decides, and a server that does not annotate its tools gets the cautious treatment.
 
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { McpClient, StdioTransport, StreamableHttpTransport } from "@earendil-works/pi-mcp";
+import { McpOAuthProvider } from "@earendil-works/pi-mcp/oauth";
 
 /** The one MCP-shaped tool that is always offered; everything else waits to be found. */
 export const DISCOVERY_TOOL = "mcp_tools";
@@ -118,23 +131,138 @@ export function loadMcpConfig(profileDir, cwd = process.cwd()) {
 	return { servers, sources };
 }
 
+// --- OAuth credentials pi already stored (READ-ONLY; see the file header) --------
+
+/**
+ * Where pi (the CLI and the editor) keeps MCP OAuth credentials. Override with
+ * `PI_MCP_AUTH_FILE`, the same way `PI_AGENT_PROFILE` overrides the profile directory.
+ */
+export function mcpAuthPath() {
+	return process.env.PI_MCP_AUTH_FILE || join(homedir(), ".pi", "agent", "mcp-auth.json");
+}
+
+/**
+ * The key pi stores a server's OAuth state under, by pi's own rule (`mcpNamespace` +
+ * `storeKeys` in pi-coding-agent): `mcp__<name with - → _>|<normalized URL>`. `legacyKey`
+ * is the URL-only key older pi versions wrote; it is read for compatibility, never written.
+ */
+export function mcpAuthKey(name, serverUrl) {
+	const urlKey = String(new URL(serverUrl));
+	return { key: `mcp__${String(name).replace(/-/g, "_")}|${urlKey}`, legacyKey: urlKey };
+}
+
+/**
+ * pi's `McpOAuthStateStore` over pi's own `mcp-auth.json`, READ-ONLY.
+ *
+ * Why read-only — so nobody "fixes" this into a refresh later: the file stores a refresh
+ * token next to the access token, and many OAuth servers ROTATE refresh tokens on use. A
+ * refresh here would hand out a new refresh token and leave pi's stored one dead — whether
+ * or not the new tokens were kept — breaking the sign-ins the owner already has in pi. The
+ * owner's standing rule is also that PiCode never writes into pi's directory. So `save()`
+ * throws instead of writing: every write path of the OAuth flow is unreachable by design.
+ */
+class ReadOnlyMcpAuthStore {
+	#file;
+	#key;
+	#legacyKey;
+	constructor(file, name, serverUrl) {
+		this.#file = file;
+		({ key: this.#key, legacyKey: this.#legacyKey } = mcpAuthKey(name, serverUrl));
+	}
+	load() {
+		try {
+			const states = JSON.parse(readFileSync(this.#file, "utf8"));
+			const state = states?.[this.#key] ?? states?.[this.#legacyKey];
+			return state && typeof state === "object" ? state : undefined;
+		} catch {
+			// No file, or not JSON: the same fact as "no stored sign-in", not an error.
+			return undefined;
+		}
+	}
+	save() {
+		throw new Error("the MCP bridge reads pi's mcp-auth.json READ-ONLY and never writes credentials");
+	}
+}
+
+/** The one line the owner can act on, naming the server as pi's CLI knows it. */
+const loginAdvice = (name) => `run: pi mcp login ${name}`;
+
+/**
+ * The transport's `authProvider` for one HTTP server, built ONLY from what pi already
+ * stored. The stored `tokensExpireAt` decides BEFORE anything is sent: a token is used
+ * only while it is still valid; an expired one fails with `loginAdvice` instead of a
+ * doomed request. `McpOAuthProvider` is the library's own reader for this file format;
+ * its flow is never started (`onRedirect` throws) and its `save()` throws, so nothing
+ * here can write or refresh.
+ *
+ * Outcome `"none"` (pi has no sign-in for the server) is NOT an error here: the entry may
+ * authenticate itself through configured `headers` (github does), so the caller decides.
+ */
+export function storedMcpAuth(name, serverUrl, { authFile = mcpAuthPath(), now = Date.now() } = {}) {
+	const store = new ReadOnlyMcpAuthStore(authFile, name, serverUrl);
+	const provider = new McpOAuthProvider({
+		serverUrl,
+		// pi's own fallback redirect URL. Never used: no flow is ever started below.
+		redirectUrl: "http://127.0.0.1/callback",
+		clientMetadata: { client_name: "picode-durable-experiment" },
+		store,
+		onRedirect: () => {
+			throw new Error(`stored sign-in unusable — ${loginAdvice(name)}`);
+		},
+	});
+	const state = store.load();
+	if (!state?.tokens?.access_token) {
+		return { outcome: "none" };
+	}
+	if (state.tokensExpireAt !== undefined && state.tokensExpireAt <= now) {
+		return { outcome: "expired", error: `stored sign-in expired — ${loginAdvice(name)}` };
+	}
+	return {
+		outcome: "stored",
+		authProvider: {
+			// Re-read through the provider on every request, so a sign-in or refresh pi
+			// performs in ANOTHER process while this bridge runs is picked up live —
+			// consuming a rotation pi made is fine; making one here is not.
+			token: async () => (await provider.tokens())?.access_token,
+			onUnauthorized: async () => {
+				throw new Error(`MCP server rejected the stored sign-in (expired or revoked) — ${loginAdvice(name)}, then restart`);
+			},
+		},
+	};
+}
+
 /**
  * Connects every server, in configuration order. One that cannot connect does not stop the
  * others: it is kept in the list with its error, because "this server is down" and "this
  * server is not configured" are different facts and the owner should see the first one.
  *
- * Servers that need OAuth fail here with pi-mcp's `McpAuthRequiredError`; the tokens the
- * owner already has live in the profile and are read by pi-mcp's own auth provider, which
- * this experiment does not wire up yet. That is reported, not hidden.
+ * An HTTP server whose OAuth state pi has stored gets that token on every request (valid
+ * ones only — see `storedMcpAuth`). Without a stored sign-in there are two honest paths:
+ * an entry that authenticates itself through `headers` connects as configured, and one
+ * with neither fails fast with the `pi mcp login` line instead of a request that cannot
+ * succeed. An expired stored sign-in always fails fast: a doomed request would say less.
  */
-export async function connectMcpServers(servers, { timeoutMs = CONNECT_TIMEOUT_MS, cwd = process.cwd() } = {}) {
+export async function connectMcpServers(servers, { timeoutMs = CONNECT_TIMEOUT_MS, cwd = process.cwd(), authFile = mcpAuthPath() } = {}) {
 	const connections = [];
 	for (const [name, entry] of servers) {
 		const connection = { name, entry, status: "failed", tools: [], error: undefined, client: undefined };
 		connections.push(connection);
 		try {
+			let authProvider;
+			if (entry.url) {
+				const stored = storedMcpAuth(name, entry.url, { authFile });
+				const ownHeaders = entry.headers !== undefined
+					&& Object.values(expandMap(entry.headers)).some(value => String(value).length > 0);
+				if (stored.outcome === "stored") {
+					authProvider = stored.authProvider;
+				} else if (stored.outcome === "expired" || !ownHeaders) {
+					connection.error = stored.error ?? `no stored sign-in — ${loginAdvice(name)}`;
+					continue;
+				}
+				// outcome "none" with own headers: the entry authenticates itself; connect.
+			}
 			const transport = entry.url
-				? new StreamableHttpTransport({ url: entry.url, headers: expandMap(entry.headers) })
+				? new StreamableHttpTransport({ url: entry.url, headers: expandMap(entry.headers), authProvider })
 				: new StdioTransport({
 					command: expand(entry.command),
 					args: (entry.args ?? []).map(expand),
@@ -397,7 +525,7 @@ export const NO_BRIDGE = { connections: [], extension: undefined, filter: undefi
  * printed for both ways round: the experiment's whole claim about size is that number.
  * Why the bridge is on or off was already printed by the [settings] lines.
  */
-export async function connectBridge(enabled, profileDir) {
+export async function connectBridge(enabled, profileDir, { authFile = mcpAuthPath() } = {}) {
 	if (!enabled) {
 		console.error("[mcp] disabled: the agent runs without MCP tools.");
 		return NO_BRIDGE;
@@ -408,7 +536,10 @@ export async function connectBridge(enabled, profileDir) {
 		return NO_BRIDGE;
 	}
 	console.error(`[mcp] ${config.servers.size} server(s) configured (${config.sources.join(", ")})`);
-	const connections = await connectMcpServers(config.servers);
+	if ([...config.servers.values()].some(entry => entry.url)) {
+		console.error(`[mcp] oauth credentials: READ-ONLY from ${authFile} (never written, never refreshed)`);
+	}
+	const connections = await connectMcpServers(config.servers, { authFile });
 	for (const connection of connections) {
 		console.error(connection.status === "connected"
 			? `[mcp] ${connection.name}: connected, ${connection.tools.length} tools`
