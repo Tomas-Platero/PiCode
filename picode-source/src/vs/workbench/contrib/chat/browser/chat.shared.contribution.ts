@@ -516,7 +516,7 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.permissions.default.settingDescription', "Controls the default permissions picker mode for new local chat sessions. You can still change the permission mode per session, and each session remembers the permission mode that was used. If enterprise policy disables auto approval, new sessions use Default Permissions."),
 			// PiCode: new sessions start in Bypass Approvals. The chat's own gate would otherwise
 			// ask for every mutating command, duplicating what the runtime's extensions already
-			// gate (Gentle AI's destructive-command guard) — the owner asked for exactly those
+			// gate (the destructive-command guard) — the owner asked for exactly those
 			// questions and nothing else. "Default Permissions" is still one pick away.
 			default: ChatPermissionLevel.AutoApprove,
 		},

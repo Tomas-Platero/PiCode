@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
@@ -18,37 +18,27 @@ import { npmInstallSpec } from './packages-registry';
  *
  * The setup itself lives in the welcome page — the same window, no popups. This module is
  * the half the workbench renderer cannot do by itself: probing whether an external pi
- * exists, installing or removing Gentle AI with pi's own CLI, and remembering that the
- * setup already happened. The page renders the choices and calls these commands; the
- * commands act and answer with the state that is now true.
- *
- * ## Gentle AI follows the internal pi
- *
- * Gentle AI is installed into **PiCode's own profile**, which is the internal pi's. The
- * external pi keeps its own profile on this machine, which this editor never writes to —
- * so when the external pi is chosen the welcome page does not even ask about Gentle AI,
- * and this bridge exposes no way to install it there.
+ * exists, importing its profile, and remembering that the setup already happened. The page
+ * renders the choices and calls these commands; the commands act and answer with the state
+ * that is now true.
  */
 
 /** Opens the welcome page, where the setup is rendered. */
 export const SETUP_COMMAND = 'picode.setup';
 
-/** The state the welcome page renders: which pi, is it there, is Gentle AI in. */
+/** The state the welcome page renders: which pi, and is it there. */
 export const GET_STATE_COMMAND = 'picode.setup.getState';
 
 /**
- * The versions the editor's About dialog shows: the pi **in force** and Gentle AI when it is
- * installed. A dedicated command rather than {@link GET_STATE_COMMAND} because the About wants
- * the running pi (the external one when that is the runtime), not the shipped one, and nothing
- * else the setup state carries.
+ * The version the editor's About dialog shows: the pi **in force**. A dedicated command
+ * rather than {@link GET_STATE_COMMAND} because the About wants the running pi (the external
+ * one when that is the runtime), not the shipped one, and nothing else the setup state
+ * carries.
  */
 export const ABOUT_VERSIONS_COMMAND = 'picode.setup.aboutVersions';
 
 /** Applies a runtime choice and answers with the resulting state. */
 export const APPLY_RUNTIME_COMMAND = 'picode.setup.applyRuntime';
-
-/** Installs or removes Gentle AI (internal pi only) and answers with the result. */
-export const APPLY_GENTLE_COMMAND = 'picode.setup.applyGentle';
 
 /** Records that the setup happened (called by the page after a theme choice). */
 export const COMPLETE_COMMAND = 'picode.setup.complete';
@@ -82,11 +72,8 @@ export const IMPORT_CREDENTIALS_COMMAND = 'picode.setup.importCredentials';
  */
 export const IMPORT_SESSIONS_COMMAND = 'picode.importExternalSessions';
 
-/** The import's live state, answered to the page's poll — the same pattern as the Gentle log. */
+/** The import's live state, answered to the page's poll. */
 export const IMPORT_LOG_COMMAND = 'picode.setup.importLog';
-
-/** The Gentle install's live output, polled by the page while the install runs. */
-export const GENTLE_LOG_COMMAND = 'picode.setup.gentleLog';
 
 /** What the probe answers about the machine's pi. */
 export interface ExternalPiInfo {
@@ -97,12 +84,6 @@ export interface ExternalPiInfo {
 
 /** The "the setup already happened" mark, in this extension's own global state. */
 const DONE_KEY = 'picode.onboarding.done';
-
-/** The packages Gentle AI is made of, as pi knows them. */
-const GENTLE_PACKAGES = ['npm:gentle-pi', 'npm:gentle-engram'] as const;
-
-/** The directories an installed Gentle AI leaves inside the profile it was installed into. */
-export const GENTLE_PACKAGE_DIRS = ['gentle-pi', 'gentle-engram'] as const;
 
 export interface SetupDeps {
 	/** The distribution root: where pi's CLI and the profile live. */
@@ -125,26 +106,14 @@ export interface SetupState {
 	readonly runtime: 'internal' | 'external';
 	/** Whether the external pi (the machine's) could be found on the PATH. */
 	readonly externalAvailable: boolean;
-	readonly gentleInstalled: boolean;
 	/** The version of the internal pi, from its own package manifest. */
 	readonly internalPiVersion?: string;
-	/** The version of Gentle AI when it is installed, from its package manifest. */
-	readonly gentleVersion?: string;
 }
 
-/** The answer of an action that may fail, with the reason for a failed one. */
-export interface SetupActionError {
-	readonly error?: string;
-}
-
-/** What the About dialog shows: the pi in force, and Gentle AI only when it is installed. */
+/** What the About dialog shows: the version of the pi in force. */
 export interface AboutVersions {
 	readonly piVersion?: string;
-	readonly gentleVersion?: string;
 }
-
-/** The Gentle installer's live state, answered to the page's poll. */
-const gentleLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
 
 /** The import's live state: the page polls it to draw its progress bar. */
 const importLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
@@ -154,40 +123,6 @@ function logImport(line: string): void {
 	if (importLog.lines.length > 12) {
 		importLog.lines.splice(0, importLog.lines.length - 12);
 	}
-}
-
-function logGentle(line: string): void {
-	gentleLog.lines.push(line);
-	if (gentleLog.lines.length > 12) {
-		gentleLog.lines.splice(0, gentleLog.lines.length - 12);
-	}
-}
-
-/**
- * Adds or removes the two Gentle sources in the profile's `settings.json` — the file pi
- * reads its package list from. This is what `pi install` / `pi remove` write; doing it
- * here is what keeps the install inside npm calls we hide, instead of pi's installer
- * flashing console windows.
- */
-function editProfilePackages(deps: SetupDeps, add: boolean): void {
-	const file = path.join(deps.profileDir, 'settings.json');
-	let settings: Record<string, unknown> = {};
-	try {
-		const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
-		if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-			settings = value as Record<string, unknown>;
-		}
-	} catch {
-		// No file yet, or a malformed one: a fresh profile starts from an empty object and
-		// the first write creates it.
-	}
-	const packages = Array.isArray(settings['packages']) ? settings['packages'].filter((p): p is string => typeof p === 'string') : [];
-	const next = add
-		? [...new Set([...packages, ...GENTLE_PACKAGES.map(p => p.replace(/^npm:/, 'npm:'))])]
-		: packages.filter(p => !GENTLE_PACKAGES.some(g => p === g || p === g.replace(/^npm:/, '')));
-	settings['packages'] = next;
-	mkdirSync(deps.profileDir, { recursive: true });
-	writeFileSync(file, JSON.stringify(settings, undefined, '\t') + '\n');
 }
 
 /**
@@ -269,9 +204,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 	const state = (): SetupState => ({
 		runtime: readRuntimeMode(),
 		externalAvailable: externalSdkEntry() !== undefined,
-		gentleInstalled: isGentleInstalled(deps.profileDir),
 		internalPiVersion: readInternalPiVersion(deps.distributionRoot),
-		gentleVersion: readGentleVersion(deps.profileDir),
 	});
 
 	const markDone = (): void => {
@@ -286,11 +219,8 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			const piVersion = readRuntimeMode() === 'external'
 				? (await probeExternalPi()).version
 				: readInternalPiVersion(deps.distributionRoot);
-			// Gentle lives in PiCode's own profile, so with the external pi it is simply absent.
-			const gentleVersion = isGentleInstalled(deps.profileDir) ? readGentleVersion(deps.profileDir) : undefined;
 			return {
 				...(piVersion === undefined ? {} : { piVersion }),
-				...(gentleVersion === undefined ? {} : { gentleVersion }),
 			};
 		}),
 		vscode.commands.registerCommand(APPLY_RUNTIME_COMMAND, async (mode: unknown): Promise<SetupState> => {
@@ -308,79 +238,6 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			markDone();
 			return state();
 		}),
-		vscode.commands.registerCommand(APPLY_GENTLE_COMMAND, async (enable: unknown): Promise<SetupState & SetupActionError> => {
-			if (enable !== true && enable !== 'install' && enable !== 'update' && enable !== 'remove' && enable !== false) {
-				throw new Error('PiCode: the Gentle AI action needs install, update or remove.');
-			}
-			// Gentle AI lives in PiCode's own profile — the internal pi's. With the external pi
-			// there is nothing to install into that this editor may write to.
-			if (readRuntimeMode() === 'external') {
-				return { ...state(), error: 'Gentle AI follows the internal pi. Your external pi keeps its own profile, which this editor never writes to.' };
-			}
-			const want = enable === 'update' ? 'update' : enable === true || enable === 'install' ? 'install' : 'remove';
-			// The installer is OURS, not pi's: `pi install` flashes console windows (its own
-			// npm children are spawned without a hidden console) and says nothing until it
-			// ends. What it writes is simple - the two sources in the profile's
-			// `settings.json`, then npm into the profile's npm project - so the steps run
-			// here, hidden, each one logged for the card to show live.
-			gentleLog.running = true;
-			gentleLog.lines = [];
-			gentleLog.step = 0;
-			gentleLog.total = want === 'remove' ? 2 : 5;
-			try {
-				if (want === 'remove') {
-					logGentle("[1/2] Removing Gentle AI from pi's configuration…");
-					editProfilePackages(deps, false);
-					gentleLog.step = 1;
-					logGentle('[2/2] Removed. New conversations run plain pi.');
-					gentleLog.step = 2;
-				} else {
-					logGentle("[1/5] Recording Gentle AI in pi's configuration…");
-					editProfilePackages(deps, true);
-					gentleLog.step = 1;
-					logGentle('[2/5] Installing the packages with npm (this downloads the agent)…');
-					// `--legacy-peer-deps` is what makes an UPDATE possible. gentle-pi declares the pi
-					// host as an OPTIONAL peer (`@earendil-works/pi-coding-agent`, v4 asks for
-					// `>=0.99.1`), and the profile's npm tree already hoists an older pi as the peer of
-					// every other package. npm's strict resolver then aborts the update with ERESOLVE
-					// even though the host that actually runs — the pinned pi under
-					// `resources/pi-runtime` — satisfies gentle. The nested copy is not the host, so
-					// ignoring peers is the honest resolution rather than a workaround.
-					await runNpm(deps, ['install', '--save', '--legacy-peer-deps', 'gentle-pi', 'gentle-engram']);
-					gentleLog.step = 2;
-					logGentle('[3/5] Approving install scripts…');
-					await runNpm(deps, ['approve-scripts', 'gentle-pi']);
-					await runNpm(deps, ['approve-scripts', 'gentle-engram']);
-					gentleLog.step = 3;
-					logGentle('[4/5] Rebuilding so the approved script runs (fetches the agent)…');
-					await runNpm(deps, ['rebuild', 'gentle-pi', 'gentle-engram']);
-					gentleLog.step = 4;
-					logGentle('[5/5] Checking what landed on disk…');
-					gentleLog.step = 5;
-				}
-			} catch (error) {
-				gentleLog.running = false;
-				logGentle(messageOf(error));
-				throw error;
-			}
-			gentleLog.running = false;
-			// Gentle's agents, skills and commands load when pi's session is created; the
-			// live session is disposed so the next message rebuilds with them in.
-			deps.resetChat();
-			// And the editor gets Gentle's skills as /commands and its agents in the agent
-			// picker: they are mirrored into the profile's own folders and those folders
-			// are registered as chat sources. Removal unregisters.
-			mirrorGentleIntoProfile(deps, want !== 'remove');
-			await registerChatSources(deps, want !== 'remove');
-			markDone();
-			const after = state();
-			// The honest answer is what is actually on disk now, not what the command hoped:
-			// a failed change is reported as an error line in the page, not as success.
-			const wantedInstalled = want !== 'remove';
-			return after.gentleInstalled === wantedInstalled
-				? after
-				: { ...after, error: `pi's command line did not ${want} Gentle AI. See the notification for the reason.` };
-		}),
 		vscode.commands.registerCommand(COMPLETE_COMMAND, (): void => markDone()),
 		vscode.commands.registerCommand(END_FOR_GOOD_COMMAND, async (): Promise<void> => {
 			markDone();
@@ -393,7 +250,6 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),
-		vscode.commands.registerCommand(GENTLE_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...gentleLog, lines: [...gentleLog.lines] })),
 		vscode.commands.registerCommand(IMPORT_COMMAND, async (credentials: unknown) => {
 			// One import at a time: the page starts it and watches the log.
 			if (importLog.running) {
@@ -459,7 +315,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// One npm run for the whole list, not one per package. A run per package put a
 				// console window on screen for each of them — twenty packages, twenty windows —
 				// and the installs do not depend on each other: npm takes the whole list in a
-				// single command, exactly as the gentle-ai install above already does.
+				// single command, exactly as any one-package install does.
 				const specs: string[] = [];
 				for (const source of declared) {
 					const spec = npmInstallSpec(source);
@@ -502,7 +358,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				logImport('Refreshing your models and connections…');
 				deps.forgetRuntime();
 				deps.refreshModels();
-				// Gentle AI may have just arrived with the packages: the running chat session
+				// The packages may have just landed on disk: the running chat session
 				// still holds the pre-import pi. The next conversation loads what landed.
 				deps.resetChat();
 				deps.sessionsChanged();
@@ -547,107 +403,14 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 	];
 }
 
-/** Recursively copies a directory tree, creating the destination as needed. */
-function copyTree(from: string, to: string): void {
-	if (!existsSync(from)) {
-		return;
-	}
-	mkdirSync(to, { recursive: true });
-	for (const entry of readdirSync(from, { withFileTypes: true })) {
-		const source = path.join(from, entry.name);
-		const target = path.join(to, entry.name);
-		if (entry.isDirectory()) {
-			copyTree(source, target);
-		} else if (entry.isFile()) {
-			writeFileSync(target, readFileSync(source));
-		}
-	}
-}
-
-/**
-	* Mirrors Gentle AI's skills and agents into the profile's own `skills/` and
-		* `agents/` folders - the folders the editor's chat scans for `/commands` and
-		* agent picker entries. The package itself stays the source; this is a copy.
-	*/
-function mirrorGentleIntoProfile(deps: SetupDeps, enable: boolean): void {
-	if (!enable) {
-		return; // removal unregisters the sources; the mirrored copies are left orphaned-free
-	}
-	const packageDir = path.join(deps.profileDir, 'npm', 'node_modules', 'gentle-pi');
-	copyTree(path.join(packageDir, 'skills'), path.join(deps.profileDir, 'skills'));
-	// The editor's agent scanner only picks up `*.agent.md` in the agents folders, so the
-	// mirrors are renamed on the way in: gentle-ai-explore.md -> gentle-ai-explore.agent.md.
-	const agentsFrom = path.join(packageDir, 'assets', 'agents');
-	const agentsTo = path.join(deps.profileDir, 'agents');
-	mkdirSync(agentsTo, { recursive: true });
-	if (existsSync(agentsFrom)) {
-		for (const entry of readdirSync(agentsFrom)) {
-			if (!entry.endsWith('.md')) {
-				continue;
-			}
-			const base = entry.slice(0, -'.md'.length);
-			writeFileSync(path.join(agentsTo, base + '.agent.md'), readFileSync(path.join(agentsFrom, entry)));
-		}
-	}
-}
-
-/**
-	* Registers (or unregisters) the profile's skills and agents folders as chat
-		* sources (`chat.agentSkillsLocations` / `chat.agentFilesLocations`).
-	*/
-async function registerChatSources(deps: SetupDeps, enable: boolean): Promise<void> {
-	const skillsKey = (deps.profileDir + '/skills').replace(/\\/g, '/');
-	const agentsKey = (deps.profileDir + '/agents').replace(/\\/g, '/');
-	const configuration = vscode.workspace.getConfiguration();
-
-	const skills = configuration.get<Record<string, boolean>>('chat.agentSkillsLocations', {});
-	const nextSkills: Record<string, boolean> = { ...skills };
-	if (enable) {
-		nextSkills[skillsKey] = true;
-	} else {
-		delete nextSkills[skillsKey];
-	}
-	await configuration.update('chat.agentSkillsLocations', nextSkills, vscode.ConfigurationTarget.Global);
-
-	const agents = configuration.get<Record<string, boolean>>('chat.agentFilesLocations', {});
-	const nextAgents: Record<string, boolean> = { ...agents };
-	if (enable) {
-		nextAgents[agentsKey] = true;
-	} else {
-		delete nextAgents[agentsKey];
-	}
-	await configuration.update('chat.agentFilesLocations', nextAgents, vscode.ConfigurationTarget.Global);
-}
-
-
-/** Whether Gentle AI is installed in the given profile. */
 /** The sentence an error carries, whatever threw it. */
 function messageOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export function isGentleInstalled(profileDir: string): boolean {
-	return GENTLE_PACKAGE_DIRS.every(dir => existsSync(path.join(profileDir, 'npm', 'node_modules', dir)));
-}
-
 /** A file's text; throws so the caller decides what a missing file means. */
 function readTextFile(file: string): string {
 	return readFileSync(file, 'utf8');
-}
-
-/** Any package's installed version, from its manifest under the profile's npm tree; undefined when it is not there. */
-export function readProfilePackageVersion(profileDir: string, name: string): string | undefined {
-	try {
-		const value: unknown = JSON.parse(readTextFile(path.join(profileDir, 'npm', 'node_modules', name, 'package.json')));
-		return typeof (value as { version?: unknown }).version === 'string' ? (value as { version: string }).version : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-/** The installed Gentle AI's version, from its own manifest; undefined when it is not there. */
-export function readGentleVersion(profileDir: string): string | undefined {
-	return readProfilePackageVersion(profileDir, 'gentle-pi');
 }
 
 /** The internal pi's version, from the manifest of the copy PiCode ships. */

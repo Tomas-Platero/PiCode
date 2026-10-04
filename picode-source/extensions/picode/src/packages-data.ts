@@ -17,7 +17,7 @@ import type { FsReader, ResourceSource } from './customizations';
  *
  * - **The declarations**: `settings.json`'s `packages`, read exactly as this connector already
  *   writes it (`onboarding.ts` filters `typeof p === 'string'`) and as pi documents it
- *   (`docs/packages.md`): a string (`"npm:gentle-pi"`) or an object with a `source`. The
+ *   (`docs/packages.md`): a string (`"npm:some-package"`) or an object with a `source`. The
  *   per-scope files are `<profile>/settings.json` and `<workspace>/.pi/settings.json`
  *   (`settings-manager.js:61`), and a project's declarations only count while the project is
  *   trusted — pi itself throws project settings away when it is not (`loadFromStorage`), so this
@@ -130,7 +130,7 @@ function npmName(spec: string): string | undefined {
  *
  * The three kinds and their spellings are pi's own: `npm:` for npm, then a local path for anything
  * that is not a package source or a remote protocol (`isLocalPath`), then a git repository for
- * `git:`/`http(s)://`/`ssh://` (`parseGitUrl`). A bare name (`gentle-pi`) is a local path for pi,
+ * `git:`/`http(s)://`/`ssh://` (`parseGitUrl`). A bare name (`some-package`) is a local path for pi,
  * so it is one here too.
  */
 export function parsePackageSource(raw: unknown): PackageSource | undefined {
@@ -357,7 +357,7 @@ export function piPackages(scopes: readonly PackageScope[], read: FsReader): Pac
 /**
  * The skill directories one package contributes.
  *
- * A package says where its skills are (`pi.skills` in its manifest, as `gentle-pi` does with
+ * A package says where its skills are (`pi.skills` in its manifest, as any npm package does with
  * `["./skills"]`); without that manifest key, the conventional `skills/` directory is the answer.
  * An entry that is a glob is walked from its literal part — `./resources/skills/*` reads
  * `./resources/skills` — because the pattern's job is usually just to name the directory, and the

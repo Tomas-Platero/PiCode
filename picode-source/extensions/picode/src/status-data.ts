@@ -5,11 +5,11 @@
 
 import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { getSessionUsage } from './agent';
 import { declarationsFromSetting, isRecord } from './declarations';
-import { isGentleInstalled, probeExternalPi, readGentleVersion, readInternalPiVersion } from './onboarding';
+import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
 import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
@@ -19,7 +19,7 @@ import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKe
  * The data behind the PiCode status view.
  *
  * One call answers the whole tree: the pi in force and its version, the providers pi has, the
- * default model, the MCP servers, Gentle AI's state, the session's usage and cost, and the
+ * default model, the MCP servers, the session's usage and cost, and the
  * project's branch, pending files and diff totals. What `status-view.ts` draws is exactly this,
  * so the shape returned here is that module's `StatusData` contract and nothing else.
  *
@@ -57,15 +57,6 @@ function readJsonObject(file: string): Record<string, unknown> | undefined {
 	} catch {
 		// A profile that is absent or half-written is "no fact yet", not an error to surface.
 		return undefined;
-	}
-}
-
-/** The directories directly under `dir`, counted; 0 when it does not exist. */
-function countDirectories(dir: string): number {
-	try {
-		return readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
-	} catch {
-		return 0;
 	}
 }
 
@@ -282,7 +273,6 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
 	const defaultModel = readDefaultModel(profileDir);
 	const usage = getSessionUsage();
-	const gentleInstalled = isGentleInstalled(profileDir);
 	const mcpServers = readMcpServers(profileDir);
 	const scope = resolveProjectScope();
 	const projects = scope.mode === 'workspace'
@@ -296,12 +286,9 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	return {
 		runtime,
 		piVersion: await readPiVersion(runtime, deps.distributionRoot),
-		gentleInstalled,
-		gentleVersion: gentleInstalled ? readGentleVersion(profileDir) : undefined,
 		providers: countProviders(profileDir),
 		defaultModel,
 		mcpServers,
-		skills: countDirectories(path.join(profileDir, 'skills')),
 		gitBranch: gitInfo.branch,
 		gitChanges: gitInfo.changes,
 		gitInsertions: gitInfo.insertions,
@@ -320,7 +307,6 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		thinkingLevel: usage?.thinkingLevel,
 		// The provider's own quota for the model in use, never the session's totals above.
 		usage: await readUsageRow(profileDir, usage?.model),
-		tasks: usage?.tasks,
 	};
 }
 

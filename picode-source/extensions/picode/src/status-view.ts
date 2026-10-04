@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import type { TaskRow } from './session-tasks';
 
 /**
  * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
- * in force, the provider and default model, the session's usage and cost, the project's
- * branch and pending changes, and Gentle AI's state.
+ * in force, the provider and default model, the session's usage and cost, and the project's
+ * branch and pending changes.
  *
  * A tree, deliberately, and not a webview: the data is a handful of rows, the theme is
  * the editor's own, and a native view cannot fail to render. The rows refresh on a slow
@@ -90,15 +89,12 @@ export interface ProjectGitInfo {
 export interface StatusData {
 	runtime?: string;
 	piVersion?: string;
-	gentleInstalled?: boolean;
-	gentleVersion?: string;
 	providers?: number;
 	defaultModel?: string;
 	model?: string;
 	thinkingLevel?: string;
 	/** pi's MCP servers, with the switch pi reads: the panel shows them and can flip them. */
 	mcpServers?: readonly McpServerSwitch[];
-	skills?: number;
 	gitBranch?: string;
 	gitChanges?: number;
 	gitInsertions?: number;
@@ -122,8 +118,6 @@ export interface StatusData {
 	 * connector cannot obtain an honest one.
 	 */
 	usage?: string;
-	/** The session's task list (gentle-pi's todo tool), last snapshot; absent when none exists. */
-	tasks?: readonly TaskRow[];
 	error?: string;
 }
 
@@ -322,20 +316,6 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		}
 		out.push(new StatusItem('pi', { children: piRows, icon: mark('picode-light.svg', 'picode.svg') }));
 
-		// Gentle AI lives in the internal profile; with the external pi it appears only
-		// when the machine's own profile happens to carry it.
-		if (d.runtime === 'internal' || d.gentleInstalled === true) {
-			const gentleRows: StatusItem[] = [
-				new StatusItem('State', { description: d.gentleInstalled ? 'Installed' + (d.gentleVersion ? ' · v' + d.gentleVersion : '') : 'Not installed', icon: new vscode.ThemeIcon('check') }),
-			];
-			if (d.gentleInstalled) {
-				gentleRows.push(
-					new StatusItem('Skills', { description: String(d.skills ?? 0), icon: new vscode.ThemeIcon('lightbulb') }),
-				);
-			}
-			out.push(new StatusItem('Gentle AI', { children: gentleRows, icon: mark('gentle-ai.svg', 'gentle-ai-dark.svg') }));
-		}
-
 		const sessionRows: StatusItem[] = [];
 		const ctxTokens = d.ctxTokens;
 		if (ctxTokens !== undefined) {
@@ -364,14 +344,6 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			if (d.cacheRead !== undefined && d.cacheWrite !== undefined) {
 				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}`, icon: new vscode.ThemeIcon('archive') }));
 			}
-		}
-		// The session's task list, exactly as the todo tool last left it — the row per task
-		// carries the status icon, the note becomes the description. No list, no rows.
-		for (const task of d.tasks ?? []) {
-			sessionRows.push(new StatusItem(task.title, {
-				description: task.note,
-				icon: new vscode.ThemeIcon(task.status === 'done' ? 'check' : task.status === 'in_progress' ? 'sync' : 'circle-large-outline'),
-			}));
 		}
 		out.push(new StatusItem('Session', { children: sessionRows, icon: new vscode.ThemeIcon('history') }));
 

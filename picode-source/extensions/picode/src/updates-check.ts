@@ -133,13 +133,13 @@ export function compareVersions(a: string, b: string): number {
  * What can be updated
  * ------------------------------------------------------------------ */
 
-/** The kinds of thing the check watches: the pi runtime, Gentle AI, and pi's npm packages. */
-export type UpdateKind = 'runtime' | 'gentle' | 'package';
+/** The kinds of thing the check watches: the pi runtime, and pi's npm packages. */
+export type UpdateKind = 'runtime' | 'package';
 
 /** One candidate the check compared, as the caller gathered it — versions may be missing. */
 export interface CandidateTarget {
 	readonly kind: UpdateKind;
-	/** What the notification and the sentence call it: `pi`, `gentle-pi`, the package's name. */
+	/** What the notification and the sentence call it: `pi`, the package's name. */
 	readonly name: string;
 	readonly installed?: string;
 	readonly latest?: string;
@@ -183,8 +183,8 @@ export function updatableTargets(candidates: readonly CandidateTarget[]): readon
  * The one sentence the notification and the status-bar tooltip carry after
  * `PiCode: updates available — `.
  *
- * Every part says what can be had and what is installed: the runtime and Gentle as one update
- * each, the packages as the product word counts them — because a profile can hold many, and
+ * Every part says what can be had and what is installed: the runtime as one update,
+ * the packages as the product word counts them — because a profile can hold many, and
  * the count is what the sentence needs to stay readable.
  */
 export function describeTargets(targets: readonly UpdateTarget[]): string {
@@ -215,7 +215,7 @@ export interface UpdatesSnapshot {
 }
 
 /** The kinds that may appear in a stored target, as a set the reader checks against. */
-const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'gentle', 'package'];
+const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'package'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);

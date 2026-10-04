@@ -567,23 +567,6 @@
 	text-decoration: underline;
 }
 
-/* Gentle AI */
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-dimmed {
-	opacity: .55;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-actions {
-	display: flex;
-	gap: 12px;
-	margin-top: 6px;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-status {
-	margin-top: 4px;
-	font-size: .9em;
-}
-
 /* Theme gallery */
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-toolbar {
@@ -1769,29 +1752,6 @@
 	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 }
 
-/* the Gentle installer's live output, polled while it runs */
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log {
-	margin-top: 6px;
-	font-family: var(--monaco-monospace-font);
-	font-size: .85em;
-	opacity: .75;
-	max-height: 74px;
-	overflow: hidden;
-	display: flex;
-	flex-direction: column;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log:empty {
-	margin: 0;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-log-line {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 /* the gallery's source tabs, publisher line and loading note */
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-source-tabs {
@@ -1827,7 +1787,7 @@
 	font-size: .92em;
 }
 
-/* the provider & model step, and the Gentle agents' model rows */
+/* the provider & model step */
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form {
 	margin-top: 10px;
@@ -1894,28 +1854,6 @@
 	color: var(--vscode-focusBorder);
 }
 
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-agents-config {
-	margin-top: 12px;
-	padding-top: 10px;
-	border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-agent-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 2px 0;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-agent-name {
-	font-size: .92em;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-agent-select {
-	min-width: 220px;
-}
-
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-actions {
 	display: flex;
 	gap: 10px;
@@ -1948,28 +1886,6 @@
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-button.disabled {
 	opacity: .45;
 	pointer-events: none;
-}
-
-/* the Gentle installer's progress bar */
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress {
-	height: 6px;
-	border-radius: 3px;
-	background: var(--vscode-progressBar-background, rgba(128,128,128,.3));
-	overflow: hidden;
-	margin-bottom: 4px;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress-bar {
-	height: 100%;
-	background: var(--vscode-progressBar-background, var(--vscode-focusBorder));
-	transition: width 0.4s ease-out;
-}
-
-.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-gentle-progress-label {
-	font-size: .85em;
-	opacity: .75;
-	margin-bottom: 4px;
 }
 
 /* Product decision: the welcome-startup checkbox is noise inside the setup flow. */

@@ -43,9 +43,8 @@ import {
 } from './providers';
 import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
-import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
 import { registerWizardModelCommands } from './wizard-models';
-import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
+import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
@@ -1725,76 +1724,6 @@ function extractText(payload: string, api: string | undefined): string | undefin
 }
 
 /* ------------------------------------------------------------------ *
- * The subagents' transcripts
- * ------------------------------------------------------------------ */
-
-/** The command that opens a subagent's transcript; it takes an optional task id. */
-export const OPEN_SUBAGENT_TRANSCRIPT_COMMAND = 'picode.openSubagentTranscript';
-
-/**
- * Opens a subagent's transcript, rendered from its pi session file.
- *
- * With a task id the transcript opens directly; without one the finished tasks gentle
- * recorded are listed, newest first. The markdown is opened in an **untitled** document:
- * the profile and the session files are read, never written or renamed. Every failure path
- * is a sentence, not a throw — a command the palette can invoke must not fail into the void.
- */
-async function openSubagentTranscript(taskId?: string): Promise<void> {
-	try {
-		const home = gentleAgentsHome();
-		let chosen = taskId;
-		if (chosen === undefined) {
-			const now = Date.now();
-			const picks = listTaskFiles(home)
-				.map(file => ({
-					taskId: path.basename(file.file, '.json'),
-					record: readTaskRecord(file.file),
-				}))
-				.map(({ taskId: id, record }) => ({
-					taskId: id,
-					label: `${record?.agent ?? 'subagent'} — ${record?.label ?? id}`,
-					description: record?.endedAt === undefined ? undefined : relativeTime(record.endedAt, now),
-				}));
-			if (picks.length === 0) {
-				void vscode.window.showInformationMessage('PiCode: no subagent activity yet. It appears when Gentle AI runs one.');
-				return;
-			}
-			const picked = await vscode.window.showQuickPick(picks, {
-				placeHolder: 'Which subagent do you want to look at?',
-			});
-			if (picked === undefined) {
-				return;
-			}
-			chosen = picked.taskId;
-		}
-
-		const sessionPath = readTaskTranscriptPath(chosen, home);
-		if (sessionPath === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: no activity was recorded for that subagent.`);
-			return;
-		}
-		let text: string | undefined;
-		try {
-			text = fs.readFileSync(sessionPath, 'utf8');
-		} catch {
-			text = undefined;
-		}
-		if (text === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: that subagent's activity could not be read.`);
-			return;
-		}
-		const document = await vscode.workspace.openTextDocument({
-			content: sessionToMarkdown(text, { title: `Subagent ${chosen}` }),
-			language: 'markdown',
-		});
-		await vscode.window.showTextDocument(document, { preview: true });
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		void vscode.window.showErrorMessage(`PiCode: that subagent's activity could not be opened (${message}).`);
-	}
-}
-
-/* ------------------------------------------------------------------ *
  * Activation
  * ------------------------------------------------------------------ */
 
@@ -1862,8 +1791,8 @@ function isInside(dir: string, file: string): boolean {
 }
 
 /**
- * The candidates one check compares: the runtime in force, Gentle AI, and the npm packages of
- * the profile pi loads. Everything arrives as "installed version if readable" — the assembly
+ * The candidates one check compares: the runtime in force, and the npm packages of the
+ * profile pi loads. Everything arrives as "installed version if readable" — the assembly
  * in `updates-check.ts` decides what is actually behind, and a missing or junk version is
  * simply not a claim the check makes.
  */
@@ -1877,7 +1806,6 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	}
 
 	const candidates: CandidateTarget[] = [];
-	const profile = profileDirectory(requireProfileUri());
 
 	// The runtime: the internal one from its manifest, the external one from the probe of the
 	// machine's pi. Both are versions of the same npm package, so the latest is the same lookup.
@@ -1886,24 +1814,12 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 		: readInternalPiVersion(distributionRoot(requireProfileUri()));
 	candidates.push({ kind: 'runtime', name: 'pi', installed: installedPi, latest: await fetchNpmLatest(PI_RUNTIME_PACKAGE, { log: report }) });
 
-	// Gentle AI, only when it is installed: an absent package is not an out-of-date one.
-	const gentleInstalled = readGentleVersion(profile);
-	if (gentleInstalled !== undefined) {
-		candidates.push({ kind: 'gentle', name: 'gentle-pi', installed: gentleInstalled, latest: await fetchNpmLatest('gentle-pi', { log: report }) });
-	}
-	const engramInstalled = readProfilePackageVersion(profile, 'gentle-engram');
-	if (engramInstalled !== undefined) {
-		candidates.push({ kind: 'gentle', name: 'gentle-engram', installed: engramInstalled, latest: await fetchNpmLatest('gentle-engram', { log: report }) });
-	}
-
 	// The npm packages of the profile in force. Git checkouts carry no version to compare and
-	// are skipped; Gentle is skipped here because it is already counted above.
+	// are skipped.
 	const scopes = packageScopes(profileInForce());
 	const npmRoots = scopes.map(scope => scope.npmRoot);
 	const npmPackages = piPackages(scopes, nodeFs()).packages.filter((found): found is PiPackage & { version: string } =>
 		found.version !== undefined
-		&& found.name !== 'gentle-pi'
-		&& found.name !== 'gentle-engram'
 		&& npmRoots.some(root => isInside(root, found.path)));
 	const latestVersions = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
 	npmPackages.forEach((found, index) => {
@@ -2107,7 +2023,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		profileDir: profileDirectory(context.extensionUri),
 		globalState: context.globalState,
 		forgetRuntime: forgetPiRuntime,
-		// Installing or removing Gentle AI must be visible to the chat immediately.
+		// A package install or removal must be visible to the chat immediately.
 		resetChat: resetChatSession,
 		// An import writes providers, models and packages onto disk: the picker must ask
 		// again instead of serving what it cached before the copy.
@@ -2142,7 +2058,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		sessionsDir: piSessionsDir(),
 	}));
 
-	// The update check: pi, Gentle AI and the profile's packages, asked quietly on a schedule,
+	// The update check: pi and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.
 	registerUpdateChecks(context);
 
@@ -2159,19 +2075,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
 
-	// The wizard's provider/model/agents commands (the welcome page's step 2 and the
-	// Gentle agents' model picker).
+	// The wizard's provider/model commands (the welcome page's model step).
 	context.subscriptions.push(...registerWizardModelCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
 	}));
-
-	// The subagents gentle launched from a chat turn stay visible in the chat itself (see
-	// `agent.ts`); this command is how their full transcript opens — the pi session file
-	// rendered as markdown into an untitled document, the profile never written.
-	context.subscriptions.push(vscode.commands.registerCommand(OPEN_SUBAGENT_TRANSCRIPT_COMMAND, (taskId?: string) =>
-		openSubagentTranscript(typeof taskId === 'string' ? taskId : undefined)));
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>

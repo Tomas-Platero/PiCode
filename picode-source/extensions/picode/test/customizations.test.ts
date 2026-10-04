@@ -73,17 +73,17 @@ const FOLDER = '/project';
  * Frontmatter
  * ------------------------------------------------------------------ */
 
-test('parseFrontmatter reads the header gentle-ai ships and leaves the instructions alone', () => {
-	const text = agentFile('gentle-ai-explore', 'Read-only exploration and mapping.');
+test('parseFrontmatter reads the header sample-skill ships and leaves the instructions alone', () => {
+	const text = agentFile('explore-agent', 'Read-only exploration and mapping.');
 
 	const parsed = parseFrontmatter(text);
 
-	assert.strictEqual(frontmatterText(parsed, 'name'), 'gentle-ai-explore');
+	assert.strictEqual(frontmatterText(parsed, 'name'), 'explore-agent');
 	assert.strictEqual(frontmatterText(parsed, 'description'), 'Read-only exploration and mapping.');
 	// The `- read` lines are the list form, and the header's indentation is not part of the value.
 	assert.deepStrictEqual(frontmatterList(parsed, 'tools'), ['read', 'grep']);
 	// The body is the instructions, not the header.
-	assert.strictEqual(parsed.body, 'You are gentle-ai-explore.');
+	assert.strictEqual(parsed.body, 'You are explore-agent.');
 });
 
 test('parseFrontmatter accepts inline lists, quotes and CRLF, and a file without a header', () => {
@@ -114,7 +114,7 @@ test('frontmatterText and frontmatterList answer nothing for a missing or wrong-
  * Agents
  * ------------------------------------------------------------------ */
 
-test('agentRoots follows gentle-pi: the profile first, then each folder, and subagents last', () => {
+test('agentRoots follows the runtime: the profile first, then each folder, and subagents last', () => {
 	assert.deepStrictEqual(agentRoots(PROFILE, []).map(root => ({ dir: toPosix(root.dir), source: root.source })), [
 		{ dir: '/profile/agents', source: 'user' },
 		{ dir: '/profile/subagents', source: 'user' },
@@ -134,8 +134,8 @@ test('agentRoots follows gentle-pi: the profile first, then each folder, and sub
 
 test('discoverAgents reads the profile and the project, sorts by name and lets the project win', () => {
 	const read = fakeFs({
-		'/profile/agents/gentle-ai-worker.md': agentFile('gentle-ai-worker', 'Bounded implementation.'),
-		'/profile/subagents/jd-judge-a.md': agentFile('jd-judge-a', 'The profile copy.'),
+		'/profile/agents/jd-judge-a.md': agentFile('jd-judge-a', 'The profile copy.'),
+		'/profile/agents/worker-agent.md': agentFile('worker-agent', 'Bounded implementation.'),
 		'/profile/agents/notes.md': 'No header, just instructions.',
 		'/profile/agents/nested/ignored.md': agentFile('nested', 'Not directly under agents.'),
 		'/profile/agents/empty.md': '---\nname: empty\n---\n',
@@ -145,27 +145,27 @@ test('discoverAgents reads the profile and the project, sorts by name and lets t
 
 	const agents = discoverAgents(agentRoots(PROFILE, [FOLDER]), read);
 
-	assert.deepStrictEqual(agents.map(agent => agent.name), ['gentle-ai-worker', 'jd-judge-a', 'notes', 'sdd-apply']);
+	assert.deepStrictEqual(agents.map(agent => agent.name), ['jd-judge-a', 'notes', 'sdd-apply', 'worker-agent']);
 	// The project's copy replaced the profile's, and `subagents/` beats `agents/` in its scope.
-	assert.strictEqual(agents[1].description, 'The project copy.');
-	assert.strictEqual(agents[1].source, 'local');
+	assert.strictEqual(agents[0].description, 'The project copy.');
+	assert.strictEqual(agents[0].source, 'local');
 	// A file with no header is still an agent, named after itself.
-	assert.strictEqual(agents[2].description, undefined);
-	assert.strictEqual(agents[0].source, 'user');
+	assert.strictEqual(agents[1].description, undefined);
+	assert.strictEqual(agents[3].source, 'user');
 	// A header with no instructions is not an agent, and a nested file is not one either.
 	assert.ok(!agents.some(agent => agent.name === 'empty' || agent.name === 'nested'));
 });
 
 test('discoverAgents reads the `.agent.md` names the installer writes', () => {
 	const read = fakeFs({
-		'/profile/agents/gentle-ai-explore.agent.md': agentFile('gentle-ai-explore', 'Exploration.'),
+		'/profile/agents/explore-agent.agent.md': agentFile('explore-agent', 'Exploration.'),
 		'/profile/agents/README.txt': 'not an agent',
 	});
 
 	const agents = discoverAgents(agentRoots(PROFILE, []), read);
 
-	assert.deepStrictEqual(agents.map(agent => toPosix(agent.file)), ['/profile/agents/gentle-ai-explore.agent.md']);
-	assert.strictEqual(agents[0].name, 'gentle-ai-explore');
+	assert.deepStrictEqual(agents.map(agent => toPosix(agent.file)), ['/profile/agents/explore-agent.agent.md']);
+	assert.strictEqual(agents[0].name, 'explore-agent');
 });
 
 /* ------------------------------------------------------------------ *
@@ -173,10 +173,10 @@ test('discoverAgents reads the `.agent.md` names the installer writes', () => {
  * ------------------------------------------------------------------ */
 
 test('skillRoots puts the packages first and the project last, so the owner wins', () => {
-	const roots = skillRoots(PROFILE, [FOLDER], ['/profile/npm/node_modules/gentle-pi/skills']);
+	const roots = skillRoots(PROFILE, [FOLDER], ['/profile/npm/node_modules/sample-plugin/skills']);
 
 	assert.deepStrictEqual(roots.map(root => ({ dir: toPosix(root.dir), source: root.source })), [
-		{ dir: '/profile/npm/node_modules/gentle-pi/skills', source: 'plugin' },
+		{ dir: '/profile/npm/node_modules/sample-plugin/skills', source: 'plugin' },
 		{ dir: '/profile/skills', source: 'user' },
 		{ dir: '/project/.pi/skills', source: 'local' },
 	]);
@@ -184,7 +184,7 @@ test('skillRoots puts the packages first and the project last, so the owner wins
 
 test('discoverSkills finds SKILL.md directories, and standalone files only at the root', () => {
 	const read = fakeFs({
-		'/profile/skills/gentle-ai/SKILL.md': '---\nname: gentle-ai\ndescription: The harness.\n---\nDo the work.',
+		'/profile/skills/sample-skill/SKILL.md': '---\nname: sample-skill\ndescription: The harness.\n---\nDo the work.',
 		'/profile/skills/_shared/review-ledger-contract.md': 'Shared fragments, not a skill.',
 		'/profile/skills/category/deep/SKILL.md': '---\ndescription: Nested.\n---\nBody.',
 		'/profile/skills/standalone.md': '---\nname: standalone\n---\nBody.',
@@ -195,7 +195,7 @@ test('discoverSkills finds SKILL.md directories, and standalone files only at th
 	const skills = discoverSkills(skillRoots(PROFILE, []), read);
 
 	// `_shared` holds a document, not a skill; a dot-directory and `node_modules` are never walked.
-	assert.deepStrictEqual(skills.map(skill => skill.name), ['deep', 'gentle-ai', 'standalone']);
+	assert.deepStrictEqual(skills.map(skill => skill.name), ['deep', 'sample-skill', 'standalone']);
 	assert.strictEqual(skills[1].description, 'The harness.');
 	// A skill is named by its folder when its header does not name it.
 	assert.strictEqual(skills[0].name, 'deep');
@@ -203,23 +203,23 @@ test('discoverSkills finds SKILL.md directories, and standalone files only at th
 });
 
 test('discoverSkills keeps one row per name, and the profile copy is the one that survives', () => {
-	const body = '---\nname: gentle-ai\ndescription: The harness.\n---\nDo the work.';
+	const body = '---\nname: sample-skill\ndescription: The harness.\n---\nDo the work.';
 	const read = fakeFs({
 		// pi installs a package's skills into the profile too, so the same skill is on disk twice.
-		'/profile/npm/node_modules/gentle-pi/skills/gentle-ai/SKILL.md': body,
-		'/profile/skills/gentle-ai/SKILL.md': body,
+		'/profile/npm/node_modules/sample-plugin/skills/sample-skill/SKILL.md': body,
+		'/profile/skills/sample-skill/SKILL.md': body,
 		// A project may override a name of its own; then the project's file is the one that wins.
 		'/project/.pi/skills/branch-pr/SKILL.md': '---\ndescription: The project copy.\n---\nBody.',
 		'/profile/skills/branch-pr/SKILL.md': '---\ndescription: The profile copy.\n---\nBody.',
 	});
 
-	const skills = discoverSkills(skillRoots(PROFILE, [FOLDER], ['/profile/npm/node_modules/gentle-pi/skills']), read);
+	const skills = discoverSkills(skillRoots(PROFILE, [FOLDER], ['/profile/npm/node_modules/sample-plugin/skills']), read);
 
-	assert.deepStrictEqual(skills.map(skill => skill.name), ['branch-pr', 'gentle-ai']);
+	assert.deepStrictEqual(skills.map(skill => skill.name), ['branch-pr', 'sample-skill']);
 	assert.strictEqual(skills.length, 2);
 	assert.strictEqual(skills[0].description, 'The project copy.');
 	assert.strictEqual(skills[0].source, 'local');
-	assert.strictEqual(toPosix(skills[1].file), '/profile/skills/gentle-ai/SKILL.md');
+	assert.strictEqual(toPosix(skills[1].file), '/profile/skills/sample-skill/SKILL.md');
 	assert.strictEqual(skills[1].source, 'user');
 });
 

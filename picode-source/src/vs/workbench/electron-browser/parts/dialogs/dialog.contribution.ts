@@ -89,12 +89,11 @@ export class DialogHandlerContribution extends Disposable implements IWorkbenchC
 
 				// About
 				else {
-					// The agent versions come from the connector: the pi in force and Gentle AI when
-					// it is installed. The About must open even when the connector is not up yet, so
-					// a failure is simply no agent lines.
-					let agents: { piVersion?: string; gentleVersion?: string } | undefined;
+					// The agent version comes from the connector: the pi in force. The About must
+					// open even when the connector is not up yet, so a failure is simply no agent line.
+					let agents: { piVersion?: string } | undefined;
 					try {
-						agents = await this.commandService.executeCommand<{ piVersion?: string; gentleVersion?: string }>('picode.setup.aboutVersions');
+						agents = await this.commandService.executeCommand<{ piVersion?: string }>('picode.setup.aboutVersions');
 					} catch { /* no connector: the editor's own facts are still shown */ }
 					const aboutDialogDetails = createNativeAboutDialogDetails(this.productService, await this.nativeHostService.getOSProperties(), agents);
 
