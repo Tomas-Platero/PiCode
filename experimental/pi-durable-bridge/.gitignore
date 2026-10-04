@@ -1,0 +1,4 @@
+# Bridge scratch: proof logs and the proof's daemon log. The durable
+# conversations themselves live in the daemon's database
+# (experimental/durable/.data/sessions.sqlite) — the daemon owns it, never us.
+.data/
