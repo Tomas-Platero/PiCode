@@ -23,11 +23,21 @@ import { startServerAndWaitForLiveTools } from './mcpTypesUtils.js';
 
 type IMcpServerRec = { object: IMcpServer };
 
+/**
+ * PiCode: how long one server gets to come up during autostart before the chat stops waiting for
+ * it. `startServerAndWaitForLiveTools` has no timeout of its own and the chat request awaits the
+ * whole autostart, so a server that starts but never publishes its tools left every message stuck
+ * on «Starting MCP servers…». The server still finishes in the background.
+ */
+const AUTOSTART_SERVER_TIMEOUT_MS = 30_000;
+
 export class McpService extends Disposable implements IMcpService {
 
 	declare _serviceBrand: undefined;
 
 	private readonly _currentAutoStarts = new Set<CancellationTokenSource>();
+	/** Servers that did not become ready in time, so autostart stops waiting for them this session. */
+	private readonly _autostartSkipped = new Set<string>();
 	private readonly _servers = observableValue<readonly IMcpServerRec[]>(this, []);
 	public readonly servers: IObservable<readonly IMcpServer[]> = this._servers.map(servers => servers.map(s => s.object));
 
@@ -130,6 +140,18 @@ export class McpService extends Disposable implements IMcpService {
 			return;
 		}
 
+		// A server that already timed out is not waited for again: retrying it every message would
+		// put its whole timeout on every turn. `resetCaches` (and a reload) gives it another chance.
+		for (const server of [...todo]) {
+			if (this._autostartSkipped.has(server.definition.id)) {
+				todo.delete(server);
+			}
+		}
+		if (!todo.size) {
+			state.set(IAutostartResult.Empty, undefined);
+			return;
+		}
+
 		const interaction = new McpStartServerInteraction();
 		const requiringInteraction: (McpDefinitionReference & { errorMessage?: string })[] = [];
 
@@ -141,9 +163,19 @@ export class McpService extends Disposable implements IMcpService {
 
 		update();
 
-		await Promise.all([...todo].map(async (server, i) => {
-			try {
-				await startServerAndWaitForLiveTools(server, { interaction, errorOnUserInteraction: true }, token);
+		await Promise.all([...todo].map(async (server) => {
+			 try {
+				// A bounded wait: see {@link AUTOSTART_SERVER_TIMEOUT_MS}.
+				await Promise.race([
+					startServerAndWaitForLiveTools(server, { interaction, errorOnUserInteraction: true }, token),
+					new Promise<void>(resolve => {
+						setTimeout(() => {
+							this._autostartSkipped.add(server.definition.id);
+							this._logService.info(`MCP autostart: ${server.definition.label} did not become ready in time; not waiting for it`);
+							resolve();
+						}, AUTOSTART_SERVER_TIMEOUT_MS);
+					}),
+				]);
 			} catch (error) {
 				if (error instanceof UserInteractionRequiredError) {
 					requiringInteraction.push({ id: server.definition.id, label: server.definition.label, errorMessage: error.message });
@@ -154,12 +186,15 @@ export class McpService extends Disposable implements IMcpService {
 					update();
 				}
 			}
+			return undefined;
 		}));
 	}
 
 	public resetCaches(): void {
 		this.userCache.reset();
 		this.workspaceCache.reset();
+		// A server that timed out may work now; give it another chance.
+		this._autostartSkipped.clear();
 	}
 
 	public resetTrust(): void {

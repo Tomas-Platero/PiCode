@@ -23,6 +23,14 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   imprimir `undefined`.
 
 ### Fixed
+- **El chat deja de quedarse pillado arrancando los MCP.** El editor arrancaba en cada mensaje
+  todos los servidores MCP nuevos o desactualizados y la petición **esperaba a todos**
+  (`chatServiceImpl`); `startServerAndWaitForLiveTools` no tiene plazo, así que un servidor que
+  arranca pero nunca publica sus herramientas dejaba el chat en «Starting MCP servers…» para
+  siempre. Ahora cada servidor del arranque automático tiene un **límite de 30 s**: pasado el
+  plazo el chat deja de esperarlo y sigue, y ese servidor no se vuelve a esperar en la sesión
+  (el log lo nombra). Nada se oculta: los servidores siguen arrancando solos y sus herramientas
+  quedan disponibles; simplemente dejan de poder colgar el mensaje.
 - **El botón «Update» de PiCode ya actualiza pi de verdad.** `pi update --all` fallaba con el pi
   empaquetado dentro del editor: pi no se auto-actualiza si no es una instalación global de npm
   (no está bajo un `node_modules` global y en Windows no infiere prefijos), y contestaba
