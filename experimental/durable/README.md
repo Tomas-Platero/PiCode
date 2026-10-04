@@ -21,20 +21,61 @@ guard blocks, and hints go to **stderr**, so `node cli.js run "..." > answer.txt
 captures just the answer. All commands run from `experimental/durable/`.
 
 ```bash
-node cli.js run "<prompt>" [--agent <name>]        # NEW conversation, stream the answer
+node cli.js run "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]   # NEW conversation, stream the answer
 node cli.js sessions                               # list conversations in sessions.sqlite
-node cli.js resume <id> "<prompt>" [--agent <name>] # continue an existing conversation
-node cli.js fork <id> "<prompt>" [--agent <name>]   # fork at the newest entry, run the prompt on the fork
+node cli.js resume <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard] # continue an existing conversation
+node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]   # fork at the newest entry, run the prompt on the fork
 node cli.js attach <id>                            # follow a conversation's entries live, Ctrl+C to detach
 node cli.js allow <id> "<exact command>"            # guard opt-in (see below)
+```
+
+### PiCode settings (`picode.durable.*`)
+
+The agent's options live in **PiCode's own settings** (Settings > PiCode > Durable agent
+(experimental), declared in `picode-source/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts`),
+not only as CLI flags — a flag that is the only way to set an option is a setting that does
+not exist. `lib/settings.js` reads the editor's user settings file
+(`%APPDATA%/PiCode/User/settings.json`, override with `PICODE_USER_SETTINGS`)
+**read-only** and picks out the `picode.durable.*` keys; reading the file directly is
+deliberate, because this program is not inside the editor yet.
+
+| Setting | Type | Default | What it does to the agent |
+| --- | --- | --- | --- |
+| `picode.durable.mcp` | boolean | `true` | The MCP bridge (off is today's `--no-mcp`). |
+| `picode.durable.guard` | boolean | `true` | The deterministic guard (off is the new `--no-guard`; until this setting existed the guard was always on). |
+| `picode.durable.model` | string | `omni/auto` | The model, as `provider/model` (today's `PI_AGENT_MODEL`/`PI_AGENT_PROVIDER`). |
+| `picode.durable.agent` | string | *(empty)* | The profile agent name (today's `--agent`). |
+
+**Precedence: command-line flag > setting > built-in default.** For the model only,
+`PI_AGENT_MODEL`/`PI_AGENT_PROVIDER` sit between the setting and the default
+(flag > setting > env > default), because the environment variables are the override the
+experiment has always had.
+
+Where every effective option came from is printed on stderr, one line per option, so
+nobody has to guess why the agent behaved as it did:
+
+```text
+[settings] mcp=off (picode.durable.mcp)
+[settings] guard=on (default)
+[settings] model=omni/auto (--model)
+[settings] agent=reviewer (--agent)
+```
+
+A missing settings file, unreadable JSON, or a key of the wrong type falls back to the
+default **and says so** on its own `[settings]` line — it never crashes and never
+silently ignores a typo'd setting:
+
+```text
+[settings] no PiCode settings file at C:\...\PiCode\User\settings.json — defaults in effect
+[settings] picode.durable.model: expected string, got number — ignored, default in effect
 ```
 
 ### `run`
 
 Creates a conversation (ownership `ownerless`, model `omni/auto` unless overridden by
-`PI_AGENT_MODEL`), submits the prompt, streams the assistant text, and exits when the
-run settles. The stderr epilogue prints the conversation id and the `resume` command
-to continue it. Verified run:
+`picode.durable.model`, `--model`, or `PI_AGENT_MODEL`), submits the prompt, streams the
+assistant text, and exits when the run settles. The stderr epilogue prints the conversation
+id and the `resume` command to continue it. Verified run:
 
 ```text
 $ node cli.js run "Reply with exactly: CLI-OK"
@@ -106,6 +147,11 @@ $ node cli.js attach 24
 ```
 
 ### The deterministic guard
+
+The guard can be turned off with `--no-guard` or `picode.durable.guard: false` (the flag
+wins) — then `makeGuardExtension({ enabled: false })` installs no hook and the agent's
+system prompt carries no guard section. Off means off: nothing blocks a destructive
+command but you.
 
 `lib/guard.js` installs an extension whose `hook(ToolTask, { beforeTool })` blocks
 destructive commands **in code, before the tool runs** — the model is never asked and
@@ -251,7 +297,7 @@ annotation, and **only a positive one** — a server that does not annotate its 
 cautious treatment. `lib/mcp.js` says which way each tool went rather than relying on the
 default, so it reads without knowing the spec.
 
-**Opt out** with `--no-mcp`.
+**Opt out** with `--no-mcp` or `picode.durable.mcp: false` (the flag wins).
 
 **Limits, said plainly:** `${VAR}` in `env`/`headers` is expanded as pi expands it; a
 `!command` value is **not** run — building a credential by shelling out is not something
@@ -268,6 +314,7 @@ unless a rule names it.
 | `lib/skills.js` | Profile `skills/` loader (read-only), the `<skills>` index section, and the `load_skill` tool. |
 | `lib/agents.js` | Profile `agents/*.md` loader (read-only) backing `--agent`. |
 | `lib/profile.js` | Reads the pi agent profile **read-only** (`%LOCALAPPDATA%/Programs/PiCode/data/pi-agent/models.json`) and builds a pi-ai provider for the `omni` provider found there (OpenAI-Responses API, `baseUrl http://192.168.1.65:20128/v1`). If the profile ever contains a key for the provider (in its `auth.json`), it is used **at runtime, never copied**. The gateway is keyless (`auth: "none"`); pi-ai's `openai-responses` API refuses a request with no key at all, so a clearly non-secret placeholder is sent — the gateway accepts any bearer on the chat endpoint. |
+| `lib/settings.js` | PiCode's settings, read-only (`%APPDATA%/PiCode/User/settings.json`, override with `PICODE_USER_SETTINGS`): picks the `picode.durable.*` keys, applies flag > setting > default, reports every effective option and every fallback on stderr. |
 | `lib/common.js` | Harness setup: models, registry (`CodingTools` + proof extensions), SQLite storage under `.data/`, per-conversation `NodeExecutionEnv`. Also `resetDatabase()`. |
 | `lib/extensions.js` | `slow_step` tool (a deterministic 2 s tool, `replay: "safe"`) and the background subagent: a `subagent` tool that spawns a **background anchor task** owning a child conversation, drives it, and reports its answer back to the parent as a follow-up input. |
 | `proof1-kill.js` / `proof1-resume.js` | Proof 1, phases A and B. |
@@ -345,5 +392,6 @@ supported shape for two UI panels; a multi-process variant would need a relay.
 ## Environment overrides
 
 - `PI_AGENT_PROFILE` — profile directory (default: the portable PiCode profile).
-- `PI_AGENT_PROVIDER` / `PI_AGENT_MODEL` — provider id / model id from the profile
-  (defaults: `omni` / `auto`).
+- `PI_AGENT_PROVIDER` / `PI_AGENT_MODEL` — provider id / model id from the profile.
+  For the model these sit **below** the `picode.durable.model` setting (flag > setting >
+  env > default); they are still the way to override one run without touching settings.

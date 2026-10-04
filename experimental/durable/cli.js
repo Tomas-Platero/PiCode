@@ -15,10 +15,11 @@
 //
 // The answer streams to stdout; tool activity and diagnostics go to stderr, so
 // `node cli.js run "..." > answer.txt` captures just the answer.
-import { CTX, MODEL, openHarness, sleepMs } from "./lib/common.js";
+import { CTX, openHarness, sleepMs } from "./lib/common.js";
 import { GuardDoc, makeGuardExtension, normalizeCommand } from "./lib/guard.js";
 import { loadSkills, makeSkillsExtension } from "./lib/skills.js";
 import { agentsDir, loadAgents } from "./lib/agents.js";
+import { DURABLE_KEYS, parseModelSetting, printDurableOptions, resolveDurableOptions } from "./lib/settings.js";
 import { DEFAULT_PROFILE_DIR } from "./lib/profile.js";
 import { closeMcpConnections, connectMcpServers, loadMcpConfig, makeMcpExtension, mcpPromptCost, mcpRemoveFilter } from "./lib/mcp.js";
 import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
@@ -29,18 +30,23 @@ const DB = "sessions.sqlite"; // the ONE shared CLI database — never numbered,
 
 function usage() {
 	console.error(`Usage:
-  node cli.js run "<prompt>" [--agent <name>] [--no-mcp]   new conversation, stream the answer
+  node cli.js run "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]
   node cli.js sessions                               list conversations in the shared database
-  node cli.js resume <id> "<prompt>" [--agent <name>] [--no-mcp]
-  node cli.js fork <id> "<prompt>" [--agent <name>] [--no-mcp]  fork, then run the prompt on the fork
+  node cli.js resume <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]
+  node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]  fork, then run the prompt on the fork
   node cli.js attach <id>                            live event stream until Ctrl+C
-  node cli.js allow <id> "<exact command>"           let the guard pass this exact command`);
+  node cli.js allow <id> "<exact command>"           let the guard pass this exact command
+
+Options also come from PiCode's settings (picode.durable.*) when the flags are not given:
+  picode.durable.mcp / .guard / .model / .agent — flag > setting > default.`);
 }
 
 function parseArgs(argv) {
 	const positional = [];
 	let agent;
 	let mcp = true;
+	let noGuard = false;
+	let model;
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--agent") {
 			agent = argv[++i];
@@ -49,19 +55,26 @@ function parseArgs(argv) {
 			agent = argv[i].slice("--agent=".length);
 		} else if (argv[i] === "--no-mcp") {
 			mcp = false;
+		} else if (argv[i] === "--no-guard") {
+			noGuard = true;
+		} else if (argv[i] === "--model") {
+			model = argv[++i];
+			if (!model) throw new Error("--model requires provider/model, for example omni/auto");
+		} else if (argv[i].startsWith("--model=")) {
+			model = argv[i].slice("--model=".length);
 		} else {
 			positional.push(argv[i]);
 		}
 	}
-	return { positional, agent, mcp };
+	return { positional, agent, mcp, noGuard, model };
 }
 
 // --- shared setup ----------------------------------------------------------------
 
-async function openCliHarness(bridge = NO_BRIDGE) {
+async function openCliHarness(bridge = NO_BRIDGE, guardEnabled = true) {
 	// Extensions read the profile once at startup; the profile itself stays read-only.
 	const skills = loadSkills(DEFAULT_PROFILE_DIR);
-	const extensions = [makeGuardExtension(), makeSkillsExtension(skills)];
+	const extensions = [makeGuardExtension({ enabled: guardEnabled }), makeSkillsExtension(skills)];
 	if (bridge.extension) extensions.push(bridge.extension);
 	return { ...(await openHarness({ db: DB, extensions })), skills, bridge };
 }
@@ -74,10 +87,11 @@ const NO_BRIDGE = { connections: [], extension: undefined, filter: undefined };
  * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
  * prompt is the small discovery tool and not three hundred schemas. The cost line below is
  * printed for both ways round: the experiment's whole claim about size is that number.
+ * Why the bridge is on or off was already printed by the [settings] lines.
  */
 async function connectBridge(enabled) {
 	if (!enabled) {
-		console.error("[mcp] disabled (--no-mcp): the agent runs without MCP tools.");
+		console.error("[mcp] disabled: the agent runs without MCP tools.");
 		return NO_BRIDGE;
 	}
 	const config = loadMcpConfig(DEFAULT_PROFILE_DIR);
@@ -220,12 +234,13 @@ function exitOnUnsettled(settled) {
 
 // --- commands --------------------------------------------------------------------
 
-async function cmdRun(args, agents) {
-	const agentChange = resolveAgentChange(agents, args.agent);
-	const bridge = await connectBridge(args.mcp !== false);
-	const { harness } = await openCliHarness(bridge);
+async function cmdRun(args, agents, options) {
+	const agentChange = resolveAgentChange(agents, options.agent?.value);
+	const bridge = await connectBridge(options.mcp.value);
+	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
-		const agent = { model: MODEL, ...(agentChange ?? {}) };
+		const model = parseModelSetting(options.model.value); // "provider/model" — validated at resolve time
+		const agent = { model, ...(agentChange ?? {}) };
 		if (bridge.filter) {
 			// The deferral: every MCP tool is filtered out of the prompt; the discovery tool
 			// brings one back when the model finds it.
@@ -277,10 +292,10 @@ async function openConversation(harness, id) {
 	return conversation;
 }
 
-async function cmdResume(args, agents) {
-	const agentChange = resolveAgentChange(agents, args.agent);
-	const bridge = await connectBridge(args.mcp !== false);
-	const { harness } = await openCliHarness(bridge);
+async function cmdResume(args, agents, options) {
+	const agentChange = resolveAgentChange(agents, options.agent?.value);
+	const bridge = await connectBridge(options.mcp.value);
+	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
 		const conversation = await openConversation(harness, args.positional[0]);
 		if (agentChange) await conversation.configure(agentChange, CTX);
@@ -294,10 +309,10 @@ async function cmdResume(args, agents) {
 	}
 }
 
-async function cmdFork(args, agents) {
-	const agentChange = resolveAgentChange(agents, args.agent);
-	const bridge = await connectBridge(args.mcp !== false);
-	const { harness } = await openCliHarness(bridge);
+async function cmdFork(args, agents, options) {
+	const agentChange = resolveAgentChange(agents, options.agent?.value);
+	const bridge = await connectBridge(options.mcp.value);
+	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
 		const source = await openConversation(harness, args.positional[0]);
 		const newest = (await source.entries({}, 1, undefined, CTX)).items[0];
@@ -405,12 +420,26 @@ async function cmdAllow(args) {
 const [, , command, ...rest] = process.argv;
 const args = parseArgs(rest);
 
+// PiCode's settings are the home of these options (Part B lives in the editor);
+// this program reads the file read-only and applies flag > setting > default.
+// The [settings] lines print for the commands that actually run the agent.
+const RUNS_AGENT = command === "run" || command === "resume" || command === "fork";
+const resolved = resolveDurableOptions({
+	flags: { mcp: args.mcp === false ? false : undefined, guard: args.noGuard ? false : undefined, model: args.model, agent: args.agent },
+});
+if (RUNS_AGENT) printDurableOptions(resolved);
+// Register the provider the model names: loadOmniProvider reads PI_AGENT_PROVIDER
+// when the harness opens. Only a flag or a setting may move it off the env value.
+if (RUNS_AGENT && (resolved.options.model.source === "flag" || resolved.options.model.source === DURABLE_KEYS.model)) {
+	process.env.PI_AGENT_PROVIDER = parseModelSetting(resolved.options.model.value).provider;
+}
+
 try {
 	switch (command) {
 		case "run":
 			args.prompt = args.positional[0];
 			if (!args.prompt) throw new Error('run requires a prompt: node cli.js run "<prompt>"');
-			await cmdRun(args, loadAgents(DEFAULT_PROFILE_DIR));
+			await cmdRun(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "sessions":
 			await cmdSessions();
@@ -418,12 +447,12 @@ try {
 		case "resume":
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('resume requires <id> and "<prompt>"');
-			await cmdResume(args, loadAgents(DEFAULT_PROFILE_DIR));
+			await cmdResume(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "fork":
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('fork requires <id> and "<prompt>"');
-			await cmdFork(args, loadAgents(DEFAULT_PROFILE_DIR));
+			await cmdFork(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "attach":
 			if (!args.positional[0]) throw new Error("attach requires <id>");

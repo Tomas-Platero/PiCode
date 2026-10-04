@@ -158,6 +158,11 @@ export function guardReason(call) {
 /**
  * The guard extension. Installed by the CLI (not by the proofs, whose transcript
  * expectations are frozen); every conversation it is selected for gets the hook.
+ *
+ * `enabled: false` is the `--no-guard` / `picode.durable.guard: false` switch, and
+ * off means off: no hook is installed at all, so nothing can block a tool call.
+ * (It does not merely silence the prompt section — a hook without a section would
+ * still block, which would make the setting a lie.)
  */
 export function makeGuardExtension({ enabled = true } = {}) {
 	const guardSection = section(
@@ -171,23 +176,25 @@ export function makeGuardExtension({ enabled = true } = {}) {
 	return defineExtension({
 		name: "guard",
 		sections: [guardSection],
-		hooks: [
-			hook(ToolTask, {
-				beforeTool: async (call, api, context) => {
-					const verdict = guardReason(call);
-					if (!verdict) return undefined;
-					// Explicit per-conversation opt-in: exact command on the allow list.
-					const doc = await api.snapshot(GuardDoc, api.conversationId, context);
-					const normalized = normalizeCommand(verdict.command);
-					if (doc?.allow?.some((a) => normalizeCommand(a) === normalized)) {
-						return undefined; // explicitly allowed by the user: pass through
-					}
-					const why = `Blocked by the deterministic guard: ${verdict.reason}.`;
-					return {
-						block: `${why} The user can allow this exact command for this conversation with: node cli.js allow <conversationId> "${normalized}"`,
-					};
-				},
-			}),
-		],
+		hooks: enabled
+			? [
+					hook(ToolTask, {
+						beforeTool: async (call, api, context) => {
+							const verdict = guardReason(call);
+							if (!verdict) return undefined;
+							// Explicit per-conversation opt-in: exact command on the allow list.
+							const doc = await api.snapshot(GuardDoc, api.conversationId, context);
+							const normalized = normalizeCommand(verdict.command);
+							if (doc?.allow?.some((a) => normalizeCommand(a) === normalized)) {
+								return undefined; // explicitly allowed by the user: pass through
+							}
+							const why = `Blocked by the deterministic guard: ${verdict.reason}.`;
+							return {
+								block: `${why} The user can allow this exact command for this conversation with: node cli.js allow <conversationId> "${normalized}"`,
+							};
+						},
+					}),
+				]
+			: [],
 	});
 }

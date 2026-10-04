@@ -52,6 +52,18 @@ export const PICODE_PI_RUNTIME_SETTING = 'picode.pi.runtime';
 /** Whether pi works on the whole workspace area or on the first folder alone. */
 export const PICODE_PROJECT_MODE_SETTING = 'picode.pi.projectMode';
 
+/** Whether the durable agent's MCP bridge connects the pi profile's servers. */
+export const PICODE_DURABLE_MCP_SETTING = 'picode.durable.mcp';
+
+/** Whether the durable agent's deterministic destructive-command guard is on. */
+export const PICODE_DURABLE_GUARD_SETTING = 'picode.durable.guard';
+
+/** Which model the durable agent runs on, as `provider/model`. */
+export const PICODE_DURABLE_MODEL_SETTING = 'picode.durable.model';
+
+/** Which profile agent's instructions the durable agent runs with. */
+export const PICODE_DURABLE_AGENT_SETTING = 'picode.durable.agent';
+
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'picode',
 	title: 'PiCode',
@@ -164,6 +176,36 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: true,
 			markdownDescription: localize('picode.context.attach', "Send the folder, the file you have open and what is selected in it with every message, so \"fix this\" needs no explaining. The selection is capped: pi can read the rest of the file itself when it needs it."),
+		},
+
+		// The experimental durable agent lives in the repository's `experimental/durable` folder
+		// and is run by hand from there today — the editor does not run it yet. These settings
+		// are that agent's own options, kept here (and not only as CLI flags) because this is
+		// where options belong; the agent reads this settings file read-only when it starts.
+		// Each description says what the setting actually does to that agent, and no more.
+		[PICODE_DURABLE_MCP_SETTING]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picode.durable.mcp', "Whether the experimental durable agent (the one in the repository's experimental/durable folder, which you run by hand — the editor does not run it yet) connects the MCP servers of your pi profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
+		},
+		[PICODE_DURABLE_GUARD_SETTING]: {
+			type: 'boolean',
+			default: true,
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picode.durable.guard', "Whether the same experimental durable agent blocks destructive commands in code before they run: recursive deletes, forced pushes and history rewrites, disk operations, and any write outside the working directory. Turning it off is the agent's --no-guard flag — with the guard off, nothing stops those commands but you."),
+		},
+		[PICODE_DURABLE_MODEL_SETTING]: {
+			type: 'string',
+			default: 'omni/auto',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picode.durable.model', "Which model the experimental durable agent runs on, written as provider/model (for example omni/auto). The provider has to be one your pi profile knows. The agent's --model flag wins over this setting."),
+		},
+		[PICODE_DURABLE_AGENT_SETTING]: {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picode.durable.agent', "Which profile agent the experimental durable agent runs as: the name of an agents/<name>.md file in your pi profile, whose instructions the conversation then follows. Leave it empty for no agent. The agent's --agent flag wins over this setting."),
 		},
 	},
 });
