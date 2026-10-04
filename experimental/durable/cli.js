@@ -20,7 +20,8 @@ import { GuardDoc, makeGuardExtension, normalizeCommand } from "./lib/guard.js";
 import { loadSkills, makeSkillsExtension } from "./lib/skills.js";
 import { agentsDir, loadAgents } from "./lib/agents.js";
 import { DEFAULT_PROFILE_DIR } from "./lib/profile.js";
-import { watchEvents } from "@earendil-works/pi-durable";
+import { closeMcpConnections, connectMcpServers, loadMcpConfig, makeMcpExtension, mcpPromptCost, mcpRemoveFilter } from "./lib/mcp.js";
+import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
 
 const DB = "sessions.sqlite"; // the ONE shared CLI database — never numbered, never per-run
 
@@ -28,10 +29,10 @@ const DB = "sessions.sqlite"; // the ONE shared CLI database — never numbered,
 
 function usage() {
 	console.error(`Usage:
-  node cli.js run "<prompt>" [--agent <name>]        new conversation, stream the answer
+  node cli.js run "<prompt>" [--agent <name>] [--no-mcp]   new conversation, stream the answer
   node cli.js sessions                               list conversations in the shared database
-  node cli.js resume <id> "<prompt>" [--agent <name>]
-  node cli.js fork <id> "<prompt>" [--agent <name>]  fork, then run the prompt on the fork
+  node cli.js resume <id> "<prompt>" [--agent <name>] [--no-mcp]
+  node cli.js fork <id> "<prompt>" [--agent <name>] [--no-mcp]  fork, then run the prompt on the fork
   node cli.js attach <id>                            live event stream until Ctrl+C
   node cli.js allow <id> "<exact command>"           let the guard pass this exact command`);
 }
@@ -39,26 +40,80 @@ function usage() {
 function parseArgs(argv) {
 	const positional = [];
 	let agent;
+	let mcp = true;
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--agent") {
 			agent = argv[++i];
 			if (!agent) throw new Error("--agent requires a name");
 		} else if (argv[i].startsWith("--agent=")) {
 			agent = argv[i].slice("--agent=".length);
+		} else if (argv[i] === "--no-mcp") {
+			mcp = false;
 		} else {
 			positional.push(argv[i]);
 		}
 	}
-	return { positional, agent };
+	return { positional, agent, mcp };
 }
 
 // --- shared setup ----------------------------------------------------------------
 
-async function openCliHarness() {
+async function openCliHarness(bridge = NO_BRIDGE) {
 	// Extensions read the profile once at startup; the profile itself stays read-only.
 	const skills = loadSkills(DEFAULT_PROFILE_DIR);
 	const extensions = [makeGuardExtension(), makeSkillsExtension(skills)];
-	return { ...(await openHarness({ db: DB, extensions })), skills };
+	if (bridge.extension) extensions.push(bridge.extension);
+	return { ...(await openHarness({ db: DB, extensions })), skills, bridge };
+}
+
+const NO_BRIDGE = { connections: [], extension: undefined, filter: undefined };
+
+/**
+ * Connects the profile's MCP servers and reports what it found, one line per server.
+ *
+ * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
+ * prompt is the small discovery tool and not three hundred schemas. The cost line below is
+ * printed for both ways round: the experiment's whole claim about size is that number.
+ */
+async function connectBridge(enabled) {
+	if (!enabled) {
+		console.error("[mcp] disabled (--no-mcp): the agent runs without MCP tools.");
+		return NO_BRIDGE;
+	}
+	const config = loadMcpConfig(DEFAULT_PROFILE_DIR);
+	if (config.servers.size === 0) {
+		console.error("[mcp] no servers configured");
+		return NO_BRIDGE;
+	}
+	console.error(`[mcp] ${config.servers.size} server(s) configured (${config.sources.join(", ")})`);
+	const connections = await connectMcpServers(config.servers);
+	for (const connection of connections) {
+		console.error(connection.status === "connected"
+			? `[mcp] ${connection.name}: connected, ${connection.tools.length} tools`
+			: `[mcp] ${connection.name}: NOT CONNECTED (${connection.error})`);
+	}
+	const cost = mcpPromptCost(connections);
+	const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
+	console.error(`[mcp] prompt cost: all ${cost.toolCount} tool(s) declared ≈ ${kib(cost.declaredBytes)}; deferred ≈ ${kib(cost.deferredBytes)}`);
+	return {
+		connections,
+		extension: cost.toolCount > 0 ? makeMcpExtension(connections) : undefined,
+		filter: mcpRemoveFilter(connections),
+	};
+}
+
+/**
+ * Arms the deferral on a conversation that already exists.
+ *
+ * Only when the conversation has no tool filter of its own: re-arming one that already
+ * discovered tools would throw that discovery away and make the model search again.
+ */
+async function armMcpFilter(harness, conversation, bridge) {
+	if (!bridge.filter) return;
+	const state = await harness.snapshot(AgentDoc, conversation.id, CTX);
+	if (state?.tools == null) {
+		await conversation.configure({ tools: bridge.filter }, CTX);
+	}
 }
 
 function resolveAgentChange(agents, agentName) {
@@ -167,17 +222,25 @@ function exitOnUnsettled(settled) {
 
 async function cmdRun(args, agents) {
 	const agentChange = resolveAgentChange(agents, args.agent);
-	const { harness } = await openCliHarness();
-	const conversation = await harness.createConversation(
-		{ ownership: { kind: "ownerless" }, ...(agentChange ? { agent: { model: MODEL, ...agentChange } } : { agent: { model: MODEL } }) },
-		CTX,
-	);
-	console.error(`[conversation] ${conversation.id}`);
-	const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
-	exitOnUnsettled(settled);
-	if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
-	console.error(`[hint] resume with: node cli.js resume ${conversation.id} "<prompt>"`);
-	await harness.close(CTX);
+	const bridge = await connectBridge(args.mcp !== false);
+	const { harness } = await openCliHarness(bridge);
+	try {
+		const agent = { model: MODEL, ...(agentChange ?? {}) };
+		if (bridge.filter) {
+			// The deferral: every MCP tool is filtered out of the prompt; the discovery tool
+			// brings one back when the model finds it.
+			agent.tools = bridge.filter;
+		}
+		const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent }, CTX);
+		console.error(`[conversation] ${conversation.id}`);
+		const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
+		exitOnUnsettled(settled);
+		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+		console.error(`[hint] resume with: node cli.js resume ${conversation.id} "<prompt>"`);
+	} finally {
+		await harness.close(CTX);
+		await closeMcpConnections(bridge.connections);
+	}
 }
 
 async function cmdSessions() {
@@ -216,32 +279,47 @@ async function openConversation(harness, id) {
 
 async function cmdResume(args, agents) {
 	const agentChange = resolveAgentChange(agents, args.agent);
-	const { harness } = await openCliHarness();
-	const conversation = await openConversation(harness, args.positional[0]);
-	if (agentChange) await conversation.configure(agentChange, CTX);
-	const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
-	exitOnUnsettled(settled);
-	if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
-	await harness.close(CTX);
+	const bridge = await connectBridge(args.mcp !== false);
+	const { harness } = await openCliHarness(bridge);
+	try {
+		const conversation = await openConversation(harness, args.positional[0]);
+		if (agentChange) await conversation.configure(agentChange, CTX);
+		await armMcpFilter(harness, conversation, bridge);
+		const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
+		exitOnUnsettled(settled);
+		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+	} finally {
+		await harness.close(CTX);
+		await closeMcpConnections(bridge.connections);
+	}
 }
 
 async function cmdFork(args, agents) {
 	const agentChange = resolveAgentChange(agents, args.agent);
-	const { harness } = await openCliHarness();
-	const source = await openConversation(harness, args.positional[0]);
-	const newest = (await source.entries({}, 1, undefined, CTX)).items[0];
-	if (!newest) throw new Error(`Conversation ${source.id} has no entries to fork from.`);
-	const fork = await source.fork(
-		newest.id,
-		{ ownership: { kind: "ownerless" }, ...(agentChange ? { agent: agentChange } : {}) },
-		CTX,
-	);
-	console.error(`[fork] ${source.id} @entry ${newest.id} → ${fork.id}`);
-	console.error(`[hint] resume the fork with: node cli.js resume ${fork.id} "<prompt>"`);
-	const { settled, guardBlocks } = await runPrompt(harness, fork, args.prompt);
-	exitOnUnsettled(settled);
-	if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
-	await harness.close(CTX);
+	const bridge = await connectBridge(args.mcp !== false);
+	const { harness } = await openCliHarness(bridge);
+	try {
+		const source = await openConversation(harness, args.positional[0]);
+		const newest = (await source.entries({}, 1, undefined, CTX)).items[0];
+		if (!newest) throw new Error(`Conversation ${source.id} has no entries to fork from.`);
+		const forkAgent = { ...(agentChange ?? {}) };
+		if (bridge.filter) {
+			forkAgent.tools = bridge.filter;
+		}
+		const forkOptions = { ownership: { kind: "ownerless" } };
+		if (Object.keys(forkAgent).length > 0) {
+			forkOptions.agent = forkAgent;
+		}
+		const fork = await source.fork(newest.id, forkOptions, CTX);
+		console.error(`[fork] ${source.id} @entry ${newest.id} → ${fork.id}`);
+		console.error(`[hint] resume the fork with: node cli.js resume ${fork.id} "<prompt>"`);
+		const { settled, guardBlocks } = await runPrompt(harness, fork, args.prompt);
+		exitOnUnsettled(settled);
+		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+	} finally {
+		await harness.close(CTX);
+		await closeMcpConnections(bridge.connections);
+	}
 }
 
 const ENTRY_TEXT = (entry) => (Array.isArray(entry?.model) ? entry.model : []).map((m) =>

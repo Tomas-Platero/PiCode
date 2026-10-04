@@ -172,10 +172,97 @@ The guard and skills extensions are installed only by the CLI (via
 `openHarness({ extensions: [...] })`); the proofs' registry — and therefore their
 golden transcript expectations — is untouched.
 
+### MCP: the servers the owner already has
+
+Durable ships no MCP client, and pi gets most of its reach from MCP, so this was the widest
+gap. `lib/mcp.js` reads the profile's `mcp.json` (**read-only**) and connects with **pi's own
+MCP library** (`@earendil-works/pi-mcp@1.0.2`), so the transports are the ones the owner
+already lives with. Every server tool becomes a durable tool named `mcp__<server>__<tool>`
+(anything that is not a letter, a digit or `_` becomes `_`, as pi does it).
+
+What it found on this machine — **11 configured, 8 connected, 174 tools**:
+
+| Server | Tools | Note |
+| --- | --- | --- |
+| aikido | 10 | stdio |
+| codegraph | 1 | stdio |
+| engram | 19 | stdio |
+| firebase | 62 | stdio |
+| github | 46 | streamable HTTP |
+| repomix | 6 | stdio |
+| sequential-thinking | 1 | stdio |
+| supabase-mcp-server | 29 | stdio |
+| atlassian-rovo-mcp | — | `McpAuthRequiredError`: needs OAuth |
+| sentry | — | `McpAuthRequiredError`: needs OAuth |
+| vercel | — | `McpAuthRequiredError`: needs OAuth |
+
+The three OAuth servers fail with pi-mcp's own error. **Wiring the tokens the owner already
+has is not done yet** — that is the next step, not a hidden limitation. A server that is down
+is reported rather than quietly dropped from the list, and `firebase` shows why that matters:
+it timed out on one run and connected with 62 tools on the next. The connection is flaky; the
+bridge is not.
+
+#### The size problem, solved by not declaring them
+
+Those 174 tools declared would be **≈ 238.7 KiB of schemas in every single request**. So they
+are not declared. Durable has the mechanism for exactly this (spec 7.3): a conversation may
+carry a `tools` **filter**, and a tool result may ask for names through `control.addTools`,
+which the generation's tools phase adds to that filter — offered from the next preparation
+on, with no prompt-cache invalidation.
+
+The conversation therefore starts with every MCP tool filtered out and `mcp_tools` in its
+place, and prints both numbers every time:
+
+```text
+[mcp] 11 server(s) configured (profile mcp.json)
+[mcp] atlassian-rovo-mcp: NOT CONNECTED (McpAuthRequiredError: MCP server requires authentication)
+[mcp] codegraph: connected, 1 tools
+[mcp] firebase: connected, 62 tools
+[mcp] github: connected, 46 tools
+[mcp] prompt cost: all 174 tool(s) declared ≈ 238.7 KiB; deferred ≈ 0.9 KiB
+```
+
+That is the whole argument for the deferral, measured rather than asserted: **238.7 KiB → 0.9
+KiB**, in one request you are not paying, and the number is printed every run instead of
+being quoted from a plan.
+
+And end to end, the model using one of them — note that nothing in the prompt named
+`mcp__codegraph__codegraph_explore` until the search put it there:
+
+```text
+[conversation] 269
+
+[tool] mcp_tools {"query":"codegraph"}
+[tool result] codegraph (connected):
+  mcp__codegraph__codegraph_explore — PRIMARY TOOL — call FIRST for almost any question …
+
+[tool] mcp__codegraph__codegraph_explore {"query":"number of symbols"}
+[tool result] **Exploration: number of symbols** — Found 57 symbols across 5 files. …
+```
+
+That run answered `57` on stdout. The tool it called was not offered, and could not have
+been: it was taken out of the conversation's filter at creation and put back by the search.
+
+**Replay.** Durable's `replay` policy decides what happens to a call that a crash
+interrupted: `"safe"` reruns it, the default (`"unsafe"`) does not and the model is told
+the call was interrupted. A read-only MCP tool is safe to rerun; anything else must not be
+executed twice behind the owner's back. So it follows the server's own `readOnlyHint`
+annotation, and **only a positive one** — a server that does not annotate its tools gets the
+cautious treatment. `lib/mcp.js` says which way each tool went rather than relying on the
+default, so it reads without knowing the spec.
+
+**Opt out** with `--no-mcp`.
+
+**Limits, said plainly:** `${VAR}` in `env`/`headers` is expanded as pi expands it; a
+`!command` value is **not** run — building a credential by shelling out is not something
+this experiment should do unasked. The guard's `beforeTool` hook runs for MCP tool calls
+like any other, but its rules today name `bash` and the file tools, so an MCP call passes
+unless a rule names it.
+
 ## Layout (original proofs)
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `cli.js` | Headless agent CLI (see above): `run` / `sessions` / `resume` / `fork` / `attach` / `allow` on the shared `sessions.sqlite`. |
 | `lib/guard.js` | Deterministic destructive-command guard: a `ToolTask.beforeTool` hook plus the per-conversation `app.guard` allow document. |
 | `lib/skills.js` | Profile `skills/` loader (read-only), the `<skills>` index section, and the `load_skill` tool. |
