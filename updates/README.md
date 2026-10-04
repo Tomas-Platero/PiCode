@@ -32,12 +32,12 @@ PiCode ships one release with two artifacts, and each is updated from a differen
 | Build | Update type | Target the editor asks for | Feed |
 | --- | --- | --- | --- |
 | Portable zip, run in place | `Archive` | `archive` | `updates/stable/win32/x64/archive/latest.json` |
-| Installed with the Inno setup exe | `Setup` | `system` (the product has no `target`, so the updater falls back to `system`) | `updates/stable/win32/x64/system/latest.json` |
+| Installed with the Inno user setup | `Setup` | `user` (the `user-setup` task injects `target: "user"` into the product it ships) | `updates/stable/win32/x64/user/latest.json` |
 
 The installed feed is not optional. Without it the installed editor requests
-`.../system/latest.json`, finds nothing, and the update dialog answers **`Server returned
-404`** — which is exactly what the 0.1.0-beta release shipped without. Both feeds point at
-the same release; they differ in the asset they name (zip vs `-setup.exe`).
+`.../user/latest.json`, finds nothing, and the update dialog answers **`Server returned
+404`** — which is exactly what 0.1.0-beta and 0.1.1-beta shipped without. Both feeds
+point at the same release; they differ in the asset they name (zip vs `-setup.exe`).
 
 ## Publishing them
 
@@ -61,7 +61,7 @@ node dev/update-feed.mjs \
   --commit <the same commit> \
   --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.1.1-beta/PiCode-win32-x64-0.1.1-beta-setup.exe \
   --sha256 <sha256 of the setup exe> \
-  --platform win32 --arch x64 --target system \
+  --platform win32 --arch x64 --target user \
   --installed <the editor version the previous release shipped>
 ```
 

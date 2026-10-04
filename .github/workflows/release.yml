@@ -273,11 +273,12 @@ jobs:
           # Two layouts are written from the same release:
           #   * `archive` - the portable zip, what a tree run in place
           #                 updates from (it has no `target`).
-          #   * `system`  - the Inno setup exe: an installed build has no
-          #                 `target` either, so buildUpdateFeedUrl resolves
-          #                 it to `system`. Without this file the installed
-          #                 editor asks for a feed nobody wrote and the check
-          #                 answers `Server returned 404`.
+          #   * `user`    - the Inno setup exe: the `user-setup` task
+          #                 injects `target: "user"` into the product it
+          #                 ships (build/gulpfile.vscode.win32.ts), so an
+          #                 installed editor asks for `user`. Without this
+          #                 file it asks for a feed nobody wrote and the
+          #                 check answers `Server returned 404`.
           # `--installed` is what the feed published; --force is forbidden:
           # if the generator refuses, this job fails by design.
           if [ -n "${FEED_VERSION}" ]; then
@@ -293,7 +294,7 @@ jobs:
           node dev/update-feed.mjs --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
             --picode-version "${PICODE_VERSION}" \
-            --platform win32 --arch x64 --target system \
+            --platform win32 --arch x64 --target user \
             "${INSTALLED[@]}"
 
       - name: Land the feeds on master
@@ -303,19 +304,19 @@ jobs:
           git config user.email \
             "github-actions[bot]@users.noreply.github.com"
           FEED_ARCHIVE=updates/stable/win32/x64/archive/latest.json
-          FEED_SYSTEM=updates/stable/win32/x64/system/latest.json
+          FEED_USER=updates/stable/win32/x64/user/latest.json
           TMP_ARCHIVE=$(mktemp)
-          TMP_SYSTEM=$(mktemp)
+          TMP_USER=$(mktemp)
           # mv, not cp: an untracked file still on disk would make the
           # checkout below refuse to run on the second release, when
           # master already tracks a different latest.json.
           mv "${FEED_ARCHIVE}" "${TMP_ARCHIVE}"
-          mv "${FEED_SYSTEM}" "${TMP_SYSTEM}"
+          mv "${FEED_USER}" "${TMP_USER}"
           git fetch origin master
           git checkout -B feed-ship origin/master
-          mkdir -p "$(dirname "${FEED_ARCHIVE}")" "$(dirname "${FEED_SYSTEM}")"
+          mkdir -p "$(dirname "${FEED_ARCHIVE}")" "$(dirname "${FEED_USER}")"
           mv "${TMP_ARCHIVE}" "${FEED_ARCHIVE}"
-          mv "${TMP_SYSTEM}" "${FEED_SYSTEM}"
+          mv "${TMP_USER}" "${FEED_USER}"
           git add updates/
           if git diff --cached --quiet; then
             echo "Feeds on master are already identical; nothing to push."
@@ -384,9 +385,9 @@ jobs:
               echo "attempts. No update will be offered to portable users." >&2
               exit 1
             }
-          check_feed "updates/stable/win32/x64/system/latest.json" \
+          check_feed "updates/stable/win32/x64/user/latest.json" \
             "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" || {
-              echo "error: the system feed did not land on master after" >&2
+              echo "error: the user feed did not land on master after" >&2
               echo "10 attempts. Installed users would see a 404." >&2
               exit 1
             }
@@ -405,7 +406,7 @@ jobs:
             2>/dev/null || echo unknown)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
           FEED_ARCHIVE_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
-          FEED_SYSTEM_URL="${RAW}/updates/stable/win32/x64/system/latest.json"
+          FEED_USER_URL="${RAW}/updates/stable/win32/x64/user/latest.json"
           {
             echo "## Release PiCode ${PICODE_VERSION}"
             echo
@@ -420,8 +421,8 @@ jobs:
             echo "  updates/stable/win32/x64/archive/latest.json"
             echo "  ${FEED_ARCHIVE_URL}"
             echo "- Feed (installed):"
-            echo "  updates/stable/win32/x64/system/latest.json"
-            echo "  ${FEED_SYSTEM_URL}"
+            echo "  updates/stable/win32/x64/user/latest.json"
+            echo "  ${FEED_USER_URL}"
             echo
             echo "Updates roll out gradually: the updater's"
             echo "\`update.minReleaseAge\` defaults to 120 h, so users"

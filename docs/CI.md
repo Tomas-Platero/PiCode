@@ -45,8 +45,8 @@ workflow las lleva dentro para que no puedan ejecutarse mal:
 3. El commit del feed se lee del `product.json` **construido**, no de HEAD.
 4. El feed se genera **dos veces** con `dev/update-feed.mjs --platform win32
    --arch x64` y `--installed <versión anterior del editor>`, una por destino:
-   `--target archive` (zip portable) y `--target system` (el `.exe` de Inno, que
-   es el destino que resuelve una instalación sin `target`). Ambas llevan
+   `--target archive` (zip portable) y `--target user` (el `.exe` del `user-setup` de
+   Inno, que es el destino que el producto instalado lleva inyectado). Ambas llevan
    `--picode-version`. **Nunca** se pasa `--force` — si el generador se niega,
    la release se para.
 5. Los dos feeds se comprometen en `master` (rama efímera `feed-ship` → push)

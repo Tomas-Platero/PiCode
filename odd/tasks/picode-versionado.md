@@ -61,10 +61,11 @@ anuncia es el de PiCode. VSCodium y Cursor hacen lo mismo.
       (`updateTooltip.ts`), con retroceso a `productVersion` cuando el feed no lo trae.
 - [x] Actualizar la skill `picode-release` y `docs/CI.md` con la regla de los dos números.
 - [x] **El feed lleva `picodeVersion`.** `dev/update-feed.mjs` acepta `--picode-version`; el
-      workflow lo pasa y publica **dos** feeds por release: `archive` (zip portable) y `system`
-      (el `.exe` de Inno, que es el destino que resuelve una instalación sin `target`). Sin el
-      segundo, la instalación pedía `.../system/latest.json` y el updater decía
-      «Server returned 404».
+      workflow lo pasa y publica **dos** feeds por release: `archive` (zip portable) y `user`
+      (el `.exe` del `user-setup` de Inno: la tarea del build inyecta `target: "user"` en el
+      producto que instala, así que la instalación pide `.../user/latest.json`). Sin el segundo,
+      la instalación pedía ese fichero y el updater decía «Server returned 404». (Se publicó
+      `system` al principio, por un diagnóstico equivocado del `target`; el `user` es el real.)
 
 ## 2026-10-03 — lo que se hizo al publicar 0.1.1-beta
 
