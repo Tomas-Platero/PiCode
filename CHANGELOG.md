@@ -20,6 +20,23 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   proceso con `GENTLE_SHELL_INTERACTIVE_HOST=1`, el contrato de host interactivo que gentle-pi lee
   (`lib/rpc-host.ts`). Detalle en `odd/tasks/picode-gentle-chat.md`.
 
+### Changed
+- **pi sube a `1.0.2` en el pin del editor.** `distribution/runtime.json` pasa de `1.0.1` a
+  `1.0.2`, la última publicada (el harness del dueño ya corre esa). Antes de subir se midió el
+  contrato contra el paquete real: las **7 entradas del SDK** que resuelve el conector están,
+  `dist/cli.js` está, y el **validador de MCP de 1.0.2 acepta los 12 escritores** de PiCode y sigue
+  rechazando las dos grafías heredadas que el check usa como control. La única novedad de 1.0.2 es
+  `samplingParamsByThinkingLevel` en `models.json`, y eso entra por *Fixed*. Detalle en
+  `odd/tasks/picode-pi-102.md`.
+
+### Fixed
+- **Un campo por modelo ya no se pierde al proyectar un proveedor.** `mergeModelsFile`
+  (`declarations.ts`) reconstruía la lista `models` del proveedor solo con lo que nombraba la fila
+  de ajustes (`id` y, si acaso, `name`), así que cualquier campo por modelo escrito a mano —
+  `samplingParamsByThinkingLevel` de pi 1.0.2, `contextWindow`, `reasoning`, `samplingParams`…— se
+  borraba en la siguiente conexión. Ahora la entrada en disco es la base y el borrador solo pisa lo
+  que nombra. Con pruebas.
+
 ## [0.1.1-beta] — 2026-10-03
 
 ### Changed

@@ -265,12 +265,28 @@ export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models:
 	const previousKey = previous !== undefined && typeof previous['apiKey'] === 'string' ? previous['apiKey'] : undefined;
 	const apiKey = rowCarriesKey ? draft.apiKey : previousKey;
 	const authHeader = rowCarriesKey ? draft.authHeader === true : draft.authHeader === true || previous?.['authHeader'] === true;
+	// A model the provider already declares may carry fields this bridge does not know about —
+	// pi's own per-model settings (`samplingParamsByThinkingLevel`, `contextWindow`, `reasoning`,
+	// …) written by hand or by a newer pi. The draft only names `id` and `name`, so the entry on
+	// disk is the base and the draft overwrites what it names: rebuilding the array from the draft
+	// alone would silently drop them on the very next projection.
+	const previousModels = previous !== undefined && Array.isArray(previous['models']) ? previous['models'] : [];
+	const previousModelById = new Map<string, Record<string, unknown>>();
+	for (const entry of previousModels) {
+		if (isRecord(entry) && typeof entry['id'] === 'string') {
+			previousModelById.set(entry['id'], entry);
+		}
+	}
 	providers[draft.id] = {
 		baseUrl: draft.baseUrl,
 		api: draft.api,
 		...(apiKey === undefined || apiKey.length === 0 ? {} : { apiKey }),
 		...(authHeader ? { authHeader: true } : {}),
-		models: models.map(model => ({ id: model.id, ...(model.name === undefined ? {} : { name: model.name }) })),
+		models: models.map(model => ({
+			...(previousModelById.get(model.id) ?? {}),
+			id: model.id,
+			...(model.name === undefined ? {} : { name: model.name }),
+		})),
 	};
 	root.providers = providers;
 	return root;
