@@ -10,33 +10,32 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Can the Actions token create a release, with and without notes?
+      - name: Draft vs published release creation
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           API="repos/${GITHUB_REPOSITORY}"
-          make_draft() {
-            local notes="$1"
+          make() {
+            local draft="$1" notes="$2"
             gh api -X POST "${API}/releases" \
               -f tag_name="probe-delete-me" \
               -f name="probe" \
               -f target_commitish="master" \
-              -F draft=true -F "generate_release_notes=${notes}" \
+              -F "draft=${draft}" -F "generate_release_notes=${notes}" \
               --jq .id 2>/tmp/err || { cat /tmp/err; echo "none"; }
           }
-          echo "== A: draft without notes"
-          A=$(make_draft false)
+          clean() {
+            if [ "$1" != "none" ]; then
+              gh api -X DELETE "${API}/releases/$1" --silent || true
+            fi
+            gh api -X DELETE "${API}/git/refs/tags/probe-delete-me" \
+              --silent || true
+          }
+          echo "== A: published, no notes"
+          A=$(make false false)
           echo "A=${A}"
-          if [ "$A" != "none" ]; then
-            gh api -X DELETE "${API}/releases/${A}" --silent
-          fi
-          echo "== B: draft with generated notes"
-          B=$(make_draft true)
+          clean "$A"
+          echo "== B: published, generated notes"
+          B=$(make false true)
           echo "B=${B}"
-          if [ "$B" != "none" ]; then
-            gh api -X DELETE "${API}/releases/${B}" --silent
-          fi
-          echo "== cleanup tag if it was created"
-          TAG="${API}/git/refs/tags/probe-delete-me"
-          gh api -X DELETE "${TAG}" --silent 2>/dev/null \
-            && echo "tag deleted" || echo "no tag to delete"
+          clean "$B"
