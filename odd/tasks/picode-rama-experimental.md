@@ -183,9 +183,10 @@ Cinco commits más sobre la rama, todos verificados **ejecutando**:
 | Commit | Qué añade |
 | --- | --- |
 | `4d340e16` | **Agente usable**: `run` / `sessions` / `resume` / `fork` / `attach` / `allow`, y un **guard determinista** que bloquea en código los comandos destructivos. Probado de verdad: el directorio y su fichero existían antes y **sobrevivieron** al intento de borrado |
-| `ce5fafa4` | **Puente de MCP** con la librería de MCP del propio pi: 11 servidores, 8 conectados, **174 tools**. Declararlas son **238,7 KiB** por petición; **diferidas, 0,9 KiB**, y el modelo las encuentra buscando |
+| `ce5fafa4` | **Puente de MCP** con la librería de MCP del propio pi: 11 servidores, **9 conectados**, **188 tools**. Declararlas son **275,6 KiB** por petición; **diferidas, 0,9 KiB**, y el modelo las encuentra buscando |
 | `0bffeff9` | **Las opciones en los ajustes de PiCode** (`picode.durable.*`), con `flag > ajuste > defecto`. El interruptor del guard **era una mentira** — apagaba el texto pero el hook seguía bloqueando: lo cazó una ejecución, no una lectura del código |
 | `2e7c8734` | **El daemon**: un dueño del storage y clientes por un pipe local. `attach` deja de sondear y pasa a recibir eventos **en vivo**; `send` corre prompts por el daemon; dos clientes distintos ven los mismos eventos a la vez |
+| `b2936dec` | **OAuth de solo lectura**: los tokens que pi ya guarda se usan, los caducados dan la línea exacta que los arregla (`pi mcp login …`), y **no se escribe ni se renueva nunca** — un refresh consume la rotación y dejaría a pi sin login. Comprobado con hash: `mcp-auth.json` intacto tras cada ejecución |
 
 Y la premisa que justificaba el daemon **resultó falsa al medirla**: el «un proceso es dueño del
 storage» de la spec **no lo impone el runtime**. De ahí el daemon, y de ahí la corrección que está
