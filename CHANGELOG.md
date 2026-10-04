@@ -7,6 +7,14 @@ All notable changes to PiCode are documented here. The format is based on
 Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
 (the owner removed them; the process lives in `docs/CI.md`).
 
+## [Unreleased]
+
+### Changed
+- **El updater ofrece una release en cuanto se publica.** `update.minReleaseAge` pasa de 120 h a
+  **0**: con el valor por defecto, un feed recién publicado contestaba «no hay actualizaciones
+  disponibles» y la release tardaba cinco días en ofrecerse. El ajuste sigue existiendo para
+  quien prefiera el reparto escalonado.
+
 ## [0.1.3-beta] — 2026-10-04
 
 ### Changed
