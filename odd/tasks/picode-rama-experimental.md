@@ -187,6 +187,15 @@ Cinco commits más sobre la rama, todos verificados **ejecutando**:
 | `0bffeff9` | **Las opciones en los ajustes de PiCode** (`picode.durable.*`), con `flag > ajuste > defecto`. El interruptor del guard **era una mentira** — apagaba el texto pero el hook seguía bloqueando: lo cazó una ejecución, no una lectura del código |
 | `2e7c8734` | **El daemon**: un dueño del storage y clientes por un pipe local. `attach` deja de sondear y pasa a recibir eventos **en vivo**; `send` corre prompts por el daemon; dos clientes distintos ven los mismos eventos a la vez |
 | `b2936dec` + `68927b96` | **OAuth de solo lectura, y solo del perfil interno**: los tokens se leen del perfil en vigor (`data/pi-agent/`), **nunca de `~/.pi`**; un acceso caducado o ausente dice que ese perfil necesita un login y que todavía no hay nada que lo haga. **No se escribe ni se renueva nunca** — un refresh consume la rotación. Comprobado con hash: el `mcp-auth.json` externo intacto, y el interno sin crear. Precio visible de la regla: `sentry` conectaba con 14 tools mientras se tomaba prestado un token externo, y ya no |
+| `d424e5dc` | **El editor ve durable**: sección *Durable* en el panel de estado (daemon, conversaciones, de subagente, streams vivos) y cuatro comandos —arrancar, parar, listar/abrir, enviar un prompt— con la transcripción en un canal de salida. Los ajustes dejan de decir «el editor todavía no lo ejecuta» |
+| `8474f4e3` | **pi + durable, demostrado**: una extensión que pi carga del repositorio le delega trabajo al daemon. La prueba: pi arranca seis pasos lentos, **se mata pi con `taskkill /F /T` a mitad**, el daemon termina el trabajo que le habían entregado, y un pi nuevo lee la conversación terminada y su respuesta. Sobre **el pi interno de PiCode**, no el de `~/.pi` |
+
+**La respuesta a «pi + pi-durable», medida construyéndola:** no es un motor —los dos no
+componen— sino un **reparto**: pi sigue siendo el que conduce, y lo que no puede perderse se le
+entrega a durable, que es quien tiene la caja negra. Lo que el híbrido **no** da, y va escrito en
+su README: la sesión propia de pi sigue sin ser a prueba de caídas; solo sobrevive lo delegado. Y
+las tarjetas de subagente del chat siguen fuera, porque eso exige que el chat corra sobre durable
+o sobre ACP: es el cambio de motor, y no se ha hecho.
 
 Y la premisa que justificaba el daemon **resultó falsa al medirla**: el «un proceso es dueño del
 storage» de la spec **no lo impone el runtime**. De ahí el daemon, y de ahí la corrección que está
