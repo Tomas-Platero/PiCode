@@ -30,7 +30,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
-import { defineExtension, defineTool, section } from "@earendil-works/pi-durable";
+import { AgentDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { McpClient, StdioTransport, StreamableHttpTransport } from "@earendil-works/pi-mcp";
 
 /** The one MCP-shaped tool that is always offered; everything else waits to be found. */
@@ -382,5 +382,58 @@ export function makeMcpExtension(connections, { maxAdd = MAX_ADD } = {}) {
 export async function closeMcpConnections(connections) {
 	for (const connection of connections) {
 		await closeMcpConnection(connection);
+	}
+}
+
+// --- CLI/daemon wiring: connect the profile's servers, arm the deferral ---------
+
+export const NO_BRIDGE = { connections: [], extension: undefined, filter: undefined };
+
+/**
+ * Connects the profile's MCP servers and reports what it found, one line per server.
+ *
+ * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
+ * prompt is the small discovery tool and not three hundred schemas. The cost line below is
+ * printed for both ways round: the experiment's whole claim about size is that number.
+ * Why the bridge is on or off was already printed by the [settings] lines.
+ */
+export async function connectBridge(enabled, profileDir) {
+	if (!enabled) {
+		console.error("[mcp] disabled: the agent runs without MCP tools.");
+		return NO_BRIDGE;
+	}
+	const config = loadMcpConfig(profileDir);
+	if (config.servers.size === 0) {
+		console.error("[mcp] no servers configured");
+		return NO_BRIDGE;
+	}
+	console.error(`[mcp] ${config.servers.size} server(s) configured (${config.sources.join(", ")})`);
+	const connections = await connectMcpServers(config.servers);
+	for (const connection of connections) {
+		console.error(connection.status === "connected"
+			? `[mcp] ${connection.name}: connected, ${connection.tools.length} tools`
+			: `[mcp] ${connection.name}: NOT CONNECTED (${connection.error})`);
+	}
+	const cost = mcpPromptCost(connections);
+	const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
+	console.error(`[mcp] prompt cost: all ${cost.toolCount} tool(s) declared ≈ ${kib(cost.declaredBytes)}; deferred ≈ ${kib(cost.deferredBytes)}`);
+	return {
+		connections,
+		extension: cost.toolCount > 0 ? makeMcpExtension(connections) : undefined,
+		filter: mcpRemoveFilter(connections),
+	};
+}
+
+/**
+ * Arms the deferral on a conversation that already exists.
+ *
+ * Only when the conversation has no tool filter of its own: re-arming one that already
+ * discovered tools would throw that discovery away and make the model search again.
+ */
+export async function armMcpFilter(harness, conversation, bridge, context) {
+	if (!bridge.filter) return;
+	const state = await harness.snapshot(AgentDoc, conversation.id, context);
+	if (state?.tools == null) {
+		await conversation.configure({ tools: bridge.filter }, context);
 	}
 }

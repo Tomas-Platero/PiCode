@@ -29,3 +29,19 @@ export function loadAgents(profileDir) {
 	}
 	return agents.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * `--agent <name>` / `agent` request parameter → the configure change that
+ * makes a conversation run with that agent's instructions. Fails with a clear
+ * message (and the available names) when the agent does not exist.
+ */
+export function resolveAgentChange(agents, agentName, profileDir) {
+	if (!agentName) return undefined;
+	const agent = agents.find((a) => a.name === agentName);
+	if (!agent) {
+		const known = agents.map((a) => a.name).join(", ") || "(none)";
+		throw new Error(`No agent "${agentName}" in ${agentsDir(profileDir)}. Available: ${known}`);
+	}
+	console.error(`[agent] ${agent.name}${agent.description ? ` — ${agent.description.slice(0, 120)}` : ""}`);
+	return { instructions: agent.instructions };
+}

@@ -198,3 +198,19 @@ export function makeGuardExtension({ enabled = true } = {}) {
 			: [],
 	});
 }
+
+/**
+ * Add one exact command to a conversation's allow list (the `allow` command and
+ * the daemon's `allow` method both land here). Whitespace-normalized; adding it
+ * twice changes nothing. Returns the conversation's full allow list.
+ */
+export async function allowCommand(harness, conversation, rawCommand, context) {
+	const command = normalizeCommand(rawCommand);
+	if (!command) throw new Error('allow requires the exact command, quoted: node cli.js allow <id> "rm -rf build"');
+	await conversation.commit(async (tx) => {
+		const doc = await tx.doc(GuardDoc, conversation.id);
+		if (!doc.allow.includes(command)) doc.allow.push(command);
+	}, context);
+	const doc = await harness.snapshot(GuardDoc, conversation.id, context);
+	return doc?.allow ?? [];
+}

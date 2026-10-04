@@ -5,40 +5,56 @@
 // continuity is visible across process invocations. The proofs keep their own
 // one-database-per-proof behaviour.
 //
+// Two ways to touch that database:
+//   • the DAEMON (`serve`) owns it and serves live events over a local
+//     endpoint; several client processes connect at once (attach/send/…);
+//   • the direct commands (run/resume/fork/…) open it in this process, and
+//     refuse with an actionable message when a daemon already owns it — one
+//     process owns the storage at a time.
+//
 // Usage:
-//   node cli.js run "<prompt>" [--agent <name>]
-//   node cli.js sessions
-//   node cli.js resume <conversationId> "<prompt>" [--agent <name>]
-//   node cli.js fork <conversationId> "<prompt>" [--agent <name>]
-//   node cli.js attach <conversationId>
-//   node cli.js allow <conversationId> "<exact command>"   # guard opt-in
+//   node cli.js serve [--no-mcp] [--no-guard]           become the owner; serve local clients
+//   node cli.js run "<prompt>" [--agent <name>]         NEW conversation, owned by THIS process
+//   node cli.js sessions                                list conversations (daemon first, direct fallback)
+//   node cli.js resume <conversationId> "<prompt>"      continue an existing conversation (direct)
+//   node cli.js fork <conversationId> "<prompt>"        fork at the newest entry (direct)
+//   node cli.js send [id] "<prompt>" [--agent <name>]   run a prompt THROUGH the daemon
+//   node cli.js attach <conversationId>                 live events from the daemon, Ctrl+C to detach
+//   node cli.js allow <conversationId> "<exact command>"  guard opt-in (daemon first, direct fallback)
 //
 // The answer streams to stdout; tool activity and diagnostics go to stderr, so
 // `node cli.js run "..." > answer.txt` captures just the answer.
-import { CTX, openHarness, sleepMs } from "./lib/common.js";
-import { GuardDoc, makeGuardExtension, normalizeCommand } from "./lib/guard.js";
+import { CTX, SHARED_DB, listConversations, openHarness, sleepMs } from "./lib/common.js";
+import { allowCommand, makeGuardExtension, normalizeCommand } from "./lib/guard.js";
 import { loadSkills, makeSkillsExtension } from "./lib/skills.js";
-import { agentsDir, loadAgents } from "./lib/agents.js";
+import { loadAgents, resolveAgentChange } from "./lib/agents.js";
 import { DURABLE_KEYS, parseModelSetting, printDurableOptions, resolveDurableOptions } from "./lib/settings.js";
 import { DEFAULT_PROFILE_DIR } from "./lib/profile.js";
-import { closeMcpConnections, connectMcpServers, loadMcpConfig, makeMcpExtension, mcpPromptCost, mcpRemoveFilter } from "./lib/mcp.js";
-import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
-
-const DB = "sessions.sqlite"; // the ONE shared CLI database — never numbered, never per-run
+import { armMcpFilter, closeMcpConnections, connectBridge, NO_BRIDGE } from "./lib/mcp.js";
+import { makeRunRenderer, makeAttachRenderer } from "./lib/render.js";
+import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "./lib/client.js";
+import { daemonEndpoint } from "./lib/protocol.js";
+import { startDaemon } from "./lib/daemon.js";
+import { watchEvents } from "@earendil-works/pi-durable";
 
 // --- argument parsing -----------------------------------------------------------
 
 function usage() {
 	console.error(`Usage:
+  node cli.js serve [--no-mcp] [--no-guard]           own ${SHARED_DB} and serve local clients (Ctrl+C to stop)
+  node cli.js stop                                    ask the daemon to shut down gracefully
   node cli.js run "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]
-  node cli.js sessions                               list conversations in the shared database
+  node cli.js sessions                               list conversations (through the daemon when it is up)
   node cli.js resume <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]
-  node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]  fork, then run the prompt on the fork
-  node cli.js attach <id>                            live event stream until Ctrl+C
+  node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]
+  node cli.js send [id] "<prompt>" [--agent <name>] [--model provider/model]   run a prompt through the daemon
+  node cli.js attach <id>                            live events from the daemon, Ctrl+C to detach
   node cli.js allow <id> "<exact command>"           let the guard pass this exact command
 
 Options also come from PiCode's settings (picode.durable.*) when the flags are not given:
-  picode.durable.mcp / .guard / .model / .agent — flag > setting > default.`);
+  picode.durable.mcp / .guard / .model / .agent — flag > setting > default.
+  --no-mcp / --no-guard are daemon-level choices: the daemon decides them once at startup
+  (node cli.js serve --no-mcp); send/attach run whatever the running daemon offers.`);
 }
 
 function parseArgs(argv) {
@@ -69,174 +85,55 @@ function parseArgs(argv) {
 	return { positional, agent, mcp, noGuard, model };
 }
 
-// --- shared setup ----------------------------------------------------------------
+// --- shared setup (the direct, in-process owner) ---------------------------------
 
 async function openCliHarness(bridge = NO_BRIDGE, guardEnabled = true) {
 	// Extensions read the profile once at startup; the profile itself stays read-only.
 	const skills = loadSkills(DEFAULT_PROFILE_DIR);
 	const extensions = [makeGuardExtension({ enabled: guardEnabled }), makeSkillsExtension(skills)];
 	if (bridge.extension) extensions.push(bridge.extension);
-	return { ...(await openHarness({ db: DB, extensions })), skills, bridge };
-}
-
-const NO_BRIDGE = { connections: [], extension: undefined, filter: undefined };
-
-/**
- * Connects the profile's MCP servers and reports what it found, one line per server.
- *
- * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
- * prompt is the small discovery tool and not three hundred schemas. The cost line below is
- * printed for both ways round: the experiment's whole claim about size is that number.
- * Why the bridge is on or off was already printed by the [settings] lines.
- */
-async function connectBridge(enabled) {
-	if (!enabled) {
-		console.error("[mcp] disabled: the agent runs without MCP tools.");
-		return NO_BRIDGE;
-	}
-	const config = loadMcpConfig(DEFAULT_PROFILE_DIR);
-	if (config.servers.size === 0) {
-		console.error("[mcp] no servers configured");
-		return NO_BRIDGE;
-	}
-	console.error(`[mcp] ${config.servers.size} server(s) configured (${config.sources.join(", ")})`);
-	const connections = await connectMcpServers(config.servers);
-	for (const connection of connections) {
-		console.error(connection.status === "connected"
-			? `[mcp] ${connection.name}: connected, ${connection.tools.length} tools`
-			: `[mcp] ${connection.name}: NOT CONNECTED (${connection.error})`);
-	}
-	const cost = mcpPromptCost(connections);
-	const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
-	console.error(`[mcp] prompt cost: all ${cost.toolCount} tool(s) declared ≈ ${kib(cost.declaredBytes)}; deferred ≈ ${kib(cost.deferredBytes)}`);
-	return {
-		connections,
-		extension: cost.toolCount > 0 ? makeMcpExtension(connections) : undefined,
-		filter: mcpRemoveFilter(connections),
-	};
-}
-
-/**
- * Arms the deferral on a conversation that already exists.
- *
- * Only when the conversation has no tool filter of its own: re-arming one that already
- * discovered tools would throw that discovery away and make the model search again.
- */
-async function armMcpFilter(harness, conversation, bridge) {
-	if (!bridge.filter) return;
-	const state = await harness.snapshot(AgentDoc, conversation.id, CTX);
-	if (state?.tools == null) {
-		await conversation.configure({ tools: bridge.filter }, CTX);
-	}
-}
-
-function resolveAgentChange(agents, agentName) {
-	if (!agentName) return undefined;
-	const agent = agents.find((a) => a.name === agentName);
-	if (!agent) {
-		const known = agents.map((a) => a.name).join(", ") || "(none)";
-		throw new Error(`No agent "${agentName}" in ${agentsDir(DEFAULT_PROFILE_DIR)}. Available: ${known}`);
-	}
-	console.error(`[agent] ${agent.name}${agent.description ? ` — ${agent.description.slice(0, 120)}` : ""}`);
-	return { instructions: agent.instructions };
-}
-
-/** Conversation and entry ids are session-assigned integers in this storage. */
-function describeNewest(entry) {
-	return entry ? `entry ${entry.id} (${entry.kind})` : "never";
+	return { ...(await openHarness({ db: SHARED_DB, extensions })), skills, bridge };
 }
 
 // --- streaming -------------------------------------------------------------------
 
-function printEventLine(line) {
-	process.stderr.write(`${line}\n`);
-}
-
-function messageText(message) {
-	const content = message?.content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content.filter((b) => b?.type === "text").map((b) => b.text).join("");
-}
-
 /**
  * Attach an event stream, submit `prompt`, wait for the run to settle.
- * Text deltas → stdout; tools, guard blocks, retries → stderr.
+ * Text deltas → stdout; tools, guard blocks, retries → stderr (lib/render.js).
  * The OmniRoute gateway answers in whole messages, so an assistant message that
  * never streamed deltas is printed complete from its message_end event.
  */
 async function runPrompt(harness, conversation, prompt) {
+	const renderer = makeRunRenderer();
 	const stream = await watchEvents(harness, conversation.id, CTX);
-	let wroteText = false;
-	let sawDelta = false;
-	let guardBlocks = 0;
 	await stream.start(async (events) => {
-		for (const e of events) {
-			switch (e.type) {
-				case "message_start":
-					sawDelta = false;
-					break;
-				case "message_update":
-					for (const change of e.changes ?? []) {
-						if (change.type === "text_delta") {
-							process.stdout.write(change.delta);
-							wroteText = true;
-							sawDelta = true;
-						}
-					}
-					break;
-				case "message_end": {
-					// message_end carries the entry; its model messages hold the assistant text.
-					const message = e.message ?? e.entry?.model?.find((m) => m.role === "assistant");
-					const text = messageText(message).trim();
-					if (!sawDelta && text && message?.role === "assistant") {
-						process.stdout.write(text);
-						wroteText = true;
-					}
-					break;
-				}
-				case "tool_execution_start":
-					printEventLine(`\n[tool] ${e.toolName} ${JSON.stringify(e.args).slice(0, 200)}`);
-					break;
-				case "tool_execution_end": {
-					const result = (e.entry?.model ?? []).map((m) =>
-						(typeof m?.content === "string" ? m.content : Array.isArray(m?.content) ? m.content.filter((b) => b?.type === "text").map((b) => b.text).join("") : ""),
-					).join(" ").trim();
-					if (result) printEventLine(`[tool result] ${result.slice(0, 500)}`);
-					if (result.startsWith("Blocked by the deterministic guard")) guardBlocks++;
-					break;
-				}
-				case "auto_retry_start":
-					printEventLine(`[retry ${e.attempt}] ${e.errorMessage?.slice(0, 200)}`);
-					break;
-				case "run_end":
-					printEventLine(`\n[run settled]`);
-					break;
-			}
-		}
+		for (const event of events) renderer.onEvent(event);
 	});
-
 	const submission = await conversation.submit({ type: "input", content: prompt }, CTX);
 	const settled = await submission.wait(CTX);
 	// Let the last committed event batches drain before detaching (same pattern as proof3).
 	await sleepMs(1500);
 	await stream.stop();
-	if (wroteText) process.stdout.write("\n");
-	return { settled, guardBlocks };
+	if (renderer.wroteText) process.stdout.write("\n");
+	return { settled, guardBlocks: renderer.guardBlocks };
 }
 
-function exitOnUnsettled(settled) {
-	if (settled.status !== "done") {
-		console.error(`\nrun did not settle: ${settled.status}${settled.reason ? ` (${JSON.stringify(settled.reason)})` : ""}`);
+function exitOnUnsettled(status) {
+	if (status !== "done") {
+		console.error(`\nrun did not settle: ${status}`);
 		process.exitCode = 1;
 	}
 }
 
-// --- commands --------------------------------------------------------------------
+function printGuardBlocks(guardBlocks) {
+	if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+}
+
+// --- direct commands (this process owns the storage) ------------------------------
 
 async function cmdRun(args, agents, options) {
-	const agentChange = resolveAgentChange(agents, options.agent?.value);
-	const bridge = await connectBridge(options.mcp.value);
+	const agentChange = resolveAgentChange(agents, options.agent?.value, DEFAULT_PROFILE_DIR);
+	const bridge = await connectBridge(options.mcp.value, DEFAULT_PROFILE_DIR);
 	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
 		const model = parseModelSetting(options.model.value); // "provider/model" — validated at resolve time
@@ -249,8 +146,8 @@ async function cmdRun(args, agents, options) {
 		const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent }, CTX);
 		console.error(`[conversation] ${conversation.id}`);
 		const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
-		exitOnUnsettled(settled);
-		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+		exitOnUnsettled(settled.status);
+		printGuardBlocks(guardBlocks);
 		console.error(`[hint] resume with: node cli.js resume ${conversation.id} "<prompt>"`);
 	} finally {
 		await harness.close(CTX);
@@ -258,51 +155,23 @@ async function cmdRun(args, agents, options) {
 	}
 }
 
-async function cmdSessions() {
-	const { harness, storage } = await openCliHarness();
-	// NOTE: the README/spec's Session.scanConversations is not on the runtime
-	// Harness; read the storage directly, serialized on the session line.
-	const conversations = await harness.readOnLine(async () => {
-		const items = [];
-		let cursor;
-		for (;;) {
-			const page = await storage.scanConversations({}, 100, cursor, CTX);
-			items.push(...page.items);
-			cursor = page.cursor;
-			if (!cursor) break;
-		}
-		return items;
-	});
-	console.error(`${conversations.length} conversation(s) in ${DB}`);
-	console.log("id\tentries\tlast activity\tnote");
-	for (const record of conversations) {
-		const page = await harness.readOnLine(() => storage.scanEntries({ conversationId: record.id }, 1000, undefined, CTX));
-		const newest = page.items[0];
-		const note = record.owner ? `subagent (task ${record.owner.taskId})` : record.parent ? `fork of ${record.parent.conversationId}` : "";
-		console.log(
-			`${record.id}\t${page.items.length}\t${describeNewest(newest)}\t${note}`,
-		);
-	}
-	await harness.close(CTX);
-}
-
 async function openConversation(harness, id) {
 	const conversation = await harness.conversation(id, CTX);
-	if (!conversation) throw new Error(`No conversation "${id}" in ${DB} — run \`node cli.js sessions\` to list ids.`);
+	if (!conversation) throw new Error(`No conversation "${id}" in ${SHARED_DB} — run \`node cli.js sessions\` to list ids.`);
 	return conversation;
 }
 
 async function cmdResume(args, agents, options) {
-	const agentChange = resolveAgentChange(agents, options.agent?.value);
-	const bridge = await connectBridge(options.mcp.value);
+	const agentChange = resolveAgentChange(agents, options.agent?.value, DEFAULT_PROFILE_DIR);
+	const bridge = await connectBridge(options.mcp.value, DEFAULT_PROFILE_DIR);
 	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
 		const conversation = await openConversation(harness, args.positional[0]);
 		if (agentChange) await conversation.configure(agentChange, CTX);
-		await armMcpFilter(harness, conversation, bridge);
+		await armMcpFilter(harness, conversation, bridge, CTX);
 		const { settled, guardBlocks } = await runPrompt(harness, conversation, args.prompt);
-		exitOnUnsettled(settled);
-		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+		exitOnUnsettled(settled.status);
+		printGuardBlocks(guardBlocks);
 	} finally {
 		await harness.close(CTX);
 		await closeMcpConnections(bridge.connections);
@@ -310,8 +179,8 @@ async function cmdResume(args, agents, options) {
 }
 
 async function cmdFork(args, agents, options) {
-	const agentChange = resolveAgentChange(agents, options.agent?.value);
-	const bridge = await connectBridge(options.mcp.value);
+	const agentChange = resolveAgentChange(agents, options.agent?.value, DEFAULT_PROFILE_DIR);
+	const bridge = await connectBridge(options.mcp.value, DEFAULT_PROFILE_DIR);
 	const { harness } = await openCliHarness(bridge, options.guard.value);
 	try {
 		const source = await openConversation(harness, args.positional[0]);
@@ -329,90 +198,160 @@ async function cmdFork(args, agents, options) {
 		console.error(`[fork] ${source.id} @entry ${newest.id} → ${fork.id}`);
 		console.error(`[hint] resume the fork with: node cli.js resume ${fork.id} "<prompt>"`);
 		const { settled, guardBlocks } = await runPrompt(harness, fork, args.prompt);
-		exitOnUnsettled(settled);
-		if (guardBlocks > 0) console.error(`[guard] ${guardBlocks} tool call(s) blocked — see the tool results above.`);
+		exitOnUnsettled(settled.status);
+		printGuardBlocks(guardBlocks);
 	} finally {
 		await harness.close(CTX);
 		await closeMcpConnections(bridge.connections);
 	}
 }
 
-const ENTRY_TEXT = (entry) => (Array.isArray(entry?.model) ? entry.model : []).map((m) =>
-	typeof m?.content === "string"
-		? m.content
-		: Array.isArray(m?.content)
-			? m.content.filter((b) => b?.type === "text").map((b) => b.text).join("")
-			: "",
-).join(" ").replace(/\s+$/, "");
+async function cmdAllowDirect(args) {
+	const command = normalizeCommand(args.prompt);
+	if (!command) throw new Error('allow requires the exact command, quoted: node cli.js allow <id> "rm -rf build"');
+	const { harness } = await openCliHarness();
+	const conversation = await openConversation(harness, args.positional[0]);
+	const allowed = await allowCommand(harness, conversation, command, CTX);
+	console.error(`[guard] allowed for ${conversation.id}:`);
+	for (const entry of allowed) console.log(`  ${entry}`);
+	await harness.close(CTX);
+}
 
-function describeEntry(entry) {
-	switch (entry.kind) {
-		case "pi.user":
-			return `[user] ${ENTRY_TEXT(entry)}`;
-		case "pi.assistant": {
-			const calls = (entry.model?.[0]?.content ?? []).filter((b) => b?.type === "toolCall").map((b) => `${b.name}(${JSON.stringify(b.arguments).slice(0, 120)})`);
-			const text = ENTRY_TEXT(entry);
-			return `[assistant]${calls.length ? ` tool calls: ${calls.join("; ")} —` : ""} ${text}`;
+// --- daemon commands (the daemon owns the storage; this process is a client) ------
+
+function printSessions(conversations, where) {
+	console.error(`${conversations.length} conversation(s) in ${SHARED_DB} (${where})`);
+	console.log("id\tentries\tlast activity\tnote");
+	for (const row of conversations) {
+		console.log(`${row.id}\t${row.entries}\t${row.newest}\t${row.note}`);
+	}
+}
+
+async function cmdServe(resolved) {
+	await startDaemon(resolved);
+	// The daemon serves until `shutdown` or Ctrl+C; keep the process alive.
+	await new Promise(() => {});
+}
+
+async function cmdSend(args) {
+	const parts = args.positional;
+	let conversationId;
+	let prompt;
+	if (parts.length >= 2) {
+		conversationId = /^\d+$/.test(parts[0]) ? Number(parts[0]) : parts[0]; // ids are integers in this storage
+		prompt = parts[1];
+	} else {
+		prompt = parts[0];
+	}
+	if (!prompt) throw new Error('send requires a prompt: node cli.js send [id] "<prompt>"');
+
+	const client = await DaemonClient.connect();
+	try {
+		console.error(`[send] through the daemon at ${daemonEndpoint()}`);
+		if (conversationId === undefined) {
+			const opened = await client.request("open", { model: args.model, agent: args.agent });
+			conversationId = opened.conversationId;
 		}
-		case "pi.tool-result": {
-			const result = ENTRY_TEXT(entry);
-			return `[tool result] ${result ? result.slice(0, 300) : "(no output)"}`;
-		}
-		case "pi.system":
-			return `[system] prompt sections changed`; // the model-context diff; bodies live in the entry
-		case "pi.reset":
-			return `[reset] new context starts here`;
-		case "pi.compaction":
-			return `[compaction] older entries summarized`;
-		default:
-			return `[${entry.kind}]`;
+		console.error(`[conversation] ${conversationId}`);
+		const renderer = makeRunRenderer();
+		client.onEvent((message) => {
+			if (message.event !== "events" || message.conversationId !== conversationId) return;
+			for (const event of message.events ?? []) renderer.onEvent(event);
+		});
+		await client.request("subscribe", { conversationId });
+		const result = await client.request("run", { conversationId, prompt, model: args.model, agent: args.agent });
+		if (renderer.wroteText) process.stdout.write("\n");
+		exitOnUnsettled(result.status);
+		printGuardBlocks(renderer.guardBlocks);
+		console.error(`[hint] continue through the daemon with: node cli.js send ${conversationId} "<prompt>"`);
+	} finally {
+		client.close();
 	}
 }
 
 async function cmdAttach(args) {
-	const { harness, storage } = await openCliHarness();
 	const raw = args.positional[0];
 	const conversationId = /^\d+$/.test(raw) ? Number(raw) : raw; // ids are integers in this storage
-	const exists = await harness.readOnLine(() => storage.conversation(conversationId, CTX));
-	if (!exists) throw new Error(`No conversation "${conversationId}" in ${DB} — run \`node cli.js sessions\` to list ids.`);
-	console.error(`[attach] ${conversationId} — streaming committed entries; Ctrl+C to detach.`);
-
-	// NOTE: watchEvents cannot cross processes (one process owns a storage; watches
-	// are fed by same-process commits), so attach polls the shared SQLite
-	// read-only, once a second, through the session's serialized read line.
-	let lastSeen = 0; // entry ids are session-assigned integers
-	let stopping = false;
-	let waited = 0;
-	while (!stopping) {
-		await sleepMs(1000);
-		waited++;
-		if (waited % 30 === 0) printEventLine("[attach] … still attached");
-		const page = await harness.readOnLine(() =>
-			storage.scanEntries({ conversationId, minEntryId: lastSeen + 1 }, 1000, undefined, CTX));
-		for (const entry of page.items.slice().reverse()) {
-			if (entry.id > lastSeen) {
-				lastSeen = entry.id;
-				if (entry.kind === "pi.system") continue; // keep the stream readable
-				printEventLine(describeEntry(entry));
-			}
+	const client = await DaemonClient.connect();
+	console.error(`[attach] ${conversationId} — live events from the daemon at ${daemonEndpoint()}; Ctrl+C to detach.`);
+	const renderer = makeAttachRenderer();
+	client.onEvent((message) => {
+		if (message.event === "closed") {
+			console.error(`[attach] the daemon closed the connection — it was stopped or restarted.`);
+			process.exitCode = 1;
+			return;
 		}
+		if (message.conversationId !== conversationId) return;
+		if (message.event === "snapshot") renderer.onEvent({ type: "snapshot", entries: message.snapshot?.entries ?? [] });
+		else if (message.event === "events") for (const event of message.events ?? []) renderer.onEvent(event);
+	});
+	// subscribe's response carries the conversation's snapshot; events follow live.
+	const { snapshot } = await client.request("subscribe", { conversationId });
+	renderer.onEvent({ type: "snapshot", entries: snapshot?.entries ?? [] });
+	process.on("SIGINT", () => {
+		client.close();
+		process.exit(0);
+	});
+	await new Promise(() => {}); // attached until Ctrl+C or the daemon goes away
+}
+
+async function cmdSessions() {
+	if (await daemonIsUp()) {
+		// The daemon owns the storage; read through it (never open a second harness).
+		const client = await DaemonClient.connect();
+		try {
+			const { conversations } = await client.request("sessions", {});
+			printSessions(conversations, `via daemon at ${daemonEndpoint()}`);
+		} finally {
+			client.close();
+		}
+		return;
 	}
+	// No daemon: nobody owns the storage, so this process may open it read-style.
+	console.error(`[sessions] no daemon running — reading ${SHARED_DB} directly.`);
+	const { harness, storage } = await openCliHarness();
+	printSessions(await listConversations(harness, storage), `direct`);
 	await harness.close(CTX);
 }
 
 async function cmdAllow(args) {
 	const command = normalizeCommand(args.prompt);
 	if (!command) throw new Error('allow requires the exact command, quoted: node cli.js allow <id> "rm -rf build"');
-	const { harness } = await openCliHarness();
-	const conversation = await openConversation(harness, args.positional[0]);
-	await conversation.commit(async (tx) => {
-		const doc = await tx.doc(GuardDoc, conversation.id);
-		if (!doc.allow.includes(command)) doc.allow.push(command);
-	}, CTX);
-	const doc = await harness.snapshot(GuardDoc, conversation.id, CTX);
-	console.error(`[guard] allowed for ${conversation.id}:`);
-	for (const entry of doc?.allow ?? []) console.log(`  ${entry}`);
-	await harness.close(CTX);
+	if (await daemonIsUp()) {
+		// A write: it must go through the owner (the daemon), never a second harness.
+		const client = await DaemonClient.connect();
+		try {
+			const { allowed } = await client.request("allow", { conversationId: args.positional[0], command });
+			console.error(`[guard] allowed for ${args.positional[0]} (via daemon):`);
+			for (const entry of allowed) console.log(`  ${entry}`);
+		} finally {
+			client.close();
+		}
+		return;
+	}
+	await cmdAllowDirect(args);
+}
+
+/** Ask the running daemon to shut down gracefully (streams closed, storage checkpointed). */
+async function cmdStop() {
+	const client = await DaemonClient.connect();
+	try {
+		await client.request("shutdown", {});
+		console.error(`[daemon] stopping — ${daemonEndpoint()}`);
+	} finally {
+		client.close();
+	}
+}
+
+/** The one-owner rule, said in a sentence a human can act on (not a raw SQLite error). */
+async function refuseWhileDaemonOwns(command, positional) {
+	if (!(await daemonIsUp())) return false;
+	console.error(`error: the durable daemon already owns ${SHARED_DB} — one process owns the storage at a time.
+Run the prompt through the daemon instead:
+  node cli.js send ${positional ? `${positional} ` : ""}"<prompt>"        (or attach: node cli.js attach <id>)
+Or stop the daemon (Ctrl+C on its terminal) to run the agent in this process again.`);
+	process.exitCode = 1;
+	return true;
 }
 
 // --- main ------------------------------------------------------------------------
@@ -422,8 +361,9 @@ const args = parseArgs(rest);
 
 // PiCode's settings are the home of these options (Part B lives in the editor);
 // this program reads the file read-only and applies flag > setting > default.
-// The [settings] lines print for the commands that actually run the agent.
-const RUNS_AGENT = command === "run" || command === "resume" || command === "fork";
+// The [settings] lines print for the commands that actually run the agent —
+// including `serve`, which runs every conversation from now on.
+const RUNS_AGENT = command === "run" || command === "resume" || command === "fork" || command === "serve";
 const resolved = resolveDurableOptions({
 	flags: { mcp: args.mcp === false ? false : undefined, guard: args.noGuard ? false : undefined, model: args.model, agent: args.agent },
 });
@@ -436,9 +376,13 @@ if (RUNS_AGENT && (resolved.options.model.source === "flag" || resolved.options.
 
 try {
 	switch (command) {
+		case "serve":
+			await cmdServe(resolved);
+			break;
 		case "run":
 			args.prompt = args.positional[0];
 			if (!args.prompt) throw new Error('run requires a prompt: node cli.js run "<prompt>"');
+			if (await refuseWhileDaemonOwns("run")) break;
 			await cmdRun(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "sessions":
@@ -447,12 +391,20 @@ try {
 		case "resume":
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('resume requires <id> and "<prompt>"');
+			if (await refuseWhileDaemonOwns("resume", args.positional[0])) break;
 			await cmdResume(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "fork":
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('fork requires <id> and "<prompt>"');
+			if (await refuseWhileDaemonOwns("fork", args.positional[0])) break;
 			await cmdFork(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
+			break;
+		case "send":
+			await cmdSend(args);
+			break;
+		case "stop":
+			await cmdStop();
 			break;
 		case "attach":
 			if (!args.positional[0]) throw new Error("attach requires <id>");
@@ -468,6 +420,10 @@ try {
 			process.exitCode = command === undefined || command === "--help" || command === "-h" ? 0 : 1;
 	}
 } catch (error) {
-	console.error(`error: ${error?.message ?? error}`);
+	if (error instanceof DaemonUnavailableError) {
+		console.error(`error: ${error.message}`);
+	} else {
+		console.error(`error: ${error?.message ?? error}`);
+	}
 	process.exitCode = 1;
 }

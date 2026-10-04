@@ -14,6 +14,9 @@ import { ProofTools, SubagentExtension } from "./extensions.js";
 export const CTX = BACKGROUND_CONTEXT;
 export const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".data");
 
+/** The ONE shared CLI database — never numbered, never per-run. The daemon owns it; the direct commands open it only when no daemon is running. */
+export const SHARED_DB = "sessions.sqlite";
+
 /** Path of a named database file inside .data/. */
 export function dbPath(name) {
 	return path.join(DATA_DIR, name);
@@ -57,6 +60,40 @@ export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.s
 	return { harness, models, registry, sqlitePath, storage };
 }
 
+/**
+ * Every conversation in the shared database, one row per conversation: id,
+ * entry count, newest entry (a proxy for last activity), and its relation
+ * (`fork of …` or subagent).
+ *
+ * NOTE: the README/spec's Session.scanConversations is not on the runtime
+ * Harness; read the storage directly, serialized on the session line.
+ */
+export async function listConversations(harness, storage) {
+	const records = await harness.readOnLine(async () => {
+		const items = [];
+		let cursor;
+		for (;;) {
+			const page = await storage.scanConversations({}, 100, cursor, CTX);
+			items.push(...page.items);
+			cursor = page.cursor;
+			if (!cursor) break;
+		}
+		return items;
+	});
+	const rows = [];
+	for (const record of records) {
+		const page = await harness.readOnLine(() => storage.scanEntries({ conversationId: record.id }, 1000, undefined, CTX));
+		const newest = page.items[0];
+		rows.push({
+			id: record.id,
+			entries: page.items.length,
+			newest: describeNewest(newest),
+			note: record.owner ? `subagent (task ${record.owner.taskId})` : record.parent ? `fork of ${record.parent.conversationId}` : "",
+		});
+	}
+	return rows;
+}
+
 /** Concatenated text of a pi-ai assistant message (content may be a string, array, or missing). */
 export function textOf(message) {
 	const content = message?.content;
@@ -88,3 +125,8 @@ export async function answerText(root, settled, context = CTX) {
 }
 
 export const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** "entry 12 (pi.assistant)" — entry ids are session-assigned integers. */
+function describeNewest(entry) {
+	return entry ? `entry ${entry.id} (${entry.kind})` : "never";
+}

@@ -21,12 +21,15 @@ guard blocks, and hints go to **stderr**, so `node cli.js run "..." > answer.txt
 captures just the answer. All commands run from `experimental/durable/`.
 
 ```bash
-node cli.js run "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]   # NEW conversation, stream the answer
-node cli.js sessions                               # list conversations in sessions.sqlite
+node cli.js serve [--no-mcp] [--no-guard]      # become the ONE owner of sessions.sqlite; serve local clients
+node cli.js run "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]   # NEW conversation, owned by THIS process
+node cli.js sessions                               # list conversations (through the daemon when it is up)
 node cli.js resume <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard] # continue an existing conversation
 node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no-mcp] [--no-guard]   # fork at the newest entry, run the prompt on the fork
-node cli.js attach <id>                            # follow a conversation's entries live, Ctrl+C to detach
+node cli.js send [id] "<prompt>" [--agent <name>] [--model provider/model]   # run a prompt THROUGH the daemon
+node cli.js attach <id>                            # follow a conversation's LIVE events, Ctrl+C to detach
 node cli.js allow <id> "<exact command>"            # guard opt-in (see below)
+node cli.js stop                                   # ask the daemon to shut down gracefully
 ```
 
 ### PiCode settings (`picode.durable.*`)
@@ -126,25 +129,122 @@ CLI-OK (FROM-THE-FORK)
 [run settled]
 ```
 
-### `attach`
+### The daemon: one owner, many clients
 
-A second client on a live conversation. NOTE: `watchEvents` cannot cross processes
-(one process owns a storage; watches are fed by same-process commits), so `attach`
-.polls the shared SQLite **read-only** once a second — replaying the committed
-history, then printing each new committed entry (user, assistant + tool calls, tool
-results) as it lands. Run a long `resume` in another terminal and attach to its id:
+pi-durable's spec allows **one process to own a storage at a time**, and its watches are
+fed by same-process commits only. Measured on this version (1.0.2): a second process can
+still open the same SQLite and read AND write it — the invariant is not machine-enforced —
+but doing so is undefined behaviour, and it is real: two writers independently allocated
+the same conversation id (`ID 368 already belongs to conversation`), after which the
+daemon's session refused every operation (`Session is poisoned by a failed commit after
+storage admission; reopen it`) until it was restarted. So the CLI makes the rule explicit
+instead of waiting for SQLite to care:
+
+- **`node cli.js serve`** opens the ONE shared `sessions.sqlite` and becomes its single
+  owner (the guard, skills and MCP bridge are set up once, at daemon startup — the
+  `[settings]`/`[mcp]` lines print there). It listens on a **local-only** endpoint:
+  a Windows named pipe (`\\.\pipe\picode-durable-agent`) or a Unix domain socket
+  (`.data/durable.sock`) — never a TCP port, because a process that runs the owner's
+  tools must not be reachable off the machine.
+- **Clients never open the database.** `attach`, `send`, `sessions` and `allow` talk to
+  the daemon. Several client processes can be attached at once — that is the point.
+- A direct `run`/`resume`/`fork` while a daemon owns the storage is refused with a
+  sentence that says what to do instead (no raw SQLite error), and a second `serve`
+  fails cleanly (`another daemon already owns sessions.sqlite …`).
+- `sessions` goes **through the daemon when it is up** (a second harness would violate
+  the one-owner rule) and **opens the database directly when it is not** (nothing owns
+  it then, and the listing must work even with no daemon). It prints which way it went.
+- `allow` follows the same daemon-first rule (a write must go through the owner).
+
+Verified in one script — `bash proof-daemon.sh` (see "Proving the daemon" below).
+
+### The protocol
+
+NDJSON over the local endpoint: every message is one JSON object on one line.
+A client sends requests; the daemon answers them and, for subscriptions, pushes events
+without being asked. The event payloads are durable's own `AgentEvent`s, relayed
+unchanged — the protocol is a thin transport, not a second API.
 
 ```text
-$ node cli.js attach 24
-[attach] 24 — streaming committed entries; Ctrl+C to detach.
-[user] Reply with exactly: CLI-OK
-[assistant] CLI-OK
-[user] Call the slow_step tool once: step 9, seconds 5. Then reply ATTACH-FIFTH-RUN.
-[assistant] tool calls: slow_step({"step":9,"seconds":5}) —
-[tool result] step 9: 5s left...
-...
-[assistant] ATTACH-FIFTH-RUN
+client → daemon request:  {"id": <number>, "method": "<name>", "params": {…}}
+daemon → client response: {"id": <number>, "ok": true, "result": {…}}
+                       or {"id": <number>, "ok": false, "error": "<reason>"}
+daemon → client event (no id, pushed):
+                          {"event": "events", "conversationId": <id>, "events": [……]}
 ```
+
+Methods:
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `ping` | — | `{protocol, pid, uptimeMs, streams}` — liveness. |
+| `sessions` | — | `{conversations: [{id, entries, newest, note}]}` — the same rows as the CLI table. |
+| `open` | `{conversationId?, model?, agent?}` | `{conversationId}` — resolves an existing conversation or creates one (ownerless; model per params or the daemon's resolved default; MCP deferral armed). |
+| `run` | `{conversationId, prompt, model?, agent?}` | `{conversationId, status, answer}` — submits the prompt and settles; all subscribers of that conversation receive the events live. |
+| `fork` | `{conversationId, prompt, model?, agent?}` | `{conversationId, forkedFrom, status, answer}` — forks at the newest entry, runs the prompt on the fork. |
+| `allow` | `{conversationId, command}` | `{conversationId, allowed: [..]}` — guard opt-in; the same list `node cli.js allow` shows. |
+| `subscribe` | `{conversationId}` | `{conversationId, snapshot}` — the response carries the conversation's snapshot; every later commit is pushed to this client as an `events` line until it disconnects or unsubscribes. |
+| `unsubscribe` | `{conversationId}` | `{conversationId, unsubscribed: true}`. |
+| `shutdown` | — | `{stopping: true}` — the daemon closes its streams, checkpoints the storage, stops the MCP bridge and exits (exposed as `node cli.js stop`). |
+
+Events (pushed to subscribers only):
+
+| Event | Payload | Meaning |
+| --- | --- | --- |
+| `events` | `{events: [AgentEvent…]}` | one durable `AgentEvent` batch per commit: `snapshot`, `run_start`/`run_end`, `turn_start`/`turn_end`, `message_start`/`message_update` (text deltas)/`message_end`, `tool_execution_start`/`_update`/`_end`, `entry_appended`, `inbox_update`, `submission`, `auto_retry_start`/`auto_retry_end`, `deferred_poll`, `agent_changed`, `usage_changed`, `task_failed`, `compaction_start`/`compaction_end`. |
+
+The snapshot itself travels in the `subscribe` response (`result.snapshot`), not as an
+event.
+
+This protocol is deliberately small and local; an editor panel that wanted to embed the
+agent would eventually speak ACP rather than this one — that is future work, not this
+experiment. One client is already shaped like a panel: `send` subscribes to its own
+conversation before submitting, so the client that starts a run sees it live.
+
+When no daemon is running, a client says so plainly and does not hang — the connect is
+bounded (3 s) and the message names the endpoint and the command that starts the daemon:
+
+```text
+$ node cli.js attach 403
+error: no durable daemon is running at \\.\pipe\picode-durable-agent — start it with: node cli.js serve
+```
+
+### `send` — a prompt through the daemon
+
+`node cli.js send [id] "<prompt>"` subscribes to the conversation (new if no id), then
+asks the daemon to run the prompt. Output is shaped exactly like `run`: the answer on
+stdout, tool activity on stderr. The `--model`/`--agent` flags travel with the request;
+`--no-mcp`/`--no-guard` are daemon-level choices (`node cli.js serve --no-mcp`) — the
+daemon decides them once at startup and every client runs what it offers.
+
+```text
+$ node cli.js send "Reply with exactly: DAEMON-OK"
+[send] through the daemon at \\.\pipe\picode-durable-agent
+[conversation] 403
+DAEMON-OK
+
+[run settled]
+[hint] continue through the daemon with: node cli.js send 403 "<prompt>"
+```
+
+### `attach` — live, not polled
+
+`attach` used to poll the shared SQLite once a second, because watches do not cross
+processes. With the daemon owning the storage, `attach` is a client: it subscribes,
+replays the snapshot, then prints each committed entry (`[user]`, `[assistant]` with its
+tool calls, `[tool result]`) **as the commit lands**, from any number of processes at
+once. Two separate attach processes watching the same run mid-flight were verified by
+`bash proof-daemon.sh`.
+
+### Proving the daemon
+
+`bash proof-daemon.sh` (from `experimental/durable/`) runs the whole story with real
+processes and prints the evidence: it starts its own daemon, is refused a direct `run`,
+creates a conversation through the daemon, attaches TWO separate client processes, runs a
+second prompt through the daemon while both watch (both logs show the live tool calls and
+the final `DAEMON-LIVE`), stops the daemon through the protocol, and shows a client
+started with no daemon up failing fast with the plain message. Raw logs land in
+`.data/daemon-proof/` (gitignored). It ends with `PROOF-DAEMON-OK` when every step held.
 
 ### The deterministic guard
 
@@ -295,7 +395,9 @@ the call was interrupted. A read-only MCP tool is safe to rerun; anything else m
 executed twice behind the owner's back. So it follows the server's own `readOnlyHint`
 annotation, and **only a positive one** — a server that does not annotate its tools gets the
 cautious treatment. `lib/mcp.js` says which way each tool went rather than relying on the
-default, so it reads without knowing the spec.
+default, so it reads without knowing the spec. (The daemon connects all of this **once**
+at startup — every `send` through the daemon reuses the same bridge instead of
+reconnecting 11 servers per run.)
 
 **Opt out** with `--no-mcp` or `picode.durable.mcp: false` (the flag wins).
 
@@ -309,13 +411,18 @@ unless a rule names it.
 
 | Path | Purpose |
 | --- | --- |
-| `cli.js` | Headless agent CLI (see above): `run` / `sessions` / `resume` / `fork` / `attach` / `allow` on the shared `sessions.sqlite`. |
+| `cli.js` | Headless agent CLI (see above): `serve` / `run` / `sessions` / `resume` / `fork` / `send` / `attach` / `allow` / `stop` on the shared `sessions.sqlite`. |
 | `lib/guard.js` | Deterministic destructive-command guard: a `ToolTask.beforeTool` hook plus the per-conversation `app.guard` allow document. |
 | `lib/skills.js` | Profile `skills/` loader (read-only), the `<skills>` index section, and the `load_skill` tool. |
 | `lib/agents.js` | Profile `agents/*.md` loader (read-only) backing `--agent`. |
 | `lib/profile.js` | Reads the pi agent profile **read-only** (`%LOCALAPPDATA%/Programs/PiCode/data/pi-agent/models.json`) and builds a pi-ai provider for the `omni` provider found there (OpenAI-Responses API, `baseUrl http://192.168.1.65:20128/v1`). If the profile ever contains a key for the provider (in its `auth.json`), it is used **at runtime, never copied**. The gateway is keyless (`auth: "none"`); pi-ai's `openai-responses` API refuses a request with no key at all, so a clearly non-secret placeholder is sent — the gateway accepts any bearer on the chat endpoint. |
 | `lib/settings.js` | PiCode's settings, read-only (`%APPDATA%/PiCode/User/settings.json`, override with `PICODE_USER_SETTINGS`): picks the `picode.durable.*` keys, applies flag > setting > default, reports every effective option and every fallback on stderr. |
-| `lib/common.js` | Harness setup: models, registry (`CodingTools` + proof extensions), SQLite storage under `.data/`, per-conversation `NodeExecutionEnv`. Also `resetDatabase()`. |
+| `lib/common.js` | Harness setup: models, registry (`CodingTools` + proof extensions), SQLite storage under `.data/`, per-conversation `NodeExecutionEnv`. Also `SHARED_DB` and `listConversations()` (the `sessions` rows, used by the daemon and the direct fallback). Also `resetDatabase()`. |
+| `lib/daemon.js` | The daemon: owns `sessions.sqlite`, serves the protocol on the local endpoint, one `watchEvents` per conversation fanned out to every subscriber, runs `open`/`run`/`fork`/`allow` inside the owner process. |
+| `lib/protocol.js` | The wire format: the local endpoint (named pipe / UDS), NDJSON framing (`LineStream`), endpoint liveness probe. |
+| `lib/client.js` | The client side: bounded connect (`DaemonUnavailableError` when no daemon — plain message, no hang), request/response matching, pushed-event listeners. |
+| `lib/render.js` | Agent events and transcript entries → CLI output, shared by the in-process `runPrompt` and the daemon clients (`send`, `attach`). |
+| `proof-daemon.sh` | Reproducible multi-process evidence for the daemon (see "Proving the daemon"). |
 | `lib/extensions.js` | `slow_step` tool (a deterministic 2 s tool, `replay: "safe"`) and the background subagent: a `subagent` tool that spawns a **background anchor task** owning a child conversation, drives it, and reports its answer back to the parent as a follow-up input. |
 | `proof1-kill.js` / `proof1-resume.js` | Proof 1, phases A and B. |
 | `proof2-subagent.js` | Proof 2. |
@@ -387,7 +494,9 @@ Expected: client A attaches before the run (snapshot `entries=0`), client B join
 mid-run (snapshot shows the in-flight run), and both receive the live event stream to
 the end (A ≈ 56 events, B ≈ 40 — B joined later). Note: one process owns a storage at
 a time, so "two clients" is two `watchEvents` attachments on one harness — the
-supported shape for two UI panels; a multi-process variant would need a relay.
+supported shape for two UI panels; the multi-process variant now exists — the daemon
+(see "The daemon: one owner, many clients") is that relay, with proof3's single-process
+watch pair unchanged as the minimal shape.
 
 ## Environment overrides
 
