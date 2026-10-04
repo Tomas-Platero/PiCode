@@ -50,7 +50,7 @@ import { registerStatusDataCommand } from './status-data';
 import { registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
-import { describeTargets, fetchNpmLatest, parseSnapshot, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
+import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -743,9 +743,14 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 	};
 }
 
+/** The directory holding the bundled pi runtime's `node_modules` — what npm reinstalls into. */
+function piRuntimeDir(): string {
+	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime');
+}
+
 /** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
 function piCliEntry(): string {
-	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+	return path.join(piRuntimeDir(), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 }
 
 /**
@@ -1784,9 +1789,6 @@ const UPDATES_FIRST_CHECK_DELAY_MS = 30_000;
 /** And then every six hours for as long as the window is open. */
 const UPDATES_CHECK_INTERVAL_MS = 6 * 60 * 60_000;
 
-/** The npm package both runtimes come from: the internal one ships it, the external one installs it. */
-const PI_RUNTIME_PACKAGE = '@earendil-works/pi-coding-agent';
-
 /** Whether the owner wants the check to run at all. */
 function updatesCheckEnabled(): boolean {
 	return vscode.workspace.getConfiguration().get<boolean>(UPDATES_CHECK_SETTING, true);
@@ -1905,7 +1907,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
 		resetChatSession();
-		const result = await runPiUpdate({ cliEntry, profileDir: profileInForce() });
+		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce() });
 		if (!result.ok) {
 			void vscode.window.showInformationMessage(result.message);
 			return;

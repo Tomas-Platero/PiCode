@@ -319,6 +319,8 @@ export interface SpawnOptions {
 	readonly env: NodeJS.ProcessEnv;
 	readonly windowsHide: boolean;
 	readonly timeoutMs: number;
+	/** Run through the shell, which is how `npm` is found on Windows (`npm.cmd`). */
+	readonly shell?: boolean;
 }
 
 /** The process run, injectable so a test can observe what would have been executed. */
@@ -328,13 +330,18 @@ export type SpawnFn = (file: string, args: readonly string[], options: SpawnOpti
 export interface UpdateRunContext {
 	/** The pi CLI's entry, already checked for existence by the caller. */
 	readonly cliEntry: string;
+	/** The directory holding the runtime's `node_modules` — what npm reinstalls into. */
+	readonly runtimeDir: string;
 	/** The profile in force — handed to pi as `PI_CODING_AGENT_DIR`. */
 	readonly profileDir: string;
 	/** The process run. Defaults to `execFile` with an args array. */
 	readonly spawn?: SpawnFn;
 }
 
-/** How long `pi update --all` may run — the runtime and every package, so a generous leash. */
+/** The npm package the runtime is installed from, and the one npm reinstalls when updating it. */
+export const PI_RUNTIME_PACKAGE = '@earendil-works/pi-coding-agent';
+
+/** How long each half of the update may run — the runtime and then every package, so a generous leash. */
 export const UPDATE_TIMEOUT_MS = 300_000;
 
 /** The stderr line the failure message carries, or nothing when pi said nothing usable. */
@@ -350,24 +357,48 @@ function lastMeaningfulLine(text: string): string | undefined {
 /**
  * One update of everything pi owns, run now.
  *
- * `pi update --all` is the whole flow in one command: it covers pi itself and the packages in
- * the profile handed to it, whichever runtime is in force — the external pi updates its own
- * installation the same way. The spawn is awaited with a five-minute leash and both outcomes
- * end in one sentence the notification can show as-is: the failure carrying the last meaningful
- * line of pi's stderr, which is where npm puts the reason.
+ * Two runs, in this order:
+ *
+ * 1. **The runtime**, with npm — not `pi update --self`. pi refuses to self-update a bundled
+ *    install: it is not under a global npm root, and on Windows pi will not infer a custom
+ *    prefix, so it answers with the `Location of pi executable: …` line instead of updating.
+ *    PiCode installed the runtime with npm at build time, so it updates it the same way.
+ * 2. **The profile's packages**, with `pi update --extensions`, which deliberately leaves the
+ *    runtime alone.
+ *
+ * Both are awaited with a five-minute leash and a failure ends in one sentence the notification
+ * can show as-is, carrying the last meaningful line of the command's stderr.
  */
 export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: boolean; message: string }> {
+	const failed = (label: string, outcome: SpawnOutcome): { ok: boolean; message: string } => {
+		const reason = lastMeaningfulLine(outcome.stderr);
+		return { ok: false, message: `PiCode could not update ${label}${reason === undefined ? '.' : `: ${reason}`}` };
+	};
 	const run = async (spawn: SpawnFn): Promise<{ ok: boolean; message: string }> => {
-		const outcome = await spawn(process.execPath, [context.cliEntry, 'update', '--all'], {
+		const runtime = await spawn('npm', [
+			'install',
+			'--prefix', context.runtimeDir,
+			'--no-audit', '--no-fund', '--save-exact',
+			`${PI_RUNTIME_PACKAGE}@latest`,
+		], {
+			env: { ...process.env, PI_CODING_AGENT_DIR: context.profileDir },
+			windowsHide: true,
+			timeoutMs: UPDATE_TIMEOUT_MS,
+			shell: true,
+		});
+		if (!runtime.ok) {
+			return failed('pi', runtime);
+		}
+		const packages = await spawn(process.execPath, [context.cliEntry, 'update', '--extensions'], {
 			// The editor's executable is Electron: without this flag it would try to open an app
 			// instead of running pi's script as Node — the same invocation the installer uses.
 			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: context.profileDir },
 			windowsHide: true,
 			timeoutMs: UPDATE_TIMEOUT_MS,
+			shell: false,
 		});
-		if (!outcome.ok) {
-			const reason = lastMeaningfulLine(outcome.stderr);
-			return { ok: false, message: `PiCode could not be updated${reason === undefined ? '.' : `: ${reason}`}` };
+		if (!packages.ok) {
+			return failed('the packages', packages);
 		}
 		return { ok: true, message: 'PiCode updated.' };
 	};
@@ -386,6 +417,7 @@ function defaultSpawn(file: string, args: readonly string[], options: SpawnOptio
 			env: options.env,
 			windowsHide: options.windowsHide,
 			timeout: options.timeoutMs,
+			shell: options.shell === true,
 		}, (error, _stdout, stderr) => {
 			resolve({
 				ok: error === null,

@@ -23,6 +23,11 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   imprimir `undefined`.
 
 ### Fixed
+- **El botón «Update» de PiCode ya actualiza pi de verdad.** `pi update --all` fallaba con el pi
+  empaquetado dentro del editor: pi no se auto-actualiza si no es una instalación global de npm
+  (no está bajo un `node_modules` global y en Windows no infiere prefijos), y contestaba
+  `Location of pi executable: …`. Ahora PiCode **reinstala el runtime con npm** —igual que lo
+  instala el build— y actualiza los paquetes del perfil con `pi update --extensions`.
 - **El texto del chat no se corta por abajo.** El margen inferior de la respuesta en curso solo
   se reservaba cuando su último bloque era markdown; con la respuesta terminando en una llamada a
   herramienta —lo normal mientras el agente trabaja— la última fila quedaba cortada. Ahora se

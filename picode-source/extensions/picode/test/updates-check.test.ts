@@ -225,31 +225,44 @@ test('a failed or meaningless npm answer is no version, said out loud once', asy
  * The update run
  * ------------------------------------------------------------------ */
 
-test("the update runs pi's CLI as Node with `update --all`, into the profile in force", async () => {
+test("the update reinstalls the runtime with npm, then updates the packages with pi", async () => {
 	const spawn = spawnAnswering({ ok: true, stderr: '' });
-	const result = await runPiUpdate({ cliEntry: '/runtime/cli.js', profileDir: '/profile', spawn });
+	const result = await runPiUpdate({ cliEntry: '/runtime/cli.js', runtimeDir: '/runtime', profileDir: '/profile', spawn });
 
 	assert.deepStrictEqual(result, { ok: true, message: 'PiCode updated.' });
-	assert.strictEqual(spawn.calls.length, 1);
-	const { file, args, options } = spawn.calls[0];
-	assert.ok(file.endsWith('node') || file === process.execPath);
-	assert.deepStrictEqual([...args], ['/runtime/cli.js', 'update', '--all']);
-	assert.strictEqual(options.env.PI_CODING_AGENT_DIR, '/profile');
-	assert.strictEqual(options.env.ELECTRON_RUN_AS_NODE, '1');
-	assert.strictEqual(options.windowsHide, true);
-	assert.strictEqual(options.timeoutMs, UPDATE_TIMEOUT_MS);
+	assert.strictEqual(spawn.calls.length, 2);
+
+	// The runtime: npm, into the directory the build installed it into — pi itself refuses to
+	// self-update a bundled install.
+	const npm = spawn.calls[0];
+	assert.strictEqual(npm.file, 'npm');
+	assert.deepStrictEqual([...npm.args], [
+		'install', '--prefix', '/runtime', '--no-audit', '--no-fund', '--save-exact',
+		'@earendil-works/pi-coding-agent@latest',
+	]);
+	assert.strictEqual(npm.options.shell, true);
+	assert.strictEqual(npm.options.windowsHide, true);
+	assert.strictEqual(npm.options.timeoutMs, UPDATE_TIMEOUT_MS);
+
+	// The packages: pi's own update, as Node through the editor's executable.
+	const pi = spawn.calls[1];
+	assert.strictEqual(pi.file, process.execPath);
+	assert.deepStrictEqual([...pi.args], ['/runtime/cli.js', 'update', '--extensions']);
+	assert.strictEqual(pi.options.env.PI_CODING_AGENT_DIR, '/profile');
+	assert.strictEqual(pi.options.env.ELECTRON_RUN_AS_NODE, '1');
+	assert.strictEqual(pi.options.timeoutMs, UPDATE_TIMEOUT_MS);
 	assert.ok(UPDATE_TIMEOUT_MS >= 300_000, 'an update of the runtime and every package gets a generous leash');
 });
 
-test("a failed update carries the last meaningful line of pi's stderr", async () => {
+test("a failed update carries the last meaningful line of the command's stderr", async () => {
 	const spawn = spawnAnswering({ ok: false, stderr: 'npm warn deprecated\nnpm error code EACCES\n' });
-	const result = await runPiUpdate({ cliEntry: '/cli.js', profileDir: '/profile', spawn });
-	assert.deepStrictEqual(result, { ok: false, message: 'PiCode could not be updated: npm error code EACCES' });
+	const result = await runPiUpdate({ cliEntry: '/cli.js', runtimeDir: '/runtime', profileDir: '/profile', spawn });
+	assert.deepStrictEqual(result, { ok: false, message: 'PiCode could not update pi: npm error code EACCES' });
 });
 
 test('a spawn that throws is a failed update, not a rejection the window sees', async () => {
 	const spawn: SpawnFn = () => Promise.reject(new Error('spawn ENOENT'));
-	const result = await runPiUpdate({ cliEntry: '/cli.js', profileDir: '/profile', spawn });
+	const result = await runPiUpdate({ cliEntry: '/cli.js', runtimeDir: '/runtime', profileDir: '/profile', spawn });
 	assert.strictEqual(result.ok, false);
 	assert.ok(result.message.includes('could not be updated'));
 });
