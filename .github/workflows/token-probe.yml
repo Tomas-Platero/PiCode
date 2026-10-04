@@ -15,8 +15,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "--- token permissions from the runner header are above ---"
-          URL="repos/${GITHUB_REPOSITORY}/releases/tags/v0.1.0-beta"
-          if gh api -X PATCH "${URL}" \
+          API="repos/${GITHUB_REPOSITORY}/releases"
+          ID=$(gh api "${API}/tags/v0.1.0-beta" --jq .id || true)
+          echo "release id: ${ID:-none}"
+          if [ -n "${ID}" ] && gh api -X PATCH \
+               "${API}/${ID}" \
                -f name="PiCode 0.1.0-beta" --silent; then
             echo "PROBE_RESULT=write-ok"
           else
