@@ -7,7 +7,7 @@ All notable changes to PiCode are documented here. The format is based on
 Releases are built locally with `dev/build.sh` and published by hand: there is no CI workflow
 (the owner removed them; the process lives in `docs/CI.md`).
 
-## [Unreleased]
+## [0.1.3-beta] — 2026-10-04
 
 ### Changed
 - **El chat ya no pide permiso para lo que PiCode no considera peligroso.** Las sesiones nuevas
