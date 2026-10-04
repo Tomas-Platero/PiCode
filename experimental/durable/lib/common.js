@@ -32,7 +32,7 @@ export function resetDatabase(name) {
 
 export const MODEL = { provider: process.env.PI_AGENT_PROVIDER || "omni", modelId: process.env.PI_AGENT_MODEL || "auto" };
 
-export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.sqlite" } = {}) {
+export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.sqlite", extensions = [] } = {}) {
 	const sqlitePath = dbPath(db);
 	const models = createModels();
 	models.setProvider(loadOmniProvider());
@@ -41,6 +41,7 @@ export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.s
 	registry.install(CodingTools);
 	registry.install(ProofTools);
 	registry.install(SubagentExtension); // brings the sleep-based tools and the subagent anchor task
+	for (const extension of extensions) registry.install(extension); // CLI-only extensions (guard, skills); proofs stay untouched
 
 	const storage = await openNodeSqliteStorage(sqlitePath);
 	const harness = await Harness.open(
@@ -53,7 +54,7 @@ export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.s
 		},
 		CTX,
 	);
-	return { harness, models, registry, sqlitePath };
+	return { harness, models, registry, sqlitePath, storage };
 }
 
 /** Concatenated text of a pi-ai assistant message (content may be a string, array, or missing). */
