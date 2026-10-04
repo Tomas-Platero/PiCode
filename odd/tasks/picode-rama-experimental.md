@@ -13,7 +13,8 @@ Planificar una línea de trabajo aparte para lo que **no toca el producto**, y h
 
 - **Pi Durable queda aparcado.** No se implementa ahora: es experimental, salió el mismo día que
   pi 1.0.0, no resuelve ningún problema que el editor tenga hoy, y cambiar el motor del chat
-  dejaría a **gentle-ai sin dónde engancharse** (ver «Por qué no ahora»).
+  dejaría a **gentle-ai sin dónde engancharse** (ver «Por qué no ahora»). *(Sigue siendo la decisión
+  de `master`. El 2026-10-04 el dueño pidió probarlo dentro de la rama: ver «Registro».)*
 - El camino barato sigue siendo el de siempre: **subir el pin de pi**. Ellos mismos dicen que las
   lecciones de Durable volverán al agente de código, y eso llega gratis por esa vía.
 - La rama **`experimental`** nace del commit raíz de `master`. Es el vehículo para probar esto — y
@@ -108,3 +109,63 @@ El umbral no es «me gusta». Es tener un producto donde el agente **corre solo 
 agentes en la nube, varias personas sobre las mismas conversaciones, o algo que deba aguantar
 caídas de verdad. Ahí Durable encaja y **no choca con nada**, porque sería **otra superficie**, no
 el chat del editor. Antes de eso, este documento es la respuesta.
+
+## Registro
+
+### 2026-10-04 · el dueño reabre la línea y se prueba de verdad
+
+El «aparcado» de arriba sigue siendo la decisión para `master`: **el motor del editor no cambia.**
+Lo que cambió es que el dueño pidió probarlo, así que se ejecutó el primer experimento que este
+documento describía.
+
+**Ramas igualadas.** `experimental` era el commit raíz de `master`, de modo que igualarlas fue un
+avance rápido: diferencias **0**. La rama sigue **local** (contrato 1: los experimentos no ensucian
+el remoto público).
+
+**🧹 Gentle fuera del producto** — commit `2ac4e68d` (28 ficheros, +171 / −2116).
+
+| Comprobación | Resultado |
+| --- | --- |
+| Typecheck del conector y del proyecto de tests | exit 0 |
+| Typecheck del núcleo | exit 0 |
+| Tests del conector | 173/173 |
+
+Se fueron con él dos superficies que existían **leyendo su runtime**, no por ser suyas: las tarjetas
+de subagentes en vivo del chat y la lista de tareas de la sesión. Y un hueco real que no se había
+visto: las carpetas `skills/` y `agents/` del perfil las registraba **la propia instalación de
+gentle**, así que ahora no las registra nadie.
+
+**🧪 pi-durable, probado** — commit `86fcdeae`, en `experimental/durable/`: un programa aparte, como
+pedía este documento. JavaScript plano sobre `pi-durable@1.0.2`, contra el gateway de la casa. El
+perfil se lee **solo lectura** y no se copia ninguna credencial.
+
+| Promesa | Resultado medido |
+| --- | --- |
+| Sobrevive a un kill | `taskkill /F` a mitad de turno → el proceso nuevo retoma la **misma** submission y termina (`RUN-COMPLETED-AFTER-RESUME`) |
+| Subagente en segundo plano | el padre responde `PARENT-NOT-BLOCKED` mientras el hijo trabaja, y recibe su informe después |
+| Dos clientes, una conversación | A: 48 eventos, B: 30 (se enganchó a mitad); los dos vivos hasta el final |
+
+Se ejecutan con `node smoke.js`, `node proof1-kill.js` + `taskkill` + `node proof1-resume.js`,
+`node proof2-subagent.js` y `node proof3-two-clients.js`.
+
+#### Lo que enseñó la API (trampas silenciosas, ninguna en la documentación)
+
+- 🔍 **El `baseUrl` va por modelo, no por proveedor.** Sin eso, pi-ai manda las peticiones al OpenAI
+  de verdad — y el 401 en `/v1/models` es una pista falsa.
+- 📌 `settled.answer` es un **id de entrada**, no el mensaje.
+- ⚠️ **Lo que devuelve el manejador de una tarea se convierte en su estado siguiente**: devolver el
+  id de la conversación hija corrompe el checkpoint.
+
+#### La restricción que decide la arquitectura
+
+🚧 **Un solo proceso es dueño del storage.** Por eso «dos clientes» son dos `watchEvents` sobre
+**un** harness: varias ventanas de PiCode contra el mismo fichero necesitarían un daemon que sea el
+único dueño. No es una nota al pie, es lo que hay que resolver antes de pensar en el editor.
+
+#### Abierto
+
+- Reponer las dos superficies del chat que se fueron con gentle, esta vez sobre durable.
+- El daemon dueño del storage, para más de un cliente a la vez.
+- El puente de MCP: `pi-mcp` no forma parte de durable, así que las tools habría que envolverlas con
+  `defineTool`.
+- Y la alternativa barata sigue en pie: **subir el pin de pi** en `master` y no portar nada.
