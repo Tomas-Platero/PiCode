@@ -69,6 +69,11 @@ jobs:
 
       - name: Resolve and guard the version
         shell: bash
+        env:
+          # `gh api` needs a token even to read the public releases;
+          # without it the previous-tag lookup below fails and the
+          # "strictly newer" guard is silently skipped.
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(node -p \
             "require('./distribution/product-delta.json').set.version")
