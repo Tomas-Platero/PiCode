@@ -109,6 +109,26 @@
 		],
 		"commands": [
 			{
+				"command": "picode.durable.start",
+				"title": "Start Durable Agent",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.durable.stop",
+				"title": "Stop Durable Agent",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.durable.list",
+				"title": "Show Durable Conversations",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.durable.send",
+				"title": "Send a Prompt to the Durable Agent",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.connectProvider",
 				"title": "Connect a subscription",
 				"category": "PiCode"

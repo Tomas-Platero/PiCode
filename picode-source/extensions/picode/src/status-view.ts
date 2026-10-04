@@ -4,15 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import type { DurableStatus } from './durable';
 
 /**
  * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
- * in force, the provider and default model, the session's usage and cost, and the project's
- * branch and pending changes.
+ * in force, the provider and default model, the session's usage and cost, the durable
+ * agent's state, and the project's branch and pending changes.
  *
  * A tree, deliberately, and not a webview: the data is a handful of rows, the theme is
  * the editor's own, and a native view cannot fail to render. The rows refresh on a slow
  * timer; errors surface as rows instead of empty panels.
+ *
+ * The Durable section is read from the agent's daemon over its local pipe, with a bounded
+ * connect: it says "not running" rather than waiting, because a panel that hangs when a
+ * process is absent is worse than one that says so.
  */
 
 export const STATUS_VIEW_TYPE = 'picode.statusView';
@@ -118,6 +123,8 @@ export interface StatusData {
 	 * connector cannot obtain an honest one.
 	 */
 	usage?: string;
+	/** The durable daemon as it answered right now (`durable.ts`): up or down, and what it holds. */
+	durable?: DurableStatus;
 	error?: string;
 }
 
@@ -346,6 +353,47 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			}
 		}
 		out.push(new StatusItem('Session', { children: sessionRows, icon: new vscode.ThemeIcon('history') }));
+
+		// The durable daemon, as it answered this very refresh (`durable.ts` asks it with a
+		// bounded connect): when it is down the section says so plainly and offers the start
+		// action instead of an empty section, and when it is up every number is its answer,
+		// none of them invented.
+		if (d.durable !== undefined) {
+			const dur = d.durable;
+			const durableRows: StatusItem[] = dur.up ? [
+				new StatusItem('Daemon', {
+					description: dur.pid === undefined ? 'running' : `running · pid ${dur.pid}`,
+					icon: new vscode.ThemeIcon('server-process'),
+				}),
+				new StatusItem('Conversations', {
+					description: String(dur.conversations ?? 0),
+					icon: new vscode.ThemeIcon('comment-discussion'),
+					command: { command: 'picode.durable.list', title: 'Open a conversation transcript' },
+				}),
+				...(dur.subagentTasks === undefined ? [] : [new StatusItem('Subagent conversations', {
+					description: String(dur.subagentTasks),
+					icon: new vscode.ThemeIcon('comment-discussion'),
+				})]),
+				new StatusItem('Live streams', {
+					description: String(dur.streams ?? 0),
+					icon: new vscode.ThemeIcon('radio-tower'),
+				}),
+				new StatusItem('Stop the durable agent', {
+					icon: new vscode.ThemeIcon('debug-stop'),
+					command: { command: 'picode.durable.stop', title: 'Stop the durable agent' },
+				}),
+			] : [
+				new StatusItem('Daemon', {
+					description: 'not running',
+					icon: new vscode.ThemeIcon('circle-slash'),
+				}),
+				new StatusItem('Start the durable agent', {
+					icon: new vscode.ThemeIcon('debug-start'),
+					command: { command: 'picode.durable.start', title: 'Start the durable agent' },
+				}),
+			];
+			out.push(new StatusItem('Durable', { children: durableRows, icon: new vscode.ThemeIcon('layers') }));
+		}
 
 		if (d.projects !== undefined) {
 			// Workspace mode: one row per folder of the area, each with its own branch and changes.

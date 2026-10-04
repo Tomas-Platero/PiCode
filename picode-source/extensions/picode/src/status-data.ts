@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { getSessionUsage } from './agent';
 import { declarationsFromSetting, isRecord } from './declarations';
+import { readDurableStatus } from './durable';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
@@ -307,6 +308,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		thinkingLevel: usage?.thinkingLevel,
 		// The provider's own quota for the model in use, never the session's totals above.
 		usage: await readUsageRow(profileDir, usage?.model),
+		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
+		durable: await readDurableStatus(),
 	};
 }
 

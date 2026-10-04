@@ -43,6 +43,7 @@ import {
 } from './providers';
 import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
+import { registerDurableCommands } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
@@ -2044,6 +2045,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
 	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
+	// The durable agent's commands: start, stop, list/open its conversations, and send it a
+	// prompt. The status panel's Durable section rows run the same ones.
+	context.subscriptions.push(...registerDurableCommands());
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the
