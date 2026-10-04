@@ -30,6 +30,15 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   `odd/tasks/picode-pi-102.md`.
 
 ### Fixed
+- **La release se crea aunque el tag sea anotado.** `release.yml` pasaba `--target "${GITHUB_SHA}"`
+  siempre; con el primer tag **anotado** (`v0.1.1-beta`) `gh` intenta resolver/recrear el tag al
+  crear la release y la API responde **403 «Resource not accessible by integration»** (los tags
+  ligeros anteriores lo sobrevivían, por eso no había salido antes). Ahora `--target` solo se pasa
+  cuando el tag **no** existe todavía, y el paso es idempotente (un re-run re-sube los assets en
+  vez de morir en «already exists»).
+- **El guard de «estrictamente más nueva» deja de saltarse en silencio.** La búsqueda del tag
+  anterior usaba `gh api` **sin token**, fallaba y `PREV_TAG` salía vacío; ahora el paso lleva
+  `GH_TOKEN`, así que la comprobación se aplica de verdad.
 - **Un campo por modelo ya no se pierde al proyectar un proveedor.** `mergeModelsFile`
   (`declarations.ts`) reconstruía la lista `models` del proveedor solo con lo que nombraba la fila
   de ajustes (`id` y, si acaso, `name`), así que cualquier campo por modelo escrito a mano —
