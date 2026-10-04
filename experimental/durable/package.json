@@ -1,0 +1,19 @@
+{
+  "name": "picode-durable-experiment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Experimental proof that @earendil-works/pi-durable delivers: (1) crash-resilient conversations, (2) subagents as background tasks, (3) multiple clients on one live conversation.",
+  "scripts": {
+    "smoke": "node smoke.js",
+    "proof1": "node proof1-kill.js",
+    "proof1:resume": "node proof1-resume.js",
+    "proof2": "node proof2-subagent.js",
+    "proof3": "node proof3-two-clients.js"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "^1.0.2",
+    "@earendil-works/pi-ai": "^1.0.2",
+    "@earendil-works/pi-durable": "^1.0.2"
+  }
+}
