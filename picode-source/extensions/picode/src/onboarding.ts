@@ -419,7 +419,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					return [];
 				}
 			})();
-			importLog.total = 2 + externalPackages.length;
+			importLog.total = externalPackages.length > 0 ? 3 : 2;
 			try {
 				logImport('Bringing your packages, connections, skills and conversations…');
 				const report = importProfile({
@@ -456,33 +456,41 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				let packagesInstalled = 0;
 				let packagesFailed = 0;
 				let packagesSkipped = 0;
-				if (declared.length > 0) {
-					importLog.total = 2 + declared.length;
-					let index = 0;
-					for (const source of declared) {
-						index += 1;
-						const spec = npmInstallSpec(source);
-						if (spec === undefined) {
-							packagesSkipped += 1;
-							logImport(`Skipping ${source} — it lives on the other machine's disk. Reinstall it here if you need it.`);
-							importLog.step = 1 + index;
-							continue;
+				// One npm run for the whole list, not one per package. A run per package put a
+				// console window on screen for each of them — twenty packages, twenty windows —
+				// and the installs do not depend on each other: npm takes the whole list in a
+				// single command, exactly as the gentle-ai install above already does.
+				const specs: string[] = [];
+				for (const source of declared) {
+					const spec = npmInstallSpec(source);
+					if (spec === undefined) {
+						packagesSkipped += 1;
+						logImport(`Skipping ${source} — it lives on the other machine's disk. Reinstall it here if you need it.`);
+						continue;
+					}
+					specs.push(spec);
+				}
+				if (specs.length > 0) {
+					logImport(specs.length === 1 ? `Installing ${specs[0]}…` : `Installing ${specs.length} packages…`);
+					try {
+						await runNpm(deps, ['install', '--save', '--no-audit', '--no-fund', ...specs]);
+						packagesInstalled = specs.length;
+					} catch {
+						// npm is all or nothing: one source it cannot resolve would leave the whole
+						// batch out. Only then is each one tried on its own, so a single bad package
+						// does not take the rest of the list with it.
+						for (const spec of specs) {
+							try {
+								await runNpm(deps, ['install', '--save', '--no-audit', '--no-fund', spec]);
+								packagesInstalled += 1;
+							} catch {
+								packagesFailed += 1;
+								logImport(`Package ${spec} could not be installed — the rest goes on.`);
+							}
 						}
-						logImport(`Installing package ${index} of ${declared.length}: ${spec}…`);
-						try {
-							// npm directly, with a hidden console — pi's own installer spawns
-							// children that pop a window each, and twenty windows is not an
-							// experience. The declarations are already in the copied settings;
-							// this is what puts the files in place.
-							await runNpm(deps, ['install', '--save', '--no-audit', '--no-fund', spec]);
-							packagesInstalled += 1;
-						} catch {
-							packagesFailed += 1;
-							logImport(`Package ${spec} could not be installed — the rest goes on.`);
-						}
-						importLog.step = 1 + index;
 					}
 				}
+				importLog.step = 2;
 				// The import put the providers and MCP servers where pi reads them, but the
 				// Settings pages read the editor's own rows — the stores the owner edits. What
 				// just arrived is added to those rows here, so the import is visible — and

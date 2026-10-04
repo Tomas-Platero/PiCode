@@ -124,3 +124,54 @@ export function singleFlight<T>(map: Map<string, Promise<T>>, key: string, task:
 	}
 	return pending;
 }
+
+/**
+ * A cache written down as one line of JSON, and read back.
+ *
+ * Everything above lives in memory, which makes **every window a cold start**: the picker opens
+ * with the profile's own rows and pi's catalogue arrives seconds later, once the runtime has been
+ * built again. Writing the last answer down is what lets the next window open with the list it had
+ * — the same list the setup wizard already had in hand — and leaves the refresh behind it with
+ * one job: saying whether the list moved.
+ *
+ * The shape is checked on the way **in**, because a cache file is a place anything can be. A
+ * value that is not the list this module writes is dropped rather than trusted: the rows go
+ * straight back to the editor, and a half-read one would be a broken picker. The read is the
+ * caller's; this module only knows the text.
+ */
+export function serialiseCache<T extends readonly unknown[]>(cache: Map<string, CacheEntry<T>>): string {
+	return JSON.stringify([...cache.values()]);
+}
+
+/** What {@link serialiseCache} wrote, or an empty cache when the text is not it. */
+export function deserialiseCache<T extends readonly unknown[]>(json: string): Map<string, CacheEntry<T>> {
+	const entries = new Map<string, CacheEntry<T>>();
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(json);
+	} catch {
+		return entries;
+	}
+	if (!Array.isArray(parsed)) {
+		return entries;
+	}
+	for (const item of parsed) {
+		if (typeof item !== 'object' || item === null) {
+			continue;
+		}
+		const { value, at, key } = item as { value?: unknown; at?: unknown; key?: unknown };
+		if (typeof at !== 'number' || typeof key !== 'string' || !Array.isArray(value)) {
+			continue;
+		}
+		const rows = value.filter((row): row is { id: string } =>
+			typeof row === 'object' && row !== null && typeof (row as { id?: unknown }).id === 'string');
+		if (rows.length !== value.length) {
+			continue;
+		}
+		// SAFETY: every row above passed the `id: string` check, and that is the whole of what this
+		// module can ask of the caller's `T` here — the rows are the editor's own model records,
+		// round-tripped through JSON. `T extends readonly unknown[]` cannot express `{ id: string }`.
+		entries.set(key, { value: rows as unknown as T, at, key });
+	}
+	return entries;
+}

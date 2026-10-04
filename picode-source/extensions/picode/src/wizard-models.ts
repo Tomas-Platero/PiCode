@@ -182,6 +182,27 @@ export function setDefaultModel(deps: WizardModelDeps, ref: unknown): void {
 		settings['defaultProvider'] = ref.slice(0, slash);
 		settings['defaultModel'] = ref;
 	});
+	rememberChatDefault(ref);
+}
+
+/**
+ * Makes the chat open on the model the wizard just chose.
+ *
+ * pi's own default (`defaultProvider` + `defaultModel` in the profile) is what a session runs once
+ * it starts, but the editor seeds a **new conversation** from its own `chat.defaultModel`, and
+ * nothing wrote it: the model the owner picked in the wizard and the one the chat opened with
+ * could disagree. The editor compares a full `provider/model` ref, which is the shape the model
+ * list already hands it.
+ *
+ * Written, not awaited: the step has done its job once pi's default is on disk, and an editor
+ * whose settings cannot be written is not a reason to fail it.
+ */
+function rememberChatDefault(ref: string): void {
+	void vscode.workspace.getConfiguration('chat')
+		.update('defaultModel', ref, vscode.ConfigurationTarget.Global)
+		.then(undefined, () => {
+			// The profile's default is the one the chat falls back to; nothing to repair here.
+		});
 }
 
 /* ------------------------------------------------------------------ *
@@ -237,6 +258,11 @@ export function setGentleAgentModels(deps: WizardModelDeps, request: unknown): {
 		}
 		settings['model_profiles'] = existing;
 	});
+	// The owner's other half of the same sentence: the model the Gentle agents run on is the one
+	// the chat opens with, not a second choice living somewhere else.
+	if (defaultModel !== undefined) {
+		rememberChatDefault(defaultModel);
+	}
 	return gentleAgentNames(deps);
 }
 

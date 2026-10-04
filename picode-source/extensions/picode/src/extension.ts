@@ -15,7 +15,7 @@ import { connectSubscription } from './login';
 import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
-import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from './models-cache';
+import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
 import { listWorkspaceSessionFiles, sessionTurns } from './sessions-provider';
@@ -47,7 +47,7 @@ import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
-import { registerStatusTreeView } from './status-view';
+import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
@@ -1111,7 +1111,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// entry, so flipping it turns a server off without losing it. The entry lives in the profile's file or
 	// in a workspace folder's; the first that holds it is the one that owns it, because a project entry
 	// replaces the profile's of the same name.
-	disposables.push(vscode.commands.registerCommand(TOGGLE_MCP_SERVER_COMMAND, (name?: string): void => {
+	disposables.push(vscode.commands.registerCommand(TOGGLE_MCP_SERVER_COMMAND, (name?: string): { name: string; on: boolean } | undefined => {
 		const server = (name ?? '').trim();
 		if (server.length === 0) {
 			return;
@@ -1131,10 +1131,16 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// The editor's own list follows: an entry that is off stops being offered as a server, so the
 			// page re-reads and the panel's rows move by one.
 			fire();
+			// The panel's own row is moved here instead: left to itself it would wait for the next tick
+			// and then pay for a `git` call per folder before the icon changed.
+			onDidToggleMcpServer.fire({ name: server, on: toggled.on });
 			void vscode.window.showInformationMessage(`PiCode: "${server}" is now ${toggled.on ? 'on' : 'off'}.`);
-			return;
+			// Answered so the MCP page can move its own row with what was just written, rather
+			// than re-reading the whole status (git included) to learn one boolean.
+			return { name: server, on: toggled.on };
 		}
 		void vscode.window.showErrorMessage(`PiCode: "${server}" is not one of pi's servers any more.`);
+		return undefined;
 	}));
 
 	return disposables;
@@ -1308,6 +1314,9 @@ function refreshSubscriptionModels(agentDir: string | undefined, key: string): v
 		.then(models => {
 			const changed = !sameIds(subscriptionModelsCache.get(key)?.value ?? [], models);
 			storeModels(subscriptionModelsCache, key, models, Date.now());
+			// Written down here, where the answer is known to be good: the next window opens
+			// with this list instead of waiting for the runtime to be built again.
+			persistCachedModels();
 			if (changed) {
 				onDidChangeModels.fire();
 			}
@@ -1320,8 +1329,55 @@ function refreshSubscriptionModels(agentDir: string | undefined, key: string): v
 export function forgetPiRuntime(): void {
 	runtimeCache = undefined;
 	// The subscription list is read through that runtime, so a dropped runtime must not leave
-	// a cached answer standing behind it: the next listing refreshes it in the background.
+	// a cached answer standing behind it: the next listing refreshes it in the background. The
+	// written-down copy goes with it — a login that changed what pi can answer must not be
+	// undone by a catalogue the next window reads back off disk.
 	subscriptionModelsCache.clear();
+	persistCachedModels();
+}
+
+/**
+ * Where the catalogue's last answer is written down, set once at activation.
+ *
+ * `undefined` until then, and in a host with no storage: the caches are the in-memory ones again,
+ * which is what they were before this existed.
+ */
+let modelCacheFile: string | undefined;
+
+/**
+ * Reads the written-down catalogue into the cache, so the first listing of a window has it.
+ *
+ * Without this every window is a cold start: the picker opens with the profile's own rows and
+ * pi's models arrive seconds later, once its runtime has been built again. The file holds what the
+ * last window saw, which is what the wizard already hands the chat when it fetches the list.
+ */
+export function loadCachedModels(): void {
+	const file = modelCacheFile;
+	if (file === undefined) {
+		return;
+	}
+	try {
+		for (const [key, entry] of deserialiseCache<vscode.LanguageModelChatInformation[]>(fs.readFileSync(file, 'utf8'))) {
+			subscriptionModelsCache.set(key, entry);
+		}
+	} catch {
+		// No file yet, or one that cannot be read: the first listing refreshes it in the
+		// background, which is exactly what a cold window did before it existed.
+	}
+}
+
+/** Writes the catalogue down, so the next window opens with it. */
+function persistCachedModels(): void {
+	const file = modelCacheFile;
+	if (file === undefined) {
+		return;
+	}
+	try {
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, serialiseCache(subscriptionModelsCache), 'utf8');
+	} catch {
+		// A cache that cannot be written is a slower next start, never a failure now.
+	}
 }
 
 /**
@@ -2095,6 +2151,10 @@ export function activate(context: vscode.ExtensionContext): void {
 	// that rhythm: serving it *is* a read, and the refresh fires the change event the list listens to
 	// (`onDidChangeModels`). So this is the safety net behind that, not a drumbeat: every five minutes
 	// it was two network calls an hour per source, for a window nobody was looking at.
+	// What the last window saw is what this one opens with: the picker's list is read back before
+	// anyone asks for it, so the warm-up below only has to say whether the list moved.
+	modelCacheFile = path.join(context.globalStorageUri.fsPath, 'models-cache.json');
+	loadCachedModels();
 	warmUpModels();
 	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));

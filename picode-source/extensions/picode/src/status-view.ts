@@ -29,6 +29,16 @@ export interface McpServerSwitch {
 }
 
 /**
+ * Fired the instant the MCP switch is flipped, so the row repaints there and then.
+ *
+ * The panel's rows are rebuilt from the whole status reading, and that reading pays for a `git` call
+ * per folder. Waiting for it — or for the five-second tick that would start it — is what left the
+ * icon on the old state after a click. The switch already knows what it just wrote, so it says it
+ * here; the next full reading still wins, this only moves the row now instead of in seconds.
+ */
+export const onDidToggleMcpServer = new vscode.EventEmitter<McpServerSwitch>();
+
+/**
  * The count the MCP row shows: how many servers there are, and how many are switched off.
  *
  * The switch is pi's own `enabled`, read from the profile's file — no connection and no side effect,
@@ -182,8 +192,11 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 	private data: StatusData | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private watched = false;
+	private readonly disposables: vscode.Disposable[] = [];
 
-	constructor(private readonly extensionUri: vscode.Uri) { }
+	constructor(private readonly extensionUri: vscode.Uri) {
+		this.disposables.push(onDidToggleMcpServer.event(server => this.applyMcpSwitch(server)));
+	}
 
 	/**
 	 * Starts or stops the refresh, as the panel is shown or hidden.
@@ -205,6 +218,33 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		}
 		void this.refresh();
 		this.timer = setInterval(() => { void this.refresh(); }, STATUS_REFRESH_MS);
+	}
+
+	/**
+	 * Repaints one MCP row with the state the switch just wrote, without re-reading anything.
+	 *
+	 * The two things a flip changes — the icon and the `on`/`off` description — both come from
+	 * `data.mcpServers`, so the row can be moved without asking for the whole reading again.
+	 */
+	private applyMcpSwitch(server: McpServerSwitch): void {
+		const data = this.data;
+		const servers = data?.mcpServers;
+		if (data === undefined || servers === undefined) {
+			return;
+		}
+		let changed = false;
+		const next = servers.map(entry => {
+			if (entry.name !== server.name || entry.on === server.on) {
+				return entry;
+			}
+			changed = true;
+			return { ...entry, on: server.on };
+		});
+		if (!changed) {
+			return;
+		}
+		this.data = { ...data, mcpServers: next };
+		this._onDidChangeTreeData.fire(undefined);
 	}
 
 	async refresh(): Promise<void> {
@@ -362,6 +402,9 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 	dispose(): void {
 		if (this.timer !== undefined) {
 			clearInterval(this.timer);
+		}
+		for (const disposable of this.disposables) {
+			disposable.dispose();
 		}
 	}
 }

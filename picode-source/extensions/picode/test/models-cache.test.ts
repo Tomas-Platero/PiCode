@@ -14,7 +14,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { cacheKey, cachedModels, sameIds, singleFlight, storeModels, type CacheEntry } from '../src/models-cache.ts';
+import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from '../src/models-cache.ts';
 
 /** A fixed instant, so the TTL math never depends on when the test runs. */
 const NOW = 1_800_000_000_000;
@@ -121,4 +121,47 @@ test('a failing task does not poison the single-flight map', async () => {
 	const recovered = await singleFlight(flights, 'k', async () => 'ok');
 	assert.strictEqual(recovered, 'ok');
 	assert.strictEqual(runs, 1, 'the failed task must not be retried by the map');
+});
+
+test('a cache survives being written down and read back', () => {
+	const cache = new Map<string, CacheEntry<Row[]>>();
+	storeModels(cache, 'agent-dir', [row('a'), row('b')], NOW);
+
+	const read = deserialiseCache<Row[]>(serialiseCache(cache));
+	assert.strictEqual(read.size, 1);
+	const entry = read.get('agent-dir');
+	assert.ok(entry);
+	assert.deepStrictEqual(entry.value, [row('a'), row('b')]);
+	assert.strictEqual(entry.at, NOW);
+	assert.strictEqual(entry.key, 'agent-dir');
+});
+
+test('a cache that was never written down reads back empty', () => {
+	assert.strictEqual(deserialiseCache('').size, 0);
+	assert.strictEqual(deserialiseCache('not json at all').size, 0);
+	assert.strictEqual(deserialiseCache('{"value":[]}').size, 0, 'an object is not the shape that gets written');
+});
+
+test('a written cache drops what is not the list it writes', () => {
+	// The rows go straight back to the editor, so a half-read entry is a broken picker: anything
+	// that is not `{ value: [{ id }], at, key }` is left out rather than guessed at.
+	const text = JSON.stringify([
+		{ key: 'good', at: NOW, value: [row('a')] },
+		{ key: 'no-rows', at: NOW, value: 'x' },
+		{ key: 'no-stamp', at: 'later', value: [row('a')] },
+		{ at: NOW, value: [row('a')] },
+		{ key: 'row-without-id', at: NOW, value: [{ name: 'x' }] },
+		{ key: 'one-bad-row', at: NOW, value: [row('a'), { name: 'x' }] },
+		null,
+	]);
+	assert.deepStrictEqual([...deserialiseCache<Row[]>(text).keys()], ['good']);
+});
+
+test('a read-back cache stays stale, so the refresh behind it still runs', () => {
+	const cache = new Map<string, CacheEntry<Row[]>>();
+	storeModels(cache, 'k', [row('a')], NOW);
+
+	const later = cachedModels(deserialiseCache<Row[]>(serialiseCache(cache)), 'k', 60_000, NOW + 60_000);
+	assert.ok(later.value, 'the list is served, which is the whole point of writing it down');
+	assert.strictEqual(later.fresh, false, 'and the caller is told to refresh behind it');
 });

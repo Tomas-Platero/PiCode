@@ -82,6 +82,15 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 	private renderSequence = 0;
 	/** Coalesces the refreshes `layout` asks for: a resize calls it many times in a row. */
 	private layoutTimer: ReturnType<typeof setTimeout> | undefined;
+	/**
+	 * What the last reading left on screen: the store's rows and pi's on/off state.
+	 *
+	 * Kept so a switch can repaint its row with what it just wrote instead of asking for the
+	 * whole status again — that command reads git for the Project row, which is nothing this
+	 * page draws and seconds this page waits.
+	 */
+	private declared: readonly IMcpServerSettingRow[] = [];
+	private states = new Map<string, boolean>();
 
 	get element(): HTMLElement {
 		return this.root;
@@ -172,7 +181,9 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		if (sequence !== this.renderSequence) {
 			return;
 		}
-		this.render(declared, states);
+		this.declared = declared;
+		this.states = states;
+		this.render(this.declared, this.states);
 	}
 
 	private render(declared: readonly IMcpServerSettingRow[], states: ReadonlyMap<string, boolean>): void {
@@ -256,14 +267,32 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 
 	/** Runs one of the connector's commands — the form — and repaints what it changed. */
 	private async runCommand(command: string, name?: string): Promise<void> {
+		let switched: { name: string; on: boolean } | undefined;
 		try {
-			await this.commandService.executeCommand(command, name);
+			const answer: unknown = await this.commandService.executeCommand(command, name);
+			if (command === TOGGLE_SERVER_COMMAND && isServerSwitch(answer)) {
+				switched = answer;
+			}
 		} catch {
 			// The connector already reports its own failures; here they would only be the
 			// command being absent, which has nothing this page can say better.
 		}
+		// The switch answers with the state it just wrote, so the row moves now. Going through
+		// `refresh` instead would ask for the whole status — git for the Project row — before
+		// anything on this page changed.
+		if (switched !== undefined) {
+			this.states.set(switched.name, switched.on);
+			this.render(this.declared, this.states);
+			return;
+		}
 		await this.refresh();
 	}
+}
+
+function isServerSwitch(value: unknown): value is { name: string; on: boolean } {
+	return typeof value === 'object' && value !== null
+		&& typeof (value as { name?: unknown }).name === 'string'
+		&& typeof (value as { on?: unknown }).on === 'boolean';
 }
 
 const contribution: IAICustomizationManagementSectionContribution = {

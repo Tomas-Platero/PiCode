@@ -19,6 +19,28 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   recurso de versión.
 
 ### Changed
+- **La lista de modelos del chat se abre completa.** Las cachés del catálogo de pi vivían solo en
+  memoria, así que **cada ventana empezaba en frío**: el desplegable abría con las filas del perfil y
+  los modelos de pi llegaban segundos después, cuando su runtime volvía a construirse. Ahora esa
+  lista se escribe en disco y se lee al arrancar, de modo que el chat abre con la misma lista que el
+  asistente ya tenía en la mano; el refresco de fondo solo tiene que decir si cambió. Un login que
+  cambia lo que pi puede responder borra también la copia en disco, para que la próxima ventana no
+  resucite un catálogo viejo.
+- **El modelo elegido en el asistente es el del chat.** Nadie escribía `chat.defaultModel`: el
+  asistente guardaba el modelo por defecto de pi (y el de los agentes de Gentle AI) en el perfil,
+  pero el editor siembra cada conversación nueva desde su propio ajuste, así que el desplegable del
+  asistente y el del chat podían discrepar. Ahora la elección se escribe en los dos sitios.
+- **La importación instala los paquetes en una sola pasada.** Antes lanzaba un `npm install` por
+  paquete declarado, y cada uno abría su ventana de consola: veinte paquetes, veinte ventanas. Ahora
+  los instala todos en **una** ejecución de npm —como ya hacía la instalación de gentle-ai—, y solo
+  si esa pasada falla se reintenta paquete a paquete, para que uno malo no tumbe al resto. La barra
+  del asistente pasa a tres pasos: copia, paquetes y refresco.
+- **El interruptor on/off de los MCP cambia al instante.** La fila del panel se repintaba con la
+  siguiente lectura completa del estado (cada 5 s, y esa lectura paga una llamada a `git` por
+  carpeta), así que el icono se quedaba en el estado viejo segundos enteros. Ahora el interruptor
+  avisa del estado que acaba de escribir y la fila se mueve en el momento; la lectura completa
+  sigue mandando después. La página **MCP Servers** recibe ese mismo estado como respuesta al mando
+  y mueve su fila sin releer nada.
 - **El updater ofrece una release en cuanto se publica.** `update.minReleaseAge` pasa de 120 h a
   **0**: con el valor por defecto, un feed recién publicado contestaba «no hay actualizaciones
   disponibles» y la release tardaba cinco días en ofrecerse. El ajuste sigue existiendo para
