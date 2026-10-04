@@ -156,16 +156,43 @@ Se ejecutan con `node smoke.js`, `node proof1-kill.js` + `taskkill` + `node proo
 - ⚠️ **Lo que devuelve el manejador de una tarea se convierte en su estado siguiente**: devolver el
   id de la conversación hija corrompe el checkpoint.
 
-#### La restricción que decide la arquitectura
+#### La restricción que decide la arquitectura (y que la spec no impone)
 
-🚧 **Un solo proceso es dueño del storage.** Por eso «dos clientes» son dos `watchEvents` sobre
-**un** harness: varias ventanas de PiCode contra el mismo fichero necesitarían un daemon que sea el
-único dueño. No es una nota al pie, es lo que hay que resolver antes de pensar en el editor.
+🚧 La spec dice que **un solo proceso es dueño del storage**, y por eso «dos clientes» eran dos
+`watchEvents` sobre **un** harness. **Medido el 2026-10-04, con dos procesos y una sonda propia:
+no es verdad.** Los dos abrieron el mismo SQLite y los dos **escribieron** — el invariante no lo
+impone el runtime. El daño es real: dos escritores repartieron el mismo id
+(`ID 368 already belongs to conversation`) y esa sesión se quedó envenenada
+(`Session is poisoned by a failed commit after storage admission`) hasta reiniciarla.
+
+Así que el daemon no está porque SQLite vaya a negarse: está porque **nadie se niega**, y el fallo
+es silencioso y caro. Es lo que hay que resolver antes de pensar en el editor.
 
 #### Abierto
 
 - Reponer las dos superficies del chat que se fueron con gentle, esta vez sobre durable.
-- El daemon dueño del storage, para más de un cliente a la vez.
+- El daemon dueño del storage, para más de un cliente a la vez. *(Hecho: ver más abajo.)*
 - El puente de MCP: `pi-mcp` no forma parte de durable, así que las tools habría que envolverlas con
   `defineTool`.
 - Y la alternativa barata sigue en pie: **subir el pin de pi** en `master` y no portar nada.
+
+### 2026-10-04 · segunda tanda: el agente, MCP, los ajustes y el daemon
+
+Cinco commits más sobre la rama, todos verificados **ejecutando**:
+
+| Commit | Qué añade |
+| --- | --- |
+| `4d340e16` | **Agente usable**: `run` / `sessions` / `resume` / `fork` / `attach` / `allow`, y un **guard determinista** que bloquea en código los comandos destructivos. Probado de verdad: el directorio y su fichero existían antes y **sobrevivieron** al intento de borrado |
+| `ce5fafa4` | **Puente de MCP** con la librería de MCP del propio pi: 11 servidores, 8 conectados, **174 tools**. Declararlas son **238,7 KiB** por petición; **diferidas, 0,9 KiB**, y el modelo las encuentra buscando |
+| `0bffeff9` | **Las opciones en los ajustes de PiCode** (`picode.durable.*`), con `flag > ajuste > defecto`. El interruptor del guard **era una mentira** — apagaba el texto pero el hook seguía bloqueando: lo cazó una ejecución, no una lectura del código |
+| `2e7c8734` | **El daemon**: un dueño del storage y clientes por un pipe local. `attach` deja de sondear y pasa a recibir eventos **en vivo**; `send` corre prompts por el daemon; dos clientes distintos ven los mismos eventos a la vez |
+
+Y la premisa que justificaba el daemon **resultó falsa al medirla**: el «un proceso es dueño del
+storage» de la spec **no lo impone el runtime**. De ahí el daemon, y de ahí la corrección que está
+más arriba en este documento.
+
+**Trampas de la API encontradas hasta aquí** — todas silenciosas, ninguna en la documentación:
+`baseUrl` va por modelo y no por proveedor; `settled.answer` es un id de entrada, no el mensaje; lo
+que devuelve el manejador de una tarea se convierte en su estado siguiente; el `Harness` no tiene
+`scanConversations` aunque lo documente; el filtro `tools` quiere `{name}` donde la spec y los tipos
+dicen cadenas; y el dueño único del storage no se cumple.
