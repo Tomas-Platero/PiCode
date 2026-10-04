@@ -584,6 +584,12 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 			glob('**/rg.exe', { cwd }),
 			glob('**/tgrep.exe', { cwd }),
 			glob('**/*explorer_command*.dll', { cwd }),
+			// PiCode: the updater that runs while the app restarts is a Microsoft binary and its
+			// VERSION resource says so (ProductName "Visual Studio Code", FileDescription "VSCode
+			// Inno Updater"). It is stamped like the rest, so the file properties carry PiCode. Its
+			// update window's title is a dialog resource, which rcedit does not touch: that one is
+			// branded in the vendored binary by dev/patch-inno-updater.mjs.
+			glob('**/tools/inno_updater.exe', { cwd }),
 		])).flatMap(o => o);
 		let packageJson: { version: string };
 		let product: { nameLong: string };

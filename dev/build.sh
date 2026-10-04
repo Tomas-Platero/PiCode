@@ -259,6 +259,15 @@ if (!fs.existsSync(`${root}/resources/server/manifest.json`) || JSON.parse(fs.re
 if (!fs.existsSync(`${root}/extensions/picode/package.json`)) {
   fail.push('extensions/picode/package.json is missing, and that is the connector');
 }
+// The update window's title comes from a dialog resource inside this binary, and nothing in the
+// toolchain rewrites resources: the strings are branded in the file, by dev/patch-inno-updater.mjs.
+// A binary that has not been through it shows "Visual Studio Code" over the progress bar.
+const updater = `${root}/build/win32/inno_updater.exe`;
+if (!fs.existsSync(updater)) {
+  fail.push('build/win32/inno_updater.exe is missing, and the installer packs it');
+} else if (fs.readFileSync(updater).indexOf(Buffer.from('Visual Studio Code', 'utf16le')) !== -1) {
+  fail.push('build/win32/inno_updater.exe still says "Visual Studio Code" in its update window; run node dev/patch-inno-updater.mjs');
+}
 
 if (fail.length > 0) {
   console.error(fail.map(line => `  - ${line}`).join('\n'));

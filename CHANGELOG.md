@@ -9,6 +9,15 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 
 ## [Unreleased]
 
+### Fixed
+- **La ventana de actualización ya no se titula «Visual Studio Code».** `inno_updater.exe` —el
+  binario que aplica la actualización y pinta la barra de progreso— lleva el título y el texto en un
+  recurso de diálogo, y ahí seguía el nombre viejo (la ventana de versión también, con
+  `FileDescription` «VSCode Inno Updater»). El título se reescribe en el propio binario
+  (`dev/patch-inno-updater.mjs`; cadenas de la **misma longitud** para no desplazar la plantilla del
+  diálogo), la fase 1 del build rechaza un binario sin marcar y el sello de `rcedit` ya cubre su
+  recurso de versión.
+
 ### Changed
 - **El updater ofrece una release en cuanto se publica.** `update.minReleaseAge` pasa de 120 h a
   **0**: con el valor por defecto, un feed recién publicado contestaba «no hay actualizaciones
