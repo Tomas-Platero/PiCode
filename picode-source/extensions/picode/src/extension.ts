@@ -44,7 +44,7 @@ import {
 } from './providers';
 import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
-import { ensureDurableAgentRunning, registerDurableCommands } from './durable';
+import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
@@ -2198,4 +2198,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
+
+	// The durable daemon is this editor's child, and nothing PiCode starts may outlive
+	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
+	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
+	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
+	// it stops itself (experimental/durable/lib/daemon.js).
+	stopDurableAgentOnShutdown();
 }

@@ -156,6 +156,15 @@ instead of waiting for SQLite to care:
   the one-owner rule) and **opens the database directly when it is not** (nothing owns
   it then, and the listing must work even with no daemon). It prints which way it went.
 - `allow` follows the same daemon-first rule (a write must go through the owner).
+- **The daemon's life is its spawner's life.** It is spawned ATTACHED (never `detached`,
+  never a background service), and a spawner that means it holds the daemon's stdin open
+  without ever writing to it and passes `PICODE_PARENT_PIPE=1`: when that pipe reads EOF —
+  the spawner died in any way, hooks or no hooks — the daemon stops ITSELF through the same
+  graceful path as the `shutdown` method. Nothing is polled and no pid is checked, so a
+  reused pid cannot keep a dead spawner's daemon alive; on Windows libuv's per-child job
+  object additionally terminates the child with the parent (the behaviour `detached: true`
+  used to escape). What survives is the state, never the process — see
+  `node proof-editor-lifecycle.js`.
 
 Verified in one script — `bash proof-daemon.sh` (see "Proving the daemon" below).
 

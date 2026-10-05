@@ -376,6 +376,29 @@ async function serveStorage(resolved, agents, skills) {
 		methods.shutdown().catch(() => process.exit(0));
 	});
 
+	// Belt and braces for the deaths a shutdown request cannot reach: the editor that
+	// started this daemon crashing, being taskkilled, or the machine going down hard —
+	// in none of those does any hook run, so the daemon needs its own reason not to
+	// outlive its parent. The spawner that means it passes PICODE_PARENT_PIPE=1 and
+	// holds THIS process's stdin open without ever writing to it. When that process
+	// dies — any death — the kernel closes its end of the pipe, stdin reads EOF, and
+	// the daemon stops itself through the SAME graceful path as `shutdown` (streams
+	// stopped, storage closed cleanly). It cannot be fooled by a stale pid: no pid is
+	// ever checked — the pipe is not a name but a kernel object owned by the parent,
+	// and EOF IS the parent being gone. A plain `node cli.js serve` never sets the
+	// variable, so manual runs keep meaning Ctrl+C and the endpoint, nothing else.
+	if (process.env.PICODE_PARENT_PIPE === "1") {
+		const stdin = process.stdin;
+		if (stdin && !stdin.isTTY && stdin.readable !== false) {
+			stdin.resume();
+			stdin.once("end", () => {
+				console.error("[daemon] the editor's lifeline pipe closed — the process that started this daemon is gone; shutting down.");
+				methods.shutdown().catch(() => process.exit(0));
+			});
+			stdin.once("error", () => {}); // 'end' does the work; an errored pipe is a closing pipe
+		}
+	}
+
 	// The endpoint is up and served; only now does the bridge start connecting.
 	// When it settles, every conversation created while it was connecting and
 	// carrying no tools filter of its own is armed with the deferral filter BEFORE

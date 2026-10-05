@@ -3,10 +3,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import type { Socket } from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DaemonClient, daemonEndpoint } from './durable-client';
+import { daemonSpawnPlan } from './durable-spawn';
 import { durableWorkRows, snapshotInFlight, type DurableWorkRow } from './durable-tasks';
 
 /**
@@ -240,6 +242,13 @@ function outputChannel(): vscode.OutputChannel {
 	return durableChannel;
 }
 
+/**
+ * The daemon this editor started, held so the lifeline pipe's write end cannot be
+ * garbage-collected shut while the editor lives — closing it early would tell the
+ * daemon the editor is dead when it is not.
+ */
+let durableChild: ChildProcess | undefined;
+
 /** The daemon's error as one honest sentence. */
 function daemonUnavailableSentence(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -302,17 +311,31 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 	} catch {
 		// A folder that cannot hold a log is not a reason to refuse to start the agent.
 	}
-	const child = spawn('node', [cliFile, 'serve'], {
+	// The spawn plan carries the lifetime contract (durable-spawn.ts): attached, never
+	// detached, and stdin is the lifeline pipe the daemon watches for this process's death.
+	const plan = daemonSpawnPlan(cliFile, {
+		...process.env,
+		PI_AGENT_PROFILE: paths.agentProfile,
+		PICODE_USER_SETTINGS: paths.userSettingsFile,
+	}, logFd);
+	const child = spawn(plan.command, [...plan.args], {
 		cwd: folder,
-		detached: true,
-		stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
+		detached: plan.detached,
+		stdio: [...plan.stdio],
 		windowsHide: true,
-		env: { ...process.env, PI_AGENT_PROFILE: paths.agentProfile, PICODE_USER_SETTINGS: paths.userSettingsFile },
+		env: plan.env,
 	});
 	if (logFd !== undefined) {
 		// The child holds its own copy of the descriptor; this process has no reason to keep it open.
 		fs.closeSync(logFd);
 	}
+	durableChild = child;
+	// The editor must stay free to exit without waiting on the daemon: unref releases the
+	// event loop, NOT the handles — the lifeline pipe stays open for exactly as long as
+	// this process lives, and its closing is the daemon's death signal. `durableChild`
+	// keeps the pipe referenced so it cannot be garbage-collected shut early. (At runtime
+	// `child.stdin` is a net.Socket — a named-pipe end — which is what has an `unref`.)
+	(child.stdin as Socket | null)?.unref();
 	child.unref();
 	const endpoint = current.endpoint;
 	for (let attempt = 0; attempt < 20; attempt++) {
@@ -347,6 +370,27 @@ async function stopDurableAgent(): Promise<void> {
 			`PiCode: the durable agent is not running — nothing to stop (${daemonUnavailableSentence(error)}).`,
 		);
 	}
+}
+
+/**
+ * The editor's way out (called from `deactivate` in extension.ts): ask the daemon to stop
+ * through its own protocol, so closing PiCode closes everything PiCode started. What
+ * survives is the state — the SQLite the daemon committed — never a background process.
+ *
+ * `deactivate` is synchronous and the editor grants it only a moment, so the request is
+ * sent without waiting on the answer: if the teardown outruns the daemon's goodbye, the
+ * lifeline pipe (PICODE_PARENT_PIPE, set at spawn) closes with this process and the
+ * daemon stops itself through the same graceful path anyway. "Not running" is not an
+ * error on the way out, and no notification is shown — the window is going away.
+ */
+export function stopDurableAgentOnShutdown(): void {
+	void withDaemon(1500, client => client.request('shutdown') as Promise<unknown>).catch(() => {
+		// Nothing to stop, or the lifeline already did it.
+	});
+	// And the belt: if THIS editor started the daemon, end its lifeline pipe too. The
+	// daemon reads EOF and stops itself through the same graceful path — so the stop no
+	// longer depends on the protocol answer arriving before the process is torn down.
+	durableChild?.stdin?.end();
 }
 
 /** The conversations the daemon holds, as quick-pick rows; `undefined` when cancelled or empty. */
