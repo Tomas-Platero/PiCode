@@ -209,3 +209,26 @@ más arriba en este documento.
 que devuelve el manejador de una tarea se convierte en su estado siguiente; el `Harness` no tiene
 `scanConversations` aunque lo documente; el filtro `tools` quiere `{name}` donde la spec y los tipos
 dicen cadenas; y el dueño único del storage no se cumple.
+
+### 2026-10-05 · lo que reporta el dueño, sin arreglar todavía
+
+Cinco cosas, tal como las dijo, para que no se pierdan. Ninguna está hecha.
+
+1. **`/mcp ` con espacio** da sus opciones en la TUI de pi; el chat del editor **no** ofrece los
+   comandos de pi con argumentos. Pi tiene el comando (el connector builtin ya se carga), pero la
+   lista de comandos del chat no lo incluye.
+2. **`PiCode: Status` → «Which pi»** debe pasar a llamarse **«Host»** y decir si es **interno o
+   externo**; fuera el texto «picode's owns pi».
+3. **Clic en un MCP que dice «need sign-in»** debe **hacer login**, no apagarlo. Hoy el clic
+   alterna el interruptor, y la acción que hace falta es la de autenticarse.
+4. **Clic en una sesión guardada** debe dar **todos los datos de una vez**, sin esperar a que el
+   dueño escriba algo para que aparezca el contenido.
+5. 🔴 **sentry, vercel y otros piden login otra vez** cada vez que se cierra y se abre el editor.
+   La credencial no persiste. Es el de fondo de los cinco.
+
+Y una sexta, aparte de PiCode y explicada: **el sync no conecta**. El esquema `picode://` lo
+registra la app **instalada** (lo declara su instalador en Windows), así que la build portable no
+es dueña de él: al pulsar «Backup and Sync Settings» el sistema entrega la URL **a la instalada**
+—por eso abría la beta— y al desinstalarla **no queda nadie escuchando** el esquema, de ahí que no
+conecte y que no haya nada en el log: no falla la sincronización, falla que no hay manejador. Una
+build portable necesita o registrar el esquema para sí misma o servir el flujo por otra vía.
