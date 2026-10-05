@@ -43,7 +43,7 @@ import {
 } from './providers';
 import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
-import { registerDurableCommands } from './durable';
+import { ensureDurableAgentRunning, registerDurableCommands } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { registerStatusDataCommand } from './status-data';
@@ -2051,10 +2051,15 @@ export function activate(context: vscode.ExtensionContext): void {
 	// PiCode has its own, and the agent's defaults would find a different install's — the very
 	// mixing a separate build exists to avoid. `globalStorageUri` is `<userData>/User/globalStorage/
 	// <extension>`, so two directories up is the settings file the editor itself obeys.
-	context.subscriptions.push(...registerDurableCommands({
+	const durablePaths = {
 		agentProfile: profileDirectory(context.extensionUri),
 		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
-	}));
+	};
+	context.subscriptions.push(...registerDurableCommands(durablePaths));
+	// And it comes up running rather than waiting to be asked: a panel that says "not running"
+	// when the editor could have started it is an obstacle, not a safeguard. Quiet, and skipped
+	// when the owner stopped it in this window or the agent is not installed here at all.
+	void ensureDurableAgentRunning(durablePaths);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the

@@ -28,6 +28,9 @@ import { durableWorkRows, snapshotInFlight, type DurableWorkRow } from './durabl
 /** Where the editor looks for the durable agent, as the settings spell it. */
 export const PICODE_DURABLE_FOLDER_SETTING = 'picode.durable.folder';
 
+/** Start the agent with the window instead of waiting to be asked. */
+export const PICODE_DURABLE_AUTOSTART_SETTING = 'picode.durable.autoStart';
+
 /** The folder the default setting names, resolved against the workspace when relative. */
 export const DEFAULT_DURABLE_FOLDER = 'experimental/durable';
 
@@ -257,8 +260,17 @@ export interface DurableAgentPaths {
 	readonly userSettingsFile: string;
 }
 
+/**
+ * Whether the owner asked the agent to stop in this window.
+ *
+ * A Stop that an auto-start undoes a second later is a lie, so a stop decided here sticks until
+ * the window reloads or the Start command runs again.
+ */
+let stoppedByOwner = false;
+
 /** "PiCode: Start Durable Agent": run `cli.js serve` in the durable folder and wait for it to answer. */
-async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
+async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {}): Promise<void> {
+	stoppedByOwner = false;
 	const folder = durableFolder();
 	const cliFile = folder === undefined ? undefined : path.join(folder, 'cli.js');
 	if (cliFile === undefined || !fs.existsSync(cliFile)) {
@@ -273,7 +285,9 @@ async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
 	}
 	const current = await readDurableStatus();
 	if (current.up) {
-		void vscode.window.showInformationMessage(`PiCode: the durable agent is already running at ${current.endpoint} (pid ${current.pid}).`);
+		if (!quiet) {
+			void vscode.window.showInformationMessage(`PiCode: the durable agent is already running at ${current.endpoint} (pid ${current.pid}).`);
+		}
 		return;
 	}
 	const child = spawn('node', [cliFile, 'serve'], {
@@ -289,9 +303,13 @@ async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
 		await new Promise(resolve => setTimeout(resolve, 500));
 		const status = await readDurableStatus();
 		if (status.up) {
-			void vscode.window.showInformationMessage(
-				`PiCode: durable agent started at ${endpoint} (pid ${status.pid}, ${status.conversations ?? 0} conversation(s)).`,
-			);
+			// Quiet when the editor started it by itself: the panel is where that state belongs, and
+			// a notification on every window start is noise. A *failure* is never quiet.
+			if (!quiet) {
+				void vscode.window.showInformationMessage(
+					`PiCode: durable agent started at ${endpoint} (pid ${status.pid}, ${status.conversations ?? 0} conversation(s)).`,
+				);
+			}
 			return;
 		}
 	}
@@ -302,6 +320,9 @@ async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
 
 /** "PiCode: Stop Durable Agent": ask the daemon to shut down through the protocol. */
 async function stopDurableAgent(): Promise<void> {
+	// Said before the attempt: if the stop fails the owner still meant it, and this is what keeps
+	// an auto-start from undoing the decision.
+	stoppedByOwner = true;
 	try {
 		await withDaemon(2500, client => client.request('shutdown') as Promise<unknown>);
 		void vscode.window.showInformationMessage('PiCode: the durable agent stopped.');
@@ -404,6 +425,30 @@ async function sendDurablePrompt(): Promise<void> {
 	} catch (error) {
 		void vscode.window.showWarningMessage(`PiCode: the prompt could not be sent (${daemonUnavailableSentence(error)}).`);
 	}
+}
+
+/** Whether the editor starts the agent by itself. Absent means yes: it is the useful default. */
+function autoStartEnabled(): boolean {
+	return vscode.workspace.getConfiguration('picode').get<boolean>(PICODE_DURABLE_AUTOSTART_SETTING) !== false;
+}
+
+/**
+ * Starts the agent when nothing else has, so the editor comes up with it already running.
+ *
+ * Deliberately quiet and deliberately conditional: it does nothing when the owner stopped the
+ * agent in this window, when `picode.durable.autoStart` is off, or when the folder is not there
+ * — an experiment that is not installed must not complain on every window start. A failure to
+ * start, once the folder IS there, is reported like any other.
+ */
+export async function ensureDurableAgentRunning(paths: DurableAgentPaths): Promise<void> {
+	if (stoppedByOwner || !autoStartEnabled() || durableFolder() === undefined) {
+		return;
+	}
+	const status = await readDurableStatus();
+	if (status.up) {
+		return;
+	}
+	await startDurableAgent(paths, { quiet: true });
 }
 
 /** Registers the four durable commands; the caller collects the disposables. */
