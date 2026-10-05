@@ -148,14 +148,18 @@ fi
 # The pack directory, named for the product and for the system being packed. The task that writes it
 # is `vscode-<platform>-<arch>-min-packing`, and the directory name is set in the gulpfiles
 # (PiCode's own change, written into the tree), so the two have to agree: this is the same table.
+#
+# `PICODE_PACK_SUFFIX` is appended by both sides. Empty in every ordinary build; set to something
+# like " - experimental" to pack beside the tree a release was cut from instead of over it, which is
+# what the gulpfiles' `buildPath` and `destinationFolderName` do with the same variable.
 case "${OS_NAME}" in
   windows)
     PACK_PLATFORM="win32"
-    PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}"
+    PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
     ;;
   linux)
     PACK_PLATFORM="linux"
-    PACK_DIR="./PiCode-linux-${VSCODE_ARCH}"
+    PACK_DIR="./PiCode-linux-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
     ;;
   *)
     echo "error: packing for OS_NAME='${OS_NAME}' is not set up yet." >&2
@@ -491,9 +495,15 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 # what a person runs and what a release runs - produces every artifact a release has. On anything
 # but Windows the script says so and stops, and the build carries on.
 echo ""
-echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
+if [[ "${PICODE_SKIP_INSTALLER:-no}" == "yes" ]]; then
+  echo "== phase 5/5 - the Windows installer: skipped (PICODE_SKIP_INSTALLER=yes)"
+  echo "   A side-by-side build does not want one: running it would land on top of the PiCode"
+  echo "   already installed, which is the opposite of what building beside it is for."
+else
+  echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
 
-bash dev/build-installer.sh "${PACK_DIR}"
+  bash dev/build-installer.sh "${PACK_DIR}"
+fi
 
 echo ""
 echo "== done"

@@ -20,7 +20,11 @@ const require = createRequire(import.meta.url);
 
 const repoPath = path.dirname(import.meta.dirname);
 const commit = getVersion(repoPath);
-const buildPath = (arch: string) => path.join(path.dirname(repoPath), `PiCode-Win32-${arch}`);
+// PiCode: an experimental build packs under its own name, so it never overwrites the tree a
+// release was cut from. `PICODE_PACK_SUFFIX` is empty in every ordinary build — the path stays
+// exactly what it always was — and `dev/build.sh` reads the same variable for its PACK_DIR.
+const PACK_SUFFIX = process.env['PICODE_PACK_SUFFIX'] ?? '';
+const buildPath = (arch: string) => path.join(path.dirname(repoPath), `PiCode-Win32-${arch}${PACK_SUFFIX}`);
 const setupDir = (arch: string, target: string) => path.join(repoPath, '.build', `win32-${arch}`, `${target}-setup`);
 const innoSetupPath = path.join(path.dirname(path.dirname(require.resolve('innosetup'))), 'bin', 'ISCC.exe');
 // The Azure Pipelines machinery (build/azure-pipelines/) was removed with the
