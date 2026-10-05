@@ -24,7 +24,8 @@ import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
-import { piCommandsOfRunner, type PiCommand } from './commands';
+import { piProjectSlug } from './sessions-provider';
+import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 
@@ -180,6 +181,8 @@ interface PiSdk {
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
 		// default, which is right for the external pi and a leak for the internal one.
+		// The internal mode passes pi's own default **shape**: the per-project folder
+		// under this profile's `sessions/` (see the sessionManager creation below).
 		create(cwd: string, sessionDir?: string): PiSessionStore;
 	};
 }
@@ -1004,7 +1007,19 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					}
 				}
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
-					sessionManager = loaded.sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
+					// pi's own session home: the per-project folder under the profile's `sessions/`,
+					// the same shape `getDefaultSessionDirPath` builds (replicated by `piProjectSlug`,
+					// which the Sessions listing matches against). The override used to be the bare
+					// `sessions/` folder, and pi files a custom session directory **directly in it** —
+					// no project folder — so every conversation the chat saved landed where the
+					// listing never walks: the owner's recent sessions were invisible in Sessions, and
+					// clicking a saved one could only ever replay the CLI's older transcripts. Filing
+					// under the project slug puts the chat's sessions where pi's own live, and the
+					// listing — and the click that replays one — sees them.
+					sessionManager = loaded.sdk.SessionManager.create(
+						cwd,
+						agentDir === undefined ? undefined : path.join(agentDir, 'sessions', piProjectSlug(cwd)),
+					);
 				}
 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
 				const created = await loaded.sdk.createAgentSessionFromServices({

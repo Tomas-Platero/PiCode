@@ -165,6 +165,36 @@ const nodeFs: SessionsFs = {
  */
 const listingCache = new Map<string, { mtime: number; label: string; id: string }>();
 
+/** The project slug a transcript's own header records, cached against the mtime it was read at. */
+const headerSlugCache = new Map<string, { mtime: number; slug: string | undefined }>();
+
+/**
+ * The per-project slug a transcript at the sessions root belongs to, read from its session
+ * header's `cwd` (the header is the only place a root-level file names its project).
+ * `undefined` when the file does not open with a session record carrying a cwd.
+ */
+function rootTranscriptSlug(entry: string, fs: SessionsFs): string | undefined {
+	const mtime = fs.mtime(entry);
+	const cached = headerSlugCache.get(entry);
+	if (cached !== undefined && cached.mtime === mtime) {
+		return cached.slug;
+	}
+	const header = sessionHeader(fs.read(entry));
+	const cwd = header?.['cwd'];
+	const slug = typeof cwd === 'string' && cwd.length > 0 ? piProjectSlug(cwd) : undefined;
+	headerSlugCache.set(entry, { mtime, slug });
+	return slug;
+}
+
+/** Forgets cached header slugs for transcripts the walk no longer sees. */
+function pruneHeaderSlugCache(seen: ReadonlySet<string>): void {
+	for (const cached of headerSlugCache.keys()) {
+		if (!seen.has(cached)) {
+			headerSlugCache.delete(cached);
+		}
+	}
+}
+
 /**
  * pi's per-project session folder name, replicating the runtime's own encoding
  * (pi `dist/core/session-manager.js`, `getDefaultSessionDirPath`): the resolved cwd
@@ -183,6 +213,10 @@ export function piProjectSlug(cwd: string): string {
  * open, never the whole profile. With no workspace open, or when no per-project
  * folder matches, the listing is empty — there is no fall-back to every project.
  *
+ * Transcripts filed directly under `sessions/` (a session created with an explicit
+ * session directory — see the sessionManager creation in `agent.ts`) are matched too,
+ * by the cwd their own session header records.
+ *
  * On Windows the folder-name match is case-insensitive: NTFS folds case, and the
  * drive letter's case in a workspace path may differ from the case pi recorded
  * when the sessions were created.
@@ -198,25 +232,45 @@ export function listWorkspaceSessionFiles(
 	const slugs = new Set(workspacePaths.map(piProjectSlug));
 	const foldedSlugs = new Set([...slugs].map(slug => slug.toLowerCase()));
 	const dirs: string[] = [];
+	// Transcripts filed directly under `sessions/` — pi itself files every session under a
+	// per-project folder, but a session created with an explicit session directory lands at
+	// the root, and the editor's chat used to create exactly those. Their project is not
+	// their path but their header: read it and match it the way the folders were matched,
+	// so conversations the chat has already saved surface without a migration.
+	const rootFiles: string[] = [];
+	const rootEntries = new Set<string>();
 	for (const entry of fs.list(sessionsDir)) {
+		if (entry.endsWith('.jsonl')) {
+			rootEntries.add(entry);
+			const slug = rootTranscriptSlug(entry, fs);
+			if (slug !== undefined && (slugs.has(slug) || (process.platform === 'win32' && foldedSlugs.has(slug.toLowerCase())))) {
+				rootFiles.push(entry);
+			}
+			continue;
+		}
 		const name = path.basename(entry);
 		if (slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()))) {
 			dirs.push(entry);
 		}
 	}
-	return listFromDirs(dirs, fs);
+	const files = listFromDirs(dirs, rootFiles, fs);
+	// The header cache keeps every root transcript seen this refresh, matched or not; the
+	// entries left over belong to files that are gone.
+	pruneHeaderSlugCache(rootEntries);
+	return files;
 }
 
 /**
  * The listing shared by every entry point: walks the given roots (pi's per-project
- * folders, or the whole `sessions/` tree), newest first; the label is the first
- * user prompt, falling back to the file's own timestamp.
+ * folders, or the whole `sessions/` tree) plus any pre-matched transcript files
+ * (`extraFiles` — root-level files a caller matched by their own header), newest first;
+ * the label is the first user prompt, falling back to the file's own timestamp.
  *
  * Each transcript's label and id are read from `listingCache` when the file's mtime still
  * matches the cached one, so an unchanged tree costs a `stat` per file instead of a full
  * read of every transcript. Entries for files the walk no longer sees are dropped.
  */
-function listFromDirs(roots: readonly string[], fs: SessionsFs): PiSessionFile[] {
+function listFromDirs(roots: readonly string[], extraFiles: readonly string[], fs: SessionsFs): PiSessionFile[] {
 	const files: PiSessionFile[] = [];
 	const stack = [...roots];
 	const visited = new Set<string>(stack);
@@ -234,27 +288,15 @@ function listFromDirs(roots: readonly string[], fs: SessionsFs): PiSessionFile[]
 				continue;
 			}
 			seen.add(entry);
-			const mtime = fs.mtime(entry);
-			const cached = listingCache.get(entry);
-			let label: string;
-			let id: string;
-			if (cached !== undefined && cached.mtime === mtime) {
-				({ label, id } = cached);
-			} else {
-				// New or modified file: read it and remember the label until it moves again.
-				const firstPrompt = firstUserPrompt(fs.read(entry))
-					?? path.basename(entry).replace(/\.jsonl$/, '');
-				const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
-				label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
-				id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
-				listingCache.set(entry, { mtime, label, id });
-			}
-			files.push({
-				id,
-				file: entry,
-				label,
-				mtime,
-			});
+			files.push(describeTranscript(entry, fs));
+		}
+	}
+	// The pre-matched files, described through the same cache; a file both matched at
+	// the root and inside a walked project folder is one file, listed once.
+	for (const entry of extraFiles) {
+		if (!seen.has(entry)) {
+			seen.add(entry);
+			files.push(describeTranscript(entry, fs));
 		}
 	}
 	for (const cached of listingCache.keys()) {
@@ -265,13 +307,33 @@ function listFromDirs(roots: readonly string[], fs: SessionsFs): PiSessionFile[]
 	return files.sort((a, b) => b.mtime - a.mtime);
 }
 
+/** One transcript's listing entry, from or into the mtime-keyed cache. */
+function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
+	const mtime = fs.mtime(entry);
+	const cached = listingCache.get(entry);
+	let label: string;
+	let id: string;
+	if (cached !== undefined && cached.mtime === mtime) {
+		({ label, id } = cached);
+	} else {
+		// New or modified file: read it and remember the label until it moves again.
+		const firstPrompt = firstUserPrompt(fs.read(entry))
+			?? path.basename(entry).replace(/\.jsonl$/, '');
+		const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
+		label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
+		id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
+		listingCache.set(entry, { mtime, label, id });
+	}
+	return { id, file: entry, label, mtime };
+}
+
 /**
  * Lists every session transcript under the profile's `sessions/` directory, across
  * all of pi's per-project folders. The panel uses `listWorkspaceSessionFiles` instead;
  * this remains the unfiltered walk for callers that genuinely want every project.
  */
 export function listSessionFiles(sessionsDir: string, fs: SessionsFs = nodeFs): PiSessionFile[] {
-	return listFromDirs([sessionsDir], fs);
+	return listFromDirs([sessionsDir], [], fs);
 }
 
 /* ------------------------------------------------------------------ *

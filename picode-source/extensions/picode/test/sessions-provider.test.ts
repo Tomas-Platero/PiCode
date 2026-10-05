@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { firstUserPrompt, sessionTurns, listSessionFiles } from '../src/sessions-provider.ts';
+import { firstUserPrompt, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -46,4 +46,70 @@ test('listSessionFiles walks project folders and labels from the first prompt', 
 	assert.strictEqual(found.length, 2);
 	assert.strictEqual(found[0].label, 'hola pi');
 	assert.ok(found[1].label.length > 0);
+});
+
+/** A listing file system over a flat record of file → content, listing ancestor directories too. */
+function memoryFs(files: Record<string, string>): SessionsFs {
+	return {
+		read: file => files[file] ?? '',
+		list: dir => {
+			const entries = new Set<string>();
+			for (const file of Object.keys(files)) {
+				if (!file.startsWith(dir + '/')) {
+					continue;
+				}
+				const rest = file.slice(dir.length + 1);
+				// A nested file is only reachable through its ancestor folders, so they are
+				// listed as entries of their own, exactly like a real directory walk.
+				entries.add(rest.includes('/') ? `${dir}/${rest.split('/')[0]}` : file);
+			}
+			return [...entries];
+		},
+		mtime: (): number => 1000,
+	};
+}
+
+function sessionHeaderLine(id: string, cwd: string): string {
+	return `{"type":"session","version":3,"id":"${id}","timestamp":"2026-10-05T12:00:00.000Z","cwd":${JSON.stringify(cwd)}}`;
+}
+
+function projectTranscript(name: string): [string, string] {
+	const slug = piProjectSlug('C:\\demo');
+	return [`/sessions/${slug}/${name}.jsonl`, `${sessionHeaderLine(name, 'C:\\demo')}\n{"type":"message","message":{"role":"user","content":[{"type":"text","text":"del proyecto"}]}}`];
+}
+
+function rootTranscript(name: string, cwd: string): [string, string] {
+	return [`/sessions/${name}.jsonl`, `${sessionHeaderLine(name, cwd)}\n{"type":"message","message":{"role":"user","content":[{"type":"text","text":"de la raiz"}]}}`];
+}
+
+const ROOT_MATCHER: readonly string[] = ['C:\\demo'];
+
+test('a workspace listing includes a root-level transcript whose header names the workspace', () => {
+	const [projectFile, projectContent] = projectTranscript('2026_p1');
+	const [rootFile, rootContent] = rootTranscript('2026_r1', 'C:\\demo');
+	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs({
+		[projectFile]: projectContent,
+		[rootFile]: rootContent,
+	}));
+	assert.deepStrictEqual(found.map(file => file.label).sort(), ['de la raiz', 'del proyecto']);
+});
+
+test('a root-level transcript for another project stays out of the workspace listing', () => {
+	const [projectFile, projectContent] = projectTranscript('2026_p2');
+	const [rootFile, rootContent] = rootTranscript('2026_r2', 'C:\\other');
+	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs({
+		[projectFile]: projectContent,
+		[rootFile]: rootContent,
+	}));
+	assert.deepStrictEqual(found.map(file => file.label), ['del proyecto']);
+});
+
+test('a root-level transcript without a session header is not matched', () => {
+	const [projectFile, projectContent] = projectTranscript('2026_p3');
+	const files: Record<string, string> = {
+		[projectFile]: projectContent,
+		'/sessions/2026_r3.jsonl': 'not a session',
+	};
+	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs(files));
+	assert.deepStrictEqual(found.map(file => file.label).sort(), ['del proyecto']);
 });
