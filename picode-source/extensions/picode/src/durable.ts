@@ -88,6 +88,14 @@ export function durableFolder(): string | undefined {
 			return candidate;
 		}
 	}
+	// The experimental build is packed *inside* the PiCode repository, so its agent sits beside
+	// the app folder rather than beside whatever folder happens to be open — which is what lets
+	// it be found while the owner works in another project. In a released build there is no
+	// `experimental/durable` up there, so this candidate simply does not exist and nothing changes.
+	const fromEditor = path.resolve(vscode.env.appRoot, '..', '..', '..', trimmed);
+	if (fs.existsSync(path.join(fromEditor, 'cli.js'))) {
+		return fromEditor;
+	}
 	// Nothing on disk matched; with a folder open the first one is still the honest guess —
 	// the commands that need `cli.js` will say exactly that it is missing.
 	return folders.length > 0 ? path.join(folders[0], trimmed) : undefined;
