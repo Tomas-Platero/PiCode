@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DaemonClient, daemonEndpoint } from './durable-client';
+import { durableWorkRows, snapshotInFlight, type DurableWorkRow } from './durable-tasks';
 
 /**
  * The durable agent, seen from the editor.
@@ -51,6 +52,13 @@ export interface DurableStatus {
 	readonly streams?: number;
 	readonly pid?: number;
 	readonly uptimeMs?: number;
+	/**
+	 * The durable work worth one row each (`durable-tasks.ts`): the subagent-owned
+	 * conversations and any conversation with a run in flight, each with the state its
+	 * snapshot actually carries. Absent when the daemon is down — the section then says
+	 * so instead of listing rows nobody read.
+	 */
+	readonly work?: readonly DurableWorkRow[];
 	/** Why the daemon could not be read, when it is up but would not answer. */
 	readonly error?: string;
 }
@@ -85,6 +93,33 @@ export function durableFolder(): string | undefined {
 	return folders.length > 0 ? path.join(folders[0], trimmed) : undefined;
 }
 
+/**
+ * The pi extension that hands work to the daemon (`durable_send`, `durable_list`,
+ * `durable_read`), as the chat's session loads it.
+ *
+ * It lives next to the durable folder — the `picode.durable.folder` setting names the
+ * folder, the bridge is its `../pi-durable-bridge/extension.ts` sibling — and it is only
+ * real when the file is on disk: `undefined` means "no bridge here", which the caller
+ * treats as "the chat runs without it", never as an error.
+ */
+export function durableBridgeExtensionPath(): string | undefined {
+	const folder = durableFolder();
+	if (folder === undefined) {
+		return undefined;
+	}
+	const candidate = path.join(folder, '..', 'pi-durable-bridge', 'extension.ts');
+	return fs.existsSync(candidate) ? candidate : undefined;
+}
+
+/**
+ * How many conversations one status reading snapshots for their live run state.
+ *
+ * Each snapshot costs a `subscribe`/`unsubscribe` round-trip on the local pipe; the cap
+ * keeps a panel refresh bounded when a daemon has collected dozens of conversations. The
+ * subagent-owned ones are read first, because they are the rows the list exists for.
+ */
+const MAX_SNAPSHOTS_PER_READ = 16;
+
 /** One bounded conversation with the daemon; the client is closed either way. */
 async function withDaemon<T>(timeoutMs: number, body: (client: DaemonClient) => Promise<T>): Promise<T> {
 	const client = await DaemonClient.connect(daemonEndpoint(durableFolder()), timeoutMs);
@@ -103,6 +138,26 @@ export async function readDurableStatus(): Promise<DurableStatus> {
 			const ping = await client.request('ping') as { pid?: number; uptimeMs?: number; streams?: number };
 			const sessions = await client.request('sessions') as { conversations?: readonly DurableConversationRow[] };
 			const conversations = sessions.conversations ?? [];
+			// Live state, conversation by conversation: `subscribe` answers with the
+			// conversation's snapshot, whose `run` presence is the protocol's own "in
+			// flight". A conversation that cannot be snapshotted is recorded as unknown
+			// rather than read as idle — the row says so instead of guessing.
+			const subagentFirst = [...conversations].sort((a, b) =>
+				Number(b.note?.startsWith('subagent') ?? false) - Number(a.note?.startsWith('subagent') ?? false) || a.id - b.id);
+			const inFlight = new Map<number, boolean | undefined>();
+			for (const row of subagentFirst.slice(0, MAX_SNAPSHOTS_PER_READ)) {
+				try {
+					const subscribed = await client.request('subscribe', { conversationId: row.id }) as { snapshot?: unknown };
+					inFlight.set(row.id, snapshotInFlight(subscribed?.snapshot));
+				} catch {
+					inFlight.set(row.id, undefined);
+				}
+				try {
+					await client.request('unsubscribe', { conversationId: row.id });
+				} catch {
+					// The next refresh unsubscribes again; a stale watch is the daemon's to reap.
+				}
+			}
 			return {
 				up: true,
 				endpoint,
@@ -111,6 +166,7 @@ export async function readDurableStatus(): Promise<DurableStatus> {
 				streams: ping.streams,
 				pid: ping.pid,
 				uptimeMs: ping.uptimeMs,
+				work: durableWorkRows(conversations, inFlight),
 			};
 		});
 	} catch (error) {

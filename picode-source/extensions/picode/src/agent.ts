@@ -19,6 +19,8 @@ import {
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
+import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
+import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { loadPiSdk } from './piSdk';
 import { piCommandsOfRunner, type PiCommand } from './commands';
@@ -147,6 +149,8 @@ interface PiSession {
 /** pi's runtime services for one working directory, reduced to what a session needs. */
 interface PiServices {
 	readonly modelRuntime: { getModel(providerId: string, modelId: string): PiModel | undefined };
+	/** Non-fatal issues pi collected while loading its resources — a bridge that failed to load is said here. */
+	readonly diagnostics?: ReadonlyArray<{ readonly type: string; readonly message: string }>;
 }
 
 interface PiSdk {
@@ -154,7 +158,11 @@ interface PiSdk {
 		cwd: string;
 		agentDir?: string;
 		/** Inline extensions of this embedded session — here, the permission gate and pi's MCP. */
-		resourceLoaderOptions?: { extensionFactories?: PiInlineExtension[] };
+		resourceLoaderOptions?: {
+			extensionFactories?: PiInlineExtension[];
+			/** pi extension files loaded from disk — here, the durable bridge. */
+			additionalExtensionPaths?: string[];
+		};
 	}): Promise<PiServices>;
 	createAgentSessionFromServices(options: {
 		services: PiServices;
@@ -243,6 +251,38 @@ function contextBlockFor(scope: PiProjectScope): string | undefined {
 }
 
 /* ------------------------------------------------------------------ *
+ * The durable delegation, as the chat can see it
+ * ------------------------------------------------------------------ */
+
+/**
+ * Pushes one durable-delegation card into the chat stream.
+ *
+ * The renderer API is proposed-API surface (`chatParticipantAdditions`); if it ever moves,
+ * the turn must not die with it — the card is a window onto the delegated work, and losing
+ * the window is reported, not fatal.
+ */
+function pushDurableCard(stream: vscode.ChatResponseStream, toolCallId: string, data: DurableCardData, log: (line: string) => void): void {
+	try {
+		const subagent = new vscode.ChatSubagentToolInvocationData(data.description, data.agentName, data.prompt, data.result);
+		const part = new vscode.ChatToolInvocationPart(DURABLE_SEND_TOOL_NAME, toolCallId);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		if (data.complete !== undefined) {
+			part.isComplete = data.complete;
+		}
+		if (data.isError !== undefined) {
+			part.isError = data.isError;
+		}
+		stream.push(part);
+	} catch (error) {
+		log(`durable card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/** The delegation tool's name, as the bridge extension registers it (`durable-cards.ts` owns the check). */
+const DURABLE_SEND_TOOL_NAME = 'durable_send';
+
+/* ------------------------------------------------------------------ *
  * The turn, as the editor's chat wants it
  * ------------------------------------------------------------------ */
 
@@ -252,7 +292,7 @@ function contextBlockFor(scope: PiProjectScope): string | undefined {
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
-async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean): Promise<void> {
+async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void): Promise<void> {
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		let thinking = false;
@@ -290,6 +330,24 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
 				// "read" is not.
 				stream.progress(toolProgress(event.toolName, event.args));
+				// A durable delegation gets a card the renderer can update in place: which
+				// conversation the work became, what was asked, and — when the call ends —
+				// what came back. Losing the card is reported, never fatal.
+				if (isDurableDelegationTool(event.toolName) && typeof event.toolCallId === 'string') {
+					const card = durableCard(event.toolName, event.args, undefined, false);
+					if (card !== undefined) {
+						pushDurableCard(stream, event.toolCallId, card, log);
+					}
+				}
+				return;
+			}
+			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
+				// The same card, now with the answer: the toolCallId and enablePartialUpdate are
+				// what make the renderer update instead of append.
+				const card = durableCard(event.toolName, event.args, event.result, event.isError === true);
+				if (card !== undefined) {
+					pushDurableCard(stream, event.toolCallId, card, log);
+				}
 				return;
 			}
 			if (event.type === 'message_end') {
@@ -821,6 +879,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	let sessionScopeKey: string | undefined;
 	/** The profile the live session was built against, so a runtime switch rebuilds it. */
 	let sessionAgentDir: string | undefined;
+	/** The durable bridge the live session was built with, so a folder change rebuilds it. */
+	let sessionBridgePath: string | undefined;
 	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
 	let services: PiServices | undefined;
 	/**
@@ -867,14 +927,20 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// switched while the window is open, and a session built against the previous
 			// profile would answer from credentials it does not have ("No API key found").
 			const agentDir = chatAgentDir(deps.distributionRoot);
+			// The bridge extension (durable_send/durable_list/durable_read) is loaded from disk
+			// when it sits next to the durable folder (`durable.ts` resolves it from the same
+			// setting). Resolved per request, so a moved durable folder rebuilds the session.
+			const bridgePath = durableBridgeExtensionPath();
 			// Rebuilt when the project scope changes — the working directory or the project
-			// mode — when the editor's MCP servers do, and when the chosen pi's profile
-			// changes, which is the same conversation pointed at a different pi.
+			// mode — when the editor's MCP servers do, when the chosen pi's profile
+			// changes, which is the same conversation pointed at a different pi, and when the
+			// durable bridge the session should load does.
 			const scopeKey = `${scope.mode}\u0000${scope.folders.join('\u0000')}`;
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
-			if (session === undefined || scopeChanged || toolsChanged || profileChanged) {
+			const bridgeChanged = sessionBridgePath !== bridgePath;
+			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged) {
 				session?.dispose();
 				// The profile is pinned in the environment *before* anything pi loads can resolve it, and the
 				// session is given the permission gate as its only inline extension. pi's own MCP is
@@ -886,8 +952,18 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				services = await sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
-					resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log)] },
+					resourceLoaderOptions: {
+						extensionFactories: [permissionExtension(deps.log)],
+						...(bridgePath === undefined ? {} : { additionalExtensionPaths: [bridgePath] }),
+					},
 				});
+				// pi collects load problems instead of failing the session; a bridge extension
+				// that could not be loaded is said here, and the turn still runs without it.
+				for (const diagnostic of services.diagnostics ?? []) {
+					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
+						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
+					}
+				}
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
 					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
 				}
@@ -910,6 +986,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				sessionFolder = cwd;
 				sessionScopeKey = scopeKey;
 				sessionAgentDir = agentDir;
+				sessionBridgePath = bridgePath;
 				mcpSignature = signature;
 				sessionChangedEmitter.fire();
 			} else {
@@ -928,7 +1005,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			}
 
 			const context = settings.attachContext ? contextBlockFor(scope) : undefined;
-			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning);
+			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);

@@ -374,6 +374,19 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 					description: String(dur.subagentTasks),
 					icon: new vscode.ThemeIcon('comment-discussion'),
 				})]),
+				// The durable work itself, one row each (`durable.ts` read it from the daemon
+				// this very refresh): the subagent-owned conversations and any conversation
+				// with a run in flight, each with the state its snapshot actually carries.
+				// A conversation that could not be snapshotted says so — no row guesses.
+				...(dur.work ?? []).map(row => new StatusItem(`Conversation ${row.conversationId}`, {
+					description: [
+						...(row.taskId === undefined ? [] : [`task ${row.taskId}`]),
+						row.inFlight === undefined ? 'state unavailable' : row.inFlight ? 'in flight' : 'idle',
+						`${row.entries} entries`,
+					].join(' · '),
+					icon: new vscode.ThemeIcon(row.inFlight === true ? 'sync' : 'circle-outline'),
+					command: { command: 'picode.durable.list', title: 'Open a conversation transcript' },
+				})),
 				new StatusItem('Live streams', {
 					description: String(dur.streams ?? 0),
 					icon: new vscode.ThemeIcon('radio-tower'),
