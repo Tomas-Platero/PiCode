@@ -46,6 +46,7 @@ import { registerPiCommandPromptFiles } from './commands';
 import { ensureDurableAgentRunning, registerDurableCommands } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
+import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
@@ -1414,6 +1415,10 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 
 	try {
 		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== agentDir) {
+			// The same guard every pi load has: if any declared package is still missing, it is
+			// installed here (hidden, one run) rather than being left for pi's loader to install
+			// with its own process — and its own window — per package.
+			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), log: line => console.error(`[picode] ${line}`) });
 			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
 		}
 	} catch {
@@ -1959,6 +1964,23 @@ export function activate(context: vscode.ExtensionContext): void {
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
+
+	// The editor owns the packages of its own profile: whatever the settings declare and the disk
+	// lacks is installed here, in one hidden npm run, before anything loads pi. Left alone, pi's
+	// own loader installs each missing declaration with its own npm process
+	// (`package-manager.js`: `resolvePackageSources` → `installNpm`, one spec per spawn, no
+	// `windowsHide`), and on Windows every one of those flashed a console window — sixteen
+	// declarations, sixteen windows, on every load until the tree was whole. This run is the
+	// whole tree; the wizard's steps only navigate and the chat waits for the same guard, so no
+	// pi load ever finds a package to install. Failures are one sentence, not silence.
+	void ensureProfilePackages({
+		profileDir: profileDirectory(context.extensionUri),
+		log: line => console.error(`[picode] ${line}`),
+	}).then(outcome => {
+		if (outcome.failed > 0) {
+			void vscode.window.showInformationMessage(`PiCode: ${outcome.failed} package${outcome.failed === 1 ? '' : 's'} of your profile could not be installed — ${outcome.lines[outcome.lines.length - 1] ?? 'see the log for the reason'}.`);
+		}
+	});
 
 	// `@pi` in the editor's own chat. This is what makes the chat exist: the editor hides its
 	// chat when there is no agent to talk to, and this supplies one — the editor's agent, not a

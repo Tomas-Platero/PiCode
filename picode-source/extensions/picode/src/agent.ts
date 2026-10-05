@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { contextBlock, withContext, type EditorContext } from './context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
 import * as path from 'node:path';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
@@ -23,6 +23,7 @@ import { durableCard, isDurableDelegationTool, type DurableCardData } from './du
 import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { loadPiSdk } from './piSdk';
+import { ensureProfilePackages } from './packages-install';
 import { piCommandsOfRunner, type PiCommand } from './commands';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
@@ -948,6 +949,10 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// before one of their tools is used — and loading pi's copy made every server run twice, with
 				// its tools reachable by two routes. The measurement and the decision are in
 				// `odd/tasks/picode-pi-0992.md`.
+				// Before pi loads anything: the profile's declared-but-missing packages are installed here
+				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
+				// never installs one itself — its per-package installs each flashed a console window.
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), log: deps.log });
 				pinAgentDir(agentDir);
 				services = await sdk.createAgentSessionServices({
 					cwd,

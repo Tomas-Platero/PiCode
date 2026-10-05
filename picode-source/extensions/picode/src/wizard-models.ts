@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { fetchModelIds } from './endpoint';
 import { loadPiSdk } from './piSdk';
+import { ensureProfilePackages } from './packages-install';
 import { projectDeclaration } from './declarations';
 
 /**
@@ -135,6 +136,10 @@ export async function listModels(deps: WizardModelDeps): Promise<{ models: Wizar
 	const loaded = await loadPiSdk<RuntimeSdk>(sdkCandidatesFor(deps.distributionRoot));
 	if (!('problem' in loaded) && typeof loaded.sdk?.createAgentSessionServices === 'function') {
 		try {
+			// Before pi loads anything: the profile's declared-but-missing packages are installed
+			// here (hidden, one run) so pi's loader never installs one itself — its per-package
+			// installs each flashed a console window on Windows.
+			await ensureProfilePackages({ profileDir: deps.profileDir });
 			const services = await loaded.sdk.createAgentSessionServices({
 				cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
 				agentDir: deps.profileDir,

@@ -12,7 +12,7 @@ import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
 import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
-import { npmInstallSpec } from './packages-registry';
+import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -339,6 +339,15 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					if (spec === undefined) {
 						packagesSkipped += 1;
 						logImport(`Skipping ${source} — it lives on the other machine's disk. Reinstall it here if you need it.`);
+						continue;
+					}
+					// npm runs through a shell on Windows (npm.cmd), and a shell concatenates its
+					// arguments instead of escaping them — so a spec that arrived in a profile this
+					// editor did not write is validated against the whitelist before it can reach
+					// that shell, and a refusal is a named line, never a passed-through argument.
+					if (!isSafeNpmInstallSpec(spec)) {
+						packagesSkipped += 1;
+						logImport(`Refused ${source}: it does not fit the spelling this editor installs through npm's shell.`);
 						continue;
 					}
 					specs.push(spec);
