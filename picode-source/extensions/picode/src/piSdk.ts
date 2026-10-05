@@ -128,6 +128,11 @@ export function firstExisting(candidates: readonly string[]): string | undefined
  */
 const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>;
 
+/** Loads a module from an exact path beside pi's entry — the MCP runtime, for instance. */
+export function importPiModule<T>(entry: string): Promise<T> {
+	return dynamicImport(pathToFileURL(entry).href) as Promise<T>;
+}
+
 /** Loads pi's entry, or says why it could not. An empty candidate list is "no pi chosen". */
 export async function loadPiSdk<T>(candidates: readonly string[]): Promise<PiSdkLoad<T>> {
 	const entry = firstExisting(candidates);

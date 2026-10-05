@@ -8,6 +8,9 @@ import { contextBlock, withContext, type EditorContext } from './context';
 import { readPiChatSettings } from './piConfig';
 import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
+import { resolveSessionCwd } from './session-cwd';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
@@ -230,7 +233,17 @@ async function loadSdk(distributionRoot: string, log: (line: string) => void): P
 	for (const skip of read.skipped) {
 		log(`pi built-in extensions: skipped ${skip}`);
 	}
-	return { sdk: loaded.sdk as PiSdk, builtins: read.builtins };
+	// The one built-in this editor re-wraps: pi's `mcp` extension decides each stdio server's
+	// working directory and spawns the server there, and when that directory is not on disk Node
+	// answers `spawn node ENOENT` — or `spawn C:\WINDOWS\system32\cmd.exe ENOENT` for the `.cmd`
+	// shims cross-spawn routes through cmd.exe — naming eight healthy commands for one missing
+	// directory (the multi-root workspace keeps a folder in `workspaceFolders` after it is moved,
+	// renamed or deleted). The wrapper keeps pi's own extension and only guards the transport's
+	// `cwd`: a missing directory never stops a server, and the sentence the owner reads names the
+	// directory, not the command. Everything else — config, OAuth, `/mcp` — stays pi's.
+	const mcp = await mcpBuiltinWithExistingCwd(loaded.entry, log);
+	const builtins = mcp === undefined ? read.builtins : read.builtins.map(entry => (entry.name === 'mcp' ? mcp : entry));
+	return { sdk: loaded.sdk as PiSdk, builtins };
 }
 
 /**
@@ -946,7 +959,16 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		}
 
 		const scope = resolveProjectScope();
-		const cwd = scope.cwd ?? process.cwd();
+		// The session's directory must exist on disk: pi itself tolerates a missing one, but
+		// everything spawned into it does not, and the workspace can hold a folder that is open
+		// but not there (moved, renamed, deleted — the editor keeps it in `workspaceFolders`).
+		// The first folder that exists is where pi runs; the home directory when none does; and
+		// every folder skipped is logged, so the missing directory is named once, honestly.
+		const picked = resolveSessionCwd(scope.folders, os.homedir());
+		for (const missing of picked.missing) {
+			deps.log(`the workspace folder "${missing}" does not exist on disk — pi runs in "${picked.cwd}" instead`);
+		}
+		const cwd = picked.cwd;
 		const config = vscode.workspace.getConfiguration('picode');
 		const settings = readPiChatSettings(key => config.get(key));
 
@@ -965,7 +987,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// mode — when the editor's MCP servers do, when the chosen pi's profile
 			// changes, which is the same conversation pointed at a different pi, and when the
 			// durable bridge the session should load does.
-			const scopeKey = `${scope.mode}\u0000${scope.folders.join('\u0000')}`;
+			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}`;
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
@@ -1058,7 +1080,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor(scope) : undefined;
+			const context = settings.attachContext ? contextBlockFor({ ...scope, cwd }) : undefined;
 			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
