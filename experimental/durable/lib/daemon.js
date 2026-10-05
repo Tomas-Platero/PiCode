@@ -76,7 +76,14 @@ async function serveStorage(resolved, agents, skills) {
 		makeGuardExtension({ enabled: resolved.options.guard.value, consultPermission }),
 		makeSkillsExtension(skills),
 	];
-	const { harness, storage, registry } = await openHarness({ db: SHARED_DB, extensions });
+	const { harness, storage, registry, profileProblem } = await openHarness({ db: SHARED_DB, extensions });
+	if (profileProblem) {
+		// The profile cannot back a model run (openHarness already printed the one plain
+		// line naming what is missing). That is a normal state, not a crash: the daemon
+		// comes up anyway, serves ping/sessions/subscribe, and every run fails with the
+		// SAME sentence instead of a stack trace or a hang — see `run`/`fork` below.
+		console.error("[profile] the daemon stays up anyway: ping, sessions, open, subscribe and shutdown are served; every run/fork fails with the reason above until the profile is fixed.");
+	}
 
 	// The MCP bridge connects BEHIND the endpoint: it is started once `listen` has
 	// succeeded (further down), and until then `bridgeReady` is already resolved
@@ -197,6 +204,9 @@ async function serveStorage(resolved, agents, skills) {
 
 		/** Submit a prompt and settle. Subscribers receive the events live, whatever process they are in. */
 		async run(params) {
+			// A run genuinely needs a model: without a usable provider it must fail with the
+			// plain reason — not succeed hollowly, not hang, not die with a stack trace.
+			if (profileProblem) throw new Error(profileProblem);
 			const conversation = await requireConversation(harness, params.conversationId);
 			const change = agentFor(resolved, agents, params);
 			if (change.model || change.instructions) await conversation.configure(change, CTX);
@@ -212,6 +222,7 @@ async function serveStorage(resolved, agents, skills) {
 
 		/** Fork at the newest entry, then run the prompt on the fork. */
 		async fork(params) {
+			if (profileProblem) throw new Error(profileProblem); // a fork runs a prompt: same rule as `run`
 			const source = await requireConversation(harness, params.conversationId);
 			const newest = (await source.entries({}, 1, undefined, CTX)).items[0];
 			if (!newest) throw new Error(`Conversation ${source.id} has no entries to fork from.`);

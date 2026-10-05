@@ -30,7 +30,7 @@ import { allowCommand, makeGuardExtension, normalizeCommand } from "./lib/guard.
 import { loadSkills, makeSkillsExtension } from "./lib/skills.js";
 import { loadAgents, resolveAgentChange } from "./lib/agents.js";
 import { DURABLE_KEYS, parseModelSetting, printDurableOptions, resolveDurableOptions } from "./lib/settings.js";
-import { DEFAULT_PROFILE_DIR } from "./lib/profile.js";
+import { DEFAULT_PROFILE_DIR, profileModelProblem } from "./lib/profile.js";
 import { armMcpFilter, closeMcpConnections, connectBridge, NO_BRIDGE } from "./lib/mcp.js";
 import { makeRunRenderer, makeAttachRenderer } from "./lib/render.js";
 import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "./lib/client.js";
@@ -372,6 +372,19 @@ Or stop the daemon (Ctrl+C on its terminal) to run the agent in this process aga
 	return true;
 }
 
+/**
+ * A direct run/resume/fork genuinely needs a model: a profile with no usable provider
+ * (a fresh install's normal state) is refused with the SAME plain sentence the daemon
+ * logs, never a raw ENOENT — and never a hollow harness that fails deep inside pi-ai.
+ */
+function refuseWithoutModel() {
+	const problem = profileModelProblem();
+	if (!problem) return false;
+	console.error(`error: ${problem}`);
+	process.exitCode = 1;
+	return true;
+}
+
 // --- main ------------------------------------------------------------------------
 
 const [, , command, ...rest] = process.argv;
@@ -401,6 +414,7 @@ try {
 			args.prompt = args.positional[0];
 			if (!args.prompt) throw new Error('run requires a prompt: node cli.js run "<prompt>"');
 			if (await refuseWhileDaemonOwns("run")) break;
+			if (refuseWithoutModel()) break;
 			await cmdRun(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "sessions":
@@ -410,12 +424,14 @@ try {
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('resume requires <id> and "<prompt>"');
 			if (await refuseWhileDaemonOwns("resume", args.positional[0])) break;
+			if (refuseWithoutModel()) break;
 			await cmdResume(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "fork":
 			args.prompt = args.positional[1];
 			if (!args.positional[0] || !args.prompt) throw new Error('fork requires <id> and "<prompt>"');
 			if (await refuseWhileDaemonOwns("fork", args.positional[0])) break;
+			if (refuseWithoutModel()) break;
 			await cmdFork(args, loadAgents(DEFAULT_PROFILE_DIR), resolved.options);
 			break;
 		case "send":

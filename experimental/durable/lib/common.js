@@ -8,7 +8,7 @@ import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { loadOmniProvider } from "./profile.js";
+import { loadOmniProvider, profileModelProblem } from "./profile.js";
 import { ProofTools, SubagentExtension } from "./extensions.js";
 
 export const CTX = BACKGROUND_CONTEXT;
@@ -38,7 +38,17 @@ export const MODEL = { provider: process.env.PI_AGENT_PROVIDER || "omni", modelI
 export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.sqlite", extensions = [] } = {}) {
 	const sqlitePath = dbPath(db);
 	const models = createModels();
-	models.setProvider(loadOmniProvider());
+	// A profile with no usable provider is a normal state (a fresh install has one), not a
+	// crash: open the harness WITHOUT a provider so the storage serves (ping, sessions,
+	// subscribe), and report the reason on the returned `profileProblem` for the caller to
+	// act on — the daemon prints it and fails every run with it; the direct commands
+	// refuse with it. Nothing here swallows the fact; nothing here dies of it either.
+	const profileProblem = profileModelProblem();
+	if (profileProblem) {
+		console.error(`[profile] ${profileProblem}`);
+	} else {
+		models.setProvider(loadOmniProvider());
+	}
 
 	const registry = createRegistry();
 	registry.install(CodingTools);
@@ -57,7 +67,7 @@ export async function openHarness({ db = process.env.PI_DURABLE_DB || "session.s
 		},
 		CTX,
 	);
-	return { harness, models, registry, sqlitePath, storage };
+	return { harness, models, registry, sqlitePath, storage, profileProblem };
 }
 
 /**

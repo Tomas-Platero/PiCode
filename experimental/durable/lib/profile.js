@@ -21,6 +21,52 @@ function readAuthKey(profileDir, providerId) {
 }
 
 /**
+ * The plain, actionable reason this profile cannot back a model run — or null when it can.
+ *
+ * A profile with no provider is a normal state (a fresh install has one), so this is a
+ * reported condition, never a crash: the daemon stays up and serves ping/sessions/
+ * subscribe, and only a run (or fork) fails — with exactly this sentence. Every way a
+ * models.json can be unusable is named here: missing, unreadable, not JSON, no providers
+ * block, the named provider absent, the provider listing no usable model.
+ */
+export function profileModelProblem(profileDir = DEFAULT_PROFILE_DIR, providerId = process.env.PI_AGENT_PROVIDER || "omni") {
+	const file = join(profileDir, "models.json");
+	let raw;
+	try {
+		raw = readFileSync(file, "utf8");
+	} catch (error) {
+		if (error?.code === "ENOENT") {
+			return `the agent profile at ${profileDir} has no models.json — no model provider is set up, and the agent cannot run a prompt until one is configured there`;
+		}
+		return `the agent profile's models.json at ${profileDir} could not be read (${error?.message ?? error}) — the agent cannot run a prompt until it is fixed`;
+	}
+	let profile;
+	try {
+		profile = JSON.parse(raw);
+	} catch (error) {
+		return `${file} is empty or not valid JSON (${error?.message ?? error}) — the agent cannot run a prompt until a model provider is configured in it`;
+	}
+	const providers = profile?.providers;
+	if (!providers || typeof providers !== "object" || Array.isArray(providers)) {
+		return `${file} has no "providers" block — the agent cannot run a prompt until a model provider is configured there`;
+	}
+	const prov = providers[providerId];
+	if (!prov || typeof prov !== "object") {
+		const known = Object.keys(providers).join(", ") || "none";
+		return `${file} has no provider "${providerId}" (providers present: ${known}) — the agent cannot run a prompt until that provider is configured there, or the model setting names one that exists`;
+	}
+	const usable = (Array.isArray(prov.models) ? prov.models : []).filter((m) => m?.api === "openai-responses");
+	if (usable.length === 0) {
+		const listed = Array.isArray(prov.models) ? `${prov.models.length} model(s), none with api "openai-responses"` : "no models";
+		return `provider "${providerId}" in ${file} has ${listed} — the agent cannot run a prompt until it lists a model with api "openai-responses"`;
+	}
+	if (typeof prov.baseUrl !== "string" || prov.baseUrl.length === 0) {
+		return `provider "${providerId}" in ${file} has no baseUrl — the agent cannot run a prompt until the provider says where its gateway is`;
+	}
+	return null;
+}
+
+/**
  * Build a pi-ai Provider from the profile's `providers.<providerId>` block.
  * The gateway speaks the OpenAI Responses API (`api: "openai-responses"`).
  * The profile says `auth: "none"` and there is no auth.json entry for it, so
@@ -28,9 +74,10 @@ function readAuthKey(profileDir, providerId) {
  * and the gateway accepts the request (verified: POST /v1/responses → 200).
  */
 export function loadOmniProvider(profileDir = DEFAULT_PROFILE_DIR, providerId = process.env.PI_AGENT_PROVIDER || "omni") {
+	const problem = profileModelProblem(profileDir, providerId);
+	if (problem) throw new Error(problem); // the same sentence the daemon reports, never a raw ENOENT
 	const profile = JSON.parse(readFileSync(join(profileDir, "models.json"), "utf8"));
 	const prov = profile.providers[providerId];
-	if (!prov) throw new Error(`provider "${providerId}" not found in ${join(profileDir, "models.json")}`);
 
 	const compat = (m) => ({
 		sessionAffinityFormat: m?.compat?.sessionAffinityFormat ?? prov.compat?.sessionAffinityFormat,
