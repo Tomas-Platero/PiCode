@@ -22,7 +22,7 @@ import { toolProgress } from './progress';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
 import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
-import { loadPiSdk } from './piSdk';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { piCommandsOfRunner, type PiCommand } from './commands';
 import { modelRefOf } from './providerIds';
@@ -102,8 +102,8 @@ interface PiExtensionApi {
 /**
  * A factory pi's built-in extensions return: it registers that extension's tools on the session.
  *
- * `createMcpExtension()`, `createCodemodeExtension()` and `createToolSearchExtension()` are all the
- * same shape — call one and it hands back a function pi runs with the session's API.
+ * The shape of every entry of pi's `builtInExtensions` list, too — the chat hands pi's own entries
+ * to the session unchanged, beside this editor's own factory.
  */
 type PiExtensionFactory = (pi: PiExtensionApi) => void | Promise<void>;
 
@@ -112,6 +112,10 @@ interface PiInlineExtension {
 	name: string;
 	factory: PiExtensionFactory;
 	hidden?: boolean;
+	/** Marks the entry as the code of a `builtin:<name>` path — what makes pi's map take it. */
+	builtin?: true;
+	/** See pi's `InlineExtension`: another extension registering the same name replaces this one. */
+	replaceable?: boolean;
 }
 
 /** pi's session store, created once and handed back to pi across a session's rebuilds. */
@@ -173,18 +177,6 @@ interface PiSdk {
 		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
 		customTools?: unknown[];
 	}): Promise<{ session: PiSession }>;
-	/**
-	 * pi's own session tools, as the CLI loads them: `createMcpExtension`, `createCodemodeExtension` and
-	 * `createToolSearchExtension`. None of them is loaded here, on purpose — the chat's MCP servers are
-	 * the **editor's**, and loading pi's MCP as well made every server run twice with its tools
-	 * reachable by two routes. They stay declared so the decision is visible where the session is built,
-	 * and so a future decision to use them has the shape already written down.
-	 *
-	 * See `odd/tasks/picode-pi-0992.md`: the measurement, and why the editor owns the servers.
-	 */
-	createMcpExtension?: () => PiExtensionFactory;
-	createCodemodeExtension?: () => PiExtensionFactory;
-	createToolSearchExtension?: () => PiExtensionFactory;
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
 		// default, which is right for the external pi and a leak for the internal one.
@@ -192,16 +184,50 @@ interface PiSdk {
 	};
 }
 
-/** pi's entry, loaded and checked for the two methods an agent turn needs. */
-async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdk | undefined> {
+/**
+ * pi's entry, loaded and checked for the two methods an agent turn needs — **and** the built-in
+ * extension entries pi ships beside it.
+ *
+ * The built-ins are the piece a session cannot work without and also cannot invent: pi builds its
+ * built-in map **from the factories the caller passes** (`resource-loader.js` line 246), so a session
+ * built with only this editor's factories would have no `builtin:mcp`, no `/mcp`, and no MCP servers
+ * connected at all. pi's own CLI avoids that by prepending its built-in list to the caller's
+ * factories (`dist/main.js:451`); the list lives in `dist/extensions/index.js` beside the entry and
+ * is loaded from the **same install** the SDK was, so the session never mixes one pi's built-ins
+ * into another's. What loads then follows pi's own rules: every built-in is enabled by default
+ * unless the profile's `extensions` setting excludes it (`package-manager.js` line 738), so the
+ * owner's `pi config` choices — including `-builtin:mcp` — stay in charge without this editor
+ * taking a position on individual names, which would go stale at the next pi version.
+ *
+ * A built-in module that is missing or unreadable is logged, not fatal: the session still runs,
+ * its MCP is simply absent, and the host guard (`mcp-host-support`) tells the owner why.
+ */
+interface PiSdkWithBuiltins {
+	sdk: PiSdk;
+	builtins: readonly PiInlineExtension[];
+}
+
+async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
 	const loaded = await loadPiSdk<Partial<PiSdk>>(sdkEntryCandidates(distributionRoot));
 	if ('problem' in loaded) {
 		log(loaded.problem);
 		return undefined;
 	}
-	return typeof loaded.sdk?.createAgentSessionServices === 'function' && typeof loaded.sdk.createAgentSessionFromServices === 'function'
-		? (loaded.sdk as PiSdk)
-		: undefined;
+	if (typeof loaded.sdk?.createAgentSessionServices !== 'function' || typeof loaded.sdk.createAgentSessionFromServices !== 'function') {
+		return undefined;
+	}
+	// The built-in module beside the entry that was actually loaded, so the factories handed to the
+	// session are the ones this pi knows by name (`builtin:mcp` resolves against this same map).
+	const builtinsLoad = await loadPiSdk<{ builtInExtensions?: unknown }>([builtinsModuleOf(loaded.entry)]);
+	if ('problem' in builtinsLoad) {
+		log(`pi built-in extensions: ${builtinsLoad.problem} — the session runs without them (no MCP connector)`);
+		return { sdk: loaded.sdk as PiSdk, builtins: [] };
+	}
+	const read = piBuiltinExtensions(builtinsLoad.sdk);
+	for (const skip of read.skipped) {
+		log(`pi built-in extensions: skipped ${skip}`);
+	}
+	return { sdk: loaded.sdk as PiSdk, builtins: read.builtins };
 }
 
 /**
@@ -910,8 +936,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 		};
-		const sdk = await loadSdk(deps.distributionRoot, deps.log);
-		if (sdk === undefined) {
+		const loaded = await loadSdk(deps.distributionRoot, deps.log);
+		if (loaded === undefined) {
 			stream.markdown('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.');
 			return {};
 		}
@@ -943,22 +969,30 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const bridgeChanged = sessionBridgePath !== bridgePath;
 			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged) {
 				session?.dispose();
-				// The profile is pinned in the environment *before* anything pi loads can resolve it, and the
-				// session is given the permission gate as its only inline extension. pi's own MCP is
-				// **deliberately not** loaded beside it: the servers are the editor's — it runs them and asks
-				// before one of their tools is used — and loading pi's copy made every server run twice, with
-				// its tools reachable by two routes. The measurement and the decision are in
-				// `odd/tasks/picode-pi-0992.md`.
+				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
+				// extensions load beside the permission gate, exactly as pi's own CLI builds a session
+				// (`dist/main.js:451`: built-ins first, the caller's after): pi takes its built-in map **from
+				// the factories the caller passes** (`resource-loader.js:246`), so the earlier list of only the
+				// permission gate left the session with no `builtin:mcp`, no `/mcp` command, and no connector for
+				// the profile's MCP servers — the "MCP connector: MISSING" warning came from exactly that. What
+				// is enabled stays pi's own default — every built-in unless the profile's `extensions` setting
+				// excludes it (`package-manager.js:738`) — so the owner's `pi config` choices, including
+				// `-builtin:mcp`, keep deciding, and this editor takes no position that would go stale. This
+				// reverses one half of `odd/tasks/picode-pi-0992.md`: pi's MCP extension is wanted again,
+				// because the profile's servers (the nan provider's) must connect. The editor's own MCP servers
+				// keep flowing as `customTools` below, so the chat's tools are untouched; a server declared both
+				// in the profile and bridged from the editor would run twice — the pre-0992 overlap — and is
+				// the owner's to reconcile in the profile, not something this editor decides.
 				// Before pi loads anything: the profile's declared-but-missing packages are installed here
 				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
 				// never installs one itself — its per-package installs each flashed a console window.
 				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), log: deps.log });
 				pinAgentDir(agentDir);
-				services = await sdk.createAgentSessionServices({
+				services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
-						extensionFactories: [permissionExtension(deps.log)],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log)],
 						...(bridgePath === undefined ? {} : { additionalExtensionPaths: [bridgePath] }),
 					},
 				});
@@ -970,10 +1004,10 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					}
 				}
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
-					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
+					sessionManager = loaded.sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
 				}
 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
-				const created = await sdk.createAgentSessionFromServices({
+				const created = await loaded.sdk.createAgentSessionFromServices({
 					services,
 					sessionManager,
 					// pi's own default when the chat is on a model that is not ours: better pi's choice
