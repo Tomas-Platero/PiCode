@@ -305,3 +305,19 @@ Dos capacidades, y son **dos**:
 Ojo con lo que el botón hace hoy: instala **el último de npm**, no el que fija el repo — y ese
 último puede traer árboles que no instalan (a `pi-telemetry@1.0.4` le responde **404** el registro).
 Que falle por eso es un tema distinto del de la ruta, y conviene que se lea como tal.
+
+### 2026-10-05 · «¿se pueden ver los agentes que lanzamos, como con /agents?»
+
+**Lo que ya hay**: las **tarjetas del chat** (una por delegación, en su conversación) y la sección
+**Durable** del panel, que lista las conversaciones de subagente y los streams vivos.
+
+**Lo que falta**: **un solo sitio** con todo lo lanzado y su estado, esté o no abierta la
+conversación de origen — que es lo que da `/agents` en la terminal.
+
+**Es posible, y no necesita maquinaria nueva**: el daemon ya conoce sus conversaciones y sus tareas
+en vuelo, y pi sus llamadas de herramienta. Lo que falta es **la vista que las junta**: qué se
+lanzó, en qué estado, y poder entrar a verlo.
+
+**Lo que NO se puede prometer hoy**: en el chat, cada sesión nueva arranca **sus propios** MCP y su
+propia sesión de pi, así que "los agentes" no son un conjunto global hasta que todo lo delegado
+pase por el daemon, que sí es un único proceso y un único sitio donde mirar.
