@@ -11,6 +11,7 @@ import { getSessionUsage } from './agent';
 import { declarationsFromSetting, isRecord } from './declarations';
 import { readDurableStatus } from './durable';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
+import { mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
 import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
@@ -92,16 +93,32 @@ function countProviders(profileDir: string): number {
 	return ids.size;
 }
 
-/** pi's MCP servers in the profile, one row each: the name, and whether pi will start it. */
-function readMcpServers(profileDir: string): readonly McpServerSwitch[] {
-	const file = readJsonObject(path.join(profileDir, 'mcp.json'));
-	const servers = file?.['mcpServers'];
-	if (!isRecord(servers)) {
-		return [];
+/** The profile's `mcp-auth.json`, as the sign-in rule wants it: looked at, whatever it holds. */
+function mcpAuthFile(file: string): McpAuthFile {
+	try {
+		return { text: readFileSync(file, 'utf8') };
+	} catch {
+		// A missing or unreadable file is "no stored sign-in", not an error (`mcp-provider.ts`).
+		return { text: undefined };
 	}
-	// `enabled: false` is pi's switch, and the one this connector honours too (`mcp-provider.ts`): this
-	// is the list that keeps a switched-off server visible once it stops being offered as a row.
-	return Object.entries(servers).map(([name, entry]) => ({ name, on: !(isRecord(entry) && entry['enabled'] === false) }));
+}
+
+/**
+ * pi's MCP servers in the profile, one row each: the name, whether pi will start it, and
+ * whether pi can actually use it (`mcp-provider.ts` — the same rule the durable bridge
+ * decides before every request).
+ *
+ * The sign-in file of the profile in force is only read where it **may** be: PiCode's own
+ * profile, the internal one. The external pi's directory is off-limits to this connector, so
+ * under an external runtime the sign-in fact is left `unknown` for the servers it would
+ * matter to — the row says so instead of defaulting to `On`.
+ */
+function readMcpServers(profileDir: string, runtime: 'internal' | 'external'): readonly McpServerSwitch[] {
+	const servers = readJsonObject(path.join(profileDir, 'mcp.json'))?.['mcpServers'];
+	const authFile: McpAuthFile | undefined = runtime === 'internal'
+		? mcpAuthFile(path.join(profileDir, 'mcp-auth.json'))
+		: undefined;
+	return mcpServerStates(isRecord(servers) ? servers : undefined, authFile, Date.now());
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
@@ -274,7 +291,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
 	const defaultModel = readDefaultModel(profileDir);
 	const usage = getSessionUsage();
-	const mcpServers = readMcpServers(profileDir);
+	const mcpServers = readMcpServers(profileDir, runtime);
 	const scope = resolveProjectScope();
 	const projects = scope.mode === 'workspace'
 		? await Promise.all(scope.folders.map(async folder => ({

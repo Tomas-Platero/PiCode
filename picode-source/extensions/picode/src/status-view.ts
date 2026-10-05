@@ -26,10 +26,18 @@ export const STATUS_DATA_COMMAND = 'picode.setup.status';
 /** How often the rows are re-read while the panel is on screen. */
 const STATUS_REFRESH_MS = 5000;
 
-/** One of pi's MCP servers, as the panel lists it: the name, and whether pi will start it. */
+/**
+ * One of pi's MCP servers, as the panel lists it: the name, whether pi will start it, and
+ * whether pi can actually use it (`mcp-provider.ts` computes the sign-in fact).
+ */
 export interface McpServerSwitch {
 	readonly name: string;
 	readonly on: boolean;
+	/**
+	 * `ok` — pi can use it; `needed` — enabled but pi has no sign-in for it; `unknown` — the
+	 * answer cannot be had (the profile's sign-ins are off-limits). Left out when `off`.
+	 */
+	readonly signIn?: 'ok' | 'needed' | 'unknown';
 }
 
 /**
@@ -43,14 +51,39 @@ export interface McpServerSwitch {
 export const onDidToggleMcpServer = new vscode.EventEmitter<McpServerSwitch>();
 
 /**
- * The count the MCP row shows: how many servers there are, and how many are switched off.
+ * The count the MCP row shows: how many servers there are, and what is wrong with the ones
+ * pi cannot use right now.
  *
  * The switch is pi's own `enabled`, read from the profile's file — no connection and no side effect,
- * which is why the panel can say it on every refresh and the MCP page cannot.
+ * which is why the panel can say it on every refresh and the MCP page cannot. The sign-in fact comes
+ * with it (`mcp-provider.ts`), so a server that is enabled but unusable is counted here instead of
+ * hiding behind an `On`.
  */
 function mcpCountDescription(servers: readonly McpServerSwitch[]): string {
 	const off = servers.filter(server => !server.on).length;
-	return off === 0 ? String(servers.length) : `${servers.length} · ${off} off`;
+	const needsSignIn = servers.filter(server => server.on && server.signIn === 'needed').length;
+	const parts: string[] = [];
+	if (off > 0) {
+		parts.push(`${off} off`);
+	}
+	if (needsSignIn > 0) {
+		parts.push(`${needsSignIn} need${needsSignIn === 1 ? 's' : ''} sign-in`);
+	}
+	return parts.length === 0 ? String(servers.length) : `${servers.length} · ${parts.join(' · ')}`;
+}
+
+/** The line one server's row shows, and the codicon beside it. */
+function mcpRowDescription(server: McpServerSwitch): { description: string; icon: string } {
+	if (!server.on) {
+		return { description: 'off', icon: 'circle-slash' };
+	}
+	if (server.signIn === 'needed') {
+		return { description: 'needs sign-in', icon: 'warning' };
+	}
+	if (server.signIn === 'unknown') {
+		return { description: 'on · sign-in unknown', icon: 'circle-outline' };
+	}
+	return { description: 'on', icon: 'circle-filled' };
 }
 
 /**
@@ -65,15 +98,24 @@ function mcpServerRows(servers: readonly McpServerSwitch[]): { children?: Status
 		return {};
 	}
 	return {
-		children: servers.map(server => new StatusItem(server.name, {
-			description: server.on ? 'on' : 'off',
-			icon: new vscode.ThemeIcon(server.on ? 'circle-filled' : 'circle-slash'),
-			command: {
-				command: 'picode.mcp.toggleServer',
-				title: server.on ? 'Turn off' : 'Turn on',
-				arguments: [server.name],
-			},
-		})),
+		children: servers.map(server => {
+			const row = mcpRowDescription(server);
+			const needsSignIn = server.on && server.signIn === 'needed';
+			return new StatusItem(server.name, {
+				description: row.description,
+				icon: new vscode.ThemeIcon(row.icon),
+				// The one thing a sign-in row must say first: where the fix lives. Nothing in the
+				// editor signs in to pi's profile yet, so the row points at pi's own `/mcp`.
+				tooltip: needsSignIn
+					? 'pi has no sign-in stored for this server, so pi cannot use it. Sign in with pi\'s own "mcp login <server>", pointed at PiCode\'s profile.'
+					: undefined,
+				command: {
+					command: 'picode.mcp.toggleServer',
+					title: server.on ? 'Turn off' : 'Turn on',
+					arguments: [server.name],
+				},
+			});
+		}),
 	};
 }
 
@@ -165,11 +207,14 @@ class StatusItem extends vscode.TreeItem {
 
 	constructor(
 		label: string,
-		options: { description?: string; children?: StatusItem[]; icon?: StatusIcon; command?: vscode.Command } = {},
+		options: { description?: string; tooltip?: string; children?: StatusItem[]; icon?: StatusIcon; command?: vscode.Command } = {},
 	) {
 		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 		if (options.description !== undefined) {
 			this.description = options.description;
+		}
+		if (options.tooltip !== undefined) {
+			this.tooltip = options.tooltip;
 		}
 		if (options.icon !== undefined) {
 			this.iconPath = options.icon;

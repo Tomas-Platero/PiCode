@@ -274,3 +274,152 @@ export function mcpServersFrom(files: readonly McpConfigFile[]): McpReadResult {
 	}
 	return { servers: [...servers.values()], skipped };
 }
+
+/* ------------------------------------------------------------------ *
+ * Whether pi can actually use each server (the sign-in rule)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The state a row shows about a server's sign-in, in the words the owner sees:
+ *
+ * - `ok` — pi can use it: a local server, a remote one with a stored sign-in, or one that
+ *   authenticates itself through its own `headers` (`github` does).
+ * - `needed` — the entry is enabled but pi has no credential for it: a `url` server with
+ *   neither a stored sign-in nor its own headers. `enabled` means "pi may start it", not
+ *   "pi can use it", and this is the difference the rows have to tell.
+ * - `unknown` — the answer cannot be had where this row is computed, and the row says so
+ *   instead of defaulting to `On`.
+ */
+export type McpSignInState = 'ok' | 'needed' | 'unknown';
+
+/** One server of the profile's `mcp.json`, with the switch pi reads and the sign-in fact. */
+export interface McpServerStateRow {
+	readonly name: string;
+	/** Whether pi will start it: pi's own `enabled` key, absent meaning on. */
+	readonly on: boolean;
+	/** Left out for a switched-off server: its sign-in is not the fact on show. */
+	readonly signIn?: McpSignInState;
+}
+
+/**
+ * The profile's `mcp-auth.json`, where pi stores a server's OAuth tokens.
+ *
+ * `text` is the file's contents when it exists and could be read; a missing or malformed file
+ * is the same fact as "no stored sign-in" (`ReadOnlyMcpAuthStore.load`), not an error.
+ */
+export interface McpAuthFile {
+	readonly text?: string;
+}
+
+/**
+ * The key pi stores one server's OAuth state under, by pi's own rule.
+ *
+ * Mirrored from `experimental/durable/lib/mcp.js` (`mcpAuthKey`, which cites pi's
+ * `mcpNamespace` + `storeKeys`): `mcp__<name with - → _>|<normalized url>`. `legacyKey` is
+ * the url-only key older pi versions wrote; it is read for compatibility, never written.
+ * A `url` that cannot be parsed has no stored key to look up.
+ */
+function mcpAuthKeys(name: string, url: string): { key?: string; legacyKey?: string } {
+	let urlKey: string;
+	try {
+		urlKey = String(new URL(url));
+	} catch {
+		return {};
+	}
+	return { key: `mcp__${name.replace(/-/g, '_')}|${urlKey}`, legacyKey: urlKey };
+}
+
+/** The OAuth state pi stored for one server, or `undefined` when there is none. */
+function storedSignInState(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
+	if (authFile?.text === undefined) {
+		return undefined;
+	}
+	let states: unknown;
+	try {
+		states = JSON.parse(authFile.text);
+	} catch {
+		// Not JSON: the same fact as "no stored sign-in" (`ReadOnlyMcpAuthStore.load`).
+		return undefined;
+	}
+	if (!isRecord(states)) {
+		return undefined;
+	}
+	const { key, legacyKey } = mcpAuthKeys(name, url);
+	const state = (key !== undefined ? states[key] : undefined) ?? (legacyKey !== undefined ? states[legacyKey] : undefined);
+	return isRecord(state) ? state : undefined;
+}
+
+/**
+ * Whether pi can use one remote server, mirroring `experimental/durable/lib/mcp.js`.
+ *
+ * That bridge decides the same question before every request (`storedMcpAuth` + `ownHeaders`):
+ * a stored sign-in whose token is still valid is used; an expired one fails fast; without a
+ * stored sign-in, an entry that carries its own non-empty `headers` authenticates itself
+ * (`github` reaches the API with its configured `Authorization` header), and one with neither
+ * needs a sign-in — whatever `enabled` says. The connector cannot import that module, so the
+ * rule is mirrored here and the origin is named: a `url` server with a stored sign-in is
+ * usable; one that carries its own non-empty headers is usable; one with neither needs a
+ * sign-in.
+ *
+ * The header check reads the values as written. pi expands `${VAR}` at use time, so a header
+ * holding an interpolation the environment cannot fill fails at use time — a different fact
+ * from "no credential at all", which is the one this rule is here to tell.
+ */
+function httpSignInState(name: string, entry: PiHttpEntry, authFile: McpAuthFile | undefined, now: number): McpSignInState {
+	const ownHeaders = Object.values(entry.headers).some(value => value.length > 0);
+	const stored = storedSignInState(authFile, name, entry.url);
+	const token = stored?.['tokens'];
+	if (isRecord(token) && typeof token['access_token'] === 'string' && token['access_token'].length > 0) {
+		// An expired stored sign-in fails fast in the bridge (`storedMcpAuth`), so it is not a
+		// usable one here either: the row asks for the sign-in again rather than promising "On".
+		const expiresAt = stored?.['tokensExpireAt'];
+		return typeof expiresAt === 'number' && expiresAt <= now ? 'needed' : 'ok';
+	}
+	if (ownHeaders) {
+		// No stored sign-in, but the entry authenticates itself.
+		return 'ok';
+	}
+	// `authFile` itself `undefined` means the profile's sign-ins were not looked at — the
+	// external pi's directory, which this connector must not read — so the honest row is
+	// "unknown", never a confident `On` or a guessed "needs sign-in".
+	return authFile === undefined ? 'unknown' : 'needed';
+}
+
+/** The sign-in fact for one entry of the profile's `mcp.json`. */
+function signInState(name: string, entry: unknown, authFile: McpAuthFile | undefined, now: number): McpSignInState | undefined {
+	if (!isRecord(entry) || entry['enabled'] === false) {
+		return undefined;
+	}
+	const mapped = mcpServerFrom(name, entry);
+	if (!isServer(mapped)) {
+		// An entry that cannot be mapped (an SSE transport, say) has no answer here either.
+		return 'unknown';
+	}
+	if (mapped.kind === 'stdio') {
+		return 'ok';
+	}
+	return httpSignInState(name, mapped, authFile, now);
+}
+
+/**
+ * One row per server of the profile's `mcp.json`, with the two facts the surfaces show: the
+ * switch pi reads (`enabled`), and whether pi can actually use the server. The order is the
+ * file's, so the list does not jump between readings.
+ *
+ * This is the one place the rule is computed; `status-data.ts` feeds its answer to the status
+ * panel and the MCP page, and neither of them re-derives it.
+ */
+export function mcpServerStates(
+	servers: Readonly<Record<string, unknown>> | undefined,
+	authFile: McpAuthFile | undefined,
+	now: number,
+): readonly McpServerStateRow[] {
+	if (servers === undefined) {
+		return [];
+	}
+	return Object.entries(servers).map(([name, entry]) => ({
+		name,
+		on: !(isRecord(entry) && entry['enabled'] === false),
+		signIn: signInState(name, entry, authFile, now),
+	}));
+}
