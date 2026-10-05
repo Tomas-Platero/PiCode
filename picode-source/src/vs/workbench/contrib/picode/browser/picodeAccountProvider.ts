@@ -11,6 +11,7 @@ import { toAction } from '../../../../base/common/actions.js';
 import { createErrorWithActions } from '../../../../base/common/errorMessage.js';
 import { IRequestContext } from '../../../../base/parts/request/common/request.js';
 import { URI } from '../../../../base/common/uri.js';
+import { AUTH_CALLBACK_PATH, oneTimeCodeFromCallback } from './picodeAuthCallback.js';
 import { decodeBase64 } from '../../../../base/common/buffer.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
@@ -306,7 +307,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		// on scheme+path (not query), and the router hands it to the active window.
 		const callbackUri = URI.from({
 			scheme: this._productService.urlProtocol,
-			path: '/auth/callback',
+			path: AUTH_CALLBACK_PATH,
 			query: 'flow=editor',
 		});
 		const authUrl = `${this._config.webOrigin}/auth/editor?callback=${encodeURIComponent(callbackUri.toString())}`;
@@ -322,27 +323,35 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 
 			// The handler must listen before the browser is opened, so the first callback
 			// cannot be missed. It claims only URIs it recognizes and lets the rest through.
+			// A dead or foreign handler for the scheme is invisible to this window: the
+			// browser hands `picode:/…` to the OS, and if the registered command no longer
+			// exists the redirect goes nowhere — no event, no error, silence. That is why
+			// what we wait for, the timeout and the recovery are all logged below.
 			disposables.add(this._urlService.registerHandler({
 				handleURL: async uri => {
-					if (uri.scheme !== callbackUri.scheme || uri.path !== callbackUri.path) {
-						return false;
-					}
-					const code = new URLSearchParams(uri.query).get('code');
+					const code = oneTimeCodeFromCallback(uri, callbackUri.scheme);
 					if (!code) {
 						return false;
 					}
+					this._logService.info('[picode.account] sign-in callback received from the browser.');
 					settle(() => resolve(code));
 					return true;
 				},
 			}));
 
 			const timeoutHandle = setTimeout(() => {
+				this._logService.warn(
+					`[picode.account] no sign-in callback arrived within 5 minutes (waiting for ${callbackUri.toString(true)}). ` +
+					'If the browser page finished but nothing happened here, the protocol handler probably points to an old installation: ' +
+					'start this PiCode once so it claims the protocol again, then sign in again.');
 				settle(() => reject(new Error(localize('picode.account.signInTimeout', "Sign-in did not finish within 5 minutes. Please try signing in again."))));
 			}, SIGN_IN_CALLBACK_TIMEOUT_MS);
 			disposables.add(toDisposable(() => clearTimeout(timeoutHandle)));
 
 			// The handler is in place: now send the user to the web app.
+			this._logService.info(`[picode.account] sign-in started; waiting for the browser to call back ${callbackUri.toString(true)} (5 minute timeout).`);
 			this._openerService.open(authUrl, { openExternal: true }).then(undefined, err => {
+				this._logService.error('[picode.account] the browser could not be opened for sign-in.', err);
 				settle(() => reject(new Error(localize('picode.account.browserOpenFailed', "Could not open your browser to sign in. Please try again."), { cause: err })));
 			});
 		}).finally(() => disposables.dispose());

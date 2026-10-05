@@ -50,15 +50,25 @@ export class ElectronURLListener extends Disposable {
 			this.uris = initialProtocolUrls;
 		}
 
-		// Windows: install as protocol handler
-		// Skip in portable mode: the registered command wouldn't preserve
-		// portable mode settings, causing issues with OAuth flows.
-		if (isWindows && !environmentMainService.isPortable) {
+		// Windows: install as protocol handler on every launch, portable or not.
+		// The registration is per-user (HKCU) and points at this exact executable, so
+		// re-claiming on every startup both registers the scheme for builds run from a
+		// folder (the normal way PiCode is distributed) and heals a stale entry left by
+		// an uninstalled copy — a dead entry makes every sign-in callback vanish without
+		// a trace. Portable is safe to register: portable mode is re-detected from the
+		// `data` folder next to the executable by whatever process the OS launches, so
+		// the URL is forwarded to the running instance with the same portable settings.
+		if (isWindows) {
 			if (environmentMainService.isBuilt) {
 				// Built: register the executable directly. Electron quotes argument
 				// values itself when writing the registry entry — do not pre-quote
 				// them here, nested quotes break the registration.
-				app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, ['--open-url', '--']);
+				const registered = app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, ['--open-url', '--']);
+				if (registered) {
+					logService.info(`Registered the ${productService.urlProtocol}:// protocol handler: "${process.execPath}" --open-url --`);
+				} else {
+					logService.warn(`Could not register the ${productService.urlProtocol}:// protocol handler; sign-in callbacks may keep going to an old installation until this copy is started once with permission to write the registry.`);
+				}
 			} else if (process.env['VSCODE_DEV']) {
 				// Development (launched via scripts/code.bat): the process spawned by
 				// the OS does NOT inherit the dev environment (VSCODE_DEV / NODE_ENV),
