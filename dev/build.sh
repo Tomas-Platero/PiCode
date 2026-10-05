@@ -198,7 +198,15 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
-trap 'printf "%s" "$?" > "${ROOT_DIR}/.scratch/build.status"' EXIT
+trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" && ! -e "${PICODE_DATA_DIR}" ]]; then echo "  -- the build stopped with the portable profile aside in ${PICODE_DATA_HOLD_DIR}: putting it back"; mv "${PICODE_DATA_HOLD_DIR}" "${PICODE_DATA_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+
+# The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
+# The functions and their rationale live in dev/data-hold.sh; build.sh calls recover + move-aside
+# around phase 4 and put-back around phase 5. The trap above is the safety net: if the build
+# dies anywhere between the move-aside and the put-back, the profile still goes home.
+source "${ROOT_DIR}/dev/data-hold.sh"
+PICODE_DATA_DIR="$(picode_data_dir "${PACK_DIR}")"
+PICODE_DATA_HOLD_DIR="$(picode_data_hold_dir "${PACK_DIR}")"
 
 # ---------------------------------------------------------------------------
 # Phase 1 - the source
@@ -470,6 +478,18 @@ cd ..
 echo ""
 echo "== phase 4/5 - pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
 
+# The pack task deletes the whole pack folder before writing it (util.rimraf in
+# picode-source/build/gulpfile.vscode.ts), and data/ -- the portable profile -- lives inside it.
+# So the profile is renamed aside first (dev/data-hold.sh): a rename is atomic on the volume and
+# costs nothing, where a copy would duplicate 1+ GB. If the rename is refused -- a running editor
+# holds a log in data/ open, and Windows refuses to rename a directory with an open file inside
+# -- the build stops HERE, with the folder and the profile untouched, instead of failing halfway
+# through a delete that has already eaten PiCode.exe and resources/app.
+# A hold left by an interrupted run is restored before anything else, so a build never packs on
+# top of a profile that is sitting beside the folder.
+picode_data_hold_recover "${PACK_DIR}" || exit 1
+picode_data_hold_move_aside "${PACK_DIR}" || exit 1
+
 cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
@@ -487,6 +507,11 @@ echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
 bash dev/stage-distribution.sh "${PACK_DIR}"
+
+# The pack and the staging seeded a fresh data/ inside the folder; the real profile -- held aside
+# since before the pack -- goes back over it now, so everything after this point (the installer
+# included) sees the owner's data, not a seed (dev/data-hold.sh).
+picode_data_hold_put_back "${PACK_DIR}" || exit 1
 
 # ---------------------------------------------------------------------------
 # The Windows installer

@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+#
+# The portable profile (data/) and the pack's wholesale delete.
+#
+# `data/` inside the pack folder (PiCode-win32-x64*/data) is the app's portable profile: user
+# data, providers, skills, sessions, logs. The pack task that produces the folder deletes it
+# wholesale before writing (util.rimraf(path.join(buildRoot, destinationFolderName)) in
+# picode-source/build/gulpfile.vscode.ts), so every build used to wipe the owner's profile, and
+# a file locked inside data/ (a log held open by the running editor) used to fail that delete
+# halfway through, leaving the folder with no PiCode.exe and no resources/app.
+#
+# The fix lives in dev/build.sh, which sources this file and calls these functions in order:
+#
+#   1. picode_data_hold_recover   - an earlier run may have died with the profile in the hold;
+#                                   restore it before anything else runs.
+#   2. picode_data_hold_move_aside - rename data/ out of the pack folder, to
+#                                   <PACK_DIR>-data-hold, beside the folder rather than inside
+#                                   it, so the pack's own delete can never reach it.
+#   3. ... the pack and the staging steps run (they delete the folder and seed a fresh data/) ...
+#   4. picode_data_hold_put_back  - drop the seeded data/ and rename the held profile back.
+#
+# A rename, not a copy: it is atomic on the volume and it does not duplicate 1+ GB.
+#
+# A Windows fact this rests on (measured, not assumed): renaming a directory while any file
+# inside it is open fails -- mv says "Permission denied", node's renameSync says EPERM, and it
+# fails even when the holder opened the file with FILE_SHARE_DELETE. That is why the move-aside
+# REFUSES instead of improvising: if data/ cannot be moved, the pack has not started, nothing
+# has been deleted, and the error names the folder that refused. A locked file can no longer
+# half-delete the app folder; it can only stop the build cleanly, before any damage.
+
+# The hold directory for a pack directory: beside it, named so a human recognises it.
+picode_data_hold_dir() {
+  printf '%s\n' "${1}-data-hold"
+}
+
+# The profile inside a pack directory.
+picode_data_dir() {
+  printf '%s\n' "${1}/data"
+}
+
+# picode_data_hold_recover <pack_dir>
+#
+# Restore a hold left behind by an interrupted run. This runs before anything else, so a build
+# never packs on top of a profile that is sitting beside the folder. Absent hold is the normal
+# case (first build, or the last run finished cleanly): silent, exit 0.
+picode_data_hold_recover() {
+  local pack_dir="$1"
+  local data_dir hold_dir
+  data_dir="$(picode_data_dir "${pack_dir}")"
+  hold_dir="$(picode_data_hold_dir "${pack_dir}")"
+
+  [[ -d "${hold_dir}" ]] || return 0
+
+  echo "  -- a previous build stopped with the portable profile in ${hold_dir}: restoring it before anything else"
+  if [[ -e "${data_dir}" ]]; then
+    # Both present: the interrupted run had already re-packed (or re-staged) before dying, so
+    # what sits in the pack folder is the seeded data/ from that run. It is build output, not
+    # the profile -- the profile is the hold, which only exists because build.sh moved it aside.
+    if ! rm -rf "${data_dir}"; then
+      echo "error: the leftover data/ in '${data_dir}' could not be removed, so the held profile cannot go back. Close whatever holds it and build again." >&2
+      return 1
+    fi
+  fi
+  if ! mv "${hold_dir}" "${data_dir}"; then
+    echo "error: the held profile could not be moved from '${hold_dir}' back to '${data_dir}'. It is still safe in the hold." >&2
+    return 1
+  fi
+  echo "  -- the portable profile is back in ${data_dir}"
+  return 0
+}
+
+# picode_data_hold_move_aside <pack_dir>
+#
+# Rename data/ out of the pack folder before the pack deletes it. Absent data/ is normal (a
+# first build): nothing to move, no noise. If the rename is refused, stop the build with a
+# message naming the folder that refused; nothing has been deleted at this point.
+picode_data_hold_move_aside() {
+  local pack_dir="$1"
+  local data_dir hold_dir mv_error
+  data_dir="$(picode_data_dir "${pack_dir}")"
+  hold_dir="$(picode_data_hold_dir "${pack_dir}")"
+
+  [[ -d "${data_dir}" ]] || return 0
+
+  echo "  -- moving the portable profile aside for the pack: ${data_dir} -> ${hold_dir}"
+  mv_error="$(mv "${data_dir}" "${hold_dir}" 2>&1)" || {
+    echo "error: the pack did NOT run and NOTHING was deleted, but the portable profile could not be moved out of the way first." >&2
+    echo "       The rename of '${data_dir}' to '${hold_dir}' was refused -- almost certainly a file inside it that a running process holds open." >&2
+    echo "       mv said: ${mv_error}" >&2
+    echo "       Close the PiCode running from this folder (its logs under data/user-data/logs are the usual holders) and build again." >&2
+    return 1
+  }
+  return 0
+}
+
+# picode_data_hold_put_back <pack_dir>
+#
+# After the pack and the staging steps: remove the seeded data/ the build created, then move
+# the held profile into place. Absent hold (nothing was ever moved, or it is already back) is
+# silent, exit 0.
+picode_data_hold_put_back() {
+  local pack_dir="$1"
+  local data_dir hold_dir
+  data_dir="$(picode_data_dir "${pack_dir}")"
+  hold_dir="$(picode_data_hold_dir "${pack_dir}")"
+
+  [[ -d "${hold_dir}" ]] || return 0
+
+  if [[ -e "${data_dir}" ]]; then
+    if ! rm -rf "${data_dir}"; then
+      echo "error: the seeded data/ in '${data_dir}' could not be removed, so the held profile cannot be put back. It is safe in ${hold_dir}." >&2
+      return 1
+    fi
+  fi
+  if ! mv "${hold_dir}" "${data_dir}"; then
+    echo "error: the profile could not be moved from '${hold_dir}' back to '${data_dir}'. It is safe in the hold." >&2
+    return 1
+  fi
+  echo "  -- the portable profile is back in ${data_dir}"
+  return 0
+}
