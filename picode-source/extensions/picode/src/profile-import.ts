@@ -6,6 +6,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { splitLeftBehindPackages } from './left-behind-packages';
 
 /**
  * The one-shot copy of a profile, and the scan that previews it.
@@ -229,7 +230,40 @@ function readJsonObjectForCopy(file: string): { text: string } | { failure: stri
 	return { text };
 }
 
-function importFile(item: ImportItem, source: string, target: string): ImportItemReport {
+/**
+ * The bytes the settings copy writes, with the packages the import leaves behind removed.
+ *
+ * A declaration that survives the copy is an instruction: the next `pi install` reads this
+ * list and installs whatever it names, so a left-behind entry must not arrive. Only the
+ * `packages` list is touched — every other key of the owner's configuration arrives exactly
+ * as it was. When nothing is removed, the file's own bytes are written unchanged; when
+ * something is, the file is re-serialized from the same parse with the list filtered.
+ */
+export function filteredSettingsText(text: string): { text: string; leftBehind: string[] } {
+	let value: unknown;
+	try {
+		value = JSON.parse(text);
+	} catch {
+		return { text, leftBehind: [] };
+	}
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		return { text, leftBehind: [] };
+	}
+	const settings = value as Record<string, unknown>;
+	const { kept, leftBehind } = splitLeftBehindPackages(settings['packages']);
+	if (leftBehind.length === 0) {
+		return { text, leftBehind };
+	}
+	// Keys are rebuilt in place rather than spread, so `packages` keeps its original
+	// position in the serialized object and nothing else is reordered.
+	const next: Record<string, unknown> = {};
+	for (const [key, entry] of Object.entries(settings)) {
+		next[key] = key === 'packages' ? kept : entry;
+	}
+	return { text: JSON.stringify(next, null, '\t'), leftBehind };
+}
+
+function importFile(item: ImportItem, source: string, target: string, transform?: (text: string) => string): ImportItemReport {
 	if (!existsSync(source)) {
 		return { item, status: 'absent', path: target };
 	}
@@ -246,7 +280,7 @@ function importFile(item: ImportItem, source: string, target: string): ImportIte
 	const existed = isFile(target);
 	try {
 		mkdirSync(path.dirname(target), { recursive: true });
-		writeFileSync(target, read.text);
+		writeFileSync(target, transform !== undefined ? transform(read.text) : read.text);
 	} catch {
 		return { item, status: 'failed', path: target, reason: 'the target could not be written' };
 	}
@@ -295,7 +329,7 @@ export function importProfile(options: ImportOptions): ImportReport {
 		} else {
 			const source = path.join(from, spec.name);
 			report = spec.kind === 'file'
-				? importFile(spec.item, source, target)
+				? importFile(spec.item, source, target, spec.item === 'settings' ? text => filteredSettingsText(text).text : undefined)
 				: importDirectory(spec.item, source, target);
 		}
 		items.push(report);

@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
+import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { npmInstallSpec } from './packages-registry';
 
@@ -263,18 +264,20 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			importLog.step = 0;
 			// The total is known BEFORE the copy: the external profile's own settings name the
 			// packages, so the bar never jumps backwards and never sits at zero while the copy
-			// runs.
-			const externalPackages = ((): string[] => {
+			// runs. Every entry is kept — strings and objects — because the ones the import
+			// leaves behind are read from this same list to tell the owner where they went.
+			const externalPackages = ((): unknown[] => {
 				try {
 					const value: unknown = JSON.parse(readFileSync(path.join(externalProfileDir(), 'settings.json'), 'utf8'));
 					const packages = typeof value === 'object' && value !== null && !Array.isArray(value)
 						? (value as Record<string, unknown>)['packages']
 						: undefined;
-					return Array.isArray(packages) ? packages.filter((entry): entry is string => typeof entry === 'string') : [];
+					return Array.isArray(packages) ? packages : [];
 				} catch {
 					return [];
 				}
 			})();
+			const leftBehind = splitLeftBehindPackages(externalPackages).leftBehind;
 			importLog.total = externalPackages.length > 0 ? 3 : 2;
 			try {
 				logImport('Bringing your packages, connections, skills and conversations…');
@@ -292,6 +295,12 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					},
 				});
 				importLog.step = 1;
+				// What was left behind, said once per package while it is still fresh: the copy
+				// removed these declarations from the settings it brought over and nothing below
+				// will install them, so the log is the only place that says where they went.
+				for (const reference of leftBehind) {
+					logImport(`Left ${reference} behind: it belongs to Gentle, which this editor no longer carries. It was not installed, and its declaration was not copied.`);
+				}
 				// Packages: the settings copy carries the declarations, but the packages' files
 				// stay in the external profile's npm tree. Install each declared source into
 				// this profile, so what the import brings actually runs here.
@@ -318,6 +327,14 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// single command, exactly as any one-package install does.
 				const specs: string[] = [];
 				for (const source of declared) {
+					// The settings copy already removed these declarations, so this only fires when
+					// one survived anyway — a profile imported before the copy was filtered. Either
+					// way the answer is the same: nothing installs it here.
+					if (isLeftBehindPackage(source)) {
+						packagesSkipped += 1;
+						logImport(`Left ${source} behind: it belongs to Gentle, which this editor no longer carries. It was not installed, and its declaration was not copied.`);
+						continue;
+					}
 					const spec = npmInstallSpec(source);
 					if (spec === undefined) {
 						packagesSkipped += 1;
