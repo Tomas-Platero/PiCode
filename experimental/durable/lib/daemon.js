@@ -8,6 +8,15 @@
 // endpoint (Windows named pipe / Unix domain socket — never a TCP port, since a
 // process that runs the owner's tools must not be reachable off the machine).
 //
+// Permission delegation: the deterministic guard (lib/guard.js) blocks
+// destructive commands in code. A protocol client that CAN decide (the ACP
+// endpoint, lib/acp.js) registers itself with `permissions.listen` for its
+// conversations; on a guarded call the daemon pushes a `permission` event to
+// that client, relays the client's answer back into the guard hook through
+// `permissions.decide`, and offers `allow` as the allow_always path. With no
+// listener, the guard blocks exactly as before — the CLI's behaviour is
+// unchanged.
+//
 // Every conversation run happens inside this process, so every subscriber —
 // any number of them, from any number of client processes — sees the same live
 // `watchEvents` stream. Clients never open the database; they only talk to the
@@ -61,9 +70,12 @@ export async function startDaemon(resolved) {
 	}
 }
 
+/** How long a permission request may sit unanswered before the guard treats it as rejected. */
+const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
+
 async function serveStorage(resolved, bridge, agents, skills) {
 	const extensions = [
-		makeGuardExtension({ enabled: resolved.options.guard.value }),
+		makeGuardExtension({ enabled: resolved.options.guard.value, consultPermission }),
 		makeSkillsExtension(skills),
 	];
 	if (bridge.extension) extensions.push(bridge.extension);
@@ -72,6 +84,32 @@ async function serveStorage(resolved, bridge, agents, skills) {
 	const endpoint = daemonEndpoint();
 	const subscribers = new Map(); // LineStream → Set<conversationId> it subscribed to
 	const streams = new Map(); // conversationId → { stream, refs } (one watchEvents per conversation, fanned out)
+	const permissionListeners = new Map(); // conversationId → Set<LineStream> that decide guarded calls (ACP)
+	const pendingPermissions = new Map(); // permission requestId → resolve(answer)
+	let nextPermissionId = 1;
+
+	/**
+	 * The guard's escape hatch for protocol clients that can decide: push the
+	 * guarded call to every listener of this conversation and await the answer.
+	 * `undefined` (no listener) means "decide deterministically", as before.
+	 */
+	function consultPermission(conversationId, call, verdict) {
+		const listeners = permissionListeners.get(conversationId);
+		if (!listeners || listeners.size === 0) return Promise.resolve(undefined);
+		return new Promise((resolve) => {
+			const requestId = `perm-${nextPermissionId++}`;
+			const timer = setTimeout(() => finish({ approved: false, reason: "the permission request timed out" }), PERMISSION_TIMEOUT_MS);
+			function finish(answer) {
+				clearTimeout(timer);
+				pendingPermissions.delete(requestId);
+				resolve(answer);
+			}
+			pendingPermissions.set(requestId, finish);
+			for (const line of listeners) {
+				line.send({ event: "permission", conversationId, requestId, toolName: call?.name, args: call?.arguments ?? {}, command: verdict?.command, reason: verdict?.reason });
+			}
+		});
+	}
 
 	function fanOut(conversationId, events) {
 		for (const [line, ids] of subscribers) {
@@ -100,7 +138,7 @@ async function serveStorage(resolved, bridge, agents, skills) {
 
 	const methods = {
 		async ping() {
-			return { protocol: PROTOCOL_VERSION, pid: process.pid, uptimeMs: Math.round(process.uptime() * 1000), streams: streams.size };
+			return { protocol: PROTOCOL_VERSION, pid: process.pid, uptimeMs: Math.round(process.uptime() * 1000), streams: streams.size, cwd: process.cwd() };
 		},
 
 		async sessions() {
@@ -128,7 +166,8 @@ async function serveStorage(resolved, bridge, agents, skills) {
 			const submission = await conversation.submit({ type: "input", content: String(params.prompt ?? "") }, CTX);
 			const settled = await submission.wait(CTX);
 			const answer = await answerText(conversation, settled, CTX);
-			return { conversationId: conversation.id, status: settled.status, answer };
+			// `reason` (on "unanswered": aborted, failed, ...) lets protocol mappers turn a cancel into a cancel.
+			return { conversationId: conversation.id, status: settled.status, answer, ...(settled.status !== "done" ? { reason: settled.reason } : {}) };
 		},
 
 		/** Fork at the newest entry, then run the prompt on the fork. */
@@ -152,6 +191,33 @@ async function serveStorage(resolved, bridge, agents, skills) {
 			const conversation = await requireConversation(harness, params.conversationId);
 			const allowed = await allowCommand(harness, conversation, params.command, CTX);
 			return { conversationId: conversation.id, allowed };
+		},
+
+		/** Abort the conversation's current run (session/cancel lands here). The waiting `run` settles. */
+		async cancel(params) {
+			const conversation = await requireConversation(harness, params.conversationId);
+			await conversation.abort(CTX);
+			return { conversationId: conversation.id, aborted: true };
+		},
+
+		/** Register this connection as the permission decider for one conversation (the ACP endpoint). */
+		async "permissions.listen"(params, line) {
+			const conversation = await requireConversation(harness, params.conversationId);
+			let set = permissionListeners.get(conversation.id);
+			if (!set) {
+				set = new Set();
+				permissionListeners.set(conversation.id, set);
+			}
+			set.add(line);
+			return { conversationId: conversation.id, listening: true };
+		},
+
+		/** Deliver a permission decision made by the protocol client. */
+		async "permissions.decide"(params) {
+			const finish = pendingPermissions.get(String(params.requestId));
+			if (!finish) throw new Error(`no pending permission request "${params.requestId}"`);
+			finish({ approved: params.approved === true, reason: params.reason });
+			return { requestId: String(params.requestId), decided: true };
 		},
 
 		/** Subscribe a client to a conversation's live events (plus its snapshot as the response). */
@@ -224,8 +290,11 @@ async function serveStorage(resolved, bridge, agents, skills) {
 		});
 		socket.on("close", () => {
 			const ids = subscribers.get(line);
-			if (!ids) return;
-			for (const conversationId of [...ids]) release(line, conversationId).catch(() => {});
+			if (ids) for (const conversationId of [...ids]) release(line, conversationId).catch(() => {});
+			for (const [conversationId, set] of permissionListeners) {
+				set.delete(line);
+				if (set.size === 0) permissionListeners.delete(conversationId);
+			}
 		});
 		socket.on("error", () => {}); // 'close' does the cleanup
 	});
@@ -248,7 +317,7 @@ async function serveStorage(resolved, bridge, agents, skills) {
 	}
 
 	console.error(`[daemon] owner of ${SHARED_DB} — listening on ${endpoint}`);
-	console.error("[daemon] methods: ping sessions open run fork allow subscribe unsubscribe shutdown");
+	console.error("[daemon] methods: ping sessions open run fork allow cancel permissions.listen permissions.decide subscribe unsubscribe shutdown");
 
 	// Graceful Ctrl+C: same path as the shutdown method.
 	process.on("SIGINT", () => {

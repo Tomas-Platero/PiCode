@@ -12,6 +12,7 @@
     "proof3": "node proof3-two-clients.js"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.7.0",
     "@earendil-works/chord": "^1.0.2",
     "@earendil-works/pi-ai": "^1.0.2",
     "@earendil-works/pi-durable": "^1.0.2",

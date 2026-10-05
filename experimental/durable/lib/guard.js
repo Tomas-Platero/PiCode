@@ -163,8 +163,15 @@ export function guardReason(call) {
  * off means off: no hook is installed at all, so nothing can block a tool call.
  * (It does not merely silence the prompt section — a hook without a section would
  * still block, which would make the setting a lie.)
+ *
+ * `consultPermission` (optional, used by the ACP endpoint via lib/daemon.js):
+ * an async `(conversationId, call, verdict) => undefined | {approved, reason?}`.
+ * When it returns a decision, that decision REPLACES the silent block: approved
+ * passes through, rejected blocks with the given reason. When it returns
+ * `undefined` (no permission decider is listening), the deterministic block
+ * below applies exactly as before. The allow list is still checked first.
  */
-export function makeGuardExtension({ enabled = true } = {}) {
+export function makeGuardExtension({ enabled = true, consultPermission } = {}) {
 	const guardSection = section(
 		"guard",
 		() =>
@@ -187,6 +194,17 @@ export function makeGuardExtension({ enabled = true } = {}) {
 							const normalized = normalizeCommand(verdict.command);
 							if (doc?.allow?.some((a) => normalizeCommand(a) === normalized)) {
 								return undefined; // explicitly allowed by the user: pass through
+							}
+							if (consultPermission) {
+								// Where a protocol client can decide (ACP), ask it instead of blocking silently.
+								const decision = await consultPermission(api.conversationId, call, verdict);
+								if (decision?.approved) return undefined; // the client decided: this call passes
+								if (decision) {
+									return {
+										block: `Blocked by the client's decision: ${decision.reason ?? verdict.reason}. The user can still allow this exact command for this conversation with: node cli.js allow <conversationId> "${normalized}"`,
+									};
+								}
+								// no decider listening: fall through to the deterministic block
 							}
 							const why = `Blocked by the deterministic guard: ${verdict.reason}.`;
 							return {

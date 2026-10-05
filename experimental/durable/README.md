@@ -29,6 +29,7 @@ node cli.js fork <id> "<prompt>" [--agent <name>] [--model provider/model] [--no
 node cli.js send [id] "<prompt>" [--agent <name>] [--model provider/model]   # run a prompt THROUGH the daemon
 node cli.js attach <id>                            # follow a conversation's LIVE events, Ctrl+C to detach
 node cli.js allow <id> "<exact command>"            # guard opt-in (see below)
+node cli.js acp                                    # speak ACP (the Agent Client Protocol) over stdio
 node cli.js stop                                   # ask the daemon to shut down gracefully
 ```
 
@@ -235,6 +236,36 @@ replays the snapshot, then prints each committed entry (`[user]`, `[assistant]` 
 tool calls, `[tool result]`) **as the commit lands**, from any number of processes at
 once. Two separate attach processes watching the same run mid-flight were verified by
 `bash proof-daemon.sh`.
+
+### ACP: the editor protocol
+
+`node cli.js acp` turns this agent into a standard **ACP (Agent Client Protocol) agent** over
+stdio — the protocol Zed and JetBrains speak — so an editor panel drives the durable agent
+with a protocol that has a spec instead of the local NDJSON one. It is implemented in
+`lib/acp.js` with the authoritative typed definitions from `@agentclientprotocol/sdk` (the
+endpoint is a daemon CLIENT, like `send` and `attach`; it never opens the storage), and
+proven by `experimental/acp-client/` with `bash proof-acp.sh` (ends `PROOF-ACP-OK`).
+
+**v1, not the v2 draft.** v1 is what existing clients speak, and the SDK itself marks v2 as
+an unstable draft whose wire protocol "may change incompatibly in any SDK release". The
+parts of the v2 lifecycle that matter are already in v1.7: streaming flows through
+`session/update` while the turn is in flight (the `session/prompt` response only carries
+`stopReason`), and `session/load` folds resume into session setup.
+
+| ACP (v1) | Where it lands in the durable agent |
+| --- | --- |
+| `initialize` | The endpoint's capabilities (`loadSession`, `sessionCapabilities.list`; no image/audio/embeddedContext). |
+| `session/new` | daemon `open` — a new ownerless conversation — plus `subscribe` and `permissions.listen`. The conversation id IS the session id. |
+| `session/load` | daemon `open <id>` + `subscribe`; the snapshot is replayed to the client as `session/update` notifications (user/assistant text, tool calls with their results). |
+| `session/list` | daemon `sessions` — the same rows as `node cli.js sessions`. |
+| `session/prompt` | daemon `run`; while the run is in flight, durable's live agent events are mapped to `session/update` (`text_delta` → `agent_message_chunk`, `thinking_delta` → `agent_thought_chunk`, tool execution → `tool_call`/`tool_call_update`). The settle status maps to the response's `stopReason` (`done` → `end_turn`). |
+| `session/cancel` | daemon `cancel` — `Conversation.abort()`; the waiting run settles and the endpoint answers `stopReason: "cancelled"`. |
+| `session/request_permission` | The guard's destructive-command verdicts are **offered to the client for a decision instead of being silently blocked**: the daemon pushes a `permission` event (`permissions.listen` / `permissions.decide` are its two halves), the endpoint turns it into a real ACP permission round-trip, `allow_always` adds the exact command to the conversation's allow list (the same list `node cli.js allow` maintains). With no listener registered the guard blocks deterministically, exactly as before. |
+| `authenticate`, `session/set_mode`, `session/fork`, `fs/*`, `terminal/*` | Not implemented and not advertised (no `authMethods`, no mode/fork capabilities; tools run inside the daemon, so client-side fs/terminal are never requested). |
+
+A client's `cwd` in `session/new` is recorded but tools execute in the **daemon's** working
+directory — the one the daemon process was started in — because the execution environment is
+the daemon's, not the endpoint's.
 
 ### Proving the daemon
 
@@ -445,11 +476,13 @@ unless a rule names it.
 | `lib/profile.js` | Reads the pi agent profile **read-only** (`%LOCALAPPDATA%/Programs/PiCode/data/pi-agent/models.json`) and builds a pi-ai provider for the `omni` provider found there (OpenAI-Responses API, `baseUrl http://192.168.1.65:20128/v1`). If the profile ever contains a key for the provider (in its `auth.json`), it is used **at runtime, never copied**. The gateway is keyless (`auth: "none"`); pi-ai's `openai-responses` API refuses a request with no key at all, so a clearly non-secret placeholder is sent — the gateway accepts any bearer on the chat endpoint. |
 | `lib/settings.js` | PiCode's settings, read-only (`%APPDATA%/PiCode/User/settings.json`, override with `PICODE_USER_SETTINGS`): picks the `picode.durable.*` keys, applies flag > setting > default, reports every effective option and every fallback on stderr. |
 | `lib/common.js` | Harness setup: models, registry (`CodingTools` + proof extensions), SQLite storage under `.data/`, per-conversation `NodeExecutionEnv`. Also `SHARED_DB` and `listConversations()` (the `sessions` rows, used by the daemon and the direct fallback). Also `resetDatabase()`. |
-| `lib/daemon.js` | The daemon: owns `sessions.sqlite`, serves the protocol on the local endpoint, one `watchEvents` per conversation fanned out to every subscriber, runs `open`/`run`/`fork`/`allow` inside the owner process. |
+| `lib/daemon.js` | The daemon: owns `sessions.sqlite`, serves the protocol on the local endpoint, one `watchEvents` per conversation fanned out to every subscriber, runs `open`/`run`/`fork`/`allow`/`cancel`/`permissions.*` inside the owner process. |
 | `lib/protocol.js` | The wire format: the local endpoint (named pipe / UDS), NDJSON framing (`LineStream`), endpoint liveness probe. |
 | `lib/client.js` | The client side: bounded connect (`DaemonUnavailableError` when no daemon — plain message, no hang), request/response matching, pushed-event listeners. |
 | `lib/render.js` | Agent events and transcript entries → CLI output, shared by the in-process `runPrompt` and the daemon clients (`send`, `attach`). |
+| `lib/acp.js` | The ACP entry point: the Agent Client Protocol (v1) over stdio, mapped onto the daemon (see "ACP: the editor protocol"). |
 | `proof-daemon.sh` | Reproducible multi-process evidence for the daemon (see "Proving the daemon"). |
+| `proof-acp.sh` | Reproducible evidence for the ACP endpoint via `experimental/acp-client/` (see "ACP: the editor protocol"). |
 | `lib/extensions.js` | `slow_step` tool (a deterministic 2 s tool, `replay: "safe"`) and the background subagent: a `subagent` tool that spawns a **background anchor task** owning a child conversation, drives it, and reports its answer back to the parent as a follow-up input. |
 | `proof1-kill.js` / `proof1-resume.js` | Proof 1, phases A and B. |
 | `proof2-subagent.js` | Proof 2. |

@@ -21,6 +21,7 @@
 //   node cli.js send [id] "<prompt>" [--agent <name>]   run a prompt THROUGH the daemon
 //   node cli.js attach <conversationId>                 live events from the daemon, Ctrl+C to detach
 //   node cli.js allow <conversationId> "<exact command>"  guard opt-in (daemon first, direct fallback)
+//   node cli.js acp                                      speak ACP v1 over stdio (an editor's entry point)
 //
 // The answer streams to stdout; tool activity and diagnostics go to stderr, so
 // `node cli.js run "..." > answer.txt` captures just the answer.
@@ -35,6 +36,7 @@ import { makeRunRenderer, makeAttachRenderer } from "./lib/render.js";
 import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "./lib/client.js";
 import { daemonEndpoint } from "./lib/protocol.js";
 import { startDaemon } from "./lib/daemon.js";
+import { startAcpAgent } from "./lib/acp.js";
 import { watchEvents } from "@earendil-works/pi-durable";
 
 // --- argument parsing -----------------------------------------------------------
@@ -50,6 +52,7 @@ function usage() {
   node cli.js send [id] "<prompt>" [--agent <name>] [--model provider/model]   run a prompt through the daemon
   node cli.js attach <id>                            live events from the daemon, Ctrl+C to detach
   node cli.js allow <id> "<exact command>"           let the guard pass this exact command
+  node cli.js acp                                    speak ACP v1 over stdio (requires a running daemon)
 
 Options also come from PiCode's settings (picode.durable.*) when the flags are not given:
   picode.durable.mcp / .guard / .model / .agent — flag > setting > default.
@@ -343,6 +346,21 @@ async function cmdStop() {
 	}
 }
 
+/**
+ * The ACP entry point: speak the Agent Client Protocol (v1) over stdio, mapped
+ * onto the daemon. stdout carries ONLY ACP messages; diagnostics go to stderr.
+ * This process is a client of the daemon — never a second owner of the storage.
+ */
+async function cmdAcp() {
+	if (!(await daemonIsUp())) {
+		console.error(`error: no durable daemon is running at ${daemonEndpoint()} — start it with: node cli.js serve. The ACP endpoint is a client of the daemon, never a second owner of ${SHARED_DB}.`);
+		process.exitCode = 1;
+		return;
+	}
+	console.error(`[acp] ${SHARED_DB} durable agent speaking ACP v1 over stdio (daemon at ${daemonEndpoint()})`);
+	await startAcpAgent();
+}
+
 /** The one-owner rule, said in a sentence a human can act on (not a raw SQLite error). */
 async function refuseWhileDaemonOwns(command, positional) {
 	if (!(await daemonIsUp())) return false;
@@ -405,6 +423,9 @@ try {
 			break;
 		case "stop":
 			await cmdStop();
+			break;
+		case "acp":
+			await cmdAcp();
 			break;
 		case "attach":
 			if (!args.positional[0]) throw new Error("attach requires <id>");
