@@ -1,5 +1,5 @@
 {
   "package": "@earendil-works/pi-coding-agent",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "note": "PiCode's own pi, pinned to an exact version so a freshly built editor is born working. `dev/pi-runtime.sh` installs it during the build and the connector looks for it there — nobody has to install or configure it."
 }
