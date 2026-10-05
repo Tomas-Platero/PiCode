@@ -13,6 +13,7 @@ import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem
 import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
+import { npmRunEnv, planNpmRun } from './npm-run';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -100,6 +101,8 @@ export interface SetupDeps {
 	readonly refreshModels: () => void;
 	/** Tells the Sessions panel that transcripts just landed. */
 	readonly sessionsChanged: () => void;
+	/** npm's CLI script, resolved by the caller (`extension.ts`). `undefined` plans the npm shim through a quoted shell. */
+	readonly npmCli?: string;
 }
 
 /** What the welcome page renders, and what the actions answer with. */
@@ -479,10 +482,14 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 }
 
 /**
- * Runs the npm on PATH inside the profile's npm project — the directory where pi
- * installs packages and the one whose `package.json` carries the install-script
- * approvals. The shell lets Windows resolve `npm` to `npm.cmd`, which is also how
- * pi's own package manager runs the npm on the PATH.
+ * Runs npm inside the profile's npm project — the directory where pi installs packages and
+ * the one whose `package.json` carries the install-script approvals.
+ *
+ * The run is planned by `npm-run.ts`: node over npm's own CLI script, a real arguments
+ * array, no shell — so no argument can be split on a space the way a shell concatenating
+ * its arguments splits them. The shim fallback (when npm's CLI script cannot be found)
+ * shells out with every argument quoted, which is also how pi's own package manager runs
+ * the npm on the PATH; the whitelist stays in front of the specs either way.
  */
 export function runNpm(deps: SetupDeps, args: readonly string[]): Promise<void> {
 	// The npm project may not exist yet - a fresh profile has no `npm/` directory until
@@ -493,15 +500,16 @@ export function runNpm(deps: SetupDeps, args: readonly string[]): Promise<void> 
 	if (!existsSync(manifest)) {
 		writeFileSync(manifest, '{\n\t\"private\": true\n}\n');
 	}
+	const plan = planNpmRun([...args], { npmCli: deps.npmCli });
 	return new Promise<void>((resolve, reject) => {
 		execFile(
-			'npm',
-			[...args],
+			plan.file,
+			plan.args,
 			{
 				cwd: project,
-				env: { ...process.env, PI_CODING_AGENT_DIR: deps.profileDir },
+				env: npmRunEnv(plan, { ...process.env, PI_CODING_AGENT_DIR: deps.profileDir }),
 				windowsHide: true,
-				shell: true,
+				shell: plan.shell,
 			},
 			error => (error === null ? resolve() : reject(error)),
 		);

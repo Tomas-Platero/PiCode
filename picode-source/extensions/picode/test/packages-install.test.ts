@@ -250,3 +250,12 @@ test('a refused spec never reaches the shell', async () => {
 	assert.deepEqual(calls[0]!.args.slice(4), ['alpha']);
 	assert.equal(outcome.rejected.length, 1);
 });
+
+test("with npm's CLI script the install runs as node over it: no shell, nothing to split on a space", async () => {
+	const { spawn, calls } = fakeSpawn();
+	const options = { ...optionsFor('C:\\profiles with spaces\\throwaway', spawn), npmCli: 'C:\\node\\npm-cli.js' };
+	await ensureProfilePackages(options);
+	assert.equal(calls.length, 1);
+	assert.equal(calls[0]!.file, process.execPath, 'the CLI script runs under the editor binary, as Node');
+	assert.deepEqual(calls[0]!.args, ['C:\\node\\npm-cli.js', 'install', '--save', '--no-audit', '--no-fund', 'alpha', 'beta', 'gamma']);
+});

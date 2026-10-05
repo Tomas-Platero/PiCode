@@ -20,6 +20,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { npmRunEnv, planNpmRun } from './npm-run';
 
 /* ------------------------------------------------------------------ *
  * Versions
@@ -319,7 +320,7 @@ export interface SpawnOptions {
 	readonly env: NodeJS.ProcessEnv;
 	readonly windowsHide: boolean;
 	readonly timeoutMs: number;
-	/** Run through the shell, which is how `npm` is found on Windows (`npm.cmd`). */
+	/** Run through the shell, which is how the npm shim fallback runs (`npm.cmd`). */
 	readonly shell?: boolean;
 }
 
@@ -334,6 +335,8 @@ export interface UpdateRunContext {
 	readonly runtimeDir: string;
 	/** The profile in force — handed to pi as `PI_CODING_AGENT_DIR`. */
 	readonly profileDir: string;
+	/** npm's CLI script, resolved by the caller (`extension.ts`). `undefined` plans the npm shim through a quoted shell. */
+	readonly npmCli?: string;
 	/** The process run. Defaults to `execFile` with an args array. */
 	readonly spawn?: SpawnFn;
 }
@@ -363,6 +366,13 @@ function lastMeaningfulLine(text: string): string | undefined {
  *    install: it is not under a global npm root, and on Windows pi will not infer a custom
  *    prefix, so it answers with the `Location of pi executable: …` line instead of updating.
  *    PiCode installed the runtime with npm at build time, so it updates it the same way.
+ *
+ *    The run is planned by `npm-run.ts`: node over npm's own CLI script, a real arguments
+ *    array, no shell. This is the spawn a side-by-side build's spaced install folder broke —
+ *    the shell concatenated `--prefix <runtimeDir>` on its spaces and npm read a prefix that
+ *    does not exist plus two junk arguments (`-`, `experimental2\resources\pi-runtime`). With
+ *    no shell there is nothing to split on; the fallback's quoting keeps the same guarantee
+ *    when npm's CLI script cannot be found.
  * 2. **The profile's packages**, with `pi update --extensions`, which deliberately leaves the
  *    runtime alone.
  *
@@ -375,16 +385,17 @@ export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: bool
 		return { ok: false, message: `PiCode could not update ${label}${reason === undefined ? '.' : `: ${reason}`}` };
 	};
 	const run = async (spawn: SpawnFn): Promise<{ ok: boolean; message: string }> => {
-		const runtime = await spawn('npm', [
+		const npmPlan = planNpmRun([
 			'install',
 			'--prefix', context.runtimeDir,
 			'--no-audit', '--no-fund', '--save-exact',
 			`${PI_RUNTIME_PACKAGE}@latest`,
-		], {
-			env: { ...process.env, PI_CODING_AGENT_DIR: context.profileDir },
+		], { npmCli: context.npmCli });
+		const runtime = await spawn(npmPlan.file, npmPlan.args, {
+			env: npmRunEnv(npmPlan, { ...process.env, PI_CODING_AGENT_DIR: context.profileDir }),
 			windowsHide: true,
 			timeoutMs: UPDATE_TIMEOUT_MS,
-			shell: true,
+			shell: npmPlan.shell,
 		});
 		if (!runtime.ok) {
 			return failed('pi', runtime);

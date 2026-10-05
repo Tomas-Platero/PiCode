@@ -53,6 +53,7 @@ import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
+import { locateNpmCli } from './npm-run';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -1518,7 +1519,7 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 			// The same guard every pi load has: if any declared package is still missing, it is
 			// installed here (hidden, one run) rather than being left for pi's loader to install
 			// with its own process — and its own window — per package.
-			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), log: line => console.error(`[picode] ${line}`) });
+			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), npmCli: locateNpmCli(), log: line => console.error(`[picode] ${line}`) });
 			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
 		}
 	} catch {
@@ -1985,7 +1986,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
 		resetChatSession();
-		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce() });
+		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli() });
 		if (!result.ok) {
 			void vscode.window.showInformationMessage(result.message);
 			return;
@@ -2075,6 +2076,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi load ever finds a package to install. Failures are one sentence, not silence.
 	void ensureProfilePackages({
 		profileDir: profileDirectory(context.extensionUri),
+		npmCli: locateNpmCli(),
 		log: line => console.error(`[picode] ${line}`),
 	}).then(outcome => {
 		if (outcome.failed > 0) {
@@ -2156,6 +2158,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		},
 		// An import also lands a tree of session transcripts: the Sessions panel re-lists.
 		sessionsChanged: () => piSessions.fireChanged(),
+		// npm runs shell-free, over npm's own CLI script (npm-run.ts) — the spaced install
+		// folder a side-by-side build carries must not be split by a shell's concatenation.
+		npmCli: locateNpmCli(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
 	// The theme step of Set up PiCode lives in the core, so its three questions — list the gallery,

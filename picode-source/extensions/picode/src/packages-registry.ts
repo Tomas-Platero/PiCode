@@ -279,13 +279,15 @@ export function npmInstallSpec(source: string): string | undefined {
 /**
  * Whether an npm install spec is safe to hand to a shell.
  *
- * npm on Windows is `npm.cmd`, which `execFile` refuses to run without a shell — the reason
- * every npm path in this product (the import's `runNpm`, pi's own installer) spawns one. A
- * shell does not escape its arguments, it concatenates them, so whatever a profile declares
- * is executed character for character if it carries metacharacters. Profiles are data this
- * editor did not write — an imported one came from another machine — so every spec is checked
- * against this whitelist **before** any install uses it, and what does not fit is refused
- * with a line that names it, never passed through.
+ * npm runs this editor starts are planned by `npm-run.ts`: node over npm's own CLI script,
+ * a real arguments array, no shell — and pi's own installer reaches npm itself. But the npm
+ * shim fallback in that planner still goes through a shell, and pi spawns npm through one
+ * (`cross-spawn` → `npm.cmd`), so the whitelist stays in front of every install as belt and
+ * braces. A shell does not escape its arguments, it concatenates them, so whatever a profile
+ * declares is executed character for character if it carries metacharacters. Profiles are
+ * data this editor did not write — an imported one came from another machine — so every spec
+ * is checked against this whitelist **before** any install uses it, and what does not fit is
+ * refused with a line that names it, never passed through.
  *
  * Accepted: an npm name (plain or `@scope/name`), optionally pinned with a version or range
  * (`pkg@1.2.3`, `pkg@^1.0.0`, `pkg@>=1.0.0`), and a `git+https://host/path` source. A leading

@@ -28,6 +28,7 @@ import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
+import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
 import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
@@ -1025,7 +1026,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// Before pi loads anything: the profile's declared-but-missing packages are installed here
 				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
 				// never installs one itself — its per-package installs each flashed a console window.
-				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), log: deps.log });
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
 				services = await loaded.sdk.createAgentSessionServices({
 					cwd,

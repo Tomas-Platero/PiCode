@@ -264,3 +264,26 @@ test('a spawn that throws is a failed update, not a rejection the window sees', 
 	assert.strictEqual(result.ok, false);
 	assert.ok(result.message.includes('could not be updated'));
 });
+
+test("with npm's CLI script, the runtime update runs node over it: no shell, the spaced prefix whole", async () => {
+	const spawn = spawnAnswering({ ok: true, stderr: '' });
+	const runtimeDir = 'D:\\PiCode-win32-x64 - experimental2\\resources\\pi-runtime';
+	const result = await runPiUpdate({
+		cliEntry: '/runtime/cli.js',
+		runtimeDir,
+		profileDir: '/profile',
+		npmCli: 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+		spawn,
+	});
+	assert.deepStrictEqual(result, { ok: true, message: 'PiCode updated.' });
+	const npm = spawn.calls[0];
+	assert.strictEqual(npm.file, process.execPath, "npm's CLI is a Node script: the editor binary runs it as Node");
+	assert.deepStrictEqual([...npm.args], [
+		'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+		'install', '--prefix', runtimeDir, '--no-audit', '--no-fund', '--save-exact',
+		'@earendil-works/pi-coding-agent@latest',
+	], 'the spaced runtimeDir is one argv element — the shape the shell split into three');
+	assert.strictEqual(npm.options.shell, false);
+	assert.strictEqual(npm.options.env.ELECTRON_RUN_AS_NODE, '1');
+	assert.strictEqual(npm.options.env.PI_CODING_AGENT_DIR, '/profile');
+});

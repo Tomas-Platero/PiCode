@@ -25,11 +25,13 @@
  *   path the import uses (`onboarding.ts`'s `runNpm` shape: `install --save --no-audit
  *   --no-fund <specs>`, cwd `<profile>/npm`, hidden). A failed batch is retried spec by spec,
  *   still hidden, because npm is all or nothing and one bad package must not take the list.
- * - **Nothing profile-derived reaches the shell unchecked.** npm on Windows runs through a
- *   shell (`npm.cmd`), and a shell concatenates its arguments, so every spec passes
- *   {@link isSafeNpmInstallSpec} first; a refusal is a named line, not a passed-through
- *   argument. The one git source kind a profile can declare is cloned with `git` directly —
- *   an executable `execFile` can run without a shell — one clone per repository, hidden.
+ * - **Nothing profile-derived reaches the shell unchecked.** npm runs planned by
+ *   `npm-run.ts` (node over npm's own CLI script, no shell) carry the specs as one argument
+ *   each; the shim fallback still goes through a shell, so every spec passes
+ *   {@link isSafeNpmInstallSpec} first — belt and braces. A refusal is a named line, not a
+ *   passed-through argument. The one git source kind a profile can declare is cloned with
+ *   `git` directly — an executable `execFile` can run without a shell — one clone per
+ *   repository, hidden.
  * - **Honest state.** The outcome carries how many packages were installed, how many were
  *   already present, how many failed, and which declarations were refused; `lines` holds the
  *   sentences for the caller's log or notification.
@@ -42,6 +44,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
+import { npmRunEnv, planNpmRun } from './npm-run';
 import { isLeftBehindPackage } from './left-behind-packages';
 import { parsePackageSource, parseSettings, type SettingsDocument } from './packages-data';
 
@@ -196,6 +199,8 @@ export interface SpawnOptions {
 	readonly env: NodeJS.ProcessEnv;
 	readonly windowsHide: boolean;
 	readonly timeoutMs: number;
+	/** Run through the shell, which is how the npm shim fallback runs (`npm.cmd`). */
+	readonly shell?: boolean;
 }
 
 /** The process run, injectable so a test can count exactly what would have been executed. */
@@ -204,9 +209,11 @@ export type SpawnFn = (file: string, args: readonly string[], options: SpawnOpti
 /**
  * The real spawn: `execFile`, hidden, no visible console, for every process this module runs.
  *
- * npm needs a shell on Windows (`npm.cmd`), which is why the shell flag is on for it — and why
- * every argument it carries is whitelist-checked before this line is reached. `git` is an
- * executable `execFile` runs directly, no shell, on every platform.
+ * The shell flag comes from the run's plan (`npm-run.ts`): npm runs planned over npm's CLI
+ * script spawn **no shell**, so no argument — flag, spec, or a path the caller did not spell —
+ * can be split on its spaces. The shim fallback still shells (`npm.cmd`), which is why the
+ * specs keep passing the whitelist before this line. `git` is an executable `execFile` runs
+ * directly, no shell, on every platform.
  */
 const defaultSpawn: SpawnFn = (file, args, options) => new Promise(resolve => {
 	execFile(file, [...args], {
@@ -214,7 +221,7 @@ const defaultSpawn: SpawnFn = (file, args, options) => new Promise(resolve => {
 		env: options.env,
 		windowsHide: options.windowsHide,
 		timeout: options.timeoutMs,
-		shell: file === 'npm' && process.platform === 'win32',
+		shell: options.shell === true,
 	}, (error, _stdout, stderr) => {
 		resolve({
 			ok: error === null,
@@ -250,6 +257,8 @@ export interface PackagesFileIo extends PackageScanIo {
 export interface EnsureProfilePackagesOptions {
 	/** PiCode's own profile — the only profile this module ever writes to. */
 	readonly profileDir: string;
+	/** npm's CLI script; `undefined` plans the npm shim through a quoted shell. */
+	readonly npmCli?: string;
 	readonly spawn?: SpawnFn;
 	readonly io?: PackagesFileIo;
 	/** Where the sentences go; the caller decides whether that is a log or a notification. */
@@ -341,13 +350,15 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 		if (failed === scan.failedBeforeSpawn) {
 			log(`Installing ${scan.specs.length} missing package${scan.specs.length === 1 ? '' : 's'} for this profile…`);
 			const runArgs = (specs: readonly string[]): string[] => ['install', '--save', '--no-audit', '--no-fund', ...specs];
+			const npmPlan = planNpmRun(runArgs(scan.specs), { npmCli: options.npmCli });
 			try {
 				// One process for the whole list — never one per package.
-				const outcome = await spawn('npm', runArgs(scan.specs), {
+				const outcome = await spawn(npmPlan.file, npmPlan.args, {
 					cwd: npmProject,
-					env,
+					env: npmRunEnv(npmPlan, env),
 					windowsHide: true,
 					timeoutMs: BATCH_TIMEOUT_MS,
+					shell: npmPlan.shell,
 				});
 				if (outcome.ok) {
 					installed = scan.specs.length;
@@ -357,12 +368,14 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 			} catch (batchError) {
 				// npm is all or nothing: only a failed batch is retried one spec at a time.
 				for (const spec of scan.specs) {
+					const onePlan = planNpmRun(runArgs([spec]), { npmCli: options.npmCli });
 					try {
-						const outcome = await spawn('npm', runArgs([spec]), {
+						const outcome = await spawn(onePlan.file, onePlan.args, {
 							cwd: npmProject,
-							env,
+							env: npmRunEnv(onePlan, env),
 							windowsHide: true,
 							timeoutMs: ONE_TIMEOUT_MS,
+							shell: onePlan.shell,
 						});
 						if (outcome.ok) {
 							installed += 1;
