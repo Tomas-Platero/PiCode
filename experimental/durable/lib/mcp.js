@@ -538,6 +538,17 @@ export async function closeMcpConnections(connections) {
 export const NO_BRIDGE = { connections: [], extension: undefined, filter: undefined };
 
 /**
+ * A bounded ceiling for waiting on the bridge from outside it: every server connect is
+ * itself bounded by CONNECT_TIMEOUT_MS and the servers are tried in order, so the whole
+ * bridge settles within roughly one timeout per configured server (plus one of slack).
+ * A caller that waits longer than this is not waiting for the bridge any more — it is
+ * stuck, and should say so instead of holding a conversation's agent hostage.
+ */
+export function mcpBridgeWaitMs(profileDir, cwd = process.cwd()) {
+	return (loadMcpConfig(profileDir, cwd).servers.size + 1) * CONNECT_TIMEOUT_MS;
+}
+
+/**
  * Connects the profile's MCP servers and reports what it found, one line per server.
  *
  * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
@@ -587,4 +598,42 @@ export async function armMcpFilter(harness, conversation, bridge, context) {
 	if (state?.tools == null) {
 		await conversation.configure({ tools: bridge.filter }, context);
 	}
+}
+
+/**
+ * The startup guarantee, made rather than promised: every conversation that already exists
+ * when the bridge settles and carries no tools filter of its own is armed with the deferral
+ * filter BEFORE the MCP extension is installed into the registry. A conversation that came
+ * into being while the bridge was connecting — through any path, not only the daemon's
+ * waiting methods — therefore never sees the MCP tools offered unfiltered: by the time the
+ * tools exist in the registry, its agent document already removes them. The count is
+ * returned so the daemon can say what it did, and `armMcpFilter`'s rule decides per
+ * conversation (only `tools == null` is touched), so a conversation that already discovered
+ * tools keeps its additions.
+ */
+export async function armAllMcpFilters(harness, storage, bridge, context) {
+	if (!bridge.filter) return 0;
+	const ids = [];
+	let cursor;
+	for (;;) {
+		const page = await harness.readOnLine(() => storage.scanConversations({}, 1000, cursor, context));
+		for (const record of page.items) ids.push(record.id);
+		cursor = page.cursor;
+		if (!cursor) break;
+	}
+	let armed = 0;
+	for (const id of ids) {
+		try {
+			const conversation = await harness.conversation(id, context);
+			if (!conversation) continue;
+			const state = await harness.snapshot(AgentDoc, id, context);
+			if (state?.tools == null) {
+				await conversation.configure({ tools: bridge.filter }, context);
+				armed++;
+			}
+		} catch (error) {
+			console.error(`[mcp] arming the deferral filter on conversation ${id} failed: ${error?.message ?? error}`);
+		}
+	}
+	return armed;
 }

@@ -25,7 +25,7 @@ step "1. starting the daemon (node cli.js serve)"
 node cli.js serve >"$OUT/daemon.log" 2>&1 &
 DAEMON_PID=$!
 up=0
-for _ in $(seq 1 120); do # up to 120 s: the MCP bridge connects before the endpoint is served
+for _ in $(seq 1 120); do # up to 120 s: the endpoint is served immediately; the bridge connects behind it
 	if grep -q "listening on" "$OUT/daemon.log" 2>/dev/null; then up=1; break; fi
 	sleep 1
 done

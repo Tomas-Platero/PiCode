@@ -28,7 +28,7 @@ import { allowCommand, makeGuardExtension } from "./guard.js";
 import { loadSkills, makeSkillsExtension } from "./skills.js";
 import { loadAgents, resolveAgentChange } from "./agents.js";
 import { DEFAULT_PROFILE_DIR } from "./profile.js";
-import { armMcpFilter, closeMcpConnections, connectBridge } from "./mcp.js";
+import { armAllMcpFilters, armMcpFilter, closeMcpConnections, connectBridge, mcpBridgeWaitMs, NO_BRIDGE } from "./mcp.js";
 import { parseModelSetting } from "./settings.js";
 import { LineStream, PROTOCOL_VERSION, daemonEndpoint, endpointIsUp } from "./protocol.js";
 
@@ -51,35 +51,69 @@ async function requireConversation(harness, conversationId) {
 }
 
 /**
- * Start the daemon: connect the MCP bridge once, open the shared storage, and
- * serve the protocol until `shutdown` or Ctrl+C. Resolved durable options
+ * Start the daemon: open the shared storage, serve the protocol IMMEDIATELY, and
+ * connect the MCP bridge behind the endpoint. Resolved durable options
  * (`picode.durable.*` / flags) come from the caller, which has already printed
  * the `[settings]` lines.
  */
 export async function startDaemon(resolved) {
 	const agents = loadAgents(DEFAULT_PROFILE_DIR);
 	const skills = loadSkills(DEFAULT_PROFILE_DIR);
-	const bridge = await connectBridge(resolved.options.mcp.value, DEFAULT_PROFILE_DIR);
-	// If anything below fails (the storage already owned, the endpoint taken), the
-	// MCP connections must not keep this half-started process alive.
-	try {
-		return await serveStorage(resolved, bridge, agents, skills);
-	} catch (error) {
-		await closeMcpConnections(bridge.connections).catch(() => {});
-		throw error;
-	}
+	return await serveStorage(resolved, agents, skills);
 }
 
 /** How long a permission request may sit unanswered before the guard treats it as rejected. */
 const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
 
-async function serveStorage(resolved, bridge, agents, skills) {
+async function serveStorage(resolved, agents, skills) {
+	// The harness opens WITHOUT the MCP extension: the endpoint must answer while
+	// the bridge still connects. The extension is installed into the registry once
+	// the bridge has settled (below) — the registry is built for exactly that
+	// ("the registry may keep changing while the Harness runs") — and the deferral
+	// filter, armed by the waiting methods and by armAllMcpFilters, is what keeps
+	// the late tools out of every prompt.
 	const extensions = [
 		makeGuardExtension({ enabled: resolved.options.guard.value, consultPermission }),
 		makeSkillsExtension(skills),
 	];
-	if (bridge.extension) extensions.push(bridge.extension);
-	const { harness, storage } = await openHarness({ db: SHARED_DB, extensions });
+	const { harness, storage, registry } = await openHarness({ db: SHARED_DB, extensions });
+
+	// The MCP bridge connects BEHIND the endpoint: it is started once `listen` has
+	// succeeded (further down), and until then `bridgeReady` is already resolved
+	// with NO_BRIDGE. `bridge` mirrors the settled bridge for shutdown; the methods
+	// that resolve an agent go through bridgeForAgent, never through `bridge`
+	// directly, so a conversation's agent is never resolved against a
+	// half-connected bridge.
+	let bridge = NO_BRIDGE;
+	let bridgeReady = Promise.resolve(NO_BRIDGE);
+
+	/**
+	 * The bounded wait every agent-resolving method holds before it touches a
+	 * conversation's agent. The deferral filter is computed from the CONNECTED
+	 * tools' names, so creating or configuring an agent before the bridge settles
+	 * would leave the conversation offering every MCP tool unfiltered — the ~238
+	 * KiB of schemas the deferral exists to prevent. The bound is the bridge's own
+	 * (mcpBridgeWaitMs); if it passes without the bridge, say so and refuse rather
+	 * than proceed into that case. `ping`, `sessions`, `subscribe`, `unsubscribe`,
+	 * `allow`, `cancel`, `permissions.*` and `shutdown` never come here: nothing a
+	 * client does to CHECK on the agent waits for eleven network connections.
+	 */
+	async function bridgeForAgent() {
+		if (!resolved.options.mcp.value) return NO_BRIDGE; // nothing to wait for, nothing to filter
+		const waitMs = mcpBridgeWaitMs(DEFAULT_PROFILE_DIR);
+		let timer;
+		const timeout = new Promise((_, reject) => {
+			timer = setTimeout(() => reject(new Error(
+				`the MCP bridge did not settle within ${Math.round(waitMs / 1000)}s — refusing to resolve a conversation's agent without the deferral filter (every MCP tool would be offered unfiltered). See the [mcp] lines on the daemon's terminal.`,
+			)), waitMs);
+			timer.unref();
+		});
+		try {
+			return await Promise.race([bridgeReady, timeout]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 
 	const endpoint = daemonEndpoint();
 	const subscribers = new Map(); // LineStream → Set<conversationId> it subscribed to
@@ -151,8 +185,12 @@ async function serveStorage(resolved, bridge, agents, skills) {
 				const conversation = await requireConversation(harness, params.conversationId);
 				return { conversationId: conversation.id };
 			}
+			// A NEW conversation needs the deferral filter, so it waits for the bridge
+			// (bounded — see bridgeForAgent). An existing one does not: nothing about
+			// its agent is resolved here, and armMcpFilter covers it at `run` time.
+			const settled = await bridgeForAgent();
 			const agent = agentFor(resolved, agents, params);
-			if (bridge.filter) agent.tools = bridge.filter; // the MCP deferral, same as a direct `run`
+			if (settled.filter) agent.tools = settled.filter; // the MCP deferral, same as a direct `run`
 			const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent }, CTX);
 			return { conversationId: conversation.id };
 		},
@@ -162,7 +200,9 @@ async function serveStorage(resolved, bridge, agents, skills) {
 			const conversation = await requireConversation(harness, params.conversationId);
 			const change = agentFor(resolved, agents, params);
 			if (change.model || change.instructions) await conversation.configure(change, CTX);
-			await armMcpFilter(harness, conversation, bridge, CTX);
+			// The deferral needs the CONNECTED tools' names: wait for the bridge (bounded).
+			const settledBridge = await bridgeForAgent();
+			await armMcpFilter(harness, conversation, settledBridge, CTX);
 			const submission = await conversation.submit({ type: "input", content: String(params.prompt ?? "") }, CTX);
 			const settled = await submission.wait(CTX);
 			const answer = await answerText(conversation, settled, CTX);
@@ -175,8 +215,9 @@ async function serveStorage(resolved, bridge, agents, skills) {
 			const source = await requireConversation(harness, params.conversationId);
 			const newest = (await source.entries({}, 1, undefined, CTX)).items[0];
 			if (!newest) throw new Error(`Conversation ${source.id} has no entries to fork from.`);
+			const settledBridge = await bridgeForAgent(); // the fork's agent needs the deferral filter
 			const agent = agentFor(resolved, agents, params);
-			if (bridge.filter) agent.tools = bridge.filter;
+			if (settledBridge.filter) agent.tools = settledBridge.filter;
 			const forkOptions = { ownership: { kind: "ownerless" } };
 			if (Object.keys(agent).length > 0) forkOptions.agent = agent;
 			const fork = await source.fork(newest.id, forkOptions, CTX);
@@ -323,6 +364,29 @@ async function serveStorage(resolved, bridge, agents, skills) {
 	process.on("SIGINT", () => {
 		methods.shutdown().catch(() => process.exit(0));
 	});
+
+	// The endpoint is up and served; only now does the bridge start connecting.
+	// When it settles, every conversation created while it was connecting and
+	// carrying no tools filter of its own is armed with the deferral filter BEFORE
+	// the extension is installed — so no conversation is ever left offering the
+	// MCP tools unfiltered, whatever path created it.
+	bridgeReady = (async () => {
+		if (!resolved.options.mcp.value) return NO_BRIDGE; // --no-mcp: nothing to wait for, nothing to filter
+		try {
+			const settled = await connectBridge(resolved.options.mcp.value, DEFAULT_PROFILE_DIR);
+			const armed = await armAllMcpFilters(harness, storage, settled, CTX);
+			if (armed > 0) console.error(`[mcp] deferral filter armed on ${armed} conversation(s) that had none of their own`);
+			if (settled.extension) registry.install(settled.extension);
+			bridge = settled;
+			return settled;
+		} catch (error) {
+			// No extension was installed, so no conversation can see an MCP tool:
+			// continuing without the bridge is safe — said loudly rather than silently.
+			console.error(`[mcp] the bridge failed (${error?.message ?? error}) — continuing without MCP tools.`);
+			bridge = NO_BRIDGE;
+			return NO_BRIDGE;
+		}
+	})();
 
 	return { endpoint, server, harness };
 }
