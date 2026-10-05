@@ -349,9 +349,9 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		});
 
 		const piRows: StatusItem[] = [
-			// The host is the answer to "where does pi run": internal — inside this PiCode — or
-			// external, the machine's own installation. Which one it is, plainly; nothing about
-			// whose pi it is.
+			// Which host runs the agent — always pi. There are two: the one inside PiCode, and the
+			// machine's own installation when there is one. The row says which, in the word the owner
+			// uses: the host, never "pi internal/external".
 			new StatusItem('Host', { description: d.runtime === 'external' ? 'External' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),

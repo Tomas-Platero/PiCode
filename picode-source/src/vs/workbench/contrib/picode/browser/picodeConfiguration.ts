@@ -207,7 +207,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.mcp', "Whether the durable agent (start it with 'PiCode: Start Durable Agent' or from the status panel's Durable section) connects the MCP servers of PiCode's internal pi profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
+			markdownDescription: localize('picode.durable.mcp', "Whether the durable agent (start it with 'PiCode: Start Durable Agent' or from the status panel's Durable section) connects the MCP servers of the host's profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
 		},
 		[PICODE_DURABLE_GUARD_SETTING]: {
 			type: 'boolean',
@@ -219,13 +219,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'string',
 			default: 'omni/auto',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.model', "Which model the durable agent runs on, written as provider/model (for example omni/auto). The provider has to be one PiCode's internal pi profile knows. The agent's --model flag wins over this setting."),
+			markdownDescription: localize('picode.durable.model', "Which model the durable agent runs on, written as provider/model (for example omni/auto). The provider has to be one the host's profile knows. The agent's --model flag wins over this setting."),
 		},
 		[PICODE_DURABLE_AGENT_SETTING]: {
 			type: 'string',
 			default: '',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.agent', "Which profile agent the durable agent runs as: the name of an agents/<name>.md file in PiCode's internal pi profile, whose instructions the conversation then follows. Leave it empty for no agent. The agent's --agent flag wins over this setting."),
+			markdownDescription: localize('picode.durable.agent', "Which profile agent the durable agent runs as: the name of an agents/<name>.md file in the host's profile, whose instructions the conversation then follows. Leave it empty for no agent. The agent's --agent flag wins over this setting."),
 		},
 	},
 });
