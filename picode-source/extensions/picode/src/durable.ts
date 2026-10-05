@@ -290,13 +290,29 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 		}
 		return;
 	}
+	// The daemon's own words go to a file rather than nowhere: when it does not come up, the reason
+	// is in there, and telling someone to "run it by hand to see why" is only fair if the reason was
+	// written down first. It lands in the daemon's own `.data/`, which is ignored. (`cliFile` is the
+	// checked path; `folder` is only its narrowed-or-not twin, so the file comes from the file.)
+	const logFile = path.join(path.dirname(cliFile), '.data', 'daemon.log');
+	let logFd: number | undefined;
+	try {
+		fs.mkdirSync(path.dirname(logFile), { recursive: true });
+		logFd = fs.openSync(logFile, 'a');
+	} catch {
+		// A folder that cannot hold a log is not a reason to refuse to start the agent.
+	}
 	const child = spawn('node', [cliFile, 'serve'], {
 		cwd: folder,
 		detached: true,
-		stdio: 'ignore',
+		stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
 		windowsHide: true,
 		env: { ...process.env, PI_AGENT_PROFILE: paths.agentProfile, PICODE_USER_SETTINGS: paths.userSettingsFile },
 	});
+	if (logFd !== undefined) {
+		// The child holds its own copy of the descriptor; this process has no reason to keep it open.
+		fs.closeSync(logFd);
+	}
 	child.unref();
 	const endpoint = current.endpoint;
 	for (let attempt = 0; attempt < 20; attempt++) {
@@ -314,7 +330,7 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 		}
 	}
 	void vscode.window.showWarningMessage(
-		`PiCode: the durable agent was started but did not answer at ${endpoint} within 10 s — run "node cli.js serve" in ${folder} by hand to see why.`,
+		`PiCode: the durable agent was started but did not answer at ${endpoint} within 10 s — its own log is ${logFile}.`,
 	);
 }
 
