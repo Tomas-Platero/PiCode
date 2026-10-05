@@ -87,11 +87,15 @@ function mcpRowDescription(server: McpServerSwitch): { description: string; icon
 }
 
 /**
- * The children of the MCP row: one per server, and the row itself is the switch.
+ * The children of the MCP row: one per server, and the row itself is the action.
  *
- * A click runs the connector's `picode.mcp.toggleServer`, which flips pi's `enabled` key in the file
- * that holds the entry. There are no children at all when there is nothing to list, so the row does not
- * offer an arrow that opens onto nothing.
+ * A server pi can use is its switch: the click runs `picode.mcp.toggleServer`, which flips pi's
+ * `enabled` key in the file that holds the entry. A server that **needs sign-in** is not: its
+ * click runs `picode.mcp.signInServer` instead, which starts pi's own `mcp login` pointed at
+ * PiCode's profile — the click that fixes the server must not be the click that switches it
+ * off. Switching it off stays reachable through the MCP page's Disable button (`extension.ts`
+ * keeps `picode.mcp.toggleServer` for it). There are no children at all when there is nothing
+ * to list, so the row does not offer an arrow that opens onto nothing.
  */
 function mcpServerRows(servers: readonly McpServerSwitch[]): { children?: StatusItem[] } {
 	if (servers.length === 0) {
@@ -104,14 +108,14 @@ function mcpServerRows(servers: readonly McpServerSwitch[]): { children?: Status
 			return new StatusItem(server.name, {
 				description: row.description,
 				icon: new vscode.ThemeIcon(row.icon),
-				// The one thing a sign-in row must say first: where the fix lives. Nothing in the
-				// editor signs in to pi's profile yet, so the row points at pi's own `/mcp`.
+				// The one thing a sign-in row must say first: that the click is the fix, and where
+				// the credential it produces lands.
 				tooltip: needsSignIn
-					? 'pi has no sign-in stored for this server, so pi cannot use it. Sign in with pi\'s own "mcp login <server>", pointed at PiCode\'s profile.'
+					? 'pi has no sign-in stored for this server, so pi cannot use it. Click to sign in: a browser window opens, and the credential is stored in PiCode\'s own profile.'
 					: undefined,
 				command: {
-					command: 'picode.mcp.toggleServer',
-					title: server.on ? 'Turn off' : 'Turn on',
+					command: needsSignIn ? 'picode.mcp.signInServer' : 'picode.mcp.toggleServer',
+					title: needsSignIn ? 'Sign in' : server.on ? 'Turn off' : 'Turn on',
 					arguments: [server.name],
 				},
 			});
@@ -345,7 +349,10 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		});
 
 		const piRows: StatusItem[] = [
-			new StatusItem('Which pi', { description: d.runtime === 'external' ? 'Your own pi' : "PiCode's own pi", icon: new vscode.ThemeIcon('circuit-board') }),
+			// The host is the answer to "where does pi run": internal — inside this PiCode — or
+			// external, the machine's own installation. Which one it is, plainly; nothing about
+			// whose pi it is.
+			new StatusItem('Host', { description: d.runtime === 'external' ? 'External' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
 			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
 			// The servers live in pi's own profile, which is where this counts them — not the project's

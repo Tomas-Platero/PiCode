@@ -423,3 +423,52 @@ export function mcpServerStates(
 		signIn: signInState(name, entry, authFile, now),
 	}));
 }
+
+/* ------------------------------------------------------------------ *
+ * Starting pi's own `mcp login` from the editor
+ * ------------------------------------------------------------------ */
+
+/**
+ * The editor does not sign in itself: it runs pi's own `mcp login <server>` as a child process.
+ *
+ * The reason is where the credential lands. pi's OAuth store writes
+ * `join(getAgentDir(), 'mcp-auth.json')` (`extensions/mcp/oauth.js:85`), and `getAgentDir()`
+ * is `process.env.PI_CODING_AGENT_DIR` when the environment carries it, `~/.pi/agent` when it
+ * does not (`dist/config.js:491`). A sign-in run without that variable — the owner's terminal,
+ * say — writes the **external** pi's file, which PiCode never reads: the credential exists, but
+ * PiCode's profile still holds zero keys. Running pi's own CLI with the variable pointed at
+ * PiCode's own profile makes pi itself write `<app>/data/pi-agent/mcp-auth.json` — the same
+ * code path, the same key spelling, the same file the rows above read.
+ *
+ * These three functions are the pure part; `extension.ts` owns the spawn and the messages.
+ */
+
+/**
+ * The CLI entry of the install an SDK entry came from.
+ *
+ * pi ships `dist/index.js` (the SDK) and `dist/cli.js` (the command line) side by side, so the
+ * CLI is the loaded SDK entry with its file name swapped — the same derivation `onboarding.ts`
+ * makes to version-check the machine's pi. A same-install CLI is the one that agrees with the
+ * pi the editor talks to.
+ */
+export function mcpCliEntryOf(sdkEntry: string): string {
+	return sdkEntry.replace(/index\.js$/, 'cli.js');
+}
+
+/**
+ * The environment one `mcp login` child runs in: a copy of the caller's environment with the
+ * two variables the sign-in needs. `PI_CODING_AGENT_DIR` is pi's own profile switch — the
+ * reason the credential lands in PiCode's profile. `ELECTRON_RUN_AS_NODE: '1'` runs the
+ * editor's own binary as plain Node, the way every other pi spawn in this connector does.
+ */
+export function mcpLoginEnv(
+	profileDir: string,
+	base: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+	return { ...base, PI_CODING_AGENT_DIR: profileDir, ELECTRON_RUN_AS_NODE: '1' };
+}
+
+/** The arguments of pi's own login command for one server, name trimmed. */
+export function mcpLoginArgs(serverName: string): string[] {
+	return ['mcp', 'login', serverName.trim()];
+}

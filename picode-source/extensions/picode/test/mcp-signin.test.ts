@@ -206,3 +206,44 @@ test('every declared server keeps its row, in the order the file holds it', () =
 		['vercel', true],
 	]);
 });
+
+/* ------------------------------------------------------------------ *
+ * Starting pi's own `mcp login` from the editor
+ * ------------------------------------------------------------------ */
+
+/*
+ * The sign-in itself is pi's own `mcp login`, run as a child process: the credential is
+ * written by pi's own OAuth store (`extensions/mcp/oauth.js`, `join(getAgentDir(),
+ * "mcp-auth.json")`), and `getAgentDir()` (`dist/config.js:491`) is `PI_CODING_AGENT_DIR`
+ * when the environment carries it. Pointing that variable at PiCode's own profile is what
+ * makes the credential land — and stay — in `<app>/data/pi-agent/mcp-auth.json`.
+ */
+
+import { mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv } from '../src/mcp-provider.ts';
+
+test('the login arguments are pi\'s own `mcp login <server>`', () => {
+	assert.deepStrictEqual(mcpLoginArgs('vercel'), ['mcp', 'login', 'vercel']);
+});
+
+test('the login arguments trim the server name', () => {
+	assert.deepStrictEqual(mcpLoginArgs(' sentry '), ['mcp', 'login', 'sentry']);
+});
+
+test('the login environment points pi\'s profile at PiCode\'s own and leaves the rest alone', () => {
+	const base = { PATH: 'C:/tools', ELECTRON_RUN_AS_NODE: undefined };
+	const env = mcpLoginEnv('D:/app/data/pi-agent', base);
+
+	assert.strictEqual(env['PI_CODING_AGENT_DIR'], 'D:/app/data/pi-agent');
+	// The editor's binary is Electron: pi's CLI runs in Node mode, as every other spawn here does.
+	assert.strictEqual(env['ELECTRON_RUN_AS_NODE'], '1');
+	assert.strictEqual(env['PATH'], 'C:/tools');
+	// The caller's environment is not mutated.
+	assert.strictEqual(base['PI_CODING_AGENT_DIR'], undefined);
+});
+
+test('the CLI entry comes from the same install as the SDK entry', () => {
+	assert.strictEqual(
+		mcpCliEntryOf('D:/app/resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent/dist/index.js'),
+		'D:/app/resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js',
+	);
+});

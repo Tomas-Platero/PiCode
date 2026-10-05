@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -12,7 +13,7 @@ import { declarationsFromSetting, projectDeclaration } from './declarations';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
-import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
+import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
@@ -32,7 +33,7 @@ import {
 	type PiPackageRow,
 } from './packages-manage';
 import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
-import { loadPiSdk } from './piSdk';
+import { loadPiSdk, sdkCandidates } from './piSdk';
 import { externalProfileDir } from './profile-import';
 import {
 	CONNECT_PROVIDER_COMMAND,
@@ -613,6 +614,19 @@ export const REMOVE_MCP_SERVER_COMMAND = 'picode.mcp.removeServer';
  */
 export const TOGGLE_MCP_SERVER_COMMAND = 'picode.mcp.toggleServer';
 
+/**
+ * The MCP sign-in, run from the status panel's "needs sign-in" row and the MCP page's Sign in
+ * button: it starts pi's own `mcp login <server>` pointed at PiCode's own profile, so the
+ * credential lands in `<app>/data/pi-agent/mcp-auth.json` — the file the sign-in rows read.
+ *
+ * The click that fixes a server is deliberately **not** the switch: a row that needs sign-in
+ * signs in, and switching it off stays on the MCP page through {@link TOGGLE_MCP_SERVER_COMMAND}.
+ */
+export const SIGN_IN_MCP_SERVER_COMMAND = 'picode.mcp.signInServer';
+
+/** How long the editor lets pi's login wait for the browser before the child is stopped. pi's own default is 300 s (`mcp login --timeout`); the slack is pi's own shutdown. */
+const MCP_LOGIN_TIMEOUT_MS = 330_000;
+
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
 
@@ -1142,6 +1156,52 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		void vscode.window.showErrorMessage(`PiCode: "${server}" is not one of pi's servers any more.`);
 		return undefined;
+	}));
+
+	// The MCP sign-in, from the status panel's "needs sign-in" row and the MCP page's Sign in
+	// button: pi's own `mcp login <server>` as a child process. The child carries
+	// `PI_CODING_AGENT_DIR` pointed at **PiCode's own profile** (`mcp-provider.ts`), which is
+	// what makes pi's OAuth store write the credential into `data/pi-agent/mcp-auth.json` — the
+	// file the sign-in rows read, and the one that has to survive the editor closing. A sign-in
+	// run without that variable (a bare terminal, say) writes the machine's own pi file instead,
+	// which is the relogin-every-restart the profile's empty file was measuring.
+	//
+	// The browser step is the owner's, and by design: the child opens it itself, and pi waits
+	// for the callback exactly as it does from a terminal. This command returns at once; the
+	// completion messages below are what tells the owner how it ended.
+	disposables.push(vscode.commands.registerCommand(SIGN_IN_MCP_SERVER_COMMAND, (name?: string): void => {
+		const server = (name ?? '').trim();
+		if (server.length === 0) {
+			return;
+		}
+		// PiCode's own profile only, whatever runtime is in force: this is where PiCode's pi
+		// reads its credentials, and the external pi's directory is never written to.
+		const profile = profileDirectory(requireProfileUri());
+		const entry = sdkCandidates(distributionRoot(requireProfileUri())).map(mcpCliEntryOf).find(file => fs.existsSync(file));
+		if (entry === undefined) {
+			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in — pi's own command line was not found in this installation.`);
+			return;
+		}
+		void vscode.window.showInformationMessage(`PiCode: signing in to "${server}" — complete it in the browser window that just opens.`);
+		execFile(process.execPath, [entry, ...mcpLoginArgs(server)], {
+			// The workspace's first folder, so pi resolves the same project file the sessions do;
+			// the profile's servers are read whatever the folder is.
+			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? profile,
+			env: mcpLoginEnv(profile, process.env),
+			windowsHide: true,
+			timeout: MCP_LOGIN_TIMEOUT_MS,
+		}, (error, _stdout, stderr) => {
+			if (error === null) {
+				void vscode.window.showInformationMessage(`PiCode: "${server}" is signed in. The credential is stored in PiCode's own profile and survives restarts.`);
+				return;
+			}
+			// pi's last stderr line is the sentence that matters (a cancelled sign-in, a server
+			// that does not use OAuth); the rest is its log, which is not for the dialog.
+			const reason = typeof stderr === 'string' && stderr.trim().length > 0
+				? stderr.trim().split('\n').pop()?.trim() ?? error.message
+				: error.message;
+			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in (${reason}).`);
+		});
 	}));
 
 	return disposables;

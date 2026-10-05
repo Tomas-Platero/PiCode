@@ -30,8 +30,8 @@ import { PICODE_MCP_SERVERS_SETTING } from './picodeConfiguration.js';
  * start it. A state the connector could not read is shown as unknown, never as `On`.
  *
  * Every action hands over to the connector's existing commands, which are the form:
- * `picode.mcp.addServer`, `editServer`, `removeServer` and `toggleServer`. No form is
- * written here, and a server's token is never shown.
+ * `picode.mcp.addServer`, `editServer`, `removeServer`, `toggleServer` and `signInServer`. No
+ * form is written here, and a server's token is never shown.
  */
 
 /** One server as the `picode.mcp.servers` store holds it. The token (`key`) is never shown. */
@@ -61,6 +61,7 @@ const ADD_SERVER_COMMAND = 'picode.mcp.addServer';
 const EDIT_SERVER_COMMAND = 'picode.mcp.editServer';
 const REMOVE_SERVER_COMMAND = 'picode.mcp.removeServer';
 const TOGGLE_SERVER_COMMAND = 'picode.mcp.toggleServer';
+const SIGN_IN_SERVER_COMMAND = 'picode.mcp.signInServer';
 
 /** One row of the table: the store's facts plus the state pi reports. */
 interface IServerRow {
@@ -243,11 +244,11 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 			state.textContent = localize('picodeMcpSectionOff', "Off");
 		} else if (row.signIn === 'needed') {
 			// The truth the page used to hide behind an `On`: the entry is enabled, but pi has
-			// no credential for it, so it cannot be used. The fix is pi's own sign-in, which
-			// nothing in the editor performs — so the row says where the fix lives.
+			// no credential for it, so it cannot be used. The fix is this page's own Sign in
+			// button, which starts pi's own sign-in pointed at PiCode's profile.
 			state.textContent = localize('picodeMcpSectionNeedsSignIn', "Needs sign-in");
 			state.title = localize('picodeMcpSectionNeedsSignInTooltip',
-				"pi has no sign-in stored for this server, so pi cannot use it. Sign in with pi's own \"mcp login <server>\", pointed at PiCode's profile, or Edit to give the server its own header.");
+				"pi has no sign-in stored for this server, so pi cannot use it. Use Sign in below: a browser window opens, and the credential is stored in PiCode's own profile.");
 		} else if (row.signIn === 'unknown') {
 			state.textContent = localize('picodeMcpSectionSignInUnknown', "On · sign-in unknown");
 			state.title = localize('picodeMcpSectionSignInUnknownTooltip',
@@ -258,6 +259,17 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 
 		const actions = DOM.append(rowElement, $('.picode-mcp-row-actions'));
 		const disposables = this.rowDisposables;
+
+		// The sign-in is the first action of a row that needs one, because fixing the server is
+		// what the owner came here to do. It runs pi's own sign-in pointed at PiCode's profile,
+		// so the credential lands where pi reads it — and stays there across restarts.
+		if (row.on !== false && row.signIn === 'needed') {
+			const signInButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+			signInButton.label = localize('picodeMcpSectionSignIn', "Sign in");
+			signInButton.setTitle(localize('picodeMcpSectionSignInTooltip',
+				"Start pi's sign-in for this server: a browser window opens, and the credential is stored in PiCode's own profile."));
+			disposables.add(signInButton.onDidClick(() => { void this.runCommand(SIGN_IN_SERVER_COMMAND, row.name); }));
+		}
 
 		const editButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
 		editButton.label = localize('picodeMcpSectionEdit', "Edit");
