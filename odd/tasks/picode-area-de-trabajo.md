@@ -69,3 +69,27 @@ Dos alcances, no uno en lugar del otro:
 - Cambiar la SDK para aceptar varios directorios.
 - Un selector de carpeta dentro del modo carpeta más allá de la primera (se puede añadir después si
   lo pides).
+
+---
+
+## 2026-10-05 · hecho, en la rama `experimental`
+
+El objetivo de este documento —que pi trabaje por **área de trabajo**, no solo por proyecto— está
+implementado y verificado (`d2ce7c68`):
+
+- En modo **workspace** la sesión del chat **es del área**: se archiva con identidad propia
+  (`--area-<nombre>-<hash>--`) en vez de quedar bajo la primera carpeta como si fuera suya.
+- Su **contexto nombra todas las raíces** (nombre y ruta del editor) con una **regla de
+  direcciones**: emparejar el proyecto que se nombra con su raíz, dirigir cada fichero por su ruta
+  bajo la raíz correcta, y lanzar un comando de otra raíz **con esa raíz como destino**. El límite
+  real va escrito: **un shell tiene un directorio a la vez**, y el contexto dice cuál es el suyo.
+- La lista de **sesiones va agrupada por proyecto** —el área primero, luego una por carpeta, con
+  tope por grupo— en vez de la lista sin fondo que había.
+- El modo **folder no cambia**, y lo cubren las pruebas que ya existían.
+
+De seguir las raíces salió además un fallo de esa misma mañana: la comprobación de carpetas solo
+miraba las **anteriores** a la primera existente, de modo que una raíz movida podía figurar como
+presente. Ahora se comprueban todas.
+
+**Lo que queda**: verlo con los ojos del dueño en un editor abierto — que el nombre del grupo se
+lea bien y que el modelo use de verdad la regla de direcciones en conversaciones reales.

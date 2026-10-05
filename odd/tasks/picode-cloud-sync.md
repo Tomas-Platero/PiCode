@@ -454,3 +454,30 @@ Cloud Functions descartadas por requerir plan Blaze).
   Nota: una verificación intermedia marcó `[AutoSync] Disabled` porque la app arrancó 5 s antes de
   que `restore-profile.mjs` terminase de copiar `data/` (carrera de reloj, no un fallo del sync);
   repetida sin build en vuelo, arrancó `Enabled` y sincronizó.
+
+---
+
+## 2026-10-05 · el manejador del callback estaba muerto
+
+El «no me funciona el sync, me abre la web pero no conecta y el log no dice nada» tenía una causa
+que se ve en el registro de Windows, no en el código:
+
+```
+HKCU\Software\Classes\picode\shell\open\command
+  → "C:\Users\tapla\...\Programs\PiCode\PiCode.exe" --open-url -- "%1"    ← carpeta que ya no existe
+```
+
+El navegador llamaba a `picode:/auth/callback?…`, Windows lanzaba **un ejecutable inexistente**, y
+por eso el editor no registraba nada: no fallaba la sincronización, **no había a quién llamar**.
+Debajo había una razón estructural: `electronUrlListener.ts` **se saltaba el registro para
+ejecuciones desde carpeta**, así que una build portable nunca podía reclamar el esquema.
+
+Arreglado (`cbd72bad`): el editor **se registra en cada arranque** (portable incluida), **repara una
+entrada muerta** al hacerlo y **lo registra en el log** — con la ruta exacta o un aviso si falla. Y
+siguiendo el rastro aparecieron **dos bugs más**: el código del callback se **decodificaba dos veces**
+(`URI.parse` + `URLSearchParams`) y el emparejador rechazaba la forma que la web envía
+(`picode:/`, una barra). Los dos con sus pruebas. La espera ya no es muda: dice que espera, cuándo
+llega, y a los cinco minutos **por qué no llegó y cómo arreglarlo**.
+
+**Lo que queda**: que el dueño abra la build una vez y vea en el log
+`Registered the picode:// protocol handler: …` antes de reintentar.
