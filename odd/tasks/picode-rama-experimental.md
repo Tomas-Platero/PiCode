@@ -232,3 +232,53 @@ es dueña de él: al pulsar «Backup and Sync Settings» el sistema entrega la U
 —por eso abría la beta— y al desinstalarla **no queda nadie escuchando** el esquema, de ahí que no
 conecte y que no haya nada en el log: no falla la sincronización, falla que no hay manejador. Una
 build portable necesita o registrar el esquema para sí misma o servir el flujo por otra vía.
+
+### 2026-10-05 · jornada larga: de «pi-durable probado» a «todo funcionando en el editor»
+
+Todo lo de abajo está **hecho y verificado ejecutando**, no leyendo. Los commits están en la rama.
+
+**El editor ve y usa el agente**
+
+| | Qué |
+| --- | --- |
+| `d424e5dc` | Sección **Durable** en el panel + cuatro comandos (arrancar, parar, listar, enviar) |
+| `8474f4e3` | **pi + durable demostrado**: se mata pi con `taskkill /F /T` a mitad y el daemon termina el trabajo; un pi nuevo lo lee |
+| `e1663a49` | El daemon **muere con PiCode** por un **latido** (un tubo, no un pid). Medido: 465 ms ordenado, 229 ms si te matan, 96 ms al cerrar el tubo. Y pararse no pierde nada |
+| `8fac64d0` | **ACP v1** sobre el daemon: `initialize`, `session/new`, `load`, `list`, `prompt`, `cancel` y **permisos** — el guard determinista deja de bloquear en silencio y **pregunta al cliente** |
+| `c1730982` | **Vuelven las dos superficies** que se llevó gentle: tarjetas de subagente y lista de trabajos, con la identidad de durable dentro |
+
+**Los MCP del chat, de rotos a útiles**
+
+| | Qué |
+| --- | --- |
+| `ce5fafa4` | Puente de MCP: 8 servidores, 174 tools. Declararlas costaban **238,7 KiB** por petición; **diferidas, 1,1 KiB** |
+| `68927b96` | Las credenciales se leen **solo del perfil interno**; el pi externo no se lee (precio: `sentry` fuera) |
+| `95bded14` | **El chat no cargaba las builtin de pi**: una línea nuestra las sustituía en vez de fusionarlas. Ahora **52 herramientas MCP** conectan |
+| `98cfad9c` | El estado dice la verdad: **On / Needs sign-in / Off**, y `github` sigue On porque se autentica solo |
+| `f03fb127` | **Las credenciales se iban al pi externo**: pi escribe en `~/.pi/agent` cuando nadie le dice otra cosa (`config.js:491`). Ahora el editor lanza su `mcp login` con el perfil de PiCode |
+| `7d1fe848` | **`spawn cmd.exe ENOENT`**: pi lanza los MCP con el cwd de la sesión, y la primera carpeta del workspace (`guildboard`) **no existe**. Una carpeta que falta ya no puede tumbar los servidores, y el error nombra **el directorio**, no el comando |
+
+**Chat y sesiones**
+
+| | Qué |
+| --- | --- |
+| `d5603683` | **`/mcp` llega al chat** (el mismo bug de las builtin, en la sesión de descubrimiento). Y **las sesiones guardadas no se listaban**: el chat archivaba en la raíz de `sessions/` y el listado solo mira carpetas por proyecto |
+| `d2ce7c68` | **Sesiones del área**: en modo workspace la sesión es del área (archivado propio), el contexto nombra **todas las raíces** con su regla de direcciones, y la lista va **agrupada por proyecto** (8 de cada uno) |
+
+**Y lo que sostiene todo**
+
+| | Qué |
+| --- | --- |
+| `2ac4e68d` | **gentle fuera del producto** (28 ficheros, +171/−2116) y el **import deja sus paquetes atrás** |
+| `4ddcea9d` | El import **no arrastra** `gentle-pi` ni `gentle-engram`, ni deja sus declaraciones |
+| `28166df4` | **Ninguna instalación de paquetes abre ventana**: era pi instalando uno por paquete con `stdio:"inherit"` y sin `windowsHide`. Y los nombres de paquete pasan por **lista blanca** antes del shell |
+| `efc7f662` | **El empaquetado ya no borra `data/`**: lo aparta, empaqueta y lo devuelve. Con un fichero bloqueado **para limpio sin borrar nada**, y una build muerta se recupera sola |
+| `cbd72bad` | **El sync tenía un manejador muerto** en el registro (una beta desinstalada) y una build desde carpeta no registraba el esquema. Ahora se registra, repara entradas muertas y **no se calla** |
+| `a1af1d55` | **pi se queda en 1.0.2**: el árbol de 1.0.3 no instala — su `pi-telemetry@^1.0.2` resuelve a 1.0.4, anunciado en el registro y con el tarball en **404** |
+
+**Lo que NO está, y por qué**
+
+- ⌨️ Las opciones de `/mcp` **por pulsación**: la API de comandos del chat no tiene enganche por tecla. Está escrito en `commands.ts`, con la pista estática como lo más cerca que se puede llegar.
+- 🖼️ El icono de la barra de tareas: **no estaba roto** — los iconos llegan y el `.exe` lleva el de PiCode; lo que falla es la **caché de iconos de Windows**.
+- 🪟 La carpeta `PiCode-Win32-x64 - experimental` quedó a medias con un handle vivo; se limpia con un reinicio.
+- 🔄 El **sync** necesita una comprobación del dueño: abrir la build una vez y ver `Registered the picode:// protocol handler: …` en el log.
