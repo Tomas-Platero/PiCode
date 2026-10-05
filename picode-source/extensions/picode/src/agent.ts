@@ -10,7 +10,8 @@ import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope,
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
-import { resolveSessionCwd } from './session-cwd';
+import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
+import { areaContextBlock } from './workspace-area';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
@@ -274,23 +275,35 @@ function editorContext(folder: string | undefined): EditorContext {
 /**
  * The context block the project scope asks for.
  *
- * One folder is the block `context.ts` already writes. In workspace mode the area's
- * remaining folders are appended to that same block: pi runs in the first one, but the
- * area is what the prompt is about, and a context naming only the base folder would
- * hide the rest of it from pi.
+ * One folder is the block `context.ts` already writes, and folder mode is exactly that.
+ * In workspace mode the session is a session of the **area**, so the folder line is
+ * replaced by the area block (`workspace-area.ts`): every root named the way the owner
+ * names it, with the rule for matching a named project to its root, addressing a file
+ * under the right root, and the honest limit — one working directory per shell. The
+ * file and selection still travel through `context.ts`; only the folder line yields,
+ * because the roots list says more and says it about every folder at once. A folder
+ * that is not on disk is named as such — the session must know `guildboard` is not
+ * there rather than discover it with a failed command.
  */
-function contextBlockFor(scope: PiProjectScope): string | undefined {
-	const base = contextBlock(editorContext(scope.cwd));
-	if (scope.mode !== 'workspace') {
+function contextBlockFor(scope: PiProjectScope, picked: SessionCwd): string | undefined {
+	if (scope.mode !== 'workspace' || scope.area === undefined) {
+		return contextBlock(editorContext(picked.cwd));
+	}
+	// Every root's on-disk state is checked on its own (see `missingDirectories`): a folder
+	// the editor keeps after a move or delete sits wherever it sits in the order, and the
+	// context must say it is gone rather than let a command discover it.
+	const missing = missingDirectories(scope.folders);
+	const roots = scope.roots.map(root => ({
+		name: root.name,
+		path: root.path,
+		onDisk: !missing.includes(root.path),
+	}));
+	const base = contextBlock(editorContext(undefined));
+	const area = areaContextBlock(roots, picked.cwd);
+	if (area === undefined) {
 		return base;
 	}
-	const extra = scope.folders.slice(1).map(folder => `- Workspace folder: ${folder}`).join('\n');
-	if (extra.length === 0) {
-		return base;
-	}
-	return base === undefined
-		? `Context from the editor, as it is right now:\n\n${extra}\n`
-		: `${base}${extra}\n`;
+	return base === undefined ? area : `${base}\n${area}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -983,11 +996,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// when it sits next to the durable folder (`durable.ts` resolves it from the same
 			// setting). Resolved per request, so a moved durable folder rebuilds the session.
 			const bridgePath = durableBridgeExtensionPath();
-			// Rebuilt when the project scope changes — the working directory or the project
-			// mode — when the editor's MCP servers do, when the chosen pi's profile
-			// changes, which is the same conversation pointed at a different pi, and when the
-			// durable bridge the session should load does.
-			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}`;
+			// Rebuilt when the project scope changes — the working directory, the project
+			// mode, or the area identity the session files under — when the editor's MCP
+			// servers do, when the chosen pi's profile changes, which is the same
+			// conversation pointed at a different pi, and when the durable bridge the
+			// session should load does.
+			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
@@ -1031,16 +1045,21 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
 					// pi's own session home: the per-project folder under the profile's `sessions/`,
 					// the same shape `getDefaultSessionDirPath` builds (replicated by `piProjectSlug`,
-					// which the Sessions listing matches against). The override used to be the bare
-					// `sessions/` folder, and pi files a custom session directory **directly in it** —
-					// no project folder — so every conversation the chat saved landed where the
-					// listing never walks: the owner's recent sessions were invisible in Sessions, and
-					// clicking a saved one could only ever replay the CLI's older transcripts. Filing
-					// under the project slug puts the chat's sessions where pi's own live, and the
-					// listing — and the click that replays one — sees them.
+					// which the Sessions listing matches against). In workspace mode the session is a
+					// session of the **area**, so it files under the area's own slug instead of the
+					// first folder's: filed under folder A's slug, every area conversation would read
+					// — in the Sessions panel and on disk — as a session of folder A. The area slug
+					// (see `workspace-area.ts`) is an identity no single path encodes, so the listing
+					// can group it on its own. The override used to be the bare `sessions/` folder,
+					// and pi files a custom session directory **directly in it** — no project folder —
+					// so every conversation the chat saved landed where the listing never walks: the
+					// owner's recent sessions were invisible in Sessions, and clicking a saved one
+					// could only ever replay the CLI's older transcripts. Filing under the project
+					// slug puts the chat's sessions where pi's own live, and the listing — and the
+					// click that replays one — sees them.
 					sessionManager = loaded.sdk.SessionManager.create(
 						cwd,
-						agentDir === undefined ? undefined : path.join(agentDir, 'sessions', piProjectSlug(cwd)),
+						agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(cwd)),
 					);
 				}
 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
@@ -1080,7 +1099,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor({ ...scope, cwd }) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked) : undefined;
 			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);

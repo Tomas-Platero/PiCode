@@ -19,7 +19,7 @@ import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRe
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listWorkspaceSessionFiles, sessionTurns } from './sessions-provider';
+import { listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, sessionTurns, type PiSessionFile } from './sessions-provider';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -51,7 +51,7 @@ import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 
 /**
@@ -672,6 +672,41 @@ function profileInForce(): string {
 /** The URI scheme pi's session transcripts use; the editor derives the chat session type from it, so it must match the type the providers register under. */
 const PI_SESSION_SCHEME = 'pi';
 
+/** The most sessions of one project — the area, or a folder — the panel lists before it stops. */
+const PI_SESSIONS_PER_GROUP_CAP = 8;
+
+/** One session as the panel lists it, with the project group it belongs to when grouped. */
+interface PanelSession {
+	readonly file: PiSessionFile;
+	/** The group's name (`description` in the panel); `undefined` when the listing is flat. */
+	readonly group?: string;
+}
+
+/**
+ * The sessions the panel lists, grouped when the session is a session of the area.
+ *
+ * In workspace mode the listing is grouped: the area's own group first, then one per
+ * folder, capped per group — the owner asked for "unas cuantas de cada proyecto", not one
+ * endless list, and a session of the area must not read as a session of the folder pi
+ * happened to run in. Each session's group travels as its panel `description`, the field
+ * the sessions view renders beside the label; the area group is the first entries of the
+ * array, so even a panel that orders as given shows the area first.
+ *
+ * In folder mode nothing changes: the same flat, uncapped listing the panel has always
+ * shown, of the folders actually open.
+ */
+function listPanelSessions(sessionsDir: string, workspacePaths: readonly string[], capPerGroup: number = PI_SESSIONS_PER_GROUP_CAP): PanelSession[] {
+	const scope = resolveProjectScope();
+	if (scope.mode !== 'workspace' || scope.area === undefined) {
+		return listWorkspaceSessionFiles(sessionsDir, workspacePaths).map(file => ({ file }));
+	}
+	const groups = listSessionGroups(sessionsDir, [
+		{ label: `${scope.area.name} (workspace area)`, slugs: [scope.area.slug] },
+		...scope.roots.map(root => ({ label: root.name, slugs: [piProjectSlug(root.path)] })),
+	], capPerGroup);
+	return groups.flatMap(group => group.files.map(file => ({ file, group: group.label })));
+}
+
 /**
  * pi's sessions, listed for the editor's Sessions panel.
  *
@@ -699,12 +734,15 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			}
 			// Like the pi CLI, the panel shows only the sessions of the folders actually
 			// open: pi files transcripts under one folder per project cwd, so the listing
-			// walks just those folders — no workspace, no match, no sessions.
+			// walks just those folders — no workspace, no match, no sessions. In workspace
+			// mode the area's own sessions (filed under the area's slug, see `agent.ts`)
+			// come as their own group, first, and each session carries its group's name.
 			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const items = listWorkspaceSessionFiles(sessionsDir, workspacePaths).map(file => ({
+			const items = listPanelSessions(sessionsDir, workspacePaths).map(({ file, group }) => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
+				...(group === undefined ? {} : { description: group }),
 				iconPath: vscode.ThemeIcon.File,
 				// The mtime is the one timestamp a transcript file carries: it feeds both the
 				// created marker and the last-activity marker, because a transcript is never
@@ -725,7 +763,9 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
 			const id = resource.path.split('/').pop();
-			const file = listWorkspaceSessionFiles(sessionsDir, workspacePaths).find(entry => entry.id === id);
+			// The same groups the panel shows, but uncapped: a session older than the
+			// listing's cap must still open — the cap bounds the list, not the history.
+			const file = listPanelSessions(sessionsDir, workspacePaths, Number.MAX_SAFE_INTEGER).find(entry => entry.file.id === id)?.file;
 			if (file === undefined) {
 				return readSession;
 			}

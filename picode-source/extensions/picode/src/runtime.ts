@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { externalSdkEntry } from './piLocate';
 import { sdkCandidates } from './piSdk';
+import { areaSessionSlug } from './workspace-area';
 
 /**
  * Which pi runs as the editor's agent, and whose configuration it uses.
@@ -40,6 +41,22 @@ export type PiProjectMode = 'auto' | 'workspace' | 'folder';
 /** The setting the choice is stored in. */
 export const PICODE_PROJECT_MODE_SETTING = 'picode.pi.projectMode';
 
+/** One root of the area, named the way the editor shows it to the owner. */
+export interface PiProjectRoot {
+	/** The folder's name in the editor — what the owner says in prompts ("the bot"). */
+	readonly name: string;
+	/** The folder's absolute path, even when the folder is not on disk. */
+	readonly path: string;
+}
+
+/** The area's own identity, present only in workspace mode. */
+export interface PiAreaIdentity {
+	/** The area's name, as the editor names the window (the workspace file, or the folder). */
+	readonly name: string;
+	/** The session-filing slug of the whole area (see `areaSessionSlug`). */
+	readonly slug: string;
+}
+
 /** Where pi runs and what it is told about, resolved from the setting and the open folders. */
 export interface PiProjectScope {
 	/** The mode in force, with `auto` already resolved against the open folders. */
@@ -48,6 +65,10 @@ export interface PiProjectScope {
 	readonly cwd: string | undefined;
 	/** Every folder the mode covers, in the editor's own order. */
 	readonly folders: readonly string[];
+	/** The area's roots, named as the editor shows them. Empty in folder mode. */
+	readonly roots: readonly PiProjectRoot[];
+	/** The area's own identity for filing and listing. `undefined` in folder mode. */
+	readonly area: PiAreaIdentity | undefined;
 }
 
 /** Reads the owner's project-scope choice, as stored. Anything unrecognised means `auto`. */
@@ -63,21 +84,32 @@ export function readProjectMode(): PiProjectMode {
  * Resolves the setting against the workspace as it is open right now.
  *
  * pi's SDK takes one working directory, so the mode never changes where pi runs — the
- * workspace's first folder is the base either way. What the mode changes is what pi is
- * **told**: in `workspace` mode every open folder travels with the context and the
- * listings, while `folder` mode keeps the first folder alone. `auto` follows how the
- * window is open — one folder is that folder, several folders are the area. A saved
- * `.code-workspace` adds nothing to the decision: it is the folder count that says how
- * wide the window is.
+ * workspace's first folder is the base either way. What the mode changes is what pi
+ * **is and is told**: in `workspace` mode the session is a session of the **area** —
+ * it files under an identity of the area's own (`area`), and the context names every
+ * root (`roots`) so "the bot" or "the web" resolves to a folder without asking — while
+ * `folder` mode keeps the first folder alone: one project, its own sessions, no area.
+ * `auto` follows how the window is open — one folder is that folder, several folders are
+ * the area. A saved `.code-workspace` adds nothing to the decision: it is the folder
+ * count that says how wide the window is.
  */
 export function resolveProjectScope(): PiProjectScope {
-	const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? [];
+	const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+	const folders = workspaceFolders.map(folder => folder.uri.fsPath);
 	const mode = readProjectMode();
 	const workspace = mode === 'workspace' || (mode === 'auto' && folders.length > 1);
+	if (!workspace) {
+		return { mode: 'folder', cwd: folders[0], folders: folders.slice(0, 1), roots: [], area: undefined };
+	}
+	// The area's name is the one the editor already shows the owner: the workspace file's
+	// name for a saved area, the folder's name for a window opened on folders alone.
+	const name = vscode.workspace.name ?? (folders[0] === undefined ? 'area' : path.basename(folders[0]));
 	return {
-		mode: workspace ? 'workspace' : 'folder',
+		mode: 'workspace',
 		cwd: folders[0],
-		folders: workspace ? folders : folders.slice(0, 1),
+		folders,
+		roots: workspaceFolders.map(folder => ({ name: folder.name, path: folder.uri.fsPath })),
+		area: { name, slug: areaSessionSlug(folders, name) },
 	};
 }
 

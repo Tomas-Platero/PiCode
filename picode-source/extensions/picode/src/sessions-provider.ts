@@ -229,8 +229,21 @@ export function listWorkspaceSessionFiles(
 	if (workspacePaths.length === 0) {
 		return [];
 	}
-	const slugs = new Set(workspacePaths.map(piProjectSlug));
+	return listBySlugs(sessionsDir, new Set(workspacePaths.map(piProjectSlug)), fs);
+}
+
+/**
+ * Lists the transcripts filed under the given per-project slugs, newest first —
+ * the slug-set core of `listWorkspaceSessionFiles`, shared with the grouped
+ * listing (`listSessionGroups`). Root-level transcripts match the same way: by
+ * the project slug their own session header records.
+ */
+function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: SessionsFs): PiSessionFile[] {
+	if (slugs.size === 0) {
+		return [];
+	}
 	const foldedSlugs = new Set([...slugs].map(slug => slug.toLowerCase()));
+	const matches = (name: string): boolean => slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()));
 	const dirs: string[] = [];
 	// Transcripts filed directly under `sessions/` — pi itself files every session under a
 	// per-project folder, but a session created with an explicit session directory lands at
@@ -249,7 +262,7 @@ export function listWorkspaceSessionFiles(
 			continue;
 		}
 		const name = path.basename(entry);
-		if (slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()))) {
+		if (matches(name)) {
 			dirs.push(entry);
 		}
 	}
@@ -260,11 +273,48 @@ export function listWorkspaceSessionFiles(
 	return files;
 }
 
+/** One group of the panel listing: its name, and the sessions filed under it. */
+export interface PiSessionGroup {
+	/** The name shown beside the group's sessions (the area, or one folder). */
+	readonly label: string;
+	/** The group's transcripts, newest first, at most `capPerGroup` of them. */
+	readonly files: readonly PiSessionFile[];
+}
+
+/** One group the listing is asked for: its name, and the per-project slugs it covers. */
+export interface PiSessionGroupRequest {
+	readonly label: string;
+	/** The filing slugs whose transcripts belong to this group (see `piProjectSlug`). */
+	readonly slugs: readonly string[];
+}
+
 /**
- * The listing shared by every entry point: walks the given roots (pi's per-project
- * folders, or the whole `sessions/` tree) plus any pre-matched transcript files
- * (`extraFiles` — root-level files a caller matched by their own header), newest first;
- * the label is the first user prompt, falling back to the file's own timestamp.
+ * The panel's listing, grouped by project: one group per request, in the order given —
+ * the area's own group first, then one per folder — each group's sessions newest first
+ * and capped, so one busy project cannot turn the panel into an endless list.
+ *
+ * Groups are filled independently: a transcript is listed once, under the group whose
+ * slugs its own filing (its per-project folder, or its header's cwd for a root-level
+ * file) matches. Groups are never merged, so a session of the area never reads as a
+ * session of the folder pi happened to run in.
+ */
+export function listSessionGroups(
+	sessionsDir: string,
+	groups: readonly PiSessionGroupRequest[],
+	capPerGroup: number,
+	fs: SessionsFs = nodeFs,
+): PiSessionGroup[] {
+	return groups.map(group => ({
+		label: group.label,
+		files: listBySlugs(sessionsDir, new Set(group.slugs), fs).slice(0, Math.max(capPerGroup, 0)),
+	}));
+}
+
+/**
+ * The listing shared by every slug-matched entry point: walks the per-project folders whose
+ * names are in `slugs` plus any pre-matched transcript files (`extraFiles` — root-level files
+ * a caller matched by their own header), newest first; the label is the first user prompt,
+ * falling back to the file's own timestamp.
  *
  * Each transcript's label and id are read from `listingCache` when the file's mtime still
  * matches the cached one, so an unchanged tree costs a `stat` per file instead of a full

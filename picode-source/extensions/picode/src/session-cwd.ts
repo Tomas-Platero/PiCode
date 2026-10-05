@@ -40,6 +40,19 @@ function isDirectory(candidate: string): boolean {
 }
 
 /**
+ * Every folder of the list that is not a directory on disk, in the editor's order.
+ *
+ * Unlike `resolveSessionCwd`'s `missing` — which only names the folders skipped on the way
+ * to the first existing one — this checks every folder, wherever it sits in the order: an
+ * area context must not present a folder that is gone (the editor keeps it in
+ * `workspaceFolders` after a move, rename or delete) as if it were there, just because an
+ * earlier folder was.
+ */
+export function missingDirectories(folders: readonly string[]): readonly string[] {
+	return folders.filter(folder => !isDirectory(folder));
+}
+
+/**
  * Picks the session directory from the open folders, in the editor's order.
  *
  * `home` is the caller's `os.homedir()`, passed in rather than resolved here so the fallback is

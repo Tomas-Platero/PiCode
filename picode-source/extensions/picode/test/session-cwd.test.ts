@@ -22,7 +22,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { resolveSessionCwd } from '../src/session-cwd.ts';
+import { resolveSessionCwd, missingDirectories } from '../src/session-cwd.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'session-cwd-home-'));
 const real = mkdtempSync(join(tmpdir(), 'session-cwd-real-'));
@@ -58,4 +58,19 @@ test('no folders at all (no window open) is the home directory with nothing said
 	const picked = resolveSessionCwd([], home);
 	assert.strictEqual(picked.cwd, home);
 	assert.deepStrictEqual(picked.missing, []);
+});
+
+test('missingDirectories checks every folder, wherever it sits in the order', () => {
+	// The workspace keeps folders in its own order; one that is gone after an existing
+	// one is still gone, and an area context must say so instead of trusting that only
+	// the folders before the first hit can be missing.
+	assert.deepStrictEqual(missingDirectories([real, gone, join(gone, 'deeper')]), [gone, join(gone, 'deeper')]);
+	assert.deepStrictEqual(missingDirectories([real]), []);
+	assert.deepStrictEqual(missingDirectories([]), []);
+});
+
+test('a file with the folder\'s name is missing too: a directory is what counts', () => {
+	const file = join(real, 'a-file');
+	writeFileSync(file, 'not a directory');
+	assert.deepStrictEqual(missingDirectories([file]), [file]);
 });
