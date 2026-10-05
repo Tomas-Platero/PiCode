@@ -2047,7 +2047,14 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
 	// The durable agent's commands: start, stop, list/open its conversations, and send it a
 	// prompt. The status panel's Durable section rows run the same ones.
-	context.subscriptions.push(...registerDurableCommands());
+	// The agent is told which profile and which settings file to use: a portable or side-by-side
+	// PiCode has its own, and the agent's defaults would find a different install's — the very
+	// mixing a separate build exists to avoid. `globalStorageUri` is `<userData>/User/globalStorage/
+	// <extension>`, so two directories up is the settings file the editor itself obeys.
+	context.subscriptions.push(...registerDurableCommands({
+		agentProfile: profileDirectory(context.extensionUri),
+		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
+	}));
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the

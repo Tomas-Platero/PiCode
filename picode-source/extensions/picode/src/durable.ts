@@ -234,8 +234,23 @@ function daemonUnavailableSentence(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * What the agent has to be told about THIS editor before it starts: which pi profile to read
+ * and which settings file to obey.
+ *
+ * Without them the agent falls back to its own defaults, and for a portable or side-by-side
+ * build those point at a different PiCode install entirely — so the agent would read the other
+ * one's profile and settings. That is the mixing this exists to prevent.
+ */
+export interface DurableAgentPaths {
+	/** `data/pi-agent` inside this distribution: the profile the editor itself uses. */
+	readonly agentProfile: string;
+	/** This editor's user settings file, whose `picode.durable.*` keys the agent honours. */
+	readonly userSettingsFile: string;
+}
+
 /** "PiCode: Start Durable Agent": run `cli.js serve` in the durable folder and wait for it to answer. */
-async function startDurableAgent(): Promise<void> {
+async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
 	const folder = durableFolder();
 	const cliFile = folder === undefined ? undefined : path.join(folder, 'cli.js');
 	if (cliFile === undefined || !fs.existsSync(cliFile)) {
@@ -249,7 +264,13 @@ async function startDurableAgent(): Promise<void> {
 		void vscode.window.showInformationMessage(`PiCode: the durable agent is already running at ${current.endpoint} (pid ${current.pid}).`);
 		return;
 	}
-	const child = spawn('node', [cliFile, 'serve'], { cwd: folder, detached: true, stdio: 'ignore', windowsHide: true });
+	const child = spawn('node', [cliFile, 'serve'], {
+		cwd: folder,
+		detached: true,
+		stdio: 'ignore',
+		windowsHide: true,
+		env: { ...process.env, PI_AGENT_PROFILE: paths.agentProfile, PICODE_USER_SETTINGS: paths.userSettingsFile },
+	});
 	child.unref();
 	const endpoint = current.endpoint;
 	for (let attempt = 0; attempt < 20; attempt++) {
@@ -374,9 +395,9 @@ async function sendDurablePrompt(): Promise<void> {
 }
 
 /** Registers the four durable commands; the caller collects the disposables. */
-export function registerDurableCommands(): vscode.Disposable[] {
+export function registerDurableCommands(paths: DurableAgentPaths): vscode.Disposable[] {
 	return [
-		vscode.commands.registerCommand('picode.durable.start', startDurableAgent),
+		vscode.commands.registerCommand('picode.durable.start', () => startDurableAgent(paths)),
 		vscode.commands.registerCommand('picode.durable.stop', stopDurableAgent),
 		vscode.commands.registerCommand('picode.durable.list', showDurableConversations),
 		vscode.commands.registerCommand('picode.durable.send', sendDurablePrompt),
