@@ -282,3 +282,26 @@ Todo lo de abajo está **hecho y verificado ejecutando**, no leyendo. Los commit
 - 🖼️ El icono de la barra de tareas: **no estaba roto** — los iconos llegan y el `.exe` lleva el de PiCode; lo que falla es la **caché de iconos de Windows**.
 - 🪟 La carpeta `PiCode-Win32-x64 - experimental` quedó a medias con un handle vivo; se limpia con un reinicio.
 - 🔄 El **sync** necesita una comprobación del dueño: abrir la build una vez y ver `Registered the picode:// protocol handler: …` en el log.
+
+### 2026-10-05 · requisito del dueño: actualizar el host y los paquetes
+
+> «quiero que se pueda actualizar el pi interno, si sacan una versión nueva, me explico?, esto es
+> importante, luego si fallan cosas es otro tema.»
+> «Al igual que los packages, quiero saber si hay actualizaciones y poder actualizarlos.»
+
+Dos capacidades, y son **dos**:
+
+1. **El host (pi) se puede actualizar.** Existe el aviso —ofreció *«pi update to 1.0.4 available
+   (now 1.0.2)»*— y el botón, pero el botón está roto: la ruta del runtime se parte por los
+   espacios al pasar por el shell (`--prefix "…\PiCode-win32-x64" "-" "experimental2\resources\…"`),
+   así que npm recibe un directorio que no existe. Latente desde siempre y destapado por el sufijo
+   `" - experimental2"`; en una ruta con espacios —`Program Files`, un usuario con espacio— le pasa
+   a cualquiera. **Importante**: el dueño quiere que la actualización **funcione**; si después
+   fallan cosas con esa versión, es otro asunto.
+2. **Los paquetes: saber si hay actualización y poder actualizarlos.** Hoy la página de *Packages*
+   lista e instala; lo que falta es **decir cuál tiene versión nueva** y **poder actualizarlo**
+   desde ahí, no solo reinstalarlo.
+
+Ojo con lo que el botón hace hoy: instala **el último de npm**, no el que fija el repo — y ese
+último puede traer árboles que no instalan (a `pi-telemetry@1.0.4` le responde **404** el registro).
+Que falle por eso es un tema distinto del de la ruta, y conviene que se lea como tal.
