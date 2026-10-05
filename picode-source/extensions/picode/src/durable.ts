@@ -254,8 +254,12 @@ async function startDurableAgent(paths: DurableAgentPaths): Promise<void> {
 	const folder = durableFolder();
 	const cliFile = folder === undefined ? undefined : path.join(folder, 'cli.js');
 	if (cliFile === undefined || !fs.existsSync(cliFile)) {
-		void vscode.window.showWarningMessage(
-			`PiCode: the durable agent folder was not found — set "picode.durable.folder" to the folder that holds cli.js${folder === undefined ? '.' : ` (looked in ${folder}).`}`,
+		// Two different problems, said differently. With no folder open there is nothing for a
+		// relative path to resolve against, and telling someone to change a setting they never
+		// set is not an answer — it sends them looking in the wrong place.
+		void vscode.window.showWarningMessage(folder === undefined
+			? `PiCode: the durable agent lives inside the PiCode repository, and it is looked for at "${DEFAULT_DURABLE_FOLDER}" relative to an open folder — none is open. Open the repository folder, or set "picode.durable.folder" to an absolute path.`
+			: `PiCode: the durable agent folder was not found — "${folder}" holds no cli.js. Set "picode.durable.folder" to the folder that does.`,
 		);
 		return;
 	}
