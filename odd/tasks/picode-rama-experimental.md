@@ -448,3 +448,70 @@ typecheck en 0. El paquete `PiCode-win32-x64 - experimental` lleva pi **1.0.4**,
 (`reuseRows`, `listingForPanel`, `ownerPrompt`, `conversationFiles`), el módulo de agentes y su fila
 *Launched agents*; el perfil del dueño intacto en **57 595 ficheros y 261 transcripciones**; y el
 validador de MCP del pi que va dentro acepta los **12** escritores de PiCode.
+
+### 2026-10-06 (noche) · «me salen sesiones tanto de proyectos (carpetas) como del workspace»
+
+> «Yo solo quiero ver si estoy en un workspace las de workspace y sale "artictemepst (workspace)
+> (workspace area)". Ese doble workspace queda feo.»
+
+**Lo que estaba mal, y eran dos cosas:**
+
+1. El panel partía las sesiones de la ventana en **varias listas** — el grupo del área primero y
+   luego uno por carpeta, cada uno con su tope. Una ventana es **una** cosa.
+2. **Cada fila llevaba su etiqueta de grupo**, y la del área decía
+   *«Artictempest (Workspace) (workspace area)»* — la misma palabra dos veces en cada fila, que es la
+   redundancia que el propio registro del proyecto tiene por regla.
+
+**Ahora (`36460c2f`)**: **una sola lista**, la de los proyectos que la ventana cubre
+(`projectSlugsOfWindow()`: el slug del área, luego el de cada carpeta abierta), de más nueva a más
+vieja, con tope. **Ninguna sesión de un proyecto que no esté abierto puede aparecer**, que es la
+mitad de su frase que más importa. Y **sin etiqueta por fila**: el título y la fecha son lo que
+distingue dos filas — que es justo lo que el arreglo anterior hizo legible.
+
+El tope pasa a ser **un solo número** (`PI_SESSIONS_LIST_CAP`): un tope por proyecto dejó de
+significar nada en cuanto el panel dejó de ser varias listas. Y sigue contando **conversaciones**,
+nunca agentes: un transcript de agente se filtra **antes** del tope.
+
+`listSessionGroups` y sus dos tipos se **borran** en vez de quedarse sin usar, y las reglas que
+codificaban son ahora la de una sola función, probada (`session-listing.test.ts` sustituye a
+`session-groups.test.ts`).
+
+**Verificado**: 352 tests, 352 pasan, 0 fallan; typecheck exit 0.
+
+### 2026-10-06 (noche) · el paquete que salía dos veces en la página de Packages
+
+> «Por cierto revisa el error de ese package.»
+
+La página enseñaba `pi-interactive-subagents` **dos veces**: una `Enabled` desde
+`github.com/HazAT/pi-interactive-subagents`, y justo debajo otra con *«Not declared — Installed on
+disk; pi does not load it»*. Mismo nombre, misma versión 3.7.2, y dos cosas contradictorias sobre
+un solo paquete.
+
+**No era la página mintiendo sobre lo que encontraba**: era el listado contando **directorios**
+donde pi cuenta **paquetes**. Medido en el perfil del dueño, las dos copias existen y las dos tienen
+su razón: la settings declara `git:github.com/HazAT/pi-interactive-subagents` (que se materializa en
+`<perfil>/git/…` y es **la que pi carga**), mientras el npm root de pi lleva
+`"pi-interactive-subagents": "github:HazAT/pi-interactive-subagents"` como dependencia, así que npm
+dejó la misma copia en `<perfil>/npm/node_modules/`.
+
+**El arreglo (`7ef50fbb`)** colapsa por **nombre de paquete**, y el orden es lo que lo mantiene
+honesto:
+
+1. **Toda declaración es una fila.** Una declaración es una instrucción que pi lee; dos
+   declaraciones del mismo paquete son dos instalaciones, y esconder una escondería algo que el
+   dueño puede tener que quitar.
+2. **Un directorio que ninguna declaración nombra es una fila solo si nada más lista su paquete.**
+   Esa es la copia que pi **no** carga, y con una copia basta para decirlo. Gana la primera por ruta,
+   para que dos lecturas de un perfil sin cambios contesten lo mismo.
+
+Lo que quita la mitad 2 es **fontanería**, no un estado sobre el que actuar: la copia descartada es
+un árbol npm resolviendo una dependencia del propio pi, y el paquete que contiene se lista una vez,
+desde la copia que carga.
+
+**Medido en el perfil real** (`.scratch/packages-evidence.ts`): la página pasa de **17 filas a 16**,
+que son exactamente sus dieciséis declaraciones, con `pi-interactive-subagents` listado **una vez** y
+apuntando a la copia git.
+
+**Verificado**: 352 tests, 352 pasan, 0 fallan (tres nuevos: el duplicado con declaración, dos copias
+sin declaración contestando lo mismo dos veces, y dos declaraciones del mismo paquete quedándose en
+dos filas); typecheck exit 0.
