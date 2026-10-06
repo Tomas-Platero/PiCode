@@ -129,6 +129,34 @@ export function firstUserPrompt(text: string): string | undefined {
 	return undefined;
 }
 
+/**
+ * The separator `withContext` puts between what the editor adds and what the owner wrote
+ * (`context.ts`): who the agent is, then the editor's context, then `---`, then the request.
+ */
+const CONTEXT_SEPARATOR = '\n\n---\n\n';
+
+/**
+ * The owner's own words in an opening message.
+ *
+ * Every message the editor sends is prefixed with a frame naming the agent and what the editor
+ * is showing, and that frame ends with `CONTEXT_SEPARATOR`. The list is a list of the owner's
+ * conversations, so the label has to be what **he** wrote: labelling with the frame is how seven
+ * rows end up reading exactly the same, which is what his own screenshot shows. Nothing is
+ * guessed — a message the frame did not produce (a conversation written by the pi CLI) has no
+ * separator before it and is returned whole, and a frame with nothing after it is left as it is
+ * rather than becoming an empty label.
+ */
+export function ownerPrompt(text: string): string {
+	const at = text.indexOf(CONTEXT_SEPARATOR);
+	// The frame is the only thing that precedes the separator, and both frames say where they come
+	// from. A horizontal rule the owner typed himself is not a frame, and must not cut his text.
+	if (at === -1 || !text.slice(0, at).includes('PiCode editor')) {
+		return text;
+	}
+	const asked = text.slice(at + CONTEXT_SEPARATOR.length).trim();
+	return asked.length > 0 ? asked : text;
+}
+
 /** The replayed conversation: user prompts and assistant answers, in order. */
 export function sessionTurns(text: string): PiSessionTurn[] {
 	const turns: PiSessionTurn[] = [];
@@ -468,8 +496,9 @@ function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	// doing — are all answered from that one read.
 	const text = fs.read(entry);
 	const header = sessionHeader(text);
-	const firstPrompt = firstUserPrompt(text)
-		?? path.basename(entry).replace(/\.jsonl$/, '');
+	const opening = firstUserPrompt(text);
+	const firstPrompt = (opening === undefined ? '' : ownerPrompt(opening))
+		|| path.basename(entry).replace(/\.jsonl$/, '');
 	const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
 	const label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
 	const id = idMatch?.[1] ?? path.basename(entry, '.jsonl');

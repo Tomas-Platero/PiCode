@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { conversationFiles, firstUserPrompt, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { conversationFiles, firstUserPrompt, listProjectSessionFiles, listingForPanel, ownerPrompt, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -124,6 +124,24 @@ test('an unbuilt listing is not an empty listing', () => {
 	assert.deepStrictEqual(listingForPanel([], undefined, false), []);
 	const built = ['c'];
 	assert.deepStrictEqual(listingForPanel(built, previous, false), built);
+});
+
+test('the label is the owner\u2019s own words, not the frame the editor prepends', () => {
+	// What every message the editor sends looks like (`context.ts` `withContext`): who the agent
+	// is, the editor's context when there is one, `---`, then the request.
+	const internal = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.';
+	const external = "You are pi, the machine's own coding agent, answering through the PiCode editor. You answer about the project the person you are talking to has open in it.";
+	const separator = '\n\n---\n\n';
+
+	assert.strictEqual(ownerPrompt(`${internal}${separator}arregla esto`), 'arregla esto');
+	assert.strictEqual(ownerPrompt(`${external}\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n${separator}hola`), 'hola');
+
+	// A message the frame did not produce — a conversation the pi CLI wrote — is its own label.
+	assert.strictEqual(ownerPrompt('revisa las dependencias'), 'revisa las dependencias');
+	// And a horizontal rule the owner typed is not a frame: his text is left alone.
+	assert.strictEqual(ownerPrompt('uno\n\n---\n\ndos'), 'uno\n\n---\n\ndos');
+	// A frame with nothing after it stays as it is, rather than becoming an empty label.
+	assert.strictEqual(ownerPrompt(`${internal}${separator}`), `${internal}${separator}`);
 });
 
 /** A listing file system whose listing order, contents and mtimes the test drives. */
