@@ -1,6 +1,6 @@
 # Feature: los MCP, «siempre on demand»
 
-**Estado:** abierta · **Rama:** `experimental` · **Abierta:** 2026-10-07
+**Estado:** cerrada · **Rama:** `experimental` · **Abierta:** 2026-10-07
 
 ## Intención del dueño
 
@@ -137,16 +137,33 @@ se **invoca** una de sus herramientas.
 
 ## Lo que queda (la segunda mitad)
 
-El arranque en bloque del editor está apagado, pero **pi sigue conectando los servidores del perfil al
-crear la sesión** (`builtin:mcp`, punto 1 de arriba), y para eso pi 1.0.4 no ofrece opción. Además hay
-duplicados medidos: tres instancias de `@aikidosec/mcp`, dos de `@supabase/mcp-server-supabase`.
+**Cerrado por decisión del dueño, el 2026-10-07:**
 
-Para que **no arranque ninguno** hasta que se use, el conector tiene que dejar de cargar `builtin:mcp`
-(quitar el MCP propio de pi de la sesión del chat) y quedarse con el camino del editor — que es el que
-el dueño pidió, y que ahora **sí** es on demand gracias a este ajuste.
+> «claro pi ha de activarlos, eso no pasa nada, pero el editor solo los ha de usar cuando lo necesita,
+> no es normal que hablo y empieza a revisarlos.»
 
-**Coste:** bajo (una línea en el montaje de la sesión). **Riesgo, y por eso no se hizo de madrugada:**
-pi es hoy quien tiene el login OAuth de MCP que arregló 1.0.4, así que quitarlo puede llevarse el camino
-de `sentry`/`vercel` que funciona. Antes de hacerlo, comprobar que el editor autentica esos dos
-servidores por su cuenta — y si no, dejarlo como está y pedirlo upstream (`/mcp` ya permite apagar
-servidores uno a uno, que es la mitigación honesta mientras tanto).
+Es decir: **pi activa los servidores del perfil cuando crea la sesión y eso se queda** — es su trabajo,
+no el ruido que molestaba. Lo que no puede pasar es lo que hacía el **editor**: revisarlos al enviar un
+mensaje. Y eso es exactamente lo que apaga `chat.mcp.autostart: never`.
+
+Por eso **no** se toca `builtin:mcp`: quitarlo era la única forma de dejar la sesión sin ningún arranque
+inicial, y con esto el dueño ha dicho que ese arranque no le molesta. De paso desaparece el riesgo que
+tenía apuntado (pi es quien tiene el login OAuth de MCP que arregló 1.0.4).
+
+Los **duplicados** que se midieron (tres `@aikidosec/mcp`, dos `@supabase/mcp-server-supabase`) son la
+suma de los dos caminos, y se quedan como están: cada uno arranca por su motivo y los dos leen el mismo
+`mcp.json`. Si algún día molestan, la vía barata es apagar en `/mcp` los servidores que no haga falta
+tener encendidos, no quitarle el MCP a pi.
+
+### El arranque del editor, medido y apagado
+
+El disparador estaba en el chat, no en el conector:
+
+```ts
+// chatServiceImpl.ts:1748 — al enviar un mensaje
+const autostartResult = new ChatMcpServersStarting(this.mcpService.autostart(token));
+```
+
+y `autostart()` devuelve vacío con `never` (ver arriba). Ahí está «hablo y empieza a revisarlos»,
+literal: era el chat el que revisaba los servidores al enviar. Apagado, esa rama no arranca nada y el
+editor solo usa un servidor cuando **invoca** una de sus herramientas.
