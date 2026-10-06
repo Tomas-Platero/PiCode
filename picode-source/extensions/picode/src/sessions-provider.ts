@@ -268,7 +268,7 @@ export function piProjectSlug(cwd: string): string {
 }
 
 /**
- * The conversations a window shows: every transcript filed under `slugs`, newest first, capped.
+ * The conversations a window shows: every transcript filed under `slugs`, newest first.
  *
  * **One list, because a window is one thing.** The slugs are the window's own
  * (`runtime.ts` `projectSlugsOfWindow()`: the area's when there is one, then each open folder's),
@@ -278,9 +278,15 @@ export function piProjectSlug(cwd: string): string {
  * twice on every row. What tells two rows apart is the title and the date, which is what the
  * panel already puts on them.
  *
- * The cap counts **conversations**: an agent's transcript is not one (see `conversationFiles`),
- * and counting them spent the whole list on delegations — an afternoon of them pushed the
- * owner's own history out of the panel entirely.
+ * **Conversations, never the agents they launched** (see `conversationFiles`): counting them spent
+ * the list on delegations — an afternoon of them pushed the owner's own history out of the panel
+ * entirely.
+ *
+ * `cap` is the caller's, and the panel passes none: the limit existed to stop **one busy project**
+ * from turning a list of groups into an endless one, and a single list of the owner's own workspace
+ * is what it asks to see, in a panel that scrolls and searches. A cap here would silently hide the
+ * older rows with nothing to say they exist — the reading the owner already reported as «salen
+ * menos».
  *
  * With no projects to look at the listing is empty, and there is no fall-back to every project
  * in the profile: the panel shows the sessions of what is open, not somebody else's history.
@@ -288,10 +294,11 @@ export function piProjectSlug(cwd: string): string {
 export function listProjectConversations(
 	sessionsDir: string,
 	slugs: Iterable<string>,
-	cap: number,
+	cap?: number,
 	fs: SessionsFs = nodeFs,
 ): PiSessionFile[] {
-	return conversationFiles(listProjectSessionFiles(sessionsDir, slugs, fs)).slice(0, Math.max(cap, 0));
+	const conversations = conversationFiles(listProjectSessionFiles(sessionsDir, slugs, fs));
+	return cap === undefined ? conversations : conversations.slice(0, Math.max(cap, 0));
 }
 
 /**

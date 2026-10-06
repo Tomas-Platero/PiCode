@@ -692,14 +692,6 @@ function profileInForce(): string {
 const PI_SESSION_SCHEME = 'pi';
 
 /**
- * The most sessions the panel lists before it stops.
- *
- * One list, so one number: the owner wants «unas cuantas», not an endless list, and a cap per
- * project stopped meaning anything once the panel stopped being several lists.
- */
-const PI_SESSIONS_LIST_CAP = 8;
-
-/**
  * pi's sessions, listed for the editor's Sessions panel.
  *
  * Nothing in the editor reads the runtime profile's `sessions/` directory — the panel's
@@ -724,13 +716,17 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// never look like "everything was deleted".
 				return lastItems ?? [];
 			}
-			// **One list, because a window is one thing.** The rows are the conversations of the
-			// projects this window has open — the area's own when there is one, then each open
-			// folder's (`runtime.ts` `projectSlugsOfWindow`) — newest first and capped. Nothing
-			// says which project a row belongs to, because the owner's instruction is that they
-			// are all *the workspace's*: «Yo solo quiero ver si estoy en un workspace las de
-			// workspace», and the label that said *«Artictempest (Workspace) (workspace area)»*
-			// said the same word twice on every row.
+			// **One list, because a window is one thing**, and no cap: the limit existed so one busy
+			// **project** could not turn a list of groups into an endless one, and there are no groups
+			// any more. What the owner asked for is to see his workspace's sessions, in a panel that
+			// scrolls and searches — and a cap here would hide the older rows with nothing to say
+			// they exist, which is the reading he already reported as «salen menos». The rows are the
+			// conversations of the projects this window has open — the area's own when there is one,
+			// then each open folder's (`runtime.ts` `projectSlugsOfWindow`) — newest first. Nothing
+			// says which project a row belongs to, because the owner's instruction is that they are
+			// all *the workspace's*: «Yo solo quiero ver si estoy en un workspace las de workspace»,
+			// and the label that said *«Artictempest (Workspace) (workspace area)»* said the same word
+			// twice on every row.
 			//
 			// `undefined` is not "no folders": it is a window whose workspace has not been
 			// resolved yet, and that is the moment the panel first asks. Publishing the
@@ -738,7 +734,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// `listingForPanel`.
 			const folders = vscode.workspace.workspaceFolders;
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const built = listProjectConversations(sessionsDir, projectSlugsOfWindow(), PI_SESSIONS_LIST_CAP).map(file => ({
+			const built = listProjectConversations(sessionsDir, projectSlugsOfWindow()).map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
