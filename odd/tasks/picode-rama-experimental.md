@@ -374,6 +374,10 @@ una conversación: su transcripción no pertenece a *Sessions*.
 * Sobre el perfil real (`.scratch/agents-evidence.ts`): de 164 transcripciones salen **56
   conversaciones y 108 agentes**; las 8 filas del panel pasan de «1 conversación + 7 agentes» a
   **8 conversaciones**.
+* `PICODE_PACK_SUFFIX=" - experimental" ./dev/build-run.sh` → **exit 0** en 8m 22s. `PiCode 1.135.5`
+  staged en `PiCode-win32-x64 - experimental/` con el conector nuevo dentro (`out/agents.js`,
+  `reuseRows` y `picode.agents` en el paquete), y el perfil del dueño intacto: apartado durante el
+  pack y devuelto con **57 632 ficheros y 261 transcripciones**.
 
 **Lo que sigue sin estar**: el slug del área se recalcula con la lista de carpetas cada vez, así
 que una carpeta que se abra o se cierre **refila** la sesión viva (agente `agent.ts`, `scopeChanged`).
