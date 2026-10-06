@@ -497,6 +497,49 @@ npm además de la git (o sea, el duplicado que se arregla arriba era real y sigu
 261 transcripciones, los agents, las skills, `models.json`, `auth.json`, `mcp.json` y `mcp-auth.json`
 están intactos.
 
+### 2026-10-06/07 (madrugada) · el build que murió por abrir el editor, y el rebuild de cero
+
+> «Quiero que buildee de 0 experimental, cárgate todo, no pasa nada, rebuildea todo para ver los
+> cambios. Olvídate de mi perfil, no quiero guardarlo, quiero que esté de 0. Quiero reinstalar, volver
+> a hacer el onboarding, todo.»
+
+**Lo que pasó, en orden, porque el orden es la lección:** el build del 00:16 arrancó con **cero**
+procesos de PiCode (la comprobación del contenedor pasó). A las **00:19:42** el dueño abrió el editor
+desde esa misma carpeta y a las **00:19:45** el build intentó borrarla: `EBUSY: resource busy or
+locked, rmdir 'PiCode-win32-x64 - experimental'`. El build murió **sin** haber destruido nada
+—el pack no llegó a escribir— y la **red de seguridad de `dev/build.sh:201` funcionó**: al fallar con
+el perfil en el `-data-hold`, lo devolvió a `data/`.
+
+El daño no vino del build: vino de que el dueño pidió borrar todo y se borró la carpeta entera. **Su
+perfil (261 conversaciones) se fue con ese borrado**, por decisión suya y dicha así. Sobreviven dos
+copias antiguas en `.scratch/` (`exp-data-now`, 255 conversaciones; `exp-data-backup`, 254), que se
+le dijeron antes de seguir.
+
+**La comprobación que faltaba (`db71d7db`)**: el contenedor pregunta si hay un editor abierto al
+**empezar**; abrirlo a mitad no lo cazaba nadie. Ahora se pregunta otra vez justo antes de la fase
+del pack —antes de apartar el perfil y antes del borrado— donde parar **no cuesta nada**: nada movido,
+nada borrado. La función (`picode_editor_running`) vive junto al perfil al que protege
+(`dev/data-hold.sh`) y la usan los dos sitios, para que «¿hay un editor abierto?» tenga una sola
+definición. **Probado en las dos direcciones**: sin editor, el build sigue (este mismo rebuild llegó a
+exit 0); con el editor abierto, bloquea — medido lanzando el editor recién empaquetado y volviendo a
+preguntar.
+
+**El rebuild de cero**: carpeta borrada, `PICODE_PACK_SUFFIX=" - experimental" ./dev/build-run.sh`
+→ **exit 0** en 5m 0s, y el paquete nuevo lleva:
+
+| Qué | Comprobado en el paquete |
+| --- | --- |
+| pi | **1.0.4** |
+| Lista de sesiones | `listProjectConversations`, `listingForPanel`, `ownerPrompt`, `reuseRows`; `listSessionGroups` **fuera** |
+| Paquetes | `oneRowPerPackage` |
+| Agentes | `out/agents.js` y `picode.agents` en el manifiesto |
+| Perfil | **de cero**: un solo fichero (el `settings.json` de fábrica), sin `pi-agent`, sin marca de onboarding |
+
+Es decir: arranca como una instalación nueva y pide el onboarding, que es lo que pidió. El dueño lo
+abrió, hizo el onboarding y **está importando** desde el pi externo — así que en el perfil aparecieron
+sus 269 transcripciones **por su propia importación**, no por ningún proceso automático. La regla se
+mantiene: importar es una decisión suya, nunca algo que el producto haga solo.
+
 ### 2026-10-06 (noche) · el paquete que salía dos veces en la página de Packages
 
 > «Por cierto revisa el error de ese package.»
