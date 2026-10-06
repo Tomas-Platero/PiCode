@@ -478,6 +478,25 @@ codificaban son ahora la de una sola función, probada (`session-listing.test.ts
 
 **Verificado**: 352 tests, 352 pasan, 0 fallan; typecheck exit 0.
 
+**Y el tope se fue con los grupos** (`6103d79f`): existía para que «un proyecto muy ocupado no
+convirtiera el panel en una lista interminable» — el deseo del dueño **cuando el panel eran varias
+listas**, una por proyecto. Con una sola lista no hay grupos que acotar, y un tope escondería las
+filas viejas **sin nada que diga que existen**: exactamente la lectura que él ya reportó como «salen
+menos». Medido en su perfil, esa ventana tiene **36 conversaciones** y el panel enseñaba ocho; ahora
+enseña las 36, en un panel que hace scroll y tiene buscador. El tope sigue existiendo como parámetro
+de `listProjectConversations` (y sus tests), para quien quiera acotar.
+
+#### Lo que se midió de paso: el árbol npm del perfil
+
+Durante estas horas el perfil pasó de **57 595 ficheros a 27 705**, y no fue ningún build: el propio
+editor escribió `<perfil>/npm/package.json` y su `package-lock.json` a las **23:56**, en una sesión
+que abrió a las 23:53 — es **pi instalando y podando** su árbol npm, que es lo que hace al asegurar
+sus paquetes declarados. Lo que importa, comprobado: **los 16 paquetes declarados siguen ahí y
+resuelven** (`piPackages` → 16 filas, 0 avisos), `pi-interactive-subagents` sigue teniendo su copia
+npm además de la git (o sea, el duplicado que se arregla arriba era real y sigue siéndolo), y las
+261 transcripciones, los agents, las skills, `models.json`, `auth.json`, `mcp.json` y `mcp-auth.json`
+están intactos.
+
 ### 2026-10-06 (noche) · el paquete que salía dos veces en la página de Packages
 
 > «Por cierto revisa el error de ese package.»
