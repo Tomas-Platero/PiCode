@@ -2190,6 +2190,23 @@ pane is first mounted. View switches inside the modal are not animated. */
 	color: var(--vscode-descriptionForeground);
 }
 
+/* The update check's answer, stacked under the state text. A row that is behind is the one
+   thing the cell says loudly; a row that cannot be checked stays muted. */
+.pi-package-row .pi-package-row-update {
+	font-size: var(--vscode-agents-fontSize-body2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pi-package-row .pi-package-row-update.behind {
+	color: var(--vscode-list-warningForeground);
+}
+
+.pi-package-row .pi-package-row-update:not(.behind) {
+	color: var(--vscode-descriptionForeground);
+}
+
 .pi-package-row .pi-package-row-actions {
 	display: flex;
 	align-items: center;

@@ -18,6 +18,7 @@ import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSe
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
+import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
 import { listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, sessionTurns, type PiSessionFile } from './sessions-provider';
 import {
@@ -32,7 +33,7 @@ import {
 	type ManageFs,
 	type PiPackageRow,
 } from './packages-manage';
-import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
+import { packageSkillDirs, parsePackageSource, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk, sdkCandidates } from './piSdk';
 import { externalProfileDir } from './profile-import';
 import {
@@ -584,6 +585,22 @@ export const PACKAGES_ENABLE_COMMAND = 'picode.packages.enable';
 export const PACKAGES_UNINSTALL_COMMAND = 'picode.packages.uninstall';
 
 /**
+ * The Packages section's update **check**: for every installed package, whether npm's registry
+ * knows a newer version. A row that is behind is told so, with the version it is behind to; a
+ * git or local one is told npm cannot say; a current one says nothing. The check runs after
+ * the page has rendered and carries its own ten-minute cache, so refreshing never hammers the
+ * registry. A **contract**, like the listing above.
+ */
+export const PACKAGES_UPDATES_CHECK_COMMAND = 'picode.packages.updatesCheck';
+
+/**
+ * The Packages section's update: one package taken to the newest version npm knows, run on the
+ * profile in force through `npm-run.ts`'s shell-free planner — the click on a row that says it
+ * is behind, not a reinstall by hand. A **contract**, like the other package commands.
+ */
+export const PACKAGES_UPDATE_COMMAND = 'picode.packages.update';
+
+/**
  * The MCP section's "Add Server", which the core invokes: it asks this connector for the new
  * server instead of the editor's own add flow, because the servers this page lists live in
  * pi's own `mcp.json` — the editor's flow would write a file pi never reads.
@@ -824,6 +841,24 @@ function externalProfileRefusal(): string | undefined {
 	return 'Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.';
 }
 
+/**
+ * The npm project an npm-declared package is installed in — the directory npm runs over when
+ * the package is updated: `<profile>/npm`, or a trusted workspace's `<folder>/.pi/npm` when
+ * that is where the package was found. An unspellable source answers the profile's, which is
+ * where the updater's own refusal sentences come from instead of a wrong install root.
+ */
+function npmProjectFor(source: string, profileDir: string): string {
+	const parsed = parsePackageSource(source);
+	if (parsed !== undefined && parsed.kind === 'npm') {
+		for (const scope of packageScopes(profileDir)) {
+			if (fs.existsSync(path.join(scope.npmRoot, parsed.name))) {
+				return path.dirname(scope.npmRoot);
+			}
+		}
+	}
+	return path.join(profileDir, 'npm');
+}
+
 
 /** A file's text, or `undefined` when it is not there. */
 function readTextFile(file: string): string | undefined {
@@ -1022,11 +1057,47 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The answer now carries each package's state: its declaration as the settings file spells
 	// it, Enabled or Disabled, and the scope the declaration was found in — the disabled record
 	// merged in, so a disabled package still appears and the page can offer to enable it.
-	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => {
+	const packageRows = (): PiPackageRow[] => {
 		const profileDir = profileInForce();
 		const read = readPackages();
 		const info = packageDisplayInfo(read.packages, packageScopes(profileDir), readDisabledRecord(), profileDir);
 		return read.packages.map(found => ({ ...found, ...info.get(found.path) }));
+	};
+
+	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
+
+	// The update check: which installed packages npm knows a newer version of. It runs after the
+	// page has rendered — the page calls it without holding the list open — and
+	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
+	// the page asks the registry for nothing inside that lifetime. Reading is all it does, so it
+	// runs in external mode too, where only the writes stop.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATES_CHECK_COMMAND, async (): Promise<readonly PackageUpdateStatusRow[]> =>
+		checkPackageUpdates(packageRows().map(found => ({
+			path: found.path,
+			name: found.name,
+			...(found.version === undefined ? {} : { version: found.version }),
+			...(found.source === undefined ? {} : { source: found.source }),
+		})), { log: report })));
+
+	// The update of one package: the click on a row that says it is behind. npm runs through
+	// `npm-run.ts`'s shell-free planner, over the npm project of the scope the package was
+	// found installed in — the profile's first, then a trusted workspace's — so a side-by-side
+	// build's spaced install folder arrives as one argument, as everywhere else here.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
+		const target = typeof source === 'string' ? source.trim() : '';
+		if (target.length === 0) {
+			return { ok: false, message: 'No package source was given.' };
+		}
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
+		}
+		const profileDir = profileInForce();
+		const result = await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
+		if (result.ok) {
+			fire();
+		}
+		return result;
 	}));
 
 	// The Packages section's catalog and install. The search resolves nothing of the editor —

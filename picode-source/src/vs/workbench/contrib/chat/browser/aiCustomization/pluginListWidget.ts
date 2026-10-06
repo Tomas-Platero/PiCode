@@ -78,8 +78,10 @@ const PACKAGES_LIST_COMMAND = 'picode.setup.packages';
 const PACKAGES_DISABLE_COMMAND = 'picode.packages.disable';
 const PACKAGES_ENABLE_COMMAND = 'picode.packages.enable';
 const PACKAGES_UNINSTALL_COMMAND = 'picode.packages.uninstall';
+const PACKAGES_UPDATES_CHECK_COMMAND = 'picode.packages.updatesCheck';
+const PACKAGES_UPDATE_COMMAND = 'picode.packages.update';
 
-/** Result shape returned by the PiCode package disable/enable/uninstall connectors. */
+/** Result shape returned by the PiCode package disable/enable/uninstall/update connectors. */
 interface IPiPackageRow {
 	readonly id: string;
 	readonly name: string;
@@ -91,6 +93,23 @@ interface IPiPackageRow {
 	readonly state?: 'enabled' | 'disabled';
 	/** Where the declaration was found: the user profile, or a workspace's `.pi`. */
 	readonly scope?: 'user' | 'workspace';
+	/** The update check's answer for this row, merged in after the table has rendered. */
+	readonly update?: IPiPackageUpdateStatus;
+}
+
+/** One row's update status, as the connector's check command answers it. */
+interface IPiPackageUpdateStatus {
+	readonly state: 'uncheckable' | 'unknown' | 'current' | 'behind';
+	/** The newer version npm knows, when the row is behind. */
+	readonly latest?: string;
+	/** Why the row says nothing actionable, for `uncheckable` and `unknown`. */
+	readonly reason?: string;
+}
+
+/** One row of the connector's check answer, keyed back to the row that asked. */
+interface IPiPackageUpdateStatusRow extends IPiPackageUpdateStatus {
+	readonly path: string;
+	readonly name: string;
 }
 
 //#region Entry types
@@ -238,8 +257,10 @@ interface IPluginPiPackageRowTemplateData {
 	readonly name: HTMLElement;
 	readonly version: HTMLElement;
 	readonly source: HTMLElement;
-	readonly state: HTMLElement;
+	readonly stateText: HTMLElement;
+	readonly updateHint: HTMLElement;
 	readonly toggleButton: Button;
+	readonly updateButton: Button;
 	readonly uninstallButton: Button;
 	readonly hint: HTMLElement;
 	readonly disposables: DisposableStore;
@@ -259,6 +280,7 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 	constructor(
 		private readonly onToggle: (row: IPiPackageRow) => void,
 		private readonly onUninstall: (row: IPiPackageRow) => void,
+		private readonly onUpdate: (row: IPiPackageRow) => void,
 	) { }
 
 	renderTemplate(container: HTMLElement): IPluginPiPackageRowTemplateData {
@@ -268,10 +290,16 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		const version = DOM.append(container, $('.pi-package-row-version'));
 		const source = DOM.append(container, $('.pi-package-row-source'));
 		const state = DOM.append(container, $('.pi-package-row-state'));
+		const stateText = DOM.append(state, $('.pi-package-row-state-text'));
+		const updateHint = DOM.append(state, $('.pi-package-row-update'));
 		const actions = DOM.append(container, $('.pi-package-row-actions'));
 
 		const toggleButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true });
 		toggleButton.element.classList.add('pi-package-row-action');
+		const updateTooltip = localize('updatePackageTooltip', "Update the package to the newest version npm knows");
+		const updateButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: updateTooltip, ariaLabel: updateTooltip });
+		updateButton.label = `$(${Codicon.arrowUp.id}) ${localize('updatePackageAction', "Update")}`;
+		updateButton.element.classList.add('pi-package-row-action');
 		const uninstallTooltip = localize('uninstallPackageTooltip', "Remove the package from pi's settings");
 		const uninstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: uninstallTooltip, ariaLabel: uninstallTooltip });
 		uninstallButton.label = `$(${Codicon.trash.id})`;
@@ -279,7 +307,7 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		const hint = DOM.append(actions, $('.pi-package-row-hint'));
 		hint.style.display = 'none';
 
-		return { container, name, version, source, state, toggleButton, uninstallButton, hint, disposables: new DisposableStore() };
+		return { container, name, version, source, stateText, updateHint, toggleButton, updateButton, uninstallButton, hint, disposables: new DisposableStore() };
 	}
 
 	renderElement(element: IPluginPiPackageItemEntry, _index: number, templateData: IPluginPiPackageRowTemplateData): void {
@@ -292,13 +320,35 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		templateData.source.title = row.source ?? '';
 		const disabled = row.state === 'disabled';
 		const declared = row.source !== undefined;
-		templateData.state.textContent = disabled
+		templateData.stateText.textContent = disabled
 			? localize('packageStateDisabled', "Disabled")
 			: declared
 				? localize('packageStateEnabled', "Enabled")
 				: localize('packageStateNotDeclared', "Not declared");
-		templateData.state.classList.toggle('disabled', disabled);
+		templateData.stateText.classList.toggle('disabled', disabled);
 		templateData.container.classList.toggle('disabled', disabled);
+
+		// The update check's answer, said in the row's own voice: a row that is behind says what
+		// it is behind to (with the action that takes it there); a row that cannot be checked
+		// says so instead of pretending; a row that is current says nothing at all.
+		const update = row.update;
+		if (!disabled && update?.state === 'behind' && update.latest) {
+			templateData.updateHint.textContent = localize('packageUpdateBehind', "Update to {0} available", update.latest);
+			templateData.updateHint.title = localize('packageUpdateBehindTitle', "Now {0}", row.version ?? '?');
+			templateData.updateHint.style.display = '';
+			templateData.updateHint.classList.add('behind');
+		} else if (!disabled && row.source !== undefined && (update?.state === 'uncheckable' || update?.state === 'unknown')) {
+			templateData.updateHint.textContent = localize('packageUpdateCannotCheck', "Cannot check for updates");
+			templateData.updateHint.title = update.reason ?? '';
+			templateData.updateHint.style.display = '';
+			templateData.updateHint.classList.remove('behind');
+		} else {
+			templateData.updateHint.style.display = 'none';
+			templateData.updateHint.textContent = '';
+			templateData.updateHint.title = '';
+			templateData.updateHint.classList.remove('behind');
+		}
+		templateData.updateButton.element.style.display = !disabled && row.source !== undefined && update?.state === 'behind' ? '' : 'none';
 
 		if (row.source === undefined) {
 			// A package the disk scan found without pi's settings spelling it: pi never loads
@@ -321,12 +371,14 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 			templateData.toggleButton.setTitle(localize('disablePackageTooltip', "Pi stops loading this package. Its files stay on disk."));
 		}
 		templateData.disposables.add(templateData.toggleButton.onDidClick(() => this.onToggle(row)));
+		templateData.disposables.add(templateData.updateButton.onDidClick(() => this.onUpdate(row)));
 		templateData.disposables.add(templateData.uninstallButton.onDidClick(() => this.onUninstall(row)));
 	}
 
 	disposeTemplate(templateData: IPluginPiPackageRowTemplateData): void {
 		templateData.disposables.dispose();
 		templateData.toggleButton.dispose();
+		templateData.updateButton.dispose();
 		templateData.uninstallButton.dispose();
 	}
 }
@@ -609,6 +661,12 @@ export class PluginListWidget extends Disposable {
 	private installedItems: IInstalledPluginItem[] = [];
 	private remoteItems: ICustomizationItem[] = [];
 	private piPackageRows: readonly IPiPackageRow[] = [];
+	/** The update check's answers, by install directory; empty until the first check answers. */
+	private packageUpdateStatuses = new Map<string, IPiPackageUpdateStatus>();
+	/** Whether one check is already running; the next one waits instead of stacking requests. */
+	private packageUpdatesInFlight = false;
+	/** The last answers, serialized — repainting happens only when they actually changed. */
+	private packageUpdateStatusesJson = '';
 	private displayEntries: IPluginListEntry[] = [];
 	private marketplaceItems: IMarketplacePluginItem[] = [];
 	private searchQuery: string = '';
@@ -802,6 +860,7 @@ export class PluginListWidget extends Disposable {
 		const piPackageRenderer = new PluginPiPackageRowRenderer(
 			row => { void this.togglePackageState(row); },
 			row => { void this.uninstallPackage(row); },
+			row => { void this.updatePackage(row); },
 		);
 		const remoteRenderer = new PluginRemoteItemRenderer();
 		const marketplaceRenderer = new GalleryItemRenderer<IPluginMarketplaceItemEntry>(PLUGIN_MARKETPLACE_ITEM_TEMPLATE_ID, new PluginMarketplaceItemProvider(
@@ -831,7 +890,15 @@ export class PluginListWidget extends Disposable {
 							const rowState = element.row.state === 'disabled'
 												? localize('pluginPiPackageItemDisabled', "Disabled")
 												: localize('pluginPiPackageItemEnabled', "Enabled");
-							return localize('pluginPiPackageItemAriaLabel', "{0}. {1}", element.row.name, rowState);
+							const update = element.row.update;
+							const updateNote = element.row.state !== 'disabled' && update?.state === 'behind' && update.latest
+								? localize('pluginPiPackageItemBehind', "update to {0} available", update.latest)
+								: update?.state === 'uncheckable' || update?.state === 'unknown'
+									? localize('pluginPiPackageItemCannotCheck', "cannot check for updates")
+									: undefined;
+							return updateNote === undefined
+								? localize('pluginPiPackageItemAriaLabel', "{0}. {1}", element.row.name, rowState)
+								: localize('pluginPiPackageItemAriaLabelWithUpdate', "{0}. {1}, {2}", element.row.name, rowState, updateNote);
 						}
 						const name = formatDisplayName(element.item.name);
 						const description = element.item.description ? truncateToFirstLine(element.item.description) : undefined;
@@ -1388,6 +1455,7 @@ export class PluginListWidget extends Disposable {
 		// The installed pi packages, straight from the connector and narrowed locally — the
 		// same client-side narrowing the marketplace search applies to its rows.
 		this.piPackageRows = await this.fetchPiPackageRows();
+		this.mergePackageUpdateStatuses();
 		const packageRows = this.piPackageRows.filter(row => !query ||
 			row.name.toLowerCase().includes(query)
 			|| row.source?.toLowerCase().includes(query)
@@ -1488,8 +1556,90 @@ export class PluginListWidget extends Disposable {
 		this.displayEntries = entries;
 		this.list.splice(0, this.list.length, this.displayEntries);
 
+		// The check runs after the table is already painted — it is a registry call per checkable
+		// package and must never hold the list open — and repaints once, when its answers change
+		// what a row says.
+		this.requestPackageUpdateStatuses();
+
 		// Compute sidebar badge directly from the data array (same source as group headers)
 		this._onDidChangeItemCount.fire(this.itemCount);
+	}
+
+	/** Carries the answers the last check gave into the rows that are on screen now. */
+	private mergePackageUpdateStatuses(): void {
+		if (this.packageUpdateStatuses.size === 0) {
+			return;
+		}
+		this.piPackageRows = this.piPackageRows.map(row => {
+			const update = this.packageUpdateStatuses.get(row.path);
+			return update === undefined ? row : { ...row, update };
+		});
+	}
+
+	/**
+	 * Asks the connector which installed packages npm knows a newer version of.
+	 *
+	 * One check at a time; the connector caches each package's latest version for ten minutes,
+	 * so refreshing the page inside that lifetime re-asks it for nothing. The repaint runs only
+	 * when an answer actually changed, so the refresh this triggers cannot loop back into
+	 * another repaint.
+	 */
+	private requestPackageUpdateStatuses(): void {
+		if (this.piPackageRows.length === 0 || this.packageUpdatesInFlight) {
+			return;
+		}
+		this.packageUpdatesInFlight = true;
+		this.commandService.executeCommand<readonly IPiPackageUpdateStatusRow[]>(PACKAGES_UPDATES_CHECK_COMMAND).then(statuses => {
+			this.packageUpdatesInFlight = false;
+			if (!Array.isArray(statuses)) {
+				return;
+			}
+			const next = new Map<string, IPiPackageUpdateStatus>();
+			for (const status of statuses) {
+				if (typeof status?.path === 'string') {
+					next.set(status.path, {
+						state: status.state,
+						...(status.latest === undefined ? {} : { latest: status.latest }),
+						...(status.reason === undefined ? {} : { reason: status.reason }),
+					});
+				}
+			}
+			const nextJson = JSON.stringify([...next.entries()].sort(([a], [b]) => a.localeCompare(b)));
+			const changed = nextJson !== this.packageUpdateStatusesJson;
+			this.packageUpdateStatusesJson = nextJson;
+			this.packageUpdateStatuses = next;
+			if (changed && !this.browseMode) {
+				void this.filterPlugins();
+			}
+		}, () => {
+			this.packageUpdatesInFlight = false;
+		});
+	}
+
+	/**
+	 * Updates one package through the connector — the click on a row that says it is behind —
+	 * then refreshes, so the row's hint and its version tell the truth again. A failure is the
+		 * connector's one sentence; a success says nothing, the refreshed row is the answer.
+	 */
+	private async updatePackage(row: IPiPackageRow): Promise<void> {
+		if (row.source === undefined) {
+			return;
+		}
+		let result: IPackageInstallResult | undefined;
+		try {
+			result = await this.commandService.executeCommand<IPackageInstallResult>(PACKAGES_UPDATE_COMMAND, row.source);
+		} catch {
+			await this.dialogService.warn(localize('packagesConnectorUnavailableManage', "PiCode connector is unavailable — packages are managed from the pi CLI."));
+			return;
+		}
+		if (!result) {
+			return;
+		}
+		if (!result.ok) {
+			await this.dialogService.warn(result.message);
+			return;
+		}
+		await this.afterPackageChange();
 	}
 
 	/**

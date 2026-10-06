@@ -95,6 +95,18 @@ function compareIdentifiers(a: readonly (string | number)[], b: readonly (string
 }
 
 /**
+ * Whether a version is one the comparator can actually order.
+ *
+ * `compareVersions` never throws — a version it cannot parse falls back to plain string
+ * order so an answer stays deterministic — but a caller that must **decide** (is this package
+ * behind?) needs to know when the answer is not a version answer: `dev`, a git sha, an empty
+ * string. This is the same parse the comparator does, said as a question.
+ */
+export function isComparableVersion(value: string): boolean {
+	return parseVersion(value) !== undefined;
+}
+
+/**
  * How two versions order: negative when `a` is older, positive when newer, zero when equal.
  *
  * The comparison is semver-shaped — numbers compare as numbers, a release is newer than any
