@@ -1,6 +1,6 @@
 # Feature: pi 1.0.4 en el pin
 
-**Estado:** abierta · **Rama:** `experimental` · **Abierta:** 2026-10-06
+**Estado:** cerrada · **Rama:** `experimental` · **Abierta:** 2026-10-06
 
 ## Intención del dueño
 
@@ -91,11 +91,22 @@ respeta desde `picode-pi-102.md`).
 | Qué | Cómo se comprobó |
 | --- | --- |
 | 7 entradas del SDK + `dist/cli.js` | `node .scratch/pi-contract.mjs <1.0.4>` → **CONTRACT OK** |
+| El árbol instala | `npm install --save-exact @earendil-works/pi-coding-agent@1.0.4` → **exit 0**, 121 paquetes |
 | MCP sigue aceptando lo que PiCode escribe | `node dev/check-mcp-entries.mjs --pack <1.0.4>` → **12 entries checked, all as expected** |
 | Azure no nos afecta | `grep` del conector y de `models.json`/`auth.json` del perfil → sin entradas `azure` |
 | `--tools`/`--exclude-tools`/`--no-mcp` no se usan | `grep` del conector y del build → sin coincidencias |
 | El pin es el único sitio con la versión | `grep` de `1.0.2` en `distribution/`, `dev/`, `src/` → solo `runtime.json` |
 
-Pendiente de cerrar: **el build** con el pin nuevo (es lo que prueba la instalación del árbol y lo
-que deja el editor del dueño con 1.0.4 dentro) y, después, la comprobación de MCP que el dueño
-puede hacer él mismo (login de `sentry` / `vercel`).
+### Cierre: medido sobre el editor que el dueño tiene en la mano
+
+| Qué | Valor |
+| --- | --- |
+| Build | `PICODE_PACK_SUFFIX=" - experimental" ./dev/build-run.sh` → **exit 0** en 5m 38s |
+| pi dentro del editor | **1.0.4** (`resources/pi-runtime/…/package.json`, y el manifiesto del runtime lo declara) |
+| MCP, contra el pi **que va dentro** | `node dev/check-mcp-entries.mjs --pack "PiCode-win32-x64 - experimental"` → **12 entries checked, all as expected**, con los dos controles heredados rechazados |
+| Perfil del dueño | **57 595 ficheros y 261 transcripciones**, apartado y devuelto por el build; `models.json`, `auth.json`, `mcp.json`, `mcp-auth.json`, agents y skills en su sitio, y sin ningún `data-hold` dejado atrás |
+| `PiCode.exe` | 221 916 672 bytes, del 2026-10-06 23:47 |
+
+**Lo que el dueño puede comprobar él mismo**, y no es una promesa: que `sentry` y `vercel`
+ya no le pidan login cada vez — 1.0.4 arregla justo ese fallo de OAuth (`invalid_redirect_uri`).
+Si sigue pasando, el siguiente sospechoso es la persistencia de la credencial en el perfil, no pi.

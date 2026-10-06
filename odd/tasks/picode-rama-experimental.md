@@ -425,3 +425,26 @@ de esa ventana sigue dando las mismas 11 filas (no se pierde nada por el camino)
 
 **Lo que NO se ha reproducido**: la segunda captura en sí. Se explica por lo de arriba y encaja con
 los tiempos del log, pero no se ha visto el fallo en vivo — queda dicho como lo que es.
+
+**Y una tercera cosa que la primera captura enseñaba sin decirlo** (`d5ae5e86`): **siete filas con la
+misma etiqueta**, «You are pi, the coding agent that runs insi…». El editor pone ese marco delante de
+cada mensaje (`withContext`, `context.ts`) y el listado tomaba como título el primer texto del
+usuario — que es el marco, idéntico en todas. Una lista donde todas las filas dicen lo mismo no la
+puede leer nadie, y es exactamente la redundancia que el dueño tiene por regla. Ahora la etiqueta es
+**lo que escribió él**:
+
+```text
+antes:  "You are pi, the coding agent that runs insi…"   ×7  (todas iguales)
+ahora:  "Hola puedes ver el espacio de trabajo?", "hey", "hola de nuevo", "hola!", …
+```
+
+Sin adivinar y sin duplicar frases: lo que se busca es el separador que `withContext` pone, y solo
+cuando lo que va delante dice de dónde viene («PiCode editor») — así una línea horizontal escrita por
+el dueño no se confunde con un marco. Una conversación escrita por el pi de la terminal no lleva
+marco y conserva su texto entero.
+
+**Cierre del día (build definitivo)**: `exit 0` en 5m 38s, con **347 tests / 347 pass / 0 fail** y
+typecheck en 0. El paquete `PiCode-win32-x64 - experimental` lleva pi **1.0.4**, el listado arreglado
+(`reuseRows`, `listingForPanel`, `ownerPrompt`, `conversationFiles`), el módulo de agentes y su fila
+*Launched agents*; el perfil del dueño intacto en **57 595 ficheros y 261 transcripciones**; y el
+validador de MCP del pi que va dentro acepta los **12** escritores de PiCode.
