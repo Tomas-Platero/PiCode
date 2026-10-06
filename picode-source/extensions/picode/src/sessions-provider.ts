@@ -513,6 +513,24 @@ function lastMessageRole(text: string): PiSessionFile['lastRole'] {
 }
 
 /**
+ * The listing the panel may be given when the listing could not be built.
+ *
+ * An empty listing is not "nothing to say": the panel takes it literally and removes every row
+ * it does not see. So emptiness is a **claim** — "the projects this window covers have no
+ * sessions" — and it is only true when those projects were known and walked. A window whose
+ * workspace has not been resolved yet has no project to walk, and that is exactly when the panel
+ * asks: the provider registers as the extension activates, and the panel refreshes right there.
+ * Answering "no sessions" at that instant is what empties the list and leaves it empty until
+ * something else happens to refresh it — the owner's «salen menos».
+ *
+ * While the projects are unknown the last real listing is the honest answer; once they are known,
+ * what was just built is.
+ */
+export function listingForPanel<T>(built: T[], previous: T[] | undefined, projectsKnown: boolean): T[] {
+	return built.length === 0 && !projectsKnown && previous !== undefined ? previous : built;
+}
+
+/**
  * Lists every session transcript under the profile's `sessions/` directory, across
  * all of pi's per-project folders. The panel uses `listWorkspaceSessionFiles` instead;
  * this remains the unfiltered walk for callers that genuinely want every project.

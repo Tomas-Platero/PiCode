@@ -20,7 +20,7 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listProjectSessionFiles, listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
+import { listProjectSessionFiles, listingForPanel, listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
 import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -756,7 +756,13 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// walks just those folders — no workspace, no match, no sessions. In workspace
 			// mode the area's own sessions (filed under the area's slug, see `agent.ts`)
 			// come as their own group, first, and each session carries its group's name.
-			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+			//
+			// `undefined` is not "no folders": it is a window whose workspace has not been
+			// resolved yet, and that is the moment the panel first asks. Publishing the
+			// emptiness of a listing nobody could build would clear the panel — see
+			// `listingForPanel`.
+			const folders = vscode.workspace.workspaceFolders;
+			const workspacePaths = (folders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
 			const built = listPanelSessions(sessionsDir, workspacePaths).map(({ file, group }) => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
@@ -772,7 +778,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// The rows nobody touched come back as the objects the panel already has: the bridge
 			// compares them by reference, so rebuilding one per refresh is what makes the whole
 			// list republish — and blink — on every refresh. See `reuseRows`.
-			lastItems = reuseRows(
+			const reusable = reuseRows(
 				lastItems ?? [],
 				built,
 				row => row.resource.toString(),
@@ -781,6 +787,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 					&& before.timing?.created === after.timing?.created
 					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
 			);
+			lastItems = listingForPanel(reusable, lastItems, folders !== undefined);
 			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -848,6 +855,10 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${picked.agent.id}` }));
 	});
 	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
+	// The listing is filtered by the folders this window has open, so a window whose folders
+	// arrive after the first ask must be asked again — nothing else fires this event, and without
+	// it the panel would sit on the answer it got while the workspace was still being resolved.
+	const foldersSubscription = vscode.workspace.onDidChangeWorkspaceFolders(() => sessionsChangedEmitter.fire());
 	// The deprecated item-provider interface cannot carry session content, so the same object
 	// registers again as the content provider for the scheme. Without it the editor cannot
 	// resolve a pi session and falls back to a text editor for an unresolvable resource.
@@ -856,6 +867,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 		fireChanged: () => sessionsChangedEmitter.fire(),
 		dispose: () => {
 			agentsCommand.dispose();
+			foldersSubscription.dispose();
 			contentRegistration.dispose();
 			registration.dispose();
 		},

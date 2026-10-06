@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { conversationFiles, firstUserPrompt, listProjectSessionFiles, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { conversationFiles, firstUserPrompt, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -112,6 +112,18 @@ test('a root-level transcript without a session header is not matched', () => {
 	};
 	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs(files));
 	assert.deepStrictEqual(found.map(file => file.label).sort(), ['del proyecto']);
+});
+
+test('an unbuilt listing is not an empty listing', () => {
+	// The panel reads an empty listing as "everything was deleted", so emptiness is only
+	// published when the projects were actually known and walked. A window whose workspace is
+	// still being resolved has no project to walk — and that is when the panel first asks.
+	const previous = ['a', 'b'];
+	assert.deepStrictEqual(listingForPanel([], previous, false), previous);
+	assert.deepStrictEqual(listingForPanel([], previous, true), []);
+	assert.deepStrictEqual(listingForPanel([], undefined, false), []);
+	const built = ['c'];
+	assert.deepStrictEqual(listingForPanel(built, previous, false), built);
 });
 
 /** A listing file system whose listing order, contents and mtimes the test drives. */
