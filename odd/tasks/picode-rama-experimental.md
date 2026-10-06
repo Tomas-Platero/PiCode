@@ -382,3 +382,46 @@ una conversación: su transcripción no pertenece a *Sessions*.
 **Lo que sigue sin estar**: el slug del área se recalcula con la lista de carpetas cada vez, así
 que una carpeta que se abra o se cierre **refila** la sesión viva (agente `agent.ts`, `scopeChanged`).
 Anotado como el primer punto de la próxima sesión.
+
+### 2026-10-06 (tarde) · «y salen menos»: una lista que no se pudo construir no es una lista vacía
+
+> «Mira primero me sale esto y luego esto: y salen menos.»
+
+**Lo que enseñan las dos capturas, medido**: la primera son **11 filas de pi + 3 locales = 14**
+(TODAY 2 + YESTERDAY 12), que es **exactamente** lo que produce el código nuevo para esa ventana
+— área 1 + `ArticTempest-Web` 8 + `artictempest-bot-dashboard` 2 (`.scratch/panel-now.ts`, contra el
+perfil real). La segunda son **solo las 3 locales**: su etiqueta es el mensaje del dueño, no el
+texto del fichero, así que no las produce el proveedor de pi. Es decir: el proveedor **devolvió cero
+filas** en una ventana donde debía devolver once.
+
+**La causa está en el log del propio editor**, en la sesión que el dueño estaba mirando:
+
+```text
+23:02:58.871  Extension host started
+23:02:58.911  activating picode.picode            (onChatParticipant:picode.pi)
+23:04:05      host terminating
+```
+
+El proveedor se registra **al activarse la extensión**, y el panel refresca justo ahí — en el
+primer segundo de una ventana que vivió 67. Si en ese instante `workspaceFolders` todavía no está
+resuelto, el listado no se puede construir, y el código publicaba esa imposibilidad como
+**«estos proyectos no tienen sesiones»**. Y el panel se lo cree: `computeItemsDelta` convierte una
+fila ausente en un **borrado**. Como nada más dispara un refresco, la lista se quedaba vacía.
+
+Es el mismo defecto del parpadeo, un paso más afuera: **el vacío es una afirmación**, y solo es
+verdad cuando los proyectos se conocieron y se recorrieron.
+
+**El arreglo** (`8b420586`):
+
+* `listingForPanel` — mientras las carpetas son **desconocidas**, la respuesta honesta es el último
+  listado real; cuando ya se conocen, el vacío se publica porque entonces sí es un hecho sobre los
+  proyectos y no sobre nuestra propia ignorancia. Los tres casos están probados como función pura.
+* **Suscripción a `onDidChangeWorkspaceFolders`** que dispara el evento del proveedor: una ventana
+  cuyas carpetas llegan después de la primera pregunta vuelve a ser preguntada. Sin eso, el panel
+  se quedaba con la respuesta que recibió mientras el workspace cargaba.
+
+**Verificado**: 346 tests, 346 pasan, 0 fallan; typecheck exit 0; y contra el perfil real el listado
+de esa ventana sigue dando las mismas 11 filas (no se pierde nada por el camino).
+
+**Lo que NO se ha reproducido**: la segunda captura en sí. Se explica por lo de arriba y encaja con
+los tiempos del log, pero no se ha visto el fallo en vivo — queda dicho como lo que es.
