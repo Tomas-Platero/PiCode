@@ -26,6 +26,11 @@
 
 set -eo pipefail
 
+# The one definition of "is an editor running?" lives beside the profile it protects
+# (`dev/data-hold.sh`), because the build asks the same question again before the pack.
+# shellcheck source=dev/data-hold.sh
+source "$( dirname "$0" )/data-hold.sh"
+
 FLAGS=("$@")
 
 mkdir -p .scratch
@@ -47,9 +52,9 @@ fi
 
 # The pack deletes the platform directory before writing it, and Windows refuses to delete the
 # files of a program that is running: an editor open from that folder turns a build into an EBUSY
-# inside the pack, minutes after it started. Checked here, where it is one line and one second.
-RUNNING_EDITOR=$( tasklist //FI "IMAGENAME eq PiCode.exe" 2>/dev/null | grep -c "PiCode.exe" || true )
-if [[ "${RUNNING_EDITOR}" -gt 0 && "${FLAGS[0]}" != "-DepsOnly" ]]; then
+# inside the pack, minutes after it started. Asked here, where it is one line and one second -- and
+# again in `build.sh` before the pack, because this answer can go stale while a build runs.
+if [[ "${FLAGS[0]}" != "-DepsOnly" ]] && picode_editor_running; then
   if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]]; then
     echo "error: PiCode is running, and the build has to replace PiCode-Win32-x64." >&2
     echo "       Close the editor first (the pack cannot delete a folder in use), or" >&2

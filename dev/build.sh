@@ -487,6 +487,18 @@ echo "== phase 4/5 - pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
 # through a delete that has already eaten PiCode.exe and resources/app.
 # A hold left by an interrupted run is restored before anything else, so a build never packs on
 # top of a profile that is sitting beside the folder.
+#
+# And the question the wrapper asked at the start is asked again here, where it still helps: the
+# compile phases take minutes, and an editor opened during them is exactly how the build of
+# 2026-10-06 00:19 died -- EBUSY inside the pack, with the profile already renamed aside. Answering
+# it here stops the build while nothing has been moved and nothing deleted.
+if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
+  echo "error: PiCode is running, and the pack has to delete $( basename "${PACK_DIR}" )." >&2
+  echo "       It was not running when this build started, so it was opened while the compile" >&2
+  echo "       phases ran. Close it and build again: nothing has been moved or deleted yet." >&2
+  echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
+  exit 4
+fi
 picode_data_hold_recover "${PACK_DIR}" || exit 1
 picode_data_hold_move_aside "${PACK_DIR}" || exit 1
 

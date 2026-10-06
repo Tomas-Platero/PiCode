@@ -34,6 +34,23 @@ picode_data_hold_dir() {
   printf '%s\n' "${1}-data-hold"
 }
 
+# picode_editor_running
+#
+# Whether a PiCode is running right now.
+#
+# This is asked twice, because the answer can change while a build runs. The pack deletes the
+# platform directory before writing it, and Windows refuses to delete the files of a program that
+# is running: an editor opened **while the compile phases run** turns the pack into an EBUSY
+# minutes later, after the profile has already been renamed aside. That is not hypothetical -- it
+# happened on 2026-10-06, at 00:19, and it cost the build and the run. One question, one answer,
+# asked where the answer still helps: at the start (nothing to lose) and again at the pack
+# (nothing lost yet).
+picode_editor_running() {
+  local count
+  count=$( tasklist //FI "IMAGENAME eq PiCode.exe" 2>/dev/null | grep -c "PiCode.exe" || true )
+  [[ "${count}" -gt 0 ]]
+}
+
 # The profile inside a pack directory.
 picode_data_dir() {
   printf '%s\n' "${1}/data"
