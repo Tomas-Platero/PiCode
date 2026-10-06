@@ -40,6 +40,40 @@ export interface PiSessionFile {
 	readonly label: string;
 	/** Last modified, newest first in the list. */
 	readonly mtime: number;
+	/**
+	 * The transcript this one was launched from, when its own header names a `parentSession`.
+	 *
+	 * pi files a **delegation** — a subagent's work, a fork — as a session of its own, under
+	 * the same project folder as the conversation that launched it, with the launching
+	 * transcript's path in its header. That one field is the difference between a conversation
+	 * the owner had and an agent the editor ran: without it a single prompt that asked for three
+	 * agents leaves four rows that look alike, and the agents crowd the conversations out of the
+	 * panel's per-project cap.
+	 */
+	readonly parent?: string;
+	/**
+	 * The role of the transcript's own **last** message entry.
+	 *
+	 * pi appends an entry once its message is complete, so the last entry is what the turn is
+	 * doing: `assistant` — the agent answered and owes nothing; `user` or `toolResult` — it was
+	 * handed something and still owes an answer. `undefined` when the file carries no message at
+	 * all. It is the only state signal an append-only transcript holds, and it is read, never
+	 * guessed from a clock.
+	 */
+	readonly lastRole?: 'user' | 'assistant' | 'toolResult';
+}
+
+/**
+ * The transcripts the panel lists: the **conversations**, never the agents' own.
+ *
+ * A delegation is a session of its own on disk (see `PiSessionFile.parent`) and belongs in the
+ * agents view, which exists for it. Leaving it in the conversations list is not merely noise:
+ * the panel caps each project at eight rows, so a prompt that launched three agents pushes the
+ * owner's own conversations past the cap — they leave the list while the agents are written and
+ * come back afterwards.
+ */
+export function conversationFiles(files: readonly PiSessionFile[]): PiSessionFile[] {
+	return files.filter(file => file.parent === undefined);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,7 +197,7 @@ const nodeFs: SessionsFs = {
  * serve a stale label; acceptable for a transcript listing, where pi appends and the mtime
  * moves with every write.
  */
-const listingCache = new Map<string, { mtime: number; label: string; id: string }>();
+const listingCache = new Map<string, { mtime: number; label: string; id: string; parent?: string; lastRole?: PiSessionFile['lastRole'] }>();
 
 /** The project slug a transcript's own header records, cached against the mtime it was read at. */
 const headerSlugCache = new Map<string, { mtime: number; slug: string | undefined }>();
@@ -229,7 +263,23 @@ export function listWorkspaceSessionFiles(
 	if (workspacePaths.length === 0) {
 		return [];
 	}
-	return listBySlugs(sessionsDir, new Set(workspacePaths.map(piProjectSlug)), fs);
+	return conversationFiles(listProjectSessionFiles(sessionsDir, workspacePaths.map(piProjectSlug), fs));
+}
+
+/**
+ * Every transcript of the projects the caller named, by slug — the conversations **and** the
+ * agents' own transcripts, newest first.
+ *
+ * This is the walk behind opening a session by id: a transcript the conversations list leaves
+ * out (a delegation's) must still open when the agents view asks for it, and the project filter
+ * must be the same one the panel used, or the id would resolve in one surface and not the other.
+ */
+export function listProjectSessionFiles(
+	sessionsDir: string,
+	slugs: Iterable<string>,
+	fs: SessionsFs = nodeFs,
+): PiSessionFile[] {
+	return listBySlugs(sessionsDir, new Set(slugs), fs);
 }
 
 /**
@@ -306,7 +356,10 @@ export function listSessionGroups(
 ): PiSessionGroup[] {
 	return groups.map(group => ({
 		label: group.label,
-		files: listBySlugs(sessionsDir, new Set(group.slugs), fs).slice(0, Math.max(capPerGroup, 0)),
+		// The cap counts **conversations**, which is what the panel is a list of: an agent's
+		// transcript is dropped before the cap, or a busy afternoon of delegations would be what
+		// the eight rows are spent on.
+		files: conversationFiles(listProjectSessionFiles(sessionsDir, group.slugs, fs)).slice(0, Math.max(capPerGroup, 0)),
 	}));
 }
 
@@ -363,7 +416,10 @@ function listFromDirs(roots: readonly string[], extraFiles: readonly string[], f
 
 /** A text order that depends on the text alone — no locale, so it is the same on any machine. */
 function compareText(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
+	if (a === b) {
+		return 0;
+	}
+	return a < b ? -1 : 1;
 }
 
 /**
@@ -405,16 +461,55 @@ function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	// — under the panel's per-group cap — drop it out of the listing until the next refresh.
 	const mtime = stat === 0 && cached !== undefined ? cached.mtime : stat;
 	if (cached !== undefined && cached.mtime === mtime) {
-		return { id: cached.id, file: entry, label: cached.label, mtime };
+		return { id: cached.id, file: entry, label: cached.label, mtime, parent: cached.parent, lastRole: cached.lastRole };
 	}
-	// New or modified file: read it and remember the label until it moves again.
-	const firstPrompt = firstUserPrompt(fs.read(entry))
+	// New or modified file: read it once and remember what it says until it moves again. The
+	// three questions — which conversation this is, who launched it, and what its last turn is
+	// doing — are all answered from that one read.
+	const text = fs.read(entry);
+	const header = sessionHeader(text);
+	const firstPrompt = firstUserPrompt(text)
 		?? path.basename(entry).replace(/\.jsonl$/, '');
 	const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
 	const label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
 	const id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
-	listingCache.set(entry, { mtime, label, id });
-	return { id, file: entry, label, mtime };
+	const parent = typeof header?.parentSession === 'string' ? header.parentSession : undefined;
+	const lastRole = lastMessageRole(text);
+	listingCache.set(entry, { mtime, label, id, parent, lastRole });
+	return { id, file: entry, label, mtime, parent, lastRole };
+}
+
+/**
+ * The role of the transcript's **last** message entry.
+ *
+ * Read from the end, because that is where the answer is: pi appends an entry when the message
+ * is complete, so a turn still in flight has none yet and the newest message is what it was
+ * handed. Entries that are not the agent's own messages (`custom_message`, `context_edit`, a
+ * marker) are passed over rather than read as an answer.
+ */
+function lastMessageRole(text: string): PiSessionFile['lastRole'] {
+	const lines = text.split('\n');
+	for (let index = lines.length - 1; index >= 0; index--) {
+		const line = lines[index].trim();
+		if (line === '') {
+			continue;
+		}
+		let entry: unknown;
+		try {
+			entry = JSON.parse(line);
+		} catch {
+			// A half-written last line, which is what a transcript looks like mid-append.
+			continue;
+		}
+		if (!isRecord(entry) || entry.type !== 'message' || !isRecord(entry.message)) {
+			continue;
+		}
+		const role = entry.message.role;
+		if (role === 'user' || role === 'assistant' || role === 'toolResult') {
+			return role;
+		}
+	}
+	return undefined;
 }
 
 /**

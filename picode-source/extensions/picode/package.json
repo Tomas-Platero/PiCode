@@ -129,6 +129,11 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.agents",
+				"title": "Show Launched Agents",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.connectProvider",
 				"title": "Connect a subscription",
 				"category": "PiCode"

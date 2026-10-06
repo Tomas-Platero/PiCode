@@ -8,12 +8,14 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { getSessionUsage } from './agent';
+import { agentsSummary, launchedAgents } from './agents';
 import { declarationsFromSetting, isRecord } from './declarations';
 import { readDurableStatus } from './durable';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
-import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
+import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
+import { listProjectSessionFiles } from './sessions-provider';
 import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
 import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKey } from './usage-data';
 
@@ -327,7 +329,26 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		usage: await readUsageRow(profileDir, usage?.model),
 		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
 		durable: await readDurableStatus(),
+		// The agents launched from the folders open in this window, counted off their own
+		// transcripts: the same rows `picode.agents` lists, and the same project slugs the
+		// conversations panel uses. A listing that throws leaves the row out rather than
+		// reporting zero agents, which would read as "nothing was ever launched".
+		agents: tryAgents(sessionsDirOf(profileDir)),
 	};
+}
+
+/** The profile's own `sessions/` folder — where pi files every transcript, project by project. */
+function sessionsDirOf(profileDir: string): string {
+	return path.join(profileDir, 'sessions');
+}
+
+/** How many agents the open projects launched, or `undefined` when the listing cannot be read. */
+function tryAgents(sessionsDir: string): StatusData['agents'] {
+	try {
+		return agentsSummary(launchedAgents(listProjectSessionFiles(sessionsDir, projectSlugsOfWindow())));
+	} catch {
+		return undefined;
+	}
 }
 
 /** Registers the command the status tree calls; the caller collects the disposable. */

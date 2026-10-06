@@ -20,7 +20,8 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
+import { listProjectSessionFiles, listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
+import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -52,7 +53,7 @@ import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 
@@ -789,12 +790,12 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			if (token.isCancellationRequested) {
 				return readSession;
 			}
-			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
 			const id = resource.path.split('/').pop();
-			// The same groups the panel shows, but uncapped: a session older than the
-			// listing's cap must still open — the cap bounds the list, not the history.
-			const file = listPanelSessions(sessionsDir, workspacePaths, Number.MAX_SAFE_INTEGER).find(entry => entry.file.id === id)?.file;
+			// Every transcript of the open projects, **not** only the ones the panel lists: an
+			// agent's own transcript is not a conversation, and the agents view opens it. The cap
+			// bounds the list, not the history, so nothing here is capped either.
+			const file = listProjectSessionFiles(sessionsDir, projectSlugsOfWindow()).find(entry => entry.id === id);
 			if (file === undefined) {
 				return readSession;
 			}
@@ -813,6 +814,39 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			return { ...readSession, history };
 		},
 	};
+	// What `/agents` answers in the terminal, in one place: every delegation filed under the open
+	// projects — whether or not the conversation that launched it is open — with the state its
+	// own transcript carries, and a way into it. The daemon is not asked: `agents.ts` says why
+	// the transcript is the state.
+	const agentsCommand = vscode.commands.registerCommand('picode.agents', async () => {
+		const agents = launchedAgents(listProjectSessionFiles(
+			path.join(profileInForce(), 'sessions'),
+			projectSlugsOfWindow(),
+		));
+		if (agents.length === 0) {
+			void vscode.window.showInformationMessage('No agent was launched from the folders open in this window.');
+			return;
+		}
+		const picked = await vscode.window.showQuickPick(agents.map(agent => ({
+			label: `$(${agentIcon(agent.state)}) ${agent.label}`,
+			description: [
+				agent.parentLabel === undefined ? undefined : `from ${agent.parentLabel}`,
+				lastActivity(agent.mtime, Date.now()),
+			].filter((part): part is string => part !== undefined).join(' · '),
+			detail: agentDetail(agent.state),
+			agent,
+		})), {
+			title: 'Launched agents',
+			placeHolder: `${agents.length} launched — pick one to read it`,
+			matchOnDescription: true,
+		});
+		if (picked === undefined) {
+			return;
+		}
+		// The scheme the provider registered has its own editor resolver in the core, so this is
+		// the read-only chat transcript, exactly as clicking the session in the panel would be.
+		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${picked.agent.id}` }));
+	});
 	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
 	// The deprecated item-provider interface cannot carry session content, so the same object
 	// registers again as the content provider for the scheme. Without it the editor cannot
@@ -821,10 +855,30 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 	return {
 		fireChanged: () => sessionsChangedEmitter.fire(),
 		dispose: () => {
+			agentsCommand.dispose();
 			contentRegistration.dispose();
 			registration.dispose();
 		},
 	};
+}
+
+/** The icon one agent state wears in the list (`agents.ts` reads it; this names it). */
+function agentIcon(state: AgentState): string {
+	if (state === 'working') {
+		return 'sync~spin';
+	}
+	return state === 'answered' ? 'check' : 'circle-outline';
+}
+
+/** What one agent state means, in the words the transcript earned. */
+function agentDetail(state: AgentState): string {
+	if (state === 'working') {
+		return 'Still owed an answer: its transcript does not end with the agent\u2019s own reply yet.';
+	}
+	if (state === 'answered') {
+		return 'Answered: its transcript ends with the agent\u2019s own reply.';
+	}
+	return 'Nothing was written to it yet.';
 }
 
 /** The directory holding the bundled pi runtime's `node_modules` — what npm reinstalls into. */

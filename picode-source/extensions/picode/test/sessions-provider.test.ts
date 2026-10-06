@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { firstUserPrompt, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { conversationFiles, firstUserPrompt, listProjectSessionFiles, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -130,6 +130,68 @@ function transcriptFor(id: string, prompt: string): string {
 		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"${prompt}"}]}}`,
 	].join('\n');
 }
+
+test('a transcript says which conversation launched it, and what its last turn is doing', () => {
+	const launched = '/list/33333333-3333-3333-3333-333333333333.jsonl';
+	const content = [
+		`{"type":"session","version":3,"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-10-05T12:00:00.000Z","cwd":"C:\\\\list","parentSession":"C:\\\\list\\\\parent.jsonl"}`,
+		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]}}`,
+		`{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}`,
+	].join('\n');
+	const [found] = listSessionFiles('/list', orderedFs([launched], () => content, () => 7000));
+	assert.strictEqual(found.parent, 'C:\\list\\parent.jsonl');
+	assert.strictEqual(found.lastRole, 'assistant');
+});
+
+test('a turn still in flight reads as one, and a marker is not an answer', () => {
+	const working = '/list/44444444-4444-4444-4444-444444444444.jsonl';
+	const content = [
+		`{"type":"session","version":3,"id":"44444444-4444-4444-4444-444444444444","timestamp":"2026-10-05T12:00:00.000Z","cwd":"C:\\\\list"}`,
+		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]}}`,
+		// The agent answered once, then was handed a tool result it still owes an answer to.
+		`{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"calling a tool"}]}}`,
+		`{"type":"message","message":{"role":"toolResult","content":[{"type":"text","text":"the output"}]}}`,
+		// A half-written last line is what a transcript looks like mid-append: it is passed over.
+		`{"type":"message","message":{"role":"assi`,
+	].join('\n');
+	const [found] = listSessionFiles('/list', orderedFs([working], () => content, () => 7000));
+	assert.strictEqual(found.lastRole, 'toolResult');
+});
+
+test('the panel lists conversations, never the agents they launched', () => {
+	// pi files both under the project's own folder; the only thing that tells them apart is the
+	// delegations' `parentSession` in their header.
+	const slug = piProjectSlug('C:\\list');
+	const dir = `/list/${slug}`;
+	const parentFile = `${dir}/55555555-5555-5555-5555-555555555555.jsonl`;
+	const childFile = `${dir}/66666666-6666-6666-6666-666666666666.jsonl`;
+	const contents: Record<string, string> = {
+		[parentFile]: transcriptFor('55555555-5555-5555-5555-555555555555', 'una conversacion'),
+		[childFile]: [
+			JSON.stringify({ type: 'session', version: 3, id: '66666666-6666-6666-6666-666666666666', cwd: 'C:\\list', parentSession: parentFile }),
+			JSON.stringify({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'un agente' }] } }),
+		].join('\n'),
+	};
+	const fs: SessionsFs = {
+		read: file => contents[file] ?? '',
+		list: seen => (seen === '/list' ? [dir] : seen === dir ? [parentFile, childFile] : []),
+		mtime: () => 1000,
+	};
+
+	// The conversations list leaves the agent out...
+	const conversations = listWorkspaceSessionFiles('/list', ['C:\\list'], fs);
+	assert.deepStrictEqual(conversations.map(file => file.label), ['una conversacion']);
+
+	// ...and the walk the content provider opens by id with still finds it, so the agents view
+	// can open a transcript the panel deliberately does not list.
+	const all = listProjectSessionFiles('/list', [slug], fs);
+	assert.strictEqual(all.length, 2);
+	assert.strictEqual(all.find(file => file.id === '66666666-6666-6666-6666-666666666666')?.label, 'un agente');
+
+	// The rule itself — the one split, named once — and the two halves it produces.
+	assert.deepStrictEqual(conversationFiles(all).map(file => file.id), ['55555555-5555-5555-5555-555555555555']);
+	assert.deepStrictEqual(all.filter(file => file.parent !== undefined).map(file => file.id), ['66666666-6666-6666-6666-666666666666']);
+});
 
 test('a listing is the same order however the directory happens to list it', () => {
 	// Three transcripts pi wrote together (an import), so the mtimes tie and the directory's

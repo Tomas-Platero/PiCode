@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { externalSdkEntry } from './piLocate';
 import { sdkCandidates } from './piSdk';
 import { areaSessionSlug } from './workspace-area';
+import { piProjectSlug } from './sessions-provider';
 
 /**
  * Which pi runs as the editor's agent, and whose configuration it uses.
@@ -111,6 +112,31 @@ export function resolveProjectScope(): PiProjectScope {
 		roots: workspaceFolders.map(folder => ({ name: folder.name, path: folder.uri.fsPath })),
 		area: { name, slug: areaSessionSlug(folders, name) },
 	};
+}
+
+/**
+ * The slugs pi files this window's sessions under: the area's own when there is one, then a
+ * slug per open folder.
+ *
+ * It is the one definition of "the sessions of this project", and every surface asks it the
+ * same question — the conversations list, the agents list, and opening a session by id. Two
+ * surfaces answering it differently is how a session shows up in one and not in the other.
+ *
+ * The folders travel as paths rather than as a resolved scope: in folder mode the scope
+ * narrows to the folder pi runs in, while the sessions of every open folder are still the
+ * ones the panel lists and the ones a click must be able to open.
+ */
+export function projectSlugs(workspacePaths: readonly string[], areaSlug: string | undefined): string[] {
+	return [
+		...(areaSlug === undefined ? [] : [areaSlug]),
+		...workspacePaths.map(piProjectSlug),
+	];
+}
+
+/** The same slugs for the window in force — the form every surface actually calls. */
+export function projectSlugsOfWindow(): string[] {
+	const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+	return projectSlugs(workspacePaths, resolveProjectScope().area?.slug);
 }
 
 /** The mode in force. Anything unrecognised means the internal pi. */

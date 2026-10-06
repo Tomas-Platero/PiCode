@@ -105,3 +105,30 @@ test('a group whose folder has no sessions yet is empty, not absent', () => {
 	assert.deepStrictEqual(groups.map(group => group.label), ['Artictempest (workspace area)', 'bot']);
 	assert.deepStrictEqual(groups.map(group => group.files), [[], []]);
 });
+
+/** The same transcript as `transcript`, but filed as a delegation of `parentFile`. */
+function delegation(id: string, cwd: string, slug: string, mtime: number, parentFile: string): [string, string] {
+	const [file, content] = transcript(id, cwd, slug, mtime);
+	const lines = content.split('\n');
+	const header: unknown = JSON.parse(lines[0]);
+	lines[0] = JSON.stringify({ ...(header as Record<string, unknown>), parentSession: parentFile });
+	return [file, lines.join('\n')];
+}
+
+test('the per-group cap is spent on conversations, never on the agents they launched', () => {
+	// The afternoon the report describes: two conversations, and nine agents launched from them,
+	// all newer. The panel's eight rows per project belong to the conversations — before this the
+	// agents were the eight newest and both conversations were pushed out of the list entirely.
+	const files: Record<string, string> = {};
+	const [firstFile, firstContent] = transcript('2026_c1', WEB, WEB_SLUG, 10);
+	const [secondFile, secondContent] = transcript('2026_c2', WEB, WEB_SLUG, 11);
+	files[firstFile] = firstContent;
+	files[secondFile] = secondContent;
+	for (let i = 0; i < 9; i++) {
+		const [file, content] = delegation(`2026_a${i}`, WEB, WEB_SLUG, 100 + i, firstFile);
+		files[file] = content;
+	}
+
+	const groups = listSessionGroups('/sessions', [{ label: 'web', slugs: [WEB_SLUG] }], 8, memoryFs(files));
+	assert.deepStrictEqual(groups[0].files.map(file => file.id), ['2026_c2', '2026_c1']);
+});

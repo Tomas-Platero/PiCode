@@ -321,3 +321,60 @@ lanzó, en qué estado, y poder entrar a verlo.
 **Lo que NO se puede prometer hoy**: en el chat, cada sesión nueva arranca **sus propios** MCP y su
 propia sesión de pi, así que "los agentes" no son un conjunto global hasta que todo lo delegado
 pase por el daemon, que sí es un único proceso y un único sitio donde mirar.
+
+### 2026-10-06 · «la parte de "sesiones" del chat se refresca mucho, cambia, pierde sesiones, vuelven a aparecer»
+
+**Lo que estaba pasando, medido** (perfil interno del dueño, 6 de octubre): 164 transcripciones
+en los tres proyectos abiertos = **56 conversaciones + 108 agentes**. El panel enseña **8 filas por
+proyecto**, y esas 8 se las comían los agentes: en el grupo del repo, **las 8 más nuevas eran 6
+agentes y 2 conversaciones**. Cada prompt que lanzaba tres agentes escribía tres transcripciones
+nuevas, el tope se gastaba en ellas y las conversaciones del dueño **salían de la lista** y
+volvían cuando el agente viejo dejaba de ser el más reciente. Eso es «pierde sesiones, vuelven a
+aparecer», literalmente.
+
+Debajo había tres mentiras más, todas del propio listado:
+
+| Qué decía el listado | Qué era verdad |
+| --- | --- |
+| Nada, pero **republicaba todo en cada refresco** (fabricaba fila nueva siempre) | El puente del editor compara las filas **por referencia** y salta el trabajo entero si el delta viene vacío. Repintar las 8 filas cada vez que el editor pregunta es lo que se ve como parpadeo |
+| Una transcripción que no se puede leer **ahora** decía ser de 1970 y llamarse como su uuid | pi escribe en la transcripción **viva** mientras el panel mira. Mentir con la fecha y el nombre la renombra, la manda al final y, con el tope de 8, **la saca de la lista** hasta el refresco siguiente |
+| El orden de los empates de fecha lo decidía el directorio | Dos ficheros escritos a la vez (una importación trae un árbol entero) quedan en el orden que a `readdir` le apetezca; una lista que se reordena sola es una lista que no se puede leer |
+
+Y una que sí era una decisión, tomada al revés: **el tope de 8 contaba agentes**. Un agente no es
+una conversación: su transcripción no pertenece a *Sessions*.
+
+**Lo que hay ahora**
+
+| Commit | Qué cambia |
+| --- | --- |
+| `5b531f90` | Una lista que no parpadea: filas reutilizadas cuando no cambian, mtime y nombre recordados cuando la lectura falla, y orden determinista (fecha, luego id, luego ruta) |
+| *(este)* | **Los agentes salen de la lista de conversaciones** y tienen la suya |
+
+**La vista de agentes** (`picode.agents`, y su fila *Launched agents* en el panel de estado):
+
+* **Un solo sitio** con todo lo lanzado desde los proyectos abiertos, esté o no abierta la
+  conversación que lo pidió: etiqueta (el encargo del agente), de qué conversación salió, y hace
+  cuánto trabajó por última vez.
+* **El estado se lee, no se adivina**: `answered` cuando la última entrada de su transcripción es
+  la respuesta del propio agente; `working` cuando le quedó algo por responder (su última entrada
+  es tuya o de una herramienta); `empty` cuando no se le pidió nada todavía. No hay ningún reloj
+  metiendo la pata: en los 129 subagentes del perfil, los 123 acabados terminan en `assistant` y
+  ninguno en mitad de un turno.
+* **Se entra**: elegir uno abre su transcripción en el chat, en solo lectura, igual que pulsar
+  una sesión en el panel. Es la misma resolución de editor que usa el panel, no un camino nuevo.
+* **Lo que no promete**: el daemon durable sigue siendo su propia sección, con su verdad (un run
+  en vuelo o ninguno); esta vista es lo que pi ejecutó dentro de este editor.
+
+**Verificado ejecutando** (no leyendo):
+
+* `node --test picode-source/extensions/picode/test/*.test.ts` → **345 tests, 345 pasan, 0 fallan**
+  (13 nuevos entre `agents.test.ts`, el listado y el tope por grupo). Los tests nuevos del listado
+  se ejecutaron **contra el código viejo** y fallan allí: son prueba, no adorno.
+* `tsc --project picode-source/extensions/picode/tsconfig.json --noEmit` → **exit 0**.
+* Sobre el perfil real (`.scratch/agents-evidence.ts`): de 164 transcripciones salen **56
+  conversaciones y 108 agentes**; las 8 filas del panel pasan de «1 conversación + 7 agentes» a
+  **8 conversaciones**.
+
+**Lo que sigue sin estar**: el slug del área se recalcula con la lista de carpetas cada vez, así
+que una carpeta que se abra o se cierre **refila** la sesión viva (agente `agent.ts`, `scopeChanged`).
+Anotado como el primer punto de la próxima sesión.

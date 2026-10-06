@@ -171,6 +171,12 @@ export interface StatusData {
 	usage?: string;
 	/** The durable daemon as it answered right now (`durable.ts`): up or down, and what it holds. */
 	durable?: DurableStatus;
+	/**
+	 * The agents launched from the open projects (`agents.ts`, read off the transcripts): how
+	 * many, and how many still owe an answer. `undefined` when the listing could not be read —
+	 * the row is then absent, because a `0` would read as "nothing was ever launched".
+	 */
+	agents?: { readonly total: number; readonly working: number };
 	error?: string;
 }
 
@@ -365,6 +371,14 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				// it is off (`mcp-provider.ts`), so without these rows it could not be switched back on.
 				...(mcpServerRows(d.mcpServers ?? [])),
 			}),
+			// The agents launched from the open projects, counted off their own transcripts, and the
+			// row is also the way in: the same list the command opens. The durable daemon's work
+			// has its own section below; this is the delegations pi itself ran.
+			...(d.agents === undefined ? [] : [new StatusItem('Launched agents', {
+				description: d.agents.working > 0 ? `${d.agents.total} · ${d.agents.working} working` : String(d.agents.total),
+				icon: new vscode.ThemeIcon('rocket'),
+				command: { command: 'picode.agents', title: 'Show the agents launched from these folders' },
+			})]),
 		];
 		const model = d.model ?? d.defaultModel;
 		if (model !== undefined) {
