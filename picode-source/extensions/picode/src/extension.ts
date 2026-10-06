@@ -20,7 +20,7 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, sessionTurns, type PiSessionFile } from './sessions-provider';
+import { listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -757,7 +757,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// come as their own group, first, and each session carries its group's name.
 			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const items = listPanelSessions(sessionsDir, workspacePaths).map(({ file, group }) => ({
+			const built = listPanelSessions(sessionsDir, workspacePaths).map(({ file, group }) => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				...(group === undefined ? {} : { description: group }),
@@ -768,8 +768,19 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// every session as dated 1970 ('57y ago').
 				timing: { created: file.mtime, lastRequestEnded: file.mtime },
 			}));
-			lastItems = items;
-			return items;
+			// The rows nobody touched come back as the objects the panel already has: the bridge
+			// compares them by reference, so rebuilding one per refresh is what makes the whole
+			// list republish — and blink — on every refresh. See `reuseRows`.
+			lastItems = reuseRows(
+				lastItems ?? [],
+				built,
+				row => row.resource.toString(),
+				(before, after) => before.label === after.label
+					&& before.description === after.description
+					&& before.timing?.created === after.timing?.created
+					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
+			);
+			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 			// No `requestHandler`: the transcript replays as read-only history, and the

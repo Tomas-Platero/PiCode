@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { firstUserPrompt, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { firstUserPrompt, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -112,4 +112,77 @@ test('a root-level transcript without a session header is not matched', () => {
 	};
 	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs(files));
 	assert.deepStrictEqual(found.map(file => file.label).sort(), ['del proyecto']);
+});
+
+/** A listing file system whose listing order, contents and mtimes the test drives. */
+function orderedFs(entries: string[], contents: (file: string) => string, mtimes: (file: string) => number): SessionsFs {
+	return {
+		read: file => (entries.includes(file) ? contents(file) : ''),
+		list: dir => (dir === '/list' ? entries : []),
+		mtime: file => (entries.includes(file) ? mtimes(file) : 0),
+	};
+}
+
+/** One transcript with a prompt, so the label is something the test can recognise. */
+function transcriptFor(id: string, prompt: string): string {
+	return [
+		`{"type":"session","version":3,"id":"${id}","timestamp":"2026-10-05T12:00:00.000Z","cwd":"C:\\\\list"}`,
+		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"${prompt}"}]}}`,
+	].join('\n');
+}
+
+test('a listing is the same order however the directory happens to list it', () => {
+	// Three transcripts pi wrote together (an import), so the mtimes tie and the directory's
+	// own order — which is not a promise — would otherwise be what the panel shows.
+	const ids = ['aaaa1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', 'cccc3333-3333-3333-3333-333333333333'];
+	// The directory hands them over in an order that is neither sorted nor reversed: it is
+	// whatever `readdir` felt like, which is exactly what must not reach the panel.
+	const listed = ['cccc3333-3333-3333-3333-333333333333', 'aaaa1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222'];
+	const files = listed.map(id => `/list/${id}.jsonl`);
+	const contents = (file: string): string => transcriptFor(file.slice('/list/'.length, -'.jsonl'.length), `prompt ${file}`);
+	const tied = (): number => 1000;
+
+	const forwards = listSessionFiles('/list', orderedFs(files, contents, tied)).map(file => file.id);
+	const backwards = listSessionFiles('/list', orderedFs([...files].reverse(), contents, tied)).map(file => file.id);
+
+	assert.deepStrictEqual(forwards, [...ids].sort());
+	assert.deepStrictEqual(backwards, forwards);
+});
+
+test('a transcript that cannot be read right now keeps its label and its place', () => {
+	// pi appends to the live transcript while the panel looks at it, so a stat that fails is a
+	// file we cannot see *this time round* — not a transcript written in 1970 whose name is its
+	// uuid. Losing the remembered mtime would rename one row and sort it below every other one.
+	const fresh = '/list/11111111-1111-1111-1111-111111111111.jsonl';
+	const older = '/list/22222222-2222-2222-2222-222222222222.jsonl';
+	const files = [fresh, older];
+	const contents = (file: string): string => transcriptFor(file.slice('/list/'.length, -'.jsonl'.length), file === fresh ? 'la viva' : 'la vieja');
+
+	const first = listSessionFiles('/list', orderedFs(files, contents, file => (file === fresh ? 9000 : 4000)));
+	assert.deepStrictEqual(first.map(file => file.label), ['la viva', 'la vieja']);
+
+	const unreadable = listSessionFiles('/list', orderedFs(files, contents, file => (file === fresh ? 0 : 4000)));
+	assert.deepStrictEqual(unreadable.map(file => file.label), ['la viva', 'la vieja']);
+	assert.deepStrictEqual(unreadable.map(file => file.mtime), [9000, 4000]);
+});
+
+test('reuseRows hands back the row it handed out before when nothing about it changed', () => {
+	interface Row { readonly id: string; readonly label: string; readonly mtime: number; }
+	const before: Row[] = [{ id: 'a', label: 'A', mtime: 1 }, { id: 'b', label: 'B', mtime: 2 }];
+	const unchanged = (previous: Row, next: Row): boolean => previous.label === next.label && previous.mtime === next.mtime;
+	const key = (row: Row): string => row.id;
+
+	const same = reuseRows(before, [{ id: 'a', label: 'A', mtime: 1 }, { id: 'b', label: 'B', mtime: 2 }], key, unchanged);
+	assert.strictEqual(same[0], before[0]);
+	assert.strictEqual(same[1], before[1]);
+
+	// One row moved, one arrived, one left: only the moved and the new ones are new objects.
+	const changed = reuseRows(before, [{ id: 'b', label: 'B', mtime: 2 }, { id: 'c', label: 'C', mtime: 3 }], key, unchanged);
+	assert.deepStrictEqual(changed.map(row => row.id), ['b', 'c']);
+	assert.strictEqual(changed[0], before[1]);
+	assert.notStrictEqual(changed[1], before[0]);
+
+	const relabelled = reuseRows(before, [{ id: 'a', label: 'A renamed', mtime: 1 }], key, unchanged);
+	assert.strictEqual(relabelled[0].label, 'A renamed');
+	assert.notStrictEqual(relabelled[0], before[0]);
 });

@@ -354,26 +354,66 @@ function listFromDirs(roots: readonly string[], extraFiles: readonly string[], f
 			listingCache.delete(cached);
 		}
 	}
-	return files.sort((a, b) => b.mtime - a.mtime);
+	// Newest first, and **the same order every time**: the mtime alone leaves files written
+	// together — an import brings a whole tree over at once — in whatever order the directory
+	// happened to list them, and a panel that reorders itself with nothing having happened is a
+	// panel the owner cannot read. The id, and then the path, settles every tie by content.
+	return files.sort((a, b) => (b.mtime - a.mtime) || compareText(a.id, b.id) || compareText(a.file, b.file));
+}
+
+/** A text order that depends on the text alone — no locale, so it is the same on any machine. */
+function compareText(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * `next`, with every row whose content did not change kept as the **same object** it was.
+ *
+ * The bridge that carries these rows to the panel diffs them **by reference** — see
+ * `computeItemsDelta` in `extHostChatSessions.ts` — and skips the update entirely when the
+ * delta comes out empty. A listing that builds a fresh object per row on every refresh
+ * therefore reads, on the panel's side, as *every session changing at once*: the whole list is
+ * republished, the model rebuilds a session object for every row, and the view repaints itself
+ * — the rows it does not draw for a moment read as sessions that went away and came back.
+ * Handing back the row built last time whenever nothing about it changed is what makes an
+ * unchanged refresh cost nothing, and a changed one carry only what changed.
+ */
+export function reuseRows<T>(
+	previous: readonly T[],
+	next: readonly T[],
+	key: (row: T) => string,
+	unchanged: (before: T, after: T) => boolean,
+): T[] {
+	const remembered = new Map<string, T>();
+	for (const row of previous) {
+		remembered.set(key(row), row);
+	}
+	return next.map(row => {
+		const last = remembered.get(key(row));
+		return last !== undefined && unchanged(last, row) ? last : row;
+	});
 }
 
 /** One transcript's listing entry, from or into the mtime-keyed cache. */
 function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
-	const mtime = fs.mtime(entry);
+	const stat = fs.mtime(entry);
 	const cached = listingCache.get(entry);
-	let label: string;
-	let id: string;
+	// `0` is not a transcript written in 1970: it is a file that could not be read this time
+	// round, and pi is appending to the live one while the panel looks at it. Keeping the
+	// remembered mtime and label holds that session where the owner last saw it; reporting the
+	// epoch and the file's uuid instead would rename one row, sort it below every other one, and
+	// — under the panel's per-group cap — drop it out of the listing until the next refresh.
+	const mtime = stat === 0 && cached !== undefined ? cached.mtime : stat;
 	if (cached !== undefined && cached.mtime === mtime) {
-		({ label, id } = cached);
-	} else {
-		// New or modified file: read it and remember the label until it moves again.
-		const firstPrompt = firstUserPrompt(fs.read(entry))
-			?? path.basename(entry).replace(/\.jsonl$/, '');
-		const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
-		label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
-		id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
-		listingCache.set(entry, { mtime, label, id });
+		return { id: cached.id, file: entry, label: cached.label, mtime };
 	}
+	// New or modified file: read it and remember the label until it moves again.
+	const firstPrompt = firstUserPrompt(fs.read(entry))
+		?? path.basename(entry).replace(/\.jsonl$/, '');
+	const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
+	const label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
+	const id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
+	listingCache.set(entry, { mtime, label, id });
 	return { id, file: entry, label, mtime };
 }
 
