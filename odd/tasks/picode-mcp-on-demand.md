@@ -91,14 +91,62 @@ Es una limitación de pi, no nuestra: `session_start` conecta todo lo activo. Un
 para la CLI; lo que falta es un «conectar cuando haga falta» en el conector. Se puede pedir upstream y
 mientras tanto quedarse como está.
 
-## Recomendación
+## Lo que se midió **después**, y cambia la respuesta (2026-10-07)
 
-**B**, y antes de escribirla, una medición de una línea de tiempo: ver si la lista de herramientas del
-editor sale de su caché sin arrancar servidores. Eso decide si B es on demand de verdad o solo A
-disfrazada — y es exactamente el dato que no se puede suponer. Si sale que la enumeración arranca, la
-respuesta honesta es **C** (pedirlo upstream) más **A** como mitigación consciente, aceptando que el
-arranque sigue ocurriendo al primer mensaje.
+Antes de elegir entre A y B se midió lo que decidía: **¿enumerar las herramientas del editor arranca
+los servidores?** No. El editor guarda las herramientas de cada servidor en una caché persistida
+(`McpServerMetadataCache`, clave `mcpToolCache` — el `mcp-cache.json` de 1,1 MB) y las sirve
+**mientras el servidor no está en marcha**:
 
-**Lo que NO se ha hecho, y por qué:** ningún cambio de MCP en esta sesión. Las dos direcciones (quitar
-el MCP de pi o quitar el puente del editor) tocan la única vía por la que el dueño tiene MCP funcionando
-hoy, y elegir a ciegas a la 01:00 cuesta un rebuild y, si sale mal, sus servidores.
+```ts
+// mcpServer.ts — el valor que el editor entrega al modelo
+const serverTools = this.fromServer.read(reader);
+const definitions = serverTools?.data ?? this._fromStaticDefinition?.read(reader) ?? this.fromCache?.data ?? this.defaultValue;
+```
+
+y `McpServerMetadataCache.get()` está documentado como *«used before a server is running»*. Es decir:
+la lista de herramientas **no** obliga a arrancar nada.
+
+Entonces, ¿quién arrancó los 11 servidores a las 00:34:49.69x, todos en 3 milisegundos? El **autostart
+del editor**, que tiene ajuste propio:
+
+```ts
+// mcpService.ts
+export const mcpAutoStartConfig = 'chat.mcp.autostart';   // never | onlyNew | newAndOutdated (por defecto)
+
+public autostart(): IObservable<IAutostartResult> {
+    const autoStartConfig = this.configurationService.getValue(mcpAutoStartConfig);
+    if (autoStartConfig === McpAutoStartValue.Never) {
+        return observableValue(this, IAutostartResult.Empty);   // no arranca nada
+    }
+    …
+```
+
+Y el propio editor lo describe en su interfaz con esa frase exacta: *«Automatically start MCP servers
+when sending a chat message»*, con su casilla en la vista de MCP.
+
+**Esto es «on demand», tal cual:** al enviar un mensaje no arranca nada, y un servidor arranca cuando
+se **invoca** una de sus herramientas.
+
+## Aplicado
+
+1. `distribution/settings.json` → `"chat.mcp.autostart": "never"`. El `settings.json` de fábrica es el
+   que el empaquetado copia al perfil, así que **una instalación nueva nace con los MCP a demanda**.
+2. El perfil en uso del dueño (`data/user-data/User/settings.json`) → el mismo ajuste, para que tenga
+   efecto **ya**, sin esperar a un build. Es reversible desde la casilla de MCP del editor.
+
+## Lo que queda (la segunda mitad)
+
+El arranque en bloque del editor está apagado, pero **pi sigue conectando los servidores del perfil al
+crear la sesión** (`builtin:mcp`, punto 1 de arriba), y para eso pi 1.0.4 no ofrece opción. Además hay
+duplicados medidos: tres instancias de `@aikidosec/mcp`, dos de `@supabase/mcp-server-supabase`.
+
+Para que **no arranque ninguno** hasta que se use, el conector tiene que dejar de cargar `builtin:mcp`
+(quitar el MCP propio de pi de la sesión del chat) y quedarse con el camino del editor — que es el que
+el dueño pidió, y que ahora **sí** es on demand gracias a este ajuste.
+
+**Coste:** bajo (una línea en el montaje de la sesión). **Riesgo, y por eso no se hizo de madrugada:**
+pi es hoy quien tiene el login OAuth de MCP que arregló 1.0.4, así que quitarlo puede llevarse el camino
+de `sentry`/`vercel` que funciona. Antes de hacerlo, comprobar que el editor autentica esos dos
+servidores por su cuenta — y si no, dejarlo como está y pedirlo upstream (`/mcp` ya permite apagar
+servidores uno a uno, que es la mitigación honesta mientras tanto).
