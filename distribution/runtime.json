@@ -1,5 +1,5 @@
 {
   "package": "@earendil-works/pi-coding-agent",
-  "version": "1.0.2",
-  "note": "PiCode's own pi, pinned to an exact version so a freshly built editor is born working. `dev/pi-runtime.sh` installs it during the build and the connector looks for it there — nobody has to install or configure it. **1.0.3 is blocked upstream**: its tree resolves `@earendil-works/pi-telemetry@^1.0.2` to 1.0.4, whose registry entry exists and whose tarball answers 404, so `npm install` fails and the build cannot pack pi. Measured 2026-10-05: tarball 1.0.4 → 404, 1.0.3 → 200, 1.0.2 → 200. Re-pin once upstream publishes 1.0.4's tarball or a fixed version."
+  "version": "1.0.4",
+  "note": "PiCode's own pi, pinned to an exact version so a freshly built editor is born working. `dev/pi-runtime.sh` installs it during the build and the connector looks for it there — nobody has to install or configure it. **The 1.0.3 blocker is gone**: its tree resolves `@earendil-works/pi-telemetry@^1.0.2` to 1.0.4, which on 2026-10-05 had a registry entry and a tarball answering 404; both 1.0.3 and 1.0.4 are published now and the tree installs. 1.0.3 renames pi's Azure provider (`azure-openai-responses` → `azure`), which PiCode does not declare and the profile does not use, so the rename costs this product nothing. Verified against 1.0.4 before pinning: the connector's 7 SDK entries resolve, `dist/cli.js` is present, and pi's own MCP validator accepts all 12 writers PiCode emits while still rejecting the two legacy spellings (`dev/check-mcp-entries.mjs`)."
 }
