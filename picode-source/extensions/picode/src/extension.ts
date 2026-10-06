@@ -53,7 +53,7 @@ import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates, windowSessionSlugs } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 
@@ -716,17 +716,22 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// never look like "everything was deleted".
 				return lastItems ?? [];
 			}
-			// **One list, because a window is one thing**, and no cap: the limit existed so one busy
-			// **project** could not turn a list of groups into an endless one, and there are no groups
-			// any more. What the owner asked for is to see his workspace's sessions, in a panel that
-			// scrolls and searches — and a cap here would hide the older rows with nothing to say
-			// they exist, which is the reading he already reported as «salen menos». The rows are the
-			// conversations of the projects this window has open — the area's own when there is one,
-			// then each open folder's (`runtime.ts` `projectSlugsOfWindow`) — newest first. Nothing
-			// says which project a row belongs to, because the owner's instruction is that they are
-			// all *the workspace's*: «Yo solo quiero ver si estoy en un workspace las de workspace»,
-			// and the label that said *«Artictempest (Workspace) (workspace area)»* said the same word
-			// twice on every row.
+			// **The workspace's own conversations, and only those**, when the window is a workspace:
+			// the sessions filed under the area's slug, which are the ones this window's chats wrote
+			// (`runtime.ts` `windowSessionSlugs`, and the owner's own instruction there). A folder's
+			// history is the folder's — it shows when that project is opened on its own, not gathered
+			// up by a workspace that happens to contain it. Nothing else can appear: with no project
+			// open the slugs are empty and the listing is empty, never a fall-back to every project in
+			// the profile.
+			//
+			// **No group label per row**, because there is one list: the label that said
+			// *«Artictempest (Workspace) (workspace area)»* said the same word twice on every row.
+			// The title and the date are what tell two rows apart.
+			//
+			// **No cap either**: the limit existed so one busy *project* could not turn a list of
+			// groups into an endless one, and there are no groups any more — while a cap here would
+			// hide the older rows with nothing to say they exist, which is the reading the owner
+			// already reported as «salen menos».
 			//
 			// `undefined` is not "no folders": it is a window whose workspace has not been
 			// resolved yet, and that is the moment the panel first asks. Publishing the
@@ -734,7 +739,7 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// `listingForPanel`.
 			const folders = vscode.workspace.workspaceFolders;
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const built = listProjectConversations(sessionsDir, projectSlugsOfWindow()).map(file => ({
+			const built = listProjectConversations(sessionsDir, windowSessionSlugs()).map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,

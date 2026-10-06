@@ -268,6 +268,35 @@ export function piProjectSlug(cwd: string): string {
 }
 
 /**
+ * The slugs a window lists conversations from.
+ *
+ * The owner, twice, and the second time because the first fix read him loosely: «me salen sesiones
+ * tanto de proyectos (carpetas) como del workspace. Yo solo quiero ver si estoy en un workspace las
+ * de workspace» / «me siguen saliendo todas las sesiones en el workspace al cargar un workspace».
+ *
+ * So a window that **is** a workspace lists the workspace's own conversations and nothing else: the
+ * sessions filed under the area's slug, which are the ones this window's chats wrote. The folders'
+ * sessions are the folders' — a project's history belongs to that project and shows when it is
+ * opened on its own, not gathered up by a workspace that happens to contain it. That is the whole
+ * point of the area's own filing identity (`workspace-area.ts`): without it every area conversation
+ * would read as a session of whichever folder pi happened to run in, and a list of *the workspace's*
+ * sessions could not exist.
+ *
+ * A window that is a single folder lists that folder's, and a workspace with no area identity falls
+ * back to the folders rather than to nothing.
+ */
+export function listedSessionSlugs(
+	mode: 'folder' | 'workspace',
+	areaSlug: string | undefined,
+	workspacePaths: readonly string[],
+): string[] {
+	if (mode === 'workspace' && areaSlug !== undefined) {
+		return [areaSlug];
+	}
+	return workspacePaths.map(piProjectSlug);
+}
+
+/**
  * The conversations a window shows: every transcript filed under `slugs`, newest first.
  *
  * **One list, because a window is one thing.** The slugs are the window's own

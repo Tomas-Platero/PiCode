@@ -16,7 +16,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { listedSessionSlugs, listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 /** A listing file system over a flat record of file → content, listing ancestor directories too. */
 function memoryFs(files: Record<string, string>): SessionsFs {
@@ -64,6 +64,15 @@ function delegation(id: string, cwd: string, slug: string, mtime: number, parent
 	lines[0] = JSON.stringify({ ...(header as Record<string, unknown>), parentSession: parentFile });
 	return [file, lines.join('\n')];
 }
+
+test('a workspace lists the workspace\u2019s own sessions, and a folder window lists the folder\u2019s', () => {
+	// The owner's instruction, twice: «Yo solo quiero ver si estoy en un workspace las de
+	// workspace». A folder's history is that folder's, and a workspace does not gather it up.
+	assert.deepStrictEqual(listedSessionSlugs('workspace', AREA_SLUG, [WEB, BOT]), [AREA_SLUG]);
+	assert.deepStrictEqual(listedSessionSlugs('folder', undefined, [WEB]), [WEB_SLUG]);
+	// A workspace with no area identity falls back to the folders rather than to nothing.
+	assert.deepStrictEqual(listedSessionSlugs('workspace', undefined, [WEB, BOT]), [WEB_SLUG, BOT_SLUG]);
+});
 
 test('the window is one list: the area and its folders together, newest first', () => {
 	// No groups and no labels: a conversation is listed once, and the date is what orders them.
