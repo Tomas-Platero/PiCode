@@ -180,6 +180,54 @@ test('the declarations and the installed directories are one row per package', (
 	assert.deepStrictEqual(result.unresolved, []);
 });
 
+test('one package installed twice is one row, and the copy pi declares is the one kept', () => {
+	// The owner's profile, exactly: the settings file declares the git source, and pi's own npm
+	// root carries the same package as a dependency (`github:HazAT/…`), so npm resolved a second
+	// copy into `node_modules/`. Only the declared copy is loaded — listing both printed, two rows
+	// apart, that one package was both Enabled and «Not declared».
+	const read = fakeFs({
+		'/profile/package.json': '{}',
+		'/profile/git/github.com/HazAT/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+		'/profile/npm/node_modules/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+	});
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["git:github.com/HazAT/pi-interactive-subagents"]}'))];
+
+	const result = piPackages(scopes, read);
+
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['pi-interactive-subagents']);
+	assert.strictEqual(toPosix(result.packages[0].path), '/profile/git/github.com/HazAT/pi-interactive-subagents');
+});
+
+test('two copies of one name and no declaration is still one row, and always the same one', () => {
+	// A project that pins its own copy of a package the profile also has. Neither is declared, so
+	// there is nothing to prefer but the path — and the answer must not move between two reads.
+	const files = {
+		'/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
+		'/project/.pi/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
+	};
+	const scopes = [userPackageScope(PROFILE, parseSettings('{}')), projectPackageScope(FOLDER, parseSettings('{}'))];
+
+	const first = piPackages(scopes, fakeFs(files));
+	const second = piPackages(scopes, fakeFs(files));
+
+	assert.deepStrictEqual(first.packages.map(found => found.name), ['sample-pi']);
+	assert.deepStrictEqual(first.packages.map(found => found.path), second.packages.map(found => found.path));
+});
+
+test('two declarations of one package are two rows: an instruction is never hidden', () => {
+	// pi reads both, so both are shown with their own source — collapsing them would hide an
+	// install the owner may have to remove, which is the one thing this listing must not do.
+	const read = fakeFs({
+		'/profile/git/github.com/HazAT/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+		'/profile/npm/node_modules/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+	});
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["git:github.com/HazAT/pi-interactive-subagents","npm:pi-interactive-subagents"]}'))];
+
+	const result = piPackages(scopes, read);
+
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['pi-interactive-subagents', 'pi-interactive-subagents']);
+});
+
 test('a declaration with nothing installed is reported, never listed', () => {
 	const read = fakeFs({ '/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi') });
 	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["npm:sample-pi","npm:not-installed"]}'))];
