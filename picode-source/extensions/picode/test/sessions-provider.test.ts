@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { test } from 'node:test';
-import { conversationFiles, firstUserPrompt, listProjectSessionFiles, listingForPanel, ownerPrompt, reuseRows, sessionTurns, listSessionFiles, listWorkspaceSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { conversationFiles, firstUserPrompt, listProjectConversations, listProjectSessionFiles, listingForPanel, ownerPrompt, reuseRows, sessionTurns, listSessionFiles, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 test('firstUserPrompt answers the first user text', () => {
 	const jsonl = [
@@ -82,12 +82,13 @@ function rootTranscript(name: string, cwd: string): [string, string] {
 	return [`/sessions/${name}.jsonl`, `${sessionHeaderLine(name, cwd)}\n{"type":"message","message":{"role":"user","content":[{"type":"text","text":"de la raiz"}]}}`];
 }
 
-const ROOT_MATCHER: readonly string[] = ['C:\\demo'];
+/** The window's own project slugs, in the form the panel asks for them. */
+const ROOT_MATCHER = [piProjectSlug('C:\\demo')];
 
 test('a workspace listing includes a root-level transcript whose header names the workspace', () => {
 	const [projectFile, projectContent] = projectTranscript('2026_p1');
 	const [rootFile, rootContent] = rootTranscript('2026_r1', 'C:\\demo');
-	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs({
+	const found = listProjectConversations('/sessions', ROOT_MATCHER, 100, memoryFs({
 		[projectFile]: projectContent,
 		[rootFile]: rootContent,
 	}));
@@ -97,7 +98,7 @@ test('a workspace listing includes a root-level transcript whose header names th
 test('a root-level transcript for another project stays out of the workspace listing', () => {
 	const [projectFile, projectContent] = projectTranscript('2026_p2');
 	const [rootFile, rootContent] = rootTranscript('2026_r2', 'C:\\other');
-	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs({
+	const found = listProjectConversations('/sessions', ROOT_MATCHER, 100, memoryFs({
 		[projectFile]: projectContent,
 		[rootFile]: rootContent,
 	}));
@@ -110,7 +111,7 @@ test('a root-level transcript without a session header is not matched', () => {
 		[projectFile]: projectContent,
 		'/sessions/2026_r3.jsonl': 'not a session',
 	};
-	const found = listWorkspaceSessionFiles('/sessions', ROOT_MATCHER, memoryFs(files));
+	const found = listProjectConversations('/sessions', ROOT_MATCHER, 100, memoryFs(files));
 	assert.deepStrictEqual(found.map(file => file.label).sort(), ['del proyecto']);
 });
 
@@ -209,7 +210,7 @@ test('the panel lists conversations, never the agents they launched', () => {
 	};
 
 	// The conversations list leaves the agent out...
-	const conversations = listWorkspaceSessionFiles('/list', ['C:\\list'], fs);
+	const conversations = listProjectConversations('/list', [slug], 100, fs);
 	assert.deepStrictEqual(conversations.map(file => file.label), ['una conversacion']);
 
 	// ...and the walk the content provider opens by id with still finds it, so the agents view

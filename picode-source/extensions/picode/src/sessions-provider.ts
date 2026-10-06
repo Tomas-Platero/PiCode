@@ -268,30 +268,30 @@ export function piProjectSlug(cwd: string): string {
 }
 
 /**
- * Lists the session transcripts of the given workspace folders only.
+ * The conversations a window shows: every transcript filed under `slugs`, newest first, capped.
  *
- * pi keeps one folder per project under `sessions/`, named by the project's cwd
- * (see `piProjectSlug`); the panel must show the sessions of the folders actually
- * open, never the whole profile. With no workspace open, or when no per-project
- * folder matches, the listing is empty — there is no fall-back to every project.
+ * **One list, because a window is one thing.** The slugs are the window's own
+ * (`runtime.ts` `projectSlugsOfWindow()`: the area's when there is one, then each open folder's),
+ * so a conversation is listed once and no row has to say which project it belongs to — the
+ * owner's own instruction: «Yo solo quiero ver si estoy en un workspace las de workspace», and
+ * the label that said *«Artictempest (Workspace) (workspace area)»* was repeating the same word
+ * twice on every row. What tells two rows apart is the title and the date, which is what the
+ * panel already puts on them.
  *
- * Transcripts filed directly under `sessions/` (a session created with an explicit
- * session directory — see the sessionManager creation in `agent.ts`) are matched too,
- * by the cwd their own session header records.
+ * The cap counts **conversations**: an agent's transcript is not one (see `conversationFiles`),
+ * and counting them spent the whole list on delegations — an afternoon of them pushed the
+ * owner's own history out of the panel entirely.
  *
- * On Windows the folder-name match is case-insensitive: NTFS folds case, and the
- * drive letter's case in a workspace path may differ from the case pi recorded
- * when the sessions were created.
+ * With no projects to look at the listing is empty, and there is no fall-back to every project
+ * in the profile: the panel shows the sessions of what is open, not somebody else's history.
  */
-export function listWorkspaceSessionFiles(
+export function listProjectConversations(
 	sessionsDir: string,
-	workspacePaths: readonly string[],
+	slugs: Iterable<string>,
+	cap: number,
 	fs: SessionsFs = nodeFs,
 ): PiSessionFile[] {
-	if (workspacePaths.length === 0) {
-		return [];
-	}
-	return conversationFiles(listProjectSessionFiles(sessionsDir, workspacePaths.map(piProjectSlug), fs));
+	return conversationFiles(listProjectSessionFiles(sessionsDir, slugs, fs)).slice(0, Math.max(cap, 0));
 }
 
 /**
@@ -301,6 +301,11 @@ export function listWorkspaceSessionFiles(
  * This is the walk behind opening a session by id: a transcript the conversations list leaves
  * out (a delegation's) must still open when the agents view asks for it, and the project filter
  * must be the same one the panel used, or the id would resolve in one surface and not the other.
+ *
+ * A transcript filed directly under `sessions/` (rather than in a project folder — what the
+ * editor's chat wrote before it filed them properly) is matched by the cwd its own session header
+ * records. On Windows the folder-name match folds case: NTFS does, and the drive letter's case in
+ * a workspace path may differ from the case pi recorded when the sessions were created.
  */
 export function listProjectSessionFiles(
 	sessionsDir: string,
@@ -311,10 +316,8 @@ export function listProjectSessionFiles(
 }
 
 /**
- * Lists the transcripts filed under the given per-project slugs, newest first —
- * the slug-set core of `listWorkspaceSessionFiles`, shared with the grouped
- * listing (`listSessionGroups`). Root-level transcripts match the same way: by
- * the project slug their own session header records.
+ * Lists the transcripts filed under the given per-project slugs, newest first. Root-level
+ * transcripts match the same way: by the project slug their own session header records.
  */
 function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: SessionsFs): PiSessionFile[] {
 	if (slugs.size === 0) {
@@ -349,46 +352,6 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
 	// entries left over belong to files that are gone.
 	pruneHeaderSlugCache(rootEntries);
 	return files;
-}
-
-/** One group of the panel listing: its name, and the sessions filed under it. */
-export interface PiSessionGroup {
-	/** The name shown beside the group's sessions (the area, or one folder). */
-	readonly label: string;
-	/** The group's transcripts, newest first, at most `capPerGroup` of them. */
-	readonly files: readonly PiSessionFile[];
-}
-
-/** One group the listing is asked for: its name, and the per-project slugs it covers. */
-export interface PiSessionGroupRequest {
-	readonly label: string;
-	/** The filing slugs whose transcripts belong to this group (see `piProjectSlug`). */
-	readonly slugs: readonly string[];
-}
-
-/**
- * The panel's listing, grouped by project: one group per request, in the order given —
- * the area's own group first, then one per folder — each group's sessions newest first
- * and capped, so one busy project cannot turn the panel into an endless list.
- *
- * Groups are filled independently: a transcript is listed once, under the group whose
- * slugs its own filing (its per-project folder, or its header's cwd for a root-level
- * file) matches. Groups are never merged, so a session of the area never reads as a
- * session of the folder pi happened to run in.
- */
-export function listSessionGroups(
-	sessionsDir: string,
-	groups: readonly PiSessionGroupRequest[],
-	capPerGroup: number,
-	fs: SessionsFs = nodeFs,
-): PiSessionGroup[] {
-	return groups.map(group => ({
-		label: group.label,
-		// The cap counts **conversations**, which is what the panel is a list of: an agent's
-		// transcript is dropped before the cap, or a busy afternoon of delegations would be what
-		// the eight rows are spent on.
-		files: conversationFiles(listProjectSessionFiles(sessionsDir, group.slugs, fs)).slice(0, Math.max(capPerGroup, 0)),
-	}));
 }
 
 /**

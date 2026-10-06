@@ -20,7 +20,7 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listProjectSessionFiles, listingForPanel, listSessionGroups, listWorkspaceSessionFiles, piProjectSlug, reuseRows, sessionTurns, type PiSessionFile } from './sessions-provider';
+import { listProjectConversations, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
 import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -53,7 +53,7 @@ import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 
@@ -691,40 +691,13 @@ function profileInForce(): string {
 /** The URI scheme pi's session transcripts use; the editor derives the chat session type from it, so it must match the type the providers register under. */
 const PI_SESSION_SCHEME = 'pi';
 
-/** The most sessions of one project — the area, or a folder — the panel lists before it stops. */
-const PI_SESSIONS_PER_GROUP_CAP = 8;
-
-/** One session as the panel lists it, with the project group it belongs to when grouped. */
-interface PanelSession {
-	readonly file: PiSessionFile;
-	/** The group's name (`description` in the panel); `undefined` when the listing is flat. */
-	readonly group?: string;
-}
-
 /**
- * The sessions the panel lists, grouped when the session is a session of the area.
+ * The most sessions the panel lists before it stops.
  *
- * In workspace mode the listing is grouped: the area's own group first, then one per
- * folder, capped per group — the owner asked for "unas cuantas de cada proyecto", not one
- * endless list, and a session of the area must not read as a session of the folder pi
- * happened to run in. Each session's group travels as its panel `description`, the field
- * the sessions view renders beside the label; the area group is the first entries of the
- * array, so even a panel that orders as given shows the area first.
- *
- * In folder mode nothing changes: the same flat, uncapped listing the panel has always
- * shown, of the folders actually open.
+ * One list, so one number: the owner wants «unas cuantas», not an endless list, and a cap per
+ * project stopped meaning anything once the panel stopped being several lists.
  */
-function listPanelSessions(sessionsDir: string, workspacePaths: readonly string[], capPerGroup: number = PI_SESSIONS_PER_GROUP_CAP): PanelSession[] {
-	const scope = resolveProjectScope();
-	if (scope.mode !== 'workspace' || scope.area === undefined) {
-		return listWorkspaceSessionFiles(sessionsDir, workspacePaths).map(file => ({ file }));
-	}
-	const groups = listSessionGroups(sessionsDir, [
-		{ label: `${scope.area.name} (workspace area)`, slugs: [scope.area.slug] },
-		...scope.roots.map(root => ({ label: root.name, slugs: [piProjectSlug(root.path)] })),
-	], capPerGroup);
-	return groups.flatMap(group => group.files.map(file => ({ file, group: group.label })));
-}
+const PI_SESSIONS_LIST_CAP = 8;
 
 /**
  * pi's sessions, listed for the editor's Sessions panel.
@@ -751,23 +724,23 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// never look like "everything was deleted".
 				return lastItems ?? [];
 			}
-			// Like the pi CLI, the panel shows only the sessions of the folders actually
-			// open: pi files transcripts under one folder per project cwd, so the listing
-			// walks just those folders — no workspace, no match, no sessions. In workspace
-			// mode the area's own sessions (filed under the area's slug, see `agent.ts`)
-			// come as their own group, first, and each session carries its group's name.
+			// **One list, because a window is one thing.** The rows are the conversations of the
+			// projects this window has open — the area's own when there is one, then each open
+			// folder's (`runtime.ts` `projectSlugsOfWindow`) — newest first and capped. Nothing
+			// says which project a row belongs to, because the owner's instruction is that they
+			// are all *the workspace's*: «Yo solo quiero ver si estoy en un workspace las de
+			// workspace», and the label that said *«Artictempest (Workspace) (workspace area)»*
+			// said the same word twice on every row.
 			//
 			// `undefined` is not "no folders": it is a window whose workspace has not been
 			// resolved yet, and that is the moment the panel first asks. Publishing the
 			// emptiness of a listing nobody could build would clear the panel — see
 			// `listingForPanel`.
 			const folders = vscode.workspace.workspaceFolders;
-			const workspacePaths = (folders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const built = listPanelSessions(sessionsDir, workspacePaths).map(({ file, group }) => ({
+			const built = listProjectConversations(sessionsDir, projectSlugsOfWindow(), PI_SESSIONS_LIST_CAP).map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
-				...(group === undefined ? {} : { description: group }),
 				iconPath: vscode.ThemeIcon.File,
 				// The mtime is the one timestamp a transcript file carries: it feeds both the
 				// created marker and the last-activity marker, because a transcript is never
@@ -783,7 +756,6 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				built,
 				row => row.resource.toString(),
 				(before, after) => before.label === after.label
-					&& before.description === after.description
 					&& before.timing?.created === after.timing?.created
 					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
 			);
