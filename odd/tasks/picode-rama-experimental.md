@@ -497,7 +497,45 @@ npm además de la git (o sea, el duplicado que se arregla arriba era real y sigu
 261 transcripciones, los agents, las skills, `models.json`, `auth.json`, `mcp.json` y `mcp-auth.json`
 están intactos.
 
-### 2026-10-06/07 (madrugada) · el build que murió por abrir el editor, y el rebuild de cero
+### 2026-10-06 (noche) · el paquete que salía dos veces en la página de Packages
+
+> «Por cierto revisa el error de ese package.»
+
+La página enseñaba `pi-interactive-subagents` **dos veces**: una `Enabled` desde
+`github.com/HazAT/pi-interactive-subagents`, y justo debajo otra con *«Not declared — Installed on
+disk; pi does not load it»*. Mismo nombre, misma versión 3.7.2, y dos cosas contradictorias sobre
+un solo paquete.
+
+**No era la página mintiendo sobre lo que encontraba**: era el listado contando **directorios**
+donde pi cuenta **paquetes**. Medido en el perfil del dueño, las dos copias existen y las dos tienen
+su razón: la settings declara `git:github.com/HazAT/pi-interactive-subagents` (que se materializa en
+`<perfil>/git/…` y es **la que pi carga**), mientras el npm root de pi lleva
+`"pi-interactive-subagents": "github:HazAT/pi-interactive-subagents"` como dependencia, así que npm
+dejó la misma copia en `<perfil>/npm/node_modules/`.
+
+**El arreglo (`7ef50fbb`)** colapsa por **nombre de paquete**, y el orden es lo que lo mantiene
+honesto:
+
+1. **Toda declaración es una fila.** Una declaración es una instrucción que pi lee; dos
+   declaraciones del mismo paquete son dos instalaciones, y esconder una escondería algo que el
+   dueño puede tener que quitar.
+2. **Un directorio que ninguna declaración nombra es una fila solo si nada más lista su paquete.**
+   Esa es la copia que pi **no** carga, y con una copia basta para decirlo. Gana la primera por ruta,
+   para que dos lecturas de un perfil sin cambios contesten lo mismo.
+
+Lo que quita la mitad 2 es **fontanería**, no un estado sobre el que actuar: la copia descartada es
+un árbol npm resolviendo una dependencia del propio pi, y el paquete que contiene se lista una vez,
+desde la copia que carga.
+
+**Medido en el perfil real** (`.scratch/packages-evidence.ts`): la página pasa de **17 filas a 16**,
+que son exactamente sus dieciséis declaraciones, con `pi-interactive-subagents` listado **una vez** y
+apuntando a la copia git.
+
+**Verificado**: 352 tests, 352 pasan, 0 fallan (tres nuevos: el duplicado con declaración, dos copias
+sin declaración contestando lo mismo dos veces, y dos declaraciones del mismo paquete quedándose en
+dos filas); typecheck exit 0.
+
+### 2026-10-07 (madrugada) · el build que murió por abrir el editor, y el rebuild de cero
 
 > «Quiero que buildee de 0 experimental, cárgate todo, no pasa nada, rebuildea todo para ver los
 > cambios. Olvídate de mi perfil, no quiero guardarlo, quiero que esté de 0. Quiero reinstalar, volver
@@ -540,40 +578,22 @@ abrió, hizo el onboarding y **está importando** desde el pi externo — así q
 sus 269 transcripciones **por su propia importación**, no por ningún proceso automático. La regla se
 mantiene: importar es una decisión suya, nunca algo que el producto haga solo.
 
-### 2026-10-06 (noche) · el paquete que salía dos veces en la página de Packages
+#### Y el build de cierre, con las dos cosas de esta madrugada
 
-> «Por cierto revisa el error de ese package.»
+`exit 0` en 5m 4s, con el editor cerrado (y esta vez **el build lo comprobó por sí mismo** antes de la
+fase del pack, que es el arreglo de arriba). El paquete `PiCode-win32-x64 - experimental` lleva,
+verificado sobre los ficheros compilados:
 
-La página enseñaba `pi-interactive-subagents` **dos veces**: una `Enabled` desde
-`github.com/HazAT/pi-interactive-subagents`, y justo debajo otra con *«Not declared — Installed on
-disk; pi does not load it»*. Mismo nombre, misma versión 3.7.2, y dos cosas contradictorias sobre
-un solo paquete.
+| Qué | Comprobado |
+| --- | --- |
+| pi | **1.0.4** |
+| Sesiones: en un workspace, solo el área | `listedSessionSlugs` y `windowSessionSlugs` |
+| Lista de conversaciones | `listProjectConversations`, `listingForPanel`, `ownerPrompt` |
+| Agentes | `out/agents.js` + `picode.agents` en el manifiesto |
+| Paquetes | `oneRowPerPackage` |
+| MCP a demanda | `"chat.mcp.autostart": "never"` en el perfil de fábrica empaquetado |
+| Perfil del dueño | **57 127 ficheros y 270 conversaciones** (una más: la suya de después del rebuild de cero) |
 
-**No era la página mintiendo sobre lo que encontraba**: era el listado contando **directorios**
-donde pi cuenta **paquetes**. Medido en el perfil del dueño, las dos copias existen y las dos tienen
-su razón: la settings declara `git:github.com/HazAT/pi-interactive-subagents` (que se materializa en
-`<perfil>/git/…` y es **la que pi carga**), mientras el npm root de pi lleva
-`"pi-interactive-subagents": "github:HazAT/pi-interactive-subagents"` como dependencia, así que npm
-dejó la misma copia en `<perfil>/npm/node_modules/`.
-
-**El arreglo (`7ef50fbb`)** colapsa por **nombre de paquete**, y el orden es lo que lo mantiene
-honesto:
-
-1. **Toda declaración es una fila.** Una declaración es una instrucción que pi lee; dos
-   declaraciones del mismo paquete son dos instalaciones, y esconder una escondería algo que el
-   dueño puede tener que quitar.
-2. **Un directorio que ninguna declaración nombra es una fila solo si nada más lista su paquete.**
-   Esa es la copia que pi **no** carga, y con una copia basta para decirlo. Gana la primera por ruta,
-   para que dos lecturas de un perfil sin cambios contesten lo mismo.
-
-Lo que quita la mitad 2 es **fontanería**, no un estado sobre el que actuar: la copia descartada es
-un árbol npm resolviendo una dependencia del propio pi, y el paquete que contiene se lista una vez,
-desde la copia que carga.
-
-**Medido en el perfil real** (`.scratch/packages-evidence.ts`): la página pasa de **17 filas a 16**,
-que son exactamente sus dieciséis declaraciones, con `pi-interactive-subagents` listado **una vez** y
-apuntando a la copia git.
-
-**Verificado**: 352 tests, 352 pasan, 0 fallan (tres nuevos: el duplicado con declaración, dos copias
-sin declaración contestando lo mismo dos veces, y dos declaraciones del mismo paquete quedándose en
-dos filas); typecheck exit 0.
+**Lo que el dueño debe saber al abrirlo**: las 270 conversaciones que importó están archivadas por
+**carpeta**, así que **no salen en el workspace** — salen al abrir esa carpeta sola. Es lo que pidió («yo
+solo quiero ver si estoy en un workspace las de workspace»), dicho antes de que lo descubra él.
