@@ -20,6 +20,18 @@
 # Only Windows has an installer. Anywhere else this says so and exits 0, so dev/build.sh keeps one
 # entry point on every platform.
 #
+# A side-by-side install is `PICODE_INSTALLER_SUFFIX` (set by dev/build.sh from the pack's own
+# suffix): the installer then lands in its own folder, shows its own name and carries its own AppId,
+# so it sits beside the editor already on the machine instead of replacing it. See
+# build/gulpfile.vscode.win32.ts for the three things it moves.
+#
+# Do NOT check which folder it installs into by installing it. Inno Setup compresses its own script
+# data, so the value cannot be read out of the .exe -- but a silent install and its uninstaller are
+# a real install and a real uninstall: they write the machine's registry, associations and PATH, and
+# the uninstaller removes whatever is in that folder, *including an installation the owner just made
+# from this same artifact* (measured on 2026-10-07, with the editor open from it: the running app
+# lost its files mid-flight). Install it as a person would, or read the defines the task passes.
+#
 # Usage: dev/build-installer.sh [pack-dir]      (default: ./PiCode-Win32-x64)
 
 set -eo pipefail
@@ -109,7 +121,20 @@ if [[ ! -f "${SETUP}" ]]; then
   exit 1
 fi
 
-OUT="${ROOT_DIR}/PiCode-win32-${ARCH}-${PICODE_VERSION}-setup.exe"
+# The name of the artifact. A release says its version, marker and all (`-0.1.3-beta-setup.exe`),
+# unchanged since the updater's own URLs are built from that. A side-by-side installer says which
+# build it is *in the version's own place*: the pre-release marker gives way to the suffix, so the
+# two installers sort together and neither is mistaken for the other
+# (`-0.1.3-beta-setup.exe` for the release, `-0.1.3-experimental-setup.exe` for this one).
+if [[ -n "${PICODE_INSTALLER_SUFFIX:-}" ]]; then
+  OUT="${ROOT_DIR}/PiCode-win32-${ARCH}-${PICODE_VERSION%%-*}${PICODE_INSTALLER_SUFFIX}-setup.exe"
+else
+  OUT="${ROOT_DIR}/PiCode-win32-${ARCH}-${PICODE_VERSION}-setup.exe"
+fi
 cp -f "${SETUP}" "${OUT}"
 
 echo "installer: ${OUT}"
+if [[ -n "${PICODE_INSTALLER_SUFFIX:-}" ]]; then
+  echo "           installs beside the editor already on the machine: a separate application to"
+  echo "           Windows, in its own folder, sharing one profile and one mutex with it."
+fi

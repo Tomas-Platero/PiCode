@@ -583,6 +583,11 @@ echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 # answer "no encuentro el pi de este editor".
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
+# And the durable agent, which is PiCode's own program (experimental/durable): an installed editor
+# has no repository above it to find it in, so a pack that does not carry it can only answer
+# "the durable agent folder was not found" wherever it is installed.
+bash dev/durable-runtime.sh "${PACK_DIR}"
+
 bash dev/stage-distribution.sh "${PACK_DIR}"
 
 # The pack and the staging seeded a fresh data/ inside the folder; the real profile -- held aside
@@ -602,6 +607,16 @@ if [[ "${PICODE_SKIP_INSTALLER:-no}" == "yes" ]]; then
   echo "   A side-by-side build does not want one: running it would land on top of the PiCode"
   echo "   already installed, which is the opposite of what building beside it is for."
 else
+  # A build that packs beside the tree installs beside the editor, unless it is told otherwise.
+  # `PICODE_PACK_SUFFIX` already says "do not overwrite the release's folder"; the installer's
+  # AppId is what decides whether it overwrites the release's *install*, so the same value is
+  # taken for `PICODE_INSTALLER_SUFFIX` when nothing set it. Without this, the pack is new and the
+  # installer quietly replaces the PiCode already on the machine. A release build sets neither.
+  if [[ -z "${PICODE_INSTALLER_SUFFIX:-}" && -n "${PICODE_PACK_SUFFIX:-}" ]]; then
+    export PICODE_INSTALLER_SUFFIX="${PICODE_PACK_SUFFIX}"
+    echo "== phase 5/5 - the Windows installer installs beside the editor, as '${PICODE_INSTALLER_SUFFIX}'"
+    echo "   (PICODE_INSTALLER_SUFFIX defaulted from PICODE_PACK_SUFFIX; set it to override)"
+  fi
   echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
 
   bash dev/build-installer.sh "${PACK_DIR}"

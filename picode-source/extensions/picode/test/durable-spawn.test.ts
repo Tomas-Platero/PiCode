@@ -16,12 +16,20 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { daemonSpawnPlan, PICODE_PARENT_PIPE_ENV } from '../src/durable-spawn.ts';
+import { daemonSpawnPlan, PICODE_PARENT_PIPE_ENV, RUN_AS_NODE_ENV } from '../src/durable-spawn.ts';
 
 test('the daemon is spawned attached: never detached, and it is `serve` on the daemon cli', () => {
 	const plan = daemonSpawnPlan('experimental/durable/cli.js', { PATH: 'x' }, undefined);
 	assert.equal(plan.detached, false);
 	assert.deepEqual(plan.args, ['experimental/durable/cli.js', 'serve']);
+});
+
+test("the daemon runs on the editor's own binary as Node, not on whatever `node` the PATH finds", () => {
+	const plan = daemonSpawnPlan('cli.js', {}, undefined);
+	// An installed PiCode is self-contained: a machine that runs it does not need a Node on PATH.
+	assert.equal(plan.command, process.execPath);
+	// Without this the editor would be re-launched as an editor instead of run as the interpreter.
+	assert.equal(plan.env[RUN_AS_NODE_ENV], '1');
 });
 
 test('the lifeline pipe is the spawn contract: stdin is a pipe, the log fd goes to out/err', () => {

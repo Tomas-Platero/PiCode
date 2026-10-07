@@ -32,11 +32,41 @@ note so that old commands keep working.
 | 2 | connector | `dev/build-connector.sh`: `tsc` over `picode-source/extensions/picode`. The packer collects extensions but does not compile them, so this has to happen first. |
 | 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
 | 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-vscode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
-| 5 | stage | `dev/pi-runtime.sh` (installs the pinned pi into the pack) and `dev/stage-distribution.sh` (portable profile, settings, icons, names). The panel is not staged — it died with the `extensions/` folder (2026-09-27) and returns as core code. |
+| 5 | stage | `dev/pi-runtime.sh` (installs the pinned pi into the pack), `dev/durable-runtime.sh` (the durable agent, `experimental/durable`, and the chat's bridge into `resources/pi-durable` — its own dependencies travel with it, ~116 MB, and nothing else does: no proofs, no `.data/`, no credentials) and `dev/stage-distribution.sh` (portable profile, settings, icons, names). The panel is not staged — it died with the `extensions/` folder (2026-09-27) and returns as core code. |
 
 `-o` stops inside phase 1 with exit code 0: after the source and the identity are checked, before
 anything is installed. It exists so the source can be checked in seconds rather than discovered to
 be wrong after an hour of compiling.
+
+## A build beside the editor
+
+The ordinary build replaces what is here: the pack goes to `PiCode-Win32-x64`, and the installer it
+produces carries the release's AppId, so running it upgrades the PiCode already on the machine. A
+build that must not do that sets one variable:
+
+```bash
+PICODE_PACK_SUFFIX="-experimental" ./dev/build.sh
+```
+
+- **`PICODE_PACK_SUFFIX`** — the pack lands in `PiCode-win32-x64-experimental`. Both sides read it:
+  `buildPath` in `gulpfile.vscode.win32.ts` and `destinationFolderName` in `gulpfile.vscode.ts`, so the
+  tree a release was cut from is left where it is.
+- **the installer follows it.** `dev/build.sh` defaults `PICODE_INSTALLER_SUFFIX` to the pack's own
+  suffix, and the Inno Setup task then moves the three things that make an install recognisable to
+  Windows: the folder it lands in (`%LOCALAPPDATA%\Programs\PiCode-win32-x64-experimental`), the name a
+  person reads (the wizard, the Start menu shortcut, "Apps & features" — `PiCode — Agentic Code Editor
+  (Experimental)`), and its **AppId**. The AppId is the one that matters: with the release's, Inno Setup
+  finds the existing install through the registry and writes over its folder, and one entry in "Apps &
+  features" stands for two programs.
+- **what does not move**: the executable, the profile (`%APPDATA%\.picode` — one profile for both, which
+  is what keeps the sessions, the skills and the providers) and the mutex (`picode`, so one of the two
+  runs at a time). The artifact is `PiCode-win32-x64-0.1.3-experimental-setup.exe`: in a side-by-side
+  build the suffix takes the version's own place, where the release names its pre-release marker, so the
+  two installers sort together and neither is mistaken for the other.
+- `PICODE_INSTALLER_SUFFIX` on its own is the smaller move: pack in place, install beside.
+
+The installer excludes `data/` on purpose, so an installed editor starts with a profile of its own; the
+portable profile stays with the portable pack.
 
 ## Requirements
 

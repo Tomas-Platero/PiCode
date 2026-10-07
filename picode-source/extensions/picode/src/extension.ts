@@ -2316,12 +2316,17 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
 	// The durable agent's commands: start, stop, list/open its conversations, and send it a
 	// prompt. The status panel's Durable section rows run the same ones.
-	// The agent is told which profile and which settings file to use: a portable or side-by-side
-	// PiCode has its own, and the agent's defaults would find a different install's — the very
-	// mixing a separate build exists to avoid. `globalStorageUri` is `<userData>/User/globalStorage/
-	// <extension>`, so two directories up is the settings file the editor itself obeys.
+	// The agent is told which profile, which storage directory and which settings file to use: a
+	// portable or side-by-side PiCode has its own, and the agent's defaults would find a different
+	// install's — the very mixing a separate build exists to avoid. Its storage is `data/durable`,
+	// beside the profile, because the agent ships *inside* the installation: anything it kept in its
+	// own folder would be replaced on the next install and removed on uninstall, and the durable
+	// conversations are the one thing it exists to keep. `globalStorageUri` is `<userData>/User/
+	// globalStorage/<extension>`, so two directories up is the settings file the editor itself obeys.
+	const agentProfile = profileDirectory(context.extensionUri);
 	const durablePaths = {
-		agentProfile: profileDirectory(context.extensionUri),
+		agentProfile,
+		agentDataDir: path.join(path.dirname(agentProfile), 'durable'),
 		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
 	};
 	context.subscriptions.push(...registerDurableCommands(durablePaths));

@@ -2,12 +2,23 @@
 // for the OmniRoute LAN gateway described in it. Credentials, if any, are read
 // at runtime from the profile's auth.json and are never copied or logged.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createProvider } from "@earendil-works/pi-ai";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 
+/**
+ * The profile to read when the editor did not name one.
+ *
+ * PiCode always names it (`PI_AGENT_PROFILE`), because the editor is the one that knows which
+ * installation this is. This fallback is for the agent started by hand, and it is derived from
+ * where the agent itself lives — `<app>/resources/pi-durable` carries the program, so the profile
+ * is `<app>/data/pi-agent`, two levels up and back down. It used to be one machine's absolute
+ * path, which was wrong for every install but the one it was written on: the agent ships inside
+ * PiCode now, and "wherever PiCode is installed" has to hold for a human running the cli too.
+ */
 export const DEFAULT_PROFILE_DIR =
-	process.env.PI_AGENT_PROFILE || "C:/Users/tapla/AppData/Local/Programs/PiCode/data/pi-agent";
+	process.env.PI_AGENT_PROFILE || join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "data", "pi-agent");
 
 /** READ-ONLY peek at the profile's auth.json for this provider's key, if any. */
 function readAuthKey(profileDir, providerId) {
@@ -76,6 +87,9 @@ export function profileModelProblem(profileDir = DEFAULT_PROFILE_DIR, providerId
 export function loadOmniProvider(profileDir = DEFAULT_PROFILE_DIR, providerId = process.env.PI_AGENT_PROVIDER || "omni") {
 	const problem = profileModelProblem(profileDir, providerId);
 	if (problem) throw new Error(problem); // the same sentence the daemon reports, never a raw ENOENT
+	// The guard above read this very file and returned null, so it is proven present, readable,
+	// parseable and complete before this line runs: a try/catch here would only hide that the guard
+	// is where a broken profile is meant to be reported, in one sentence rather than a SyntaxError.
 	const profile = JSON.parse(readFileSync(join(profileDir, "models.json"), "utf8"));
 	const prov = profile.providers[providerId];
 

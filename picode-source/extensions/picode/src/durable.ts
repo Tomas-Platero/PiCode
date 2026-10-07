@@ -9,7 +9,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DaemonClient, daemonEndpoint } from './durable-client';
 import { daemonSpawnPlan } from './durable-spawn';
+import { DEFAULT_DURABLE_FOLDER, durableFolderCandidates, SHIPPED_DURABLE_FOLDER } from './durable-folder';
 import { durableWorkRows, snapshotInFlight, type DurableWorkRow } from './durable-tasks';
+
+export { DEFAULT_DURABLE_FOLDER };
 
 /**
  * The durable agent, seen from the editor.
@@ -32,9 +35,6 @@ export const PICODE_DURABLE_FOLDER_SETTING = 'picode.durable.folder';
 
 /** Start the agent with the window instead of waiting to be asked. */
 export const PICODE_DURABLE_AUTOSTART_SETTING = 'picode.durable.autoStart';
-
-/** The folder the default setting names, resolved against the workspace when relative. */
-export const DEFAULT_DURABLE_FOLDER = 'experimental/durable';
 
 /** One conversation as the daemon's `sessions` lists it. */
 interface DurableConversationRow {
@@ -71,10 +71,13 @@ export interface DurableStatus {
 /**
  * The folder that holds the agent's `cli.js`, from the setting.
  *
- * A relative path is resolved against the workspace folders: the setting's default points at
- * the repository's `experimental/durable`, which exists when the editor is opened on this
- * repository. When nothing resolves, the answer is `undefined` — the commands say so in one
- * sentence rather than guessing a path.
+ * An absolute value is used as given, and a folder that is not there is reported as exactly that.
+ * A relative one is resolved against the open workspace folders, then against the repository a
+ * packed build sits in, and finally against the agent this installation carries — the candidate
+ * that answers wherever PiCode is installed, which is what an installation has instead of a
+ * repository above it (`durable-folder.ts` holds the order and the reasons for each root). When
+ * nothing matches, the answer is the first workspace candidate so the caller can name it, or
+ * `undefined` with no folder open: the commands say so in one sentence rather than guessing.
  */
 export function durableFolder(): string | undefined {
 	const configured = vscode.workspace.getConfiguration('picode').get<string>(PICODE_DURABLE_FOLDER_SETTING)
@@ -87,19 +90,14 @@ export function durableFolder(): string | undefined {
 		return trimmed;
 	}
 	const folders = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
-	for (const folder of folders) {
-		const candidate = path.join(folder, trimmed);
+	// The roots, their order and the reason each one is in the list live in durable-folder.ts, where
+	// `node --test` pins them: the open folders, the repository a packed build sits in, and the agent
+	// this installation carries (`resources/pi-durable`) — the one that works wherever PiCode is
+	// installed, which is what an installed editor has instead of a repository above it.
+	for (const candidate of durableFolderCandidates(trimmed, folders, vscode.env.appRoot)) {
 		if (fs.existsSync(path.join(candidate, 'cli.js'))) {
 			return candidate;
 		}
-	}
-	// The experimental build is packed *inside* the PiCode repository, so its agent sits beside
-	// the app folder rather than beside whatever folder happens to be open — which is what lets
-	// it be found while the owner works in another project. In a released build there is no
-	// `experimental/durable` up there, so this candidate simply does not exist and nothing changes.
-	const fromEditor = path.resolve(vscode.env.appRoot, '..', '..', '..', trimmed);
-	if (fs.existsSync(path.join(fromEditor, 'cli.js'))) {
-		return fromEditor;
 	}
 	// Nothing on disk matched; with a folder open the first one is still the honest guess —
 	// the commands that need `cli.js` will say exactly that it is missing.
@@ -268,6 +266,15 @@ function daemonUnavailableSentence(error: unknown): string {
 export interface DurableAgentPaths {
 	/** `data/pi-agent` inside this distribution: the profile the editor itself uses. */
 	readonly agentProfile: string;
+	/**
+	 * Where the daemon keeps its own storage (`sessions.sqlite`), beside that profile.
+	 *
+	 * The agent is shipped inside the installation, and the installation is replaced on every
+	 * install and removed on uninstall — so the folder it lives in is the one place its storage
+	 * must NOT be. The editor names `data/durable` instead, next to the profile the daemon already
+	 * reads, which is also what keeps a portable build's conversations with the portable build.
+	 */
+	readonly agentDataDir: string;
 	/** This editor's user settings file, whose `picode.durable.*` keys the agent honours. */
 	readonly userSettingsFile: string;
 }
@@ -290,7 +297,7 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 		// relative path to resolve against, and telling someone to change a setting they never
 		// set is not an answer — it sends them looking in the wrong place.
 		void vscode.window.showWarningMessage(folder === undefined
-			? `PiCode: the durable agent lives inside the PiCode repository, and it is looked for at "${DEFAULT_DURABLE_FOLDER}" relative to an open folder — none is open. Open the repository folder, or set "picode.durable.folder" to an absolute path.`
+			? `PiCode: this build carries no durable agent, and there is no folder open to look in — it is looked for at "${DEFAULT_DURABLE_FOLDER}" relative to an open folder, and in "${SHIPPED_DURABLE_FOLDER}" inside the installation. Set "picode.durable.folder" to the folder that holds a cli.js.`
 			: `PiCode: the durable agent folder was not found — "${folder}" holds no cli.js. Set "picode.durable.folder" to the folder that does.`,
 		);
 		return;
@@ -304,9 +311,11 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 	}
 	// The daemon's own words go to a file rather than nowhere: when it does not come up, the reason
 	// is in there, and telling someone to "run it by hand to see why" is only fair if the reason was
-	// written down first. It lands in the daemon's own `.data/`, which is ignored. (`cliFile` is the
-	// checked path; `folder` is only its narrowed-or-not twin, so the file comes from the file.)
-	const logFile = path.join(path.dirname(cliFile), '.data', 'daemon.log');
+	// written down first. It lands in the daemon's own storage directory, which is the only place it
+	// may write: the folder it is shipped in belongs to the installation and is replaced on install.
+	// (`cliFile` is the checked path; `folder` is only its narrowed-or-not twin, so the file comes
+	// from the file.)
+	const logFile = path.join(paths.agentDataDir, 'daemon.log');
 	let logFd: number | undefined;
 	try {
 		fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -319,6 +328,7 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 	const plan = daemonSpawnPlan(cliFile, {
 		...process.env,
 		PI_AGENT_PROFILE: paths.agentProfile,
+		PICODE_DURABLE_DATA: paths.agentDataDir,
 		PICODE_USER_SETTINGS: paths.userSettingsFile,
 	}, logFd);
 	const child = spawn(plan.command, [...plan.args], {

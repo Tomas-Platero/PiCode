@@ -12,7 +12,17 @@ import { loadOmniProvider, profileModelProblem } from "./profile.js";
 import { ProofTools, SubagentExtension } from "./extensions.js";
 
 export const CTX = BACKGROUND_CONTEXT;
-export const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".data");
+/**
+ * Where the daemon keeps its own storage: `sessions.sqlite`, its WAL files, the daemon log.
+ *
+ * `.data/` beside this folder by default, which is what the repository's own runs and the proofs
+ * use. PiCode names it when *it* starts the agent (`PICODE_DURABLE_DATA`), because an editor ships
+ * this folder inside its own installation: anything written there dies with an uninstall, and the
+ * conversations are the one thing a durable agent exists to keep. The editor points it at its own
+ * data directory instead, beside the pi profile the daemon already reads (`PI_AGENT_PROFILE`).
+ */
+export const DATA_DIR =
+	process.env.PICODE_DURABLE_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".data");
 
 /** The ONE shared CLI database — never numbered, never per-run. The daemon owns it; the direct commands open it only when no daemon is running. */
 export const SHARED_DB = "sessions.sqlite";

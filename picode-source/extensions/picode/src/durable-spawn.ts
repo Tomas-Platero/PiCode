@@ -24,7 +24,16 @@
 /** The daemon stops itself when its stdin reads EOF (see its `serve` in lib/daemon.js). */
 export const PICODE_PARENT_PIPE_ENV = 'PICODE_PARENT_PIPE';
 
-/** The spawn plan for `node cli.js serve`, exactly as the editor must issue it. */
+/**
+ * Runs the editor's own binary as plain Node instead of launching the editor again.
+ *
+ * The same choice `npm-run.ts` and `packages-manage.ts` make for every other node process this
+ * extension starts: an installed PiCode is self-contained, and a machine that runs PiCode does not
+ * have to have a Node on PATH for its own agent to start.
+ */
+export const RUN_AS_NODE_ENV = 'ELECTRON_RUN_AS_NODE';
+
+/** The spawn plan for `<the editor's own binary> cli.js serve`, exactly as the editor must issue it. */
 export interface DaemonSpawnPlan {
 	readonly command: string;
 	readonly args: readonly string[];
@@ -35,17 +44,21 @@ export interface DaemonSpawnPlan {
 	readonly stdio: readonly ['pipe', number | 'ignore', number | 'ignore'];
 	/** Never detached: a background service is exactly what the daemon must not be. */
 	readonly detached: false;
-	/** The child's environment: the caller's, plus the lifeline instruction. */
+	/** The child's environment: the caller's, plus the lifeline and run-as-node instructions. */
 	readonly env: Readonly<Record<string, string | undefined>>;
 }
 
 /** Build the spawn plan for the daemon at `cliFile`. */
 export function daemonSpawnPlan(cliFile: string, baseEnv: NodeJS.ProcessEnv, logFd: number | undefined): DaemonSpawnPlan {
 	return {
-		command: 'node',
+		// The editor's own binary as plain Node, never the `node` of whoever's PATH this happens to
+		// be: an installation is self-contained, and a machine that runs PiCode does not have to have
+		// a Node on PATH for its own agent to start. Measured on the editor's node (24.18.1): the
+		// agent's `node:sqlite` storage loads there.
+		command: process.execPath,
 		args: [cliFile, 'serve'],
 		stdio: ['pipe', logFd ?? 'ignore', logFd ?? 'ignore'],
 		detached: false,
-		env: { ...baseEnv, [PICODE_PARENT_PIPE_ENV]: '1' },
+		env: { ...baseEnv, [PICODE_PARENT_PIPE_ENV]: '1', [RUN_AS_NODE_ENV]: '1' },
 	};
 }
