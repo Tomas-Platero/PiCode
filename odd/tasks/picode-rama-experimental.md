@@ -719,3 +719,54 @@ queda **apuntado como observación**, no como conclusión: puede ser cosa del ed
 `oneRowPerPackage`, `chat.mcp.autostart` y pi **1.0.4**. El perfil del dueño: **57 169 ficheros y 272
 conversaciones**, con **3 en el área** — las que el panel debe enseñar ahora, sin que la lista se
 vacíe cuando el workspace se está cargando.
+
+### 2026-10-07 · la causa **real**: un directorio que no se pudo leer publicado como vacío
+
+> «Aquí hay 8 sesiones. Luego hay 5. ¿Entiendes?»
+
+Al final la prueba estaba en el **propio registro del panel**. En
+`data/user-data/User/workspaceStorage/<hash>/state.vscdb`, la clave `agentSessions.model.cache`
+guarda **exactamente las filas que el panel recibió**, y ahí estaban las ocho:
+
+```text
+pi      11:50  hola          ← las del área, mías
+pi      01:01  hola
+pi      00:35  Hey
+local   11:49  hola          ← las locales del editor
+local   01:01  mola / esta sesión es de prueba / como estamos
+local   00:34  Hey
+```
+
+Es decir: la segunda captura es **las cinco locales, y ningunas de las mías**. Y no era el filtro
+(`providers: []`, nada excluido), ni un error del proveedor (no hay nada en los logs), ni la identidad
+del área (eso ya estaba arreglado). Era esto:
+
+```ts
+list: dir => { try { return readdirSync(dir).map(…) } catch { return []; } }
+```
+
+**Un directorio que se negó a leerse volvía como un directorio vacío.** En un perfil ocupado —el suyo,
+con una importación, un árbol npm y once servidores MCP— `readdirSync` falla **un instante**, y el
+listado publicaba «estos proyectos no tienen sesiones» con el panel creyéndoselo y borrando **todas**
+las filas. Al siguiente refresco volvían: el 8 → 5 → 8 que llevaba toda la mañana viendo.
+
+**El arreglo (`23a0a732`)** es la diferencia que el paseo estaba tirando a la basura:
+
+* **`SessionsFs.list` devuelve `undefined`** cuando el directorio no se pudo leer, y el paseo informa
+  `complete: false`.
+* **`conversationsReport` / `areaConversationsReport`** sacan eso junto con las filas, y el panel pide
+  esos en vez de las listas simples.
+* **`listingForPanel` retiene salvo que la respuesta se pueda sostener**: los proyectos se conocen **y**
+  el paseo leyó todo lo que necesitaba. Una lista **más corta** también se retiene, porque la fila que
+  falta **no se borró: no se pudo leer**.
+
+**Verificado**: 358 tests, 358 pasan, 0 fallan; y la regla nueva se ejecutó **contra la vieja** primero,
+donde falla (15 tests, 14 pasan, 1 falla) — el caso que afirma es justo el que le vaciaba el panel.
+Typecheck exit 0.
+
+#### La lección, ahora sí completa
+
+Cuatro veces el mismo patrón: una lista que no se pudo construir, un workspace sin resolver, una
+identidad que se movía, y un directorio que no se pudo leer. **Todas dicen «no hay nada» cuando lo
+cierto es «no pude mirar».** La regla, taquigráfica: *si la lectura falló, la respuesta es la de antes,
+no el vacío.*
