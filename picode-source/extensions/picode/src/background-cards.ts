@@ -40,6 +40,29 @@ function recordOf(value: unknown): Record<string, unknown> | undefined {
 		: undefined;
 }
 
+/**
+ * A JSON object from an unknown value that may have crossed a boundary.
+ *
+ * It arrives parsed when the caller is the one that made the call, but **serialised** when it has been
+ * through one: the same call that reads `{command, label}` in the transcript read as
+ * `'{"command":…,"label":…}'` by an editor-side observer — and the card drawn from that second shape
+ * was an empty one. Both are accepted; a string that is not JSON is simply not arguments.
+ */
+function objectOf(value: unknown): Record<string, unknown> | undefined {
+	const direct = recordOf(value);
+	if (direct !== undefined) {
+		return direct;
+	}
+	if (typeof value !== 'string') {
+		return undefined;
+	}
+	try {
+		return recordOf(JSON.parse(value));
+	} catch {
+		return undefined;
+	}
+}
+
 /** A non-empty string from an unknown value, or `undefined`. */
 function textOf(value: unknown): string | undefined {
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
@@ -65,7 +88,7 @@ export interface BackgroundCall {
 
 /** The call's own arguments, read as the tool documents them. */
 export function backgroundCallOf(args: unknown): BackgroundCall {
-	const record = recordOf(args);
+	const record = objectOf(args);
 	const label = textOf(record?.['label']);
 	const command = textOf(record?.['command']);
 	return {
@@ -75,15 +98,28 @@ export function backgroundCallOf(args: unknown): BackgroundCall {
 }
 
 /**
- * The job number a start's result names: `Started background job 3 (web lint + type-check).`
+ * A start's result, read for the two things it knows: which job it became, and what it is called.
  *
- * The number is the only thing that ties the two ends together, so it is read rather than assumed;
- * a result that does not say it leaves it out.
+ * `Started background job 3 (web lint + type-check). It keeps running…` — the number ties the two ends
+ * together, and the label is the very one the call carried, repeated by the tool. That repetition is
+ * what lets the card stand up when the call's own arguments are not reachable from where it is drawn.
  */
-export function backgroundJobNumberOf(resultText: unknown): string | undefined {
+export function backgroundStartOf(resultText: unknown): { jobNumber?: string; label?: string } {
 	const text = textOf(resultText);
-	const match = text === undefined ? null : /^Started background job\s+(\S+)/.exec(text);
-	return match === null ? undefined : match[1];
+	const match = text === undefined ? null : /^Started background job\s+(\S+?)\s*(?:\((.+)\))?\./.exec(text);
+	if (match === null) {
+		return {};
+	}
+	const label = textOf(match[2]);
+	return {
+		jobNumber: match[1],
+		...(label === undefined ? {} : { label }),
+	};
+}
+
+/** The job number a start's result names, when it names one. */
+export function backgroundJobNumberOf(resultText: unknown): string | undefined {
+	return backgroundStartOf(resultText).jobNumber;
 }
 
 /**
@@ -93,7 +129,7 @@ export function backgroundJobNumberOf(resultText: unknown): string | undefined {
  * of typed parts, and a card without the job's number is a card that cannot be tied to its ending.
  */
 export function backgroundResultOf(result: unknown): string | undefined {
-	const record = recordOf(result);
+	const record = objectOf(result);
 	const content = record === undefined ? result : record['content'];
 	if (typeof content === 'string') {
 		return textOf(content);
@@ -136,7 +172,7 @@ export interface BackgroundCompletion {
  * owner typed (or an agent's answer that happens to mention a job) cannot become a card.
  */
 export function backgroundCompletionOf(message: unknown): BackgroundCompletion | undefined {
-	const record = recordOf(message);
+	const record = objectOf(message);
 	if (record?.['customType'] !== BACKGROUND_COMPLETION_TYPE) {
 		return undefined;
 	}

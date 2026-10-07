@@ -18,6 +18,7 @@ import {
 	backgroundCompletionOf,
 	backgroundJobNumberOf,
 	backgroundResultOf,
+	backgroundStartOf,
 	completionFailed,
 	finishedResultLine,
 	isBackgroundTool,
@@ -28,6 +29,32 @@ test('only the background tool becomes a card', () => {
 	assert.strictEqual(isBackgroundTool('background'), true);
 	assert.strictEqual(isBackgroundTool('bash'), false);
 	assert.strictEqual(isBackgroundTool(undefined), false);
+});
+
+test('the start result repeats the label, so the card has it without the call', () => {
+	// The result names the job **and** repeats the label the call carried: that repetition is what lets
+	// the card stand up when the call's own arguments are not readable from where it is drawn.
+	const start = backgroundStartOf('Started background job 1 (web build (ArticTempest-Web)). It keeps running while you and the user carry on.');
+	assert.strictEqual(start.jobNumber, '1');
+	assert.strictEqual(start.label, 'web build (ArticTempest-Web)');
+
+	// A result without a label still names the job.
+	const bare = backgroundStartOf('Started background job 7. It keeps running.');
+	assert.strictEqual(bare.jobNumber, '7');
+	assert.strictEqual(bare.label, undefined);
+
+	assert.deepStrictEqual(backgroundStartOf('nothing to see here'), {});
+	assert.deepStrictEqual(backgroundStartOf(undefined), {});
+});
+
+test('the arguments are read even when they crossed a boundary', () => {
+	// The same call, serialised — which is how an editor-side observer sees it, and why the first card
+	// drawn by this feature had no label and no command on it.
+	const args = { command: 'cd "d:/repositorios/ArticTempest-Web" && npm run build 2>&1 | tail -40', label: 'web build (ArticTempest-Web)' };
+	assert.deepStrictEqual(backgroundCallOf(JSON.stringify(args)), args);
+
+	// A string that is not JSON is simply not arguments, and never a crash.
+	assert.deepStrictEqual(backgroundCallOf('npm run build'), {});
 });
 
 test('a call carries the command and the label the agent gave the job', () => {

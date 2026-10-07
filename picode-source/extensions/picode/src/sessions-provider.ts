@@ -281,6 +281,20 @@ function pruneHeaderSlugCache(seen: ReadonlySet<string>): void {
 }
 
 /**
+ * The hash half of an area slug (`--area-<name>-<hash8>--`), case-folded.
+ *
+ * The hash covers the area's folder list (see `areaSessionSlug`) and is the part of the
+ * slug that actually identifies the area; the name between the dashes is the editor's
+ * window name, which is derived, not chosen — the same folders under a re-named window
+ * spell a different slug. Matching goes by the hash for exactly that reason.
+ */
+const AREA_SLUG_HASH = /^--area-.+-([0-9a-f]{8})--$/;
+
+function areaSlugHash(slug: string): string | undefined {
+	return AREA_SLUG_HASH.exec(slug)?.[1]?.toLowerCase();
+}
+
+/**
  * pi's per-project session folder name, replicating the runtime's own encoding
  * (pi `dist/core/session-manager.js`, `getDefaultSessionDirPath`): the resolved cwd
  * with any leading separator stripped, every `/`, `\` and `:` turned into `-`,
@@ -330,6 +344,36 @@ export function listedSessionSlugs(
 export function areaFamilyPrefix(areaSlug: string): string | undefined {
 	const match = /^(--area-.+)-[0-9a-f]{8}$/.exec(areaSlug.replace(/--$/, ''));
 	return match === null ? undefined : `${match[1]}-`;
+}
+
+/**
+ * Every folder name on disk that belongs to the same area as `areaSlug`, and whether the
+ * directory could be read at all.
+ *
+ * Two things move an area's filing folder without moving its sessions, and each rule catches
+ * what the other misses:
+ *
+ - the **identity** (the hash): a window without a saved workspace file hashes its folder list,
+   and folders open and close as the owner works — `…-513d6f42--` became `…-19976c25--`. Same
+   area name, different hash: gathered by the name prefix (`areaFamilyPrefix`).
+ - the **name**: a window with no workspace file takes its name from the editor, and the same
+   folders can be spelled differently a moment later — the hash covers the folder list and is
+   unchanged. Same hash, different name: gathered by the hash (`areaSlugHash`).
+ *
+ * A saved workspace file pins both (identity is the file's path, name is its own), and then the
+ * family is one folder — which is the shape the union collapses to when nothing moved.
+ */
+function areaFamily(sessionsDir: string, areaSlug: string, fs: SessionsFs): { names: string[]; read: boolean } {
+	const entries = fs.list(sessionsDir);
+	if (entries === undefined) {
+		return { names: [], read: false };
+	}
+	const prefix = areaFamilyPrefix(areaSlug);
+	const hash = areaSlugHash(areaSlug);
+	const names = entries.map(entry => path.basename(entry)).filter(name =>
+		(prefix !== undefined && name.startsWith(prefix))
+		|| (hash !== undefined && areaSlugHash(name) === hash));
+	return { names, read: true };
 }
 
 /**
@@ -383,11 +427,9 @@ export function areaConversationsReport(
 	cap?: number,
 	fs: SessionsFs = nodeFs,
 ): AreaListing {
-	const names = fs.list(sessionsDir);
-	const prefix = areaFamilyPrefix(areaSlug);
-	const family = (names ?? []).map(entry => path.basename(entry)).filter(name => prefix !== undefined && name.startsWith(prefix));
-	const report = conversationsReport(sessionsDir, family.length > 0 ? family : [areaSlug], cap, fs);
-	return { files: report.files, complete: names !== undefined && report.complete };
+	const family = areaFamily(sessionsDir, areaSlug, fs);
+	const report = conversationsReport(sessionsDir, family.names.length > 0 ? family.names : [areaSlug], cap, fs);
+	return { files: report.files, complete: family.read && report.complete };
 }
 
 /** The conversations filed under the given slugs, with the same honest answer as an area's. */
@@ -413,13 +455,9 @@ export function conversationsReport(
  * list no longer computes is exactly the one that would otherwise not open.
  */
 export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: SessionsFs = nodeFs): string[] {
-	const prefix = areaFamilyPrefix(areaSlug);
-	if (prefix === undefined) {
-		return [];
-	}
 	// A read that failed is "no family found", and the caller that needs the difference asks for it
 	// itself (`areaConversationsReport`): here the fall-back is the slug it was given.
-	return (fs.list(sessionsDir) ?? []).map(entry => path.basename(entry)).filter(name => name.startsWith(prefix));
+	return areaFamily(sessionsDir, areaSlug, fs).names;
 }
 
 /**
@@ -485,7 +523,17 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
 		return { files: [], complete: true };
 	}
 	const foldedSlugs = new Set([...slugs].map(slug => slug.toLowerCase()));
-	const matches = (name: string): boolean => slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()));
+	// Area requests match by hash, not by whole name: the name inside an area slug is the
+	// editor's window name and it has changed spelling before (saved workspace, re-titled
+	// window), which filed the same area under more than one folder. The hash — the part
+	// built from the folder list — is the identity; every `--area-…-<hash>--` folder on
+	// disk belongs to the group whose requested slug carries the same hash, so a session
+	// never leaves the panel because the window's name did.
+	const areaHashes = new Set([...slugs].map(areaSlugHash).filter((hash): hash is string => hash !== undefined));
+	const matches = (name: string): boolean =>
+		slugs.has(name)
+		|| (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()))
+		|| (areaHashes.has(areaSlugHash(name) ?? ''));
 	const dirs: string[] = [];
 	// Transcripts filed directly under `sessions/` — pi itself files every session under a
 	// per-project folder, but a session created with an explicit session directory lands at

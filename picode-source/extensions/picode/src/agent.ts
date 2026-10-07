@@ -28,8 +28,8 @@ import {
 	BACKGROUND_TOOL,
 	backgroundCallOf,
 	backgroundCompletionOf,
-	backgroundJobNumberOf,
 	backgroundResultOf,
+	backgroundStartOf,
 	completionFailed,
 	finishedResultLine,
 	isBackgroundTool,
@@ -487,7 +487,15 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				// A background job's call ends at once, when the job **starts**: its result is what names
 				// the job, so the same card is updated with it rather than a second one being pushed.
 				if (isBackgroundTool(event.toolName)) {
-					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), backgroundJobNumberOf(backgroundResultOf(event.result)), log);
+					// The result is what the card can always count on: it names the job, and it repeats the
+					// label the call carried — which is what keeps the card honest when the call's own
+					// arguments are not readable from here (they do arrive serialised often enough).
+					const start = backgroundStartOf(backgroundResultOf(event.result));
+					const call = backgroundCallOf(event.args);
+					pushBackgroundCard(stream, event.toolCallId, {
+						...call,
+						...(call.label === undefined && start.label !== undefined ? { label: start.label } : {}),
+					}, start.jobNumber, log);
 				}
 				return;
 			}
