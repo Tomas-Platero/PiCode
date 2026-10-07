@@ -101,14 +101,24 @@ picode_data_hold_move_aside() {
   [[ -d "${data_dir}" ]] || return 0
 
   echo "  -- moving the portable profile aside for the pack: ${data_dir} -> ${hold_dir}"
-  mv_error="$(mv "${data_dir}" "${hold_dir}" 2>&1)" || {
+  # Tried more than once, and the reason is measured rather than imagined: an editor that was
+  # **just closed** keeps its extension-host logs open while it tears down, and on 2026-10-07 it kept
+  # them for **minutes** — its utility process crashed on the way out (`terminated unexpectedly with
+  # code 3221225477` at 12:01:53, right after the extension host exited cleanly), and the handles were
+  # still there when the build asked at 12:03 and at 12:07. Two builds were lost to a process that had
+  # already exited; the wait is cheap and the refusal it replaces is not. A window that is **still
+  # open** keeps refusing and gets the message below, which is the case this refusal exists for.
+  for _ in $(seq 1 40); do
+    mv_error="$(mv "${data_dir}" "${hold_dir}" 2>&1)" && return 0
+    sleep 2
+  done
+  {
     echo "error: the pack did NOT run and NOTHING was deleted, but the portable profile could not be moved out of the way first." >&2
-    echo "       The rename of '${data_dir}' to '${hold_dir}' was refused -- almost certainly a file inside it that a running process holds open." >&2
+    echo "       The rename of '${data_dir}' to '${hold_dir}' was refused for 80 s -- a file inside it is held open." >&2
     echo "       mv said: ${mv_error}" >&2
     echo "       Close the PiCode running from this folder (its logs under data/user-data/logs are the usual holders) and build again." >&2
     return 1
   }
-  return 0
 }
 
 # picode_data_hold_put_back <pack_dir>
