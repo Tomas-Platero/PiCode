@@ -24,6 +24,18 @@ import {
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
+import {
+	BACKGROUND_TOOL,
+	backgroundCallOf,
+	backgroundCompletionOf,
+	backgroundJobNumberOf,
+	backgroundResultOf,
+	completionFailed,
+	finishedResultLine,
+	isBackgroundTool,
+	runningResultLine,
+	type BackgroundCall,
+} from './background-cards';
 import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
@@ -345,6 +357,62 @@ function pushDurableCard(stream: vscode.ChatResponseStream, toolCallId: string, 
 /** The delegation tool's name, as the bridge extension registers it (`durable-cards.ts` owns the check). */
 const DURABLE_SEND_TOOL_NAME = 'durable_send';
 
+/**
+ * The card a background job gets: at its start, and updated once its result names the job it became.
+ *
+ * The agent's `background` tool returns at once, so both ends happen inside this same call — the card
+ * is pushed when the call starts and updated when its result arrives, which is what "running in the
+ * background" should look like while it is true.
+ */
+function pushBackgroundCard(stream: vscode.ChatResponseStream, toolCallId: string, call: BackgroundCall, jobNumber: string | undefined, log: (line: string) => void): void {
+	try {
+		const subagent = new vscode.ChatSubagentToolInvocationData(
+			jobNumber === undefined ? 'Starting in the background' : 'Running in the background',
+			call.label ?? 'background job',
+			call.command ?? '',
+			runningResultLine(jobNumber),
+		);
+		const part = new vscode.ChatToolInvocationPart(BACKGROUND_TOOL, toolCallId);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		part.isComplete = false;
+		stream.push(part);
+	} catch (error) {
+		log(`background card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * The card a **finished** job gets, in the message that brings its result.
+ *
+ * A different card from the one above, and it has to be: the result arrives in a later turn, and the
+ * editor only updates a part inside the response being streamed. So the pair reads as one job — the
+ * first card says it started, this one says how it ended, and both name the same job.
+ */
+function pushBackgroundCompletionCard(
+	stream: vscode.ChatResponseStream,
+	completion: ReturnType<typeof backgroundCompletionOf> & object,
+	log: (line: string) => void,
+): void {
+	try {
+		const failed = completionFailed(completion);
+		const subagent = new vscode.ChatSubagentToolInvocationData(
+			failed ? 'A background job failed' : 'A background job finished',
+			completion.label ?? 'background job',
+			completion.command ?? '',
+			[finishedResultLine(completion), completion.tail ?? ''].filter(line => line.length > 0).join('\n\n'),
+		);
+		const part = new vscode.ChatToolInvocationPart(BACKGROUND_TOOL, `background-job-${completion.id ?? completion.summary}`);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		part.isComplete = true;
+		part.isError = failed;
+		stream.push(part);
+	} catch (error) {
+		log(`background completion card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
 /* ------------------------------------------------------------------ *
  * The turn, as the editor's chat wants it
  * ------------------------------------------------------------------ */
@@ -402,6 +470,11 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 						pushDurableCard(stream, event.toolCallId, card, log);
 					}
 				}
+				// Work the agent left running: its card says so from the first moment, which is what the
+				// owner asked to be able to see («¿hay alguna forma de que yo vea ese background?»).
+				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
+					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
+				}
 				return;
 			}
 			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
@@ -411,10 +484,22 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				if (card !== undefined) {
 					pushDurableCard(stream, event.toolCallId, card, log);
 				}
+				// A background job's call ends at once, when the job **starts**: its result is what names
+				// the job, so the same card is updated with it rather than a second one being pushed.
+				if (isBackgroundTool(event.toolName)) {
+					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), backgroundJobNumberOf(backgroundResultOf(event.result)), log);
+				}
 				return;
 			}
 			if (event.type === 'message_end') {
 				const message = event.message;
+				// A job that has ended arrives as its own message into the conversation: the card says which
+				// job it was, how it ended, and the tail of its output (`background-cards.ts` reads it, and
+				// only a message of that exact type becomes a card).
+				const completion = backgroundCompletionOf(message);
+				if (completion !== undefined) {
+					pushBackgroundCompletionCard(stream, completion, log);
+				}
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
 					// What happened first, then pi's own sentence — except for the one failure whose advice only works
 					// in a terminal, which is answered with the settings where a provider is added.
