@@ -34,6 +34,34 @@ picode_data_hold_dir() {
   printf '%s\n' "${1}-data-hold"
 }
 
+# picode_data_locked_files <dir>
+#
+# The files under a directory that **refuse to be opened right now**, up to a few, one per line.
+#
+# This is the answer to "who is holding it" when the profile's rename is refused. The message that
+# says "close the PiCode running from this folder" is no help when none is running — measured twice
+# on 2026-10-07, where the handles outlived the editor (a utility process that crashed on the way
+# out, and children that inherited its log descriptors) for longer than the wait above, so the build
+# refused with the reason still unknown. Naming the files turns that into something to act on.
+#
+# Windows only, and silent when it cannot answer: a guess here is worse than nothing.
+picode_data_locked_files() {
+  local dir="$1"
+  command -v powershell.exe >/dev/null 2>&1 || return 0
+  command -v cygpath >/dev/null 2>&1 || return 0
+  powershell.exe -NoProfile -Command "
+    \$n = 0
+    Get-ChildItem '$( cygpath -w "${dir}" )' -Recurse -File -ErrorAction SilentlyContinue |
+      Where-Object { \$_.FullName -notmatch 'node_modules' } |
+      ForEach-Object {
+        if (\$n -lt 5) {
+          \$f = \$_.FullName
+          try { \$s = [System.IO.File]::Open(\$f, 'Open', 'ReadWrite', 'None'); \$s.Close() }
+          catch { Write-Output \$f; \$n++ }
+        }
+      }" 2>/dev/null | tr -d '\r'
+}
+
 # picode_editor_running
 #
 # Whether a PiCode is running right now.
@@ -116,6 +144,13 @@ picode_data_hold_move_aside() {
     echo "error: the pack did NOT run and NOTHING was deleted, but the portable profile could not be moved out of the way first." >&2
     echo "       The rename of '${data_dir}' to '${hold_dir}' was refused for 80 s -- a file inside it is held open." >&2
     echo "       mv said: ${mv_error}" >&2
+    locked="$( picode_data_locked_files "${data_dir}" )"
+    if [[ -n "${locked}" ]]; then
+      echo "       These files are held open right now:" >&2
+      while IFS= read -r file; do
+        echo "         ${file}" >&2
+      done <<< "${locked}"
+    fi
     echo "       Close the PiCode running from this folder (its logs under data/user-data/logs are the usual holders) and build again." >&2
     return 1
   }
