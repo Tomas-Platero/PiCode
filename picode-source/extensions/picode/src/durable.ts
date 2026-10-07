@@ -433,9 +433,9 @@ function modelAndAgentParams(): Record<string, unknown> {
  * "PiCode: Choose Durable Model": pick the model the durable agent runs on from a list.
  *
  * The setting is a `provider/model` string because that is what the agent's own `--model` flag takes,
- * but nothing about it belongs in a text box. It was worse than a text box: its **default** was the
- * owner's own provider (`omni/auto`), a name no other machine has, so a fresh install pointed at a
- * model that does not exist there — «esto son mis modelos no los de otras personas».
+ * but nothing about it belongs in a text box. It was worse than a text box: its **default** was one
+ * developer's own provider, a name no other machine has, so a fresh install pointed at a model that
+ * does not exist there — «esto son mis modelos no los de otras personas».
  *
  * So the list comes from the editor's model registry, filtered to the vendor the connector publishes:
  * those **are** the models the host's profile in force knows, which is exactly what the setting asks
