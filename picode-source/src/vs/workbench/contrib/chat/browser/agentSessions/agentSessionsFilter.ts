@@ -51,8 +51,47 @@ export interface IAgentSessionsFilterOptions extends Partial<IAgentSessionsFilte
 	overrideExclude?(session: IAgentSession): boolean | undefined;
 }
 
-const DEFAULT_EXCLUDES: IAgentSessionsFilterExcludes = Object.freeze({
-	providers: [] as const,
+/**
+ * The id PiCode's own transcripts are listed under, and the group they share with the editor's own
+ * sessions.
+ *
+ * PiCode records its own conversations **twice**: the editor's `Local` sessions and pi's transcripts
+ * (`pi`) are the same chats, written by the same chat — one for the editor's history, one as the
+ * agent's transcript. The owner asked for one list at a time: «Me gustaría que siempre filtrara por
+ * defecto por las "local" y luego yo si quiero poner las externas, nunca ambas juntas», so the two
+ * behave as one group:
+ *
+ * - **the default hides `pi`**, and the panel opens on the editor's list;
+ * - **turning either one on turns the other off** ({@link excludesAfterToggle}), so both are never
+ *   shown at once;
+ * - pi's transcripts stay reachable from the filter, because they are the only place conversations
+ *   the editor never recorded exist — an import, or one the pi CLI wrote.
+ */
+export const PI_TRANSCRIPT_SESSION_PROVIDER = 'pi';
+export const ONE_LIST_SESSION_PROVIDERS: readonly string[] = [AgentSessionProviders.Local, PI_TRANSCRIPT_SESSION_PROVIDER];
+
+/**
+ * `excludes` holds what is **hidden**, and the filter's toggle inverts membership — that is kept here,
+ * plus the one extra rule of the group: showing one half hides the other.
+ */
+export function excludesAfterToggle(current: readonly string[], toggled: string): string[] {
+	const excludes = new Set(current);
+	if (excludes.delete(toggled)) {
+		for (const other of ONE_LIST_SESSION_PROVIDERS) {
+			if (other !== toggled) {
+				excludes.add(other);
+			}
+		}
+		return Array.from(excludes);
+	}
+	excludes.add(toggled);
+	return Array.from(excludes);
+}
+
+/** What the panel hides before the owner touches the filter; exported so a test can pin it. */
+export const DEFAULT_EXCLUDES: IAgentSessionsFilterExcludes = Object.freeze({
+	// The editor's list is the one the panel opens on; see `ONE_LIST_SESSION_PROVIDERS`.
+	providers: [PI_TRANSCRIPT_SESSION_PROVIDER] as const,
 	states: [] as const,
 	archived: true as const /* archived are never excluded but toggle between expanded and collapsed */,
 	read: false as const,
@@ -234,6 +273,17 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 					label: resolveLabel(contribution.type)
 				});
 			}
+			// ...and the ones registered **in code** rather than declared, which is how PiCode's own
+			// transcripts arrive (the connector registers `pi` imperatively). Without them the filter
+			// could not offer the only list that holds conversations the editor never recorded — an
+			// import, or one the pi CLI wrote — and `ONE_LIST_SESSION_PROVIDERS` would be a one-way
+			// switch.
+			for (const registered of this.chatSessionsService.getRegisteredChatSessionItemProviders()) {
+				if (providers.find(p => p.id === registered)) {
+					continue;
+				}
+				providers.push({ id: registered, label: resolveLabel(registered) });
+			}
 		}
 
 		const that = this;
@@ -253,12 +303,7 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 					});
 				}
 				run(): void {
-					const providerExcludes = new Set(that.excludes.providers);
-					if (!providerExcludes.delete(provider.id)) {
-						providerExcludes.add(provider.id);
-					}
-
-					that.storeExcludes({ ...that.excludes, providers: Array.from(providerExcludes) });
+					that.storeExcludes({ ...that.excludes, providers: excludesAfterToggle(that.excludes.providers, provider.id) });
 				}
 			}));
 		}
