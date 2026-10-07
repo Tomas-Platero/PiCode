@@ -770,3 +770,38 @@ Cuatro veces el mismo patrón: una lista que no se pudo construir, un workspace 
 identidad que se movía, y un directorio que no se pudo leer. **Todas dicen «no hay nada» cuando lo
 cierto es «no pude mirar».** La regla, taquigráfica: *si la lectura falló, la respuesta es la de antes,
 no el vacío.*
+
+### 2026-10-07 · decisión del dueño sobre la lista duplicada: **filtro del panel** (C)
+
+> «pero las de pi son de las importaciones seguro, pq vendrán del pi externo y las guarda como "pi"
+> — o las reconviertes en local o va a blinkear siempre el panel de sesiones»
+>
+> «la c»
+
+**Lo que era cierto de su sospecha**, y era lo importante: **la misma conversación sale dos veces**,
+una como `pi` (nuestra transcripción) y otra como `local` (la del editor). Medido en su perfil, las
+tres del área tienen pareja local por hora (`11:50 hola ↔ 11:49 hola`, `01:01 ↔ 01:01`,
+`00:35 Hey ↔ 00:34 Hey`). Es redundancia de verdad y va contra su propia regla de «cero redundancia».
+
+**Lo que no era cierto**: esas tres **no son importadas**. El pi externo **no tiene carpeta de área**
+(comprobado), así que las del área las creó PiCode al hablar él aquí; las 269 importadas están
+archivadas **por carpeta** y en un workspace **no se listan**. Y la duplicación **no** era el parpadeo:
+ese era el `readdir` que fallaba y se leía como vacío.
+
+Las tres salidas se le pusieron sobre la mesa con su coste, y eligió **C**:
+
+| | Qué pasa | Coste |
+| --- | --- | --- |
+| A | No listar nuestras filas en workspace (el editor ya lista esas conversaciones) | Pequeño; en un workspace no se pierde nada, en carpeta seguirían saliendo las importadas |
+| B | **Marcar** cada conversación con el id de la sesión del editor y saltar las que el editor ya lista | Medio; sin duplicados **y** sin perder importadas ni CLI, y las que ya existen se quedan sin marca |
+| **C ← elegida** | Dejarlo, y filtrar él con el menú del panel | Cero; el duplicado sigue a la vista |
+
+**Cómo se filtra** (para que quede escrito, no solo dicho): el panel de SESSIONS tiene un icono de
+filtro en su cabecera; ese menú lista los proveedores y deja marcarlos o desmarcarlos — **desmarcar
+`pi` en un workspace** deja la lista del editor sin duplicados y sin perder nada (todas las del área
+nacen del editor), y **desmarcar `Local`** deja las nuestras, que incluyen las importadas y las que
+escribió la CLI. La elección se guarda en el perfil
+(`agentSessions.filterExcludes.agentsessionsviewerfiltersubmenu`), así que se hace una vez.
+
+**B sigue siendo el camino si algún día quiere una sola lista sin filtros**: deja las importadas
+visibles y quita el duplicado sin depender de que él toque el menú. Queda anotado, no descartado.
