@@ -544,7 +544,24 @@ if [[ -d "${PACK_DIR}" ]]; then
     sleep 2
   done
   if [[ -d "${PACK_DIR}" ]]; then
-    echo "error: the pack folder '${PACK_DIR}' could not be deleted after 60 s: something still holds a file inside it." >&2
+    echo "error: the pack folder '${PACK_DIR}' could not be deleted after 60 s: something still holds it open." >&2
+    # Named, because "something holds it" is not something a person can act on. Measured on 2026-10-07:
+    # the files that refused to open were inside it, and Windows' own Restart Manager reported **no**
+    # process using the folder at all -- an antivirus or a search indexer holds it from a driver, which
+    # no process list shows. Both answers are worth giving: the files when there are files, and the
+    # scanner guess (with what to do about it) when there are none.
+    locked="$( picode_data_locked_files "${PACK_DIR}" )"
+    if [[ -n "${locked}" ]]; then
+      echo "       These files inside it are held open right now:" >&2
+      while IFS= read -r file; do
+        echo "         ${file}" >&2
+      done <<< "${locked}"
+      echo "       Close whatever is using them (an editor open from this folder, or a tool watching it)." >&2
+    else
+      echo "       No file inside it refuses to open, so the folder itself is held -- a console whose current" >&2
+      echo "       directory is inside it, or a scanner (antivirus, search indexer) holding it from a driver." >&2
+      echo "       A scanner lets go on its own: build again in a few minutes." >&2
+    fi
     echo "       Nothing but that folder's own build output was at stake, and the portable profile is safe in $( picode_data_hold_dir "${PACK_DIR}" )." >&2
     exit 1
   fi
