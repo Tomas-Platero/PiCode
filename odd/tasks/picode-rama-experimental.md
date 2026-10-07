@@ -597,3 +597,51 @@ verificado sobre los ficheros compilados:
 **Lo que el dueño debe saber al abrirlo**: las 270 conversaciones que importó están archivadas por
 **carpeta**, así que **no salen en el workspace** — salen al abrir esa carpeta sola. Es lo que pidió («yo
 solo quiero ver si estoy en un workspace las de workspace»), dicho antes de que lo descubra él.
+
+### 2026-10-07 · los dos informes de la primera vuelta con el build nuevo
+
+> «cuando abro sesiones multiples me salta esto: PiCode: the turn could not finish — Agent is already
+> processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.»
+>
+> «Y luego la lista de sesiones en un area de trabajo sigue fallando, es que parpadea es como si
+> intentase coger las de una de las carpetas que tendrá luego ahí otras sesiones. Ejemplo las de
+> artictempest-web.»
+
+**Los dos eran ciertos, y los dos eran míos.**
+
+#### 1. El modo de ventana se decidía contando carpetas (`d8b08536`)
+
+`resolveProjectScope()` preguntaba «¿hay más de una carpeta?» para saber si la ventana era un
+workspace. Una ventana abierta desde un **fichero de workspace** reporta **una** carpeta mientras el
+workspace se está restaurando: durante un instante la respuesta era «carpeta», el panel listaba **las
+sesiones de esa carpeta** — las de `artictempest-web`, exactamente las que él nombró — y en cuanto
+llegaba la segunda carpeta la respuesta pasaba a «workspace» y la lista cambiaba bajo sus pies. Eso es
+el parpadeo, y no era el listado: era la pregunta.
+
+Ahora un **fichero de workspace** decide la respuesta. Es como una ventana dice «soy un workspace», se
+sabe **desde el principio** (antes que las carpetas), y no cambia. El recuento se queda como respaldo
+para una ventana abierta solo con carpetas, y el ajuste del dueño por encima de los dos.
+`isWorkspaceWindow` es pura y está probada (ocho casos).
+
+#### 2. Dos pestañas de chat compartían un agente, y chocaban (`d8b08536`)
+
+Hay **una** sesión de pi por ventana (`agent.ts`, `session`): cada pestaña de chat que el dueño abra
+conduce el **mismo** agente. Al enviar en una segunda mientras la primera seguía transmitiendo, pi
+rechazaba el mensaje —«Agent is already processing…»— y el turno no llegaba a empezar.
+
+La cola vive ahora **de este lado**: el turno siguiente espera a que termine el que está en vuelo, y
+la pestaña que espera lo dice en su propio stream. **No** se usa el `streamingBehavior` de pi, y el
+motivo merece quedar escrito: `followUp` le entrega el segundo mensaje a pi para después del turno
+actual, y el evento que cierra un turno (`agent_settled`) saltaría entonces para el **primero**
+mientras la segunda petición aún espera su respuesta — esa pestaña no transmitiría nada y terminaría
+antes de tiempo, que es peor que el error. Serializando, el turno y su final van emparejados.
+
+**Verificado**: 354 tests, 354 pasan, 0 fallan (uno nuevo con los ocho casos de la regla); typecheck
+exit 0.
+
+#### Lo que se sabe y **no** se arregla aquí
+
+**Dos pestañas de chat comparten la conversación de pi.** Es una consecuencia de que haya una sola
+sesión por ventana, y esa decisión es lo que evita que cada pestaña arranque **todos** los servidores
+MCP activos — cada sesión de pi conecta cada servidor, que es justo lo que el dueño pidió parar. Queda
+dicho aquí para que, si algún día quiere aislamiento por pestaña, se sepa el precio.
