@@ -134,7 +134,13 @@ interface PiSession {
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
 	readonly thinkingLevel?: string;
-	prompt(text: string): Promise<void>;
+	/**
+	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
+	 * prompt without it — «Agent is already processing. Specify streamingBehavior ('steer' or
+	 * 'followUp') to queue the message» — which is what the owner read when he asked «como van»
+	 * while a background job's result was being processed.
+	 */
+	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
 	abort(): Promise<void>;
 	subscribe(listener: (event: PiEvent) => void): () => void;
 	setModel(model: PiModel): Promise<void>;
@@ -432,7 +438,19 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 			void session.abort().catch(() => undefined);
 		});
 
-		session.prompt(prompt).catch(reject);
+		// pi refuses a prompt while it is streaming unless it is told how to queue it: «Agent is already
+		// processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message» — which is
+		// the error the owner hit by asking «como van» while a background job's result was being
+		// processed. Our own queue (`turnChain`) orders **our** requests, and that is all it can do: it
+		// cannot see what pi is doing for itself, and a background job delivers its result into the
+		// session as a steer, so pi can be busy when our next prompt arrives.
+		//
+		// `followUp` is the honest answer — it waits for the run in flight and then runs — and it is
+		// pi's own machinery rather than a second guess at it. The turn's ending stays paired: pi settles
+		// once, after everything queued has run (`_runAgentPrompt` loops on `hasQueuedMessages` and calls
+		// `_emitAgentSettled` in its `finally`), so the single `agent_settled` this awaits is the end of
+		// the work that includes this prompt.
+		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).catch(reject);
 		void cancellation;
 	});
 }
