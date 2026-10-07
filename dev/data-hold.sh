@@ -107,6 +107,11 @@ picode_data_hold_recover() {
       return 1
     fi
   fi
+  # The pack folder may not exist at all: a build into a name nothing has used yet (a different
+  # suffix, or the first build on this machine). The rename below needs its parent, so it is made
+  # here -- measured on 2026-10-07, where a new suffix failed with "No such file or directory" and
+  # the profile stayed in the hold until this line existed.
+  mkdir -p "${pack_dir}" || return 1
   if ! mv "${hold_dir}" "${data_dir}"; then
     echo "error: the held profile could not be moved from '${hold_dir}' back to '${data_dir}'. It is still safe in the hold." >&2
     return 1
