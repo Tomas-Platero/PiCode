@@ -19,7 +19,16 @@ name: Release
 on:
   push:
     tags:
+      # An experimental build ships *beside* the release, never
+      # through it. Its tag (`v*-experimental`) must not enter this
+      # pipeline: this job lands the update feed on master, and a
+      # feed naming an experimental build offers it to every stable
+      # user -- the opposite of what the `experimental` branch is
+      # for (odd/tasks/picode-rama-experimental.md). Experimental
+      # releases are cut by hand from a local `PICODE_PACK_SUFFIX`
+      # build.
       - 'v*'
+      - '!v*-experimental'
   workflow_dispatch:
 
 permissions:
