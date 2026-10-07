@@ -180,6 +180,7 @@ picode_data_hold_put_back() {
       return 1
     fi
   fi
+  mkdir -p "${pack_dir}" || return 1
   if ! mv "${hold_dir}" "${data_dir}"; then
     echo "error: the profile could not be moved from '${hold_dir}' back to '${data_dir}'. It is safe in the hold." >&2
     return 1
