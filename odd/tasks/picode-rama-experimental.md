@@ -911,3 +911,46 @@ escriba el dueño, o una respuesta que solo mencione un trabajo— **no produce 
 
 **Lo que queda**: **B** —una lista con todos los trabajos, corriendo o acabados— sigue sobre la mesa, y
 es la misma información leída de los mismos dos extremos. No se ha hecho porque él eligió A.
+
+### 2026-10-07 · el día que el perfil se borró, y lo que quedó de ello
+
+Tres cosas ocurrieron hoy en la build, y las tres se cuentan porque las tres dejaron código.
+
+**1. La tarjeta decía «background job» en vez de la etiqueta.** Lo que el editor **guardó** de la
+tarjeta lo delató: `"agentName": "background job", "prompt": "", "result": "running · job 1"`. El número
+del trabajo llegaba (viene del texto del resultado) y los argumentos no, aunque la llamada de esa misma
+conversación lleva `label: "web build (ArticTempest-Web)"`. Reproducido en node: `backgroundCallOf` con
+el objeto acierta, y con **el mismo contenido serializado** devuelve `{}`. Los argumentos cruzan una
+frontera que el proceso que llama no cruza. Arreglado leyendo **las dos formas** (`objectOf`) y sacando
+la etiqueta **del propio resultado**, que siempre llega: `Started background job 1 (web build …)` la
+repite. El mecanismo del SDK está verificado en su código compilado: `args: toolCall.arguments`.
+
+**2. El perfil del dueño se borró, y fue culpa del agente.** Al editar `dev/build.sh` para que el
+borrado esperase, el bloque reemplazado se llevó por delante las dos líneas que llaman a
+`picode_data_hold_recover` y `picode_data_hold_move_aside` — las que apartan `data/` antes de que el
+pack borre la carpeta. La build siguiente borró la carpeta con el perfil dentro: **56 861 ficheros**,
+287 conversaciones. Restaurado desde `.scratch/exp-data-now` (259 conversaciones): **28 se perdieron**,
+y el dueño lo supo en el momento, en palabras llanas. Lo que quedó:
+
+* las dos líneas **primero**, y una comprobación que **se niega a borrar si `data/` sigue dentro**
+  (el estado exacto que aquel error creó);
+* el trap de salida que devuelve el perfil usa `picode_data_hold_put_back`, que **quita el `data/`
+  sembrado** y renombra el apartadero de vuelta — antes se saltaba justo el caso en que el pack ya
+  había sembrado una carpeta, que es el caso en que hace falta;
+* `recover` y `put_back` **crean la carpeta del pack** si no existe: una build con un sufijo nuevo
+  moría con `No such file or directory` y el perfil se quedaba en el apartadero.
+
+**3. La carpeta del producto quedó bloqueada y hoy no se ha podido liberar.** Ni hay editor abierto, ni
+procesos con esa ruta en su orden de comandos, ni consolas mías (17 cerradas), ni es un directorio de
+trabajo (probado arrancando un proceso en `C:\` y con un `.bat`): Windows, por boca de su propia
+Restart Manager, dice que **ningún proceso** la usa. Es un bloqueo de driver (antivirus o indexador).
+Lo que quedó de eso:
+
+* la build **reintenta el borrado 60 s** y lo dice, en vez de morir en silencio dentro de gulp;
+* al negarse, **nombra los ficheros** que se niegan a abrirse, o — si ninguno lo hace — avisa del
+  escáner y dice que se vuelva a intentar en unos minutos.
+
+**La salida del día**: como la carpeta `- experimental` no se puede borrar ni renombrar mientras el
+bloqueo dure, la build se ha hecho en **`PiCode-win32-x64 - experimental-b`**, con el perfil del dueño
+dentro (56 861 ficheros, 259 conversaciones). Cuando el bloqueo se suelte: renombrar `-b` a su nombre de
+siempre y borrar la vieja.
