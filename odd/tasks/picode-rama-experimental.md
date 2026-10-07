@@ -834,3 +834,44 @@ menú del filtro») **era falsa** — `pi` no aparecía en ese menú. Lo que él
 **Verificado**: el typecheck del núcleo pasa por encima del cambio, y la regla tiene su prueba en la
 suite del propio núcleo (`agentSessionsOneList.test.ts`): el valor por defecto, las dos direcciones del
 grupo, que esconder una **no** revela la otra, y que un proveedor ajeno al grupo conserva su estado.
+
+### 2026-10-07 · el «2» de proveedores, el thinking que no se ve, y un mando muerto
+
+Tres cosas que el dueño encontró mirando, y las tres eran ciertas.
+
+**«El proveedor de nan no me sale en la lista de providers… en picode:status salen 2 proveedores.»**
+
+Los dos tenían razón sobre su propia pregunta, y **ese era el problema**: la página de ajustes edita
+**declaraciones** (`picode.providers`) y el panel contaba la **unión de tres fuentes** —las
+declaraciones, los `models.json` del perfil y las credenciales de `auth.json`—. Su `nan` existe **solo**
+como credencial del perfil (sus modelos llegan de un paquete instalado), así que estaba en el número y
+en ninguna fila.
+
+`providers-list.ts` (puro y probado) las mantiene separadas, y la fila **Providers** del panel ahora se
+despliega en una fila por proveedor diciendo de dónde viene: *declared here*, *models in pi*, *signed in
+with your own account* — que es además la respuesta a «¿por qué este no lo puedo editar y el otro sí?».
+El recuento se queda; lo que cambia es que ya no es lo único que dice.
+
+**«y no consigo ver el thinking en el chat.»**
+
+Verificado de punta a punta antes de tocar nada: el modelo **sí piensa** (63 partes `thinking` en su
+transcripción), el campo del delta es exactamente el que lee el código
+(`@earendil-works/pi-ai`: `{ type: "thinking_delta", delta: string }`), los tres lectores del ajuste usan
+la sección `picode` correctamente, y **su ajuste ya estaba en `show`** — puesto minutos antes. La
+explicación honesta: aún no había mandado un mensaje desde entonces. Lo que **sí** faltaba era poder
+saberlo: la fila **Thinking** del panel ahora dice las dos mitades —el nivel, y `· not shown` cuando está
+oculto— y al pulsarla abre ese ajuste. El valor por defecto (`hide`) no se toca: es una decisión, y ahora
+la fila la dice en voz alta en vez de dejar que la busque.
+
+**«Revisa esta opción si es necesaria.»** — `Chat › Agent: Thinking Style`.
+
+**No lo era, y ya no está en los ajustes.** Renderiza *partes de thinking del chat del editor*, y el chat
+de PiCode no tiene ninguna: el de pi se escribe dentro de la respuesta como cita. Los dos sitios que lo
+leen caen a su propio valor por defecto cuando no está (`chatThinkingContentPart` a `Collapsed`,
+`chatWidget` a `FixedScrolling`), así que quitarlo no cambia nada de lo que corre; solo saca de los
+ajustes un mando experimental sin nada detrás. **Sus vecinos se dejan a propósito**: `collapsedTools`
+**sí** vive aquí (decide cómo se pliegan las llamadas de herramienta, y este chat tiene herramientas), y
+`generateTitles` está muerto por lo mismo que el quitado — anotado, no supuesto.
+
+**Verificado**: 362 tests, 362 pasan, 0 fallan (4 nuevos, uno con su perfil exacto); typecheck del
+conector y del núcleo, los dos exit 0.
