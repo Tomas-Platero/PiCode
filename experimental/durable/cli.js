@@ -78,7 +78,7 @@ function parseArgs(argv) {
 			noGuard = true;
 		} else if (argv[i] === "--model") {
 			model = argv[++i];
-			if (!model) throw new Error("--model requires provider/model, for example omni/auto");
+			if (!model) throw new Error("--model takes provider/model, the same string the model list writes");
 		} else if (argv[i].startsWith("--model=")) {
 			model = argv[i].slice("--model=".length);
 		} else {

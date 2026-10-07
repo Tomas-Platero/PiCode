@@ -101,7 +101,7 @@
 						},
 						"id": {
 							"type": "string",
-							"description": "A short name for this provider, with no spaces (for example omni)."
+							"description": "A short name for this provider, with no spaces: the name the settings row, the model list and the agent use."
 						}
 					}
 				}
@@ -121,6 +121,11 @@
 			{
 				"command": "picode.durable.list",
 				"title": "Show Durable Conversations",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.durable.chooseModel",
+				"title": "Choose Durable Model",
 				"category": "PiCode"
 			},
 			{

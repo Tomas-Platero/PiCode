@@ -215,11 +215,15 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize('picode.durable.guard', "Whether the durable agent blocks destructive commands in code before they run: recursive deletes, forced pushes and history rewrites, disk operations, and any write outside the working directory. Turning it off is the agent's --no-guard flag — with the guard off, nothing stops those commands but you."),
 		},
+		// The model is **not** defaulted to anything, and the name that used to be here is why: it was
+		// the owner's own provider (`omni/auto`), which no other machine has, so a fresh install
+		// pointed the agent at a model that does not exist there. Empty means "not chosen" and the
+		// agent picks its own; the list is what the profile in force actually offers.
 		[PICODE_DURABLE_MODEL_SETTING]: {
 			type: 'string',
-			default: 'omni/auto',
+			default: '',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.model', "Which model the durable agent runs on, written as provider/model (for example omni/auto). The provider has to be one the host's profile knows. The agent's --model flag wins over this setting."),
+			markdownDescription: localize('picode.durable.model', "Which model the durable agent runs on, written as provider/model. [Choose a model](command:picode.durable.chooseModel) lists the ones the host's profile knows — the same list the chat's picker shows. Leave it empty and the agent chooses. The agent's --model flag wins over this setting."),
 		},
 		[PICODE_DURABLE_AGENT_SETTING]: {
 			type: 'string',

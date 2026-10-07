@@ -133,6 +133,9 @@ export function durableBridgeExtensionPath(): string | undefined {
  */
 const MAX_SNAPSHOTS_PER_READ = 16;
 
+/** The vendor the connector registers its models under; the durable agent runs on those. */
+const DURABLE_VENDOR = 'picode';
+
 /** One bounded conversation with the daemon; the client is closed either way. */
 async function withDaemon<T>(timeoutMs: number, body: (client: DaemonClient) => Promise<T>): Promise<T> {
 	const client = await DaemonClient.connect(daemonEndpoint(durableFolder()), timeoutMs);
@@ -426,6 +429,45 @@ function modelAndAgentParams(): Record<string, unknown> {
 	return params;
 }
 
+/**
+ * "PiCode: Choose Durable Model": pick the model the durable agent runs on from a list.
+ *
+ * The setting is a `provider/model` string because that is what the agent's own `--model` flag takes,
+ * but nothing about it belongs in a text box. It was worse than a text box: its **default** was the
+ * owner's own provider (`omni/auto`), a name no other machine has, so a fresh install pointed at a
+ * model that does not exist there — «esto son mis modelos no los de otras personas».
+ *
+ * So the list comes from the editor's model registry, filtered to the vendor the connector publishes:
+ * those **are** the models the host's profile in force knows, which is exactly what the setting asks
+ * for, and they change by themselves as the owner connects providers. What is written is the model's
+ * id, which is that same `provider/model` string.
+ */
+async function chooseDurableModel(): Promise<void> {
+	let models: readonly vscode.LanguageModelChat[];
+	try {
+		models = await vscode.lm.selectChatModels({ vendor: DURABLE_VENDOR });
+	} catch (error) {
+		void vscode.window.showWarningMessage(`PiCode: the model list could not be read — ${error instanceof Error ? error.message : String(error)}.`);
+		return;
+	}
+	if (models.length === 0) {
+		void vscode.window.showInformationMessage('PiCode: no model is connected yet. Connect a provider in the PiCode settings, and the list will have something in it.');
+		return;
+	}
+	const current = vscode.workspace.getConfiguration('picode').get<string>('durable.model')?.trim();
+	const picked = await vscode.window.showQuickPick(models.map(model => ({
+		label: model.name,
+		description: model.id,
+		...(model.id === current ? { detail: 'the durable agent runs on this one now' } : {}),
+		model,
+	})), { placeHolder: 'Which model should the durable agent run on' });
+	if (picked === undefined) {
+		return;
+	}
+	await vscode.workspace.getConfiguration('picode').update('durable.model', picked.model.id, vscode.ConfigurationTarget.Global);
+	void vscode.window.showInformationMessage(`PiCode: the durable agent runs on ${picked.model.id}.`);
+}
+
 /** "PiCode: Show Durable Conversations": pick one, and read its transcript into the output channel. */
 async function showDurableConversations(): Promise<void> {
 	try {
@@ -518,5 +560,6 @@ export function registerDurableCommands(paths: DurableAgentPaths): vscode.Dispos
 		vscode.commands.registerCommand('picode.durable.stop', stopDurableAgent),
 		vscode.commands.registerCommand('picode.durable.list', showDurableConversations),
 		vscode.commands.registerCommand('picode.durable.send', sendDurablePrompt),
+		vscode.commands.registerCommand('picode.durable.chooseModel', chooseDurableModel),
 	];
 }
