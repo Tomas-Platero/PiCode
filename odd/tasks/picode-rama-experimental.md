@@ -805,3 +805,32 @@ escribió la CLI. La elección se guarda en el perfil
 
 **B sigue siendo el camino si algún día quiere una sola lista sin filtros**: deja las importadas
 visibles y quita el duplicado sin depender de que él toque el menú. Queda anotado, no descartado.
+
+### 2026-10-07 · «siempre las locales por defecto, nunca ambas juntas»
+
+> «Me gustaría que siempre filtrara por defecto por las "local" y luego yo si quiero poner las
+> externas, nunca ambas juntas.»
+
+El duplicado que él venía señalando, resuelto **por defecto y sin depender de que él toque nada**
+(`5179f950`). PiCode guarda sus propias conversaciones **dos veces** —las sesiones `Local` del editor
+y las transcripciones `pi` son los mismos chats— y el panel enseñaba las dos. Medido en su perfil:
+tres filas `pi` y cinco `local`, con las tres emparejadas por hora.
+
+`agentSessionsFilter.ts` los conoce ahora como **un grupo** (`ONE_LIST_SESSION_PROVIDERS`):
+
+* **El valor por defecto oculta `pi`**, así que el panel se abre con la lista del editor.
+* **Mostrar una esconde la otra** (`excludesAfterToggle`), que es el «nunca ambas juntas» que pidió.
+  La regla es una **función pura y probada**, porque es justo el tipo de cosa que un refactor pierde
+  en silencio.
+* **Los proveedores registrados por código ya salen en el menú del filtro.** No salían: el menú se
+  construía solo con las contribuciones **declaradas**, y el conector registra `pi` **por código**, así
+  que el único interruptor que alcanza las conversaciones que el editor nunca grabó —una importación, o
+  una que escribió la CLI— **no existía**. Sin eso, el valor por defecto habría sido una puerta de un
+  solo sentido.
+
+**Y una corrección que hay que dejar escrita**: la indicación que se le dio antes («desmarca `pi` en el
+menú del filtro») **era falsa** — `pi` no aparecía en ese menú. Lo que él pidió es lo que arregla eso.
+
+**Verificado**: el typecheck del núcleo pasa por encima del cambio, y la regla tiene su prueba en la
+suite del propio núcleo (`agentSessionsOneList.test.ts`): el valor por defecto, las dos direcciones del
+grupo, que esconder una **no** revela la otra, y que un proveedor ajeno al grupo conserva su estado.
