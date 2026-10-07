@@ -1546,18 +1546,14 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			description: nls.localize('chat.tools.todos.showWidget', "Controls whether to show the todo list widget above the chat input. When enabled, the widget displays todo items created by the agent and updates as progress is made."),
 		},
-		[ChatConfiguration.ThinkingStyle]: {
-			type: 'string',
-			default: 'fixedScrolling',
-			enum: ['collapsed', 'collapsedPreview', 'fixedScrolling'],
-			enumDescriptions: [
-				nls.localize('chat.agent.thinkingMode.collapsed', "Thinking parts will be collapsed by default."),
-				nls.localize('chat.agent.thinkingMode.collapsedPreview', "Thinking parts will be expanded first, then collapse once we reach a part that is not thinking."),
-				nls.localize('chat.agent.thinkingMode.fixedScrolling', "Show thinking in a fixed-height streaming panel that auto-scrolls; click header to expand to full height."),
-			],
-			description: nls.localize('chat.agent.thinkingStyle', "Controls how thinking is rendered."),
-			tags: ['experimental'],
-		},
+		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how the
+		// editor renders *thinking parts* of its own chat, and PiCode's chat never has any: the agent's
+		// thinking is written into the answer as a quote (`picode.pi.reasoning`, off by default), and this
+		// setting does not touch it. It was an experimental control with nothing behind it, and the owner
+		// read it exactly so: «Revisa esta opción si es necesaria.» Both readers fall back on their own
+		// default when it is unset (`chatThinkingContentPart` to `Collapsed`, `chatWidget` to
+		// `FixedScrolling`), so removing it changes nothing that runs — it only takes a knob out of the
+		// settings that cannot do anything here.
 		[ChatConfiguration.ThinkingGenerateTitles]: {
 			type: 'boolean',
 			default: true,

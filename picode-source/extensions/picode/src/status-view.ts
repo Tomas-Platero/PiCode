@@ -5,6 +5,26 @@
 
 import * as vscode from 'vscode';
 import type { DurableStatus } from './durable';
+import type { PiProviderRow } from './providers-list';
+
+/**
+ * Where one provider came from, in the owner's words — and it is the whole answer to "why is this one
+ * not editable where the other is": the settings page edits declarations, and a provider that pi
+ * itself carries (models, a sign-in) has no declaration to edit.
+ */
+function providerOrigin(row: PiProviderRow): string {
+	const parts: string[] = [];
+	if (row.declared) {
+		parts.push('declared here');
+	}
+	if (row.models) {
+		parts.push('models in pi');
+	}
+	if (row.credential) {
+		parts.push('signed in with your own account');
+	}
+	return parts.length === 0 ? 'in pi' : parts.join(' · ');
+}
 
 /**
  * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
@@ -140,10 +160,17 @@ export interface ProjectGitInfo {
 export interface StatusData {
 	runtime?: string;
 	piVersion?: string;
-	providers?: number;
+	/**
+	 * Every provider the host has, each with where the editor learned of it. A list and not a count:
+	 * the count disagreed with the settings page (which edits only the **declarations**) and the owner
+	 * read that as a missing provider.
+	 */
+	providers?: readonly PiProviderRow[];
 	defaultModel?: string;
 	model?: string;
 	thinkingLevel?: string;
+	/** Whether the agent's thinking is written into the chat (`picode.pi.reasoning`). */
+	reasoning?: 'shown' | 'hidden';
 	/** pi's MCP servers, with the switch pi reads: the panel shows them and can flip them. */
 	mcpServers?: readonly McpServerSwitch[];
 	gitBranch?: string;
@@ -360,7 +387,20 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			// uses: the host, never "pi internal/external".
 			new StatusItem('Host', { description: d.runtime === 'external' ? 'External' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
-			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
+			// One row per provider, each saying where the editor learned of it. The settings page edits
+			// **declarations**; a provider whose models or sign-in live in the profile has nothing there to
+			// edit, so without these rows the panel's count and that page disagreed in silence — «El
+			// proveedor de nan no me sale en la lista de providers… en picode:status salen 2».
+			new StatusItem('Providers', {
+				description: String((d.providers ?? []).length),
+				icon: new vscode.ThemeIcon('plug'),
+				tooltip: 'Every provider the host has. The ones declared in the PiCode settings can be edited there; the others come from pi itself, with their own sign-in.',
+				command: { command: 'workbench.action.openSettings', arguments: ['picode.providers'], title: 'Open the provider settings' },
+				children: (d.providers ?? []).map(row => new StatusItem(row.id, {
+					description: providerOrigin(row),
+					icon: new vscode.ThemeIcon(row.declared ? 'check' : 'account'),
+				})),
+			}),
 			// The servers live in pi's own profile, which is where this counts them — not the project's
 			// business, which is where the row used to sit.
 			new StatusItem('MCP servers', {
@@ -385,7 +425,14 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 			piRows.push(new StatusItem('Model', { description: model, icon: new vscode.ThemeIcon('chip') }));
 		}
 		if (d.thinkingLevel !== undefined) {
-			piRows.push(new StatusItem('Thinking', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
+			// The level is how hard it thinks; whether the owner **sees** it is `picode.pi.reasoning`, which
+			// is off by default — and that default is what he was looking for: «no consigo ver el thinking en
+			// el chat». The row says both, and opens the setting that turns it on.
+			piRows.push(new StatusItem('Thinking', {
+				description: d.reasoning === 'hidden' ? `${d.thinkingLevel} · not shown` : d.thinkingLevel,
+				icon: new vscode.ThemeIcon('dashboard'),
+				command: { command: 'workbench.action.openSettings', arguments: ['picode.pi.reasoning'], title: 'Show the thinking in the chat' },
+			}));
 		}
 		out.push(new StatusItem('pi', { children: piRows, icon: mark('picode-light.svg', 'picode.svg') }));
 

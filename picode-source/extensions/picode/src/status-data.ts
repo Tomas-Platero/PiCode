@@ -11,7 +11,9 @@ import { getSessionUsage } from './agent';
 import { agentsSummary, launchedAgents } from './agents';
 import { declarationsFromSetting, isRecord } from './declarations';
 import { readDurableStatus } from './durable';
+import { providerInventory } from './providers-list';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
+import { readPiChatSettings } from './piConfig';
 import { mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
@@ -65,34 +67,27 @@ function readJsonObject(file: string): Record<string, unknown> | undefined {
 }
 
 /**
- * The providers the owner has: the ones declared in the settings row, the endpoints pi's
- * `models.json` holds, and the credentials (subscriptions) `auth.json` holds — counted once
- * each, because the same provider can appear in more than one of them.
+ * The three places the editor learns of a provider, kept apart instead of merged into a count.
+ *
+ * They are not the same thing, and merging them is what made the panel say «Providers 2» while the
+ * settings page listed one row — the page edits **declarations**, and a provider pi itself carries
+ * (models in its profile, a sign-in in its credentials) has nothing there to edit. The owner read the
+ * disagreement as a missing provider; the panel now answers *which* two and why
+ * (`providers-list.ts`, which owns the rule and is tested).
  */
-function countProviders(profileDir: string): number {
-	const ids = new Set<string>();
-
+function providerSources(profileDir: string): { declared: string[]; models: string[]; credentials: string[] } {
 	const configuration = vscode.workspace.getConfiguration('picode');
-	for (const declaration of declarationsFromSetting(configuration.get('providers') ?? configuration.get('pi.providers'))) {
-		ids.add(declaration.id);
-	}
+	const declared = declarationsFromSetting(configuration.get('providers') ?? configuration.get('pi.providers'))
+		.map(declaration => declaration.id);
 
-	const models = readJsonObject(path.join(profileDir, 'models.json'));
-	const providers = models?.['providers'];
-	if (isRecord(providers)) {
-		for (const id of Object.keys(providers)) {
-			ids.add(id);
-		}
-	}
-
+	const models = readJsonObject(path.join(profileDir, 'models.json'))?.['providers'];
 	const auth = readJsonObject(path.join(profileDir, 'auth.json'));
-	if (auth !== undefined) {
-		for (const id of Object.keys(auth)) {
-			ids.add(id);
-		}
-	}
 
-	return ids.size;
+	return {
+		declared,
+		models: isRecord(models) ? Object.keys(models) : [],
+		credentials: auth === undefined ? [] : Object.keys(auth),
+	};
 }
 
 /** The profile's `mcp-auth.json`, as the sign-in rule wants it: looked at, whatever it holds. */
@@ -292,6 +287,10 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const runtime = readRuntimeMode();
 	const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
 	const defaultModel = readDefaultModel(profileDir);
+	const sources = providerSources(profileDir);
+	// Whether the agent's thinking reaches the chat. `hide` is the shipped default, and the owner was
+	// looking for exactly this: «no consigo ver el thinking en el chat».
+	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
 	const mcpServers = readMcpServers(profileDir, runtime);
 	const scope = resolveProjectScope();
@@ -306,7 +305,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	return {
 		runtime,
 		piVersion: await readPiVersion(runtime, deps.distributionRoot),
-		providers: countProviders(profileDir),
+		providers: providerInventory(sources.declared, sources.models, sources.credentials),
 		defaultModel,
 		mcpServers,
 		gitBranch: gitInfo.branch,
@@ -325,6 +324,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		cacheWrite: usage?.cacheWrite,
 		model: usage?.model,
 		thinkingLevel: usage?.thinkingLevel,
+		reasoning,
 		// The provider's own quota for the model in use, never the session's totals above.
 		usage: await readUsageRow(profileDir, usage?.model),
 		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
