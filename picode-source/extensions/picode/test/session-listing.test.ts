@@ -16,7 +16,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { areaFamilyPrefix, areaFamilySlugs, listAreaConversations, listedSessionSlugs, listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { areaConversationsReport, areaFamilyPrefix, areaFamilySlugs, conversationsReport, listAreaConversations, listedSessionSlugs, listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 /** A listing file system over a flat record of file → content, listing ancestor directories too. */
 function memoryFs(files: Record<string, string>): SessionsFs {
@@ -106,6 +106,55 @@ test('a root-level transcript belongs to the window its own header names', () =>
 		'/sessions/2026_r.jsonl': rootContent,
 	}));
 	assert.deepStrictEqual(found.map(file => file.id).sort(), ['2026_r', '2026_w']);
+});
+
+test('a directory that cannot be read is not an empty one', () => {
+	// The owner's panel emptied while nothing had been deleted: the profile was busy being written,
+	// one directory refused to be read, and the walk could not tell that from "there is nothing
+	// here". This is the difference, and it is the whole fix.
+	const blocked: SessionsFs = { read: () => '', list: () => undefined, mtime: () => 0 };
+	const area = areaConversationsReport('/sessions', AREA_SLUG, undefined, blocked);
+	assert.deepStrictEqual(area.files, []);
+	assert.strictEqual(area.complete, false);
+
+	// A directory that is readable and holds nothing is complete **and** empty: publishing that is
+	// telling the truth, and it must stay possible.
+	const empty = areaConversationsReport('/sessions', AREA_SLUG, undefined, memoryFs({}));
+	assert.deepStrictEqual(empty.files, []);
+	assert.strictEqual(empty.complete, true);
+
+	// And a project's conversations answer the same way, because folder mode needs it too.
+	assert.strictEqual(conversationsReport('/sessions', [piProjectSlug(WEB)], undefined, blocked).complete, false);
+	assert.strictEqual(conversationsReport('/sessions', [piProjectSlug(WEB)], undefined, memoryFs({})).complete, true);
+});
+
+test('one unreadable identity makes the whole area incomplete, even with rows to show', () => {
+	// An area can have more than one identity on disk, and the walk reaches them one by one. A walk
+	// that read *some* of them is not a listing of fewer sessions — the rows it did not reach were
+	// not deleted — so the answer says so, and the caller that cares (the panel) holds instead of
+	// publishing the shorter list.
+	const otherIdentity = '--area-Artictempest--Workspace--513d6f42--';
+	const [file, content] = transcript('2026_a', 'D:\\repos', AREA_SLUG, 10);
+	const files: Record<string, string> = {
+		[file]: content,
+		// Written under the other identity, and unreachable because that folder refuses to be read.
+		[`/sessions/${otherIdentity}/m20/2026_b.jsonl`]: '{}',
+	};
+	const base = memoryFs(files);
+	const partial: SessionsFs = {
+		read: base.read,
+		mtime: base.mtime,
+		list: dir => (dir === `/sessions/${otherIdentity}` ? undefined : base.list(dir)),
+	};
+
+	const report = areaConversationsReport('/sessions', AREA_SLUG, undefined, partial);
+	assert.deepStrictEqual(report.files.map(entry => entry.id), ['2026_a']);
+	assert.strictEqual(report.complete, false);
+
+	// The same walk with everything readable is complete, and the second identity's row is there.
+	const whole = areaConversationsReport('/sessions', AREA_SLUG, undefined, memoryFs(files));
+	assert.deepStrictEqual(whole.files.map(entry => entry.id).sort(), ['2026_a', '2026_b']);
+	assert.strictEqual(whole.complete, true);
 });
 
 test('an area lists its sessions whatever identity they were filed under', () => {

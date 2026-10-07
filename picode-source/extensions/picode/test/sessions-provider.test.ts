@@ -115,16 +115,20 @@ test('a root-level transcript without a session header is not matched', () => {
 	assert.deepStrictEqual(found.map(file => file.label).sort(), ['del proyecto']);
 });
 
-test('an unbuilt listing is not an empty listing', () => {
-	// The panel reads an empty listing as "everything was deleted", so emptiness is only
-	// published when the projects were actually known and walked. A window whose workspace is
-	// still being resolved has no project to walk — and that is when the panel first asks.
+test('a listing that cannot be stood behind does not replace the one the panel has', () => {
+	// The panel reads a listing as the whole truth and removes every row it does not see, so it is
+	// published only when the projects were known **and** the walk could read what it needed. Two
+	// ways that fails, both seen on the owner's machine: a workspace that has not been resolved yet,
+	// and a directory that refused to be read while the profile was being written.
 	const previous = ['a', 'b'];
 	assert.deepStrictEqual(listingForPanel([], previous, false), previous);
 	assert.deepStrictEqual(listingForPanel([], previous, true), []);
 	assert.deepStrictEqual(listingForPanel([], undefined, false), []);
-	const built = ['c'];
-	assert.deepStrictEqual(listingForPanel(built, previous, false), built);
+	// A **shorter** listing is not a fact either: the row that is missing was not deleted, it could
+	// not be read. That is the case that emptied his panel while nothing had been deleted at all.
+	const short = ['c'];
+	assert.deepStrictEqual(listingForPanel(short, previous, false), previous);
+	assert.deepStrictEqual(listingForPanel(short, previous, true), short);
 });
 
 test('the label is the owner\u2019s own words, not the frame the editor prepends', () => {

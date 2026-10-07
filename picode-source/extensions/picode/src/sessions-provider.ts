@@ -187,8 +187,29 @@ export function sessionTurns(text: string): PiSessionTurn[] {
 /** The file system the listing reads, injectable for tests. */
 export interface SessionsFs {
 	read(file: string): string;
-	list(dir: string): string[];
+	/**
+	 * The entries of a directory, or `undefined` when it could not be read at all.
+	 *
+	 * The difference is the whole point: an empty directory means "there are no sessions here", and
+	 * a directory that could not be read means **nothing at all** — and on Windows the second is
+	 * real and momentary (the profile is being written while the panel asks). A walk that cannot
+	 * tell them apart publishes its own failure as "your sessions are gone", which is exactly what
+	 * the owner kept seeing.
+	 */
+	list(dir: string): string[] | undefined;
 	mtime(file: string): number;
+}
+
+/**
+ * What a walk produced, and whether it could finish.
+ *
+ * `complete` is the difference between "these projects have no sessions" and "I could not read
+ * them": a directory that refused to be read (see `SessionsFs.list`) sets it false, and a caller
+ * that cares — the panel — holds what it already had instead of publishing the failure as fact.
+ */
+interface WalkResult {
+	readonly files: PiSessionFile[];
+	readonly complete: boolean;
 }
 
 const nodeFs: SessionsFs = {
@@ -203,7 +224,9 @@ const nodeFs: SessionsFs = {
 		try {
 			return readdirSync(dir).map(name => path.join(dir, name));
 		} catch {
-			return [];
+			// `undefined`, never `[]`: see the interface. A directory that refused to be read is not an
+			// empty one, and saying it is empties the panel.
+			return undefined;
 		}
 	},
 	mtime: file => {
@@ -329,8 +352,57 @@ export function listAreaConversations(
 	cap?: number,
 	fs: SessionsFs = nodeFs,
 ): PiSessionFile[] {
-	const family = areaFamilySlugs(sessionsDir, areaSlug, fs);
-	return listProjectConversations(sessionsDir, family.length > 0 ? family : [areaSlug], cap, fs);
+	return areaConversationsReport(sessionsDir, areaSlug, cap, fs).files;
+}
+
+/** One area's conversations, and whether the walk could be trusted to have seen them all. */
+export interface AreaListing {
+	/** The rows, newest first. A readonly property over the list that was just built. */
+	readonly files: PiSessionFile[];
+	/**
+	 * False when a directory that holds these sessions could not be read.
+	 *
+	 * The panel needs this and not the files alone: an area whose folder refused to be read comes
+	 * back with **no** rows, and publishing that as "the area has no sessions" is what emptied the
+	 * panel on the owner's machine — while the profile was busy being written, every so often. An
+	 * incomplete listing is not a listing of fewer sessions; it is no answer at all.
+	 */
+	readonly complete: boolean;
+}
+
+/**
+ * The area's conversations, with the honest answer about whether they could all be read.
+ *
+ * The directory is read once here, for the family, and again by the walk; **both** reads count. The
+ * first is what finds the identities this workspace filed under, the second is what walks into
+ * them, and either failing means the area was not really looked at.
+ */
+export function areaConversationsReport(
+	sessionsDir: string,
+	areaSlug: string,
+	cap?: number,
+	fs: SessionsFs = nodeFs,
+): AreaListing {
+	const names = fs.list(sessionsDir);
+	const prefix = areaFamilyPrefix(areaSlug);
+	const family = (names ?? []).map(entry => path.basename(entry)).filter(name => prefix !== undefined && name.startsWith(prefix));
+	const report = conversationsReport(sessionsDir, family.length > 0 ? family : [areaSlug], cap, fs);
+	return { files: report.files, complete: names !== undefined && report.complete };
+}
+
+/** The conversations filed under the given slugs, with the same honest answer as an area's. */
+export function conversationsReport(
+	sessionsDir: string,
+	slugs: Iterable<string>,
+	cap?: number,
+	fs: SessionsFs = nodeFs,
+): AreaListing {
+	const walk = listBySlugs(sessionsDir, new Set(slugs), fs);
+	const conversations = conversationFiles(walk.files);
+	return {
+		files: cap === undefined ? conversations : conversations.slice(0, Math.max(cap, 0)),
+		complete: walk.complete,
+	};
 }
 
 /**
@@ -345,7 +417,9 @@ export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: Sessi
 	if (prefix === undefined) {
 		return [];
 	}
-	return fs.list(sessionsDir).map(entry => path.basename(entry)).filter(name => name.startsWith(prefix));
+	// A read that failed is "no family found", and the caller that needs the difference asks for it
+	// itself (`areaConversationsReport`): here the fall-back is the slug it was given.
+	return (fs.list(sessionsDir) ?? []).map(entry => path.basename(entry)).filter(name => name.startsWith(prefix));
 }
 
 /**
@@ -378,8 +452,7 @@ export function listProjectConversations(
 	cap?: number,
 	fs: SessionsFs = nodeFs,
 ): PiSessionFile[] {
-	const conversations = conversationFiles(listProjectSessionFiles(sessionsDir, slugs, fs));
-	return cap === undefined ? conversations : conversations.slice(0, Math.max(cap, 0));
+	return conversationsReport(sessionsDir, slugs, cap, fs).files;
 }
 
 /**
@@ -400,16 +473,16 @@ export function listProjectSessionFiles(
 	slugs: Iterable<string>,
 	fs: SessionsFs = nodeFs,
 ): PiSessionFile[] {
-	return listBySlugs(sessionsDir, new Set(slugs), fs);
+	return listBySlugs(sessionsDir, new Set(slugs), fs).files;
 }
 
 /**
  * Lists the transcripts filed under the given per-project slugs, newest first. Root-level
  * transcripts match the same way: by the project slug their own session header records.
  */
-function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: SessionsFs): PiSessionFile[] {
+function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: SessionsFs): WalkResult {
 	if (slugs.size === 0) {
-		return [];
+		return { files: [], complete: true };
 	}
 	const foldedSlugs = new Set([...slugs].map(slug => slug.toLowerCase()));
 	const matches = (name: string): boolean => slugs.has(name) || (process.platform === 'win32' && foldedSlugs.has(name.toLowerCase()));
@@ -421,7 +494,12 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
 	// so conversations the chat has already saved surface without a migration.
 	const rootFiles: string[] = [];
 	const rootEntries = new Set<string>();
-	for (const entry of fs.list(sessionsDir)) {
+	const entries = fs.list(sessionsDir);
+	// The directory itself could not be read: nothing can be said about what is in it.
+	if (entries === undefined) {
+		return { files: [], complete: false };
+	}
+	for (const entry of entries) {
 		if (entry.endsWith('.jsonl')) {
 			rootEntries.add(entry);
 			const slug = rootTranscriptSlug(entry, fs);
@@ -435,11 +513,11 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
 			dirs.push(entry);
 		}
 	}
-	const files = listFromDirs(dirs, rootFiles, fs);
+	const walk = listFromDirs(dirs, rootFiles, fs);
 	// The header cache keeps every root transcript seen this refresh, matched or not; the
 	// entries left over belong to files that are gone.
 	pruneHeaderSlugCache(rootEntries);
-	return files;
+	return walk;
 }
 
 /**
@@ -452,14 +530,22 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
  * matches the cached one, so an unchanged tree costs a `stat` per file instead of a full
  * read of every transcript. Entries for files the walk no longer sees are dropped.
  */
-function listFromDirs(roots: readonly string[], extraFiles: readonly string[], fs: SessionsFs): PiSessionFile[] {
+function listFromDirs(roots: readonly string[], extraFiles: readonly string[], fs: SessionsFs): WalkResult {
 	const files: PiSessionFile[] = [];
 	const stack = [...roots];
 	const visited = new Set<string>(stack);
 	const seen = new Set<string>();
+	let complete = true;
 	while (stack.length > 0) {
 		const dir = stack.pop()!;
-		for (const entry of fs.list(dir)) {
+		const entries = fs.list(dir);
+		if (entries === undefined) {
+			// A project folder that refused to be read: its sessions are missing from this walk, so the
+			// walk is incomplete rather than quiet about them.
+			complete = false;
+			continue;
+		}
+		for (const entry of entries) {
 			if (!entry.endsWith('.jsonl')) {
 				// A project folder: pi's per-project grouping. Walk it once — a cycle
 				// in the tree (or a lying listing) must not hang the panel.
@@ -490,7 +576,7 @@ function listFromDirs(roots: readonly string[], extraFiles: readonly string[], f
 	// together — an import brings a whole tree over at once — in whatever order the directory
 	// happened to list them, and a panel that reorders itself with nothing having happened is a
 	// panel the owner cannot read. The id, and then the path, settles every tie by content.
-	return files.sort((a, b) => (b.mtime - a.mtime) || compareText(a.id, b.id) || compareText(a.file, b.file));
+	return { files: files.sort((a, b) => (b.mtime - a.mtime) || compareText(a.id, b.id) || compareText(a.file, b.file)), complete };
 }
 
 /** A text order that depends on the text alone — no locale, so it is the same on any machine. */
@@ -595,28 +681,32 @@ function lastMessageRole(text: string): PiSessionFile['lastRole'] {
 /**
  * The listing the panel may be given when the listing could not be built.
  *
- * An empty listing is not "nothing to say": the panel takes it literally and removes every row
- * it does not see. So emptiness is a **claim** — "the projects this window covers have no
- * sessions" — and it is only true when those projects were known and walked. A window whose
- * workspace has not been resolved yet has no project to walk, and that is exactly when the panel
- * asks: the provider registers as the extension activates, and the panel refreshes right there.
- * Answering "no sessions" at that instant is what empties the list and leaves it empty until
- * something else happens to refresh it — the owner's «salen menos».
+ * A listing is not "nothing to say": the panel takes it literally and removes every row it does not
+ * see. So what comes back is a **claim** — "these projects have these sessions" — and it is only
+ * true when the projects were known **and** the walk could read everything it needed. Both halves
+ * have bitten the owner:
  *
- * While the projects are unknown the last real listing is the honest answer; once they are known,
- * what was just built is.
+ * - a window whose workspace had not been resolved yet has no project to walk, and that is exactly
+ *   when the panel asks (the provider registers as the extension activates);
+ * - a directory that refused to be read (Windows, a profile being written while the panel asks)
+ *   comes back with no rows at all — the same "everything is gone" as a real deletion, from a
+ *   momentary failure nobody sees.
+ *
+ * While the answer cannot be stood behind, the last real listing is the honest one. `publishable`
+ * is what says so: the projects are known **and** the walk was complete.
  */
-export function listingForPanel<T>(built: T[], previous: T[] | undefined, projectsKnown: boolean): T[] {
-	return built.length === 0 && !projectsKnown && previous !== undefined ? previous : built;
+export function listingForPanel<T>(built: T[], previous: T[] | undefined, publishable: boolean): T[] {
+	return !publishable && previous !== undefined ? previous : built;
 }
 
 /**
  * Lists every session transcript under the profile's `sessions/` directory, across
- * all of pi's per-project folders. The panel uses `listWorkspaceSessionFiles` instead;
- * this remains the unfiltered walk for callers that genuinely want every project.
+ * all of pi's per-project folders. The panel asks for what a window covers instead
+ * (`conversationsReport` / `areaConversationsReport`); this remains the unfiltered walk for
+ * callers that genuinely want every project.
  */
 export function listSessionFiles(sessionsDir: string, fs: SessionsFs = nodeFs): PiSessionFile[] {
-	return listFromDirs([sessionsDir], [], fs);
+	return listFromDirs([sessionsDir], [], fs).files;
 }
 
 /* ------------------------------------------------------------------ *

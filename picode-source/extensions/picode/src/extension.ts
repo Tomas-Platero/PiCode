@@ -20,7 +20,7 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { areaFamilySlugs, listAreaConversations, listProjectConversations, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
+import { areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
 import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -745,10 +745,10 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// dropped every row — «primero me salen 8 sesiones y luego 5». In a folder window there is
 			// one project and its own slug is the whole answer.
 			const listing = windowSessionScope();
-			const listed = listing.mode === 'workspace' && listing.slugs[0] !== undefined
-				? listAreaConversations(sessionsDir, listing.slugs[0])
-				: listProjectConversations(sessionsDir, listing.slugs);
-			const built = listed.map(file => ({
+			const report = listing.mode === 'workspace' && listing.slugs[0] !== undefined
+				? areaConversationsReport(sessionsDir, listing.slugs[0])
+				: conversationsReport(sessionsDir, listing.slugs);
+			const built = report.files.map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
@@ -769,7 +769,12 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 					&& before.timing?.created === after.timing?.created
 					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
 			);
-			lastItems = listingForPanel(reusable, lastItems, folders !== undefined);
+			// **Publishable** is the whole question: the projects are known, and the walk could read
+			// every directory it needed. A listing that came back short because a directory refused
+			// to be read is not a listing of fewer sessions — it is no answer, and publishing it is
+			// what emptied this panel over and over while the profile was being written. See
+			// `listingForPanel`.
+			lastItems = listingForPanel(reusable, lastItems, folders !== undefined && report.complete);
 			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
