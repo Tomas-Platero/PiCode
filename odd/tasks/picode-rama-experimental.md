@@ -875,3 +875,39 @@ ajustes un mando experimental sin nada detrás. **Sus vecinos se dejan a propós
 
 **Verificado**: 362 tests, 362 pasan, 0 fallan (4 nuevos, uno con su perfil exacto); typecheck del
 conector y del núcleo, los dos exit 0.
+
+### 2026-10-07 · ver el trabajo en background: **tarjetas** (A)
+
+> «Y mira lo que me sale si pregunto como van» — y el chat contestaba *«corriendo en background»*.
+>
+> «¿Hay alguna forma de que yo vea ese background o algo?»
+
+Se le dieron tres salidas —**A** tarjetas en el chat, **B** además una lista en un sitio, **C** las dos—
+y eligió **A**. Lo que había hasta ahora: la llamada de herramienta plegada, y minutos después un
+mensaje con el resultado. **Nada en medio.**
+
+**Los dos extremos de un trabajo ya estaban en la conversación**, así que los dos se vuelven tarjeta:
+
+* **El arranque.** La herramienta `background` vuelve al instante, así que la llamada y su resultado
+  son el mismo momento: aparece una tarjeta que dice *Running in the background* con la etiqueta que el
+  agente le puso al trabajo y el comando, y **esa misma tarjeta se actualiza** con el número de trabajo
+  en cuanto el resultado lo nombra (mismo `toolCallId` y `enablePartialUpdate`, el mecanismo que ya usan
+  las tarjetas de durable).
+* **El final.** El resultado llega **como un mensaje propio** a la conversación. Se reconoce por su
+  **marca** (`customType: 'specpi-background'`) y se convierte también en tarjeta: *A background job
+  finished* o *failed*, la etiqueta, el comando, el código de salida y el final de su salida.
+
+**Son dos tarjetas, y es a propósito**: el editor solo actualiza una parte **dentro de la respuesta que
+se está transmitiendo**, y el final de un trabajo llega en un turno posterior. El par se lee como un
+trabajo: la primera dice dónde está, la segunda cómo acabó.
+
+**Nada se inventa, y las pruebas son la prueba de dónde sale cada dato**: las cadenas que afirman están
+**copiadas de la conversación del dueño** (los `{command, label}` de la llamada y
+`Started background job 3 (web lint + type-check).`) y de **un trabajo que terminó en esta sesión** (el
+contenido del mensaje de final y sus `details`). Un mensaje que no lleve esa marca exacta —uno que
+escriba el dueño, o una respuesta que solo mencione un trabajo— **no produce tarjeta**.
+
+**Verificado**: 369 tests, 369 pasan, 0 fallan (7 nuevos); typecheck exit 0.
+
+**Lo que queda**: **B** —una lista con todos los trabajos, corriendo o acabados— sigue sobre la mesa, y
+es la misma información leída de los mismos dos extremos. No se ha hecho porque él eligió A.
