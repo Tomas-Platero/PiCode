@@ -645,3 +645,77 @@ exit 0.
 sesión por ventana, y esa decisión es lo que evita que cada pestaña arranque **todos** los servidores
 MCP activos — cada sesión de pi conecta cada servidor, que es justo lo que el dueño pidió parar. Queda
 dicho aquí para que, si algún día quiere aislamiento por pestaña, se sepa el precio.
+
+### 2026-10-07 · la causa raíz del parpadeo: la identidad del área salía de las carpetas
+
+> «Ves como primero me salen 8 sesiones y luego 5 en el área de trabajo que tengo abierto?. Sigue
+> fallando, no se si está cargando menos o de más, pero revísalo bien. Date una vuelta sobre esto
+> porque no puede seguir fallando.»
+
+Tenía razón en insistir, y la vuelta que pedía encontró la raíz. **El área tenía 3 conversaciones**,
+y él veía 8 y luego 5: las que desaparecían eran **las de pi**, y el panel se quedaba con las locales
+del editor. Medido en su propio perfil, con los tres hashes:
+
+```text
+las 2 carpetas (como están en disco)   --area-Artictempest--Workspace--513d6f42--   ← sus 3 sesiones
+con 1 sola (a medio cargar)            --area-Artictempest--Workspace--19976c25--   ← busca aquí: NADA
+con una 3ª carpeta abierta             --area-Artictempest--Workspace--f44eca3a--   ← y otra vez
+```
+
+**La identidad del área se calculaba hasheando las carpetas abiertas**, y esa lista no es estable: una
+ventana reporta una carpeta mientras el workspace se restaura, y el dueño abre y cierra carpetas
+mientras trabaja. Cada uno de esos momentos **renombraba el área**, el listado pedía la identidad
+recién calculada, encontraba una carpeta **sin sesiones** y publicaba ese vacío como un hecho.
+
+Esto explica **todo** lo que ha reportado sobre esta lista: el «8 y luego 5», el «salen menos» de
+antes, y que una conversación viva se refilara al abrir una carpeta.
+
+**El arreglo (`420040ff`), por los dos lados para que no pueda volver por ninguno:**
+
+1. **La identidad es el workspace, no la lista de carpetas.** Cuando la ventana tiene fichero de
+   workspace, el hash es sobre **ese fichero** (`vscode.workspace.workspaceFile`) — es como una ventana
+   dice *cuál* workspace es, y no cambia. Una ventana abierta solo con carpetas mantiene las carpetas
+   como identidad, que es todo lo que tiene.
+2. **El listado recoge todas las identidades** que ese workspace haya usado: las sesiones **no se
+   mueven** cuando la identidad se mueve, están donde se escribieron. `listAreaConversations` pide
+   todas las carpetas que comparten el **nombre** del área — la actual solo como respaldo para un
+   workspace sin sesiones todavía — y `areaFamilySlugs` da la misma respuesta a abrir una sesión por
+   su id, para que una fila que el panel enseña **abra siempre** al pulsarla.
+
+**Verificado**: 356 tests, 356 pasan, 0 fallan; y el test nuevo se ejecutó **contra el código viejo**,
+donde falla (10 tests, 9 pasan, 1 falla) — el caso roto es justo el que afirma. El otro test fija la
+otra mitad: el mismo nombre de área se recoge, el área de **otro** workspace no, y un slug de proyecto
+no tiene familia. Typecheck exit 0.
+
+#### La lección, escrita para no repetirla
+
+Es la **tercera vez** que esta familia de fallo le muerde: primero una lista que no se pudo construir
+publicada como vacía, luego una ventana cuyo workspace aún no estaba resuelto, y ahora una identidad
+que se movía sola. La regla que las une: **antes de publicar un vacío, preguntarse si lo que se buscó
+es lo que existe.** Un panel que lee del disco no puede decir «no hay nada» cuando la pregunta se ha
+movido.
+
+#### El build, y lo que costó llegar a él
+
+Tres intentos: los dos primeros murieron a los 53 s, **sin borrar ni mover nada**, porque el
+renombrado del perfil fue rechazado — `Permission denied` — **sin ningún PiCode corriendo**. Lo que
+pasaba está en el log del propio editor:
+
+```text
+12:01:53.345  Extension host terminating: received terminate message from renderer
+12:01:53.357  Extension host with pid 81136 exiting with code 0
+12:01:53.452  [UtilityProcessWorker]: terminated unexpectedly with code 3221225477
+```
+
+El editor salió limpio y **uno de sus procesos de utilidad crasheó al salir** (violación de acceso), y
+los logs del host de extensiones se quedaron **abiertos minutos** después. Comprobado luego: no son de
+solo lectura y `data/` se renombra sin problema. El arreglo (`fd12aeb1`): el renombrado **reintenta
+hasta 80 s** antes de rendirse — la negativa sigue siendo segura, solo que ya no es gratuita. El crash
+queda **apuntado como observación**, no como conclusión: puede ser cosa del editor y no nuestra.
+
+**Tercer intento: `exit 0` en 3m 36s.** El paquete lleva, comprobado sobre lo compilado:
+`areaFamilyPrefix`, `areaFamilySlugs`, `listAreaConversations`, `windowSessionScope`,
+`isWorkspaceWindow`, el hash sobre `workspaceFile`, `turnChain`, `listingForPanel`,
+`oneRowPerPackage`, `chat.mcp.autostart` y pi **1.0.4**. El perfil del dueño: **57 169 ficheros y 272
+conversaciones**, con **3 en el área** — las que el panel debe enseñar ahora, sin que la lista se
+vacíe cuando el workspace se está cargando.
