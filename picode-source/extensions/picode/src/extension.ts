@@ -20,7 +20,7 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listProjectConversations, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
+import { areaFamilySlugs, listAreaConversations, listProjectConversations, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
 import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -53,7 +53,7 @@ import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates, windowSessionSlugs } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, windowSessionScope } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 
@@ -739,7 +739,16 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			// `listingForPanel`.
 			const folders = vscode.workspace.workspaceFolders;
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const built = listProjectConversations(sessionsDir, windowSessionSlugs()).map(file => ({
+			// In a workspace, the listing asks for **every identity** that workspace ever filed under
+			// (`listAreaConversations`): the area's identity moves whenever the folder list does, and a
+			// listing that looked only for the identity computed this instant found an empty folder and
+			// dropped every row — «primero me salen 8 sesiones y luego 5». In a folder window there is
+			// one project and its own slug is the whole answer.
+			const listing = windowSessionScope();
+			const listed = listing.mode === 'workspace' && listing.slugs[0] !== undefined
+				? listAreaConversations(sessionsDir, listing.slugs[0])
+				: listProjectConversations(sessionsDir, listing.slugs);
+			const built = listed.map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
@@ -774,8 +783,15 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			const id = resource.path.split('/').pop();
 			// Every transcript of the open projects, **not** only the ones the panel lists: an
 			// agent's own transcript is not a conversation, and the agents view opens it. The cap
-			// bounds the list, not the history, so nothing here is capped either.
-			const file = listProjectSessionFiles(sessionsDir, projectSlugsOfWindow()).find(entry => entry.id === id);
+			// bounds the list, not the history, so nothing here is capped either. The area's **whole
+			// family** comes along: the panel lists the identities a workspace filed under, so a row
+			// it shows has to resolve when it is clicked, whatever identity it was written under.
+			const areaSlug = resolveProjectScope().area?.slug;
+			const lookupSlugs = [
+				...projectSlugsOfWindow(),
+				...(areaSlug === undefined ? [] : areaFamilySlugs(sessionsDir, areaSlug)),
+			];
+			const file = listProjectSessionFiles(sessionsDir, lookupSlugs).find(entry => entry.id === id);
 			if (file === undefined) {
 				return readSession;
 			}

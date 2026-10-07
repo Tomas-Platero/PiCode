@@ -16,7 +16,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { listedSessionSlugs, listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
+import { areaFamilyPrefix, areaFamilySlugs, listAreaConversations, listedSessionSlugs, listProjectConversations, piProjectSlug, type SessionsFs } from '../src/sessions-provider.ts';
 
 /** A listing file system over a flat record of file → content, listing ancestor directories too. */
 function memoryFs(files: Record<string, string>): SessionsFs {
@@ -106,6 +106,46 @@ test('a root-level transcript belongs to the window its own header names', () =>
 		'/sessions/2026_r.jsonl': rootContent,
 	}));
 	assert.deepStrictEqual(found.map(file => file.id).sort(), ['2026_r', '2026_w']);
+});
+
+test('an area lists its sessions whatever identity they were filed under', () => {
+	// The owner's report: «primero me salen 8 sesiones y luego 5». The area's identity is a hash of
+	// the folders it had open at that moment, and that list is not stable — a window reports one
+	// folder while the workspace is still being restored — so the identity computed a moment later
+	// named a folder with no sessions in it, and every row of his disappeared.
+	//
+	// The canonical slug here is the second identity; the sessions are in the first. Both carry the
+	// same area **name** — that is what makes them the same workspace — and differ only in the hash,
+	// which is the part the folder list moves.
+	const filedUnder = '--area-Artictempest--Workspace--513d6f42--';
+	const canonical = '--area-Artictempest--Workspace--19976c25--';
+	const files: Record<string, string> = {};
+	for (const [id, mtime] of [['2026_a', 10], ['2026_b', 20]] as const) {
+		const [file, content] = transcript(id, 'D:\\repos', filedUnder, mtime);
+		files[file] = content;
+	}
+
+	// The identity that is on disk right now finds them...
+	assert.deepStrictEqual(listAreaConversations('/sessions', filedUnder, undefined, memoryFs(files)).map(file => file.id), ['2026_b', '2026_a']);
+	// ...and so does the one computed a second later, which is the case that was broken.
+	assert.deepStrictEqual(listAreaConversations('/sessions', canonical, undefined, memoryFs(files)).map(file => file.id), ['2026_b', '2026_a']);
+});
+
+test('the family is one area\u2019s own name, never another workspace\u2019s', () => {
+	const mine = '--area-Artictempest--Workspace--19976c25--';
+	assert.strictEqual(areaFamilyPrefix(mine), '--area-Artictempest--Workspace--');
+	// A project slug is not an area, and has no family to gather.
+	assert.strictEqual(areaFamilyPrefix(piProjectSlug(WEB)), undefined);
+
+	const files: Record<string, string> = {
+		'/sessions/--area-Artictempest--Workspace--19976c25--/a.jsonl': '{}',
+		'/sessions/--area-Artictempest--Workspace--513d6f42--/b.jsonl': '{}',
+		'/sessions/--area-Other--Workspace--abcdef01--/c.jsonl': '{}',
+	};
+	assert.deepStrictEqual(areaFamilySlugs('/sessions', mine, memoryFs(files)).sort(), [
+		'--area-Artictempest--Workspace--19976c25--',
+		'--area-Artictempest--Workspace--513d6f42--',
+	]);
 });
 
 test('with no project open there is no list, and no fall-back to the whole profile', () => {

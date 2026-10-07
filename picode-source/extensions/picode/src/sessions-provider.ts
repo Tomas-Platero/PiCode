@@ -297,6 +297,58 @@ export function listedSessionSlugs(
 }
 
 /**
+ * The prefix every identity of one area shares: `--area-<name>-`.
+ *
+ * An area slug is `--area-<name>-<hash8>--`, and the hash is what an identity is. The **name** is the
+ * workspace's own (`vscode.workspace.name`) and therefore stable, so the prefix is what says "this
+ * folder belongs to that workspace" — `undefined` when the slug is not an area's (a project slug, or
+ * anything else), in which case there is no family to gather.
+ */
+export function areaFamilyPrefix(areaSlug: string): string | undefined {
+	const match = /^(--area-.+)-[0-9a-f]{8}$/.exec(areaSlug.replace(/--$/, ''));
+	return match === null ? undefined : `${match[1]}-`;
+}
+
+/**
+ * The conversations of one area, whichever identity they were filed under.
+ *
+ * An area's identity was once a hash of the folders it had open, and that list is not stable: a
+ * window reports one folder while the workspace is still being restored, and the owner opens and
+ * closes folders as he works. Every one of those moments renamed the area — `…-513d6f42--` became
+ * `…-19976c25--` — and a listing that looked only for the name it had just computed found a folder
+ * with no sessions in it and dropped every row («primero me salen 8 sesiones y luego 5»).
+ *
+ * The sessions do not move when the identity does: they are where they were written. So the listing
+ * asks for **every** folder this workspace ever filed under — same area name, any identity — and
+ * the current one is only the fall-back for a workspace that has no sessions yet. Nothing is
+ * orphaned, and a folder added or removed cannot empty the panel.
+ */
+export function listAreaConversations(
+	sessionsDir: string,
+	areaSlug: string,
+	cap?: number,
+	fs: SessionsFs = nodeFs,
+): PiSessionFile[] {
+	const family = areaFamilySlugs(sessionsDir, areaSlug, fs);
+	return listProjectConversations(sessionsDir, family.length > 0 ? family : [areaSlug], cap, fs);
+}
+
+/**
+ * Every folder on disk that belongs to the same area as `areaSlug` — same name, any identity.
+ *
+ * The listing needs them all (above), and so does opening a session by id: a row the panel shows
+ * must resolve when it is clicked, and a conversation filed under an identity the current folder
+ * list no longer computes is exactly the one that would otherwise not open.
+ */
+export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: SessionsFs = nodeFs): string[] {
+	const prefix = areaFamilyPrefix(areaSlug);
+	if (prefix === undefined) {
+		return [];
+	}
+	return fs.list(sessionsDir).map(entry => path.basename(entry)).filter(name => name.startsWith(prefix));
+}
+
+/**
  * The conversations a window shows: every transcript filed under `slugs`, newest first.
  *
  * **One list, because a window is one thing.** The slugs are the window's own

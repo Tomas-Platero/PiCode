@@ -101,15 +101,22 @@ export function resolveProjectScope(): PiProjectScope {
 	if (!workspace) {
 		return { mode: 'folder', cwd: folders[0], folders: folders.slice(0, 1), roots: [], area: undefined };
 	}
-	// The area's name is the one the editor already shows the owner: the workspace file's
-	// name for a saved area, the folder's name for a window opened on folders alone.
+	// The area's **identity** is the workspace, not the list of folders it happens to have open.
+	// The folder list is not stable — a window reports one folder while the workspace is still being
+	// restored, and the owner adds and removes folders as he works — and a hash over it moves the
+	// area's identity every time it does. That is what emptied the Sessions panel under him: the slug
+	// his sessions were filed under was `…-513d6f42--`, the slug computed a moment later was
+	// `…-19976c25--`, so the listing looked in a folder that has no sessions and the panel dropped
+	// every row («primero me salen 8 sesiones y luego 5»). A workspace file is what a window uses to
+	// say *which workspace it is*, and it does not change.
+	const identity = vscode.workspace.workspaceFile === undefined ? folders : [vscode.workspace.workspaceFile.fsPath];
 	const name = vscode.workspace.name ?? (folders[0] === undefined ? 'area' : path.basename(folders[0]));
 	return {
 		mode: 'workspace',
 		cwd: folders[0],
 		folders,
 		roots: workspaceFolders.map(folder => ({ name: folder.name, path: folder.uri.fsPath })),
-		area: { name, slug: areaSessionSlug(folders, name) },
+		area: { name, slug: areaSessionSlug(identity, name) },
 	};
 }
 
@@ -131,18 +138,26 @@ export function projectSlugs(workspacePaths: readonly string[], areaSlug: string
 	];
 }
 
+/** What the conversations panel lists for the window in force, and which window that is. */
+export interface WindowSessionScope {
+	readonly mode: 'folder' | 'workspace';
+	/** The identity to list: the area's own slug when the window is a workspace, else the folders'. */
+	readonly slugs: readonly string[];
+}
+
 /**
  * The slugs the **conversations panel** lists, for the window in force.
  *
  * A thin adapter over the rule, which lives where it can be run: `sessions-provider.ts`
  * `listedSessionSlugs` holds it and the tests exercise it with no editor (a workspace lists the
  * workspace's own conversations, a folder window lists that folder's). This only resolves which
- * window this is.
+ * window this is, and says so too: the caller needs the mode to know whether an area slug has to be
+ * widened to every identity that workspace ever filed under (`listAreaConversations`).
  */
-export function windowSessionSlugs(): string[] {
+export function windowSessionScope(): WindowSessionScope {
 	const scope = resolveProjectScope();
 	const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
-	return listedSessionSlugs(scope.mode, scope.area?.slug, workspacePaths);
+	return { mode: scope.mode, slugs: listedSessionSlugs(scope.mode, scope.area?.slug, workspacePaths) };
 }
 
 /** The same slugs for the window in force — the form every surface actually calls. */
