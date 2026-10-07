@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { areaContextBlock, areaSessionSlug } from '../src/workspace-area.ts';
+import { areaContextBlock, areaSessionSlug, isWorkspaceWindow } from '../src/workspace-area.ts';
 import { piProjectSlug } from '../src/sessions-provider.ts';
 
 const WEB = 'D:\\repositorios\\ArticTempest-Web';
@@ -93,4 +93,22 @@ test('the block carries the addressing rules and the honest one-working-director
 
 test('no roots at all is no block', () => {
 	assert.strictEqual(areaContextBlock([], WEB), undefined);
+});
+
+test('a saved workspace file decides the window is a workspace, before its folders finish loading', () => {
+	// The owner's report: «la lista de sesiones en un area de trabajo sigue fallando, es que parpadea,
+	// es como si intentase coger las de una de las carpetas… Ejemplo las de artictempest-web». A window
+	// opened from a workspace file reports one folder while it is still being restored, so counting
+	// folders answered "folder" for an instant and the panel listed that folder's sessions.
+	assert.strictEqual(isWorkspaceWindow('auto', 1, true), true);
+	assert.strictEqual(isWorkspaceWindow('auto', 2, true), true);
+	assert.strictEqual(isWorkspaceWindow('auto', 1, false), false);
+
+	// A window opened on folders alone still follows the count, which is what that rule was for.
+	assert.strictEqual(isWorkspaceWindow('auto', 2, false), true);
+	assert.strictEqual(isWorkspaceWindow('auto', 0, false), false);
+
+	// And the owner's own setting wins over both.
+	assert.strictEqual(isWorkspaceWindow('workspace', 1, false), true);
+	assert.strictEqual(isWorkspaceWindow('folder', 3, true), false);
 });

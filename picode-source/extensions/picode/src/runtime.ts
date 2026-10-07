@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { externalSdkEntry } from './piLocate';
 import { sdkCandidates } from './piSdk';
-import { areaSessionSlug } from './workspace-area';
+import { areaSessionSlug, isWorkspaceWindow } from './workspace-area';
 import { listedSessionSlugs, piProjectSlug } from './sessions-provider';
 
 /**
@@ -97,8 +97,7 @@ export function readProjectMode(): PiProjectMode {
 export function resolveProjectScope(): PiProjectScope {
 	const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
 	const folders = workspaceFolders.map(folder => folder.uri.fsPath);
-	const mode = readProjectMode();
-	const workspace = mode === 'workspace' || (mode === 'auto' && folders.length > 1);
+	const workspace = isWorkspaceWindow(readProjectMode(), folders.length, vscode.workspace.workspaceFile !== undefined);
 	if (!workspace) {
 		return { mode: 'folder', cwd: folders[0], folders: folders.slice(0, 1), roots: [], area: undefined };
 	}

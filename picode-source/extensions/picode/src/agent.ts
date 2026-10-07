@@ -951,6 +951,24 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	/** The MCP tool set the running session was built with. */
 	let mcpSignature = '';
 
+	/**
+	 * The turns of this window, one at a time, and how many are waiting for their slot.
+	 *
+	 * There is **one** pi session per window (see `session` above): every chat session the owner has
+	 * open drives the same agent. Sending a message in a second one while the first is still
+	 * streaming makes pi refuse the prompt — «Agent is already processing. Specify streamingBehavior
+	 * ('steer' or 'followUp') to queue the message.» — and that is what the owner saw as soon as he
+	 * opened more than one session: the turn never started, and the chat said so.
+	 *
+	 * Queued **here**, not through pi's `streamingBehavior`: `followUp` would hand the second message
+	 * to pi to run after the current turn, and the event that ends a turn (`agent_settled`) would then
+	 * fire for the *first* one while the second request was still waiting for its answer — the second
+	 * tab would stream nothing and end early, which is worse than the error. Waiting one's turn keeps
+	 * the turn and its ending paired, and the second tab's own stream shows its own answer.
+	 */
+	let turnChain: Promise<void> = Promise.resolve();
+	let turnsWaiting = 0;
+
 	/** What the editor's MCP servers offer right now, as a signature to compare. */
 	const currentMcpSignature = () => toolSetSignature(mcpTools(vscode.lm.tools as readonly EditorToolInfo[]));
 	/** Whether the owner wants pi to have the editor's MCP tools at all (`picode.mcp.enabled`). */
@@ -1101,7 +1119,26 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			}
 
 			const context = settings.attachContext ? contextBlockFor(scope, picked) : undefined;
-			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
+			// One turn at a time in this window: the next one waits for the turn in flight to end, so
+			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
+			const previousTurn = turnChain;
+			let releaseTurn!: () => void;
+			turnChain = new Promise<void>(resolve => { releaseTurn = resolve; });
+			turnsWaiting++;
+			try {
+				if (turnsWaiting > 1) {
+					stream.progress('PiCode is finishing the turn already running in this window…');
+				}
+				await previousTurn.catch(() => undefined);
+				if (token.isCancellationRequested) {
+					// Cancelled while waiting: the turn this request would have run must not start.
+					return {};
+				}
+				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
+			} finally {
+				turnsWaiting--;
+				releaseTurn();
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);

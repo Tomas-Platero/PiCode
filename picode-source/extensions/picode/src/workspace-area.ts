@@ -59,6 +59,32 @@ export function areaSessionSlug(folders: readonly string[], areaName: string | u
 	return `--area-${name}-${hash}--`;
 }
 
+/**
+ * Whether the window in force is a workspace.
+ *
+ * `auto` follows how the window is open, and the owner's report says the folder count alone is not a
+ * stable way to ask: «la lista de sesiones en un area de trabajo sigue fallando, es que parpadea, es
+ * como si intentase coger las de una de las carpetas… Ejemplo las de artictempest-web». A window opened
+ * from a saved workspace file reports **one** folder while the workspace is still being restored, so a
+ * rule that counted folders answered "folder" for an instant and the panel listed that folder's
+ * sessions — then the second folder arrived, the answer became "workspace", and the list changed under
+ * him.
+ *
+ * A saved workspace file is what a window uses to say "I am a workspace", and it is known from the
+ * start, so it answers the same before and after the folders finish loading. The count stays as the
+ * fallback for a window opened on folders alone (the case this rule was written for), and the owner's
+ * own setting still decides when there is one.
+ */
+export function isWorkspaceWindow(mode: 'auto' | 'workspace' | 'folder', folderCount: number, hasWorkspaceFile: boolean): boolean {
+	if (mode === 'workspace') {
+		return true;
+	}
+	if (mode === 'folder') {
+		return false;
+	}
+	return hasWorkspaceFile || folderCount > 1;
+}
+
 /** The example a context block quotes for running a command in a root other than the session's. */
 function commandExample(roots: readonly AreaRoot[], sessionCwd: string): string | undefined {
 	const other = roots.find(root => root.onDisk && root.path !== sessionCwd);
