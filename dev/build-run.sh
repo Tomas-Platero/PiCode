@@ -37,7 +37,6 @@ mkdir -p .scratch
 LOCK=".scratch/build.lock"
 LOG=".scratch/build-live.log"
 STATUS=".scratch/build.status"
-BACKUP=".scratch/payload-data-backup"
 
 if [[ -f "${LOCK}" ]]; then
   RUNNING=$( cat "${LOCK}" )
@@ -72,11 +71,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The owner's profile, if there is one to keep.
-if [[ -d "PiCode-Win32-x64/data" ]]; then
-  rm -rf "${BACKUP}"
-  cp -r "PiCode-Win32-x64/data" "${BACKUP}" 2> /dev/null || true
-fi
+# The owner's profile is **not** copied here. It lives at <pack>/data, and the pack's own delete would
+# eat it -- which is what `dev/data-hold.sh` exists for: a rename aside (atomic, no 1+ GB duplicate) and
+# back, done by `dev/build.sh` around the pack phase, with its own recovery at the start of the next
+# run. The copy-and-restore that used to sit on these two lines was a second mechanism for the same
+# folder, and it named it without the suffix this runner builds with (PiCode-Win32-x64 instead of
+# "PiCode-win32-x64 - experimental"), so all it ever produced was an empty skeleton profile beside the
+# real one. One mechanism, and it is the one that cannot get the folder wrong: it takes the pack
+# directory it is given.
 
 set +e
 if [[ "${FLAGS[0]}" == "-DepsOnly" ]]; then
@@ -100,7 +102,6 @@ else
 fi
 set -e
 
-node dev/restore-profile.mjs >> "${LOG}" 2>&1 || true
 
 echo "${BUILD_STATUS}" > "${STATUS}"
 exit "${BUILD_STATUS}"

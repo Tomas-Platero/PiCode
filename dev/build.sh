@@ -198,7 +198,7 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
-trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" && ! -e "${PICODE_DATA_DIR}" ]]; then echo "  -- the build stopped with the portable profile aside in ${PICODE_DATA_HOLD_DIR}: putting it back"; mv "${PICODE_DATA_HOLD_DIR}" "${PICODE_DATA_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
 
 # The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
 # The functions and their rationale live in dev/data-hold.sh; build.sh calls recover + move-aside
@@ -499,8 +499,37 @@ if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
   echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
   exit 4
 fi
-picode_data_hold_recover "${PACK_DIR}" || exit 1
-picode_data_hold_move_aside "${PACK_DIR}" || exit 1
+# The profile is beside the folder from here until the pack and the staging have finished, and it has
+# to come back even when they fail: a build that dies in between used to leave it in the hold, so the
+# next time the editor was opened it found no data at all. That is what happened on 2026-10-07 -- the
+# pack refused with EBUSY (a handle Windows had not let go of), the build stopped, and the profile
+# stayed aside until it was put back by hand. The restore lives in the trap above, which already runs
+# on every exit: it used to skip when a `data/` existed, and a failed pack has usually seeded one, so
+# the one case that needed it most was the one it did nothing for. It now calls
+# `picode_data_hold_put_back`, which drops the seeded data/ and renames the hold back, and it says so
+# on the way out. A second `trap ... EXIT` here would *replace* that one, taking the status file with
+# it -- which is how this comment came to be written.
+
+# The pack task deletes this folder with `util.rimraf` (see the note above), and that delete is the
+# one that fails with EBUSY when anything still holds a file inside: gulp then kills the whole build
+# minutes in, after everything else has been compiled. On 2026-10-07 that was a handle Windows had not
+# released yet even though no editor was running -- the same teardown the profile's own rename waits
+# 80 s for. So the delete is done here, where it can wait and say so, and only build output is at
+# stake: `data/` was moved aside on the line above.
+if [[ -d "${PACK_DIR}" ]]; then
+  for attempt in $(seq 1 30); do
+    rm -rf "${PACK_DIR}" 2>/dev/null && break
+    if [[ "${attempt}" == "1" ]]; then
+      echo "  -- something still holds $( basename "${PACK_DIR}" ) open: waiting up to 60 s for it to let go"
+    fi
+    sleep 2
+  done
+  if [[ -d "${PACK_DIR}" ]]; then
+    echo "error: the pack folder '${PACK_DIR}' could not be deleted after 60 s: something still holds a file inside it." >&2
+    echo "       Nothing but that folder's own build output was at stake, and the portable profile is safe in $( picode_data_hold_dir "${PACK_DIR}" )." >&2
+    exit 1
+  fi
+fi
 
 cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
