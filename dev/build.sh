@@ -499,6 +499,25 @@ if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
   echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
   exit 4
 fi
+# The profile goes aside **first**, and the order is the whole point of this phase: `data/` lives inside
+# the folder that is about to be deleted, so a build that deletes without moving it aside first deletes
+# the owner's profile with it. On 2026-10-07 that is exactly what happened: an edit to this file dropped
+# these two lines, and the delete below took 56 861 files -- sessions, skills, providers -- with it. No
+# other mechanism could have saved it: the profile is safe only because it is renamed out of reach
+# *before* the delete runs.
+picode_data_hold_recover "${PACK_DIR}" || exit 1
+picode_data_hold_move_aside "${PACK_DIR}" || exit 1
+
+# And the check that would have caught that edit, asked where it still helps: if `data/` is still inside
+# the folder, then nothing was moved aside, and deleting now would take the profile. Refusing costs a
+# build; deleting costs the owner his sessions, his skills and his providers. (The delete below is the
+# only thing that can destroy them, and it is the one place a mistake is unrecoverable.)
+if [[ -e "$( picode_data_dir "${PACK_DIR}" )" ]]; then
+  echo "error: $( picode_data_dir "${PACK_DIR}" ) is still inside the pack folder, so the portable profile was NOT moved aside." >&2
+  echo "       Refusing to delete '${PACK_DIR}': it is the step that would take the profile with it." >&2
+  exit 1
+fi
+
 # The profile is beside the folder from here until the pack and the staging have finished, and it has
 # to come back even when they fail: a build that dies in between used to leave it in the hold, so the
 # next time the editor was opened it found no data at all. That is what happened on 2026-10-07 -- the
