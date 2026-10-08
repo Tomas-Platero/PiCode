@@ -8,7 +8,7 @@ body:
         PiCode's product rules are written down (see
         `AGENTS.md` and `docs/DISENO.md`): no PiCode-
         owned panel, tab or settings page; nothing is
-        reimplemented that Pi or Gentle AI already
+        reimplemented that Pi already
         ships; a datum appears once; anything
         requiring action is a button.
         Saying how your idea fits those rules saves a

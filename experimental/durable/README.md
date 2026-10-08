@@ -2,7 +2,7 @@
 
 A self-contained program that runs `@earendil-works/pi-durable` (1.0.2) against the
 owner's LAN gateway **OmniRoute** and proves, with real runs, the three promises that
-justify replacing what `gentle-ai` provided:
+justify replacing what came before it:
 
 1. **A conversation survives the process being killed and continues where it stopped.**
 2. **A subagent is a background task that does not block the parent conversation.**
@@ -334,7 +334,7 @@ visible in the transcript: the second `pi.tool-result` has `isError: false`).
 ### Skills and agents
 
 The pi profile (`%LOCALAPPDATA%/Programs/PiCode/data/pi-agent`, read-only) used to get
-its `skills/` registered by the gentle install; nothing registered it any more. The
+its `skills/` registered; nothing registered it any more. The
 CLI wires it back in:
 
 - **Skills** (`lib/skills.js`): every `skills/<dir>/SKILL.md` is read once at startup

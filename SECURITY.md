@@ -52,6 +52,5 @@ See [docs/CI.md](docs/CI.md) for the full policy of when the pin moves.
 - **Credentials stay in the local PiCode profile** (`data/` in portable builds). Cloud sync
   of the profile is planned; when it lands, credential upload will require explicit consent
   and encryption. Until then, nothing leaves your machine unless you send it.
-- PiCode bundles third-party runtimes ([Pi](https://pi.dev),
-  [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai)); vulnerabilities in those
+- PiCode bundles third-party runtimes ([Pi](https://pi.dev)); vulnerabilities in those
   should be reported upstream as well as here, since PiCode pins their versions.

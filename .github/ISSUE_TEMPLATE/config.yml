@@ -13,9 +13,3 @@ contact_links:
       model catalog) is Pi's project — if the panel
       is only reporting what Pi did, report it
       there.
-  - name: Upstream Gentle AI issues
-    url: >-
-      https://github.com/Gentleman-Programming/gentle-ai
-    about: >-
-      The harness, its skills and its review
-      binaries belong upstream of PiCode.
