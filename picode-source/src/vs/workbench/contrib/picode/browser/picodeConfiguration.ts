@@ -154,7 +154,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				localize('picode.pi.reasoning.hide', "Only the answer."),
 				localize('picode.pi.reasoning.show', "The thinking first, quoted above the answer."),
 			],
-			default: 'hide',
+			default: 'show',
 			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
 		},
 		[PICODE_DISABLED_TOOLS_SETTING]: {

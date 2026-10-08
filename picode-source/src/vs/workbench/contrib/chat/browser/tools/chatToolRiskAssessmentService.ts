@@ -116,8 +116,7 @@ export class ChatToolRiskAssessmentService implements IChatToolRiskAssessmentSer
 	}
 
 	private async _invokeModel(tool: IToolData, parameters: unknown, kind: ToolRiskPromptKind, token: CancellationToken): Promise<IToolRiskAssessment | undefined> {
-		const modelId = this._configurationService.getValue<string>(ChatConfiguration.ToolRiskAssessmentModel)
-			|| this._configurationService.getValue<string>(ChatConfiguration.UtilitySmallModel);
+		const modelId = this._configurationService.getValue<string>(ChatConfiguration.ToolRiskAssessmentModel);
 		if (!modelId) {
 			return undefined;
 		}
@@ -173,7 +172,7 @@ function resolveRiskPromptKind(tool: IToolData, kind: ToolRiskPromptKind | undef
  * assessment, used as the cache key so re-invocations of the same tool call
  * hit the cache even when model-generated descriptive fields differ.
  */
-function normalizeRiskCacheParameters(parameters: unknown, kind: ToolRiskPromptKind): unknown {
+function normalizeRiskCacheParameters(parameters: unknown, kind: ToolRiskPromptKind): Record<string, unknown> | unknown {
 	if (kind === 'terminal' && parameters && typeof parameters === 'object') {
 		const p = parameters as Record<string, unknown>;
 		return { command: p.command };

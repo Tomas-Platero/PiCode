@@ -23,6 +23,7 @@ import { isIOS } from '../../../../base/common/platform.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { isDefined, isUndefinedOrNull } from '../../../../base/common/types.js';
 import { localize } from '../../../../nls.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
@@ -1582,12 +1583,16 @@ function providerFieldError(item: { id: string; endpoint: string }): string | un
  */
 export class ProviderListSettingWidget extends AbstractListSettingWidget<IProviderDataItem> {
 
+	/** Guards a slow status answer against a newer render of the profile rows. */
+	private profileRowsSequence = 0;
+
 	constructor(
 		container: HTMLElement,
 		@IThemeService themeService: IThemeService,
 		@IContextViewService contextViewService: IContextViewService,
 		@IHoverService private readonly hoverService: IHoverService,
 		@IConfigurationService configurationService: IConfigurationService,
+		@ICommandService private readonly commandService: ICommandService,
 	) {
 		super(container, themeService, contextViewService, configurationService);
 	}
@@ -1737,13 +1742,92 @@ export class ProviderListSettingWidget extends AbstractListSettingWidget<IProvid
 		rowElement.setAttribute('aria-label', description);
 	}
 
+	protected renderList(): void {
+		super.renderList();
+		void this.renderProfileRows();
+	}
+
+	/**
+	 * The providers the **profile** knows that the form does not declare — nan behind an
+	 * installed package, a subscription whose sign-in lives in `auth.json` — as read-only
+	 * rows after the editable ones. The form edits declarations; a provider pi knows by
+	 * itself has no row here to edit, and the owner said the missing one read as broken:
+	 * «Los proveedores no me sale nan».
+	 */
+	private async renderProfileRows(): Promise<void> {
+		const sequence = ++this.profileRowsSequence;
+		const rows = await profileProviders(this.commandService);
+		if (sequence !== this.profileRowsSequence || rows.length === 0 || !this.listElement.isConnected) {
+			return;
+		}
+
+		const separator = DOM.append(this.listElement, $('.setting-list-row.picode-provider-profile-separator'));
+		separator.textContent = this.getLocalizedStrings().profileSeparatorLabel;
+
+		for (const row of rows) {
+			const rowElement = DOM.append(this.listElement, $('.setting-list-row.picode-provider-row.picode-provider-profile'));
+			const nameElement = DOM.append(rowElement, $('.setting-list-object-key'));
+			nameElement.textContent = row.id;
+			const detailElement = DOM.append(rowElement, $('.setting-list-object-value'));
+			const facts: string[] = [];
+			if (row.models) {
+				facts.push(this.getLocalizedStrings().profileModels);
+			}
+			if (row.credential) {
+				facts.push(this.getLocalizedStrings().profileCredential);
+			}
+			detailElement.textContent = facts.join(' · ');
+			rowElement.title = this.getLocalizedStrings().profileRowTooltip;
+		}
+	}
+
 	protected getLocalizedStrings() {
 		return {
 			deleteActionTooltip: localize('picode.removeProvider', "Remove provider"),
 			editActionTooltip: localize('picode.editProvider', "Edit provider"),
 			addButtonLabel: localize('picode.addProvider', "Add provider"),
+			profileSeparatorLabel: localize('picode.profileProviders', "From your pi profile"),
+			profileModels: localize('picode.profileProviderModels', "models"),
+			profileCredential: localize('picode.profileProviderCredential', "sign-in"),
+			profileRowTooltip: localize('picode.profileProviderTooltip', "pi knows this provider from its own profile — a package, a subscription. It has no row in this form to edit; the status view shows it in full."),
 		};
 	}
+}
+
+/** One provider the profile knows that no declaration explains, as the status answer carries it. */
+interface IProfileProviderRow {
+	readonly id: string;
+	readonly models: boolean;
+	readonly credential: boolean;
+}
+
+/** How long the profile's provider answer is reused: the status command reads git. */
+const PROFILE_PROVIDERS_TTL_MS = 60_000;
+
+/** The cached answer, shared by every settings page this session renders. */
+let profileProvidersCache: { rows: readonly IProfileProviderRow[]; at: number } | undefined;
+
+/**
+ * The providers the profile knows and the form does not declare, from the connector's own
+ * status answer — the same three-source union the status view shows, minus the declared
+ * rows this form already lists. A status the connector cannot give (it is not running) is
+ * "no extra rows", never an invented provider.
+ */
+async function profileProviders(commandService: ICommandService): Promise<readonly IProfileProviderRow[]> {
+	if (profileProvidersCache !== undefined && Date.now() - profileProvidersCache.at < PROFILE_PROVIDERS_TTL_MS) {
+		return profileProvidersCache.rows;
+	}
+	let rows: readonly IProfileProviderRow[] = [];
+	try {
+		const data = await commandService.executeCommand<{ providers?: readonly { id: string; declared: boolean; models: boolean; credential: boolean }[] }>('picode.setup.status');
+		rows = (data?.providers ?? [])
+			.filter(provider => !provider.declared && provider.id.length > 0)
+			.map(provider => ({ id: provider.id, models: provider.models, credential: provider.credential }));
+	} catch {
+		// The connector is not answering; the form shows only what it declares.
+	}
+	profileProvidersCache = { rows, at: Date.now() };
+	return rows;
 }
 
 /* ------------------------------------------------------------------ *

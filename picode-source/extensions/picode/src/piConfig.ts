@@ -64,7 +64,9 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 
 	return {
 		thinkingLevel: typeof thinking === 'string' && (THINKING_LEVELS as readonly string[]).includes(thinking) ? thinking : undefined,
-		showReasoning: reasoning === 'show',
+		// Default **shown** (the owner's call: «Esto siempre en show por defecto»); an explicit
+		// `hide` is the only thing that turns it off.
+		showReasoning: reasoning !== 'hide',
 		// On unless it was turned off: a switch that only exists to be left alone is not a switch.
 		mcpEnabled: mcp === undefined ? true : mcp === true,
 		// Default **on**, unlike the retired extension's: attaching the context is what makes the

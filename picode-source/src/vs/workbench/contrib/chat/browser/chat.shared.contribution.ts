@@ -201,9 +201,7 @@ import { ChatTipService, IChatTipService } from './chatTipService.js';
 import { ChatWindowNotifier } from './chatWindowNotifier.js';
 import { AgentPluginRecommendations } from './claudePluginRecommendations.js';
 import { ChatCodeBlockContextProviderService } from './codeBlockContextProviderService.js';
-import { ExploreAgentDefaultModel } from './exploreAgentDefaultModel.js';
 import { HasByokModelsContribution } from './hasByokModelsContribution.js';
-import { PlanAgentDefaultModel } from './planAgentDefaultModel.js';
 import './planReviewFeedback/planReviewFeedbackEditorOverlay.js';
 import { IPlanReviewFeedbackService, PlanReviewFeedbackService } from './planReviewFeedback/planReviewFeedbackService.js';
 import { PluginAutoUpdate } from './pluginAutoUpdate.js';
@@ -219,7 +217,6 @@ import { LanguageModelToolsConfirmationService } from './tools/languageModelTool
 import { LanguageModelToolsService, globalAutoApproveDescription } from './tools/languageModelToolsService.js';
 import { ToolResultCompressorService } from './tools/toolResultCompressorService.js';
 import { ConfigureToolSets, UserToolSetsContributions } from './tools/toolSetsContribution.js';
-import { UtilityModelContribution, UtilitySmallModelContribution } from './utilityModelContribution.js';
 import { ChatViewsWelcomeHandler } from './viewsWelcome/chatViewsWelcomeHandler.js';
 import './widget/chatContentParts/chatSubagentOpenChat.js';
 import { ChatFindAccessibilityHelp } from './widget/chatFind/chatFindAccessibilityHelp.js';
@@ -347,14 +344,9 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			agentsWindow: { default: false },
 		},
-		'chat.editing.autoAcceptDelay': {
-			type: 'number',
-			markdownDescription: nls.localize('chat.editing.autoAcceptDelay', "Delay after which changes made by chat are automatically accepted. Values are in seconds, `0` means disabled and `100` seconds is the maximum."),
-			default: 0,
-			minimum: 0,
-			maximum: 100
-		},
-		'chat.editing.confirmEditRequestRemoval': {
+		// `chat.editing.autoAcceptDelay` was removed with the core editing sessions it timed: pi
+		// edits with its own tools, so no chat editing session ever exists to auto-accept for.
+				'chat.editing.confirmEditRequestRemoval': {
 			type: 'boolean',
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: nls.localize('chat.editing.confirmEditRequestRemoval', "Whether to show a confirmation before removing a request and its associated edits."),
@@ -1220,38 +1212,9 @@ configurationRegistry.registerConfiguration({
 				mode: 'auto'
 			},
 		},
-		[ChatConfiguration.PlanAgentDefaultModel]: {
-			type: 'string',
-			description: nls.localize('chat.planAgent.defaultModel.description', "Select the default language model to use for the Plan agent from the available providers."),
-			default: '',
-			enum: PlanAgentDefaultModel.modelIds,
-			enumItemLabels: PlanAgentDefaultModel.modelLabels,
-			markdownEnumDescriptions: PlanAgentDefaultModel.modelDescriptions
-		},
-		[ChatConfiguration.ExploreAgentDefaultModel]: {
-			type: 'string',
-			description: nls.localize('chat.exploreAgent.defaultModel.description', "Select the default language model to use for the Explore subagent from the available providers."),
-			default: '',
-			enum: ExploreAgentDefaultModel.modelIds,
-			enumItemLabels: ExploreAgentDefaultModel.modelLabels,
-			markdownEnumDescriptions: ExploreAgentDefaultModel.modelDescriptions
-		},
-		[ChatConfiguration.UtilityModel]: {
-			type: 'string',
-			description: nls.localize('chat.utilityModel.description', "Override the language model used by built-in utility flows. Leave empty to use the configured default behavior."),
-			default: '',
-			enum: UtilityModelContribution.modelIds,
-			enumItemLabels: UtilityModelContribution.modelLabels,
-			markdownEnumDescriptions: UtilityModelContribution.modelDescriptions
-		},
-		[ChatConfiguration.UtilitySmallModel]: {
-			type: 'string',
-			description: nls.localize('chat.utilitySmallModel.description', "Override the language model used by built-in small/fast utility flows. A fast and inexpensive model is recommended. Leave empty to use the configured default behavior."),
-			default: '',
-			enum: UtilitySmallModelContribution.modelIds,
-			enumItemLabels: UtilitySmallModelContribution.modelLabels,
-			markdownEnumDescriptions: UtilitySmallModelContribution.modelDescriptions
-		},
+		// The Plan/Explore/Utility default-model settings were removed with their machinery: they
+		// configured Copilot-family subagents this product does not have - pi is the only agent,
+		// and nothing in the tree read these values (measured 2026-10-08, before removal).
 		[ChatConfiguration.RequestQueueingDefaultAction]: {
 			type: 'string',
 			enum: ['queue', 'steer'],

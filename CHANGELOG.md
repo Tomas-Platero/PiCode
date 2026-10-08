@@ -46,6 +46,17 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 - **Un servidor MCP que se podía renovar vuelve a pedir login cada hora, y ahora se pide el permiso que lo evita.** Vercel se entraba bien pero, una hora después, la fila volvía a **Needs sign-in** y reiniciar no cambiaba nada: la credencial que pi guardaba **no traía refresh token** (scope `openid`, `expires_in: 3600`), así que no había con qué renovarla. La petición solo pedía los permisos que el recurso anuncia; `offline_access`, que es el que hace que el proveedor emita un refresh token, no se pedía nunca. Ahora, antes de abrir el navegador, el login mira los metadatos del servidor —los que pi ya dejó guardados, o los descubre con el propio descubridor de pi para uno nuevo— y si el servidor de autorización dice que puede emitir `offline_access`, lo añade a los permisos de la entrada **sin quitar ninguno** de los que ya se pedían. Aplica a cualquiera en la misma situación, no solo a Vercel.
 
 ### Changed
+- **El thinking del agente se muestra por defecto.** El ajuste pasaba a estar apagado salvo
+  configuración contraria; ahora es al revés: se muestra salvo que lo ocultes tú.
+- **La página de Providers enseña también los proveedores del perfil.** Lo que pi conoce por su
+  cuenta — un paquete instalado, una suscripción conectada, como nan — sale ahora en la página
+  como filas de solo lectura bajo el epígrafe *From your pi profile*, con lo que tiene (modelos,
+  sign-in). Antes solo salían los declarados en el formulario, y el que faltaba parecía roto.
+- **Los ajustes muertos de la sección Agent se han retirado.** El modelo por defecto del Plan
+  agent, el del Explore agent, los dos de los modelos de utilidad y el auto-aceptado de ediciones
+  configuraban piezas de Copilot que este producto no tiene — mandos sin aparato. Se quedan los
+  que funcionan con pi: las confirmaciones de borrar/reintentar, la edición de peticiones, la
+  cola de peticiones y la restauración del input al deshacer.
 - **La lista de modelos del chat se abre completa.** Las cachés del catálogo de pi vivían solo en
   memoria, así que **cada ventana empezaba en frío**: el desplegable abría con las filas del perfil y
   los modelos de pi llegaban segundos después, cuando su runtime volvía a construirse. Ahora esa

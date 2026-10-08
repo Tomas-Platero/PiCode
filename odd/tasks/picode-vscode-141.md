@@ -119,6 +119,30 @@ upstream sin trabajo adicional (ya anotado en el reporte al dueño).
       input leída del DOM en el momento (`_layoutListForInputHeight` en `chatWidget.ts`), y la
       cifra en caché queda solo como reserva para un elemento aún no medido. Verificado: `tsc`
       del núcleo 0; el arreglo se prueba en el editor empaquetado, que es donde el dueño lo vio.
+- [x] **F9 · Ajustes vivos y muertos de la sección Agent** (2026-10-08, decisión del dueño:
+      «De estas opciones cuáles podemos mantener o quitar?»). Medido uno a uno contra el árbol:
+      **quedan** las confirmaciones de borrar/reintentar peticiones, la edición de peticiones
+      (inline), la cola de peticiones (steer/queue del input) y la restauración del input al
+      deshacer — todas viven en el chat del núcleo y funcionan con pi. **Se quitan** cuatro
+      mandos sin aparato: `chat.planAgent.defaultModel` y `chat.exploreAgent.defaultModel`
+      (configuraban subagentes de la familia Copilot que este producto no tiene; nadie los leía),
+      `chat.utilityModel` y `chat.utilitySmallModel` (su único lector, el servicio de riesgo de
+      herramientas, busca modelos con vendor `copilot`, que aquí no existe — la lectura cae a su
+      valor vacío, igual que hoy), y `chat.editing.autoAcceptDelay` (cronometraba sesiones de
+      edición del núcleo que pi nunca crea: pi edita con sus propias herramientas). Retirados
+      también los tres ficheros de contribución huérfanos, el consejo del catálogo que
+      promocionaba el auto-aceptado, y las entradas en el índice de Ajustes. El test de la clase
+      base se recorta al caso vivo.
+- [x] **F10 · Reasoning visible por defecto** (2026-10-08, decisión del dueño: «Esto siempre en
+      show por defecto»). El defecto de `picode.pi.reasoning` pasa a `show`; un `hide` explícito
+      es lo único que lo oculta.
+- [x] **F11 · El proveedor nan sale en la página de Providers** (2026-10-08, decisión del dueño:
+      «Los proveedores no me sale nan»). La página enseña ahora, tras las filas editables, una
+      sección **From your pi profile** con los proveedores que el perfil conoce y el formulario
+      no declara (nan: modelos y/o credencial), de solo lectura — el mismo patrón que los MCP
+      descubiertos. Los datos son el mismo estado de tres fuentes que ya mostraba el panel
+      (`picode.setup.status`), con caché de 60 s porque esa lectura paga git; si el conector no
+      contesta, la sección simplemente no sale.
 - [x] **Cierre** — changelog anotado y build del pack lanzada para verificar todo el árbol.
 
 ## Nota de coordenadas
