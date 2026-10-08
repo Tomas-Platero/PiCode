@@ -65,12 +65,12 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   cambia lo que pi puede responder borra también la copia en disco, para que la próxima ventana no
   resucite un catálogo viejo.
 - **El modelo elegido en el asistente es el del chat.** Nadie escribía `chat.defaultModel`: el
-  asistente guardaba el modelo por defecto de pi (y el de los agentes de Gentle AI) en el perfil,
+  asistente guardaba el modelo por defecto de pi en el perfil,
   pero el editor siembra cada conversación nueva desde su propio ajuste, así que el desplegable del
   asistente y el del chat podían discrepar. Ahora la elección se escribe en los dos sitios.
 - **La importación instala los paquetes en una sola pasada.** Antes lanzaba un `npm install` por
   paquete declarado, y cada uno abría su ventana de consola: veinte paquetes, veinte ventanas. Ahora
-  los instala todos en **una** ejecución de npm —como ya hacía la instalación de gentle-ai—, y solo
+  los instala todos en **una** ejecución de npm, y solo
   si esa pasada falla se reintenta paquete a paquete, para que uno malo no tumbe al resto. La barra
   del asistente pasa a tres pasos: copia, paquetes y refresco.
 - **El interruptor on/off de los MCP cambia al instante.** La fila del panel se repintaba con la
@@ -98,13 +98,13 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 ### Changed
 - **El chat ya no pide permiso para lo que PiCode no considera peligroso.** Las sesiones nuevas
   arrancan en **Bypass Approvals** (`chat.permissions.default`), así que la única puerta que
-  pregunta es la de las extensiones del runtime —el guard de comandos destructivos de Gentle AI—.
-  Antes, PiCode pedía permiso por cada `bash`/`edit`/`write` además de lo que pidiera gentle, y el
+  pregunta es la de las extensiones del runtime. Antes, PiCode pedía permiso por cada
+  `bash`/`edit`/`write` además de lo que pidiera el runtime, y el
   dueño veía dos preguntas por el mismo comando. «Default Permissions» sigue a un clic en el
   picker para quien lo quiera.
-- **El About enseña PiCode, pi y Gentle AI.** Se quitan las dos líneas de Copilot
+- **El About enseña PiCode y pi.** Se quitan las dos líneas de Copilot
   (`@github/copilot`, `@github/copilot-sdk`) y en su lugar aparecen `PiCode` (la versión propia),
-  `pi` (el pi en vigor) y `Gentle AI` (solo cuando está instalado). El conector responde las dos
+  `pi` (el pi en vigor). El conector responde las dos
   últimas con el comando `picode.setup.aboutVersions`. De paso, `ElectronBuildId` deja de
   imprimir `undefined`.
 
@@ -132,13 +132,12 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 ### Added
 - **El chat hospeda la UI interactiva de las extensiones de pi.** El conector enlazaba las
   extensiones **sin** contexto de UI (`mode` por defecto `"print"`, `ctx.hasUI === false`), así que
-  una extensión que necesita preguntar —el guard de comandos destructivos de gentle-ai, su tool
-  `ask_user_question`, sus paneles— o bloqueaba con una frase que el modelo solo podía repetir, o
+  una extensión que necesita preguntar —su tool `ask_user_question`, sus paneles— o bloqueaba
+  con una frase que el modelo solo podía repetir, o
   respondía «unavailable». Ahora se enlazan con `mode: "rpc"` y un `uiContext` que traduce
   `ctx.ui.confirm/select/input` al carrusel de preguntas del chat y `ctx.ui.notify` a una línea en
   él; lo de terminal (`custom`, `setWidget`, `setFooter`, `theme`…) queda inerte. Se marca además el
-  proceso con `GENTLE_SHELL_INTERACTIVE_HOST=1`, el contrato de host interactivo que gentle-pi lee
-  (`lib/rpc-host.ts`).
+  proceso con el contrato de host interactivo que el runtime lee (`lib/rpc-host.ts`).
 
 ### Changed
 - **pi sube a `1.0.2` en el pin del editor.** `distribution/runtime.json` pasa de `1.0.1` a
@@ -196,14 +195,6 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   al instalar (la versión directa va fijada por el pin, y ahora también literal en el `package.json`
   del runtime con `--save-exact`), y trae la corrección de seguridad de `brace-expansion`. Detalle
   en `odd/tasks/picode-pi-101.md`.
-- **Gentle AI sube a `gentle-pi` 4.0.0 en el perfil interno.** El paquete que el propio
-  producto instala pasa de 3.7.0 a 4.0.0 (el salto mayor del que se tenía registro). Antes de
-  subir se comprobó el acoplamiento del conector con los contratos de gentle que espeja:
-  `lib/agents-config.ts`, `lib/agent-home.ts` y `lib/orchestrator-presence.ts` son
-  **idénticos** entre 3.7.0 y 4.0.0, y la clave `gentleTodo` (`{tasks, nextId}`) no cambia, así
-  que **el conector no necesita tocar código**. Lo que sí cambia para el usuario: la v4 saca
-  del paquete los **13 agentes del ciclo SDD** y la extensión `sdd-init`, sube las extensiones
-  de 13 a 18 y deja de traer `@earendil-works/pi-tui` (lo aporta el host).
 - **esbuild is back on — at upstream's factory value.** VSCodium had flipped
   `useEsbuildTranspile` to `false` without recording a reason anywhere; PiCode restored it to
   `true` (2026-09-27) and closed the one real gap the route has: the product chain no longer
@@ -236,7 +227,7 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   nodo ya existe en la tarjeta.
 - **«Switching pi…» deja de quedarse pegado.** `applyRuntime` pintaba la frase antes del cambio y no
   la borraba al terminar, así que sobrevivía al repintado y parecía que el cambio no acababa nunca.
-  Ahora se limpia en cuanto la operación responde (como ya hacía el instalador de Gentle).
+  Ahora se limpia en cuanto la operación responde.
 - **La galería de temas deja de ofrecer herramientas con apariencia de tema.** El filtro de Open VSX
   `category=themes` devuelve PowerShell —que sí declara `contributes.themes` («PowerShell ISE»)—, así
   que la comprobación de manifiesto lo dejaba pasar y elegirlo instalaba un depurador y levantaba el
@@ -332,13 +323,12 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 - **Installers join the portables**: Windows setup (`Inno Setup`) plus `.deb` and `.rpm` for
   Linux, with `SHA256SUMS.txt` across every release asset.
 - **First-run setup as a three-step wizard** you can watch: choose the Pi runtime, connect a
-  provider, install Gentle AI — with the buttons that actually look like buttons.
-- **A Gentle install you can watch**, and a chat that reloads it when it finishes.
+  provider, pick packages — with the buttons that actually look like buttons.
 
 ### Fixed
 - The chat follows the Pi instance that is in force, models included.
 - The runtime choice writes the key it registered; Copilot leaves the status bar.
-- Gentle AI installs one package at a time, with npm 11's script gate satisfied in the
+- Packages install one at a time, with npm 11's script gate satisfied in the
   metadata stage.
 - The npm project is created before npm runs against it (setup path).
 - The Linux build heap comes down to 5632 MB; the minifier gets a bigger heap on Windows;
@@ -386,8 +376,8 @@ PiCode owns:
   dual runtime (Pi on `PATH`, managed install, or custom) over RPC or embedded SDK.
 - **Theme gallery** with a preview rendered from each theme's own colours, reachable from the
   palette, the panel and the first-run wizard.
-- **First-run wizard**: runtime choice, Gentle AI switch, theme choice.
-- Pi and Gentle AI pinned and installed through their own mechanisms (ADR-010), with
+- **First-run wizard**: runtime choice, package choice, theme choice.
+- Pi pinned and installed through its own mechanism (ADR-010), with
   `picode.pi.executablePath` as the escape hatch.
 
 ### Known at release
