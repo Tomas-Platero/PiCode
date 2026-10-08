@@ -1,16 +1,16 @@
-# Feature: pi y gentle-ai dentro de «Agent Customizations for Local»
+# Feature: pi dentro de «Agent Customizations for Local»
 
 ## Goal
 
-Que el hub nativo de personalizaciones muestre **lo que pi y gentle-ai ya tienen** en disco
-—skills, agentes, prompts, paquetes— sin reimplementar ninguna de las dos cosas y sin
-duplicar ficheros, y **sin una extensión que lo haga**.
+Que el hub nativo de personalizaciones muestre **lo que pi ya tiene** en disco
+—skills, agentes, prompts, paquetes— sin reimplementarla y sin duplicar ficheros, y
+**sin una extensión que lo haga**.
 
 > **Corrección de rumbo (decidida por el dueño).** La vía de esta feature **no** es que una
 extensión registre `chat.registerChatSessionCustomizationProvider`. El **host de agentes del
 core ya descubre personalizaciones él solo**
 (`src/vs/platform/agentHost/node/copilot/sessionCustomizationDiscovery.ts`), con una tabla
-fija de directorios. Conectar pi y gentle-ai es **extender esa tabla**, que es core y no
+fija de directorios. Conectar pi es **extender esa tabla**, que es core y no
 necesita extensión ninguna. Las tareas H1–H6 de abajo quedan **sustituidas** por D1–D3.
 
 ## Hallazgo que ordena todo (D3, ya auditado)
@@ -30,45 +30,10 @@ Servers, Plugins; Tools oculto en Local). Un tipo custom no crea sección nueva,
 catálogo de **proveedores** no cabe aquí: necesita otra superficie (ver la feature de
 proveedores).
 
-## Mapa de gentle-ai (gentle-pi v4.0.0, medido en el paquete local)
-
-> Re-medido el 2026-10-02 sobre la v4.0.0; la primera medición de este mapa fue la 3.7.0.
-> El salto mayor se llevó los 13 agentes del ciclo SDD de `assets/agents/` y la extensión
-> `sdd-init`; las cifras de las filas de abajo son las de la 4.0.0.
-
-Ojo con el repositorio: `github.com/Gentleman-Programming/gentle-ai` es el **CLI en Go** que
-instala; el **paquete de pi** es `gentle-pi` (marca *gentle-shell*). Manda el paquete local.
-
-Se carga desde la clave `pi` de su `package.json`: `extensions`, `themes`, `prompts`,
-`skills`. **No** declara `commands`, `mcp` ni `hooks`.
-
-| Sección del hub | Qué de gentle-ai encaja | Desajuste |
-| --- | --- | --- |
-| **Skills** | `skills/*/SKILL.md` — 12 skills (`gentle-ai`, `branch-pr`, `chained-pr`, `cognitive-doc-design`, `comment-writer`, `issue-creation`, `judgment-day`, `rdd-defect-workflow`, `skill-creator`, `skill-improver`, `skill-registry`, `work-unit-commits`) | Limpio. `_shared/review-ledger-contract.md` **no** es una skill |
-| **Agents** | `assets/agents/*.md` — **10**: 3 de delegación, 4 lentes de review, 3 de Judgment Day. El ciclo SDD **ya no viene como agentes** | **No** están en la clave `pi`: los instala el CLI en `~/.pi/agent/agents/`. Queda 1 *chain* (`assets/chains/4r-review.chain.md`), que es otro tipo de pi y **no tiene sección** |
-| **Instructions** | `assets/orchestrator*.md` (5), `sdd-orchestrator-workflow.md`, el contrato espejado | **No** son ficheros que pi descubra: los **inyecta en runtime** `gentle-ai.ts`. Un hub puede mostrarlos, no gobernarlos |
-| **Prompts** | `prompts/skill-creation.md` | Limpio |
-| **Hooks** | — | **No hay ficheros**: todo es `pi.on(...)` dentro de 18 extensiones. Se pueden mostrar, no registrar |
-| **MCP Servers** | — | **Ninguno**. Llegan por paquetes compañeros (`pi-mcp-adapter`, `gentle-engram`) editados en `settings.json` |
-| **Plugins** | el propio paquete npm + deps (`@heyhuynhgiabuu/pi-pretty`) + el binario nativo | Sin manifiesto por plugin: la unidad es el paquete npm |
-
-**Sin sección en el hub**: `themes/` (3 temas), `contracts/`, `docs/`, `lib/`, `runtime/`,
-`scripts/`, `assets/migrations/`, el binario `.gentle-ai/v4.0.0/gentle-ai.exe`.
-
-### Lo que gentle-ai espera del host
-
-- pi ≥ 1.0.0 y Node ≥ 22.19.0. En Windows **compila su binario Go en el postinstall** (Go 1.25.10+); macOS y Linux descargan un archivo firmado.
-- Homes: `GENTLE_PI_AGENT_HOME` → `PI_CODING_AGENT_DIR` → `~/.pi/agent`; config en
-  `~/.pi/gentle-ai`.
-- Estado que escribe: `~/.pi/gentle-ai/{models,profiles,persona,background-subagents,double-esc-cancel}.json`,
-  `~/.pi/agent/subagents.json` o `.pi/subagents.json`, `openspec/config.yaml`,
-  `.atl/skill-registry.md`.
-- CLI propio en `.gentle-ai/v4.0.0/gentle-ai[.exe]`, **nunca** desde el PATH.
-
 ## Decisions
 
-1. **Se muestra lo que existe; no se copia nada.** El hub lee de las rutas donde pi y
-   gentle-ai ya escriben. Duplicar ficheros crearía dos fuentes de verdad.
+1. **Se muestra lo que existe; no se copia nada.** El hub lee de las rutas donde pi ya
+   escribe. Duplicar ficheros crearía dos fuentes de verdad.
 2. **Se reutiliza `discoverSkills()`** (`src/skills.ts`, que ya distingue fuentes `pi`,
    `package` y `project`) en vez de escribir un segundo descubridor.
 3. **Los desajustes se declaran, no se disfrazan.** Las *chains* y los temas no tienen
@@ -100,17 +65,17 @@ mentir sobre su tipo.
 
 - [x] D1 Añadir las raíces de pi a la tabla: `.pi/agents`, `.pi/skills` (proyecto) y
       `~/.pi/agent/agents`, `~/.pi/agent/skills` (usuario).
-- [ ] D2 Verificar en ejecución que el hub lista los agentes de gentle-ai (23 en
-      `~/.pi/agent/agents`).
-- [ ] D3 Las **skills de paquete** (las 13 de gentle-ai, y las de cualquier `pi install`)
+- [ ] D2 Verificar en ejecución que el hub lista los agentes de pi
+      (`~/.pi/agent/agents`).
+- [ ] D3 Las **skills de paquete** (las de cualquier `pi install`)
       viven en `~/.pi/agent/npm/node_modules/<paquete>/skills`, que la tabla no puede
       expresar porque no hay globs. Necesita una raíz nueva que lea la lista de paquetes de
       pi, o una tabla con glob. **Es el hueco que queda.**
 
 ### Por qué D1 importa más de lo que parece
 
-Además de las rutas de pi, esta tabla es la que hace que un harness como gentle-ai sea
-visible **sin que gentle-ai tenga que saber nada del editor**: su instalador ya deja sus 23
+Además de las rutas de pi, esta tabla es la que hace que un harness instalado sea
+visible **sin que él tenga que saber nada del editor**: su instalador ya deja sus
 subagentes en `~/.pi/agent/agents`, así que basta con que el core mire ahí. Cero código en
 la extensión, que es exactamente lo pedido.
 

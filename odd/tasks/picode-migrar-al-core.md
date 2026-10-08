@@ -41,7 +41,7 @@ Así que el conector de pi es una **extensión del core**, en `vscode/extensions
 - **Ya migrado al core**: la sesión de pi (`platform/agentHost/node/pi/piSession.ts`), la
   traducción de sus eventos a acciones del protocolo (`piActionMapping.ts`), el ajuste de
   proveedores bajo el nodo Chat (`contrib/picode/browser/picodeConfiguration.ts` + el nodo
-  del árbol de ajustes) y el descubrimiento de personalizaciones de pi y gentle-ai
+  del árbol de ajustes) y el descubrimiento de personalizaciones de pi
   (`sessionCustomizationDiscovery.ts`).
 
 ## Por qué no se ha borrado el directorio todavía
@@ -59,7 +59,7 @@ origen hasta que la migración copie lo que sirve.
       `registerLanguageModelChatProvider` es API **estable** y sin guarda de permiso. Es la
       respuesta a «conecto omni y no veo los modelos».
 - [ ] M3 **Ajustes de PiCode en el core**, dentro de Chat y Agente, no bajo Extensions.
-- [ ] M4 **Habilidades de paquete** (las 13 de gentle-ai) en el descubrimiento del core — hoy
+- [ ] M4 **Habilidades de paquete** en el descubrimiento del core — hoy
       la tabla de directorios no sabe expresar `~/.pi/agent/npm/node_modules/<paquete>/skills`.
 - [ ] M5 **El asistente de primer arranque**, en el core.
 - [ ] M6 **Borrar `extensions/picode-pi-chat`** cuando no quede nada por migrar.

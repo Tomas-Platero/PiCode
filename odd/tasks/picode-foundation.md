@@ -3,8 +3,8 @@
 ## Goal
 
 Establish the foundation of PiCode: a lightweight, rebranded VS Code distribution
-(based on VSCodium) for Windows that ships with the pi coding agent and gentle-pi
-(Gentle AI) integrated as first-class built-in experiences.
+(based on VSCodium) for Windows that ships with the pi coding agent integrated as a
+first-class built-in experience.
 
 ## Decisions (locked)
 
@@ -16,7 +16,7 @@ Establish the foundation of PiCode: a lightweight, rebranded VS Code distributio
 | Platform (MVP) | Windows | Matches the development machine; allows local iteration and validation before multi-OS CI |
 | Distribution depth | Layer on VSCodium **without compiling** (ADR-008) | A fork build needs Python 3.11, rustup, jq and MSVC Build Tools — none present — plus ~40-60 GB and 30-90 min builds and patch rebasing per upstream release. The fork path is deferred, not rejected |
 | Panel behaviour | Opt-in, never auto-opened (ADR-009) | Predictability and non-intrusiveness; an agent-first editor still has to be a good editor |
-| pi version | Pin and ship pi and gentle-pi (ADR-010) | Reproducibility across users, with a setting to override |
+| pi version | Pin and ship pi (ADR-010) | Reproducibility across users, with a setting to override |
 
 ## Verified integration surface
 
@@ -32,8 +32,6 @@ These facts were verified directly against the local installation
 - SDK: `createAgentSession`, `ModelRuntime`, `SessionManager`, `AgentSession.subscribe`
   from `@earendil-works/pi-coding-agent` (`docs/sdk.md`).
 - Package entrypoints: `bin.pi = dist/bundle/cli.js`, plus `./rpc-entry` and `./client` exports.
-- gentle-pi is a native Go binary (`%USERPROFILE%\go\bin\gentle-ai`), invoked with
-  subcommands such as `gentle-ai review mode status`.
 
 ## Tasks
 
@@ -112,7 +110,7 @@ commit is attributed to this task.
       installed."); `codium --list-extensions` returns exactly
       `picode.picode-pi-chat`
 - [x] Default settings written to `%APPDATA%\VSCodium\User\settings.json`
-- [x] pi `0.86.1` and gentle-pi `3.3.0` reported as already installed and skipped
+- [x] pi `0.86.1` reported as already installed and skipped
 - [x] **Branding confirmed at runtime:** `codium --help` prints
       `PiCode — Agentic Code Editor 1.126.04524` as its first line, which is the
       overlay's `nameLong`; the same output's usage line still reads
@@ -123,7 +121,7 @@ commit is attributed to this task.
 
 - [x] One Conventional Commit per task, on `feat/picode-foundation`
 
-## Verified fact map (pi / gentle-pi)
+## Verified fact map (pi)
 
 Produced by a read-only reconnaissance pass over the installed packages. These
 facts were verified against files on this machine and constrain the design.
@@ -142,31 +140,13 @@ facts were verified against files on this machine and constrain the design.
   built-in MCP. This confirms that RPC is the only editor-integration surface,
   which validates ADR-003.
 - Confirmed **absent**: any existing pi extension that integrates an editor, and
-  any `vscode` reference in the pi or gentle-pi sources. PiCode would be first.
+  any `vscode` reference in the pi sources. PiCode would be first.
 - Flag parser: `dist/cli/args.js`; extensions may register additional flags.
 
-### gentle-pi (3.3.0) and the `gentle-ai` binary
-
-- gentle-pi is a **Pi package**, not a CLI: its behaviour lives in
-  `gentle-pi/extensions/*.ts` loaded through the package's `pi` manifest.
-- The CLI is the Go binary `gentle-ai.exe`, version **3.4.0**, and it is
-  **bundled inside the gentle-pi npm package** at `.gentle-ai/v3.4.0/gentle-ai.exe`
-  (the installer pins `INSTALLER_VERSION = "3.4.0"`). A second copy currently
-  sits on `PATH` at `%USERPROFILE%\go\bin\gentle-ai.exe`.
-  **Implication for distribution**: PiCode can depend on the gentle-pi package and
-  ship the binary itself, instead of requiring users to install Go tooling.
-- Command space: `gentle-ai sync`, `gentle-ai review mode status|enable|disable`,
-  `gentle-ai review assess|reclaim|recover|capture-unachievable`,
-  `gentle-ai telemetry ...`, `gentle-ai canon`, `gentle-ai runtime`.
-- Slash commands registered by its extensions: `/gentle:status`, `/gentle:doctor`,
-  `/gentle:review-mode`, `/gentle:models`, `/gentle:profiles`, `/gentle:persona`,
-  `/gentle:telemetry`, `/gentle:background-subagents`, `/gentle:install-*`,
-  `/gentle:sdd-preflight`.
-
 **Implication for the panel**: the RPC `get_commands` call already returned 118
-commands in live testing, which includes these slash commands. The panel can
-offer them as first-class actions without learning anything about gentle-pi
-specifically — the discovery path is generic.
+commands in live testing, which includes slash commands from installed packages.
+The panel can offer them as first-class actions without learning anything about
+any specific package — the discovery path is generic.
 
 ## Open questions
 

@@ -30,7 +30,7 @@ bringing a newer VS Code is a merge against `picode-source/` and nothing else ha
 │ 3. Agent layer        the native chat, modified in the core,     │
 │                       speaking to pi (RPC + CLI)                 │
 ├──────────────────────────────────────────────────────────────────┤
-│ 2. Extension layer    the agent runtime (pi, gentle-pi), the     │
+│ 2. Extension layer    the agent runtime (pi), the                │
 │                       trimmed built-in extensions, Open VSX      │
 ├──────────────────────────────────────────────────────────────────┤
 │ 1. Editor layer       the owned source tree in picode-source/    │
@@ -68,10 +68,9 @@ Two properties of the layer shape everything above it:
 ### Layer 2 — Extensions
 
 - **The agent runtime**: `pi` is pinned in `distribution/runtime.json` and installed into
-  the pack by `dev/pi-runtime.sh`; `gentle-pi` is a pi package the connector installs into
-  the internal profile's npm project (its source of truth is npm, once the script gate is
-  approved). Both are executables the agent layer talks to, decoupled from the editor so
-  they update independently. Which one runs is the owner's choice (`picode.pi.runtime`).
+  the pack by `dev/pi-runtime.sh`. It is an executable the agent layer talks to, decoupled
+  from the editor so it updates independently. Which one runs is the owner's choice
+  (`picode.pi.runtime`).
 - **The built-in extensions**: the trimmed set the source tree ships (language
   colorizers for every language, `git`, TypeScript, JSON/HTML/CSS language features,
   markdown preview without mermaid, `emmet`, themes, the `picode` connector).
@@ -92,8 +91,7 @@ open work; the task board (`docs/TAREAS.md`) tracks it.
 pi is spoken to two ways, and the contract below is the stable part of this layer:
 **RPC** (`pi --mode rpc`, JSONL over stdin/stdout) for the session, and the **CLI** of
 the *active runtime* for everything the protocol does not expose — package management
-(`pi install`, `remove`, `update`, `list`) and Gentle AI's own surface (`review mode`,
-`telemetry`, `doctor`).
+(`pi install`, `remove`, `update`, `list`).
 
 **Framing (strict).** Records are delimited by LF (`\n`) **only**. Unicode line
 separators (`U+2028`, `U+2029`) are legal inside JSON strings, so Node's `readline` is

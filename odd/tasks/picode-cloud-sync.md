@@ -1,6 +1,6 @@
 # Cloud Sync — Cuenta PiCode y sincronización en la nube (Firebase)
 
-> Servicio de pago que se vende: sincronizar la configuración completa de PiCode + Pi + Gentle AI
+> Servicio de pago que se vende: sincronizar la configuración completa de PiCode + Pi
 > entre instalaciones del editor y una cuenta en nuestra web. PiCode sigue siendo 100% gratuito.
 > Referencias: AGENTS.md §6 (modelo de negocio y nube). Investigación previa guardada en memoria
 > (observación #119, topic_key `picode-cloud-sync`).
@@ -399,14 +399,14 @@ Cloud Functions descartadas por requerir plan Blaze).
      §4 (PiCode no lee ni escribe `~/.pi`; pi resuelve su perfil externo por sí solo). FIX en el
      núcleo (`piProfileSync.ts`): el recurso apunta a **`<dist>/data/pi-agent`**, el perfil propio
      que el extension host y el agent host ya resuelven (`distributionRoot` + `data/pi-agent`,
-     `dev/build.sh` lo crea y gentle-pi se instala ahí). Se resuelve por `process.execPath`
+     `dev/build.sh` lo crea). Se resuelve por `process.execPath`
      (`dirname` = raíz de la distribución) con guarda `/picode/i`, igual que
      `sessionCustomizationDiscovery.ts`; en desarrollo/tests cae a
      `<userData>/../pi-agent`, que es el mismo layout portable. Se añadió además una línea de log
      `Found N pi profile file(s) to consider under <ruta>`: el bundle del perfil externo que quedó
      en `User/sync/piProfile/lastSyncpiProfile.json` contenía **solo los 5 ficheros raíz** pese a
      que `~/.pi/agent` tenía 162 ficheros en las carpetas sincronizadas (agents/skills/memory/
-     chains/gentle-ai) — el siguiente arranque con este cambio lo evidencia en el log en vez de
+     chains) — el siguiente arranque con este cambio lo evidencia en el log en vez de
      fallar en silencio. Verificación de que el walk funciona: reproducido el algoritmo real con
      el `FileService`+`DiskFileSystemProvider` compilados sobre `~/.pi/agent` → 167 candidatos/162
      de carpetas, así que el cero observado apunta a la ruta/perfil usado en runtime, que es

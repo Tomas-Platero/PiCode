@@ -15,7 +15,7 @@ desmontar.
 > | --- | --- |
 > | Contexto del editor (proyecto, fichero abierto, selección, problemas, diff) | El chat del core |
 > | Estadísticas de pi (modelo, tokens, coste, presión de contexto) | El chat del core |
-> | Comandos de pi y de gentle-pi como acciones | El chat del core |
+> | Comandos de pi como acciones | El chat del core |
 > | Sesiones: listar, retomar, bifurcar, compactar | El chat del core |
 > | La interfaz de referencia con estimación de coste y quitables | El chat del core |
 >
@@ -161,7 +161,7 @@ Commit: pending
 
 ### 4. Command and session surface
 
-The `get_commands` catalogue (pi and gentle-pi slash commands) as first-class
+The `get_commands` catalogue (pi slash commands) as first-class
 actions, plus session list/resume/fork/compact.
 
 - [ ] `get_commands` catalogue exposed as first-class actions

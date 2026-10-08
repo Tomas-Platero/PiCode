@@ -5,8 +5,8 @@
 
 ## Puntos pedidos (frases del dueño, resumidas)
 
-1. Notificación (abajo a la izquierda) cuando pi o Gentle-AI tengan actualizaciones —
-   packages, el propio pi o gentle — con botón para actualizar. Antes de actualizar,
+1. Notificación (abajo a la izquierda) cuando pi o sus packages tengan actualizaciones —
+   con botón para actualizar. Antes de actualizar,
    parar sesiones; después, refrescar.
 2. Packages: tabla en vez de lista, con deshabilitar al momento y/o borrar. Pi interno o externo.
 3. MCP Servers: 3.1 «Extensions» pasa a «Servers». 3.2 Editar/quitar cualquier MCP
@@ -15,7 +15,7 @@
 4. Skills: 4.1 «Generate Skill» pasa a ser un único botón «Browse Skill» → `https://www.skills.sh/`.
    4.2 La lista «Plugins» pasa a «Packages». 4.3 El popup dice «Uninstall Skill».
    4.4 Fuera el botón «Install Chat Customization Extension».
-5. Agents: 5.1 Solo agentes de Gentle-AI, sin categorías. 5.2 Fuera el botón de generar/añadir.
+5. Agents: 5.1 Solo agentes de pi, sin categorías. 5.2 Fuera el botón de generar/añadir.
    5.3 Fuera «Install Chat Customization Extension»; quedan los otros 2.
 6. Overview: fuera «Customize Your Agent».
 7. Chat: fuera «Agente» (el modo).
@@ -51,15 +51,14 @@
 ### P1 — no existe ningún mecanismo de comprobación de actualizaciones
 - Versión de pi interno: `onboarding.ts:571` lee el `package.json` de la copia fijada.
 - Versión de pi externo: `onboarding.ts:585` ejecuta `<cli.js> --version`.
-- Versión de Gentle-AI: `onboarding.ts:562` lee `<perfil>/npm/node_modules/gentle-pi/package.json`.
 - Packages instalados con versión: `packages-data.ts` (manifests en disco).
 - Última versión publicada: el propio catálogo npm que ya usa `packages-registry.ts`
-  (`https://registry.npmjs.org/...`; para pi y gentle: `<pkg>/latest`).
+  (`https://registry.npmjs.org/...`; para pi: `<pkg>/latest`).
 - pi CLI trae la maquinaria de actualización hecha: `pi update [--self|--extensions|--all]`,
   `pi remove <source>`, `pi install <source>`.
 - «Parar sesiones»: pi corre **en proceso** (import ESM en el extension host); no hay proceso
   que matar. El gancho ya existe: `resetChatSession()` (`agent.ts:626`, `:821`), usado hoy
-  cuando se instala/quita Gentle. Tras actualizar el runtime hace falta **recargar la
+  cuando se instala/quita un paquete. Tras actualizar el runtime hace falta **recargar la
   ventana** para que el ESM recargado entre en el host.
 - Posición de las notificaciones: el workbench pinta los avisos donde pinta los avisos
   (abajo a la derecha por defecto, no configurable por producto). Lo que sí es nuestro:
@@ -107,7 +106,7 @@
 - «Install Chat Customization Extension»: `aiCustomizationManagement.contribution.ts:425-435`
   y `:464-475`. Fuera (Skills y Agents).
 - Agents, categorías: grupos Workspace/User/Plugins/Extensions/Built-in en
-  `aiCustomizationListWidget.ts:1374-1378`. Los agentes de Gentle-AI llegan del conector
+  `aiCustomizationListWidget.ts:1374-1378`. Los agentes de pi llegan del conector
   (`customizations.ts`, raíces `<perfil>/agents|subagents`; proveedor en `extension.ts:559`).
   Para Agents: solo esos, sin cabeceras de grupo.
 - Overview, «Customize Your Agent»: banner en `aiCustomizationWelcomePagePromptLaunchers.ts:147-244`
@@ -131,7 +130,7 @@
 
 - D1 · P1: notificación estándar + elemento de barra de estado abajo-izquierda; la posición
   de los avisos del workbench no se toca.
-- D2 · P1: tras actualizar el runtime de pi o Gentle, se pide recargar la ventana (botón
+- D2 · P1: tras actualizar el runtime de pi o un paquete, se pide recargar la ventana (botón
   «Reload») porque el ESM del host no se recarga en caliente.
 - D3 · P2: la deshabilitación es del conector (pi no la soporta en 0.87.1); el paquete sale
   del array `packages` y se recuerda para poder reactivarlo.
@@ -150,7 +149,7 @@
 | U3 | MCP Servers: «Servers», editar/quitar, mcp.directory, sistema vscode | 3 |
 | U4 | Packages: tabla con Disable/Enable/Uninstall (conector + núcleo) | 2 |
 | U5 | Skills: Browse Skill, «Packages», «Uninstall Skill», fuera el botón de extensión | 4 |
-| U6 | Agents: solo Gentle-AI sin categorías, fuera generar; Overview sin «Customize Your Agent» | 5, 6 |
+| U6 | Agents: solo agentes de pi sin categorías, fuera generar; Overview sin «Customize Your Agent» | 5, 6 |
 | U7 | Chat: fuera el modo «Agente»; MCP siempre activos en las tools | 7, 8 |
 | U8 | Notificaciones de actualización con botón Update (conector) | 1 |
 

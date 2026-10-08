@@ -235,7 +235,7 @@ feature. A first-run invitation — a one-time, dismissible prompt that points a
 the command without opening the panel — is recorded as future work; it is not
 part of this decision and is not implemented.
 
-## ADR-010 — Pin and ship pi and gentle-pi rather than using the user's PATH
+## ADR-010 — Pin and ship pi rather than using the user's PATH
 
 **Status:** accepted.
 
@@ -248,15 +248,13 @@ between pi releases (ADR-007 records a corrected assumption that came directly
 from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
-PiCode therefore pins the runtime it is verified against: pi `1.0.0` and
-gentle-pi `4.0.0`. Neither pin requires toolchains the user does not have — pi
-requires Node `22.19.0` or newer, and the `gentle-ai` CLI is a binary bundled
-inside the gentle-pi package (a prebuilt archive on macOS and Linux; a Go source
-build on Windows, which the machine running PiCode is expected to have).
+PiCode therefore pins the runtime it is verified against: pi `1.0.0`. The pin
+requires Node `22.19.0` or newer, which the machine running PiCode is expected to
+have.
 
-**Decision:** PiCode pins and ships its own pi and gentle-pi, and installs them
-through their own supported mechanisms (`npm install -g` for pi, `pi install` for
-gentle-pi), instead of resolving them from the user's `PATH`.
+**Decision:** PiCode pins and ships its own pi, and installs it through its own
+supported mechanism (`npm install -g`), instead of resolving it from the user's
+`PATH`.
 
 The pin is not a lock-in: the extension setting `picode.pi.executablePath` lets a
 user point PiCode at a different pi binary.

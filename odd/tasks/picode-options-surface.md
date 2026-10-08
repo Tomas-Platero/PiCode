@@ -32,7 +32,7 @@ Decoded:
 
 `menu.ts` walks the owner through `showQuickPick` levels: categories, then the
 settings inside one, then a value picker. It also lists things that are not
-settings at all — installed extensions, providers, the Gentle AI state, usage and
+settings at all — installed extensions, providers, usage and
 the session list — because a quick pick was the only surface available.
 
 `ajustes-view.ts` is a sidebar card that renders the same category rows.
@@ -78,7 +78,7 @@ against a running pi (`withLock`).
 | Writes | `SettingsManager` setters only | The file belongs to pi; the typed API is pi's own write path |
 | Styling | Only `--vscode-*` variables, the codicon set already vendored | Same rule as the chat panel: any theme works, no palette of our own |
 | Entry points | `picode.piChat.menu`, the sidebar card, and the panel's gear button all open the tab | One destination; the old quick picks stop being a parallel universe |
-| Health | Read-only "Estado" category keeps what the quick pick showed (version, runtime, transport, providers, packages, sessions, usage, Gentle AI) | Those are facts, not settings, and losing them would be a regression |
+| Health | Read-only "Estado" category keeps what the quick pick showed (version, runtime, transport, providers, packages, sessions, usage) | Those are facts, not settings, and losing them would be a regression |
 | Actions | Rows with a button, in the same list as the settings they relate to | Installing an extension belongs next to the extension paths, not in a separate menu |
 
 ## Tasks

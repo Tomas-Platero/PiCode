@@ -21,6 +21,11 @@ cambiar la rama por defecto habría tumbado todos los updaters. El sello lo hace
 (`PICODE_CHANNEL` escribe `quality` **y la rama del `updateUrl`**), y falla en voz alta si el
 `updateUrl` del delta no tiene forma que él sepa apuntar.
 
+**Y una rama lleva SOLO el feed de su canal.** Nada de `updates/stable/…` copiado en `beta` o en
+`experimental`: un feed en la rama equivocada no es inofensivo, es un fichero que parece el del
+canal y no lo es, y es lo primero que pisaría un merge entre canales. Pasó el 2026-10-08 al
+unificar las tres ramas (el feed estable se vino a las tres) y se corrigió el mismo día.
+
 **El nombre `rc` no existe** como canal: se retiró el 2026-10-08. El canal estable se llama
 `stable` en todas partes — el generador de feeds (`dev/update-feed.mjs`) y el sellado de la
 build (`dev/build.sh`, `PICODE_CHANNEL=stable|beta|experimental`) ya no aceptan `rc`.

@@ -1,7 +1,7 @@
 # Auditoría de ajustes — qué sirve, qué sobra, y cómo se actualiza PiCode
 
 > Auditoría pedida por el dueño (2026-09-28): revisar TODOS los ajustes, ver qué no se
-> puede usar con pi / gentle, qué quitar, y explicar la historia de actualizaciones.
+> puede usar con pi, qué quitar, y explicar la historia de actualizaciones.
 > Solo análisis y decisiones registradas; la ejecución vendrá después, decidida cosa por cosa.
 
 ## El resumen que importa
@@ -47,7 +47,7 @@ la auditoría (todo tiene file:line en el informe fuente). `chat.agent.enabled`,
   Candidato: apuntar el fetch al markdown de nuestro propio release o quitar el fetch y
   dejar solo el enlace.
 
-## (C) Se queda — funciona con pi/gentle
+## (C) Se queda — funciona con pi
 
 `picode.*` (los siete nuestros + `picode.updates.check`), `chat.agent.enabled`
 (load-bearing), `chat.disableAIFeatures`, `chat.editor.*`/fuentes, `chat.mcp.access/*`

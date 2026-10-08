@@ -46,14 +46,10 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 ### Los iconos
 >
-> *"Tengo un svg para el menú de la izq para gentle-ai"*
-> *"Es una rosa, es el logo de gentle-ai"*
->
 > *"lo de la rosa cambialo por el de picode"* — 2026-10-01
 
-* **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor). El registro decía antes que ahí iba la rosa; el dueño lo corrigió el 1 de octubre.
-* **La rosa es de Gentle AI** y se usa **donde aparece Gentle AI**: la fila *Gentle AI* del panel de estado (`extensions/picode/media/gentle-ai.svg`).
-* **Las dos marcas viven en el conector** (`picode-source/extensions/picode/media/`) y cada una lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
+* **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor).
+* **La marca vive en el conector** (`picode-source/extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
 > *"El logo que cambiamos en el centro de la pantalla... no uses el png usa el svg"*
@@ -68,7 +64,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"y ya no es SDD es ODD"*
 
-* La metodología de la capa Gentle AI es **ODD (Organic Driven Development)**. SDD es solo una rama dentro de ODD.
+* La metodología del proyecto es **ODD (Organic Driven Development)**. SDD es solo una rama dentro de ODD.
 * En el texto visible para el dueño, «SDD» no se usa como nombre del método global. Sus comandos y artefactos específicos sí conservan su nombre.
 
 ---
@@ -121,11 +117,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 ## 6. Modelo de Negocio y Nube
 
 ### El programa es gratis; lo que se vende es la nube
->
-> *"el servicio que voy a vender no es el programa de picode, este será gratuito 100%, si no la posibilidad de guardar toda configuración, ya sea de picode, pi o gentle en la nube"*
 
 * **PiCode es 100% gratuito y completo:** No hay funciones recortadas ni dependencia de la nube para su funcionamiento local.
-* **Valor comercial:** Sincronización y respaldo en la nube de toda la configuración (PiCode, Pi y Gentle AI) como un único bloque.
+* **Valor comercial:** Sincronización y respaldo en la nube de toda la configuración (PiCode y Pi) como un único bloque.
 * **Unidad de perfil:** Toda la configuración vive en un perfil interno propio que se sube/baja como una unidad aislada.
 * **Seguridad de credenciales:** `auth.json` y tokens requieren cifrado y consentimiento explícito del usuario antes de subir a la nube.
 
@@ -167,11 +161,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Explicación funcional de errores: qué significa la falla (ej. "no se pudo conectar"), no la causa en el código.
 
 ### La ventana de gestión del chat habla de pi, no de Copilot
->
-> *"Necesito que esta ventana contenga las cosas de pi y gentle-ai ejemplo: Agents - Agentes de Gentle. Skills - Skills tanto en pi, proyecto y gentle-ai. Instructions - esto quitalo. Prompts - Esto quitalo. Hooks - Esto quitalo (pi no tiene hooks). MCP Servers - Lista de servidores mcp de pi. Plugins - Listado de Packages de Pi."*
 
 * La página **«Agent Customizations»** del chat debe listar los elementos reales del runtime pi (perfil en fuerza), no los de las convenciones de GitHub/Copilot.
-* **Agents**: los agentes de Gentle/pi. **Skills**: las de pi, las del proyecto y las de gentle-ai. **MCP Servers**: los servidores mcp de pi. **Plugins**: los paquetes instalados de pi.
+* **Agents**: los agentes de pi. **Skills**: las de pi y las del proyecto. **MCP Servers**: los servidores mcp de pi. **Plugins**: los paquetes instalados de pi.
 * **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejeta de la página.
 
 ---
@@ -186,7 +178,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-24** · Confirmado que **no existe extensión propia**: todo el desarrollo va dentro del núcleo del editor.
 * **2026-09-25** · Regla de UI: La pantalla muestra acciones y estados (*Built*, *Stop build*), no explicaciones de funcionamiento interno.
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
-* **2026-09-27** · Regla de los iconos: la rosa y la marca de agua cambian de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasan al núcleo (`picode-source/.../contrib/picode/browser/media/`). La intención —la rosa de la izquierda, el dibujo de trazos en el editor vacío— no cambia.
-* **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi/gentle (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
-* **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). La rosa sigue siendo el logo de Gentle AI y se usa donde aparece Gentle AI (su fila del panel de estado). Se añade que cada marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
+* **2026-09-27** · Regla de los iconos: la marca de agua cambia de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasa al núcleo (`picode-source/.../contrib/picode/browser/media/`). El dibujo de trazos del editor vacío no cambia.
+* **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
+* **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.

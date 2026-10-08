@@ -87,7 +87,7 @@ the external profile has not been written to.
 ### The safety rule that orders all of it
 
 **The internal profile is never switched on empty.** An internal instance with no
-credentials cannot talk to a model, and with no packages it has no Gentle AI, no skills and
+credentials cannot talk to a model, and with no packages it has no skills and
 no MCPs — that is not isolation, it is a broken editor. So: import first, or start from
 scratch **on purpose** and say so, and only then move the profile. This is a rule, not a
 preference, and the feature document states it because the obvious order is the wrong one.
@@ -116,14 +116,14 @@ is what will eventually make an empty internal profile a first-class start.
 ### The first run must not require a terminal
 
 The owner's words: "mi idea era que el wizard de primer arranque (elegir tipo de pi +
-activar gentle-ai) funcione todo dentro del editor, sin pasar por terminal", and "asegurarnos
+activar paquetes) funcione todo dentro del editor, sin pasar por terminal", and "asegurarnos
 de que el wizard no dependa de hacer login por terminal como paso intermedio".
 
 The wizard asks two questions and installs what the answers name. It has to be completable
 **entirely inside the editor**, so no path through it may end in "now run this command in a
 terminal":
 
-- bringing Gentle AI in, and installing and updating the internal pi, already happen in the
+- installing and updating the internal pi already happens in the
   editor through the existing install path;
 - an external profile's configuration arrives through the import (slice 2);
 - **credentials for an empty internal profile are the one case that still needs the bridge**
@@ -234,7 +234,7 @@ as evidence.
     peligro es real y está vivo en esta máquina**: `runtime` es `managed`, el perfil interno
     (`<distribución>/data/pi-agent`) **no existe**, y T4a ya apunta ahí las instalaciones de
     paquetes. Con el perfil interno vacío, la instancia gestionada se queda **muda**: sin
-    credenciales, sin paquetes, sin gentle-ai.
+    credenciales, sin paquetes.
     La decisión va **en el resolutor, no en un llamador**: `instanceProfile()` solo responde
     el perfil interno cuando ese perfil **sirve**; si no, responde el de la máquina con
     `owned: false`, que es exactamente el comportamiento de hoy. Así **todos** los que lanzan
