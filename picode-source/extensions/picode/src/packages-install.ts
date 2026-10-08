@@ -106,7 +106,7 @@ function exactPin(spec: string): string | undefined {
  * `<npmRoot>/<name>`, a git one checks out to `<gitRoot>/<host>/<path>`, a local one is
  * resolved in place. A declaration that is already installed is `present` — except an exact
  * pin whose installed version differs, which is reinstalled here so pi never does it with its
- * own window. Left-behind packages (Gentle's) are never installed, and an unsafe spec is
+ * own window. Left-behind packages are never installed, and an unsafe spec is
  * refused with a line rather than passed to npm's shell.
  */
 export function scanDeclaredPackages(

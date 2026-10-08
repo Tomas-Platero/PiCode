@@ -302,7 +302,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// removed these declarations from the settings it brought over and nothing below
 				// will install them, so the log is the only place that says where they went.
 				for (const reference of leftBehind) {
-					logImport(`Left ${reference} behind: it belongs to Gentle, which this editor no longer carries. It was not installed, and its declaration was not copied.`);
+					logImport(`Left ${reference} behind: this editor does not carry it. It was not installed, and its declaration was not copied.`);
 				}
 				// Packages: the settings copy carries the declarations, but the packages' files
 				// stay in the external profile's npm tree. Install each declared source into
@@ -335,7 +335,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 					// way the answer is the same: nothing installs it here.
 					if (isLeftBehindPackage(source)) {
 						packagesSkipped += 1;
-						logImport(`Left ${source} behind: it belongs to Gentle, which this editor no longer carries. It was not installed, and its declaration was not copied.`);
+						logImport(`Left ${source} behind: this editor does not carry it. It was not installed, and its declaration was not copied.`);
 						continue;
 					}
 					const spec = npmInstallSpec(source);

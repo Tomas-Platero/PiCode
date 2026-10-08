@@ -6,26 +6,26 @@
 /**
  * The packages an import from an external pi leaves behind.
  *
- * This branch carries no Gentle integration — it was taken out of the product (commit
- * `2ac4e68d`) — so an import must not drag Gentle's packages into PiCode's own profile.
- * The refusal has to happen twice, because a declaration left in the copied
+ * This product carries an integration that its owner decided against — it was taken out of
+ * the product (commit `2ac4e68d`) — so an import must not drag those packages into PiCode's
+ * own profile. The refusal has to happen twice, because a declaration left in the copied
  * `settings.json` is an instruction: the next `pi install` reads that list and installs
- * whatever it names. The import therefore neither installs these packages nor copies
- * their declarations.
+ * whatever it names. The import therefore neither installs these packages nor copies their
+ * declarations.
  *
- * This module is the one place that knows which names count, so adding a package later
- * is one line in the list below. The names come from the owner's real profile and from
- * the removed integration's own record of what it installed — no others were ever known.
+ * This module is the one place that knows which names count, so adding a package later is
+ * one line in the list below. The names come from the owner's real profile and from the
+ * removed integration's own record of what it installed — no others were ever known.
  */
 
-/** The Gentle package names this editor no longer carries, spelled as npm knows them. */
+/** The package names this editor does not carry, spelled as npm knows them. */
 export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = ['gentle-pi', 'gentle-engram'];
 
 /**
  * A package entry's bare name, from any of the spellings a `packages` entry uses: the
  * `npm:` / `git:` prefix comes off, and so does an `@version` suffix. A scoped name
  * (`@scope/pkg`) keeps its leading `@` — only the version's `@` is cut — and an exact
- * name never grows or shrinks: `gentle-pi-extras` is not `gentle-pi`.
+ * name never grows or shrinks: `x-extras` is not `x`.
  */
 export function packageNameOf(entry: string): string {
 	let value = entry.trim();
