@@ -1,7 +1,7 @@
 {
   "set": {
     "version": "1.141.0",
-    "picodeVersion": "0.1.5-experimental",
+    "picodeVersion": "0.2.0-beta",
     "nameShort": "PiCode",
     "nameLong": "PiCode — Agentic Code Editor",
     "urlProtocol": "picode",
