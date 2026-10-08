@@ -6,11 +6,20 @@
 
 Una rama por canal, y el canal se llama como su feed:
 
-| Canal | Rama | Calidad (`quality`) | Feed |
+| Canal | Rama | Calidad (`quality`) | Feed (en su propia rama) |
 | --- | --- | --- | --- |
-| **Stable** | `master` | `stable` | `updates/stable/…` |
-| **Beta** | `beta` | `beta` | `updates/beta/…` |
-| **Experimental** | `experimental` | `experimental` | `updates/experimental/…` |
+| **Stable** | `master` | `stable` | `master:updates/stable/…` |
+| **Beta** | `beta` | `beta` | `beta:updates/beta/…` |
+| **Experimental** | `experimental` | `experimental` | `experimental:updates/experimental/…` |
+
+**El feed vive con su canal**, en la rama de ese canal (decisión del dueño, 2026-10-08). El
+updater lee `.../PiCode/<rama>/updates/<canal>/win32/x64/<target>/latest.json`, así que una beta
+lee la rama `beta` y **por construcción no puede recibir una release de stable**, aunque un
+pipeline se equivoque de canal. Antes la ruta era `.../HEAD/updates/…` (la rama por defecto) y por
+eso los tres canales conspiraban a `master`; se retiró también porque `HEAD` es un blanco móvil:
+cambiar la rama por defecto habría tumbado todos los updaters. El sello lo hace `dev/build.sh`
+(`PICODE_CHANNEL` escribe `quality` **y la rama del `updateUrl`**), y falla en voz alta si el
+`updateUrl` del delta no tiene forma que él sepa apuntar.
 
 **El nombre `rc` no existe** como canal: se retiró el 2026-10-08. El canal estable se llama
 `stable` en todas partes — el generador de feeds (`dev/update-feed.mjs`) y el sellado de la
@@ -131,8 +140,15 @@ versión del editor no se toca — el canal viaja en `quality` (ruta del feed) y
       canal en `gulpfile.vscode.win32.ts`, reutilizando la maquinaria side-by-side.
 - [ ] **C4** · Perfil por canal: `dataFolderName` por canal (o la decisión del dueño de
       compartir), con la nota de migración.
-- [ ] **C5** · Pipeline beta: etiquetas `v*-beta` con su ruta de publicación (manual primero,
-      workflow después), feeds `updates/beta/…` con `--installed` propio.
+- [x] **C5** · Pipeline por canal: hecho el 2026-10-08 en `.github/workflows/release.yml`. **Un
+      solo workflow, no tres**: el canal sale del sufijo del tag (`-beta`, `-experimental`, o
+      ninguno = `stable`), y de ahí salen las tres cosas que cambian entre canales — el sellado del
+      build (`PICODE_CHANNEL`), el `--quality` del generador de feeds, y la rama donde aterriza el
+      feed. El `--installed` se lee del feed de ese mismo canal. Tres copias de un fichero de 400
+      líneas eran tres sitios donde las trampas medidas se podían desincronizar.
+      **Antes de esto, publicar beta era peligroso**: el workflow construía sin canal y generaba
+      siempre el feed estable, así que cualquier tag habría ofrecido la beta a todos los usuarios
+      de stable.
 - [ ] **C6** · Feeds experimentales: extender el script `.scratch/publish-experimental-*.sh`
       con `--channel experimental` para que una experimental **sí** actualice vía updater.
 - [ ] **C7** · Verificación end to end: tres builds instaladas en la misma máquina, cada una
@@ -147,11 +163,10 @@ versión del editor no se toca — el canal viaja en `quality` (ruta del feed) y
   `quality: stable` (comprobado en `picode-source/.build/win32-x64/user-setup/product.json`), así
   que no tienen feed propio. La maquinaria está lista (C1 y C2 hechos); lo que falta son los
   feeds y la identidad por canal (C3–C7).
-- 2026-10-08 · **Trampa viva**: `picode-source/product.json` tiene hoy `quality: beta` sin
-  commitear (en HEAD es `stable`) y **el delta no fija `quality`**, así que una build hecha **sin
-  `PICODE_CHANNEL`** saldría leyendo `updates/beta/…`, que no existe: esa instalación no se
-  actualizaría nunca. Hay que decidir: commitear `beta` como parte de crear el canal, o volver a
-  `stable`.
+- 2026-10-08 · **Resuelto**: el `quality` del árbol se quedó en `stable` (el delta no lo fija, y
+  el build lo sella con `PICODE_CHANNEL`), así que una build **sin** la variable sale con el canal
+  estable y lee el feed correcto en vez de buscar un feed de beta que no existe. La trampa que
+  había aquí queda cerrada por el valor por defecto, no por disciplina.
 - 2026-10-08 · Abierta con las palabras del dueño. Todo el mecanismo medido antes de diseñar;
   el hallazgo que ordena el diseño es que `quality` ya ES el canal para el updater (ruta del
   feed) pero hoy arrastra una mutación de versión del editor que hay que desactivar.

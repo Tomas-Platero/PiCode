@@ -331,22 +331,38 @@ fi
 # quality is scoped back to upstream's own 'insider', which is not a channel of ours).
 if [[ -n "${PICODE_CHANNEL:-}" ]]; then
   case "${PICODE_CHANNEL}" in
-    stable)       QUALITY_VALUE="stable" ;;
-    beta)         QUALITY_VALUE="beta" ;;
-    experimental) QUALITY_VALUE="experimental" ;;
+    stable)       QUALITY_VALUE="stable";       FEED_BRANCH="master" ;;
+    beta)         QUALITY_VALUE="beta";         FEED_BRANCH="beta" ;;
+    experimental) QUALITY_VALUE="experimental"; FEED_BRANCH="experimental" ;;
     *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
-  PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" node <<'NODE'
+  PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" FEED_BRANCH="${FEED_BRANCH}" node <<'NODE'
 const fs = require('fs');
 const file = 'picode-source/product.json';
 const product = JSON.parse(fs.readFileSync(file, 'utf8'));
-if (product.quality === process.env.QUALITY_VALUE) {
-  console.log(`  channel already sealed: ${product.quality}`);
-} else {
-  product.quality = process.env.QUALITY_VALUE;
-  fs.writeFileSync(file, JSON.stringify(product, null, '\t') + '\n');
-  console.log(`  channel sealed: ${process.env.PICODE_CHANNEL} (quality "${process.env.QUALITY_VALUE}")`);
+const quality = process.env.QUALITY_VALUE;
+const branch = process.env.FEED_BRANCH;
+// The feed lives with its own channel: the branch in the URL is the channel's branch, so a
+// beta build reads the beta branch's feed and a stable build can never be handed a beta one,
+// even if a pipeline gets the channel wrong. The URL is derived from the one the delta
+// already carries, so the host and the path keep a single home and the branch is the only
+// thing this adds. Failing loudly beats shipping a HEAD URL silently: HEAD follows whatever
+// the default branch happens to be, which is the moving target this removes.
+const before = product.updateUrl;
+if (typeof before !== 'string' || before.indexOf('/HEAD/') === -1) {
+  console.error(`  product.json's updateUrl carries no /HEAD/ to point at a branch: ${before}`);
+  process.exit(1);
 }
+const updateUrl = before.replace('/HEAD/', `/${branch}/`);
+if (product.quality === quality && before === updateUrl) {
+  console.log(`  channel already sealed: ${quality} (feed branch ${branch})`);
+  process.exit(0);
+}
+product.quality = quality;
+product.updateUrl = updateUrl;
+fs.writeFileSync(file, JSON.stringify(product, null, '\t') + '\n');
+console.log(`  channel sealed: ${process.env.PICODE_CHANNEL} -> quality "${quality}", feed branch "${branch}"`);
+console.log(`  updateUrl: ${updateUrl}`);
 NODE
 fi
 

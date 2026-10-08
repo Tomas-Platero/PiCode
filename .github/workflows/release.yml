@@ -143,7 +143,27 @@ jobs:
           # The editor's number is what the updater compares, so it has to move
           # too: a release whose editor version does not grow is one nobody
           # gets offered.
-          FEED=updates/stable/win32/x64/archive/latest.json
+          #
+          # The channel is the tag's suffix, and each channel keeps its feed
+          # on its own branch — the owner's relation (2026-10-08):
+          #
+          #   stable <-> master
+          #   beta <-> beta
+          #   experimental <-> experimental
+          #
+          # `insider` is not one of ours and never names a release here.
+          case "${PICODE_VERSION}" in
+            *-experimental)
+              CHANNEL="experimental"; FEED_BRANCH="experimental" ;;
+            *-beta)
+              CHANNEL="beta"; FEED_BRANCH="beta" ;;
+            *)
+              CHANNEL="stable"; FEED_BRANCH="master" ;;
+          esac
+          # The feed is named after the channel, and it is read from that
+          # channel's branch in the tag's own tree: a tag on beta carries
+          # updates/beta/…, a tag on master carries updates/stable/…
+          FEED=updates/${CHANNEL}/win32/x64/archive/latest.json
           FEED_VERSION=""
           if [ -f "${FEED}" ]; then
             FEED_VERSION=$(node -p \
@@ -160,6 +180,8 @@ jobs:
             echo "PICODE_VERSION=${PICODE_VERSION}"
             echo "PREV_TAG=${PREV_TAG}"
             echo "FEED_VERSION=${FEED_VERSION}"
+            echo "CHANNEL=${CHANNEL}"
+            echo "FEED_BRANCH=${FEED_BRANCH}"
           } >> "$GITHUB_ENV"
 
       # preinstall.ts looks for Visual Studio only under fixed Program Files
@@ -193,6 +215,10 @@ jobs:
           # Authenticates @vscode/ripgrep's GitHub download; a cold
           # npm ci without it hits the unauthenticated rate limit (403).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Seals the channel into the build: product.json's `quality` and
+          # the branch in its updateUrl. Without it the build would ship
+          # the tree's default, which is the stable channel.
+          PICODE_CHANNEL: ${{ env.CHANNEL }}
         run: ./dev/build.sh
 
       - name: Read the built identity
@@ -298,11 +324,13 @@ jobs:
           node dev/update-feed.mjs --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_ZIP}" --sha256 "${SHA}" \
             --picode-version "${PICODE_VERSION}" \
+            --quality "${CHANNEL}" \
             --platform win32 --arch x64 --target archive \
             "${INSTALLED[@]}"
           node dev/update-feed.mjs --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
             --picode-version "${PICODE_VERSION}" \
+            --quality "${CHANNEL}" \
             --platform win32 --arch x64 --target user \
             "${INSTALLED[@]}"
 
@@ -312,27 +340,28 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email \
             "github-actions[bot]@users.noreply.github.com"
-          FEED_ARCHIVE=updates/stable/win32/x64/archive/latest.json
-          FEED_USER=updates/stable/win32/x64/user/latest.json
+          FEED_ARCHIVE=updates/${CHANNEL}/win32/x64/archive/latest.json
+          FEED_USER=updates/${CHANNEL}/win32/x64/user/latest.json
           TMP_ARCHIVE=$(mktemp)
           TMP_USER=$(mktemp)
           # mv, not cp: an untracked file still on disk would make the
           # checkout below refuse to run on the second release, when
-          # master already tracks a different latest.json.
+          # that branch already tracks a different latest.json.
           mv "${FEED_ARCHIVE}" "${TMP_ARCHIVE}"
           mv "${FEED_USER}" "${TMP_USER}"
-          git fetch origin master
-          git checkout -B feed-ship origin/master
+          git fetch origin "${FEED_BRANCH}"
+          git checkout -B feed-ship "origin/${FEED_BRANCH}"
           mkdir -p "$(dirname "${FEED_ARCHIVE}")" "$(dirname "${FEED_USER}")"
           mv "${TMP_ARCHIVE}" "${FEED_ARCHIVE}"
           mv "${TMP_USER}" "${FEED_USER}"
           git add updates/
           if git diff --cached --quiet; then
-            echo "Feeds on master are already identical; nothing to push."
+            echo "Feeds on ${FEED_BRANCH} are already identical; nothing" \
+              "to push."
           else
             git commit -m \
               "release: update feed for v${PICODE_VERSION} [skip ci]"
-            git push origin HEAD:master
+            git push origin "HEAD:${FEED_BRANCH}"
           fi
 
       - name: Verify the feeds are live
@@ -342,7 +371,8 @@ jobs:
         run: |
           VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
             --json visibility --jq .visibility)
-          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
+          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}"
+          RAW="${RAW}/${FEED_BRANCH}"
           # On a PRIVATE repo raw.githubusercontent.com 404s for anonymous
           # readers, so the anonymous check would fail even with a correct
           # feed. Until the repo is public, verify the exact bytes on
@@ -388,15 +418,17 @@ jobs:
             done
             return 1
           }
-          check_feed "updates/stable/win32/x64/archive/latest.json" \
+          check_feed "updates/${CHANNEL}/win32/x64/archive/latest.json" \
             "PiCode-win32-x64-${PICODE_VERSION}.zip" || {
-              echo "error: the archive feed did not land on master after 10" >&2
+              echo "error: the archive feed did not land on" \
+                "${FEED_BRANCH} after 10" >&2
               echo "attempts. No update will be offered to portable users." >&2
               exit 1
             }
-          check_feed "updates/stable/win32/x64/user/latest.json" \
+          check_feed "updates/${CHANNEL}/win32/x64/user/latest.json" \
             "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" || {
-              echo "error: the user feed did not land on master after" >&2
+              echo "error: the user feed did not land on" \
+                "${FEED_BRANCH} after" >&2
               echo "10 attempts. Installed users would see a 404." >&2
               exit 1
             }
@@ -413,9 +445,12 @@ jobs:
           SETUP_SIZE=$(stat -c%s \
             "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
             2>/dev/null || echo unknown)
-          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/HEAD"
-          FEED_ARCHIVE_URL="${RAW}/updates/stable/win32/x64/archive/latest.json"
-          FEED_USER_URL="${RAW}/updates/stable/win32/x64/user/latest.json"
+          RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}"
+          RAW="${RAW}/${FEED_BRANCH}"
+          FEED_ARCHIVE_URL="${RAW}/updates/${CHANNEL}/win32"
+          FEED_ARCHIVE_URL="${FEED_ARCHIVE_URL}/x64/archive/latest.json"
+          FEED_USER_URL="${RAW}/updates/${CHANNEL}/win32"
+          FEED_USER_URL="${FEED_USER_URL}/x64/user/latest.json"
           {
             echo "## Release PiCode ${PICODE_VERSION}"
             echo
@@ -427,10 +462,10 @@ jobs:
             echo "- Release: https://github.com/${GITHUB_REPOSITORY}"
             echo "/releases/tag/v${PICODE_VERSION}"
             echo "- Feed (portable):"
-            echo "  updates/stable/win32/x64/archive/latest.json"
+            echo "  updates/${CHANNEL}/win32/x64/archive/latest.json"
             echo "  ${FEED_ARCHIVE_URL}"
             echo "- Feed (installed):"
-            echo "  updates/stable/win32/x64/user/latest.json"
+            echo "  updates/${CHANNEL}/win32/x64/user/latest.json"
             echo "  ${FEED_USER_URL}"
             echo
             echo "Updates roll out gradually: the updater's"
