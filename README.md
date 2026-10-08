@@ -55,8 +55,6 @@
 | 📊 **A status panel that tells the truth** | Which pi is answering, its version, your providers, every MCP server and its state, the model and thinking level in use, what the session has cost, the tokens and cache it has used, the plan the agent is working through, your project's branch and changes. |
 | 🗂️ **Sessions** | Every conversation is kept per project. Search them, reopen them, read any transcript. |
 | ☁️ **PiCode Account** | Sign in and your settings, extensions, AI configuration and your agent's memory follow you to any machine — encrypted in transit and at rest. |
-| 🤖 **Gentle AI** | The workflow layer: persistent memory, curated skills and subagents, installed with one click. |
-
 ## ☁️ PiCode Account
 
 Create a free account and PiCode keeps your editor the same everywhere:
@@ -66,7 +64,7 @@ Create a free account and PiCode keeps your editor the same everywhere:
 - **Last week of conversations** — always with you, a rolling window that cleans itself.
 - **Three ways in** — email, Google or GitHub.
 
-The free plan syncs a small allowance — enough for your settings and extensions — and **Pro** is what covers the heavy things: your whole pi profile, its sessions and the Gentle AI setup. See [plans](https://www.getpicode.app/pricing).
+The free plan syncs a small allowance — enough for your settings and extensions — and **Pro** is what covers the heavy things: your whole pi profile and its sessions. See [plans](https://www.getpicode.app/pricing).
 
 <a id="download"></a>
 
@@ -95,7 +93,7 @@ Releasing is by hand, and the version rule is the one above: a release bumps PiC
 
 ## 🙏 Credits
 
-PiCode stands on open source: [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code — MIT source](https://github.com/microsoft/vscode) for the editor, the [Pi](https://pi.dev) coding agent for the agentic loop, and [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) with [Engram](https://github.com/Gentleman-Programming/engram) for memory and workflow. Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.
+PiCode stands on open source: [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code — MIT source](https://github.com/microsoft/vscode) for the editor, and the [Pi](https://pi.dev) coding agent for the agentic loop. Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.
 
 <br />
 <div align="center">
