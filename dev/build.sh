@@ -307,6 +307,33 @@ if [[ "${DELTA_EXIT}" -ne 0 ]]; then
   exit "${DELTA_EXIT}"
 fi
 
+# The channel (RC / Beta / Experimental) is sealed into the build here, as product.json's
+# `quality`: it is what the updater uses to build its feed URL, so a beta build asks
+# updates/beta/… and can never be offered another channel's release. It is NOT a user
+# setting and NOT the editor's version — the version the extensions match is untouched
+# (see build/gulpfile.vscode.ts, where the upstream version-suffix by quality is scoped
+# back to upstream's own 'insider'). RC keeps the stable feed the product has always had.
+if [[ -n "${PICODE_CHANNEL:-}" ]]; then
+  case "${PICODE_CHANNEL}" in
+    rc)           QUALITY_VALUE="stable" ;;
+    beta)         QUALITY_VALUE="beta" ;;
+    experimental) QUALITY_VALUE="experimental" ;;
+    *) echo "error: PICODE_CHANNEL must be one of rc, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
+  esac
+  PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" node <<'NODE'
+const fs = require('fs');
+const file = 'picode-source/product.json';
+const product = JSON.parse(fs.readFileSync(file, 'utf8'));
+if (product.quality === process.env.QUALITY_VALUE) {
+  console.log(`  channel already sealed: ${product.quality}`);
+} else {
+  product.quality = process.env.QUALITY_VALUE;
+  fs.writeFileSync(file, JSON.stringify(product, null, '\t') + '\n');
+  console.log(`  channel sealed: ${process.env.PICODE_CHANNEL} (quality "${process.env.QUALITY_VALUE}")`);
+}
+NODE
+fi
+
 if ! APP_VERSION="${APP_VERSION}" node <<'NODE'
 const fs = require('fs');
 const file = 'picode-source/package.json';
