@@ -44,6 +44,8 @@ export interface PiChatSettings {
 	readonly attachContext: boolean;
 	/** Whether the editor's MCP servers' tools are given to pi. */
 	readonly mcpEnabled: boolean;
+	/** The agent tools that stay off, by name. Empty — nothing is excluded — unless filled. */
+	readonly disabledTools: readonly string[];
 }
 
 /**
@@ -58,6 +60,7 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 	const attach = get('context.attach');
 
 	const mcp = get('mcp.enabled');
+	const disabledTools = get('pi.disabledTools');
 
 	return {
 		thinkingLevel: typeof thinking === 'string' && (THINKING_LEVELS as readonly string[]).includes(thinking) ? thinking : undefined,
@@ -68,5 +71,26 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 		// agent answer about the file the owner is looking at without being told which one, and a
 		// user who does not want it is the exception, not the rule.
 		attachContext: attach === undefined ? true : attach === true,
+		disabledTools: disabledToolsOf(disabledTools),
 	};
+}
+
+/**
+ * The tools the session is built without, read from the setting's raw value.
+ *
+ * A name that is not a non-empty string is a typo, not a tool — it is dropped rather than
+ * passed to pi, because an `excludeTools` entry pi cannot match is a tool the owner thinks
+ * is off and is not. Duplicates collapse: one entry is enough to exclude a tool.
+ */
+export function disabledToolsOf(value: unknown): readonly string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	const names = new Set<string>();
+	for (const entry of value) {
+		if (typeof entry === 'string' && entry.trim().length > 0) {
+			names.add(entry.trim());
+		}
+	}
+	return [...names].toSorted((a, b) => a.localeCompare(b));
 }

@@ -58,6 +58,14 @@ export interface McpServerSwitch {
 	 * answer cannot be had (the profile's sign-ins are off-limits). Left out when `off`.
 	 */
 	readonly signIn?: 'ok' | 'needed' | 'unknown';
+	/**
+	 * Where this row comes from: `profile` — the profile's own `mcp.json` (the list the
+	 * settings form edits); `project` — the workspace's `.pi/mcp.json`, which pi loads for
+	 * trusted projects; `discovered` — a server a pi extension or plugin connected into the
+	 * live session, which has no entry anywhere the form can edit. Left out for the profile
+	 * rows the reading has always answered.
+	 */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 /**

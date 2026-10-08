@@ -330,7 +330,7 @@ function mcpAuthKeys(name: string, url: string): { key?: string; legacyKey?: str
 }
 
 /** The OAuth state pi stored for one server, or `undefined` when there is none. */
-function storedSignInState(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
+function storedServerState(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
 	if (authFile?.text === undefined) {
 		return undefined;
 	}
@@ -347,6 +347,19 @@ function storedSignInState(authFile: McpAuthFile | undefined, name: string, url:
 	const { key, legacyKey } = mcpAuthKeys(name, url);
 	const state = (key !== undefined ? states[key] : undefined) ?? (legacyKey !== undefined ? states[legacyKey] : undefined);
 	return isRecord(state) ? state : undefined;
+}
+
+/**
+ * The metadata pi cached beside one server's sign-in, or `undefined` when there is none.
+ *
+ * pi keeps the discovery it made — `resourceMetadata` and `authorizationServerMetadata` — in the
+ * same state as the tokens, so a server that has ever been contacted carries what it takes to know
+ * which scopes its authorization server can issue, without asking the network again. The shape is
+ * the one a fresh `discoverOAuthServerInfo` returns, which is what lets `mcp-scopes.ts` read both.
+ */
+export function storedDiscoveryOf(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
+	const discovery = storedServerState(authFile, name, url)?.['discovery'];
+	return isRecord(discovery) ? discovery : undefined;
 }
 
 /**
@@ -367,7 +380,7 @@ function storedSignInState(authFile: McpAuthFile | undefined, name: string, url:
  */
 function httpSignInState(name: string, entry: PiHttpEntry, authFile: McpAuthFile | undefined, now: number): McpSignInState {
 	const ownHeaders = Object.values(entry.headers).some(value => value.length > 0);
-	const stored = storedSignInState(authFile, name, entry.url);
+	const stored = storedServerState(authFile, name, entry.url);
 	const token = stored?.['tokens'];
 	if (isRecord(token) && typeof token['access_token'] === 'string' && token['access_token'].length > 0) {
 		// An expired stored sign-in fails fast in the bridge (`storedMcpAuth`), so it is not a
@@ -385,8 +398,7 @@ function httpSignInState(name: string, entry: PiHttpEntry, authFile: McpAuthFile
 	return authFile === undefined ? 'unknown' : 'needed';
 }
 
-/** The sign-in fact for one entry of the profile's `mcp.json`. */
-function signInState(name: string, entry: unknown, authFile: McpAuthFile | undefined, now: number): McpSignInState | undefined {
+/** The sign-in fact for one entry of the profile's `mcp.json`. */function signInState(name: string, entry: unknown, authFile: McpAuthFile | undefined, now: number): McpSignInState | undefined {
 	if (!isRecord(entry) || entry['enabled'] === false) {
 		return undefined;
 	}
@@ -472,3 +484,78 @@ export function mcpLoginEnv(
 export function mcpLoginArgs(serverName: string): string[] {
 	return ['mcp', 'login', serverName.trim()];
 }
+
+/**
+ * The server name inside one of pi's `mcp__<server>__<tool>` tool names.
+ *
+ * The server id ends at the **first** `__` after the prefix (a server id itself may carry
+ * single underscores; the separator is the double one). Anything that does not fit the
+ * shape is not an MCP tool of a server and is left out. Pure, so the discovery the status
+ * answer merges can be tested without an editor or a live session.
+ */
+export function mcpServerNameOfTool(toolName: string): string | undefined {
+	if (!toolName.startsWith('mcp__')) {
+		return undefined;
+	}
+	const rest = toolName.slice('mcp__'.length);
+	const separator = rest.indexOf('__');
+	return separator > 0 ? rest.slice(0, separator) : undefined;
+}
+
+/** One MCP server row the discovery answers: its name, whether it is on, and where it comes from. */
+export interface McpDiscoveryRow {
+	readonly name: string;
+	readonly on: boolean;
+	/** Left out for the profile rows the reading has always answered. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
+}
+
+/**
+ * The MCP servers the **live session** connected that no file declares.
+ *
+ * pi extensions and plugins can register servers (`pi.registerMcpServer`), and those have
+ * no entry in the profile or the project — they only exist as the `mcp__…` tools the
+ * running session exposes. A server the files also declare is skipped: the row the files
+ * answer is the row the settings form can edit, and a second, untouchable row for the same
+ * server would read as two servers.
+ */
+export function discoveredMcpServers(
+	known: readonly string[],
+	connected: readonly string[] | undefined,
+): readonly McpDiscoveryRow[] {
+	if (connected === undefined) {
+		return [];
+	}
+	const seen = new Set(known);
+	const rows: McpDiscoveryRow[] = [];
+	for (const name of connected) {
+		if (name.length > 0 && !seen.has(name)) {
+			rows.push({ name, on: true, origin: 'discovered' });
+		}
+	}
+	return rows;
+}
+
+/**
+ * The sources of MCP servers, merged into the one list the pages draw.
+ *
+ * First source wins on a name clash — profile over project over discovered — because the
+ * earlier sources are the ones with an entry the settings form can edit, and one server
+ * shown twice reads as two servers.
+ */
+export function mergeMcpServers(
+	...sources: ReadonlyArray<readonly McpDiscoveryRow[]>
+): readonly McpDiscoveryRow[] {
+	const seen = new Set<string>();
+	const rows: McpDiscoveryRow[] = [];
+	for (const source of sources) {
+		for (const row of source) {
+			if (!seen.has(row.name)) {
+				seen.add(row.name);
+				rows.push(row);
+			}
+		}
+	}
+	return rows;
+}
+

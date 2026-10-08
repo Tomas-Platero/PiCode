@@ -7,14 +7,14 @@ import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { getSessionUsage } from './agent';
+import { getSessionUsage, liveSessionMcpServers } from './agent';
 import { agentsSummary, launchedAgents } from './agents';
 import { declarationsFromSetting, isRecord } from './declarations';
 import { readDurableStatus } from './durable';
 import { providerInventory } from './providers-list';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { readPiChatSettings } from './piConfig';
-import { mcpServerStates, type McpAuthFile } from './mcp-provider';
+import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
 import { listProjectSessionFiles } from './sessions-provider';
@@ -115,7 +115,36 @@ function readMcpServers(profileDir: string, runtime: 'internal' | 'external'): r
 	const authFile: McpAuthFile | undefined = runtime === 'internal'
 		? mcpAuthFile(path.join(profileDir, 'mcp-auth.json'))
 		: undefined;
-	return mcpServerStates(isRecord(servers) ? servers : undefined, authFile, Date.now());
+	return mcpServerStates(isRecord(servers) ? servers : undefined, authFile, Date.now())
+		.map(row => ({ ...row, origin: 'profile' as const }));
+}
+
+/**
+ * The project's own `.pi/mcp.json` servers, when pi would load them.
+ *
+ * pi only reads the project's file for a **trusted** workspace, so an untrusted one yields
+ * nothing here — listing servers pi will not start would promise tools that never arrive.
+ * The rows carry no sign-in fact: the profile's sign-in file has nothing to say about a
+ * server the project declares, and guessing would print a state the owner cannot act on.
+ */
+function readProjectMcpServers(): readonly McpServerSwitch[] {
+	if (!vscode.workspace.isTrusted) {
+		return [];
+	}
+	const scope = resolveProjectScope();
+	const folders = (scope.mode === 'workspace' ? scope.folders : [scope.cwd])
+		.filter((folder): folder is string => folder !== undefined);
+	const rows: McpServerSwitch[] = [];
+	for (const folder of folders) {
+		const servers = readJsonObject(path.join(folder, '.pi', 'mcp.json'))?.['mcpServers'];
+		if (!isRecord(servers)) {
+			continue;
+		}
+		for (const [name, entry] of Object.entries(servers)) {
+			rows.push({ name, on: !(isRecord(entry) && entry['enabled'] === false), origin: 'project' });
+		}
+	}
+	return rows;
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
@@ -292,7 +321,12 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	// looking for exactly this: «no consigo ver el thinking en el chat».
 	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
-	const mcpServers = readMcpServers(profileDir, runtime);
+	const profileMcpServers = readMcpServers(profileDir, runtime);
+	const mcpServers = mergeMcpServers(
+		profileMcpServers,
+		readProjectMcpServers(),
+		discoveredMcpServers(profileMcpServers.map(row => row.name), liveSessionMcpServers()),
+	);
 	const scope = resolveProjectScope();
 	const projects = scope.mode === 'workspace'
 		? await Promise.all(scope.folders.map(async folder => ({

@@ -13,6 +13,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
 import './picodeMcpSection.js';
+import './picodeAgentStatusPill.js';
 
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.
@@ -36,6 +37,7 @@ export const PICODE_THINKING_LEVEL_SETTING = 'picode.pi.thinkingLevel';
 
 /** Whether the model's thinking is written into the chat. */
 export const PICODE_REASONING_SETTING = 'picode.pi.reasoning';
+export const PICODE_DISABLED_TOOLS_SETTING = 'picode.pi.disabledTools';
 
 /** Whether pi gets the tools of the editor's MCP servers. */
 export const PICODE_MCP_ENABLED_SETTING = 'picode.mcp.enabled';
@@ -154,6 +156,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			],
 			default: 'hide',
 			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
+		},
+		[PICODE_DISABLED_TOOLS_SETTING]: {
+			type: 'array',
+			items: { type: 'string' },
+			default: [],
+			scope: ConfigurationScope.APPLICATION,
+			markdownDescription: localize('picode.pi.disabledTools', "Agent tools that stay off, by name: `bash`, `edit`, `write`, `read`, `grep`, `background`, and every MCP tool as `mcp_servername` or the tool's own name. The session rebuilds when the list changes. This is what the agent cannot reach, not a security boundary — its commands still ask before they run."),
 		},
 		// The MCP servers are the **editor's** (its screen, its `mcp.json`, its trust and its
 		// credentials) and the connector gives their tools to pi, through `lm.invokeTool` — one path

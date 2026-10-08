@@ -3564,7 +3564,13 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		const { height, width } = this.bodyDimension;
 		const chatSuggestNextWidgetHeight = this.chatSuggestNextWidget.height;
 
-		const inputHeight = this._inputVisible ? this.inputPart.height.get() : this.inputPart.element.offsetHeight;
+		// The input's height is read from the DOM, not from the last number the resize observer
+		// reported: the observer runs a frame behind the change, and a frame where the list keeps
+		// the stale height is a frame where the input's bottom edge is pushed out of the view —
+		// the clipped toolbars and last lines seen at the end of a chat whose stack just grew
+		// (a suggestion card, a notice, the status pill). The cached value is only the fallback
+		// for an element the layout has not reached yet, where the DOM reads zero.
+		const inputHeight = this.inputPart.element.offsetHeight || this.inputPart.height.get();
 		const readOnlyBannerHeight = this.readOnlyBanner?.visible ? CHAT_READ_ONLY_BANNER_HEIGHT : 0;
 		const lastElementVisible = this.listWidget.isScrolledToBottom;
 		const lastItem = this.listWidget.lastItem;

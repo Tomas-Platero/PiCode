@@ -37,7 +37,7 @@ export interface McpServerSetting {
 
 /** One server as pi's file declares it. */
 export type McpServerEntry =
-	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string>; readonly oauth?: Record<string, never> }
+	| { readonly type: 'http'; readonly url: string; readonly headers?: Record<string, string>; readonly oauth?: Record<string, unknown> }
 	| { readonly command: string; readonly args: readonly string[] };
 
 /**
@@ -170,6 +170,55 @@ export function normalizedServersFile(parsed: Record<string, unknown>): Record<s
 	return { ...parsed, mcpServers: normalized };
 }
 
+/** The entry keys the settings form owns; everything else in a declared entry is not its to overwrite. */
+const FORM_OWNED_KEYS = ['type', 'url', 'command', 'args', 'env', 'headers'] as const;
+
+/**
+ * One declared server's entry, over whatever the file already held for it.
+ *
+ * The form holds a name, a transport, a target, arguments and a token; the file can hold more —
+ * `enabled`, `exposure`, `toolExposure`, and the `oauth` object the sign-in fills with a scope.
+ * Replacing the entry with the form's own shape would delete all of it on every activation, so only
+ * the keys the form actually speaks are overwritten, and `oauth` is merged key by key (the form
+ * writes it empty; the sign-in puts `scope` in it).
+ */
+export function mergedServerEntry(previous: unknown, fresh: Record<string, unknown>): FileServerEntry {
+	const merged: FileServerEntry = isRecord(previous) ? { ...previous } : {};
+	for (const key of FORM_OWNED_KEYS) {
+		delete merged[key];
+	}
+	Object.assign(merged, fresh);
+	const before = isRecord(previous) && isRecord(previous['oauth']) ? previous['oauth'] : undefined;
+	const now = isRecord(fresh['oauth']) ? fresh['oauth'] : undefined;
+	if (before !== undefined && now !== undefined) {
+		merged['oauth'] = { ...before, ...now };
+	}
+	return merged;
+}
+
+/**
+ * The file's text with one server asking to sign in with a given scope, or `undefined` when the
+ * file holds no such server.
+ *
+ * Only `oauth.scope` moves: the entry belongs to the owner (or to the form), and the sign-in is
+ * repairing one field of it. `oauth` is created when the entry has none — that is what makes pi
+ * treat the server as one that signs in — and kept an object otherwise, which is the shape pi's
+ * own validator accepts.
+ */
+export function mcpServersTextWithOAuthScope(existing: unknown, name: string, scope: string): string | undefined {
+	if (!isRecord(existing) || !isRecord(existing['mcpServers'])) {
+		return undefined;
+	}
+	const servers = { ...existing['mcpServers'] };
+	const entry = servers[name];
+	if (!isRecord(entry)) {
+		return undefined;
+	}
+	const oauth = isRecord(entry['oauth']) ? entry['oauth'] : {};
+	servers[name] = { ...entry, oauth: { ...oauth, scope } };
+	return `${JSON.stringify({ ...existing, mcpServers: servers }, null, 2)}\n`;
+}
+
 /**
  * The file's content: what the settings declare, over whatever else was already there.
  *
@@ -201,7 +250,7 @@ export function mcpServersFile(existing: unknown, servers: readonly McpServerSet
 		}
 	}
 	for (const [name, entry] of declared) {
-		merged[name] = entry;
+		merged[name] = mergedServerEntry(previous[name], entry);
 	}
 
 	root.mcpServers = merged;

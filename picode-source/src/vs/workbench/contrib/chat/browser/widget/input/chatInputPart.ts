@@ -451,6 +451,8 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 	private chatPlanReviewContainer!: HTMLElement;
 	private chatToolConfirmationCarouselContainer!: HTMLElement;
 	private chatInputNotificationContainer!: HTMLElement;
+	/** PiCode's background-jobs pill slot: filled by the contribution in `contrib/picode/browser`. */
+	picodeBackgroundPillContainer!: HTMLElement;
 	private chatGoalBannerContainer!: HTMLElement;
 	private persistentContentContainer!: HTMLElement;
 	private readonly _chatPetHorizontalPlatformProviders = new Set<IChatPetHorizontalPlatformProvider>();
@@ -3060,6 +3062,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 					dom.h('.chat-question-carousel-widget-container@chatQuestionCarouselContainer'),
 					dom.h('.chat-tool-confirmation-carousel-container@chatToolConfirmationCarouselContainer'),
 					dom.h(`.${chatInputStackClass}`, [
+						dom.h(`.picode-background-pill-container.${chatInputStackSlotClass}@picodeBackgroundPillContainer`),
 						dom.h(`.chat-input-notification-container.${chatInputStackSlotClass}@chatInputNotificationContainer`),
 						dom.h(`.voice-mode-onboarding-container.${chatInputStackSlotClass}@voiceModeOnboardingContainer`),
 						dom.h(`.dictation-onboarding-container.${chatInputStackSlotClass}@dictationOnboardingContainer`),
@@ -3093,6 +3096,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 				dom.h('.chat-tool-confirmation-carousel-container@chatToolConfirmationCarouselContainer'),
 				dom.h('.interactive-input-followups@followupsContainer'),
 				dom.h(`.${chatInputStackClass}`, [
+					dom.h(`.picode-background-pill-container.${chatInputStackSlotClass}@picodeBackgroundPillContainer`),
 					dom.h(`.chat-input-notification-container.${chatInputStackSlotClass}@chatInputNotificationContainer`),
 					dom.h(`.voice-mode-onboarding-container.${chatInputStackSlotClass}@voiceModeOnboardingContainer`),
 					dom.h(`.dictation-onboarding-container.${chatInputStackSlotClass}@dictationOnboardingContainer`),
@@ -3151,6 +3155,7 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 		dom.hide(this.chatToolConfirmationCarouselContainer);
 		this._register(this.chatInputNoticeHubService.registerHost(this.noticeHost, this.container));
 		this.chatInputNotificationContainer = elements.chatInputNotificationContainer;
+		this.picodeBackgroundPillContainer = elements.picodeBackgroundPillContainer;
 		this._register(registerChatInputOnboardingHosts(
 			this.noticeHost,
 			{ voice: elements.voiceModeOnboardingContainer, dictation: elements.dictationOnboardingContainer },

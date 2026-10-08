@@ -69,6 +69,23 @@ export function builtinsModuleOf(sdkEntry: string): string {
 	return path.join(path.dirname(sdkEntry), 'extensions', 'index.js');
 }
 
+/**
+ * pi's own OAuth discovery module, from the **same** install as the SDK entry.
+ *
+ * pi reads a remote server's authorization-server metadata through `discoverOAuthServerInfo`,
+ * which lives in its sibling package `@earendil-works/pi-mcp` (`dist/oauth/index.js`). Asking the
+ * module pi will itself use is what keeps the answer from drifting: a second implementation of the
+ * well-known URLs would be a second opinion, and the one that counts is pi's. A pi that keeps the
+ * package somewhere else (a layout this function does not expect) simply has no answer, and the
+ * caller treats that as "leave the sign-in alone".
+ */
+export function mcpOauthModuleOf(sdkEntry: string): string | undefined {
+	// `<node_modules>/@earendil-works/pi-coding-agent/dist/index.js` -> `<node_modules>`.
+	const nodeModules = path.resolve(path.dirname(sdkEntry), '..', '..', '..');
+	const candidate = path.join(nodeModules, '@earendil-works', 'pi-mcp', 'dist', 'oauth', 'index.js');
+	return fs.existsSync(candidate) ? candidate : undefined;
+}
+
 /** One built-in extension entry of pi's `builtInExtensions` module (`dist/extensions/index.js`). */
 export interface PiBuiltinExtension {
 	readonly name: string;

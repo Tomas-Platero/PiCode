@@ -9,12 +9,12 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
-import { declarationsFromSetting, projectDeclaration } from './declarations';
+import { declarationsFromSetting, isRecord, projectDeclaration } from './declarations';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
-import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, type McpConfigFile, type PiMcpServer } from './mcp-provider';
-import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
+import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, storedDiscoveryOf, type McpConfigFile, type PiMcpServer } from './mcp-provider';
+import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
@@ -35,7 +35,8 @@ import {
 	type PiPackageRow,
 } from './packages-manage';
 import { packageSkillDirs, parsePackageSource, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
-import { loadPiSdk, sdkCandidates } from './piSdk';
+import { loadPiSdk, mcpOauthModuleOf, importPiModule, sdkCandidates } from './piSdk';
+import { offlineAccessScope } from './mcp-scopes';
 import { externalProfileDir } from './profile-import';
 import {
 	CONNECT_PROVIDER_COMMAND,
@@ -44,7 +45,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
 import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
@@ -247,6 +248,60 @@ function declaredMcpServers(): McpServerSetting[] {	const configured = vscode.wo
 /** Writes the servers pi reads. Nothing is installed beside it: the file is pi's own. */
 function applyMcpServers(profile: string): void {
 	writeMcpServers(profile, declaredMcpServers());
+}
+
+/** How long the metadata lookup before a sign-in may take: it is a hint, not the sign-in itself. */
+const MCP_DISCOVERY_TIMEOUT_MS = 15_000;
+
+/**
+ * Makes a sign-in durable before it starts, when the server's own metadata allows it.
+ *
+ * A remote server whose authorization server can issue a refresh token is asked for
+ * `offline_access` (`mcp-scopes.ts` says why), so the credential pi stores can be renewed instead
+ * of being asked for again the hour it expires. The discovery for that is pi's own: what it cached
+ * beside the server's sign-in, or — for a server never contacted — pi's own
+ * `discoverOAuthServerInfo`, loaded from the same install as the SDK entry.
+ *
+ * Best-effort by construction: this only changes what a sign-in asks for, so a lookup that fails
+ * must leave the sign-in exactly as it was rather than block it.
+ */
+async function ensureSignInCanBeRenewed(profile: string, server: string, sdkEntry: string): Promise<void> {
+	try {
+		const file = mcpServersFile(profile);
+		const existing = readJsonFile(file);
+		const servers = isRecord(existing) && isRecord(existing['mcpServers']) ? existing['mcpServers'] : undefined;
+		const entry = servers !== undefined && isRecord(servers[server]) ? servers[server] : undefined;
+		// A local server, or one that authenticates itself with its own headers, has no OAuth sign-in
+		// to make durable — pi would not even open a browser for it.
+		if (entry === undefined || typeof entry['url'] !== 'string' || isRecord(entry['headers'])) {
+			return;
+		}
+		const url = entry['url'];
+		let authText: string | undefined;
+		try {
+			authText = fs.readFileSync(path.join(profile, 'mcp-auth.json'), 'utf8');
+		} catch {
+			authText = undefined;
+		}
+		let discovery: unknown = storedDiscoveryOf(authText === undefined ? undefined : { text: authText }, server, url);
+		if (discovery === undefined) {
+			const module = mcpOauthModuleOf(sdkEntry);
+			if (module !== undefined) {
+				const loaded = await importPiModule<{ discoverOAuthServerInfo?: (serverUrl: string, options?: { signal?: AbortSignal }) => Promise<unknown> }>(module);
+				discovery = await loaded.discoverOAuthServerInfo?.(url, { signal: AbortSignal.timeout(MCP_DISCOVERY_TIMEOUT_MS) });
+			}
+		}
+		const scope = offlineAccessScope(isRecord(entry['oauth']) ? entry['oauth']['scope'] : undefined, discovery);
+		if (scope === undefined) {
+			return;
+		}
+		const text = mcpServersTextWithOAuthScope(existing, server, scope);
+		if (text !== undefined) {
+			fs.writeFileSync(file, text, { mode: 0o600 });
+		}
+	} catch {
+		// A sign-in that cannot be improved is still a sign-in.
+	}
 }
 
 /**
@@ -1137,6 +1192,16 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
 
+	// The background jobs the agent left running, as the pill above the chat input reads them.
+	// Pure reading of what the transcript already reported: the same starts and completions the
+	// chat cards draw, minus the cards. It answers even before the first turn — as "nothing
+	// running" — which is why it is a plain read and not part of the status answer.
+	disposables.push(vscode.commands.registerCommand(BACKGROUND_JOBS_COMMAND, () => runningBackgroundJobs()));
+
+	// "Cancel queued": every turn waiting for its slot in this window returns without running.
+	// The pill's Cancel button calls it; the turn in flight is never touched by it.
+	disposables.push(vscode.commands.registerCommand('picode.cancelQueuedTurns', () => cancelQueuedTurns()));
+
 	// The update check: which installed packages npm knows a newer version of. It runs after the
 	// page has rendered — the page calls it without holding the list open — and
 	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
@@ -1352,7 +1417,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The browser step is the owner's, and by design: the child opens it itself, and pi waits
 	// for the callback exactly as it does from a terminal. This command returns at once; the
 	// completion messages below are what tells the owner how it ended.
-	disposables.push(vscode.commands.registerCommand(SIGN_IN_MCP_SERVER_COMMAND, (name?: string): void => {
+	disposables.push(vscode.commands.registerCommand(SIGN_IN_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
 		const server = (name ?? '').trim();
 		if (server.length === 0) {
 			return;
@@ -1360,10 +1425,17 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		// PiCode's own profile only, whatever runtime is in force: this is where PiCode's pi
 		// reads its credentials, and the external pi's directory is never written to.
 		const profile = profileDirectory(requireProfileUri());
-		const entry = sdkCandidates(distributionRoot(requireProfileUri())).map(mcpCliEntryOf).find(file => fs.existsSync(file));
+		const candidates = sdkCandidates(distributionRoot(requireProfileUri()));
+		const entry = candidates.map(mcpCliEntryOf).find(file => fs.existsSync(file));
 		if (entry === undefined) {
 			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in — pi's own command line was not found in this installation.`);
 			return;
+		}
+		// The sign-in is repaired before it starts: a credential the server cannot renew is one it
+		// will ask for again the hour it expires.
+		const sdkEntry = candidates.find(file => fs.existsSync(file));
+		if (sdkEntry !== undefined) {
+			await ensureSignInCanBeRenewed(profile, server, sdkEntry);
 		}
 		void vscode.window.showInformationMessage(`PiCode: signing in to "${server}" — complete it in the browser window that just opens.`);
 		execFile(process.execPath, [entry, ...mcpLoginArgs(server)], {

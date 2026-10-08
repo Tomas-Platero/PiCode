@@ -10,6 +10,7 @@ import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope,
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
+import { mcpServerNameOfTool } from './mcp-provider';
 import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
 import { areaContextBlock } from './workspace-area';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
@@ -23,6 +24,7 @@ import {
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
+import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
 import {
 	BACKGROUND_TOOL,
@@ -172,6 +174,13 @@ interface PiSession {
 		mode?: string;
 		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
 	}): Promise<void>;
+	/**
+	 * The tools the running session exposes, by name. Present in pi 1.1.0; read defensively
+	 * (optional call) because the SDK is loaded at runtime and older pins may lack it. The
+	 * `mcp__<server>__<tool>` names are how the session's **connected** MCP servers are
+	 * discovered — servers no file declares, brought in by pi extensions and plugins.
+	 */
+	getAllTools?(): ReadonlyArray<{ readonly name: string }>;
 	dispose(): void;
 }
 
@@ -200,6 +209,8 @@ interface PiSdk {
 		thinkingLevel?: string;
 		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
 		customTools?: unknown[];
+		/** The agent tools that stay off, by name (pi's own `excludeTools`). See `piConfig.ts`. */
+		excludeTools?: string[];
 	}): Promise<{ session: PiSession }>;
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
@@ -461,6 +472,10 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
 				// "read" is not.
 				stream.progress(toolProgress(event.toolName, event.args));
+				// The same line is the pill's "now": what the agent is doing this instant, above
+				// the input where it stays visible while the transcript scrolls on.
+				agentActivity = toolProgress(event.toolName, event.args);
+				notifyAgentStatus();
 				// A durable delegation gets a card the renderer can update in place: which
 				// conversation the work became, what was asked, and — when the call ends —
 				// what came back. Losing the card is reported, never fatal.
@@ -496,6 +511,17 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 						...call,
 						...(call.label === undefined && start.label !== undefined ? { label: start.label } : {}),
 					}, start.jobNumber, log);
+					// The same fact feeds the pill above the chat input: the job is **running now**.
+					const tracked = backgroundJobStartOf(backgroundResultOf(event.result));
+					if (tracked !== undefined) {
+						const label = call.label ?? tracked.label;
+						backgroundJobs.start({
+							jobNumber: tracked.jobNumber,
+							...(label === undefined ? {} : { label }),
+							...(call.command === undefined ? {} : { command: call.command }),
+						}, Date.now());
+						notifyAgentStatus();
+					}
 				}
 				return;
 			}
@@ -507,6 +533,14 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				const completion = backgroundCompletionOf(message);
 				if (completion !== undefined) {
 					pushBackgroundCompletionCard(stream, completion, log);
+					// The same ending closes the job in the pill's registry: no completion, no job.
+					const closed: BackgroundJobCompletion = {
+						...(completion.id === undefined ? {} : { id: completion.id }),
+						...(completion.label === undefined ? {} : { label: completion.label }),
+						...(completion.command === undefined ? {} : { command: completion.command }),
+					};
+					backgroundJobs.complete(closed);
+					notifyAgentStatus();
 				}
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
 					// What happened first, then pi's own sentence — except for the one failure whose advice only works
@@ -519,6 +553,8 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 			}
 			if (event.type === 'agent_settled' && !settled) {
 				settled = true;
+				agentActivity = undefined;
+				notifyAgentStatus();
 				// What `subscribe` returns is the unsubscribe function itself, not a disposable.
 				subscription();
 				resolve();
@@ -959,10 +995,110 @@ let sessionCommandsProvider: (() => { readonly key: string; readonly commands: r
 /** Fires when the chat's session was created, replaced or dropped. */
 const sessionChangedEmitter = new vscode.EventEmitter<void>();
 
+/** The live session's MCP server names, set by registerPiAgent; read by the status answer. */
+let sessionMcpProvider: (() => readonly string[] | undefined) | undefined;
+
+/** The background jobs this window's agent left running, as the pill above the chat input reads them. */
+const backgroundJobs = new BackgroundJobTracker();
+
+/** The command id the pill above the chat input polls for the jobs still running. */
+export const BACKGROUND_JOBS_COMMAND = 'picode.backgroundJobs';
+
+/**
+ * The status the pill above the chat input is told about, as one push.
+ *
+ * The connector pushes; the pill never polls — a poll would wake this extension at window
+ * start just to hear "nothing happening". Every field is a fact the transcript already
+ * reported: the jobs still running, whether a turn is in flight, what it is doing right
+ * now, and how many requests of this window are waiting for their slot.
+ */
+export interface AgentStatusPush {
+	readonly backgroundJobs: ReturnType<typeof backgroundJobRows>;
+	readonly running: boolean;
+	readonly activity?: string;
+	readonly queued: number;
+}
+
+/** What the agent is doing this instant, as the tool's progress line says it. */
+let agentActivity: string | undefined;
+/** Whether a turn is in flight in this window. */
+let agentRunning = false;
+
+/**
+ * The turns waiting for their slot, each with the way out: dropping one makes its request
+ * return without ever running, at once — not when the running turn ends.
+ */
+interface WaitingTurn {
+	drop(): void;
+}
+const waitingTurns = new Set<WaitingTurn>();
+
+/**
+ * The status push: what the pill is told, whenever any of its facts changed. The command
+ * the core registers may be missing (an older editor carrying a newer connector), so the
+ * push is told once and never again — the pill is a nicety, not something to retry.
+ */
+const notifyAgentStatus = (): void => {
+	const status: AgentStatusPush = {
+		backgroundJobs: runningBackgroundJobs(),
+		running: agentRunning,
+		...(agentActivity === undefined ? {} : { activity: agentActivity }),
+		queued: waitingTurns.size,
+	};
+	void vscode.commands.executeCommand('picode.picodeAgentStatusChanged', status)
+		.then(() => undefined, () => undefined);
+};
+
+/**
+ * The status command's answer, so the pill could also ask once (it never needs to): what
+ * this window's agent is doing right now.
+ */
+export function currentAgentStatus(): AgentStatusPush {
+	return {
+		backgroundJobs: runningBackgroundJobs(),
+		running: agentRunning,
+		...(agentActivity === undefined ? {} : { activity: agentActivity }),
+		queued: waitingTurns.size,
+	};
+}
+
+/**
+ * Drops every turn waiting for its slot — the pill's "Cancel" for the queue. Returns how
+ * many were waiting. Turns already running are not touched: the chat's own stop button is
+ * what aborts the turn in flight.
+ */
+export function cancelQueuedTurns(): number {
+	const count = waitingTurns.size;
+	for (const waiting of waitingTurns) {
+		waiting.drop();
+	}
+	waitingTurns.clear();
+	notifyAgentStatus();
+	return count;
+}
+
+/**
+ * The background jobs still running, with how long each has run — the answer the
+ * `picode.backgroundJobs` command gives the pill. An empty list is an honest "nothing
+ * running", and is what a window with no live session answers too.
+ */
+export function runningBackgroundJobs(): ReturnType<typeof backgroundJobRows> {
+	return backgroundJobRows(backgroundJobs.list(), Date.now());
+}
+
+/**
+ * The server names the live session actually connected — every server behind an `mcp__…`
+ * tool pi exposed, whatever file (or pi extension or plugin) brought it in. `undefined`
+ * when there is no live session to ask: no session, no discovery, no invented rows.
+ */
+export function liveSessionMcpServers(): readonly string[] | undefined {
+	return sessionMcpProvider?.();
+}
+
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	// The setup bridge needs to drop the live session when the profile's packages change:
 	// what they load (agents, skills, commands) registers when pi's session is created.
-	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; sessionChangedEmitter.fire(); };
+	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire(); };
 	sessionUsageProvider = () => {
 		if (sessionManager === undefined) {
 			return undefined;
@@ -1041,6 +1177,24 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		// serving another session's registry.
 		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: piCommandsOfRunner(session) };
 	};
+	sessionMcpProvider = () => {
+		if (session === undefined || typeof session.getAllTools !== 'function') {
+			return undefined;
+		}
+		try {
+			const names = new Set<string>();
+			for (const tool of session.getAllTools() ?? []) {
+				const server = mcpServerNameOfTool(String(tool?.name ?? ''));
+				if (server !== undefined) {
+					names.add(server);
+				}
+			}
+			return [...names].toSorted((a, b) => a.localeCompare(b));
+		} catch {
+			// A session that cannot answer its tools is "no discovery", not an error to surface.
+			return undefined;
+		}
+	};
 	let session: PiSession | undefined;
 	let sessionFolder: string | undefined;
 	/** The project scope the live session was built against, so a mode or folder change rebuilds it. */
@@ -1061,6 +1215,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	let sessionManager: unknown;
 	/** The MCP tool set the running session was built with. */
 	let mcpSignature = '';
+	/** The disabled tools the running session was built with, so a change rebuilds it. */
+	let disabledToolsKey = '';
 
 	/**
 	 * The turns of this window, one at a time, and how many are waiting for their slot.
@@ -1136,7 +1292,10 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
 			const bridgeChanged = sessionBridgePath !== bridgePath;
-			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged) {
+			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
+			const disabledChanged = disabledToolsKey !== settings.disabledTools.join('\u0000');
+			disabledToolsKey = settings.disabledTools.join('\u0000');
+			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged || disabledChanged) {
 				session?.dispose();
 				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
 				// extensions load beside the permission gate, exactly as pi's own CLI builds a session
@@ -1193,6 +1352,10 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					);
 				}
 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
+				// The tools the owner turned off, read at session build: a change rebuilds the session
+				// with everything else that reshapes it. What pi keeps is a **denial, not a wall** —
+				// its commands still ask before they run.
+				const disabledTools = settings.disabledTools;
 				const created = await loaded.sdk.createAgentSessionFromServices({
 					services,
 					sessionManager,
@@ -1203,6 +1366,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
 					// because a server added a minute ago has to be there on the next message.
 					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
+					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
 				});
 				session = created.session;
 				// The session exists and its extensions are loaded; this is what starts them. Called
@@ -1236,18 +1400,30 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			let releaseTurn!: () => void;
 			turnChain = new Promise<void>(resolve => { releaseTurn = resolve; });
 			turnsWaiting++;
+			// The way out while waiting: dropping the request makes it return at once, without
+			// waiting for the running turn to end first — that is what "Cancel queued" means.
+			let dropWaiting!: () => void;
+			const droppedWhileWaiting = new Promise<void>(resolve => { dropWaiting = resolve; });
+			const waitingTurn: WaitingTurn = { drop: dropWaiting };
+			waitingTurns.add(waitingTurn);
+			agentRunning = true;
+			notifyAgentStatus();
 			try {
 				if (turnsWaiting > 1) {
 					stream.progress('PiCode is finishing the turn already running in this window…');
 				}
-				await previousTurn.catch(() => undefined);
+				await Promise.race([previousTurn.catch(() => undefined), droppedWhileWaiting]);
 				if (token.isCancellationRequested) {
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
 				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
 			} finally {
+				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;
+				agentRunning = false;
+				agentActivity = undefined;
+				notifyAgentStatus();
 				releaseTurn();
 			}
 		} catch (error) {

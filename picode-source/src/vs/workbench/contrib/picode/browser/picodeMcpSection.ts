@@ -47,6 +47,8 @@ interface IMcpServerState {
 	readonly on: boolean;
 	/** Whether pi can use the server (`mcp-provider.ts`); left out when the row is off. */
 	readonly signIn?: 'ok' | 'needed' | 'unknown';
+	/** Where the server comes from (`status-view.ts`): left out for the profile's own rows. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 /** The slice of the status panel's answer this widget reads. */
@@ -75,6 +77,8 @@ interface IServerRow {
 	readonly signIn?: 'ok' | 'needed' | 'unknown';
 	/** A server pi runs that the store does not spell out (added through the connector). */
 	readonly undeclared?: boolean;
+	/** Where the server comes from; the actions write the profile, so only its rows get them. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 export class PicodeMcpServersWidget extends Disposable implements IAICustomizationManagementSectionWidget {
@@ -178,7 +182,7 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		try {
 			const data = await this.commandService.executeCommand<IStatusDataSlice>(STATUS_DATA_COMMAND);
 			for (const server of data?.mcpServers ?? []) {
-				states.set(server.name, { on: server.on, signIn: server.signIn });
+				states.set(server.name, { on: server.on, signIn: server.signIn, origin: server.origin });
 			}
 		} catch {
 			// The connector is not answering; the rows stay honest about not knowing.
@@ -203,10 +207,11 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 			args: row.args,
 			on: states.get(row.name)?.on,
 			signIn: states.get(row.name)?.signIn,
+			origin: 'profile',
 		}));
 		for (const [name, state] of states) {
 			if (!declared.some(row => row.name === name)) {
-				rows.push({ name, on: state.on, signIn: state.signIn, undeclared: true });
+				rows.push({ name, on: state.on, signIn: state.signIn, undeclared: true, origin: state.origin });
 			}
 		}
 
@@ -224,7 +229,15 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		name.textContent = row.name;
 
 		const runs = DOM.append(rowElement, $('.picode-mcp-cell-runs'));
-		if (row.undeclared || row.transport === undefined) {
+		if (row.origin === 'project') {
+			runs.textContent = localize('picodeMcpSectionProject', "Project");
+			runs.title = localize('picodeMcpSectionProjectTooltip',
+				"Declared in this project's .pi/mcp.json. pi loads it for trusted projects; edit it in the project, not here.");
+		} else if (row.origin === 'discovered') {
+			runs.textContent = localize('picodeMcpSectionDiscovered', "Discovered");
+			runs.title = localize('picodeMcpSectionDiscoveredTooltip',
+				"Connected into the live session by a pi extension or plugin. It has no entry here to edit or remove.");
+		} else if (row.undeclared || row.transport === undefined) {
 			runs.textContent = '';
 		} else {
 			runs.textContent = row.transport === 'http'
@@ -259,6 +272,13 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 
 		const actions = DOM.append(rowElement, $('.picode-mcp-row-actions'));
 		const disposables = this.rowDisposables;
+
+		// A row the profile does not own has nothing here to act on: the project's file is
+		// edited in the project, and a discovered server has no entry anywhere — offering Edit
+		// or Remove would write a **new** profile entry instead of touching what the row shows.
+		if (row.origin === 'project' || row.origin === 'discovered') {
+			return rowElement;
+		}
 
 		// The sign-in is the first action of a row that needs one, because fixing the server is
 		// what the owner came here to do. It runs pi's own sign-in pointed at PiCode's profile,
