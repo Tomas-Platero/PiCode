@@ -103,11 +103,13 @@ versión del editor no se toca — el canal viaja en `quality` (ruta del feed) y
 
 ## Tasks
 
-- [ ] **C1** · Sellado del canal en la build: `PICODE_CHANNEL` en la fase de versión escribe
-      `quality` en el `product.json` resultante (el delta de distribution sigue siendo la base;
-      el canal lo pisa la build).
-- [ ] **C2** · Desactivar el sufijo de versión por calidad en `gulpfile.vscode.ts` (la trampa
-      medida), con test que fije que `1.135.7` no crece por ser beta.
+- [x] **C1** · Sellado del canal en la build: hecho en `7ad0d89d`. `dev/build.sh` lee
+      `PICODE_CHANNEL` (`rc|beta|experimental`) y escribe `quality` (`stable|beta|experimental`)
+      en el `product.json` del árbol. **Ojo**: solo actúa si la variable está puesta; sin ella,
+      `quality` se queda como esté en el árbol.
+- [x] **C2** · Sufijo de versión por calidad desactivado: hecho en `7ad0d89d`.
+      `picode-source/build/gulpfile.vscode.ts:301-310` — solo `insider` recibe sufijo, así que
+      `beta`/`experimental`/`rc` conservan la versión limpia que casan las extensiones.
 - [ ] **C3** · Identidad de instalador por canal: DirName/NameLong/AppId/**mutex** fijos por
       canal en `gulpfile.vscode.win32.ts`, reutilizando la maquinaria side-by-side.
 - [ ] **C4** · Perfil por canal: `dataFolderName` por canal (o la decisión del dueño de
@@ -121,6 +123,18 @@ versión del editor no se toca — el canal viaja en `quality` (ruta del feed) y
 
 ## Registro
 
+- 2026-10-08 · **Medido el estado real de los feeds**: de los tres canales solo existe **uno**.
+  `updates/stable/win32/x64/{user,archive}/latest.json` existe y apunta a **0.1.3-beta**
+  (`productVersion 1.135.5`); **no hay `updates/beta/…` ni `updates/experimental/…`**. Las
+  experimentales 0.1.4 y 0.1.5 se publicaron **al margen del canal**: su paquete se construyó con
+  `quality: stable` (comprobado en `picode-source/.build/win32-x64/user-setup/product.json`), así
+  que no tienen feed propio. La maquinaria está lista (C1 y C2 hechos); lo que falta son los
+  feeds y la identidad por canal (C3–C7).
+- 2026-10-08 · **Trampa viva**: `picode-source/product.json` tiene hoy `quality: beta` sin
+  commitear (en HEAD es `stable`) y **el delta no fija `quality`**, así que una build hecha **sin
+  `PICODE_CHANNEL`** saldría leyendo `updates/beta/…`, que no existe: esa instalación no se
+  actualizaría nunca. Hay que decidir: commitear `beta` como parte de crear el canal, o volver a
+  `stable`.
 - 2026-10-08 · Abierta con las palabras del dueño. Todo el mecanismo medido antes de diseñar;
   el hallazgo que ordena el diseño es que `quality` ya ES el canal para el updater (ruta del
   feed) pero hoy arrastra una mutación de versión del editor que hay que desactivar.
