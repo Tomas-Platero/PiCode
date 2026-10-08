@@ -32,7 +32,7 @@ ella antes de la siguiente petición); sin cambios en `providers.ts`/`endpoint.t
 | --- | --- | --- |
 | M0 | `src/models-cache.ts` puro (sin `vscode` ni imports locales, patrón `usage-data.ts`): `CacheEntry`, `cacheKey` (join con \u0000, `undefined` como valor propio), `cachedModels` (frontera TTL exclusiva: fresco en ttl−1, rancio en ttl, miss→undefined+rancio), `storeModels`, `sameIds` (insensible al orden, conables los duplicados), `singleFlight` (un vuelo por clave; el fallo libera el hueco y no envenena el mapa) | ✅ 8 tests |
 | M1 | Cableado en `extension.ts`: respuesta inmediata = fichero del perfil + caché configurada (rancia servida) + caché de suscripciones (rancia servida); refrescos en segundo plano con `singleFlight` + detección de cambio por `sameIds` + disparo del evento; proyección del formulario desde ids cacheados (en miss, diferida al refresco); fallos de refresco por `report`, nunca al vacío | ✅ |
-| M2 | Invalidaciones: cambio de `picode.providers`/`pi.providers` limpia `configuredModelsCache` y dispara el evento (oyente de ajustes de `activate`); `forgetPiRuntime` limpia también `subscriptionModelsCache` (login/quitar Gentle AI siguen viéndose al instante) | ✅ |
+| M2 | Invalidaciones: cambio de `picode.providers`/`pi.providers` limpia `configuredModelsCache` y dispara el evento (oyente de ajustes de `activate`); `forgetPiRuntime` limpia también `subscriptionModelsCache` (login/quitar suscripción siguen viéndose al instante) | ✅ |
 | M3 | Validación: tsgo nativo `--noEmit` (0 errores) + emit; `node --test` del directorio 82/82 (74 previos verdes + 8 nuevos) | ✅ |
 
 ## Primera pintura (composición de la respuesta inmediata)

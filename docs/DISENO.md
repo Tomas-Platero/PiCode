@@ -1,14 +1,14 @@
 # Diseño de PiCode
 
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
-> `AGENTS.md`; su visión completa, en `docs/VISION.md`; qué son pi y Gentle-AI por dentro, en
-> `docs/PI-Y-GENTLE-AI.md`. Este documento dice **cómo se junta todo**.
+> `AGENTS.md`; su visión completa, en `docs/VISION.md`. Este documento dice **cómo se junta
+> todo**.
 
 ## Qué es PiCode, en una frase
 
 Un **VS Code compilado desde su fuente** donde **pi es el agente nativo**, no una extensión
-añadida — y donde **Gentle-AI es el orquestador**. Sin Copilot en ningún sitio, y con todo
-integrado como si el editor siempre hubiera sido así.
+añadida. Sin Copilot en ningún sitio, y con todo integrado como si el editor siempre
+hubiera sido así.
 
 ## Las capas
 
@@ -62,10 +62,10 @@ Vive **dentro del núcleo**, partido en dos por una razón técnica que conviene
 conector es uno más. **No dibuja nada**: ni chat, ni modales, ni ajustes propios. Si algo
 necesita superficie, la superficie va al núcleo.
 
-### 4. El Harness: Gentle-AI
+### 4. El Harness: la capa de paquetes de pi
 
-Gentle-AI **no se reimplementa**: es un **paquete de pi** (`gentle-pi`) que pi carga desde su
-perfil. Aporta habilidades, subagentes, cadenas, temas y su orquestador.
+Nada se reimplementa: pi carga **paquetes** desde su perfil, y esos paquetes aportan
+habilidades, subagentes, cadenas y temas.
 
 PiCode lo que hace es **enseñarlo**: sus habilidades y sus agentes aparecen en el editor
 porque el **propio host de agentes los descubre en disco**, no porque una extensión los lea.
@@ -102,14 +102,14 @@ Por defecto se usa el pi de dentro. Si el usuario quiere, puede:
 ### 8. Lo que se vende
 
 El programa es **gratis y completo**. Lo que se vende es **guardar toda la configuración en la
-nube** —la de PiCode, la de pi y la de Gentle-AI— como **una sola cosa**, que es exactamente
+nube** —la de PiCode y la de pi— como **una sola cosa**, que es exactamente
 el perfil propio.
 
 ## Las reglas de diseño
 
 1. **No hay superficie propia de PiCode.** Chat, Agente y sus ajustes.
 2. **Nada se escribe fuera del perfil de PiCode.**
-3. **No se reimplementa lo que pi o Gentle-AI ya traen.** Se enseña.
+3. **No se reimplementa lo que pi ya trae.** Se enseña.
 4. **Un dato aparece una vez.** Si se puede leer en tres sitios, sobran dos.
 5. **Lo que exige acción es un botón.** "Reinicia pi" no es información.
 6. **El conector no dibuja.** Si necesita interfaz, la interfaz es del núcleo.
@@ -124,7 +124,7 @@ el perfil propio.
 3. **Conecta un proveedor** desde el Chat: elige ChatGPT, Claude, DeepSeek… y lo conecta con
    su cuenta o con una clave.
 4. **Habla con `@pi` en el Chat**, que es el del editor. Con sus herramientas, su memoria y
-   las habilidades de Gentle-AI.
+   sus habilidades.
 5. **Todo queda en su perfil**, listo para subirse cuando exista la nube.
 
 ## Qué NO es PiCode

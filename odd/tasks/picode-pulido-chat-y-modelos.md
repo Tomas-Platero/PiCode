@@ -138,7 +138,7 @@ Arreglo:
 - **Barra de progreso real**: el conector cuenta un paso por la copia, uno por cada
   package y uno por el refresco; la página lo consulta cada 500 ms y mueve la barra con
   la línea que va («Installing package 3 of 20: npm:pi-lens…»). Mismo patrón que el
-  instalador de Gentle. Un import cada vez, forzado.
+  instalador de paquetes. Un import cada vez, forzado.
 - Sin casilla de credenciales a mitad de flujo: el import automático lo trae todo menos
   los logins, y al terminar ofrece una vez «Sign in with my saved logins» (copia solo
   auth.json).
@@ -149,7 +149,7 @@ Arreglo:
 
 Me equivoqué de dirección: el import **no se lanza solo** — se elige. Y el defecto real
 que vio era gordo: **cada package instalado abría su ventana de consola** (el instalador
-de pi lanza hijos de npm que se sacan consola propia; el propio instalador de Gentle ya
+de pi lanza hijos de npm que se sacan consola propia; el propio instalador de pi ya
 documentaba eso y por eso corre npm directo).
 
 Arreglo:
@@ -174,9 +174,9 @@ Cuatro ajustes sobre la misma prueba en vivo:
 - **Barra de progreso de verdad**: el total se cuenta ANTES de mover nada (el settings.json
   del perfil externo ya nombra los packages), así que nunca arranca a cero ni salta hacia
   atrás; barra de 8px con relleno a contraste completo y línea con lo que pasa.
-- **Gentle llega instalado**: si el import trae gentle-pi con los packages, el estado se
-  relee al terminar y la página de Gentle lo muestra instalado (con sus filas de agentes);
-  la sesión viva del chat se recicla para que la siguiente conversación cargue lo landed.
+- **Los paquetes llegan instalados**: si el import los trae, el estado se
+  relee al terminar; la sesión viva del chat se recicla para que la siguiente conversación
+  cargue lo landed.
 - **Las sesiones importadas aparecen en el chat**: nada en el editor leía el directorio
   `sessions/` del perfil (el grupo «Local» es el índice interno del chat service). El
   conector registra ahora un proveedor de sesiones `pi`: lista las transcripciones del

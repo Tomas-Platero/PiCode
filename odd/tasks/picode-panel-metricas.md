@@ -17,7 +17,6 @@
 | Providers | 229 | siempre |
 | MCP servers (+ hijo por servidor) | 232-241 | siempre; datos de `status-data.ts:87-100` |
 | Model / Thinking | 243 / 246 | solo si hay valor |
-| Gentle AI: State / Skills | 254 / 258 | siempre; Skills = nº de directorios (`status-data.ts:293`) |
 | Session: Context / Cost | 270 / 276 | **solo si `ctxTokens` existe** |
 | «No turns yet» | 278 | ← esto es lo de «las métricas no siempre salen» |
 | Usage | 283 | solo con proveedor NaN y credencial (`status-data.ts:216-241`) |

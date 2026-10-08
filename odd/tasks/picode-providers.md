@@ -151,6 +151,6 @@ No se movieron los otros ocho ajustes `picode.*`: eso es el defecto de D1 y va a
 
 ## Fuera de alcance
 
-- Registro del propio pi/gentle-ai en el hub de personalizaciones (feature aparte).
+- Registro del propio pi en el hub de personalizaciones (feature aparte).
 - Múltiples cuentas por proveedor (lo que PI-Desktop sí hace: una fila por cuenta). Aquí
   pi guarda una credencial por id de proveedor.

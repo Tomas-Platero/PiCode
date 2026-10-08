@@ -13,7 +13,7 @@
 | **Copilot fuera del Chat** | El aviso que bloqueaba el chat desapareció; su causa se encontró en los registros reales, y eran **dos** |
 | **El selector de modelos sin marca de Copilot** | Las cadenas comprobadas a cero en el editor construido |
 | **Los ajustes de pi, dentro del nodo Chat** | Un nodo «pi» con comodín, bajo Chat |
-| **El editor ve las personalizaciones de pi y de Gentle-AI** | La tabla de descubrimiento del núcleo incluye sus rutas |
+| **El editor ve las personalizaciones de pi** | La tabla de descubrimiento del núcleo incluye sus rutas |
 | **La sesión de pi dentro del núcleo** | Escrita y compilando en modo estricto |
 | **La traducción de lo que pi dice y hace** | Escrita y compilando: texto y herramientas |
 | **La extensión vieja, fuera del producto** | No se compila ni se empaqueta; su material está archivado |
@@ -29,8 +29,7 @@
 | **Los MCP del editor, conectados al pi interno** | pi no trae MCP (lo dice su README) pero deja añadirle herramientas: las herramientas de los servidores MCP del editor se le dan a pi, y las llama a través del editor, con sus permisos y confirmaciones. Trece comprobaciones ejecutadas |
 | **Los ajustes, con los nombres y el orden del producto** | Nodo `PiCode` (antes Chat) y nodo `Settings` (antes pi), con `Providers` y `Settings` delante de las categorías del editor |
 | **Fuera la ventana de agentes de VS Code** | Sus seis acciones no se registran: se acaban el botón «Open in Agents» de la barra, la entrada del menú del chat, el atajo `Ctrl+Shift+A`, los comandos de la paleta y el cartel de bienvenida. Sus dos consejos también fuera |
-| **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`), papel en `odd/tasks/picode-management-round.md`: causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents solo Gentle-AI sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
-| **Gentle AI en `gentle-pi` 4.0.0** | Perfil interno actualizado de 3.7.0 a 4.0.0 (`npm install`, gate de scripts aprobado y `rebuild` para el binario Go local; `node_modules/gentle-pi/package.json` = 4.0.0 y `.gentle-ai/v4.0.0/gentle-ai.exe` en su sitio). Compatibilidad comprobada antes de subir: `lib/agents-config.ts`, `lib/agent-home.ts` y `lib/orchestrator-presence.ts` idénticos entre 3.7.0 y 4.0.0, y `gentleTodo` con la misma forma → el conector no cambia. La v4 deja fuera del paquete los 13 agentes SDD y `sdd-init` |
+| **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`), papel en `odd/tasks/picode-management-round.md`: causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
 | **Adopción de 1.141 + release 0.1.5-experimental** (2026-10-08) | Píldora de estado del agente sobre el chat (actividad, cola con cancelación, trabajos en background, empujada sin sondeos), MCP con origen por fila (perfil/proyecto/descubiertos), cancelación inmediata de turnos en cola, `picode.pi.disabledTools`, thinking en show por defecto, nan visible en Providers, ajustes muertos de la sección Agent fuera, corte del borde inferior del chat arreglado. Ficha `odd/tasks/picode-vscode-141.md`; release publicada y verificada en GitHub |
 
 ## Lo que está a medias
@@ -55,7 +54,7 @@
 | 4 | **Registrar el host y apagar los otros agentes** | 🟢 | Que pi sea **el único** agente del editor. Va **después** del 3: apagarlos antes deja el selector vacío |
 | 5 | **El asistente de primer arranque** | 🟡 | Preguntar qué hacer, con las tres opciones: pi de dentro · conectar uno externo · traerse la configuración |
 | 6 | **Conectar a un pi externo / migrar su configuración** | 🟡 | Lo que el usuario puede elegir; nada se escribe fuera |
-| 7 | **Las habilidades de los paquetes de Gentle-AI** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus 13 habilidades |
+| 7 | **Las habilidades de los paquetes de pi** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus habilidades |
 | 8 | **Recuperar lo que valía del panel viejo** | 🟡 | Estadísticas de pi, sus comandos y las sesiones — dentro del Chat. El contexto del editor ya viaja con cada mensaje |
 | 9 | **La nube** | 🔴 | Subir y bajar **el perfil como una unidad** |
 | 10 | **Limpiar** | 🟢 | Hecho el 2026-09-29: fuera `apply-picode.ps1` (la vía del ZIP que lo usaba ya no existe), fuera ESLint y `.vscode/` del árbol, y el recorte lightweight de `picode-source/` (`odd/tasks/lightweight-picode-source.md`) |
@@ -67,8 +66,8 @@ Estas cosas están **decididas en contra**, y si alguien las propone, aquí est�
 - **Un panel, una pestaña o unos ajustes propios de PiCode.** La superficie es el editor.
 - **Escribir en el pi de la máquina.** Ni configuración, ni credenciales, ni sesiones. La
   dirección es una sola: hacia dentro.
-- **Reimplementar proveedores, OAuth, habilidades o el orquestador.** pi y Gentle-AI ya los
-  traen.
+- **Reimplementar proveedores, OAuth, habilidades o el orquestador.** pi ya los
+  trae.
 - **Duplicar un ajuste de pi en el editor.** Ya pasó con el modelo por defecto: se retiró, y
   hay una prueba que impide que vuelva.
 - **Marcar algo como hecho porque compila.** El registro tiene tres casos de eso.

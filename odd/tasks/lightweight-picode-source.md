@@ -1,7 +1,7 @@
 # Lightweight: recorte de `picode-source/`
 
 **Objetivo (dueño, 2026-09-29):** reducir el árbol fuente de PiCode (~3.3G en disco). Producto
-ligero: editor para programar con look VS Code + capa agéntica (pi + Gentle AI). Nada de
+ligero: editor para programar con look VS Code + capa agéntica (pi). Nada de
 notebooks, login Microsoft/GitHub ni diagramas mermaid.
 
 **Estado inicial medido (2026-09-29):**

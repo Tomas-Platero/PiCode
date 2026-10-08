@@ -53,7 +53,7 @@ The owner's words (2026-09-23):
 - **Nothing in PiCode touches editor themes today**: no `workbench.colorTheme` anywhere,
   no `configurationDefaults`, and `distribution/settings.json` (the first-run defaults)
   sets no theme. The settings panel governs pi's settings and PiCode's own; the onboarding
-  wizard has three steps (pi, Gentle AI, summary) and no theme step.
+  wizard has two steps (pi, summary) and no theme step.
 
 ## Decisions
 
@@ -92,7 +92,7 @@ with one work-unit commit on the feature branch, recorded here as evidence.
   Comando `picode.piChat.selectTheme`, la categoría **Aspecto** en el panel de ajustes con
   el tema en vigor y la fila que abre la galería, y la declaración en `package.json`.
 - [x] **T5 — El paso del asistente.**
-  Un paso «Tema» entre Gentle AI y el resumen, con la galería compacta montada desde el
+  Un paso «Tema» antes del resumen, con la galería compacta montada desde el
   mismo componente y **dos** salidas honestas: aplicar, o quedarse con el que venga.
 - **T6 — Cierre.** Verificación independiente, `npm test` verde (35 suites), distribución
   re-stageada y el informe.
@@ -112,7 +112,7 @@ with one work-unit commit on the feature branch, recorded here as evidence.
 
 ## Independent verification
 
-Read-only pass (`gentle-ai-verify`) over the theme feature, on the commits that were already
+Read-only pass over the theme feature, on the commits that were already
 pushed. It found **four reachable defects**, all fixed in `a10968`, plus two dead pieces:
 
 1. **The gallery opened a new tab on every invocation.** `selectTheme` built a fresh view on

@@ -157,12 +157,12 @@ recorded here as evidence.
   `models-command.js`, `models-config.js` and the new command in `package.json`. That
   tree is a build artifact (untracked), so the staging is reported here instead of in a
   commit.
-- **Independent verification** (read-only, `gentle-ai-verify`) over the three commits:
+- **Independent verification** (read-only) over the three commits:
   result below.
 
 ## Independent verification
 
-Read-only pass (`gentle-ai-verify`) over the three commits, and **four confirmed defects**
+Read-only pass over the three commits, and **four confirmed defects**
 found and fixed (`e6d1c04`), each one reachable:
 
 1. **PiCode refused files pi accepts.** pi parses `models.json` as

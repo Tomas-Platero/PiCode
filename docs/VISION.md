@@ -45,14 +45,7 @@ por API key. pi ya trae este sistema hecho y maduro (`/login`, OAuth o API key p
 decenas soportadas de fábrica) — el trabajo real es **exponerlo en la UI del editor** (al
 estilo "Add provider" de PI-Desktop), no reconstruirlo desde cero.
 
-### 5. Gentle-AI / memoria
-
-Engram (la memoria persistente de Gentle-AI) ya entra como tool nativa de pi. El resto de
-piezas de Gentle-AI (SDD, skills, persona, tema) no tienen aún soporte oficial para pi como
-agente — probablemente el camino sea usar el propio sistema de skills/paquetes de pi en vez de
-depender del instalador de Gentle-AI.
-
-### 6. Mejoras de UX pendientes (del panel original, aún no abordadas)
+### 5. Mejoras de UX pendientes (del panel original, aún no abordadas)
 
 Logo propio de PiCode, autocompletado de skills con "/", rediseño del catálogo de paquetes,
 unificar categorías de Compactación/Razonamiento/Reintentos, mensajes de carga de sesión más
