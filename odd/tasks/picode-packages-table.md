@@ -35,16 +35,16 @@ Gathered 2026-09-22 against pi `0.86.1` and the owner's real
 `~/.pi/agent/settings.json` (18 packages).
 
 - **The stored datum is a source string and nothing else.** Real values in place:
-  `"npm:pi-lens"`, `"npm:@tintinweb/pi-subagents"`, `"npm:gentle-engram@0.1.14"`,
+  `"npm:pi-lens"`, `"npm:@tintinweb/pi-subagents"`,
   `"git:github.com/HazAT/pi-interactive-subagents"`. There is no version and no
   path in the value, so every column of the table except Estado is **derived**.
 - **Only a pinned spec carries a version.** Exactly 1 of the owner's 18 entries
-  does (`npm:gentle-engram@0.1.14`). The owner chose the cheap source on purpose
+  does. The owner chose the cheap source on purpose
   when asked: *"Solo de la especificación guardada (Recomendado)"*. Reading the
   installed `package.json` (through `pi list` + a file read per package) is a
   deliberate, available follow-up, not part of this feature.
-- **The same package can appear twice**, and does: `npm:gentle-engram` and
-  `npm:gentle-engram@0.1.14` resolve to the same directory. So a row is identified
+- **The same package can appear twice**: a package and its pinned spec resolve to
+  the same directory. So a row is identified
   by its **position in the stored list**, never by its source string, and two rows
   may legitimately look identical in the Nombre column.
 - **`pi list` knows the path, the settings value does not** — repeated here because
@@ -108,7 +108,6 @@ summarize(rows) -> { total, active, paused }
 | --- | --- | --- | --- | --- |
 | `npm:pi-lens` | npm | `pi-lens` | `` | `` |
 | `npm:@tintinweb/pi-subagents` | npm | `pi-subagents` | `@tintinweb` | `` |
-| `npm:gentle-engram@0.1.14` | npm | `gentle-engram` | `` | `0.1.14` |
 | `npm:@gtrabanco/pi-nan-provider@2.0.0` | npm | `pi-nan-provider` | `@gtrabanco` | `2.0.0` |
 | `git:github.com/HazAT/pi-interactive-subagents` | git | `pi-interactive-subagents` | `HazAT` | `` |
 | `git:github.com/HazAT/pi-interactive-subagents@v1` | git | `pi-interactive-subagents` | `HazAT` | `v1` |
@@ -193,7 +192,7 @@ to infer them from the diff.
    filter, and a search that silently widens to the raw spec makes the filter
    redundant and the placeholder untrue.
 2. **The stored spec stays reachable on hover.** The Nombre cell carries `title`
-   with the exact stored source, because the owner's file stores `gentle-engram`
+   with the exact stored source, because the owner's file can store the same package
    twice and two rows can be indistinguishable by name alone.
 3. **The arrow shows only on the active header.** `paintSort` writes the direction
    into every sortable header; the CSS keeps the inactive indicators at
@@ -225,7 +224,7 @@ contributes.
 - Work-unit commits on the feature branch.
 - `npm test` green, with the new suite in the chain (16 suites).
 - The pure half checked against the owner's real `~/.pi/agent/settings.json`: 18
-  rows, the two `gentle-engram` rows kept apart, the pinned one the only row with a
+  rows, the duplicated package rows kept apart, the pinned one the only row with a
   version, `git:github.com/HazAT/...` derived to `HazAT` / git.
 - The no-literal-colour grep over `media/settings.css` returning nothing.
 - The distribution stage (`distribution/apply-picode.ps1`) copies `media/` wholesale,

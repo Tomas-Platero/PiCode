@@ -2,16 +2,10 @@
 
 **Abierta**: 2026-09-27 · **Rama**: `feat/source-in-repo` · **Estado**: exploración delegada
 
-## Intención del dueño (frase original, captura 27-09 17:30)
+## Intención del dueño
 
-> "Necesito que esta ventana contenga las cosas de pi y gentle-ai ejemplo:
-> - Agents - Agentes de Gentle.
-> - Skills - Skills tanto en pi, proyecto y gentle-ai.
-> - Instructions - esto quitalo.
-> - Prompts - Esto quitalo
-> - Hooks - Esto quitalo (pi no tiene hooks).
-> - MCP Servers - Lista de servidores mcp de pi.
-> - Plugins - Listado de Packages de Pi."
+Que esta ventana contenga los elementos reales del runtime pi — Agents, Skills, MCP
+Servers y Plugins — y deje fuera Instructions, Prompts y Hooks.
 
 Registrada como regla permanente en `AGENTS.md` (§ La ventana de gestión del chat habla de pi).
 
@@ -27,8 +21,8 @@ hooks, gallery de plugins…), no el runtime pi.
 
 | Sección | Debe listar | Dónde vive de verdad |
 | --- | --- | --- |
-| Agents | agentes de Gentle/pi | `<perfil>/agents/*.md` global + `.pi/agents/*.md` del proyecto |
-| Skills | pi + proyecto + gentle-ai | `<perfil>/skills/`, proyecto (`.agents/skills`, `.pi/skills`), `gentle-pi/skills/` |
+| Agents | agentes de pi | `<perfil>/agents/*.md` global + `.pi/agents/*.md` del proyecto |
+| Skills | pi + proyecto | `<perfil>/skills/`, proyecto (`.agents/skills`, `.pi/skills`), `<pkg>/skills` |
 | MCP Servers | servidores mcp de pi | `mcp.json` global del perfil + `.pi/mcp.json` del proyecto |
 | Plugins | paquetes de pi instalados | `<perfil>/npm/node_modules/*` (los que pi carga como packages) |
 | Instructions | — FUERA | — |
@@ -44,7 +38,7 @@ configuró — el mismo resolutorio que usa el conector (`profile-paths`).
 | --- | --- | --- |
 | G0 | Mapeo delegado (Explore `dc84abb8-8dab-451`) | ✅ mapa completo; ver decisiones abajo |
 | G1 | Núcleo: quitar Instructions/Prompts/Hooks de `managementSections` (`browser/aiCustomization/aiCustomizationWorkspaceService.ts:55-61`), quitar tarjetas Voice/Dictation (`aiCustomizationWelcomePagePromptLaunchers.ts:106`) y reencaminar la caja libre (quita el prefijo `/init`, `:189`) | ✅ W1 (typecheck 0 errores) |
-| G2 | Conector: `chat.registerCustomAgentProvider` (agentes del perfil en fuerza + `.pi/agents` del proyecto) y `chat.registerSkillProvider` (skills de perfil + proyecto + paquetes npm incl. gentle-pi) | ✅ W2: `customizations.ts` (436 L) + 11 tests. El bloqueo declarado por W2 (falta la propuesta en el `include` del tsconfig, fuera de su superficie) lo cerró el padre: una línea + comentario, patrón idéntico al de `chatProvider`. Typecheck 0 |
+| G2 | Conector: `chat.registerCustomAgentProvider` (agentes del perfil en fuerza + `.pi/agents` del proyecto) y `chat.registerSkillProvider` (skills de perfil + proyecto + paquetes npm) | ✅ W2: `customizations.ts` (436 L) + 11 tests. El bloqueo declarado por W2 (falta la propuesta en el `include` del tsconfig, fuera de su superficie) lo cerró el padre: una línea + comentario, patrón idéntico al de `chatProvider`. Typecheck 0 |
 | G3 | Conector: `lm.registerMcpServerDefinitionProvider` (estable) alimentando la sección MCP desde el `mcp.json` del perfil + proyecto | ✅ W2: `mcp-provider.ts` (239 L) + 8 tests; punto de manifest `mcpServerDefinitionProviders` |
 | G4 | Plugins: comando conector `picode.setup.packages` (contrato fijo) + clase de descubrimiento en `agentPluginServiceImpl.ts` que lo llama (patrón `CopilotCliAgentPluginDiscovery:854`) | ✅ núcleo `0236ddff` + W2 `packages-data.ts` (385 L) + 11 tests; contrato exacto cumplido |
 | G5 | Build completo + verificación visual en el editor empaquetado | ✅ build 0; pack verificado (3 módulos + manifest + discovery); editor relanzado |
@@ -159,15 +153,15 @@ tsconfig pendiente de autorización (bloqueo arriba). Detalle, hallazgos y lími
     los tres providers, los `FileSystemWatcher` y el comando viven en `src/extension.ts`.
   - **Rutas reales, leídas del runtime** (no supuestas): agentes en
     `<perfil>/agents`, `<perfil>/subagents`, `<cwd>/.pi/agents`, `<cwd>/.pi/subagents`
-    (el runtime de pi vía `gentle-pi/lib/agents-config.ts:211`; `subagents/` gana a
+    (el runtime de pi; `subagents/` gana a
     `agents/` y el proyecto gana al perfil, igual que allí). Skills en
     `<perfil>/skills`, `<cwd>/.pi/skills` y `<pkg>/skills`
     (`pi/docs/skills.md` + `dist/core/package-manager.js:203`; `SKILL.md` a cualquier
     profundidad, `*.md` suelto solo en la raíz, `_shared/` y los directorios con punto
     nunca son skills).
   - **Paquetes = los que lo declaran**, no todo `node_modules`: allí viven 95
-    directorios (dependencias transitivas) y solo 3 son paquetes de pi
-    (`gentle-pi`, `gentle-engram`, `@heyhuynhgiabuu/pi-pretty`), reconocidos por su
+    directorios (dependencias transitivas) y solo algunos son paquetes de pi,
+    reconocidos por su
     manifiesto `pi`, la keyword `pi-package` o un directorio de recursos convencional.
     Una declaración sin nada instalado **no se lista** (pi tampoco la resuelve): se
     registra en el log. Declaraciones y directorios se unen por ruta, así que una fila

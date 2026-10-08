@@ -35,11 +35,10 @@ memoria de sesiones).
 3. `Building-PiCode.md` — cómo compilar (Windows/Linux), preflight, pins
 4. `The-Patch-System.md` — patches/vscodium + patches/picode, regeneración
 5. `Pi-Inside.md` — pi interno vs externo, wizard, migración, proveedores/modelos
-6. `Gentle-AI-and-ODD.md` — memoria, skills, ODD/SDD
-7. `Distribution-and-Licensing.md` — MIT, upstreams, attribution
-8. `CI-and-Release.md` — workflows full-build, pin-check, pin-watch
-9. `Roadmap-and-Known-State.md` — qué existe hoy, qué falta (sintetizado de odd/tasks)
-10. `Glossary.md` — términos (host, pinned, lineage…)
+6. `Distribution-and-Licensing.md` — MIT, upstreams, attribution
+7. `CI-and-Release.md` — workflows full-build, pin-check, pin-watch
+8. `Roadmap-and-Known-State.md` — qué existe hoy, qué falta (sintetizado de odd/tasks)
+9. `Glossary.md` — términos (host, pinned, lineage…)
 
 ## Tareas y evidencia
 
@@ -61,7 +60,7 @@ memoria de sesiones).
   papeles.
 - [x] `wiki/` — 13 páginas en inglés: Home, What-PiCode-Is, Getting-PiCode,
   First-Run-and-the-Wizard, Architecture, Building-PiCode, The-Patch-System,
-  Pi-Inside, Gentle-AI-and-ODD, Distribution-and-Licensing, CI-and-Releases,
+  Pi-Inside, Distribution-and-Licensing, CI-and-Releases,
   Decisions-Log, Roadmap-and-Known-State, Glossary. Enlaces internos
   normalizados a `Pagina.md` (funcionan en la vista del repo y al importar a
   la wiki de GitHub) y verificados con script de integridad (`ALL LINKS OK`).

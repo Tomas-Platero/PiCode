@@ -12,9 +12,9 @@
 ## Arquitectura (exploración hecha)
 
 - **Asistente**: `picode-source/src/vs/workbench/contrib/welcomeGettingStarted/browser/picodeSetup.ts`
-  (1416 líneas, código propio de PiCode). Máquina de estados manual: `step: 0|1|2|3`
-  (0=pi runtime, 1=Provider & model, 2=Gentle AI, 3=Theme), dispatch en ~235-241, etiquetas
-  en ~255, `advanceFrom` ~335, guardas `step < 3` / `step === 3` en el pie.
+  (1416 líneas, código propio de PiCode). Máquina de estados manual: `step: 0|1|2`
+  (0=pi runtime, 1=Provider & model, 2=Theme), dispatch en ~235-241, etiquetas
+  en ~255, `advanceFrom` ~335, guardas `step < 2` / `step === 2` en el pie.
 - **Las claves `onboardingThemes`/`onboardingKeymaps` de product.json son datos muertos**:
   tipos en `src/vs/base/common/product.ts` pero nada las lee.
 - **Galería de temas (patrón a imitar)**: `renderThemeCard()` (~882) + `renderGalleryInto`

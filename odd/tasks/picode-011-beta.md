@@ -33,7 +33,7 @@ Tres defectos encadenados, todos comprobados contra el medio:
   `.picode-import-area` que después buscaba con `querySelector`, así que la oferta de
   importar nunca se pintaba. Se añadió el nodo.
 - **«Switching pi…» pegado.** `applyRuntime` no limpiaba la nota tras un cambio correcto;
-  ahora llama a `setNote('', false)` antes del repintado, como ya hacía `applyGentle`.
+  ahora llama a `setNote('', false)` antes del repintado.
 
 ## Galería de temas
 

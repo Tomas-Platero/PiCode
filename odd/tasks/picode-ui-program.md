@@ -35,9 +35,9 @@ Gathered read-only on 2026-09-22, against pi 0.86.1 and the installed packages.
    `SettingsView.show(startAt)` → `state.selected` in `media/settings.js`. The
    plumbing is complete; the **ids disagree**: the sidebar uses
    `src/menu.ts`'s `PiCategoryId` (`modelo | extensiones | runtime | proveedores |
-   gentle | sesion`) while the settings rail uses `src/pi-settings.ts`'s ids
+   sesion`) while the settings rail uses `src/pi-settings.ts`'s ids
    (`estado | picode | modelo | razonamiento | compactacion | reintentos | red |
-   herramientas | paquetes | skills | apariencia | sesion`). Four of six land on
+   herramientas | paquetes | skills | apariencia | sesion`). Four of five land on
    nothing, which is why the tab "just opens" and the owner has to search.
 2. **`extension_ui_request` is declared and never handled.** Its only occurrence in
    the extension is `src/protocol.ts:352`. That is pi's UI-neutral bridge for
@@ -67,10 +67,7 @@ Gathered read-only on 2026-09-22, against pi 0.86.1 and the installed packages.
    `picode.pi.runtime` (`path | managed | custom`) plus `picode.pi.executablePath`,
    `runtime.json` (the version pin for the managed pi), and `installSource()` in
    `src/menu.ts`, which runs `pi install` after a modal that names the exact command
-   — required, because pi's docs say packages run with full system access. Gentle AI
-   is two npm packages on this machine, `gentle-pi` (the orchestrator: ODD, SDD
-   skills) and `gentle-engram` (the memory provider), and the installed
-   `gentle-pi/assets/gentle-logo-only.png` is the only brand mark shipped today.
+   — required, because pi's docs say packages run with full system access.
 
 ## Phases and tasks
 
@@ -79,12 +76,11 @@ Gathered read-only on 2026-09-22, against pi 0.86.1 and the installed packages.
 | Task | Where |
 | --- | --- |
 | 1a. The chat's empty state shows the PiCode mark instead of a generic glyph | `media/main.js`, `media/main.css`, `src/chat-view.ts` |
-| 1b. A Gentle AI entry in the activity bar with **its own** settings panel | `package.json`, `src/gentle-view.ts` (new), `media/gentle.{js,css}` (new), `src/extension.ts`, `media/ajustes.js` |
 | 2. The six sidebar categories become deep links into the settings tab | `src/menu.ts`, `src/ajustes-view.ts`, `src/extension.ts` |
 | 3.3. Paquetes y recursos keeps only the packages table | `src/pi-settings.ts`, `media/settings.js` |
 | 5. Compactación + Razonamiento + Reintentos become one "Analítica" category | `src/pi-settings.ts` |
 | 6. "Cargando sesión…" while a previous session loads, and a way back to the list | `media/main.js`, `media/main.css`, `src/chat-view.ts` |
-| 10. The initial-setup wizard: pi runtime and Gentle AI, both linked natively, and repeatable later | new `src/onboarding.ts`, new `media/onboarding.{js,css}` (new webview), `src/extension.ts`, `package.json`, `src/pi-settings.ts` |
+| 10. The initial-setup wizard: pi runtime, linked natively, and repeatable later | new `src/onboarding.ts`, new `media/onboarding.{js,css}` (new webview), `src/extension.ts`, `package.json`, `src/pi-settings.ts` |
 
 Task 10 in detail, because it is the one that must leave the editor in a working
 state and not half-configured:
@@ -95,19 +91,15 @@ state and not half-configured:
 - **Question 1 — which pi**: the system `path` pi, PiCode's own `managed` pi, or a
   `custom` path/version. It writes `picode.pi.runtime` and, when needed,
   `picode.pi.executablePath` — the three modes `src/runtime.ts` already resolves.
-- **Question 2 — Gentle AI**: yes installs the layer (`pi install npm:gentle-pi` and
-  `npm:gentle-engram`) through the existing consent modal that names the exact
-  command; no leaves the option available later from the settings row without any
-  reinstall.
 - **The end state is linked, not merely chosen**: the resolved pi is the one the
-  chat and the settings tab use, the skills the layer brought are visible in the
-  Skills category, and the Gentle AI panel from task 1b shows its state. That is the
+  chat and the settings tab use, and the skills the packages brought are visible in
+  the Skills category. That is the
   difference this task has to deliver — the owner's words: "integradas de forma
   nativa dentro del editor desde ese momento, no como algo que haya que configurar
   aparte después".
 - **Repeatable.** A settings row ("Repetir configuración inicial") and the palette
-  command open the same wizard at any time, so changing the pi runtime or turning
-  Gentle AI on later needs no reinstall.
+  command open the same wizard at any time, so changing the pi runtime later needs no
+  reinstall.
 
 The deep-link mapping the fix must implement:
 
@@ -117,7 +109,6 @@ The deep-link mapping the fix must implement:
 | `extensiones` | settings rail `paquetes` |
 | `runtime` | settings rail `picode` |
 | `proveedores` | settings rail `modelo` until Fase 4 gives credentials their own section |
-| `gentle` | the new Gentle AI panel (task 1b), not the settings tab |
 | `sesion` | settings rail `sesion` |
 
 ### Fase 2 — skills and hot reload
@@ -154,10 +145,9 @@ full `npm test` chain green before it landed. Nothing is pushed; nothing is rele
 | The base this program builds on | `26573ae`, `4f7381b` | The uncommitted settings tab and packages table from the previous sessions, salvaged as-is, plus their feature documents and this record |
 | A stale key in the distribution defaults | `2e95b23` | `distribution/settings.json` still named the retired `picode.pi.defaultModel` |
 | Fase 1, tasks 1a and 6 | `e0d94a6` | The empty chat's mark, the "Cargando sesión…" line and the way back to the session list |
-| Fase 1, task 1b | `22e6cae` | Gentle AI's own activity-bar entry and panel, over one shared port |
 | Fase 1, tasks 5 and 3.3 | `f95b1fc` | The Analítica merge, and Paquetes y recursos down to the table with Acción = Eliminar |
-| Fase 1, task 2 | `9cd33a4` | The six sidebar categories reach the section they name; `gentle` reveals its panel |
-| Fase 1, task 10 | `9525de0` | The setup wizard: which pi, and whether to bring Gentle AI, once and repeatable |
+| Fase 1, task 2 | `9cd33a4` | The six sidebar categories reach the section they name |
+| Fase 1, task 10 | `9525de0` | The setup wizard: which pi, once and repeatable |
 | Fase 1, task 10b | `517c529` | Action rows in the catalogue, and the row that reopens the wizard |
 | Fase 2, task 3.1 (host) | `41e6303` | Skill discovery over the three automatic routes, and pi's package filters surviving a write |
 | Fase 2, task 3.1 (rows) | `951ffbb` | The skills derivation as a pure module |
@@ -172,15 +162,6 @@ full `npm test` chain green before it landed. Nothing is pushed; nothing is rele
 Decisions taken during the run, recorded because the owner asked not to be
 interrupted and these were settled without them:
 
-- **The Gentle AI activity-bar icon is an authored monochrome mark** (`media/gentle.svg`),
-drawn in the same line style as `picode.svg`. The brand's own mark is a rendered
-illustration that the activity bar's mask would flatten into a blob, so the bar gets
-the silhouette and the panel gets the real logo, downscaled to 256 px from the
-1.18 MB original. **A proper monochrome SVG from the brand owner would replace this**
-and is the only part of the entry that is an interpretation rather than the brand.
-- **Installing Gentle AI from the wizard installs two packages.** Nothing in PiCode
-ever installed `gentle-engram`; the layer is `gentle-pi` plus the memory provider, and
-the consent modal names both exact commands.
 - **The merged category is labelled "Analítica" as asked**, with a description that
 names what it holds, since the label alone does not carry thinking, compaction and
 retries.

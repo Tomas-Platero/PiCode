@@ -9,13 +9,10 @@
 | Palabra | En el vocabulario del dueño | En el vocabulario de VS Code 1.141 |
 | --- | --- | --- |
 | **Host** | **pi**. El agente que ejecuta. Interno (el de PiCode) o externo (el de la máquina). | El agente que ejecuta. |
-| **Harness** | **Gentle-AI**, la capa que organiza el trabajo por encima del host. | El **harness de agente**: el proceso que mueve el bucle del agente (Copilot harness, harness picker). |
+| **Harness** | La capa que organiza el trabajo por encima del host, hoy ejecutada por **pi** y sus paquetes. | El **harness de agente**: el proceso que mueve el bucle del agente (Copilot harness, harness picker). |
 
-Hoy, en PiCode, **el papel de harness lo ejecuta pi**, con su ecosistema de paquetes, y
-**Gentle-AI no está integrada**: se retiró del producto a propósito (ver
-[La parte de Gentle-AI](#la-parte-de-gentle-ai--fuera-del-producto-y-por-qué)). Este
-documento describe las dos cosas: cómo está montado el harness que sí hay (pi), y qué
-quedó de la integración con Gentle-AI.
+Hoy, en PiCode, **el papel de harness lo ejecuta pi**, con su ecosistema de paquetes.
+Este documento describe cómo está montado.
 
 ---
 
@@ -44,7 +41,7 @@ quedó de la integración con Gentle-AI.
 - **Runtime interno o externo**: ajuste `picode.pi.runtime`. El externo se **conecta**
   (se lee, nunca se escribe) y el asistente de primer arranque ofrece **migrar** de él
   al interno — siempre a petición expresa del dueño. Una importación se niega a arrastrar
-  los paquetes de Gentle (`left-behind-packages.ts`, ver más abajo).
+  paquetes vetados (`left-behind-packages.ts`).
 
 ### 3. El conector (lo que une el editor con pi)
 
@@ -92,8 +89,7 @@ extensión para vivir en el proceso host del editor. Está registrado como tarea
 
 ## Parte 2 — pi-durable: el runtime que reemplaza al harness
 
-La rama `experimental` existe para probar `pi-durable` como runtime del agente — y el
-commit que lo trajo dice sin rodeos que **gentle-ai es lo que reemplaza**.
+La rama `experimental` existe para probar `pi-durable` como runtime del agente.
 
 - **Dónde**: `resources/pi-durable`, junto a las dependencias que carga. Se ejecuta sobre
   el binario del propio editor en modo Node: una instalación es autocontenida.
@@ -105,39 +101,9 @@ commit que lo trajo dice sin rodeos que **gentle-ai es lo que reemplaza**.
 
 ---
 
-## La parte de Gentle-AI — fuera del producto, y por qué
-
-**Medido**: el commit `2ac4e68d` (4 de octubre de 2026) retiró la integración completa —
-"el producto se sostiene sin gentle-ai". En esta rama el producto **no la detecta, no la
-instala, no la muestra ni la nombra**: fuera el puente de instalación del onboarding y su
-paso del asistente, la sección *Gentle AI* del panel de estado, los perfiles de modelo de
-los agentes, los objetivos de comprobación de actualizaciones y el resto de su superficie.
-
-**Qué quedo, y a propósito:**
-
-| Resto | Dónde | Por qué |
-| --- | --- | --- |
-| La **negativa de importación** | `extensions/picode/src/left-behind-packages.ts` | Un import desde un pi externo no arrastra `gentle-pi` ni `gentle-engram` al perfil interno — ni instalados ni declarados, porque una declaración en el `settings.json` copiado es una orden para el siguiente `pi install`. Añadir un nombre a esa lista es una línea. |
-| El **vocabulario** | `docs/PI-Y-GENTLE-AI.md` | Host = pi, Harness = Gentle-AI, y las cuatro combinaciones interno/externo. Sigue siendo el idioma del dueño. |
-| La **metodología ODD** | `AGENTS.md` | Sigue siendo la capa de organización del trabajo, hoy ejercida por personas y por este harness documental — no por un paquete dentro del editor. |
-
-**Qué era la integración retirada** (para no volver a inventarlo): los paquetes
-`gentle-pi` y `gentle-engram` instalados en el perfil; una tool por agente
-(`subagent_<nombre>`); los ficheros de presencia
-(`gentle-agents/presence/<hash>.<encarnación>.activity.json`) que el chat leía en vivo;
-las tareas en `gentle-agents/tasks/`; la sección del panel de estado con su rosa; y el
-paso del asistente que la instalaba.
-
-**Si algún día vuelve**: la puerta es la misma que cualquier paquete de pi
-(`packages*.ts`), la lista de `left-behind-packages.ts` es la que hay que editar, y las
-tarjetas de subagente del chat ya saben leer presencia de gentle si vuelve a escribirse.
-Lo que no volverá sin decisión del dueño es su instalación automática.
-
----
-
 ## Los caminos que NO existen (y no deben abrirse)
 
-- **No hay superficie de Gentle-AI ni de Copilot en el editor**: el chat es `@pi` y nadie
+- **No hay superficie de Copilot en el editor**: el chat es `@pi` y nadie
   más. `defaultChatAgent` está a `null` y los ajustes de los subagentes de la familia
   Copilot se retiraron (commit `41185701`, ver `odd/tasks/picode-vscode-141.md`).
 - **El perfil externo jamás se escribe**: conectarse es leer; migrar es una acción

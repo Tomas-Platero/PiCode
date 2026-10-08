@@ -138,7 +138,7 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   `ctx.ui.confirm/select/input` al carrusel de preguntas del chat y `ctx.ui.notify` a una línea en
   él; lo de terminal (`custom`, `setWidget`, `setFooter`, `theme`…) queda inerte. Se marca además el
   proceso con `GENTLE_SHELL_INTERACTIVE_HOST=1`, el contrato de host interactivo que gentle-pi lee
-  (`lib/rpc-host.ts`). Detalle en `odd/tasks/picode-gentle-chat.md`.
+  (`lib/rpc-host.ts`).
 
 ### Changed
 - **pi sube a `1.0.2` en el pin del editor.** `distribution/runtime.json` pasa de `1.0.1` a

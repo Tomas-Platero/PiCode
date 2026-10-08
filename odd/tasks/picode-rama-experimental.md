@@ -13,7 +13,7 @@ Planificar una línea de trabajo aparte para lo que **no toca el producto**, y h
 
 - **Pi Durable queda aparcado.** No se implementa ahora: es experimental, salió el mismo día que
   pi 1.0.0, no resuelve ningún problema que el editor tenga hoy, y cambiar el motor del chat
-  dejaría a **gentle-ai sin dónde engancharse** (ver «Por qué no ahora»). *(Sigue siendo la decisión
+  dejaría a **los paquetes de pi sin dónde engancharse** (ver «Por qué no ahora»). *(Sigue siendo la decisión
   de `master`. El 2026-10-04 el dueño pidió probarlo dentro de la rama: ver «Registro».)*
 - El camino barato sigue siendo el de siempre: **subir el pin de pi**. Ellos mismos dicen que las
   lecciones de Durable volverán al agente de código, y eso llega gratis por esa vía.
@@ -29,7 +29,7 @@ Planificar una línea de trabajo aparte para lo que **no toca el producto**, y h
 | ¿Viene con pi? | **No**: comprobado dentro del paquete de pi 1.0.0, no hay ni rastro |
 | ¿Depende del agente de código? | **No**: trae su propio motor de modelos y herramientas (deps: `pi-ai`, `chord`, `typebox`, `diff`) |
 | Lo que reutiliza de PiCode | **Nada** de lo ya montado: proveedores, perfiles, MCP, credenciales y ajustes habría que rehacerlos sobre su API |
-| Choque con gentle-ai | **Sí, por capa**: gentle-ai se engancha a la superficie de extensiones de **pi**; Durable tiene la suya (`defineExtension`, `defineTask`, `defineTool`). Una conversación corre sobre **un** motor, no sobre dos |
+| Choque con los paquetes de pi | **Sí, por capa**: los paquetes se enganchan a la superficie de extensiones de **pi**; Durable tiene la suya (`defineExtension`, `defineTask`, `defineTool`). Una conversación corre sobre **un** motor, no sobre dos |
 
 Y el detalle que lo resume: el ejemplo que enseñan (el planificador de vacaciones) son ~1.300
 líneas y **la mayoría es interfaz**. Poner el chat del editor encima de esto es reescribir el motor
@@ -39,7 +39,7 @@ del chat, no enchufar una pieza.
 
 Una rama de feature se abre para llevar algo a `master`. Esta no: es un **banco de pruebas**. La
 diferencia importa porque PiCode tiene una regla que no se rompe desde una rama — **un solo Pi
-dentro del editor, con agents, skills y gentle-ai**. Un experimento que cambia el motor es una
+dentro del editor, con agents, skills y paquetes**. Un experimento que cambia el motor es una
 línea paralela, no una tarea.
 
 ## El reset del repositorio
@@ -86,7 +86,7 @@ git branch experimental master
    actualizarse a menudo; en `master` no.
 3. 1️⃣ **No cambia la regla del único Pi.** Que un experimento funcione no convierte a Durable en el
    motor del editor: eso sería una decisión de producto, no un resultado de rama.
-4. 🧩 **No exige gentle-ai.** Si un experimento necesita agents, skills o memoria de gentle, portarlos
+4. 🧩 **No exige paquetes de pi.** Si un experimento necesita agents, skills o memoria, portarlos
    es trabajo del propio experimento, no un requisito de la rama.
 5. 🧼 **No toca el perfil interno del producto** (`data/pi-agent`) salvo que sea el objetivo del
    experimento; lo normal es un perfil propio para no contaminar el del dueño.
@@ -122,7 +122,7 @@ documento describía.
 avance rápido: diferencias **0**. La rama sigue **local** (contrato 1: los experimentos no ensucian
 el remoto público).
 
-**🧹 Gentle fuera del producto** — commit `2ac4e68d` (28 ficheros, +171 / −2116).
+**🧹 Fuera la integración retirada** — commit `2ac4e68d` (28 ficheros, +171 / −2116).
 
 | Comprobación | Resultado |
 | --- | --- |
@@ -133,7 +133,7 @@ el remoto público).
 Se fueron con él dos superficies que existían **leyendo su runtime**, no por ser suyas: las tarjetas
 de subagentes en vivo del chat y la lista de tareas de la sesión. Y un hueco real que no se había
 visto: las carpetas `skills/` y `agents/` del perfil las registraba **la propia instalación de
-gentle**, así que ahora no las registra nadie.
+la capa retirada**, así que ahora no las registra nadie.
 
 **🧪 pi-durable, probado** — commit `86fcdeae`, en `experimental/durable/`: un programa aparte, como
 pedía este documento. JavaScript plano sobre `pi-durable@1.0.2`, contra el gateway de la casa. El
@@ -170,7 +170,7 @@ es silencioso y caro. Es lo que hay que resolver antes de pensar en el editor.
 
 #### Abierto
 
-- Reponer las dos superficies del chat que se fueron con gentle, esta vez sobre durable.
+- Reponer las dos superficies del chat que se fueron con la capa retirada, esta vez sobre durable.
 - El daemon dueño del storage, para más de un cliente a la vez. *(Hecho: ver más abajo.)*
 - El puente de MCP: `pi-mcp` no forma parte de durable, así que las tools habría que envolverlas con
   `defineTool`.
@@ -189,7 +189,7 @@ Cinco commits más sobre la rama, todos verificados **ejecutando**:
 | `b2936dec` + `68927b96` | **OAuth de solo lectura, y solo del perfil interno**: los tokens se leen del perfil en vigor (`data/pi-agent/`), **nunca de `~/.pi`**; un acceso caducado o ausente dice que ese perfil necesita un login y que todavía no hay nada que lo haga. **No se escribe ni se renueva nunca** — un refresh consume la rotación. Comprobado con hash: el `mcp-auth.json` externo intacto, y el interno sin crear. Precio visible de la regla: `sentry` conectaba con 14 tools mientras se tomaba prestado un token externo, y ya no |
 | `d424e5dc` | **El editor ve durable**: sección *Durable* en el panel de estado (daemon, conversaciones, de subagente, streams vivos) y cuatro comandos —arrancar, parar, listar/abrir, enviar un prompt— con la transcripción en un canal de salida. Los ajustes dejan de decir «el editor todavía no lo ejecuta» |
 | `8474f4e3` | **pi + durable, demostrado**: una extensión que pi carga del repositorio le delega trabajo al daemon. La prueba: pi arranca seis pasos lentos, **se mata pi con `taskkill /F /T` a mitad**, el daemon termina el trabajo que le habían entregado, y un pi nuevo lee la conversación terminada y su respuesta. Sobre **el pi interno de PiCode**, no el de `~/.pi` |
-| `c1730982` | **Vuelven las dos superficies que se fue gentle**: las tarjetas de subagente del chat (pintadas por el propio agente de chat, en la forma que la UI ya sabe dibujar, con la **identidad de durable** dentro) y la lista de trabajos del panel, con el único estado que el protocolo sostiene — `run` presente es *in flight*, ausente es *idle*, y lo que no se pudo leer lo dice |
+| `c1730982` | **Vuelven las dos superficies que se fue la capa retirada**: las tarjetas de subagente del chat (pintadas por el propio agente de chat, en la forma que la UI ya sabe dibujar, con la **identidad de durable** dentro) y la lista de trabajos del panel, con el único estado que el protocolo sostiene — `run` presente es *in flight*, ausente es *idle*, y lo que no se pudo leer lo dice |
 | `8fac64d0` | **ACP v1** sobre el daemon: `initialize`, `session/new`, `load`, `list`, `prompt`, `cancel` y **permisos**. La joya: el guard determinista deja de bloquear en silencio y **pregunta al cliente** (`allow_once` / `allow_always` / `reject_once`), y la misma orden puede quedar bloqueada antes de correr o ejecutarse, según lo que se conteste. Sin cliente escuchando, el bloqueo de siempre — por eso `proof-daemon.sh` sigue pasando igual |
 | `b9c26e35` | **Build al lado, no encima**: `PICODE_PACK_SUFFIX` empaqueta en otra carpeta (la tarea de empaquetado hace `rimraf` de la suya) y `PICODE_SKIP_INSTALLER` no genera instalador, porque instalarlo pisaría el PiCode que el dueño ya usa. Ambas vacías por defecto: una build normal no cambia |
 
@@ -245,7 +245,7 @@ Todo lo de abajo está **hecho y verificado ejecutando**, no leyendo. Los commit
 | `8474f4e3` | **pi + durable demostrado**: se mata pi con `taskkill /F /T` a mitad y el daemon termina el trabajo; un pi nuevo lo lee |
 | `e1663a49` | El daemon **muere con PiCode** por un **latido** (un tubo, no un pid). Medido: 465 ms ordenado, 229 ms si te matan, 96 ms al cerrar el tubo. Y pararse no pierde nada |
 | `8fac64d0` | **ACP v1** sobre el daemon: `initialize`, `session/new`, `load`, `list`, `prompt`, `cancel` y **permisos** — el guard determinista deja de bloquear en silencio y **pregunta al cliente** |
-| `c1730982` | **Vuelven las dos superficies** que se llevó gentle: tarjetas de subagente y lista de trabajos, con la identidad de durable dentro |
+| `c1730982` | **Vuelven las dos superficies** que se llevó la capa retirada: tarjetas de subagente y lista de trabajos, con la identidad de durable dentro |
 
 **Los MCP del chat, de rotos a útiles**
 
@@ -269,8 +269,8 @@ Todo lo de abajo está **hecho y verificado ejecutando**, no leyendo. Los commit
 
 | | Qué |
 | --- | --- |
-| `2ac4e68d` | **gentle fuera del producto** (28 ficheros, +171/−2116) y el **import deja sus paquetes atrás** |
-| `4ddcea9d` | El import **no arrastra** `gentle-pi` ni `gentle-engram`, ni deja sus declaraciones |
+| `2ac4e68d` | **La capa retirada fuera del producto** (28 ficheros, +171/−2116) y el **import deja sus paquetes atrás** |
+| `4ddcea9d` | El import **no arrastra** los paquetes vetados, ni deja sus declaraciones |
 | `28166df4` | **Ninguna instalación de paquetes abre ventana**: era pi instalando uno por paquete con `stdio:"inherit"` y sin `windowsHide`. Y los nombres de paquete pasan por **lista blanca** antes del shell |
 | `efc7f662` | **El empaquetado ya no borra `data/`**: lo aparta, empaqueta y lo devuelve. Con un fichero bloqueado **para limpio sin borrar nada**, y una build muerta se recupera sola |
 | `cbd72bad` | **El sync tenía un manejador muerto** en el registro (una beta desinstalada) y una build desde carpeta no registraba el esquema. Ahora se registra, repara entradas muertas y **no se calla** |
@@ -983,7 +983,7 @@ demonio corre sobre el binario del editor como Node con su almacenamiento en `da
 **Falla de la herramienta aprendida**: crear la release con el cuerpo JSON por **argv** corrompió los
 em dashes (el argv de Windows cruza la página de código ANSI) y la API contestó *Problems parsing
 JSON* con un JSON válido. El cuerpo va por **fichero** (`--data-binary @`), que manda los bytes tal
-cual. Notas reescritas a petición del dueño: **todo sobre pi durable, nada de gentle**, y parchadas
+cual. Notas reescritas a petición del dueño: **todo sobre pi durable**, y parchadas
 sobre la release ya creada.
 
 **Verificado ejecutando**: build exit 0 (5m 49s); 375 tests (374 pasan, 1 skip); typecheck exit 0;
