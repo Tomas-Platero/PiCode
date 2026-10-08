@@ -136,10 +136,19 @@ versión del editor no se toca — el canal viaja en `quality` (ruta del feed) y
 - [x] **C2** · Sufijo de versión por calidad desactivado: hecho en `7ad0d89d`.
       `picode-source/build/gulpfile.vscode.ts:301-310` — solo `insider` recibe sufijo, así que
       `beta`/`experimental`/`rc` conservan la versión limpia que casan las extensiones.
-- [ ] **C3** · Identidad de instalador por canal: DirName/NameLong/AppId/**mutex** fijos por
-      canal en `gulpfile.vscode.win32.ts`, reutilizando la maquinaria side-by-side.
-- [ ] **C4** · Perfil por canal: `dataFolderName` por canal (o la decisión del dueño de
-      compartir), con la nota de migración.
+- [x] **C3** · Identidad de instalador por canal: hecho el 2026-10-08, y **en el sello**
+      (`dev/build.sh`) en vez de en `gulpfile.vscode.win32.ts`: el canal escribe
+      `nameShort`/`nameLong`, `win32DirName`, `win32NameVersion`, `win32ShellNameShort`,
+      `win32RegValueName`, `win32AppUserModelId`, `win32MutexName` y los dos mutex del túnel.
+      Los `win32*AppId` se **derivan** (sha1 del canal + el nombre de la clave) para que el
+      mismo canal dé siempre los mismos identificadores y dos canales convivan; **`stable`
+      no se toca**: su AppId es la identidad con la que están registradas las instalaciones
+      que ya existen, y derivar uno nuevo las dejaría huérfanas.
+- [x] **C4** · Perfil por canal: `dataFolderName`, `sharedDataFolderName` y
+      `serverDataFolderName` llevan el canal (`.picode`, `.picode-beta`,
+      `.picode-experimental`), así que tres instalaciones no comparten ajustes ni
+      extensiones. Verificado sellando los tres canales y leyendo el `product.json`
+      resultante.
 - [x] **C5** · Pipeline por canal: hecho el 2026-10-08 en `.github/workflows/release.yml`. **Un
       solo workflow, no tres**: el canal sale del sufijo del tag (`-beta`, `-experimental`, o
       ninguno = `stable`), y de ahí salen las tres cosas que cambian entre canales — el sellado del

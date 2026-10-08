@@ -338,31 +338,96 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
   esac
   PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" FEED_BRANCH="${FEED_BRANCH}" node <<'NODE'
 const fs = require('fs');
+const crypto = require('crypto');
 const file = 'picode-source/product.json';
-const product = JSON.parse(fs.readFileSync(file, 'utf8'));
+const channel = process.env.PICODE_CHANNEL;
 const quality = process.env.QUALITY_VALUE;
 const branch = process.env.FEED_BRANCH;
-// The feed lives with its own channel: the branch in the URL is the channel's branch, so a
-// beta build reads the beta branch's feed and a stable build can never be handed a beta one,
-// even if a pipeline gets the channel wrong. The URL is derived from the one the delta
-// already carries, so the host and the path keep a single home and the branch is the only
-// thing this adds. Failing loudly beats shipping a HEAD URL silently: HEAD follows whatever
-// the default branch happens to be, which is the moving target this removes.
-const before = product.updateUrl;
-if (typeof before !== 'string' || before.indexOf('/HEAD/') === -1) {
-  console.error(`  product.json's updateUrl carries no /HEAD/ to point at a branch: ${before}`);
+const raw = fs.readFileSync(file, 'utf8');
+const product = JSON.parse(raw);
+
+// The feed lives with its own channel: the branch in the URL is the channel's
+// branch, so a beta build reads the beta branch's feed and a stable build can
+// never be handed a beta one, even if a pipeline gets the channel wrong. The
+// URL is derived from the one the delta already carries, so the host and the
+// path keep a single home and the branch is the only thing this adds. Failing
+// loudly beats shipping a HEAD URL silently: HEAD follows whatever the default
+// branch happens to be, and that moving target is what this removes.
+if (typeof product.updateUrl !== 'string'
+  || product.updateUrl.indexOf('/HEAD/') === -1) {
+  console.error('  updateUrl has no /HEAD/ to point at a branch:');
+  console.error(`  ${product.updateUrl}`);
   process.exit(1);
 }
-const updateUrl = before.replace('/HEAD/', `/${branch}/`);
-if (product.quality === quality && before === updateUrl) {
-  console.log(`  channel already sealed: ${quality} (feed branch ${branch})`);
+
+// Everything a second install needs so it does not collide with the first one:
+// its own folder, registry name, mutex, user model id and installer AppId.
+// `stable` keeps exactly what the delta carries, so the stable build is the
+// product as it has always been; the others are that plus the channel.
+const CHANNEL = {
+  stable: { label: '', reg: 'PiCode', slug: 'picode' },
+  beta: { label: ' Beta', reg: 'PiCodeBeta', slug: 'picode-beta' },
+  experimental: {
+    label: ' Experimental',
+    reg: 'PiCodeExperimental',
+    slug: 'picode-experimental'
+  }
+}[channel];
+if (CHANNEL === undefined) {
+  console.error(`  no identity is defined for channel '${channel}'`);
+  process.exit(1);
+}
+
+product.quality = quality;
+product.updateUrl = product.updateUrl.replace('/HEAD/', `/${branch}/`);
+product.nameShort = `PiCode${CHANNEL.label}`;
+product.nameLong = product.nameLong.replace('PiCode', `PiCode${CHANNEL.label}`);
+product.win32DirName = `PiCode${CHANNEL.label}`;
+product.win32NameVersion = `PiCode${CHANNEL.label}`;
+product.win32ShellNameShort = `PiCode${CHANNEL.label}`;
+product.win32RegValueName = CHANNEL.reg;
+product.win32AppUserModelId = `PiCode.${CHANNEL.reg}`;
+product.win32MutexName = CHANNEL.slug;
+product.win32TunnelMutex = `${CHANNEL.slug}-tunnel`;
+product.win32TunnelServiceMutex = `${CHANNEL.slug}-tunnelservice`;
+product.dataFolderName = `.${CHANNEL.slug}`;
+product.sharedDataFolderName = `.${CHANNEL.slug}-shared`;
+product.serverDataFolderName = `.${CHANNEL.slug}-server`;
+product.darwinBundleIdentifier = `com.${CHANNEL.slug}`;
+product.linuxIconName = CHANNEL.slug;
+
+// The AppIds are derived, not random: a channel always gets the same
+// identifiers, so a rebuild is the same installer, and two channels can sit
+// side by side. One hash per key, so x64 and arm64 never share an id.
+//
+// `stable` is left ALONE on purpose. Its AppId is the identity every install
+// that already exists is registered under -- the installer and the uninstaller
+// key off it -- so deriving a new one would orphan them. The stable build must
+// be the product it has always been, down to the identifier.
+if (channel !== 'stable') {
+  for (const key of Object.keys(product)) {
+    if (!/^win32.*AppId$/.test(key)) {
+      continue;
+    }
+    const h = crypto.createHash('sha1')
+      .update(`PiCode installer ${channel} ${key}`)
+      .digest('hex').toUpperCase();
+    product[key] = `{{${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}`
+      + `-${h.slice(16, 20)}-${h.slice(20, 32)}}`;
+  }
+}
+
+const after = JSON.stringify(product, null, '\t') + '\n';
+if (after === raw) {
+  console.log(`  channel already sealed: ${quality} (feed ${branch})`);
   process.exit(0);
 }
-product.quality = quality;
-product.updateUrl = updateUrl;
-fs.writeFileSync(file, JSON.stringify(product, null, '\t') + '\n');
-console.log(`  channel sealed: ${process.env.PICODE_CHANNEL} -> quality "${quality}", feed branch "${branch}"`);
-console.log(`  updateUrl: ${updateUrl}`);
+fs.writeFileSync(file, after);
+console.log(`  channel sealed: ${channel} -> quality "${quality}"`);
+console.log(`  feed branch: ${branch}`);
+console.log(`  profile: ${product.dataFolderName}`);
+console.log(`  installs as: ${product.win32DirName}`);
+console.log(`  mutex: ${product.win32MutexName}`);
 NODE
 fi
 
