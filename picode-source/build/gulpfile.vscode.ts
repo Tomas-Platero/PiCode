@@ -300,8 +300,14 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		let version = packageJson.version;
 		const quality = (product as { quality?: string }).quality;
 
-		if (quality && quality !== 'stable') {
-			version += '-' + quality;
+		// PiCode's channels (beta/experimental/rc) must NOT suffix the version. This value lands
+		// in product.json's `version` (stamped below), which is what extension `engines.vscode`
+		// ranges match against — Open VSX declares plain versions, and a suffixed one fails
+		// every range — and what the updater compares. Upstream's 'insider' keeps its suffix:
+		// its own extension ecosystem pairs the suffixed versions. Measured 2026-10-08,
+		// odd/tasks/picode-canales.md (the channels design).
+		if (quality === 'insider') {
+			version += '-insider';
 		}
 
 		const name = product.nameShort;
