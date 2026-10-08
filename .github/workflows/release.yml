@@ -316,6 +316,45 @@ jobs:
               "${CREATE[@]}" "${TARGET[@]}"
           fi
 
+      - name: Describe the channel above the changelog
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The page opens by saying what this channel IS, and only then what
+          # changed. The description lives in the repository, one fragment per
+          # channel, so it is edited like any other text instead of hiding in
+          # this file. The release's own title already carries the version, and
+          # the project's rule is that a datum appears once.
+          DESCRIPTION="dev/release-notes/${CHANNEL}.md"
+          if [ ! -f "${DESCRIPTION}" ]; then
+            echo "error: channel ${CHANNEL} has no description at" >&2
+            echo "${DESCRIPTION}" >&2
+            exit 1
+          fi
+          # The changelog GitHub generated compares against the release before
+          # this one. Repointed at this tag's own commits: a link that goes
+          # nowhere is the one thing these notes must not carry.
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          COMMITS_URL="${REPO_URL}/commits/v${PICODE_VERSION}"
+          SED="s#https://github.com/[^ ]*/compare/[^ ]*#${COMMITS_URL}#"
+          EXE="PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
+          ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
+          {
+            cat "${DESCRIPTION}"
+            echo
+            echo "---"
+            echo
+            gh release view "v${PICODE_VERSION}" \
+              --json body --jq .body | sed -E "${SED}"
+            echo
+            echo "| File | What it is for |"
+            echo "| --- | --- |"
+            echo "| `\${EXE}` | install it |"
+            echo "| `\${ZIP}` | run it in place, without installing |"
+          } > release-notes.md
+          gh release edit "v${PICODE_VERSION}" --notes-file release-notes.md
+
       - name: Generate the update feed
         shell: bash
         run: |
