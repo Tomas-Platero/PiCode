@@ -954,3 +954,38 @@ Lo que quedó de eso:
 bloqueo dure, la build se ha hecho en **`PiCode-win32-x64 - experimental-b`**, con el perfil del dueño
 dentro (56 861 ficheros, 259 conversaciones). Cuando el bloqueo se suelte: renombrar `-b` a su nombre de
 siempre y borrar la vieja.
+
+### 2026-10-07 (noche) · primera release experimental: `v0.1.4-experimental`
+
+> «Quiero que subas al repo una release experimental y picode subelo a 0.1.4-experimental»
+
+La primera vez que la rama se convierte en algo descargable. Publicada **al lado** del canal
+estable, nunca dentro de él.
+
+| | Valor |
+| --- | --- |
+| Release | https://github.com/Tomas-Platero/PiCode/releases/tag/v0.1.4-experimental (marcada *Pre-release*) |
+| Assets | zip 290,5 MB + setup.exe 182,3 MB, **ambos con el SHA-256 verificado por GitHub contra el local** |
+| Versión | `picodeVersion 0.1.4-experimental`, editor `1.135.6` (`distribution/product-delta.json`) |
+| Feed estable | **intacto**: sigue en `0.1.3-beta / 1.135.5`; nadie recibe esto como actualización |
+
+**La decisión de canal** (la del día): una etiqueta `v*-experimental` **no dispara `release.yml`**
+—exclusión `!v*-experimental` añadida y probada: cero runs para la etiqueta—. Ese pipeline escribe
+el feed en `master`, y un feed nombrando una experimental la ofrecería a todo usuario estable. La
+experimental se corta a mano: build local con `PICODE_PACK_SUFFIX="-experimental"`, release vía API
+(marca *Pre-release*), sin feed.
+
+**Lo que la release lleva** (commits `aa4ce550` + `8b85a172`): el agente durable viaja dentro de la
+instalación (`resources/pi-durable`, 116 MB con sus dependencias, sin pruebas ni credenciales), el
+instalador es **otra aplicación para Windows** (AppId `0C6D6F1E-…`, carpeta y nombre propios), y el
+demonio corre sobre el binario del editor como Node con su almacenamiento en `data/durable`.
+
+**Falla de la herramienta aprendida**: crear la release con el cuerpo JSON por **argv** corrompió los
+em dashes (el argv de Windows cruza la página de código ANSI) y la API contestó *Problems parsing
+JSON* con un JSON válido. El cuerpo va por **fichero** (`--data-binary @`), que manda los bytes tal
+cual. Notas reescritas a petición del dueño: **todo sobre pi durable, nada de gentle**, y parchadas
+sobre la release ya creada.
+
+**Verificado ejecutando**: build exit 0 (5m 49s); 375 tests (374 pasan, 1 skip); typecheck exit 0;
+instalador compilado con su AppId propio; digests del servidor = SHA-256 locales; los dos feeds de
+`master` siguen en `0.1.3-beta`.
