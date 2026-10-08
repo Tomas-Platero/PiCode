@@ -564,11 +564,11 @@ export class ListSettingWidget<TListDataItem extends IListDataItem> extends Abst
 			return true;
 		}));
 		let counter = 0;
-		this.listDisposables.add(DOM.addDisposableListener(rowElement, DOM.EventType.DRAG_ENTER, (ev) => {
+		this.listDisposables.add(DOM.addDisposableListener(rowElement, DOM.EventType.DRAG_ENTER, (_ev) => {
 			counter++;
 			rowElement.classList.add('drag-hover');
 		}));
-		this.listDisposables.add(DOM.addDisposableListener(rowElement, DOM.EventType.DRAG_LEAVE, (ev) => {
+		this.listDisposables.add(DOM.addDisposableListener(rowElement, DOM.EventType.DRAG_LEAVE, (_ev) => {
 			counter--;
 			if (!counter) {
 				rowElement.classList.remove('drag-hover');
@@ -791,7 +791,7 @@ export class ExcludeSettingWidget extends ListSettingWidget<IIncludeExcludeDataI
 		return ['setting-list-include-exclude-widget'];
 	}
 
-	protected override addDragAndDrop(rowElement: HTMLElement, item: IIncludeExcludeDataItem, idx: number) {
+	protected override addDragAndDrop(_rowElement: HTMLElement, _item: IIncludeExcludeDataItem, _idx: number) {
 		return;
 	}
 
@@ -827,7 +827,7 @@ export class IncludeSettingWidget extends ListSettingWidget<IIncludeExcludeDataI
 		return ['setting-list-include-exclude-widget'];
 	}
 
-	protected override addDragAndDrop(rowElement: HTMLElement, item: IIncludeExcludeDataItem, idx: number) {
+	protected override addDragAndDrop(_rowElement: HTMLElement, _item: IIncludeExcludeDataItem, _idx: number) {
 		return;
 	}
 
@@ -1036,7 +1036,7 @@ export class ObjectSettingDropdownWidget extends AbstractListSettingWidget<IObje
 		return header;
 	}
 
-	protected renderItem(item: IObjectDataItem, idx: number): RowElementGroup {
+	protected renderItem(item: IObjectDataItem, _idx: number): RowElementGroup {
 		const rowElement = $('.setting-list-row');
 		rowElement.classList.add('setting-list-object-row');
 
@@ -1374,7 +1374,7 @@ export class ObjectSettingCheckboxWidget extends AbstractListSettingWidget<IBool
 		return ['setting-list-object-widget'];
 	}
 
-	protected getActionsForItem(item: IBoolObjectDataItem, idx: number): IAction[] {
+	protected getActionsForItem(_item: IBoolObjectDataItem, idx: number): IAction[] {
 		return [];
 	}
 

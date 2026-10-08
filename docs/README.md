@@ -14,6 +14,7 @@ la cara pública (README, wiki) se escribe desde aquí, no al revés.
 | [howto-build.md](howto-build.md) | Compilar desde la fuente: pins, parches, reparación, verificación | ES |
 | [CI.md](CI.md) | La vigilancia del pin: los tres workflows, cachés, política de urgencia | ES |
 | [PI-Y-GENTLE-AI.md](PI-Y-GENTLE-AI.md) | Qué son pi y Gentle-AI por dentro, medido contra la instalación real | ES |
+| [HARNESS.md](HARNESS.md) | Cómo está integrado hoy el harness de agentes: las cinco capas de pi, pi-durable, y la parte de Gentle-AI que salió del producto | ES |
 | [TAREAS.md](TAREAS.md) | **La única lista de qué queda.** Si un papel de `odd/tasks/` dice otra cosa, gana este | ES |
 
 ## Cómo se lee esto sin perderse
