@@ -103,6 +103,22 @@ jobs:
             echo "distribution/product-delta.json." >&2
             exit 1
           fi
+          # The channel is the tag's suffix, and each channel keeps its feed
+          # on its own branch — the owner's relation (2026-10-08):
+          #
+          #   stable <-> master
+          #   beta <-> beta
+          #   experimental <-> experimental
+          #
+          # `insider` is not one of ours and never names a release here.
+          case "${PICODE_VERSION}" in
+            *-experimental)
+              CHANNEL="experimental"; FEED_BRANCH="experimental" ;;
+            *-beta)
+              CHANNEL="beta"; FEED_BRANCH="beta" ;;
+            *)
+              CHANNEL="stable"; FEED_BRANCH="master" ;;
+          esac
           # A tag push must carry the version the delta file declares;
           # otherwise the release and the feed would tell different stories.
           if [ "${{ github.event_name }}" = "push" ] \
@@ -115,9 +131,21 @@ jobs:
             exit 1
           fi
           # Refuse a PiCode version that is not strictly newer than the last
-          # release, and an editor version the updater would never offer.
-          PREV_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
-            --jq .tag_name 2>/dev/null || true)
+          # release of THIS channel, and an editor version the updater would
+          # never offer. Comparing against the latest release of the whole
+          # repository is wrong as soon as there is more than one channel:
+          # 0.2.0 (stable) is not "newer" than 0.2.0-beta, yet it is the
+          # release that comes after it. Each channel only races itself, and
+          # the channel's own feed names the release it last served.
+          PREV_TAG=""
+          PREV_FEED="updates/${CHANNEL}/win32/x64/archive/latest.json"
+          if [ -f "${PREV_FEED}" ]; then
+            PREV_PICODE=$(node -p \
+              "require('./${PREV_FEED}').picodeVersion" 2>/dev/null || true)
+            [ -n "${PREV_PICODE}" ] && PREV_TAG="v${PREV_PICODE}"
+          fi
+          # The first release of a channel has no previous one to be newer
+          # than: `--installed` is omitted for it below, and so is this.
           ver_le() {
             # ver_le <a> <b>: true when a <= b, one segment at a time, on the
             # numeric part only, so `0.2.0-beta` compares as its number.
@@ -144,22 +172,6 @@ jobs:
           # too: a release whose editor version does not grow is one nobody
           # gets offered.
           #
-          # The channel is the tag's suffix, and each channel keeps its feed
-          # on its own branch — the owner's relation (2026-10-08):
-          #
-          #   stable <-> master
-          #   beta <-> beta
-          #   experimental <-> experimental
-          #
-          # `insider` is not one of ours and never names a release here.
-          case "${PICODE_VERSION}" in
-            *-experimental)
-              CHANNEL="experimental"; FEED_BRANCH="experimental" ;;
-            *-beta)
-              CHANNEL="beta"; FEED_BRANCH="beta" ;;
-            *)
-              CHANNEL="stable"; FEED_BRANCH="master" ;;
-          esac
           # The feed is named after the channel, and it is read from that
           # channel's branch in the tag's own tree: a tag on beta carries
           # updates/beta/…, a tag on master carries updates/stable/…
@@ -278,18 +290,30 @@ jobs:
           else
             TARGET=(--target "${GITHUB_SHA}")
           fi
+          # A channel that is not stable publishes a prerelease, and that is
+          # not cosmetic: GitHub shows the newest NON-prerelease as the
+          # project's latest release, so a beta put up as a normal one is
+          # presented to everyone arriving at the repository as THE release.
+          # `stable` is the only channel whose release is the real thing.
+          CREATE=()
+          EDIT=(--prerelease=false)
+          if [ "${CHANNEL}" != "stable" ]; then
+            CREATE=(--prerelease)
+            EDIT=(--prerelease=true)
+          fi
           # Idempotent: a re-run after a partial failure must not die on an
           # existing release and must still refresh the assets.
           if gh release view "v${PICODE_VERSION}" >/dev/null 2>&1; then
             gh release upload "v${PICODE_VERSION}" \
               "PiCode-win32-x64-${PICODE_VERSION}.zip" \
               "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" --clobber
+            gh release edit "v${PICODE_VERSION}" "${EDIT[@]}"
           else
             gh release create "v${PICODE_VERSION}" \
               "PiCode-win32-x64-${PICODE_VERSION}.zip" \
               "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
               --title "PiCode ${PICODE_VERSION}" --generate-notes \
-              "${TARGET[@]}"
+              "${CREATE[@]}" "${TARGET[@]}"
           fi
 
       - name: Generate the update feed
