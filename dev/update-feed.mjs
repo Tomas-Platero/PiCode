@@ -31,7 +31,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 
-const QUALITIES = new Set(["stable", "insider"]);
+// The channels a feed can be cut for. `stable` is the RC channel (versions 1.0.0+);
+// `beta` and `experimental` are the channels ahead of it (owner's decision, 2026-10-08,
+// `odd/tasks/picode-canales.md`): a build ships with its channel in product.json's
+// `quality`, and reads its own feed — one channel is never offered another's build.
+// `insider` stays accepted because upstream tooling may still name it.
+const QUALITIES = new Set(["stable", "insider", "beta", "experimental", "rc"]);
 const PLATFORMS = new Set([
   "aix",
   "android",
