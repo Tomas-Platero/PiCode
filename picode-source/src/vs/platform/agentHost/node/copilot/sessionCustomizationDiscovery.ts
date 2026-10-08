@@ -160,22 +160,18 @@ const searchRoots: { workspace: ISearchRoot[]; user: ISearchRoot[]; picode: ISea
 		{ path: ['.copilot', 'hooks'], recursive: true, type: DiscoveredType.Hook, name: '~/.copilot' },
 
 		// PiCode: pi's own user profile, which is `~/.pi/agent` (see
-		// `environment-variables.md`, `PI_CODING_AGENT_DIR`). This is also where
-		// gentle-ai's own installer puts its subagents, so listing this directory is what
-		// brings the whole harness into the hub without an extension doing it.
+		// `environment-variables.md`, `PI_CODING_AGENT_DIR`). Listing this directory is
+		// what brings the profile's own agents and skills into the hub.
 		{ path: ['.pi', 'agent', 'agents'], type: DiscoveredType.Agent, name: '~/.pi/agent' },
 		{ path: ['.pi', 'agent', 'skills'], recursive: true, type: DiscoveredType.Skill, name: '~/.pi/agent' },
 	],
 
-	// PiCode's own profile, wherever the distribution runs from. gentle-pi ships its
-	// agents and skills inside its npm package, and the wizard installs that package
-	// here — so this root is what makes the whole Gentle AI harness visible to the
-	// editor's hub, completions and agent picker. Empty when not running as PiCode.
+	// PiCode's own profile, wherever the distribution runs from. Listing the profile's
+	// own agents and skills folders is what makes them visible to the editor's hub,
+	// completions and agent picker. Empty when not running as PiCode.
 	picode: PICODE_PROFILE_ROOT === undefined ? [] : [
 		{ path: ['agents'], type: DiscoveredType.Agent, name: 'PiCode profile' },
 		{ path: ['skills'], recursive: true, type: DiscoveredType.Skill, name: 'PiCode profile' },
-		{ path: ['npm', 'node_modules', 'gentle-pi', 'assets', 'agents'], type: DiscoveredType.Agent, name: 'gentle-pi' },
-		{ path: ['npm', 'node_modules', 'gentle-pi', 'skills'], recursive: true, type: DiscoveredType.Skill, name: 'gentle-pi' },
 	],
 };
 

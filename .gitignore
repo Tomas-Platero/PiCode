@@ -91,14 +91,6 @@ desktop.ini
 # never part of the repository. Everything temporary belongs here.
 /.scratch/
 
-# El agente durable vive en `experimental/`: su código, sus dependencias vendorizadas y los
-# ficheros que el demonio escribe al correr. Es material de la rama `experimental`, así que en
-# este canal no forma parte del producto — y lo que aparece aquí son restos de cambiar de rama:
-# 13 500 ficheros de `node_modules` y de `.data/` que un `git add -A` se llevaría por delante.
-# Se ignora entero para que eso no pueda pasar. Si algún día el agente durable se trae a este
-# canal, hay que quitar esta regla ANTES: con ella puesta, sus ficheros nuevos no se verían.
-/experimental/
-
 # Material en migración al núcleo: el código de la extensión vieja, conservado solo para
 # copiar de él lo que sirve. No es producto, no se compila y se borra cuando la migración
 # termine — por eso tampoco se revisa. Anclado: sin la barra inicial también se habría
@@ -136,3 +128,5 @@ service-account*.json
 .vercel
 *.tsbuildinfo
 .eslintcache
+experimental/durable/node_modules
+experimental/durable/.data

@@ -4,16 +4,40 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import type { TaskRow } from './session-tasks';
+import type { DurableStatus } from './durable';
+import type { PiProviderRow } from './providers-list';
+
+/**
+ * Where one provider came from, in the owner's words — and it is the whole answer to "why is this one
+ * not editable where the other is": the settings page edits declarations, and a provider that pi
+ * itself carries (models, a sign-in) has no declaration to edit.
+ */
+function providerOrigin(row: PiProviderRow): string {
+	const parts: string[] = [];
+	if (row.declared) {
+		parts.push('declared here');
+	}
+	if (row.models) {
+		parts.push('models in pi');
+	}
+	if (row.credential) {
+		parts.push('signed in with your own account');
+	}
+	return parts.length === 0 ? 'in pi' : parts.join(' · ');
+}
 
 /**
  * The PiCode status view: a native tree in the activity bar's PiCode container — the pi
- * in force, the provider and default model, the session's usage and cost, the project's
- * branch and pending changes, and Gentle AI's state.
+ * in force, the provider and default model, the session's usage and cost, the durable
+ * agent's state, and the project's branch and pending changes.
  *
  * A tree, deliberately, and not a webview: the data is a handful of rows, the theme is
  * the editor's own, and a native view cannot fail to render. The rows refresh on a slow
  * timer; errors surface as rows instead of empty panels.
+ *
+ * The Durable section is read from the agent's daemon over its local pipe, with a bounded
+ * connect: it says "not running" rather than waiting, because a panel that hangs when a
+ * process is absent is worse than one that says so.
  */
 
 export const STATUS_VIEW_TYPE = 'picode.statusView';
@@ -22,10 +46,26 @@ export const STATUS_DATA_COMMAND = 'picode.setup.status';
 /** How often the rows are re-read while the panel is on screen. */
 const STATUS_REFRESH_MS = 5000;
 
-/** One of pi's MCP servers, as the panel lists it: the name, and whether pi will start it. */
+/**
+ * One of pi's MCP servers, as the panel lists it: the name, whether pi will start it, and
+ * whether pi can actually use it (`mcp-provider.ts` computes the sign-in fact).
+ */
 export interface McpServerSwitch {
 	readonly name: string;
 	readonly on: boolean;
+	/**
+	 * `ok` — pi can use it; `needed` — enabled but pi has no sign-in for it; `unknown` — the
+	 * answer cannot be had (the profile's sign-ins are off-limits). Left out when `off`.
+	 */
+	readonly signIn?: 'ok' | 'needed' | 'unknown';
+	/**
+	 * Where this row comes from: `profile` — the profile's own `mcp.json` (the list the
+	 * settings form edits); `project` — the workspace's `.pi/mcp.json`, which pi loads for
+	 * trusted projects; `discovered` — a server a pi extension or plugin connected into the
+	 * live session, which has no entry anywhere the form can edit. Left out for the profile
+	 * rows the reading has always answered.
+	 */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 /**
@@ -39,37 +79,75 @@ export interface McpServerSwitch {
 export const onDidToggleMcpServer = new vscode.EventEmitter<McpServerSwitch>();
 
 /**
- * The count the MCP row shows: how many servers there are, and how many are switched off.
+ * The count the MCP row shows: how many servers there are, and what is wrong with the ones
+ * pi cannot use right now.
  *
  * The switch is pi's own `enabled`, read from the profile's file — no connection and no side effect,
- * which is why the panel can say it on every refresh and the MCP page cannot.
+ * which is why the panel can say it on every refresh and the MCP page cannot. The sign-in fact comes
+ * with it (`mcp-provider.ts`), so a server that is enabled but unusable is counted here instead of
+ * hiding behind an `On`.
  */
 function mcpCountDescription(servers: readonly McpServerSwitch[]): string {
 	const off = servers.filter(server => !server.on).length;
-	return off === 0 ? String(servers.length) : `${servers.length} · ${off} off`;
+	const needsSignIn = servers.filter(server => server.on && server.signIn === 'needed').length;
+	const parts: string[] = [];
+	if (off > 0) {
+		parts.push(`${off} off`);
+	}
+	if (needsSignIn > 0) {
+		parts.push(`${needsSignIn} need${needsSignIn === 1 ? 's' : ''} sign-in`);
+	}
+	return parts.length === 0 ? String(servers.length) : `${servers.length} · ${parts.join(' · ')}`;
+}
+
+/** The line one server's row shows, and the codicon beside it. */
+function mcpRowDescription(server: McpServerSwitch): { description: string; icon: string } {
+	if (!server.on) {
+		return { description: 'off', icon: 'circle-slash' };
+	}
+	if (server.signIn === 'needed') {
+		return { description: 'needs sign-in', icon: 'warning' };
+	}
+	if (server.signIn === 'unknown') {
+		return { description: 'on · sign-in unknown', icon: 'circle-outline' };
+	}
+	return { description: 'on', icon: 'circle-filled' };
 }
 
 /**
- * The children of the MCP row: one per server, and the row itself is the switch.
+ * The children of the MCP row: one per server, and the row itself is the action.
  *
- * A click runs the connector's `picode.mcp.toggleServer`, which flips pi's `enabled` key in the file
- * that holds the entry. There are no children at all when there is nothing to list, so the row does not
- * offer an arrow that opens onto nothing.
+ * A server pi can use is its switch: the click runs `picode.mcp.toggleServer`, which flips pi's
+ * `enabled` key in the file that holds the entry. A server that **needs sign-in** is not: its
+ * click runs `picode.mcp.signInServer` instead, which starts pi's own `mcp login` pointed at
+ * PiCode's profile — the click that fixes the server must not be the click that switches it
+ * off. Switching it off stays reachable through the MCP page's Disable button (`extension.ts`
+ * keeps `picode.mcp.toggleServer` for it). There are no children at all when there is nothing
+ * to list, so the row does not offer an arrow that opens onto nothing.
  */
 function mcpServerRows(servers: readonly McpServerSwitch[]): { children?: StatusItem[] } {
 	if (servers.length === 0) {
 		return {};
 	}
 	return {
-		children: servers.map(server => new StatusItem(server.name, {
-			description: server.on ? 'on' : 'off',
-			icon: new vscode.ThemeIcon(server.on ? 'circle-filled' : 'circle-slash'),
-			command: {
-				command: 'picode.mcp.toggleServer',
-				title: server.on ? 'Turn off' : 'Turn on',
-				arguments: [server.name],
-			},
-		})),
+		children: servers.map(server => {
+			const row = mcpRowDescription(server);
+			const needsSignIn = server.on && server.signIn === 'needed';
+			return new StatusItem(server.name, {
+				description: row.description,
+				icon: new vscode.ThemeIcon(row.icon),
+				// The one thing a sign-in row must say first: that the click is the fix, and where
+				// the credential it produces lands.
+				tooltip: needsSignIn
+					? 'pi has no sign-in stored for this server, so pi cannot use it. Click to sign in: a browser window opens, and the credential is stored in PiCode\'s own profile.'
+					: undefined,
+				command: {
+					command: needsSignIn ? 'picode.mcp.signInServer' : 'picode.mcp.toggleServer',
+					title: needsSignIn ? 'Sign in' : server.on ? 'Turn off' : 'Turn on',
+					arguments: [server.name],
+				},
+			});
+		}),
 	};
 }
 
@@ -90,15 +168,19 @@ export interface ProjectGitInfo {
 export interface StatusData {
 	runtime?: string;
 	piVersion?: string;
-	gentleInstalled?: boolean;
-	gentleVersion?: string;
-	providers?: number;
+	/**
+	 * Every provider the host has, each with where the editor learned of it. A list and not a count:
+	 * the count disagreed with the settings page (which edits only the **declarations**) and the owner
+	 * read that as a missing provider.
+	 */
+	providers?: readonly PiProviderRow[];
 	defaultModel?: string;
 	model?: string;
 	thinkingLevel?: string;
+	/** Whether the agent's thinking is written into the chat (`picode.pi.reasoning`). */
+	reasoning?: 'shown' | 'hidden';
 	/** pi's MCP servers, with the switch pi reads: the panel shows them and can flip them. */
 	mcpServers?: readonly McpServerSwitch[];
-	skills?: number;
 	gitBranch?: string;
 	gitChanges?: number;
 	gitInsertions?: number;
@@ -122,8 +204,14 @@ export interface StatusData {
 	 * connector cannot obtain an honest one.
 	 */
 	usage?: string;
-	/** The session's task list (gentle-pi's todo tool), last snapshot; absent when none exists. */
-	tasks?: readonly TaskRow[];
+	/** The durable daemon as it answered right now (`durable.ts`): up or down, and what it holds. */
+	durable?: DurableStatus;
+	/**
+	 * The agents launched from the open projects (`agents.ts`, read off the transcripts): how
+	 * many, and how many still owe an answer. `undefined` when the listing could not be read —
+	 * the row is then absent, because a `0` would read as "nothing was ever launched".
+	 */
+	agents?: { readonly total: number; readonly working: number };
 	error?: string;
 }
 
@@ -164,11 +252,14 @@ class StatusItem extends vscode.TreeItem {
 
 	constructor(
 		label: string,
-		options: { description?: string; children?: StatusItem[]; icon?: StatusIcon; command?: vscode.Command } = {},
+		options: { description?: string; tooltip?: string; children?: StatusItem[]; icon?: StatusIcon; command?: vscode.Command } = {},
 	) {
 		super(label, options.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
 		if (options.description !== undefined) {
 			this.description = options.description;
+		}
+		if (options.tooltip !== undefined) {
+			this.tooltip = options.tooltip;
 		}
 		if (options.icon !== undefined) {
 			this.iconPath = options.icon;
@@ -299,9 +390,25 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 		});
 
 		const piRows: StatusItem[] = [
-			new StatusItem('Which pi', { description: d.runtime === 'external' ? 'Your own pi' : "PiCode's own pi", icon: new vscode.ThemeIcon('circuit-board') }),
+			// Which host runs the agent — always pi. There are two: the one inside PiCode, and the
+			// machine's own installation when there is one. The row says which, in the word the owner
+			// uses: the host, never "pi internal/external".
+			new StatusItem('Host', { description: d.runtime === 'external' ? 'External' : 'Internal', icon: new vscode.ThemeIcon('circuit-board') }),
 			new StatusItem('Version', { description: d.piVersion || '—', icon: new vscode.ThemeIcon('tag') }),
-			new StatusItem('Providers', { description: String(d.providers ?? 0), icon: new vscode.ThemeIcon('plug') }),
+			// One row per provider, each saying where the editor learned of it. The settings page edits
+			// **declarations**; a provider whose models or sign-in live in the profile has nothing there to
+			// edit, so without these rows the panel's count and that page disagreed in silence — «El
+			// proveedor de nan no me sale en la lista de providers… en picode:status salen 2».
+			new StatusItem('Providers', {
+				description: String((d.providers ?? []).length),
+				icon: new vscode.ThemeIcon('plug'),
+				tooltip: 'Every provider the host has. The ones declared in the PiCode settings can be edited there; the others come from pi itself, with their own sign-in.',
+				command: { command: 'workbench.action.openSettings', arguments: ['picode.providers'], title: 'Open the provider settings' },
+				children: (d.providers ?? []).map(row => new StatusItem(row.id, {
+					description: providerOrigin(row),
+					icon: new vscode.ThemeIcon(row.declared ? 'check' : 'account'),
+				})),
+			}),
 			// The servers live in pi's own profile, which is where this counts them — not the project's
 			// business, which is where the row used to sit.
 			new StatusItem('MCP servers', {
@@ -312,29 +419,30 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				// it is off (`mcp-provider.ts`), so without these rows it could not be switched back on.
 				...(mcpServerRows(d.mcpServers ?? [])),
 			}),
+			// The agents launched from the open projects, counted off their own transcripts, and the
+			// row is also the way in: the same list the command opens. The durable daemon's work
+			// has its own section below; this is the delegations pi itself ran.
+			...(d.agents === undefined ? [] : [new StatusItem('Launched agents', {
+				description: d.agents.working > 0 ? `${d.agents.total} · ${d.agents.working} working` : String(d.agents.total),
+				icon: new vscode.ThemeIcon('rocket'),
+				command: { command: 'picode.agents', title: 'Show the agents launched from these folders' },
+			})]),
 		];
 		const model = d.model ?? d.defaultModel;
 		if (model !== undefined) {
 			piRows.push(new StatusItem('Model', { description: model, icon: new vscode.ThemeIcon('chip') }));
 		}
 		if (d.thinkingLevel !== undefined) {
-			piRows.push(new StatusItem('Thinking', { description: d.thinkingLevel, icon: new vscode.ThemeIcon('dashboard') }));
+			// The level is how hard it thinks; whether the owner **sees** it is `picode.pi.reasoning`, which
+			// is off by default — and that default is what he was looking for: «no consigo ver el thinking en
+			// el chat». The row says both, and opens the setting that turns it on.
+			piRows.push(new StatusItem('Thinking', {
+				description: d.reasoning === 'hidden' ? `${d.thinkingLevel} · not shown` : d.thinkingLevel,
+				icon: new vscode.ThemeIcon('dashboard'),
+				command: { command: 'workbench.action.openSettings', arguments: ['picode.pi.reasoning'], title: 'Show the thinking in the chat' },
+			}));
 		}
 		out.push(new StatusItem('pi', { children: piRows, icon: mark('picode-light.svg', 'picode.svg') }));
-
-		// Gentle AI lives in the internal profile; with the external pi it appears only
-		// when the machine's own profile happens to carry it.
-		if (d.runtime === 'internal' || d.gentleInstalled === true) {
-			const gentleRows: StatusItem[] = [
-				new StatusItem('State', { description: d.gentleInstalled ? 'Installed' + (d.gentleVersion ? ' · v' + d.gentleVersion : '') : 'Not installed', icon: new vscode.ThemeIcon('check') }),
-			];
-			if (d.gentleInstalled) {
-				gentleRows.push(
-					new StatusItem('Skills', { description: String(d.skills ?? 0), icon: new vscode.ThemeIcon('lightbulb') }),
-				);
-			}
-			out.push(new StatusItem('Gentle AI', { children: gentleRows, icon: mark('gentle-ai.svg', 'gentle-ai-dark.svg') }));
-		}
 
 		const sessionRows: StatusItem[] = [];
 		const ctxTokens = d.ctxTokens;
@@ -365,15 +473,61 @@ class StatusTreeProvider implements vscode.TreeDataProvider<StatusItem>, vscode.
 				sessionRows.push(new StatusItem('Cache read / write', { description: `${d.cacheRead.toLocaleString()} / ${d.cacheWrite.toLocaleString()}`, icon: new vscode.ThemeIcon('archive') }));
 			}
 		}
-		// The session's task list, exactly as the todo tool last left it — the row per task
-		// carries the status icon, the note becomes the description. No list, no rows.
-		for (const task of d.tasks ?? []) {
-			sessionRows.push(new StatusItem(task.title, {
-				description: task.note,
-				icon: new vscode.ThemeIcon(task.status === 'done' ? 'check' : task.status === 'in_progress' ? 'sync' : 'circle-large-outline'),
-			}));
-		}
 		out.push(new StatusItem('Session', { children: sessionRows, icon: new vscode.ThemeIcon('history') }));
+
+		// The durable daemon, as it answered this very refresh (`durable.ts` asks it with a
+		// bounded connect): when it is down the section says so plainly and offers the start
+		// action instead of an empty section, and when it is up every number is its answer,
+		// none of them invented.
+		if (d.durable !== undefined) {
+			const dur = d.durable;
+			const durableRows: StatusItem[] = dur.up ? [
+				new StatusItem('Daemon', {
+					description: dur.pid === undefined ? 'running' : `running · pid ${dur.pid}`,
+					icon: new vscode.ThemeIcon('server-process'),
+				}),
+				new StatusItem('Conversations', {
+					description: String(dur.conversations ?? 0),
+					icon: new vscode.ThemeIcon('comment-discussion'),
+					command: { command: 'picode.durable.list', title: 'Open a conversation transcript' },
+				}),
+				...(dur.subagentTasks === undefined ? [] : [new StatusItem('Subagent conversations', {
+					description: String(dur.subagentTasks),
+					icon: new vscode.ThemeIcon('comment-discussion'),
+				})]),
+				// The durable work itself, one row each (`durable.ts` read it from the daemon
+				// this very refresh): the subagent-owned conversations and any conversation
+				// with a run in flight, each with the state its snapshot actually carries.
+				// A conversation that could not be snapshotted says so — no row guesses.
+				...(dur.work ?? []).map(row => new StatusItem(`Conversation ${row.conversationId}`, {
+					description: [
+						...(row.taskId === undefined ? [] : [`task ${row.taskId}`]),
+						row.inFlight === undefined ? 'state unavailable' : row.inFlight ? 'in flight' : 'idle',
+						`${row.entries} entries`,
+					].join(' · '),
+					icon: new vscode.ThemeIcon(row.inFlight === true ? 'sync' : 'circle-outline'),
+					command: { command: 'picode.durable.list', title: 'Open a conversation transcript' },
+				})),
+				new StatusItem('Live streams', {
+					description: String(dur.streams ?? 0),
+					icon: new vscode.ThemeIcon('radio-tower'),
+				}),
+				new StatusItem('Stop the durable agent', {
+					icon: new vscode.ThemeIcon('debug-stop'),
+					command: { command: 'picode.durable.stop', title: 'Stop the durable agent' },
+				}),
+			] : [
+				new StatusItem('Daemon', {
+					description: 'not running',
+					icon: new vscode.ThemeIcon('circle-slash'),
+				}),
+				new StatusItem('Start the durable agent', {
+					icon: new vscode.ThemeIcon('debug-start'),
+					command: { command: 'picode.durable.start', title: 'Start the durable agent' },
+				}),
+			];
+			out.push(new StatusItem('Durable', { children: durableRows, icon: new vscode.ThemeIcon('layers') }));
+		}
 
 		if (d.projects !== undefined) {
 			// Workspace mode: one row per folder of the area, each with its own branch and changes.

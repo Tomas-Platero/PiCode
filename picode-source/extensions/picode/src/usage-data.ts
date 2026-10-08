@@ -7,9 +7,9 @@
  * Subscription usage: the provider's own quota, read live.
  *
  * The `usage 20%` bar the TUI draws is not session data at all: it is the provider's own
- * rate-limit window, fetched from the provider while the session runs. Gentle Shell is what
- * draws it (`gentle-pi/lib/shell-usage.ts`), and this module mirrors exactly one of its routes
- * — NaN's — so the Status view can show the same number the TUI shows without inventing one.
+ * rate-limit window, fetched from the provider while the session runs. This module mirrors
+ * exactly one such route — NaN's — so the Status view can show the same number the TUI shows
+ * without inventing one.
  *
  * The other two routes are deliberately absent: Codex and Claude Pro/Max report their windows
  * in **SSE response headers** of the chat request itself, and this connector never sees those
@@ -222,7 +222,7 @@ function periodWindow(tokensUsed: number, allowance: number, resetAt: number | n
  * NaN's quota payload, read defensively.
  *
  * Every field is optional, because this payload lives outside NaN's published contract, and
- * the two refusals the provider makes are kept exactly as Gentle Shell makes them:
+ * the two refusals the provider makes are kept exactly as the TUI treats them:
  *
  * - A model reporting **no allowance** is skipped — the dashboard draws nothing for it either,
  *   and the live payload carries such entries.

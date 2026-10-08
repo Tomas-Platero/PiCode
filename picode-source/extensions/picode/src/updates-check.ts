@@ -20,6 +20,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { npmRunEnv, planNpmRun } from './npm-run';
 
 /* ------------------------------------------------------------------ *
  * Versions
@@ -94,6 +95,18 @@ function compareIdentifiers(a: readonly (string | number)[], b: readonly (string
 }
 
 /**
+ * Whether a version is one the comparator can actually order.
+ *
+ * `compareVersions` never throws — a version it cannot parse falls back to plain string
+ * order so an answer stays deterministic — but a caller that must **decide** (is this package
+ * behind?) needs to know when the answer is not a version answer: `dev`, a git sha, an empty
+ * string. This is the same parse the comparator does, said as a question.
+ */
+export function isComparableVersion(value: string): boolean {
+	return parseVersion(value) !== undefined;
+}
+
+/**
  * How two versions order: negative when `a` is older, positive when newer, zero when equal.
  *
  * The comparison is semver-shaped — numbers compare as numbers, a release is newer than any
@@ -133,13 +146,13 @@ export function compareVersions(a: string, b: string): number {
  * What can be updated
  * ------------------------------------------------------------------ */
 
-/** The kinds of thing the check watches: the pi runtime, Gentle AI, and pi's npm packages. */
-export type UpdateKind = 'runtime' | 'gentle' | 'package';
+/** The kinds of thing the check watches: the pi runtime, and pi's npm packages. */
+export type UpdateKind = 'runtime' | 'package';
 
 /** One candidate the check compared, as the caller gathered it — versions may be missing. */
 export interface CandidateTarget {
 	readonly kind: UpdateKind;
-	/** What the notification and the sentence call it: `pi`, `gentle-pi`, the package's name. */
+	/** What the notification and the sentence call it: `pi`, the package's name. */
 	readonly name: string;
 	readonly installed?: string;
 	readonly latest?: string;
@@ -183,8 +196,8 @@ export function updatableTargets(candidates: readonly CandidateTarget[]): readon
  * The one sentence the notification and the status-bar tooltip carry after
  * `PiCode: updates available — `.
  *
- * Every part says what can be had and what is installed: the runtime and Gentle as one update
- * each, the packages as the product word counts them — because a profile can hold many, and
+ * Every part says what can be had and what is installed: the runtime as one update,
+ * the packages as the product word counts them — because a profile can hold many, and
  * the count is what the sentence needs to stay readable.
  */
 export function describeTargets(targets: readonly UpdateTarget[]): string {
@@ -215,7 +228,7 @@ export interface UpdatesSnapshot {
 }
 
 /** The kinds that may appear in a stored target, as a set the reader checks against. */
-const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'gentle', 'package'];
+const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'package'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -319,7 +332,7 @@ export interface SpawnOptions {
 	readonly env: NodeJS.ProcessEnv;
 	readonly windowsHide: boolean;
 	readonly timeoutMs: number;
-	/** Run through the shell, which is how `npm` is found on Windows (`npm.cmd`). */
+	/** Run through the shell, which is how the npm shim fallback runs (`npm.cmd`). */
 	readonly shell?: boolean;
 }
 
@@ -334,6 +347,8 @@ export interface UpdateRunContext {
 	readonly runtimeDir: string;
 	/** The profile in force — handed to pi as `PI_CODING_AGENT_DIR`. */
 	readonly profileDir: string;
+	/** npm's CLI script, resolved by the caller (`extension.ts`). `undefined` plans the npm shim through a quoted shell. */
+	readonly npmCli?: string;
 	/** The process run. Defaults to `execFile` with an args array. */
 	readonly spawn?: SpawnFn;
 }
@@ -363,6 +378,13 @@ function lastMeaningfulLine(text: string): string | undefined {
  *    install: it is not under a global npm root, and on Windows pi will not infer a custom
  *    prefix, so it answers with the `Location of pi executable: …` line instead of updating.
  *    PiCode installed the runtime with npm at build time, so it updates it the same way.
+ *
+ *    The run is planned by `npm-run.ts`: node over npm's own CLI script, a real arguments
+ *    array, no shell. This is the spawn a side-by-side build's spaced install folder broke —
+ *    the shell concatenated `--prefix <runtimeDir>` on its spaces and npm read a prefix that
+ *    does not exist plus two junk arguments (`-`, `experimental2\resources\pi-runtime`). With
+ *    no shell there is nothing to split on; the fallback's quoting keeps the same guarantee
+ *    when npm's CLI script cannot be found.
  * 2. **The profile's packages**, with `pi update --extensions`, which deliberately leaves the
  *    runtime alone.
  *
@@ -375,16 +397,17 @@ export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: bool
 		return { ok: false, message: `PiCode could not update ${label}${reason === undefined ? '.' : `: ${reason}`}` };
 	};
 	const run = async (spawn: SpawnFn): Promise<{ ok: boolean; message: string }> => {
-		const runtime = await spawn('npm', [
+		const npmPlan = planNpmRun([
 			'install',
 			'--prefix', context.runtimeDir,
 			'--no-audit', '--no-fund', '--save-exact',
 			`${PI_RUNTIME_PACKAGE}@latest`,
-		], {
-			env: { ...process.env, PI_CODING_AGENT_DIR: context.profileDir },
+		], { npmCli: context.npmCli });
+		const runtime = await spawn(npmPlan.file, npmPlan.args, {
+			env: npmRunEnv(npmPlan, { ...process.env, PI_CODING_AGENT_DIR: context.profileDir }),
 			windowsHide: true,
 			timeoutMs: UPDATE_TIMEOUT_MS,
-			shell: true,
+			shell: npmPlan.shell,
 		});
 		if (!runtime.ok) {
 			return failed('pi', runtime);

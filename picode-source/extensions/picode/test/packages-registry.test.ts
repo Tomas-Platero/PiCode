@@ -119,14 +119,14 @@ test('the catalog payload becomes rows sorted by downloads, nameless entries ski
 	const fetchFn = fetchAnswering(catalogPayload(
 		{ name: 'little-used', downloads: 12, version: '0.1.0' },
 		{ downloads: 999999 },
-		{ name: 'gentle-pi', downloads: 5000, description: 'Gentle AI for pi', publisher: 'quintin', version: '1.2.3' },
+		{ name: 'sample-pi', downloads: 5000, description: 'A package for pi', publisher: 'quintin', version: '1.2.3' },
 	));
 
 	const rows = await searchPackages('sort-probe', { fetchFn, now: () => 0 });
 
 	// The entry without a name cannot be shown or installed: it is not a row.
 	assert.deepStrictEqual(rows, [
-		{ name: 'gentle-pi', description: 'Gentle AI for pi', publisher: 'quintin', version: '1.2.3' },
+		{ name: 'sample-pi', description: 'A package for pi', publisher: 'quintin', version: '1.2.3' },
 		{ name: 'little-used', version: '0.1.0' },
 	]);
 });
@@ -204,11 +204,11 @@ test('two queries are two cache entries, never one answer masquerading as the ot
  * ------------------------------------------------------------------ */
 
 test('an npm name is prefixed with npm:, scoped or not', () => {
-	assert.strictEqual(installTargetSpec('gentle-pi'), 'npm:gentle-pi');
+	assert.strictEqual(installTargetSpec('sample-pi'), 'npm:sample-pi');
 	assert.strictEqual(installTargetSpec('@scope/pkg'), 'npm:@scope/pkg');
 	assert.strictEqual(installTargetSpec('@scope/pkg@1.2.3'), 'npm:@scope/pkg@1.2.3');
 	// Already pi's spelling stays as it is.
-	assert.strictEqual(installTargetSpec('npm:gentle-pi'), 'npm:gentle-pi');
+	assert.strictEqual(installTargetSpec('npm:sample-pi'), 'npm:sample-pi');
 });
 
 test('a git URL passes through untouched', () => {
@@ -241,14 +241,14 @@ test('an empty target is refused before anything is spawned', async () => {
 
 test("an install runs pi's CLI as Node, into the profile in force, with the npm: spelling", async () => {
 	const spawn = spawnAnswering({ ok: true, stderr: '' });
-	const result = await installPackage('gentle-pi', { cliEntry: '/runtime/cli.js', profileDir: '/profile', spawn });
+	const result = await installPackage('sample-pi', { cliEntry: '/runtime/cli.js', profileDir: '/profile', spawn });
 
-	assert.deepStrictEqual(result, { ok: true, message: 'Package gentle-pi installed with pi.' });
+	assert.deepStrictEqual(result, { ok: true, message: 'Package sample-pi installed with pi.' });
 	assert.strictEqual(spawn.calls.length, 1);
 	const { file, args, options } = spawn.calls[0];
 	// The editor's executable, the CLI entry, and the target as **one argv element** — no shell.
 	assert.ok(file.endsWith('node') || file === process.execPath);
-	assert.deepStrictEqual([...args], ['/runtime/cli.js', 'install', 'npm:gentle-pi']);
+	assert.deepStrictEqual([...args], ['/runtime/cli.js', 'install', 'npm:sample-pi']);
 	assert.strictEqual(options.env.PI_CODING_AGENT_DIR, '/profile');
 	assert.strictEqual(options.env.ELECTRON_RUN_AS_NODE, '1');
 	assert.strictEqual(options.windowsHide, true);

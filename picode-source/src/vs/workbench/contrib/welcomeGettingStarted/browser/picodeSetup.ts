@@ -31,9 +31,6 @@ import { ColorThemeData } from '../../../services/themes/common/colorThemeData.j
  *   says what the choice loads. When the internal pi runs and the machine's profile holds
  *   anything, a "Import from my external pi" action appears with the **counts first** and a
  *   confirm behind them — nothing is ever imported silently.
- * - **Gentle AI** — asked about only while the internal pi runs (it lives in PiCode's own
- *   profile). Three states: not installed, working (inline, no popups), installed with its
- *   version and update/remove.
  * - **pi packages** — the theme's two-source pattern again: what pi already has installed
  *   (read-only rows) and npm's catalog of pi packages, searched with a pause, paged, and
  *   installed on click. The step is optional by nature: moving past it changes nothing.
@@ -134,9 +131,7 @@ interface PackageInstallResult {
 interface SetupState {
 	runtime: 'internal' | 'external';
 	externalAvailable: boolean;
-	gentleInstalled: boolean;
 	internalPiVersion?: string;
-	gentleVersion?: string;
 }
 
 /** What the probe answers about the machine's pi. */
@@ -204,10 +199,6 @@ export class PiCodeSetup extends Disposable {
 	/** The model list fetched from the provider(s), for the picker and the agents. */
 	private wizardModels: WizardModel[] | undefined;
 	private modelsLoading = false;
-	/** Gentle AI's agent names, fetched after the install. */
-	private gentleAgents: string[] | undefined;
-	/** The owner's per-agent model choices. */
-	private agentProfiles: Record<string, string> = {};
 	private readonly disposables = this._register(new DisposableStore());
 	/** The grid's own store: repainting the grid must not unbind the rest of the cards. */
 	private readonly gridDisposables = this._register(new DisposableStore());
@@ -225,7 +216,6 @@ export class PiCodeSetup extends Disposable {
 	/** The final screen's one-line ending, set once "End the setup" answers. */
 	private endedNote: string | undefined;
 	private endedWithError = false;
-	private gentleStatus: HTMLElement | undefined;
 	/* The theme card's two sources: what is installed, and what the gallery (Open VSX) has. */
 	private themeSource: 'installed' | 'gallery' = 'installed';
 	private galleryItems: GalleryItem[] | undefined;
@@ -246,8 +236,6 @@ export class PiCodeSetup extends Disposable {
 	/** The catalog row an install is running for; one install at a time, like pi's own queue. */
 	private installingPackage: string | undefined;
 	private packageSearchTimer: Timeout | undefined;
-	/** The Gentle installer's live output, polled while the install runs. */
-	private gentleLogEl: HTMLElement | undefined;
 
 	constructor(
 		private readonly container: HTMLElement,
@@ -302,7 +290,7 @@ export class PiCodeSetup extends Disposable {
 		if (this.skipped) {
 			reset(this.container as HTMLElement, $('.picode-card', {},
 				$('p', {}, localize('picodeSetup.skipped', "Setup skipped. Reopen it any time: run 'PiCode: Set up PiCode' from the command palette, or Help > Welcome.")),
-				$('.picode-gentle-actions', {},
+				$('.picode-setup-actions', {},
 					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
 			));
 			return;
@@ -310,7 +298,7 @@ export class PiCodeSetup extends Disposable {
 		if (this.finished) {
 			reset(this.container as HTMLElement, $('.picode-card', {},
 				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > PiCode, or by running this setup again.")),
-				$('.picode-gentle-actions', {},
+				$('.picode-setup-actions', {},
 					this.button('picode-setup-review', localize('picodeSetup.review', "Review the setup"), () => { this.finished = false; this.step = 0; this.renderWizard(this.state); }, 'primary'),
 					this.button('picode-setup-end', localize('picodeSetup.end', "End the setup"), () => this.endForGood(), 'secondary')),
 				...(this.endedNote !== undefined ? [$('p.picode-note' + (this.endedWithError ? '.picode-error' : ''), {}, this.endedNote)] : []),
@@ -318,10 +306,9 @@ export class PiCodeSetup extends Disposable {
 			return;
 		}
 
-		// Six steps: the PiCode Account sign-in, then pi, then (for the internal pi) the
-		// provider and its model, then Gentle AI with its agents, then the pi packages,
-		// then the theme. With the external pi the provider step has nothing to ask (its
-		// providers are the machine's) and Gentle is dimmed.
+		// Five steps: the PiCode Account sign-in, then pi, then (for the internal pi) the
+		// provider and its model, then the pi packages, then the theme. With the external
+		// pi the provider step has nothing to ask (its providers are the machine's).
 		const body = this.step === 0
 			? this.renderLoginStep()
 			: this.step === 1
@@ -329,10 +316,8 @@ export class PiCodeSetup extends Disposable {
 				: this.step === 2
 					? (state.runtime === 'internal' ? this.renderProviderStep() : this.renderSkippedProvider())
 					: this.step === 3
-						? this.renderGentleStep(state)
-						: this.step === 4
-							? this.renderPackagesCard()
-							: this.renderThemeCard();
+						? this.renderPackagesCard()
+						: this.renderThemeCard();
 
 		const foot = this.renderWizardFoot(state);
 		this.wizardFootEl = foot;
@@ -351,23 +336,22 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	/** The six dots and the "1 of 6 — Sign in" line. */
+	/** The five dots and the "1 of 5 — Sign in" line. */
 	private renderWizardHead(): HTMLElement {
 		const names = [
 			localize('picodeSetup.step.login', "Sign in"),
 			localize('picodeSetup.step.pi', "pi"),
 			localize('picodeSetup.step.provider', "Provider & model"),
-			localize('picodeSetup.step.gentle', "Gentle AI"),
 			localize('picodeSetup.step.packages', "Packages"),
 			localize('picodeSetup.step.theme', "Theme"),
 		];
 		const dots = $('.picode-step-dots', {});
-		for (let i = 0; i < 6; i += 1) {
+		for (let i = 0; i < 5; i += 1) {
 			dots.appendChild($('.picode-dot' + (i === this.step ? '.on' : '')));
 		}
 		return $('.picode-wizard-head', {},
 			dots,
-			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 6 — {1}", String(this.step + 1), names[this.step])),
+			$('span.picode-step-label', {}, localize('picodeSetup.step.of', "{0} of 5 — {1}", String(this.step + 1), names[this.step])),
 		);
 	}
 
@@ -380,8 +364,8 @@ export class PiCodeSetup extends Disposable {
 	 */
 	private renderWizardFoot(state: SetupState): HTMLElement {
 		const back = this.navButton('picode-wizard-back', localize('picodeSetup.nav.back', "Back"), this.step > 0,
-			() => this.goTo((this.step === 3 && state.runtime !== 'internal' ? 1 : this.step - 1) as 0 | 1 | 2 | 3 | 4 | 5));
-		const nextLabel = this.step === 5 ? localize('picodeSetup.nav.done', "Done")
+			() => this.goTo((this.step - 1) as 0 | 1 | 2 | 3 | 4));
+		const nextLabel = this.step === 4 ? localize('picodeSetup.nav.done', "Done")
 			: this.step === 1 ? localize('picodeSetup.nav.next', "Next")
 			: this.step === 2 ? localize('picodeSetup.nav.nextModel', "Next — set the default model")
 			: this.step === 0 && this.accountStatus?.signedIn ? localize('picodeSetup.nav.continue', "Continue")
@@ -389,7 +373,7 @@ export class PiCodeSetup extends Disposable {
 		const next = this.navButton(
 			'picode-wizard-next',
 			nextLabel,
-			this.step === 1 ? this.piChosen : this.step === 2 ? this.wizardModel !== undefined : !(this.busy && this.step === 3),
+			this.step === 1 ? this.piChosen : this.step === 2 ? this.wizardModel !== undefined : true,
 			() => this.advanceFrom(state),
 			'primary',
 		);
@@ -402,8 +386,8 @@ export class PiCodeSetup extends Disposable {
 			next.title = localize('picodeSetup.nav.chooseModel', "Pick the model your agent will run on.");
 		}
 		const foot = $('.picode-wizard-foot', {}, back, $('.picode-foot-spacer', {}));
-		if (this.step < 5) {
-			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), !(this.busy && this.step === 3), () => this.advanceFrom(state, true)));
+		if (this.step < 4) {
+			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.advanceFrom(state, true)));
 		}
 		foot.append(
 			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
@@ -422,7 +406,7 @@ export class PiCodeSetup extends Disposable {
 			return;
 		}
 		if (this.step === 1) {
-			this.goTo(state.runtime === 'internal' ? 2 : 3);
+			this.goTo(2);
 			return;
 		}
 		if (this.step === 2) {
@@ -439,10 +423,6 @@ export class PiCodeSetup extends Disposable {
 		}
 		if (this.step === 3) {
 			this.goTo(4);
-			return;
-		}
-		if (this.step === 4) {
-			this.goTo(5);
 			return;
 		}
 		this.finish();
@@ -467,7 +447,7 @@ export class PiCodeSetup extends Disposable {
 		}
 	}
 
-	private goTo(step: 0 | 1 | 2 | 3 | 4 | 5): void {
+	private goTo(step: 0 | 1 | 2 | 3 | 4): void {
 		this.step = step;
 		// A note belongs to the step that produced it, and must not follow the owner forward.
 		this.noteText = '';
@@ -809,8 +789,8 @@ export class PiCodeSetup extends Disposable {
 			if (report === undefined || this._store.isDisposed) { return; }
 			this.importReport = report;
 			this.importRunning = false;
-			// Gentle AI may have just arrived with the packages: re-read the state so the
-			// Gentle step shows it as installed instead of offering the install again.
+			// The packages may have just landed on disk: re-read the state so every step
+			// shows what is installed now instead of offering the install again.
 			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.getState');
 			this.renderImportDone(progressArea);
 		}).catch(error => {
@@ -941,7 +921,7 @@ export class PiCodeSetup extends Disposable {
 			$('.picode-card-head', {},
 				$('.picode-card-title', {}, localize('picodeSetup.provider.skippedTitle', "Providers")),
 				$('span.picode-hint', {}, localize('picodeSetup.provider.skippedHint', "Handled by your external pi"))),
-			$('p.picode-row-description', {}, localize('picodeSetup.provider.skippedDetail', "The pi on this machine keeps its own providers and credentials, which this editor never writes to. Next: Gentle AI — which also belongs to the internal pi — the pi packages, and your theme.")),
+			$('p.picode-row-description', {}, localize('picodeSetup.provider.skippedDetail', "The pi on this machine keeps its own providers and credentials, which this editor never writes to. Next: the pi packages and your theme.")),
 		);
 	}
 
@@ -1005,113 +985,6 @@ export class PiCodeSetup extends Disposable {
 		if (this.currentModelArea !== undefined && this.currentModelArea.isConnected) {
 			this.paintModels(this.currentModelArea);
 		}
-	}
-
-	/**
-		* Gentle AI's own step: the install (always the latest version) and, once it is
-			* on disk, the agent models - one row per agent, the owner's list from the
-			* provider step as the choices, saved into the profile's subagents.json.
-			*/
-	private renderGentleStep(state: SetupState): HTMLElement {
-		const dimmed = state.runtime !== 'internal';
-		const card = this.renderGentleCard(state, dimmed);
-		if (!dimmed && state.gentleInstalled) {
-			// The agents' model rows, after the card: one per agent, pre-set to the
-			// default model, changeable from the fetched list.
-			if (this.gentleAgents === undefined) {
-				void this.services.commandService.executeCommand<{ agents: string[] }>('picode.setup.gentleAgents')
-					.then(answer => {
-						if (answer === undefined) { return; }
-						this.gentleAgents = answer.agents;
-						this.agentProfiles = {};
-						this.renderWizard(this.state);
-					})
-					.catch(() => { /* the card stays without the rows; the install still worked */ });
-			}
-			if (this.gentleAgents !== undefined && this.gentleAgents.length > 0 && (this.wizardModels ?? []).length > 0) {
-				const agentsBox = $('.picode-agents-config', {},
-					$('.picode-card-head', {},
-						$('.picode-card-title', {}, localize('picodeSetup.agents.title', "Agent models")),
-						$('span.picode-hint', {}, localize('picodeSetup.agents.hint', "Which model each of Gentle AI's agents runs on."))),
-				);
-				for (const agent of this.gentleAgents) {
-					const select = $('select.picode-select.picode-agent-select', {});
-					const chosen = this.agentProfiles[agent] ?? this.wizardModel ?? '';
-					for (const model of this.wizardModels ?? []) {
-						const option = $('option', { 'value': model.ref }, model.ref);
-						if (model.ref === chosen) {
-							option.setAttribute('selected', 'selected');
-						}
-						select.appendChild(option);
-					}
-					this.disposables.add(addDisposableListener(select, 'change', () => {
-						this.agentProfiles[agent] = (select as HTMLSelectElement).value;
-					}));
-					this.disposables.add(addDisposableListener(select, 'keydown', event => event.stopPropagation()));
-					agentsBox.appendChild($('.picode-agent-row', {},
-						$('span.picode-agent-name', {}, agent),
-						$('.picode-select-wrap', {}, select,
-							$('span.codicon.codicon-chevron-down.picode-select-chevron')),
-					));
-				}
-				const save = this.button('picode-agents-save', localize('picodeSetup.agents.save', "Save agent models"), async () => {
-					try {
-						await this.services.commandService.executeCommand('picode.setup.gentleAgentModels', {
-							defaultModel: this.wizardModel,
-							profiles: this.agentProfiles,
-						});
-						this.setNote(localize('picodeSetup.agents.saved', "Agent models saved."), false);
-					} catch (error) {
-						this.setNote(messageOf(error), true);
-					}
-				}, 'secondary');
-				agentsBox.appendChild($('.picode-form-actions', {}, save));
-				card.appendChild(agentsBox);
-			}
-		}
-		return card;
-	}
-
-	private renderGentleCard(state: SetupState, dimmed: boolean): HTMLElement {
-		const description = localize('picodeSetup.gentle.detail', "The agent layer for pi: subagents, skills and a memory that carries your context between sessions. Only for PiCode's internal pi.");
-
-		const actions = $('.picode-gentle-actions', {});
-		let status: string;
-		if (dimmed) {
-			status = localize('picodeSetup.gentle.external', "Belongs to your external pi");
-		} else if (state.gentleInstalled) {
-			status = localize('picodeSetup.gentle.on', "Installed");
-			actions.append(
-				this.button('picode-gentle-update', localize('picodeSetup.gentle.update', "Update"), () => this.applyGentle('update'), 'secondary'),
-				this.button('picode-gentle-remove', localize('picodeSetup.gentle.remove', "Remove — use plain pi"), () => this.applyGentle('remove')),
-			);
-		} else {
-			status = localize('picodeSetup.gentle.off', "Not installed");
-			actions.append(
-				this.button('picode-gentle-install', localize('picodeSetup.gentle.install', "Install Gentle AI"), () => this.applyGentle('install'), 'primary'),
-			);
-		}
-
-		const card = $('.picode-card.picode-gentle-card' + (dimmed ? '.picode-dimmed' : ''),
-			{
-				'title': dimmed
-					? localize('picodeSetup.gentle.externalTooltip', "Gentle AI is installed into PiCode's own profile, which only the internal pi uses. Your external pi keeps its own profile, and this editor never writes to it.")
-					: undefined,
-			},
-			$('.picode-card-head', {},
-				$('.picode-card-title', {}, localize('picodeSetup.gentle.title', "Gentle AI")),
-				$('span.picode-hint', {}, status + (state.gentleVersion && !dimmed ? ` · v${state.gentleVersion}` : '')),
-			),
-			$('.picode-card-body', {}, $('span.picode-row-description', {}, description)),
-			actions,
-		);
-		this.gentleStatus = $('.picode-gentle-status');
-		card.appendChild(this.gentleStatus);
-		// The installer's own output lands here while it runs; a card that talks is a
-		// card that reassures.
-		this.gentleLogEl = $('.picode-gentle-log');
-		card.appendChild(this.gentleLogEl);
-		return card;
 	}
 
 	/**
@@ -1839,60 +1712,6 @@ export class PiCodeSetup extends Disposable {
 			this.busy = false;
 			return;
 		}
-		this.busy = false;
-		await this.render();
-	}
-
-	private async applyGentle(action: 'install' | 'update' | 'remove'): Promise<void> {
-		if (this.busy || this.state === undefined || this.state.runtime !== 'internal') { return; }
-		this.busy = true;
-		// The card's buttons go inert for the whole run: a second click is a no-op by the
-		// busy guard, but it should also LOOK dead while the installer works.
-		const gentleCard = this.gentleLogEl?.closest('.picode-card');
-		if (gentleCard instanceof HTMLElement) {
-			for (const button of gentleCard.querySelectorAll('.picode-gentle-actions .picode-button')) {
-				button.classList.add('disabled');
-			}
-		}
-		this.repaintFoot();
-		// The install takes a while; the bridge logs its steps, and this poll paints
-		// them as they happen - a card that talks is a card that reassures.
-		const poll = setInterval(() => {
-			void this.services.commandService
-				.executeCommand<{ running: boolean; lines: string[]; step: number; total: number }>('picode.setup.gentleLog')
-				.then(log => {
-					if (log === undefined || this.gentleLogEl === undefined || !this.gentleLogEl.isConnected) { return; }
-					const pct = log.total > 0 ? Math.round(log.step / log.total * 100) : 0;
-					const bar = $('.picode-gentle-progress', {},
-						$('.picode-gentle-progress-bar', { style: `width:${pct}%` }),
-					);
-					const label = $('.picode-gentle-progress-label', {}, `${pct}%`);
-					reset(this.gentleLogEl, bar, label, ...log.lines.slice(-3).map(line => $('.picode-gentle-log-line', {}, line)));
-					// While the installer runs, the card's buttons and the way forward are
-					// visually locked (the busy guard already makes them no-ops).
-					const card = this.gentleLogEl.closest('.picode-card');
-					if (card instanceof HTMLElement) {
-						for (const button of card.querySelectorAll('.picode-button')) {
-							button.classList.toggle('disabled', log.running);
-						}
-					}
-				})
-				.catch(() => { /* the next tick tries again */ });
-		}, 1200);
-		if (this.gentleStatus) {
-			this.gentleStatus.textContent = action === 'install'
-				? localize('picodeSetup.gentle.installing', "Installing — pi's own installer runs; this can take a moment…")
-				: action === 'update'
-					? localize('picodeSetup.gentle.updating', "Updating…")
-					: localize('picodeSetup.gentle.removing', "Removing…");
-		}
-		try {
-			this.state = await this.services.commandService.executeCommand<SetupState>('picode.setup.applyGentle', action);
-			this.setNote('', false);
-		} catch (error) {
-			this.setNote(messageOf(error), true);
-		}
-		clearInterval(poll);
 		this.busy = false;
 		await this.render();
 	}

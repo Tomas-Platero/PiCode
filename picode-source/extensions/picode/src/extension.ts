@@ -4,21 +4,24 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
-import { declarationsFromSetting, projectDeclaration } from './declarations';
+import { declarationsFromSetting, isRecord, projectDeclaration } from './declarations';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
-import { mcpServersFrom, type McpConfigFile, type PiMcpServer } from './mcp-provider';
-import { mcpServersText, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
+import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, storedDiscoveryOf, type McpConfigFile, type PiMcpServer } from './mcp-provider';
+import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
+import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { listWorkspaceSessionFiles, sessionTurns } from './sessions-provider';
+import { areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
+import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -31,8 +34,9 @@ import {
 	type ManageFs,
 	type PiPackageRow,
 } from './packages-manage';
-import { packageSkillDirs, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
-import { loadPiSdk } from './piSdk';
+import { packageSkillDirs, parsePackageSource, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
+import { loadPiSdk, mcpOauthModuleOf, importPiModule, sdkCandidates } from './piSdk';
+import { offlineAccessScope } from './mcp-scopes';
 import { externalProfileDir } from './profile-import';
 import {
 	CONNECT_PROVIDER_COMMAND,
@@ -41,16 +45,18 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
 import { registerPiCommandPromptFiles } from './commands';
-import { gentleAgentsHome, listTaskFiles, readTaskRecord, readTaskTranscriptPath, relativeTime, sessionToMarkdown } from './subagents';
+import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
-import { probeExternalPi, readGentleVersion, readInternalPiVersion, readProfilePackageVersion, registerSetupCommands } from './onboarding';
+import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
+import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, windowSessionScope } from './runtime';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
+import { locateNpmCli } from './npm-run';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -242,6 +248,60 @@ function declaredMcpServers(): McpServerSetting[] {	const configured = vscode.wo
 /** Writes the servers pi reads. Nothing is installed beside it: the file is pi's own. */
 function applyMcpServers(profile: string): void {
 	writeMcpServers(profile, declaredMcpServers());
+}
+
+/** How long the metadata lookup before a sign-in may take: it is a hint, not the sign-in itself. */
+const MCP_DISCOVERY_TIMEOUT_MS = 15_000;
+
+/**
+ * Makes a sign-in durable before it starts, when the server's own metadata allows it.
+ *
+ * A remote server whose authorization server can issue a refresh token is asked for
+ * `offline_access` (`mcp-scopes.ts` says why), so the credential pi stores can be renewed instead
+ * of being asked for again the hour it expires. The discovery for that is pi's own: what it cached
+ * beside the server's sign-in, or — for a server never contacted — pi's own
+ * `discoverOAuthServerInfo`, loaded from the same install as the SDK entry.
+ *
+ * Best-effort by construction: this only changes what a sign-in asks for, so a lookup that fails
+ * must leave the sign-in exactly as it was rather than block it.
+ */
+async function ensureSignInCanBeRenewed(profile: string, server: string, sdkEntry: string): Promise<void> {
+	try {
+		const file = mcpServersFile(profile);
+		const existing = readJsonFile(file);
+		const servers = isRecord(existing) && isRecord(existing['mcpServers']) ? existing['mcpServers'] : undefined;
+		const entry = servers !== undefined && isRecord(servers[server]) ? servers[server] : undefined;
+		// A local server, or one that authenticates itself with its own headers, has no OAuth sign-in
+		// to make durable — pi would not even open a browser for it.
+		if (entry === undefined || typeof entry['url'] !== 'string' || isRecord(entry['headers'])) {
+			return;
+		}
+		const url = entry['url'];
+		let authText: string | undefined;
+		try {
+			authText = fs.readFileSync(path.join(profile, 'mcp-auth.json'), 'utf8');
+		} catch {
+			authText = undefined;
+		}
+		let discovery: unknown = storedDiscoveryOf(authText === undefined ? undefined : { text: authText }, server, url);
+		if (discovery === undefined) {
+			const module = mcpOauthModuleOf(sdkEntry);
+			if (module !== undefined) {
+				const loaded = await importPiModule<{ discoverOAuthServerInfo?: (serverUrl: string, options?: { signal?: AbortSignal }) => Promise<unknown> }>(module);
+				discovery = await loaded.discoverOAuthServerInfo?.(url, { signal: AbortSignal.timeout(MCP_DISCOVERY_TIMEOUT_MS) });
+			}
+		}
+		const scope = offlineAccessScope(isRecord(entry['oauth']) ? entry['oauth']['scope'] : undefined, discovery);
+		if (scope === undefined) {
+			return;
+		}
+		const text = mcpServersTextWithOAuthScope(existing, server, scope);
+		if (text !== undefined) {
+			fs.writeFileSync(file, text, { mode: 0o600 });
+		}
+	} catch {
+		// A sign-in that cannot be improved is still a sign-in.
+	}
 }
 
 /**
@@ -581,6 +641,22 @@ export const PACKAGES_ENABLE_COMMAND = 'picode.packages.enable';
 export const PACKAGES_UNINSTALL_COMMAND = 'picode.packages.uninstall';
 
 /**
+ * The Packages section's update **check**: for every installed package, whether npm's registry
+ * knows a newer version. A row that is behind is told so, with the version it is behind to; a
+ * git or local one is told npm cannot say; a current one says nothing. The check runs after
+ * the page has rendered and carries its own ten-minute cache, so refreshing never hammers the
+ * registry. A **contract**, like the listing above.
+ */
+export const PACKAGES_UPDATES_CHECK_COMMAND = 'picode.packages.updatesCheck';
+
+/**
+ * The Packages section's update: one package taken to the newest version npm knows, run on the
+ * profile in force through `npm-run.ts`'s shell-free planner — the click on a row that says it
+ * is behind, not a reinstall by hand. A **contract**, like the other package commands.
+ */
+export const PACKAGES_UPDATE_COMMAND = 'picode.packages.update';
+
+/**
  * The MCP section's "Add Server", which the core invokes: it asks this connector for the new
  * server instead of the editor's own add flow, because the servers this page lists live in
  * pi's own `mcp.json` — the editor's flow would write a file pi never reads.
@@ -611,6 +687,19 @@ export const REMOVE_MCP_SERVER_COMMAND = 'picode.mcp.removeServer';
  * **contract** like {@link CHECK_MCP_SERVER_COMMAND}.
  */
 export const TOGGLE_MCP_SERVER_COMMAND = 'picode.mcp.toggleServer';
+
+/**
+ * The MCP sign-in, run from the status panel's "needs sign-in" row and the MCP page's Sign in
+ * button: it starts pi's own `mcp login <server>` pointed at PiCode's own profile, so the
+ * credential lands in `<app>/data/pi-agent/mcp-auth.json` — the file the sign-in rows read.
+ *
+ * The click that fixes a server is deliberately **not** the switch: a row that needs sign-in
+ * signs in, and switching it off stays on the MCP page through {@link TOGGLE_MCP_SERVER_COMMAND}.
+ */
+export const SIGN_IN_MCP_SERVER_COMMAND = 'picode.mcp.signInServer';
+
+/** How long the editor lets pi's login wait for the browser before the child is stopped. pi's own default is 300 s (`mcp login --timeout`); the slack is pi's own shutdown. */
+const MCP_LOGIN_TIMEOUT_MS = 330_000;
 
 /** The id the servers below are registered under; it must match the manifest's contribution. */
 const MCP_PROVIDER_ID = 'pi';
@@ -682,12 +771,39 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// never look like "everything was deleted".
 				return lastItems ?? [];
 			}
-			// Like the pi CLI, the panel shows only the sessions of the folders actually
-			// open: pi files transcripts under one folder per project cwd, so the listing
-			// walks just those folders — no workspace, no match, no sessions.
-			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+			// **The workspace's own conversations, and only those**, when the window is a workspace:
+			// the sessions filed under the area's slug, which are the ones this window's chats wrote
+			// (`runtime.ts` `windowSessionSlugs`, and the owner's own instruction there). A folder's
+			// history is the folder's — it shows when that project is opened on its own, not gathered
+			// up by a workspace that happens to contain it. Nothing else can appear: with no project
+			// open the slugs are empty and the listing is empty, never a fall-back to every project in
+			// the profile.
+			//
+			// **No group label per row**, because there is one list: the label that said
+			// *«Artictempest (Workspace) (workspace area)»* said the same word twice on every row.
+			// The title and the date are what tell two rows apart.
+			//
+			// **No cap either**: the limit existed so one busy *project* could not turn a list of
+			// groups into an endless one, and there are no groups any more — while a cap here would
+			// hide the older rows with nothing to say they exist, which is the reading the owner
+			// already reported as «salen menos».
+			//
+			// `undefined` is not "no folders": it is a window whose workspace has not been
+			// resolved yet, and that is the moment the panel first asks. Publishing the
+			// emptiness of a listing nobody could build would clear the panel — see
+			// `listingForPanel`.
+			const folders = vscode.workspace.workspaceFolders;
 			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const items = listWorkspaceSessionFiles(sessionsDir, workspacePaths).map(file => ({
+			// In a workspace, the listing asks for **every identity** that workspace ever filed under
+			// (`listAreaConversations`): the area's identity moves whenever the folder list does, and a
+			// listing that looked only for the identity computed this instant found an empty folder and
+			// dropped every row — «primero me salen 8 sesiones y luego 5». In a folder window there is
+			// one project and its own slug is the whole answer.
+			const listing = windowSessionScope();
+			const report = listing.mode === 'workspace' && listing.slugs[0] !== undefined
+				? areaConversationsReport(sessionsDir, listing.slugs[0])
+				: conversationsReport(sessionsDir, listing.slugs);
+			const built = report.files.map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
@@ -697,8 +813,24 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 				// every session as dated 1970 ('57y ago').
 				timing: { created: file.mtime, lastRequestEnded: file.mtime },
 			}));
-			lastItems = items;
-			return items;
+			// The rows nobody touched come back as the objects the panel already has: the bridge
+			// compares them by reference, so rebuilding one per refresh is what makes the whole
+			// list republish — and blink — on every refresh. See `reuseRows`.
+			const reusable = reuseRows(
+				lastItems ?? [],
+				built,
+				row => row.resource.toString(),
+				(before, after) => before.label === after.label
+					&& before.timing?.created === after.timing?.created
+					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
+			);
+			// **Publishable** is the whole question: the projects are known, and the walk could read
+			// every directory it needed. A listing that came back short because a directory refused
+			// to be read is not a listing of fewer sessions — it is no answer, and publishing it is
+			// what emptied this panel over and over while the profile was being written. See
+			// `listingForPanel`.
+			lastItems = listingForPanel(reusable, lastItems, folders !== undefined && report.complete);
+			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 			// No `requestHandler`: the transcript replays as read-only history, and the
@@ -707,10 +839,19 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			if (token.isCancellationRequested) {
 				return readSession;
 			}
-			const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 			const sessionsDir = path.join(profileInForce(), 'sessions');
 			const id = resource.path.split('/').pop();
-			const file = listWorkspaceSessionFiles(sessionsDir, workspacePaths).find(entry => entry.id === id);
+			// Every transcript of the open projects, **not** only the ones the panel lists: an
+			// agent's own transcript is not a conversation, and the agents view opens it. The cap
+			// bounds the list, not the history, so nothing here is capped either. The area's **whole
+			// family** comes along: the panel lists the identities a workspace filed under, so a row
+			// it shows has to resolve when it is clicked, whatever identity it was written under.
+			const areaSlug = resolveProjectScope().area?.slug;
+			const lookupSlugs = [
+				...projectSlugsOfWindow(),
+				...(areaSlug === undefined ? [] : areaFamilySlugs(sessionsDir, areaSlug)),
+			];
+			const file = listProjectSessionFiles(sessionsDir, lookupSlugs).find(entry => entry.id === id);
 			if (file === undefined) {
 				return readSession;
 			}
@@ -729,7 +870,44 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 			return { ...readSession, history };
 		},
 	};
+	// What `/agents` answers in the terminal, in one place: every delegation filed under the open
+	// projects — whether or not the conversation that launched it is open — with the state its
+	// own transcript carries, and a way into it. The daemon is not asked: `agents.ts` says why
+	// the transcript is the state.
+	const agentsCommand = vscode.commands.registerCommand('picode.agents', async () => {
+		const agents = launchedAgents(listProjectSessionFiles(
+			path.join(profileInForce(), 'sessions'),
+			projectSlugsOfWindow(),
+		));
+		if (agents.length === 0) {
+			void vscode.window.showInformationMessage('No agent was launched from the folders open in this window.');
+			return;
+		}
+		const picked = await vscode.window.showQuickPick(agents.map(agent => ({
+			label: `$(${agentIcon(agent.state)}) ${agent.label}`,
+			description: [
+				agent.parentLabel === undefined ? undefined : `from ${agent.parentLabel}`,
+				lastActivity(agent.mtime, Date.now()),
+			].filter((part): part is string => part !== undefined).join(' · '),
+			detail: agentDetail(agent.state),
+			agent,
+		})), {
+			title: 'Launched agents',
+			placeHolder: `${agents.length} launched — pick one to read it`,
+			matchOnDescription: true,
+		});
+		if (picked === undefined) {
+			return;
+		}
+		// The scheme the provider registered has its own editor resolver in the core, so this is
+		// the read-only chat transcript, exactly as clicking the session in the panel would be.
+		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${picked.agent.id}` }));
+	});
 	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
+	// The listing is filtered by the folders this window has open, so a window whose folders
+	// arrive after the first ask must be asked again — nothing else fires this event, and without
+	// it the panel would sit on the answer it got while the workspace was still being resolved.
+	const foldersSubscription = vscode.workspace.onDidChangeWorkspaceFolders(() => sessionsChangedEmitter.fire());
 	// The deprecated item-provider interface cannot carry session content, so the same object
 	// registers again as the content provider for the scheme. Without it the editor cannot
 	// resolve a pi session and falls back to a text editor for an unresolvable resource.
@@ -737,10 +915,31 @@ function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fire
 	return {
 		fireChanged: () => sessionsChangedEmitter.fire(),
 		dispose: () => {
+			agentsCommand.dispose();
+			foldersSubscription.dispose();
 			contentRegistration.dispose();
 			registration.dispose();
 		},
 	};
+}
+
+/** The icon one agent state wears in the list (`agents.ts` reads it; this names it). */
+function agentIcon(state: AgentState): string {
+	if (state === 'working') {
+		return 'sync~spin';
+	}
+	return state === 'answered' ? 'check' : 'circle-outline';
+}
+
+/** What one agent state means, in the words the transcript earned. */
+function agentDetail(state: AgentState): string {
+	if (state === 'working') {
+		return 'Still owed an answer: its transcript does not end with the agent\u2019s own reply yet.';
+	}
+	if (state === 'answered') {
+		return 'Answered: its transcript ends with the agent\u2019s own reply.';
+	}
+	return 'Nothing was written to it yet.';
 }
 
 /** The directory holding the bundled pi runtime's `node_modules` — what npm reinstalls into. */
@@ -766,6 +965,24 @@ function externalProfileRefusal(): string | undefined {
 		return undefined;
 	}
 	return 'Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.';
+}
+
+/**
+ * The npm project an npm-declared package is installed in — the directory npm runs over when
+ * the package is updated: `<profile>/npm`, or a trusted workspace's `<folder>/.pi/npm` when
+ * that is where the package was found. An unspellable source answers the profile's, which is
+ * where the updater's own refusal sentences come from instead of a wrong install root.
+ */
+function npmProjectFor(source: string, profileDir: string): string {
+	const parsed = parsePackageSource(source);
+	if (parsed !== undefined && parsed.kind === 'npm') {
+		for (const scope of packageScopes(profileDir)) {
+			if (fs.existsSync(path.join(scope.npmRoot, parsed.name))) {
+				return path.dirname(scope.npmRoot);
+			}
+		}
+	}
+	return path.join(profileDir, 'npm');
 }
 
 
@@ -966,11 +1183,57 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The answer now carries each package's state: its declaration as the settings file spells
 	// it, Enabled or Disabled, and the scope the declaration was found in — the disabled record
 	// merged in, so a disabled package still appears and the page can offer to enable it.
-	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => {
+	const packageRows = (): PiPackageRow[] => {
 		const profileDir = profileInForce();
 		const read = readPackages();
 		const info = packageDisplayInfo(read.packages, packageScopes(profileDir), readDisabledRecord(), profileDir);
 		return read.packages.map(found => ({ ...found, ...info.get(found.path) }));
+	};
+
+	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
+
+	// The background jobs the agent left running, as the pill above the chat input reads them.
+	// Pure reading of what the transcript already reported: the same starts and completions the
+	// chat cards draw, minus the cards. It answers even before the first turn — as "nothing
+	// running" — which is why it is a plain read and not part of the status answer.
+	disposables.push(vscode.commands.registerCommand(BACKGROUND_JOBS_COMMAND, () => runningBackgroundJobs()));
+
+	// "Cancel queued": every turn waiting for its slot in this window returns without running.
+	// The pill's Cancel button calls it; the turn in flight is never touched by it.
+	disposables.push(vscode.commands.registerCommand('picode.cancelQueuedTurns', () => cancelQueuedTurns()));
+
+	// The update check: which installed packages npm knows a newer version of. It runs after the
+	// page has rendered — the page calls it without holding the list open — and
+	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
+	// the page asks the registry for nothing inside that lifetime. Reading is all it does, so it
+	// runs in external mode too, where only the writes stop.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATES_CHECK_COMMAND, async (): Promise<readonly PackageUpdateStatusRow[]> =>
+		checkPackageUpdates(packageRows().map(found => ({
+			path: found.path,
+			name: found.name,
+			...(found.version === undefined ? {} : { version: found.version }),
+			...(found.source === undefined ? {} : { source: found.source }),
+		})), { log: report })));
+
+	// The update of one package: the click on a row that says it is behind. npm runs through
+	// `npm-run.ts`'s shell-free planner, over the npm project of the scope the package was
+	// found installed in — the profile's first, then a trusted workspace's — so a side-by-side
+	// build's spaced install folder arrives as one argument, as everywhere else here.
+	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
+		const target = typeof source === 'string' ? source.trim() : '';
+		if (target.length === 0) {
+			return { ok: false, message: 'No package source was given.' };
+		}
+		const refusal = externalProfileRefusal();
+		if (refusal !== undefined) {
+			return { ok: false, message: refusal };
+		}
+		const profileDir = profileInForce();
+		const result = await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
+		if (result.ok) {
+			fire();
+		}
+		return result;
 	}));
 
 	// The Packages section's catalog and install. The search resolves nothing of the editor —
@@ -1141,6 +1404,59 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		void vscode.window.showErrorMessage(`PiCode: "${server}" is not one of pi's servers any more.`);
 		return undefined;
+	}));
+
+	// The MCP sign-in, from the status panel's "needs sign-in" row and the MCP page's Sign in
+	// button: pi's own `mcp login <server>` as a child process. The child carries
+	// `PI_CODING_AGENT_DIR` pointed at **PiCode's own profile** (`mcp-provider.ts`), which is
+	// what makes pi's OAuth store write the credential into `data/pi-agent/mcp-auth.json` — the
+	// file the sign-in rows read, and the one that has to survive the editor closing. A sign-in
+	// run without that variable (a bare terminal, say) writes the machine's own pi file instead,
+	// which is the relogin-every-restart the profile's empty file was measuring.
+	//
+	// The browser step is the owner's, and by design: the child opens it itself, and pi waits
+	// for the callback exactly as it does from a terminal. This command returns at once; the
+	// completion messages below are what tells the owner how it ended.
+	disposables.push(vscode.commands.registerCommand(SIGN_IN_MCP_SERVER_COMMAND, async (name?: string): Promise<void> => {
+		const server = (name ?? '').trim();
+		if (server.length === 0) {
+			return;
+		}
+		// PiCode's own profile only, whatever runtime is in force: this is where PiCode's pi
+		// reads its credentials, and the external pi's directory is never written to.
+		const profile = profileDirectory(requireProfileUri());
+		const candidates = sdkCandidates(distributionRoot(requireProfileUri()));
+		const entry = candidates.map(mcpCliEntryOf).find(file => fs.existsSync(file));
+		if (entry === undefined) {
+			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in — pi's own command line was not found in this installation.`);
+			return;
+		}
+		// The sign-in is repaired before it starts: a credential the server cannot renew is one it
+		// will ask for again the hour it expires.
+		const sdkEntry = candidates.find(file => fs.existsSync(file));
+		if (sdkEntry !== undefined) {
+			await ensureSignInCanBeRenewed(profile, server, sdkEntry);
+		}
+		void vscode.window.showInformationMessage(`PiCode: signing in to "${server}" — complete it in the browser window that just opens.`);
+		execFile(process.execPath, [entry, ...mcpLoginArgs(server)], {
+			// The workspace's first folder, so pi resolves the same project file the sessions do;
+			// the profile's servers are read whatever the folder is.
+			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? profile,
+			env: mcpLoginEnv(profile, process.env),
+			windowsHide: true,
+			timeout: MCP_LOGIN_TIMEOUT_MS,
+		}, (error, _stdout, stderr) => {
+			if (error === null) {
+				void vscode.window.showInformationMessage(`PiCode: "${server}" is signed in. The credential is stored in PiCode's own profile and survives restarts.`);
+				return;
+			}
+			// pi's last stderr line is the sentence that matters (a cancelled sign-in, a server
+			// that does not use OAuth); the rest is its log, which is not for the dialog.
+			const reason = typeof stderr === 'string' && stderr.trim().length > 0
+				? stderr.trim().split('\n').pop()?.trim() ?? error.message
+				: error.message;
+			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in (${reason}).`);
+		});
 	}));
 
 	return disposables;
@@ -1414,6 +1730,10 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 
 	try {
 		if (runtimeCache === undefined || runtimeCache.cwd !== cwd || runtimeCache.agentDir !== agentDir) {
+			// The same guard every pi load has: if any declared package is still missing, it is
+			// installed here (hidden, one run) rather than being left for pi's loader to install
+			// with its own process — and its own window — per package.
+			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), npmCli: locateNpmCli(), log: line => console.error(`[picode] ${line}`) });
 			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
 		}
 	} catch {
@@ -1725,76 +2045,6 @@ function extractText(payload: string, api: string | undefined): string | undefin
 }
 
 /* ------------------------------------------------------------------ *
- * The subagents' transcripts
- * ------------------------------------------------------------------ */
-
-/** The command that opens a subagent's transcript; it takes an optional task id. */
-export const OPEN_SUBAGENT_TRANSCRIPT_COMMAND = 'picode.openSubagentTranscript';
-
-/**
- * Opens a subagent's transcript, rendered from its pi session file.
- *
- * With a task id the transcript opens directly; without one the finished tasks gentle
- * recorded are listed, newest first. The markdown is opened in an **untitled** document:
- * the profile and the session files are read, never written or renamed. Every failure path
- * is a sentence, not a throw — a command the palette can invoke must not fail into the void.
- */
-async function openSubagentTranscript(taskId?: string): Promise<void> {
-	try {
-		const home = gentleAgentsHome();
-		let chosen = taskId;
-		if (chosen === undefined) {
-			const now = Date.now();
-			const picks = listTaskFiles(home)
-				.map(file => ({
-					taskId: path.basename(file.file, '.json'),
-					record: readTaskRecord(file.file),
-				}))
-				.map(({ taskId: id, record }) => ({
-					taskId: id,
-					label: `${record?.agent ?? 'subagent'} — ${record?.label ?? id}`,
-					description: record?.endedAt === undefined ? undefined : relativeTime(record.endedAt, now),
-				}));
-			if (picks.length === 0) {
-				void vscode.window.showInformationMessage('PiCode: no subagent activity yet. It appears when Gentle AI runs one.');
-				return;
-			}
-			const picked = await vscode.window.showQuickPick(picks, {
-				placeHolder: 'Which subagent do you want to look at?',
-			});
-			if (picked === undefined) {
-				return;
-			}
-			chosen = picked.taskId;
-		}
-
-		const sessionPath = readTaskTranscriptPath(chosen, home);
-		if (sessionPath === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: no activity was recorded for that subagent.`);
-			return;
-		}
-		let text: string | undefined;
-		try {
-			text = fs.readFileSync(sessionPath, 'utf8');
-		} catch {
-			text = undefined;
-		}
-		if (text === undefined) {
-			void vscode.window.showInformationMessage(`PiCode: that subagent's activity could not be read.`);
-			return;
-		}
-		const document = await vscode.workspace.openTextDocument({
-			content: sessionToMarkdown(text, { title: `Subagent ${chosen}` }),
-			language: 'markdown',
-		});
-		await vscode.window.showTextDocument(document, { preview: true });
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		void vscode.window.showErrorMessage(`PiCode: that subagent's activity could not be opened (${message}).`);
-	}
-}
-
-/* ------------------------------------------------------------------ *
  * Activation
  * ------------------------------------------------------------------ */
 
@@ -1862,8 +2112,8 @@ function isInside(dir: string, file: string): boolean {
 }
 
 /**
- * The candidates one check compares: the runtime in force, Gentle AI, and the npm packages of
- * the profile pi loads. Everything arrives as "installed version if readable" — the assembly
+ * The candidates one check compares: the runtime in force, and the npm packages of the
+ * profile pi loads. Everything arrives as "installed version if readable" — the assembly
  * in `updates-check.ts` decides what is actually behind, and a missing or junk version is
  * simply not a claim the check makes.
  */
@@ -1877,7 +2127,6 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	}
 
 	const candidates: CandidateTarget[] = [];
-	const profile = profileDirectory(requireProfileUri());
 
 	// The runtime: the internal one from its manifest, the external one from the probe of the
 	// machine's pi. Both are versions of the same npm package, so the latest is the same lookup.
@@ -1886,24 +2135,12 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 		: readInternalPiVersion(distributionRoot(requireProfileUri()));
 	candidates.push({ kind: 'runtime', name: 'pi', installed: installedPi, latest: await fetchNpmLatest(PI_RUNTIME_PACKAGE, { log: report }) });
 
-	// Gentle AI, only when it is installed: an absent package is not an out-of-date one.
-	const gentleInstalled = readGentleVersion(profile);
-	if (gentleInstalled !== undefined) {
-		candidates.push({ kind: 'gentle', name: 'gentle-pi', installed: gentleInstalled, latest: await fetchNpmLatest('gentle-pi', { log: report }) });
-	}
-	const engramInstalled = readProfilePackageVersion(profile, 'gentle-engram');
-	if (engramInstalled !== undefined) {
-		candidates.push({ kind: 'gentle', name: 'gentle-engram', installed: engramInstalled, latest: await fetchNpmLatest('gentle-engram', { log: report }) });
-	}
-
 	// The npm packages of the profile in force. Git checkouts carry no version to compare and
-	// are skipped; Gentle is skipped here because it is already counted above.
+	// are skipped.
 	const scopes = packageScopes(profileInForce());
 	const npmRoots = scopes.map(scope => scope.npmRoot);
 	const npmPackages = piPackages(scopes, nodeFs()).packages.filter((found): found is PiPackage & { version: string } =>
 		found.version !== undefined
-		&& found.name !== 'gentle-pi'
-		&& found.name !== 'gentle-engram'
 		&& npmRoots.some(root => isInside(root, found.path)));
 	const latestVersions = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
 	npmPackages.forEach((found, index) => {
@@ -1963,7 +2200,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
 		resetChatSession();
-		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce() });
+		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli() });
 		if (!result.ok) {
 			void vscode.window.showInformationMessage(result.message);
 			return;
@@ -2043,6 +2280,24 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
 
+	// The editor owns the packages of its own profile: whatever the settings declare and the disk
+	// lacks is installed here, in one hidden npm run, before anything loads pi. Left alone, pi's
+	// own loader installs each missing declaration with its own npm process
+	// (`package-manager.js`: `resolvePackageSources` → `installNpm`, one spec per spawn, no
+	// `windowsHide`), and on Windows every one of those flashed a console window — sixteen
+	// declarations, sixteen windows, on every load until the tree was whole. This run is the
+	// whole tree; the wizard's steps only navigate and the chat waits for the same guard, so no
+	// pi load ever finds a package to install. Failures are one sentence, not silence.
+	void ensureProfilePackages({
+		profileDir: profileDirectory(context.extensionUri),
+		npmCli: locateNpmCli(),
+		log: line => console.error(`[picode] ${line}`),
+	}).then(outcome => {
+		if (outcome.failed > 0) {
+			void vscode.window.showInformationMessage(`PiCode: ${outcome.failed} package${outcome.failed === 1 ? '' : 's'} of your profile could not be installed — ${outcome.lines[outcome.lines.length - 1] ?? 'see the log for the reason'}.`);
+		}
+	});
+
 	// `@pi` in the editor's own chat. This is what makes the chat exist: the editor hides its
 	// chat when there is no agent to talk to, and this supplies one — the editor's agent, not a
 	// surface of ours. Nothing to configure: it finds pi and its profile by itself.
@@ -2107,7 +2362,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		profileDir: profileDirectory(context.extensionUri),
 		globalState: context.globalState,
 		forgetRuntime: forgetPiRuntime,
-		// Installing or removing Gentle AI must be visible to the chat immediately.
+		// A package install or removal must be visible to the chat immediately.
 		resetChat: resetChatSession,
 		// An import writes providers, models and packages onto disk: the picker must ask
 		// again instead of serving what it cached before the copy.
@@ -2117,6 +2372,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		},
 		// An import also lands a tree of session transcripts: the Sessions panel re-lists.
 		sessionsChanged: () => piSessions.fireChanged(),
+		// npm runs shell-free, over npm's own CLI script (npm-run.ts) — the spaced install
+		// folder a side-by-side build carries must not be split by a shell's concatenation.
+		npmCli: locateNpmCli(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
 	// The theme step of Set up PiCode lives in the core, so its three questions — list the gallery,
@@ -2128,6 +2386,26 @@ export function activate(context: vscode.ExtensionContext): void {
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
 	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
+	// The durable agent's commands: start, stop, list/open its conversations, and send it a
+	// prompt. The status panel's Durable section rows run the same ones.
+	// The agent is told which profile, which storage directory and which settings file to use: a
+	// portable or side-by-side PiCode has its own, and the agent's defaults would find a different
+	// install's — the very mixing a separate build exists to avoid. Its storage is `data/durable`,
+	// beside the profile, because the agent ships *inside* the installation: anything it kept in its
+	// own folder would be replaced on the next install and removed on uninstall, and the durable
+	// conversations are the one thing it exists to keep. `globalStorageUri` is `<userData>/User/
+	// globalStorage/<extension>`, so two directories up is the settings file the editor itself obeys.
+	const agentProfile = profileDirectory(context.extensionUri);
+	const durablePaths = {
+		agentProfile,
+		agentDataDir: path.join(path.dirname(agentProfile), 'durable'),
+		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
+	};
+	context.subscriptions.push(...registerDurableCommands(durablePaths));
+	// And it comes up running rather than waiting to be asked: a panel that says "not running"
+	// when the editor could have started it is an obstacle, not a safeguard. Quiet, and skipped
+	// when the owner stopped it in this window or the agent is not installed here at all.
+	void ensureDurableAgentRunning(durablePaths);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the
@@ -2142,7 +2420,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		sessionsDir: piSessionsDir(),
 	}));
 
-	// The update check: pi, Gentle AI and the profile's packages, asked quietly on a schedule,
+	// The update check: pi and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.
 	registerUpdateChecks(context);
 
@@ -2159,19 +2437,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	const modelsTimer = setInterval(() => warmUpModels(), 30 * 60_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearInterval(modelsTimer)));
 
-	// The wizard's provider/model/agents commands (the welcome page's step 2 and the
-	// Gentle agents' model picker).
+	// The wizard's provider/model commands (the welcome page's model step).
 	context.subscriptions.push(...registerWizardModelCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
 	}));
-
-	// The subagents gentle launched from a chat turn stay visible in the chat itself (see
-	// `agent.ts`); this command is how their full transcript opens — the pi session file
-	// rendered as markdown into an untitled document, the profile never written.
-	context.subscriptions.push(vscode.commands.registerCommand(OPEN_SUBAGENT_TRANSCRIPT_COMMAND, (taskId?: string) =>
-		openSubagentTranscript(typeof taskId === 'string' ? taskId : undefined)));
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(CONNECT_PROVIDER_COMMAND, () =>
@@ -2191,4 +2462,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
+
+	// The durable daemon is this editor's child, and nothing PiCode starts may outlive
+	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
+	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
+	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
+	// it stops itself (experimental/durable/lib/daemon.js).
+	stopDurableAgentOnShutdown();
 }

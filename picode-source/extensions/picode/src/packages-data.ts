@@ -17,7 +17,7 @@ import type { FsReader, ResourceSource } from './customizations';
  *
  * - **The declarations**: `settings.json`'s `packages`, read exactly as this connector already
  *   writes it (`onboarding.ts` filters `typeof p === 'string'`) and as pi documents it
- *   (`docs/packages.md`): a string (`"npm:gentle-pi"`) or an object with a `source`. The
+ *   (`docs/packages.md`): a string (`"npm:some-package"`) or an object with a `source`. The
  *   per-scope files are `<profile>/settings.json` and `<workspace>/.pi/settings.json`
  *   (`settings-manager.js:61`), and a project's declarations only count while the project is
  *   trusted — pi itself throws project settings away when it is not (`loadFromStorage`), so this
@@ -130,7 +130,7 @@ function npmName(spec: string): string | undefined {
  *
  * The three kinds and their spellings are pi's own: `npm:` for npm, then a local path for anything
  * that is not a package source or a remote protocol (`isLocalPath`), then a git repository for
- * `git:`/`http(s)://`/`ssh://` (`parseGitUrl`). A bare name (`gentle-pi`) is a local path for pi,
+ * `git:`/`http(s)://`/`ssh://` (`parseGitUrl`). A bare name (`some-package`) is a local path for pi,
  * so it is one here too.
  */
 export function parsePackageSource(raw: unknown): PackageSource | undefined {
@@ -310,7 +310,7 @@ export function installedPackages(npmRoot: string, read: FsReader): readonly PiP
 
 /** What one read of every scope produced: the packages, and what could not be resolved. */
 export interface PackageReadResult {
-	/** Sorted by name, one row per directory. */
+	/** Sorted by name, one row per package. */
 	readonly packages: readonly PiPackage[];
 	/** The declarations that resolved to nothing, one line each, for the log. */
 	readonly unresolved: readonly string[];
@@ -324,7 +324,7 @@ export interface PackageReadResult {
  * the profile holds two copies.
  */
 export function piPackages(scopes: readonly PackageScope[], read: FsReader): PackageReadResult {
-	const byPath = new Map<string, PiPackage>();
+	const byPath = new Map<string, FoundPackage>();
 	const unresolved: string[] = [];
 
 	for (const scope of scopes) {
@@ -338,26 +338,81 @@ export function piPackages(scopes: readonly PackageScope[], read: FsReader): Pac
 				unresolved.push(`${dir}: installed, but it has no readable package.json`);
 				continue;
 			}
-			byPath.set(found.path, found);
+			byPath.set(found.path, { found, declared: true });
 		}
 	}
 
 	for (const scope of scopes) {
 		for (const found of installedPackages(scope.npmRoot, read)) {
-			byPath.set(found.path, found);
+			// A directory a declaration already named keeps the declaration: one install, seen twice.
+			if (!byPath.has(found.path)) {
+				byPath.set(found.path, { found, declared: false });
+			}
 		}
 	}
 
-	return {
-		packages: [...byPath.values()].sort((left, right) => left.name.localeCompare(right.name)),
-		unresolved,
-	};
+	return { packages: oneRowPerPackage([...byPath.values()]), unresolved };
+}
+
+/** One directory the walk found, and whether pi's settings declare it. */
+interface FoundPackage {
+	readonly found: PiPackage;
+	readonly declared: boolean;
+}
+
+/**
+ * One row per **package**, not one per directory.
+ *
+ * pi can hold the same package in two places, and the owner's own profile does:
+ * `git:github.com/HazAT/pi-interactive-subagents` is materialized under `git/`, while pi's npm root
+ * carries `"pi-interactive-subagents": "github:HazAT/pi-interactive-subagents"` as a dependency, so
+ * npm resolved the same package into `npm/node_modules/`. Two real directories, one name, one
+ * version — and only the declared one is loaded, so the page printed, two rows apart, that the same
+ * package was both **Enabled** and *«Not declared, pi does not load it»*. The owner read it, rightly,
+ * as a defect: a listing may not say two contradictory things about one package.
+ *
+ * The rule has two halves, and the order between them is the point:
+ *
+ * 1. **Every declaration is a row.** A declaration is an instruction pi reads, so two declarations
+ *    naming the same package are two installs pi loads and both are shown — hiding one would hide
+ *    something the owner may need to remove.
+ * 2. **A directory no declaration names is a row only when nothing else lists its package.** That is
+ *    the copy pi does not load: one copy of one package is enough to say so, and the winner is the
+ *    first by path so two reads of an unchanged profile answer the same thing.
+ *
+ * What the second half drops is plumbing rather than a state to act on: the discarded copy is an npm
+ * tree resolving pi's own dependency, and the package it holds is listed once, from the copy that
+ * loads. The case where a copy **is** the story — a directory no declaration names, with no declared
+ * copy beside it — survives, because there is nothing to collapse it into.
+ */
+function oneRowPerPackage(found: readonly FoundPackage[]): PiPackage[] {
+	const kept: PiPackage[] = found.flatMap(entry => (entry.declared ? [entry.found] : []));
+	const named = new Set(kept.map(found => found.name));
+	const undeclared = found
+		.filter(entry => !entry.declared)
+		.sort((left, right) => compareText(left.found.path, right.found.path));
+	for (const entry of undeclared) {
+		if (named.has(entry.found.name)) {
+			continue;
+		}
+		named.add(entry.found.name);
+		kept.push(entry.found);
+	}
+	return kept.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** A text order that depends on the text alone — no locale, so the same answer on any machine. */
+function compareText(left: string, right: string): number {
+	if (left === right) {
+		return 0;
+	}
+	return left < right ? -1 : 1;
 }
 
 /**
  * The skill directories one package contributes.
  *
- * A package says where its skills are (`pi.skills` in its manifest, as `gentle-pi` does with
+ * A package says where its skills are (`pi.skills` in its manifest, as any npm package does with
  * `["./skills"]`); without that manifest key, the conventional `skills/` directory is the answer.
  * An entry that is a glob is walked from its literal part — `./resources/skills/*` reads
  * `./resources/skills` — because the pattern's job is usually just to name the directory, and the

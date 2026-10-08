@@ -22,14 +22,16 @@ import { PICODE_MCP_SERVERS_SETTING } from './picodeConfiguration.js';
  *
  * This is the one place pi's MCP servers are configured. The list reads the servers the
  * `picode.mcp.servers` store holds — name, where the server runs, its address or command —
- * and each row's on/off state, which is not part of that store: pi holds it in its own
- * profile. The state comes from the same command the status panel reads
- * (`picode.setup.status`), never from the profile's files themselves — those belong to the
- * connector, not to the core.
+ * and each row's state, which is not part of that store: pi holds it in its own profile. The
+ * state comes from the same command the status panel reads (`picode.setup.status`), never
+ * from the profile's files themselves — those belong to the connector, not to the core. It
+ * tells three facts apart (`mcp-provider.ts`): `On` — pi will start it and can use it;
+ * `Needs sign-in` — pi will start it but has no credential for it; `Off` — pi will not
+ * start it. A state the connector could not read is shown as unknown, never as `On`.
  *
  * Every action hands over to the connector's existing commands, which are the form:
- * `picode.mcp.addServer`, `editServer`, `removeServer` and `toggleServer`. No form is
- * written here, and a server's token is never shown.
+ * `picode.mcp.addServer`, `editServer`, `removeServer`, `toggleServer` and `signInServer`. No
+ * form is written here, and a server's token is never shown.
  */
 
 /** One server as the `picode.mcp.servers` store holds it. The token (`key`) is never shown. */
@@ -40,15 +42,18 @@ interface IMcpServerSettingRow {
 	readonly args?: string;
 }
 
-/** One server's switch, as the status panel's data reports it. */
-interface IMcpServerStateRow {
-	readonly name: string;
+/** One server's state, as the status panel's data reports it. */
+interface IMcpServerState {
 	readonly on: boolean;
+	/** Whether pi can use the server (`mcp-provider.ts`); left out when the row is off. */
+	readonly signIn?: 'ok' | 'needed' | 'unknown';
+	/** Where the server comes from (`status-view.ts`): left out for the profile's own rows. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 /** The slice of the status panel's answer this widget reads. */
 interface IStatusDataSlice {
-	readonly mcpServers?: readonly IMcpServerStateRow[];
+	readonly mcpServers?: readonly (IMcpServerState & { readonly name: string })[];
 }
 
 const STATUS_DATA_COMMAND = 'picode.setup.status';
@@ -58,6 +63,7 @@ const ADD_SERVER_COMMAND = 'picode.mcp.addServer';
 const EDIT_SERVER_COMMAND = 'picode.mcp.editServer';
 const REMOVE_SERVER_COMMAND = 'picode.mcp.removeServer';
 const TOGGLE_SERVER_COMMAND = 'picode.mcp.toggleServer';
+const SIGN_IN_SERVER_COMMAND = 'picode.mcp.signInServer';
 
 /** One row of the table: the store's facts plus the state pi reports. */
 interface IServerRow {
@@ -67,8 +73,12 @@ interface IServerRow {
 	readonly args?: string;
 	/** `undefined` when pi's state could not be read; the row then shows no switch. */
 	readonly on?: boolean;
+	/** Whether pi can use the server; `needed` is the row that says "Needs sign-in". */
+	readonly signIn?: 'ok' | 'needed' | 'unknown';
 	/** A server pi runs that the store does not spell out (added through the connector). */
 	readonly undeclared?: boolean;
+	/** Where the server comes from; the actions write the profile, so only its rows get them. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
 export class PicodeMcpServersWidget extends Disposable implements IAICustomizationManagementSectionWidget {
@@ -90,7 +100,7 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 	 * page draws and seconds this page waits.
 	 */
 	private declared: readonly IMcpServerSettingRow[] = [];
-	private states = new Map<string, boolean>();
+	private states = new Map<string, IMcpServerState>();
 
 	get element(): HTMLElement {
 		return this.root;
@@ -168,11 +178,11 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 
 		// The on/off state is pi's, not the store's: the same command the status panel
 		// reads answers it. Without it the rows still list, but show no switch.
-		const states = new Map<string, boolean>();
+		const states = new Map<string, IMcpServerState>();
 		try {
 			const data = await this.commandService.executeCommand<IStatusDataSlice>(STATUS_DATA_COMMAND);
 			for (const server of data?.mcpServers ?? []) {
-				states.set(server.name, server.on);
+				states.set(server.name, { on: server.on, signIn: server.signIn, origin: server.origin });
 			}
 		} catch {
 			// The connector is not answering; the rows stay honest about not knowing.
@@ -186,7 +196,7 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		this.render(this.declared, this.states);
 	}
 
-	private render(declared: readonly IMcpServerSettingRow[], states: ReadonlyMap<string, boolean>): void {
+	private render(declared: readonly IMcpServerSettingRow[], states: ReadonlyMap<string, IMcpServerState>): void {
 		this.rowDisposables.clear();
 		DOM.clearNode(this.rowsContainer);
 
@@ -195,11 +205,13 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 			transport: row.transport,
 			target: row.target,
 			args: row.args,
-			on: states.get(row.name),
+			on: states.get(row.name)?.on,
+			signIn: states.get(row.name)?.signIn,
+			origin: 'profile',
 		}));
-		for (const [name, on] of states) {
+		for (const [name, state] of states) {
 			if (!declared.some(row => row.name === name)) {
-				rows.push({ name, on, undeclared: true });
+				rows.push({ name, on: state.on, signIn: state.signIn, undeclared: true, origin: state.origin });
 			}
 		}
 
@@ -217,7 +229,15 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		name.textContent = row.name;
 
 		const runs = DOM.append(rowElement, $('.picode-mcp-cell-runs'));
-		if (row.undeclared || row.transport === undefined) {
+		if (row.origin === 'project') {
+			runs.textContent = localize('picodeMcpSectionProject', "Project");
+			runs.title = localize('picodeMcpSectionProjectTooltip',
+				"Declared in this project's .pi/mcp.json. pi loads it for trusted projects; edit it in the project, not here.");
+		} else if (row.origin === 'discovered') {
+			runs.textContent = localize('picodeMcpSectionDiscovered', "Discovered");
+			runs.title = localize('picodeMcpSectionDiscoveredTooltip',
+				"Connected into the live session by a pi extension or plugin. It has no entry here to edit or remove.");
+		} else if (row.undeclared || row.transport === undefined) {
 			runs.textContent = '';
 		} else {
 			runs.textContent = row.transport === 'http'
@@ -233,12 +253,43 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		state.classList.toggle('disabled', row.on === false);
 		if (row.on === undefined) {
 			state.textContent = '';
+		} else if (!row.on) {
+			state.textContent = localize('picodeMcpSectionOff', "Off");
+		} else if (row.signIn === 'needed') {
+			// The truth the page used to hide behind an `On`: the entry is enabled, but pi has
+			// no credential for it, so it cannot be used. The fix is this page's own Sign in
+			// button, which starts pi's own sign-in pointed at PiCode's profile.
+			state.textContent = localize('picodeMcpSectionNeedsSignIn', "Needs sign-in");
+			state.title = localize('picodeMcpSectionNeedsSignInTooltip',
+				"pi has no sign-in stored for this server, so pi cannot use it. Use Sign in below: a browser window opens, and the credential is stored in PiCode's own profile.");
+		} else if (row.signIn === 'unknown') {
+			state.textContent = localize('picodeMcpSectionSignInUnknown', "On · sign-in unknown");
+			state.title = localize('picodeMcpSectionSignInUnknownTooltip',
+				"Whether pi can sign in to this server could not be read, so the row does not claim either way.");
 		} else {
-			state.textContent = row.on ? localize('picodeMcpSectionOn', "On") : localize('picodeMcpSectionOff', "Off");
+			state.textContent = localize('picodeMcpSectionOn', "On");
 		}
 
 		const actions = DOM.append(rowElement, $('.picode-mcp-row-actions'));
 		const disposables = this.rowDisposables;
+
+		// A row the profile does not own has nothing here to act on: the project's file is
+		// edited in the project, and a discovered server has no entry anywhere — offering Edit
+		// or Remove would write a **new** profile entry instead of touching what the row shows.
+		if (row.origin === 'project' || row.origin === 'discovered') {
+			return rowElement;
+		}
+
+		// The sign-in is the first action of a row that needs one, because fixing the server is
+		// what the owner came here to do. It runs pi's own sign-in pointed at PiCode's profile,
+		// so the credential lands where pi reads it — and stays there across restarts.
+		if (row.on !== false && row.signIn === 'needed') {
+			const signInButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+			signInButton.label = localize('picodeMcpSectionSignIn', "Sign in");
+			signInButton.setTitle(localize('picodeMcpSectionSignInTooltip',
+				"Start pi's sign-in for this server: a browser window opens, and the credential is stored in PiCode's own profile."));
+			disposables.add(signInButton.onDidClick(() => { void this.runCommand(SIGN_IN_SERVER_COMMAND, row.name); }));
+		}
 
 		const editButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
 		editButton.label = localize('picodeMcpSectionEdit', "Edit");
@@ -281,7 +332,8 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		// `refresh` instead would ask for the whole status — git for the Project row — before
 		// anything on this page changed.
 		if (switched !== undefined) {
-			this.states.set(switched.name, switched.on);
+			// A flip changes only the switch; the sign-in fact stays what the last reading said.
+			this.states.set(switched.name, { on: switched.on, signIn: this.states.get(switched.name)?.signIn });
 			this.render(this.declared, this.states);
 			return;
 		}

@@ -31,6 +31,7 @@
 | **Fuera la ventana de agentes de VS Code** | Sus seis acciones no se registran: se acaban el botón «Open in Agents» de la barra, la entrada del menú del chat, el atajo `Ctrl+Shift+A`, los comandos de la paleta y el cartel de bienvenida. Sus dos consejos también fuera |
 | **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`), papel en `odd/tasks/picode-management-round.md`: causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents solo Gentle-AI sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
 | **Gentle AI en `gentle-pi` 4.0.0** | Perfil interno actualizado de 3.7.0 a 4.0.0 (`npm install`, gate de scripts aprobado y `rebuild` para el binario Go local; `node_modules/gentle-pi/package.json` = 4.0.0 y `.gentle-ai/v4.0.0/gentle-ai.exe` en su sitio). Compatibilidad comprobada antes de subir: `lib/agents-config.ts`, `lib/agent-home.ts` y `lib/orchestrator-presence.ts` idénticos entre 3.7.0 y 4.0.0, y `gentleTodo` con la misma forma → el conector no cambia. La v4 deja fuera del paquete los 13 agentes SDD y `sdd-init` |
+| **Adopción de 1.141 + release 0.1.5-experimental** (2026-10-08) | Píldora de estado del agente sobre el chat (actividad, cola con cancelación, trabajos en background, empujada sin sondeos), MCP con origen por fila (perfil/proyecto/descubiertos), cancelación inmediata de turnos en cola, `picode.pi.disabledTools`, thinking en show por defecto, nan visible en Providers, ajustes muertos de la sección Agent fuera, corte del borde inferior del chat arreglado. Ficha `odd/tasks/picode-vscode-141.md`; release publicada y verificada en GitHub |
 
 ## Lo que está a medias
 
@@ -47,6 +48,8 @@
 
 | # | Tarea | Tamaño | Qué desbloquea |
 | --- | --- | --- | --- |
+| 11 | **Rebasar la base a VS Code 1.141.0** (`odd/tasks/picode-rebase-141.md`) | 🔴 | Frescura de extensiones y de upstream; va antes de congelar los canales. Aparato montado (clon desechable + delta), juntanza empezada |
+| 12 | **Tres canales: RC / Beta / Experimental** (`odd/tasks/picode-canales.md`) | 🔴 | Cada build se actualiza solo por su feed, tres instalaciones lado a lado. C1-C2 hechas (sellado del canal + trampa de versión); quedan C3-C7. Pendiente una decisión del dueño: perfil por canal vs compartido |
 | 1 | **Que tus modelos salgan en la ventana del editor** | 🟡 | Es lo que hoy hace que `@pi` diga «Language model unavailable». La puerta del editor para registrar modelos es **estable**, y el catálogo de pi ya se lee |
 | 3 | **La clase del host que une sesión y traducción** | 🔴 | Es la pieza más grande. Con ella, pi responde **con su propio bucle** y sus herramientas |
 | 4 | **Registrar el host y apagar los otros agentes** | 🟢 | Que pi sea **el único** agente del editor. Va **después** del 3: apagarlos antes deja el selector vacío |

@@ -14,6 +14,7 @@
   "files.eol": "\n",
   "telemetry.telemetryLevel": "off",
   "chat.disableAIFeatures": false,
+  "chat.mcp.autostart": "never",
   "agents.voice.enabled": false,
   "agents.voice.backendUrl": "",
   "security.workspace.trust.enabled": true,

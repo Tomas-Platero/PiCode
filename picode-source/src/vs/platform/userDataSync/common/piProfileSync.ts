@@ -26,7 +26,7 @@ import { Change, IRemoteUserData, ISyncData, IUserDataSyncLocalStoreService, IUs
  * Synchronises PiCode's own pi profile (`<dist>/data/pi-agent`) so that agents,
  * subagents and skills follow the user across machines.
  *
- * The `agents`, `subagents`, `skills`, `memory`, `chains`, `gentle-ai` and `specpi` subtrees
+ * The `agents`, `subagents`, `skills`, `memory`, `chains` and `specpi` subtrees
  * plus the profile's own config files are bundled. The remote content is a JSON document
  * `{ "version": 1, "files": { "<relativePosixPath>": "<fileContent>" } }`. Merging is
  * last-writer-wins per file; a file changed on both sides becomes a whole-file conflict (no
@@ -50,13 +50,13 @@ interface IPiProfileAcceptedResourcePreview extends IFileResourcePreview {
 const PI_PROFILE_DATA_VERSION = 1;
 /** PiCode's own pi profile inside the distribution: `<dist>/data/pi-agent`. */
 const PI_PROFILE_DISTRIBUTION_SUBPATH = ['data', 'pi-agent'];
-const PI_PROFILE_SYNCED_FOLDERS = ['agents', 'subagents', 'skills', 'memory', 'chains', 'gentle-ai', 'specpi'];
+const PI_PROFILE_SYNCED_FOLDERS = ['agents', 'subagents', 'skills', 'memory', 'chains', 'specpi'];
 // Root-level config files of the pi profile, synced alongside the folders.
 const PI_PROFILE_ROOT_FILES = ['settings.json', 'models.json', 'subagents.json', 'trust.json', 'mcp-adapter.json'];
 // Credentials are machine/session-bound (OAuth token rotation breaks across
 // machines) and never leave the device.
 const EXCLUDED_FILES = new Set(['auth.json', 'auth.json.bak-omniroute-only', 'crashes.json', 'models.json.bak-before-nan', 'models.json.bak-omniroute-only']);
-const SKIPPED_FOLDERS = new Set(['node_modules', 'sessions', 'npm', 'bin', 'extensions', 'tmp', 'web-search-cache', 'git', 'image-view', 'intercom', 'fff', 'gentle-agents', 'mcp-oauth']);
+const SKIPPED_FOLDERS = new Set(['node_modules', 'sessions', 'npm', 'bin', 'extensions', 'tmp', 'web-search-cache', 'git', 'image-view', 'intercom', 'fff', 'mcp-oauth']);
 const MAX_FILE_SIZE = 1024 * 1024;
 const MAX_BUNDLE_SIZE = 3 * 1024 * 1024;
 

@@ -274,3 +274,288 @@ export function mcpServersFrom(files: readonly McpConfigFile[]): McpReadResult {
 	}
 	return { servers: [...servers.values()], skipped };
 }
+
+/* ------------------------------------------------------------------ *
+ * Whether pi can actually use each server (the sign-in rule)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The state a row shows about a server's sign-in, in the words the owner sees:
+ *
+ * - `ok` — pi can use it: a local server, a remote one with a stored sign-in, or one that
+ *   authenticates itself through its own `headers` (`github` does).
+ * - `needed` — the entry is enabled but pi has no credential for it: a `url` server with
+ *   neither a stored sign-in nor its own headers. `enabled` means "pi may start it", not
+ *   "pi can use it", and this is the difference the rows have to tell.
+ * - `unknown` — the answer cannot be had where this row is computed, and the row says so
+ *   instead of defaulting to `On`.
+ */
+export type McpSignInState = 'ok' | 'needed' | 'unknown';
+
+/** One server of the profile's `mcp.json`, with the switch pi reads and the sign-in fact. */
+export interface McpServerStateRow {
+	readonly name: string;
+	/** Whether pi will start it: pi's own `enabled` key, absent meaning on. */
+	readonly on: boolean;
+	/** Left out for a switched-off server: its sign-in is not the fact on show. */
+	readonly signIn?: McpSignInState;
+}
+
+/**
+ * The profile's `mcp-auth.json`, where pi stores a server's OAuth tokens.
+ *
+ * `text` is the file's contents when it exists and could be read; a missing or malformed file
+ * is the same fact as "no stored sign-in" (`ReadOnlyMcpAuthStore.load`), not an error.
+ */
+export interface McpAuthFile {
+	readonly text?: string;
+}
+
+/**
+ * The key pi stores one server's OAuth state under, by pi's own rule.
+ *
+ * Mirrored from `experimental/durable/lib/mcp.js` (`mcpAuthKey`, which cites pi's
+ * `mcpNamespace` + `storeKeys`): `mcp__<name with - → _>|<normalized url>`. `legacyKey` is
+ * the url-only key older pi versions wrote; it is read for compatibility, never written.
+ * A `url` that cannot be parsed has no stored key to look up.
+ */
+function mcpAuthKeys(name: string, url: string): { key?: string; legacyKey?: string } {
+	let urlKey: string;
+	try {
+		urlKey = String(new URL(url));
+	} catch {
+		return {};
+	}
+	return { key: `mcp__${name.replace(/-/g, '_')}|${urlKey}`, legacyKey: urlKey };
+}
+
+/** The OAuth state pi stored for one server, or `undefined` when there is none. */
+function storedServerState(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
+	if (authFile?.text === undefined) {
+		return undefined;
+	}
+	let states: unknown;
+	try {
+		states = JSON.parse(authFile.text);
+	} catch {
+		// Not JSON: the same fact as "no stored sign-in" (`ReadOnlyMcpAuthStore.load`).
+		return undefined;
+	}
+	if (!isRecord(states)) {
+		return undefined;
+	}
+	const { key, legacyKey } = mcpAuthKeys(name, url);
+	const state = (key !== undefined ? states[key] : undefined) ?? (legacyKey !== undefined ? states[legacyKey] : undefined);
+	return isRecord(state) ? state : undefined;
+}
+
+/**
+ * The metadata pi cached beside one server's sign-in, or `undefined` when there is none.
+ *
+ * pi keeps the discovery it made — `resourceMetadata` and `authorizationServerMetadata` — in the
+ * same state as the tokens, so a server that has ever been contacted carries what it takes to know
+ * which scopes its authorization server can issue, without asking the network again. The shape is
+ * the one a fresh `discoverOAuthServerInfo` returns, which is what lets `mcp-scopes.ts` read both.
+ */
+export function storedDiscoveryOf(authFile: McpAuthFile | undefined, name: string, url: string): Record<string, unknown> | undefined {
+	const discovery = storedServerState(authFile, name, url)?.['discovery'];
+	return isRecord(discovery) ? discovery : undefined;
+}
+
+/**
+ * Whether pi can use one remote server, mirroring `experimental/durable/lib/mcp.js`.
+ *
+ * That bridge decides the same question before every request (`storedMcpAuth` + `ownHeaders`):
+ * a stored sign-in whose token is still valid is used; an expired one fails fast; without a
+ * stored sign-in, an entry that carries its own non-empty `headers` authenticates itself
+ * (`github` reaches the API with its configured `Authorization` header), and one with neither
+ * needs a sign-in — whatever `enabled` says. The connector cannot import that module, so the
+ * rule is mirrored here and the origin is named: a `url` server with a stored sign-in is
+ * usable; one that carries its own non-empty headers is usable; one with neither needs a
+ * sign-in.
+ *
+ * The header check reads the values as written. pi expands `${VAR}` at use time, so a header
+ * holding an interpolation the environment cannot fill fails at use time — a different fact
+ * from "no credential at all", which is the one this rule is here to tell.
+ */
+function httpSignInState(name: string, entry: PiHttpEntry, authFile: McpAuthFile | undefined, now: number): McpSignInState {
+	const ownHeaders = Object.values(entry.headers).some(value => value.length > 0);
+	const stored = storedServerState(authFile, name, entry.url);
+	const token = stored?.['tokens'];
+	if (isRecord(token) && typeof token['access_token'] === 'string' && token['access_token'].length > 0) {
+		// An expired stored sign-in fails fast in the bridge (`storedMcpAuth`), so it is not a
+		// usable one here either: the row asks for the sign-in again rather than promising "On".
+		const expiresAt = stored?.['tokensExpireAt'];
+		return typeof expiresAt === 'number' && expiresAt <= now ? 'needed' : 'ok';
+	}
+	if (ownHeaders) {
+		// No stored sign-in, but the entry authenticates itself.
+		return 'ok';
+	}
+	// `authFile` itself `undefined` means the profile's sign-ins were not looked at — the
+	// external pi's directory, which this connector must not read — so the honest row is
+	// "unknown", never a confident `On` or a guessed "needs sign-in".
+	return authFile === undefined ? 'unknown' : 'needed';
+}
+
+/** The sign-in fact for one entry of the profile's `mcp.json`. */function signInState(name: string, entry: unknown, authFile: McpAuthFile | undefined, now: number): McpSignInState | undefined {
+	if (!isRecord(entry) || entry['enabled'] === false) {
+		return undefined;
+	}
+	const mapped = mcpServerFrom(name, entry);
+	if (!isServer(mapped)) {
+		// An entry that cannot be mapped (an SSE transport, say) has no answer here either.
+		return 'unknown';
+	}
+	if (mapped.kind === 'stdio') {
+		return 'ok';
+	}
+	return httpSignInState(name, mapped, authFile, now);
+}
+
+/**
+ * One row per server of the profile's `mcp.json`, with the two facts the surfaces show: the
+ * switch pi reads (`enabled`), and whether pi can actually use the server. The order is the
+ * file's, so the list does not jump between readings.
+ *
+ * This is the one place the rule is computed; `status-data.ts` feeds its answer to the status
+ * panel and the MCP page, and neither of them re-derives it.
+ */
+export function mcpServerStates(
+	servers: Readonly<Record<string, unknown>> | undefined,
+	authFile: McpAuthFile | undefined,
+	now: number,
+): readonly McpServerStateRow[] {
+	if (servers === undefined) {
+		return [];
+	}
+	return Object.entries(servers).map(([name, entry]) => ({
+		name,
+		on: !(isRecord(entry) && entry['enabled'] === false),
+		signIn: signInState(name, entry, authFile, now),
+	}));
+}
+
+/* ------------------------------------------------------------------ *
+ * Starting pi's own `mcp login` from the editor
+ * ------------------------------------------------------------------ */
+
+/**
+ * The editor does not sign in itself: it runs pi's own `mcp login <server>` as a child process.
+ *
+ * The reason is where the credential lands. pi's OAuth store writes
+ * `join(getAgentDir(), 'mcp-auth.json')` (`extensions/mcp/oauth.js:85`), and `getAgentDir()`
+ * is `process.env.PI_CODING_AGENT_DIR` when the environment carries it, `~/.pi/agent` when it
+ * does not (`dist/config.js:491`). A sign-in run without that variable — the owner's terminal,
+ * say — writes the **external** pi's file, which PiCode never reads: the credential exists, but
+ * PiCode's profile still holds zero keys. Running pi's own CLI with the variable pointed at
+ * PiCode's own profile makes pi itself write `<app>/data/pi-agent/mcp-auth.json` — the same
+ * code path, the same key spelling, the same file the rows above read.
+ *
+ * These three functions are the pure part; `extension.ts` owns the spawn and the messages.
+ */
+
+/**
+ * The CLI entry of the install an SDK entry came from.
+ *
+ * pi ships `dist/index.js` (the SDK) and `dist/cli.js` (the command line) side by side, so the
+ * CLI is the loaded SDK entry with its file name swapped — the same derivation `onboarding.ts`
+ * makes to version-check the machine's pi. A same-install CLI is the one that agrees with the
+ * pi the editor talks to.
+ */
+export function mcpCliEntryOf(sdkEntry: string): string {
+	return sdkEntry.replace(/index\.js$/, 'cli.js');
+}
+
+/**
+ * The environment one `mcp login` child runs in: a copy of the caller's environment with the
+ * two variables the sign-in needs. `PI_CODING_AGENT_DIR` is pi's own profile switch — the
+ * reason the credential lands in PiCode's profile. `ELECTRON_RUN_AS_NODE: '1'` runs the
+ * editor's own binary as plain Node, the way every other pi spawn in this connector does.
+ */
+export function mcpLoginEnv(
+	profileDir: string,
+	base: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+	return { ...base, PI_CODING_AGENT_DIR: profileDir, ELECTRON_RUN_AS_NODE: '1' };
+}
+
+/** The arguments of pi's own login command for one server, name trimmed. */
+export function mcpLoginArgs(serverName: string): string[] {
+	return ['mcp', 'login', serverName.trim()];
+}
+
+/**
+ * The server name inside one of pi's `mcp__<server>__<tool>` tool names.
+ *
+ * The server id ends at the **first** `__` after the prefix (a server id itself may carry
+ * single underscores; the separator is the double one). Anything that does not fit the
+ * shape is not an MCP tool of a server and is left out. Pure, so the discovery the status
+ * answer merges can be tested without an editor or a live session.
+ */
+export function mcpServerNameOfTool(toolName: string): string | undefined {
+	if (!toolName.startsWith('mcp__')) {
+		return undefined;
+	}
+	const rest = toolName.slice('mcp__'.length);
+	const separator = rest.indexOf('__');
+	return separator > 0 ? rest.slice(0, separator) : undefined;
+}
+
+/** One MCP server row the discovery answers: its name, whether it is on, and where it comes from. */
+export interface McpDiscoveryRow {
+	readonly name: string;
+	readonly on: boolean;
+	/** Left out for the profile rows the reading has always answered. */
+	readonly origin?: 'profile' | 'project' | 'discovered';
+}
+
+/**
+ * The MCP servers the **live session** connected that no file declares.
+ *
+ * pi extensions and plugins can register servers (`pi.registerMcpServer`), and those have
+ * no entry in the profile or the project — they only exist as the `mcp__…` tools the
+ * running session exposes. A server the files also declare is skipped: the row the files
+ * answer is the row the settings form can edit, and a second, untouchable row for the same
+ * server would read as two servers.
+ */
+export function discoveredMcpServers(
+	known: readonly string[],
+	connected: readonly string[] | undefined,
+): readonly McpDiscoveryRow[] {
+	if (connected === undefined) {
+		return [];
+	}
+	const seen = new Set(known);
+	const rows: McpDiscoveryRow[] = [];
+	for (const name of connected) {
+		if (name.length > 0 && !seen.has(name)) {
+			rows.push({ name, on: true, origin: 'discovered' });
+		}
+	}
+	return rows;
+}
+
+/**
+ * The sources of MCP servers, merged into the one list the pages draw.
+ *
+ * First source wins on a name clash — profile over project over discovered — because the
+ * earlier sources are the ones with an entry the settings form can edit, and one server
+ * shown twice reads as two servers.
+ */
+export function mergeMcpServers(
+	...sources: ReadonlyArray<readonly McpDiscoveryRow[]>
+): readonly McpDiscoveryRow[] {
+	const seen = new Set<string>();
+	const rows: McpDiscoveryRow[] = [];
+	for (const source of sources) {
+		for (const row of source) {
+			if (!seen.has(row.name)) {
+				seen.add(row.name);
+				rows.push(row);
+			}
+		}
+	}
+	return rows;
+}
+

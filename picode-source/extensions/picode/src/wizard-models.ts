@@ -3,18 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { fetchModelIds } from './endpoint';
 import { loadPiSdk } from './piSdk';
+import { ensureProfilePackages } from './packages-install';
+import { locateNpmCli } from './npm-run';
 import { projectDeclaration } from './declarations';
-import { GENTLE_PACKAGE_DIRS } from './onboarding';
 
 /**
- * The wizard's provider and model plumbing, and Gentle AI's agent models.
+ * The wizard's provider and model plumbing.
  *
- * Three questions the welcome page asks once, answered here:
+ * Two questions the welcome page asks once, answered here:
  *
  * - **A provider, two ways.** By subscription (pi's own OAuth login flow, already
  *   registered as `picode.connectProvider`) or by hand (name, endpoint, dialect, key) —
@@ -24,16 +25,11 @@ import { GENTLE_PACKAGE_DIRS } from './onboarding';
  *   provider's own `/models` endpoint for a hand-written one, from pi's catalogue for a
  *   subscription. The owner's pick becomes the profile's `default_model` (pi's own
  *   setting), which is what a session uses before anyone picks anything.
- * - **Gentle AI's agents.** After the install, each of its agents can run on a model of
- *   the owner's choice; the choices live in the profile's `subagents.json`
- *   (`model_profiles`), which is the file gentle-pi's own agent config reads.
  */
 
 export const PROVIDER_ADD_COMMAND = 'picode.setup.providerAddManual';
 export const MODELS_LIST_COMMAND = 'picode.setup.modelsList';
 export const MODEL_DEFAULT_COMMAND = 'picode.setup.modelDefault';
-export const GENTLE_AGENTS_COMMAND = 'picode.setup.gentleAgents';
-export const GENTLE_AGENT_MODELS_COMMAND = 'picode.setup.gentleAgentModels';
 
 export interface WizardModelDeps {
 	readonly distributionRoot: string;
@@ -57,7 +53,7 @@ export interface ManualProvider {
 
 /** One model of the fetched list, as the picker shows it. */
 export interface WizardModel {
-	/** `provider/model-id` — the ref pi and subagents.json understand. */
+	/** `provider/model-id` — the ref pi understands. */
 	readonly ref: string;
 	readonly provider: string;
 	readonly model: string;
@@ -141,6 +137,10 @@ export async function listModels(deps: WizardModelDeps): Promise<{ models: Wizar
 	const loaded = await loadPiSdk<RuntimeSdk>(sdkCandidatesFor(deps.distributionRoot));
 	if (!('problem' in loaded) && typeof loaded.sdk?.createAgentSessionServices === 'function') {
 		try {
+			// Before pi loads anything: the profile's declared-but-missing packages are installed
+			// here (hidden, one run) so pi's loader never installs one itself — its per-package
+			// installs each flashed a console window on Windows.
+			await ensureProfilePackages({ profileDir: deps.profileDir, npmCli: locateNpmCli() });
 			const services = await loaded.sdk.createAgentSessionServices({
 				cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
 				agentDir: deps.profileDir,
@@ -206,67 +206,6 @@ function rememberChatDefault(ref: string): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Gentle AI's agents, and their models
- * ------------------------------------------------------------------ */
-
-/** The agents gentle-pi ships, read from the installed package's own definitions. */
-export function gentleAgentNames(deps: WizardModelDeps): { agents: string[] } {
-	const agentsDir = path.join(deps.profileDir, 'npm', 'node_modules', 'gentle-pi', 'assets', 'agents');
-	const agents: string[] = [];
-	if (existsSync(agentsDir)) {
-		for (const file of readdirSync(agentsDir)) {
-			if (!file.endsWith('.md')) { continue; }
-			const match = /^name:\s*(.+)$/m.exec(readFileSync(path.join(agentsDir, file), 'utf8'));
-			if (match !== null) {
-				agents.push(match[1].trim());
-			}
-		}
-	}
-	return { agents: agents.sort() };
-}
-
-/** `model_profiles` as gentle-pi's own agent config parses it. */
-export interface AgentModelConfig {
-	readonly defaultModel?: string;
-	readonly profiles: Record<string, string>;
-}
-
-export function setGentleAgentModels(deps: WizardModelDeps, request: unknown): { agents: string[] } {
-	const req = request as { defaultModel?: unknown; profiles?: unknown } | undefined;
-	const profiles: Record<string, string> = {};
-	if (typeof req?.profiles === 'object' && req.profiles !== null) {
-		for (const [name, ref] of Object.entries(req.profiles as Record<string, unknown>)) {
-			if (typeof ref === 'string' && ref.includes('/')) {
-				profiles[name] = ref;
-			}
-		}
-	}
-	const defaultModel = typeof req?.defaultModel === 'string' && req.defaultModel.includes('/') ? req.defaultModel : undefined;
-
-	editProfileSettings(deps, settings => {
-		if (defaultModel !== undefined) {
-			settings['default_model'] = defaultModel;
-		}
-		const existing = typeof settings['model_profiles'] === 'object' && settings['model_profiles'] !== null
-			? (settings['model_profiles'] as Record<string, unknown>)
-			: {};
-		for (const [name, ref] of Object.entries(profiles)) {
-			const current = typeof existing[name] === 'object' && existing[name] !== null
-				? (existing[name] as Record<string, unknown>)
-				: {};
-			existing[name] = { ...current, model: ref };
-		}
-		settings['model_profiles'] = existing;
-	});
-	// The owner's other half of the same sentence: the model the Gentle agents run on is the one
-	// the chat opens with, not a second choice living somewhere else.
-	if (defaultModel !== undefined) {
-		rememberChatDefault(defaultModel);
-	}
-	return gentleAgentNames(deps);
-}
-
-/* ------------------------------------------------------------------ *
  * The profile's settings.json — pi's own configuration
  * ------------------------------------------------------------------ */
 
@@ -285,18 +224,11 @@ function editProfileSettings(deps: WizardModelDeps, edit: (settings: Record<stri
 	writeFileSync(file, JSON.stringify(settings, undefined, '\t') + '\n');
 }
 
-/** Whether Gentle AI is installed (the agents step only asks when it is). */
-export function gentleInstalledIn(deps: WizardModelDeps): boolean {
-	return GENTLE_PACKAGE_DIRS.every(dir => existsSync(path.join(deps.profileDir, 'npm', 'node_modules', dir)));
-}
-
-/** Registers the wizard's provider/model/agents commands. */
+/** Registers the wizard's provider/model commands. */
 export function registerWizardModelCommands(deps: WizardModelDeps): vscode.Disposable[] {
 	return [
 		vscode.commands.registerCommand(PROVIDER_ADD_COMMAND, (request: unknown) => addManualProvider(deps, request)),
 		vscode.commands.registerCommand(MODELS_LIST_COMMAND, () => listModels(deps)),
 		vscode.commands.registerCommand(MODEL_DEFAULT_COMMAND, (ref: unknown) => setDefaultModel(deps, ref)),
-		vscode.commands.registerCommand(GENTLE_AGENTS_COMMAND, () => gentleAgentNames(deps)),
-		vscode.commands.registerCommand(GENTLE_AGENT_MODELS_COMMAND, (request: unknown) => setGentleAgentModels(deps, request)),
 	];
 }

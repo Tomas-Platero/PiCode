@@ -201,9 +201,7 @@ import { ChatTipService, IChatTipService } from './chatTipService.js';
 import { ChatWindowNotifier } from './chatWindowNotifier.js';
 import { AgentPluginRecommendations } from './claudePluginRecommendations.js';
 import { ChatCodeBlockContextProviderService } from './codeBlockContextProviderService.js';
-import { ExploreAgentDefaultModel } from './exploreAgentDefaultModel.js';
 import { HasByokModelsContribution } from './hasByokModelsContribution.js';
-import { PlanAgentDefaultModel } from './planAgentDefaultModel.js';
 import './planReviewFeedback/planReviewFeedbackEditorOverlay.js';
 import { IPlanReviewFeedbackService, PlanReviewFeedbackService } from './planReviewFeedback/planReviewFeedbackService.js';
 import { PluginAutoUpdate } from './pluginAutoUpdate.js';
@@ -219,7 +217,6 @@ import { LanguageModelToolsConfirmationService } from './tools/languageModelTool
 import { LanguageModelToolsService, globalAutoApproveDescription } from './tools/languageModelToolsService.js';
 import { ToolResultCompressorService } from './tools/toolResultCompressorService.js';
 import { ConfigureToolSets, UserToolSetsContributions } from './tools/toolSetsContribution.js';
-import { UtilityModelContribution, UtilitySmallModelContribution } from './utilityModelContribution.js';
 import { ChatViewsWelcomeHandler } from './viewsWelcome/chatViewsWelcomeHandler.js';
 import './widget/chatContentParts/chatSubagentOpenChat.js';
 import { ChatFindAccessibilityHelp } from './widget/chatFind/chatFindAccessibilityHelp.js';
@@ -347,14 +344,9 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			agentsWindow: { default: false },
 		},
-		'chat.editing.autoAcceptDelay': {
-			type: 'number',
-			markdownDescription: nls.localize('chat.editing.autoAcceptDelay', "Delay after which changes made by chat are automatically accepted. Values are in seconds, `0` means disabled and `100` seconds is the maximum."),
-			default: 0,
-			minimum: 0,
-			maximum: 100
-		},
-		'chat.editing.confirmEditRequestRemoval': {
+		// `chat.editing.autoAcceptDelay` was removed with the core editing sessions it timed: pi
+		// edits with its own tools, so no chat editing session ever exists to auto-accept for.
+				'chat.editing.confirmEditRequestRemoval': {
 			type: 'boolean',
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: nls.localize('chat.editing.confirmEditRequestRemoval', "Whether to show a confirmation before removing a request and its associated edits."),
@@ -516,7 +508,7 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.permissions.default.settingDescription', "Controls the default permissions picker mode for new local chat sessions. You can still change the permission mode per session, and each session remembers the permission mode that was used. If enterprise policy disables auto approval, new sessions use Default Permissions."),
 			// PiCode: new sessions start in Bypass Approvals. The chat's own gate would otherwise
 			// ask for every mutating command, duplicating what the runtime's extensions already
-			// gate (Gentle AI's destructive-command guard) — the owner asked for exactly those
+			// gate (the destructive-command guard) — the owner asked for exactly those
 			// questions and nothing else. "Default Permissions" is still one pick away.
 			default: ChatPermissionLevel.AutoApprove,
 		},
@@ -1220,38 +1212,9 @@ configurationRegistry.registerConfiguration({
 				mode: 'auto'
 			},
 		},
-		[ChatConfiguration.PlanAgentDefaultModel]: {
-			type: 'string',
-			description: nls.localize('chat.planAgent.defaultModel.description', "Select the default language model to use for the Plan agent from the available providers."),
-			default: '',
-			enum: PlanAgentDefaultModel.modelIds,
-			enumItemLabels: PlanAgentDefaultModel.modelLabels,
-			markdownEnumDescriptions: PlanAgentDefaultModel.modelDescriptions
-		},
-		[ChatConfiguration.ExploreAgentDefaultModel]: {
-			type: 'string',
-			description: nls.localize('chat.exploreAgent.defaultModel.description', "Select the default language model to use for the Explore subagent from the available providers."),
-			default: '',
-			enum: ExploreAgentDefaultModel.modelIds,
-			enumItemLabels: ExploreAgentDefaultModel.modelLabels,
-			markdownEnumDescriptions: ExploreAgentDefaultModel.modelDescriptions
-		},
-		[ChatConfiguration.UtilityModel]: {
-			type: 'string',
-			description: nls.localize('chat.utilityModel.description', "Override the language model used by built-in utility flows. Leave empty to use the configured default behavior."),
-			default: '',
-			enum: UtilityModelContribution.modelIds,
-			enumItemLabels: UtilityModelContribution.modelLabels,
-			markdownEnumDescriptions: UtilityModelContribution.modelDescriptions
-		},
-		[ChatConfiguration.UtilitySmallModel]: {
-			type: 'string',
-			description: nls.localize('chat.utilitySmallModel.description', "Override the language model used by built-in small/fast utility flows. A fast and inexpensive model is recommended. Leave empty to use the configured default behavior."),
-			default: '',
-			enum: UtilitySmallModelContribution.modelIds,
-			enumItemLabels: UtilitySmallModelContribution.modelLabels,
-			markdownEnumDescriptions: UtilitySmallModelContribution.modelDescriptions
-		},
+		// The Plan/Explore/Utility default-model settings were removed with their machinery: they
+		// configured Copilot-family subagents this product does not have - pi is the only agent,
+		// and nothing in the tree read these values (measured 2026-10-08, before removal).
 		[ChatConfiguration.RequestQueueingDefaultAction]: {
 			type: 'string',
 			enum: ['queue', 'steer'],
@@ -1546,18 +1509,14 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			description: nls.localize('chat.tools.todos.showWidget', "Controls whether to show the todo list widget above the chat input. When enabled, the widget displays todo items created by the agent and updates as progress is made."),
 		},
-		[ChatConfiguration.ThinkingStyle]: {
-			type: 'string',
-			default: 'fixedScrolling',
-			enum: ['collapsed', 'collapsedPreview', 'fixedScrolling'],
-			enumDescriptions: [
-				nls.localize('chat.agent.thinkingMode.collapsed', "Thinking parts will be collapsed by default."),
-				nls.localize('chat.agent.thinkingMode.collapsedPreview', "Thinking parts will be expanded first, then collapse once we reach a part that is not thinking."),
-				nls.localize('chat.agent.thinkingMode.fixedScrolling', "Show thinking in a fixed-height streaming panel that auto-scrolls; click header to expand to full height."),
-			],
-			description: nls.localize('chat.agent.thinkingStyle', "Controls how thinking is rendered."),
-			tags: ['experimental'],
-		},
+		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how the
+		// editor renders *thinking parts* of its own chat, and PiCode's chat never has any: the agent's
+		// thinking is written into the answer as a quote (`picode.pi.reasoning`, off by default), and this
+		// setting does not touch it. It was an experimental control with nothing behind it, and the owner
+		// read it exactly so: «Revisa esta opción si es necesaria.» Both readers fall back on their own
+		// default when it is unset (`chatThinkingContentPart` to `Collapsed`, `chatWidget` to
+		// `FixedScrolling`), so removing it changes nothing that runs — it only takes a knob out of the
+		// settings that cannot do anything here.
 		[ChatConfiguration.ThinkingGenerateTitles]: {
 			type: 'boolean',
 			default: true,

@@ -5,13 +5,19 @@
 
 import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { getSessionUsage } from './agent';
+import { getSessionUsage, liveSessionMcpServers } from './agent';
+import { agentsSummary, launchedAgents } from './agents';
 import { declarationsFromSetting, isRecord } from './declarations';
-import { isGentleInstalled, probeExternalPi, readGentleVersion, readInternalPiVersion } from './onboarding';
+import { readDurableStatus } from './durable';
+import { providerInventory } from './providers-list';
+import { probeExternalPi, readInternalPiVersion } from './onboarding';
+import { readPiChatSettings } from './piConfig';
+import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
-import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
+import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
+import { listProjectSessionFiles } from './sessions-provider';
 import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
 import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKey } from './usage-data';
 
@@ -19,7 +25,7 @@ import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKe
  * The data behind the PiCode status view.
  *
  * One call answers the whole tree: the pi in force and its version, the providers pi has, the
- * default model, the MCP servers, Gentle AI's state, the session's usage and cost, and the
+ * default model, the MCP servers, the session's usage and cost, and the
  * project's branch, pending files and diff totals. What `status-view.ts` draws is exactly this,
  * so the shape returned here is that module's `StatusData` contract and nothing else.
  *
@@ -60,56 +66,85 @@ function readJsonObject(file: string): Record<string, unknown> | undefined {
 	}
 }
 
-/** The directories directly under `dir`, counted; 0 when it does not exist. */
-function countDirectories(dir: string): number {
+/**
+ * The three places the editor learns of a provider, kept apart instead of merged into a count.
+ *
+ * They are not the same thing, and merging them is what made the panel say «Providers 2» while the
+ * settings page listed one row — the page edits **declarations**, and a provider pi itself carries
+ * (models in its profile, a sign-in in its credentials) has nothing there to edit. The owner read the
+ * disagreement as a missing provider; the panel now answers *which* two and why
+ * (`providers-list.ts`, which owns the rule and is tested).
+ */
+function providerSources(profileDir: string): { declared: string[]; models: string[]; credentials: string[] } {
+	const configuration = vscode.workspace.getConfiguration('picode');
+	const declared = declarationsFromSetting(configuration.get('providers') ?? configuration.get('pi.providers'))
+		.map(declaration => declaration.id);
+
+	const models = readJsonObject(path.join(profileDir, 'models.json'))?.['providers'];
+	const auth = readJsonObject(path.join(profileDir, 'auth.json'));
+
+	return {
+		declared,
+		models: isRecord(models) ? Object.keys(models) : [],
+		credentials: auth === undefined ? [] : Object.keys(auth),
+	};
+}
+
+/** The profile's `mcp-auth.json`, as the sign-in rule wants it: looked at, whatever it holds. */
+function mcpAuthFile(file: string): McpAuthFile {
 	try {
-		return readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
+		return { text: readFileSync(file, 'utf8') };
 	} catch {
-		return 0;
+		// A missing or unreadable file is "no stored sign-in", not an error (`mcp-provider.ts`).
+		return { text: undefined };
 	}
 }
 
 /**
- * The providers the owner has: the ones declared in the settings row, the endpoints pi's
- * `models.json` holds, and the credentials (subscriptions) `auth.json` holds — counted once
- * each, because the same provider can appear in more than one of them.
+ * pi's MCP servers in the profile, one row each: the name, whether pi will start it, and
+ * whether pi can actually use it (`mcp-provider.ts` — the same rule the durable bridge
+ * decides before every request).
+ *
+ * The sign-in file of the profile in force is only read where it **may** be: PiCode's own
+ * profile, the internal one. The external pi's directory is off-limits to this connector, so
+ * under an external runtime the sign-in fact is left `unknown` for the servers it would
+ * matter to — the row says so instead of defaulting to `On`.
  */
-function countProviders(profileDir: string): number {
-	const ids = new Set<string>();
-
-	const configuration = vscode.workspace.getConfiguration('picode');
-	for (const declaration of declarationsFromSetting(configuration.get('providers') ?? configuration.get('pi.providers'))) {
-		ids.add(declaration.id);
-	}
-
-	const models = readJsonObject(path.join(profileDir, 'models.json'));
-	const providers = models?.['providers'];
-	if (isRecord(providers)) {
-		for (const id of Object.keys(providers)) {
-			ids.add(id);
-		}
-	}
-
-	const auth = readJsonObject(path.join(profileDir, 'auth.json'));
-	if (auth !== undefined) {
-		for (const id of Object.keys(auth)) {
-			ids.add(id);
-		}
-	}
-
-	return ids.size;
+function readMcpServers(profileDir: string, runtime: 'internal' | 'external'): readonly McpServerSwitch[] {
+	const servers = readJsonObject(path.join(profileDir, 'mcp.json'))?.['mcpServers'];
+	const authFile: McpAuthFile | undefined = runtime === 'internal'
+		? mcpAuthFile(path.join(profileDir, 'mcp-auth.json'))
+		: undefined;
+	return mcpServerStates(isRecord(servers) ? servers : undefined, authFile, Date.now())
+		.map(row => ({ ...row, origin: 'profile' as const }));
 }
 
-/** pi's MCP servers in the profile, one row each: the name, and whether pi will start it. */
-function readMcpServers(profileDir: string): readonly McpServerSwitch[] {
-	const file = readJsonObject(path.join(profileDir, 'mcp.json'));
-	const servers = file?.['mcpServers'];
-	if (!isRecord(servers)) {
+/**
+ * The project's own `.pi/mcp.json` servers, when pi would load them.
+ *
+ * pi only reads the project's file for a **trusted** workspace, so an untrusted one yields
+ * nothing here — listing servers pi will not start would promise tools that never arrive.
+ * The rows carry no sign-in fact: the profile's sign-in file has nothing to say about a
+ * server the project declares, and guessing would print a state the owner cannot act on.
+ */
+function readProjectMcpServers(): readonly McpServerSwitch[] {
+	if (!vscode.workspace.isTrusted) {
 		return [];
 	}
-	// `enabled: false` is pi's switch, and the one this connector honours too (`mcp-provider.ts`): this
-	// is the list that keeps a switched-off server visible once it stops being offered as a row.
-	return Object.entries(servers).map(([name, entry]) => ({ name, on: !(isRecord(entry) && entry['enabled'] === false) }));
+	const scope = resolveProjectScope();
+	const folders = (scope.mode === 'workspace' ? scope.folders : [scope.cwd])
+		.filter((folder): folder is string => folder !== undefined);
+	const rows: McpServerSwitch[] = [];
+	for (const folder of folders) {
+		const servers = readJsonObject(path.join(folder, '.pi', 'mcp.json'))?.['mcpServers'];
+		if (!isRecord(servers)) {
+			continue;
+		}
+		for (const [name, entry] of Object.entries(servers)) {
+			rows.push({ name, on: !(isRecord(entry) && entry['enabled'] === false), origin: 'project' });
+		}
+	}
+	return rows;
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
@@ -281,9 +316,17 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const runtime = readRuntimeMode();
 	const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
 	const defaultModel = readDefaultModel(profileDir);
+	const sources = providerSources(profileDir);
+	// Whether the agent's thinking reaches the chat. `hide` is the shipped default, and the owner was
+	// looking for exactly this: «no consigo ver el thinking en el chat».
+	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
-	const gentleInstalled = isGentleInstalled(profileDir);
-	const mcpServers = readMcpServers(profileDir);
+	const profileMcpServers = readMcpServers(profileDir, runtime);
+	const mcpServers = mergeMcpServers(
+		profileMcpServers,
+		readProjectMcpServers(),
+		discoveredMcpServers(profileMcpServers.map(row => row.name), liveSessionMcpServers()),
+	);
 	const scope = resolveProjectScope();
 	const projects = scope.mode === 'workspace'
 		? await Promise.all(scope.folders.map(async folder => ({
@@ -296,12 +339,9 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	return {
 		runtime,
 		piVersion: await readPiVersion(runtime, deps.distributionRoot),
-		gentleInstalled,
-		gentleVersion: gentleInstalled ? readGentleVersion(profileDir) : undefined,
-		providers: countProviders(profileDir),
+		providers: providerInventory(sources.declared, sources.models, sources.credentials),
 		defaultModel,
 		mcpServers,
-		skills: countDirectories(path.join(profileDir, 'skills')),
 		gitBranch: gitInfo.branch,
 		gitChanges: gitInfo.changes,
 		gitInsertions: gitInfo.insertions,
@@ -318,10 +358,31 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		cacheWrite: usage?.cacheWrite,
 		model: usage?.model,
 		thinkingLevel: usage?.thinkingLevel,
+		reasoning,
 		// The provider's own quota for the model in use, never the session's totals above.
 		usage: await readUsageRow(profileDir, usage?.model),
-		tasks: usage?.tasks,
+		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
+		durable: await readDurableStatus(),
+		// The agents launched from the folders open in this window, counted off their own
+		// transcripts: the same rows `picode.agents` lists, and the same project slugs the
+		// conversations panel uses. A listing that throws leaves the row out rather than
+		// reporting zero agents, which would read as "nothing was ever launched".
+		agents: tryAgents(sessionsDirOf(profileDir)),
 	};
+}
+
+/** The profile's own `sessions/` folder — where pi files every transcript, project by project. */
+function sessionsDirOf(profileDir: string): string {
+	return path.join(profileDir, 'sessions');
+}
+
+/** How many agents the open projects launched, or `undefined` when the listing cannot be read. */
+function tryAgents(sessionsDir: string): StatusData['agents'] {
+	try {
+		return agentsSummary(launchedAgents(listProjectSessionFiles(sessionsDir, projectSlugsOfWindow())));
+	} catch {
+		return undefined;
+	}
 }
 
 /** Registers the command the status tree calls; the caller collects the disposable. */

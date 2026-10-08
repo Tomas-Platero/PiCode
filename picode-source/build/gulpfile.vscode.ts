@@ -675,7 +675,9 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 	const [vscode, vscodeMin] = ['', 'min'].map(minified => {
 		const sourceFolderName = `out-vscode${dashed(minified)}`;
-		const destinationFolderName = `PiCode${dashed(platform)}${dashed(arch)}`;
+		// PiCode: the same `PICODE_PACK_SUFFIX` as `buildPath` in gulpfile.vscode.win32.ts, and
+		// empty unless a side-by-side build asked for its own directory.
+		const destinationFolderName = `PiCode${dashed(platform)}${dashed(arch)}${process.env['PICODE_PACK_SUFFIX'] ?? ''}`;
 
 		const packageTasks: task.Task[] = [
 			compileNativeExtensionsBuildTask,

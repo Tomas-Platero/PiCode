@@ -9,7 +9,33 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 
 ## [Unreleased]
 
+### Added
+- **Los servidores MCP que pi descubre solo ya se ven en la página de MCP.** La página lista tres
+  orígenes distintos: los del perfil (los de siempre, editables), los del `.pi/mcp.json` del
+  proyecto (cuando el espacio es de confianza, que es la regla con la que pi los carga) y los que
+  una extensión o plugin de pi conectó en la sesión viva — marcados **Discovered**. Cada fila dice
+  de dónde viene; las que no vienen del perfil son de solo lectura, porque editar aquí escribiría
+  una entrada nueva del perfil, no lo que la fila muestra.
+- **Una píldora sobre el chat dice qué está haciendo el agente.** Mientras trabaja enseña la
+  herramienta en curso (y se queda ahí, aunque el transcript siga corriendo); cuántos mensajes
+  esperan su turno, con un botón *Cancel queued* que los devuelve sin ejecutarlos — el que está
+  en vuelo no se toca, ese lo para el botón de parar del propio chat; y cuántos trabajos en
+  background siguen corriendo, con el más antiguo y su tiempo al pasar el ratón. Cuando el agente
+  está en reposo, no hay píldora. El editor la recibe empujada por el conector: nada se sondea y
+  nada despierta la extensión solo para oír "nada".
+- **Las herramientas del agente se pueden apagar por nombre.** Nuevo ajuste *picode.pi.disabledTools*:
+  los nombres que entren ahí (`bash`, `edit`, `write`, un servidor MCP como `mcp_nombre`…) no
+  llegan a la sesión. Cambiar la lista reconstruye la sesión, igual que cambiar los servidores
+  MCP. Queda dicho en el propio ajuste: es lo que el agente no puede alcanzar, no una frontera
+  de seguridad — sus comandos siguen preguntando antes de ejecutarse.
+
 ### Fixed
+- **El borde inferior del chat ya no se corta.** A veces los iconos de la respuesta o la última
+  frase quedaban medio fuera al final del chat: la lista se dimensionaba con la altura del input
+  **en caché** — la que midió el ciclo anterior — y cuando algo sobre el input crecía (una
+  sugerencia, un aviso), la lista tardaba un ciclo en enterarse y empujaba el borde del input
+  fuera de la vista. Ahora el espacio se reparte con la altura que el input ocupa **de verdad**
+  en ese momento, no con la última medida.
 - **La ventana de actualización ya no se titula «Visual Studio Code».** `inno_updater.exe` —el
   binario que aplica la actualización y pinta la barra de progreso— lleva el título y el texto en un
   recurso de diálogo, y ahí seguía el nombre viejo (la ventana de versión también, con
@@ -17,8 +43,20 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   (`dev/patch-inno-updater.mjs`; cadenas de la **misma longitud** para no desplazar la plantilla del
   diálogo), la fase 1 del build rechaza un binario sin marcar y el sello de `rcedit` ya cubre su
   recurso de versión.
+- **Un servidor MCP que se podía renovar vuelve a pedir login cada hora, y ahora se pide el permiso que lo evita.** Vercel se entraba bien pero, una hora después, la fila volvía a **Needs sign-in** y reiniciar no cambiaba nada: la credencial que pi guardaba **no traía refresh token** (scope `openid`, `expires_in: 3600`), así que no había con qué renovarla. La petición solo pedía los permisos que el recurso anuncia; `offline_access`, que es el que hace que el proveedor emita un refresh token, no se pedía nunca. Ahora, antes de abrir el navegador, el login mira los metadatos del servidor —los que pi ya dejó guardados, o los descubre con el propio descubridor de pi para uno nuevo— y si el servidor de autorización dice que puede emitir `offline_access`, lo añade a los permisos de la entrada **sin quitar ninguno** de los que ya se pedían. Aplica a cualquiera en la misma situación, no solo a Vercel.
 
 ### Changed
+- **El thinking del agente se muestra por defecto.** El ajuste pasaba a estar apagado salvo
+  configuración contraria; ahora es al revés: se muestra salvo que lo ocultes tú.
+- **La página de Providers enseña también los proveedores del perfil.** Lo que pi conoce por su
+  cuenta — un paquete instalado, una suscripción conectada, como nan — sale ahora en la página
+  como filas de solo lectura bajo el epígrafe *From your pi profile*, con lo que tiene (modelos,
+  sign-in). Antes solo salían los declarados en el formulario, y el que faltaba parecía roto.
+- **Los ajustes muertos de la sección Agent se han retirado.** El modelo por defecto del Plan
+  agent, el del Explore agent, los dos de los modelos de utilidad y el auto-aceptado de ediciones
+  configuraban piezas de Copilot que este producto no tiene — mandos sin aparato. Se quedan los
+  que funcionan con pi: las confirmaciones de borrar/reintentar, la edición de peticiones, la
+  cola de peticiones y la restauración del input al deshacer.
 - **La lista de modelos del chat se abre completa.** Las cachés del catálogo de pi vivían solo en
   memoria, así que **cada ventana empezaba en frío**: el desplegable abría con las filas del perfil y
   los modelos de pi llegaban segundos después, cuando su runtime volvía a construirse. Ahora esa
@@ -45,6 +83,15 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   **0**: con el valor por defecto, un feed recién publicado contestaba «no hay actualizaciones
   disponibles» y la release tardaba cinco días en ofrecerse. El ajuste sigue existiendo para
   quien prefiera el reparto escalonado.
+- **El pi que PiCode lleva dentro sube a 1.1.0.** El escalón (1.0.4 → 1.1.0) no tiene ruptura y no
+  obliga a tocar la app: lo que llega son arreglos **dentro de pi** —el login de Anthropic en
+  Windows cae a un puerto libre cuando el 53692 está reservado, los MCP OAuth se cancelan en
+  cualquier paso y cada petición caduca a los 15 s, `/mcp` abre en vivo mientras los servidores
+  conectan, `server_busy` y los finales `finish_reason: "error"` de Mistral se reintentan, hay
+  menos fallos de límite de contexto y los costes dejan de quedarse cortos con prompts largos— y
+  las novedades (Claude Haiku 5.5, los clasificadores nuevos) llegan solas por el catálogo de pi
+  que el desplegable ya lee. Verificado antes de fijarlo: las 7 entradas del SDK, `dist/cli.js`,
+  los built-ins y el validador de MCP de 1.1.0 contra los 12 escritores de PiCode.
 
 ## [0.1.3-beta] — 2026-10-04
 

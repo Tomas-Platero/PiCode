@@ -6,8 +6,8 @@
 /**
  * The package list, run on its own.
  *
- * The fixtures mirror a real profile: `settings.json` declares `npm:gentle-pi` and
- * `npm:gentle-engram`, and the `node_modules` those installs created holds ninety-five
+ * The fixtures mirror a real profile: `settings.json` declares `npm:sample-pi` and
+ * `npm:sample-notes`, and the `node_modules` those installs created holds ninety-five
  * directories of which only three are pi packages. Telling those three apart from a transitive
  * dependency — and from a declaration that was never installed — is the whole job, and it needs no
  * editor.
@@ -59,7 +59,7 @@ function toPosix(target: string): string {
 	return target.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
-/** The manifest of a real pi package: gentle-pi's own keys and paths. */
+/** The manifest of a pi package, with the keys and paths pi reads. */
 function manifest(name: string, extra: Readonly<Record<string, unknown>> = {}): string {
 	return JSON.stringify({ name, version: '1.0.0', description: `${name} for pi`, keywords: ['pi-package'], ...extra });
 }
@@ -72,7 +72,7 @@ const FOLDER = '/project';
  * ------------------------------------------------------------------ */
 
 test('parsePackageSource classifies the four spellings pi accepts', () => {
-	assert.deepStrictEqual(parsePackageSource('npm:gentle-pi'), { kind: 'npm', name: 'gentle-pi', spec: 'gentle-pi' });
+	assert.deepStrictEqual(parsePackageSource('npm:sample-pi'), { kind: 'npm', name: 'sample-pi', spec: 'sample-pi' });
 	assert.deepStrictEqual(parsePackageSource('npm:@scope/pkg@1.2.3'), { kind: 'npm', name: '@scope/pkg', spec: '@scope/pkg@1.2.3' });
 	assert.deepStrictEqual(parsePackageSource('git:github.com/example/pi-tools@v1'), {
 		kind: 'git',
@@ -82,7 +82,7 @@ test('parsePackageSource classifies the four spellings pi accepts', () => {
 	});
 	assert.deepStrictEqual(parsePackageSource('./local-package'), { kind: 'local', path: './local-package', spec: './local-package' });
 	// The object form of a settings entry carries the source as its `source` key.
-	assert.deepStrictEqual(parsePackageSource({ source: 'npm:gentle-pi', skills: [] }), { kind: 'npm', name: 'gentle-pi', spec: 'gentle-pi' });
+	assert.deepStrictEqual(parsePackageSource({ source: 'npm:sample-pi', skills: [] }), { kind: 'npm', name: 'sample-pi', spec: 'sample-pi' });
 });
 
 test('parsePackageSource refuses what it cannot resolve to a directory', () => {
@@ -98,12 +98,12 @@ test('parsePackageSource refuses what it cannot resolve to a directory', () => {
 
 test('parseSettings reads the file pi writes, and refuses a malformed or non-object one', () => {
 	// The shape on disk in a real profile.
-	const settings = parseSettings('{\n\t"packages": [\n\t\t"npm:gentle-pi",\n\t\t"npm:gentle-engram"\n\t]\n}');
-	assert.deepStrictEqual(settings?.['packages'], ['npm:gentle-pi', 'npm:gentle-engram']);
+	const settings = parseSettings('{\n\t"packages": [\n\t\t"npm:sample-pi",\n\t\t"npm:sample-notes"\n\t]\n}');
+	assert.deepStrictEqual(settings?.['packages'], ['npm:sample-pi', 'npm:sample-notes']);
 
 	assert.strictEqual(parseSettings(undefined), undefined);
 	assert.strictEqual(parseSettings('{ half'), undefined);
-	assert.strictEqual(parseSettings('["npm:gentle-pi"]'), undefined);
+	assert.strictEqual(parseSettings('["npm:sample-pi"]'), undefined);
 });
 
 test('the two scopes install where pi installs', () => {
@@ -123,9 +123,9 @@ test('the two scopes install where pi installs', () => {
 test('a node_modules of dependencies yields only the packages that are pi packages', () => {
 	const read = fakeFs({
 		// The two the owner declared: a manifest, a keyword, conventional resource directories.
-		'/profile/npm/node_modules/gentle-pi/package.json': manifest('gentle-pi', { pi: { skills: ['./skills'] } }),
-		'/profile/npm/node_modules/gentle-pi/skills/gentle-ai/SKILL.md': '---\nname: gentle-ai\n---\nBody.',
-		'/profile/npm/node_modules/gentle-engram/package.json': manifest('gentle-engram'),
+		'/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi', { pi: { skills: ['./skills'] } }),
+		'/profile/npm/node_modules/sample-pi/skills/sample-skill/SKILL.md': '---\nname: sample-skill\n---\nBody.',
+		'/profile/npm/node_modules/sample-notes/package.json': manifest('sample-notes'),
 		// A scoped third-party pi package, which is what pi-pretty is.
 		'/profile/npm/node_modules/@heyhuynhgiabuu/pi-pretty/package.json': JSON.stringify({ name: '@heyhuynhgiabuu/pi-pretty', version: '0.6.27', keywords: ['pi-package'] }),
 		// A package with no manifest signal, but with a conventional resource directory.
@@ -139,10 +139,10 @@ test('a node_modules of dependencies yields only the packages that are pi packag
 
 	const packages = installedPackages('/profile/npm/node_modules', read);
 
-	assert.deepStrictEqual(packages.map(found => found.name), ['@heyhuynhgiabuu/pi-pretty', 'conventional', 'gentle-engram', 'gentle-pi']);
+	assert.deepStrictEqual(packages.map(found => found.name), ['@heyhuynhgiabuu/pi-pretty', 'conventional', 'sample-notes', 'sample-pi']);
 	assert.strictEqual(packages[3].version, '1.0.0');
-	assert.strictEqual(packages[3].description, 'gentle-pi for pi');
-	assert.strictEqual(toPosix(packages[3].path), '/profile/npm/node_modules/gentle-pi');
+	assert.strictEqual(packages[3].description, 'sample-pi for pi');
+	assert.strictEqual(toPosix(packages[3].path), '/profile/npm/node_modules/sample-pi');
 });
 
 test('isPiPackage needs a signal: a manifest, the keyword, or a resource directory', () => {
@@ -167,26 +167,74 @@ test('isPiPackage needs a signal: a manifest, the keyword, or a resource directo
 test('the declarations and the installed directories are one row per package', () => {
 	const read = fakeFs({
 		'/profile/package.json': '{}',
-		'/profile/npm/node_modules/gentle-pi/package.json': manifest('gentle-pi'),
-		'/profile/npm/node_modules/gentle-engram/package.json': manifest('gentle-engram'),
+		'/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
+		'/profile/npm/node_modules/sample-notes/package.json': manifest('sample-notes'),
 		'/profile/npm/node_modules/@heyhuynhgiabuu/pi-pretty/package.json': JSON.stringify({ name: '@heyhuynhgiabuu/pi-pretty', version: '0.6.27', keywords: ['pi-package'] }),
 	});
-	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["npm:gentle-pi","npm:gentle-engram"]}'))];
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["npm:sample-pi","npm:sample-notes"]}'))];
 
 	const result = piPackages(scopes, read);
 
-	// gentle-pi and gentle-engram are declared *and* installed: one row each, not two.
-	assert.deepStrictEqual(result.packages.map(found => found.name), ['@heyhuynhgiabuu/pi-pretty', 'gentle-engram', 'gentle-pi']);
+	// Both declared packages are installed: one row each, not two.
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['@heyhuynhgiabuu/pi-pretty', 'sample-notes', 'sample-pi']);
 	assert.deepStrictEqual(result.unresolved, []);
 });
 
-test('a declaration with nothing installed is reported, never listed', () => {
-	const read = fakeFs({ '/profile/npm/node_modules/gentle-pi/package.json': manifest('gentle-pi') });
-	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["npm:gentle-pi","npm:not-installed"]}'))];
+test('one package installed twice is one row, and the copy pi declares is the one kept', () => {
+	// The owner's profile, exactly: the settings file declares the git source, and pi's own npm
+	// root carries the same package as a dependency (`github:HazAT/…`), so npm resolved a second
+	// copy into `node_modules/`. Only the declared copy is loaded — listing both printed, two rows
+	// apart, that one package was both Enabled and «Not declared».
+	const read = fakeFs({
+		'/profile/package.json': '{}',
+		'/profile/git/github.com/HazAT/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+		'/profile/npm/node_modules/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+	});
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["git:github.com/HazAT/pi-interactive-subagents"]}'))];
 
 	const result = piPackages(scopes, read);
 
-	assert.deepStrictEqual(result.packages.map(found => found.name), ['gentle-pi']);
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['pi-interactive-subagents']);
+	assert.strictEqual(toPosix(result.packages[0].path), '/profile/git/github.com/HazAT/pi-interactive-subagents');
+});
+
+test('two copies of one name and no declaration is still one row, and always the same one', () => {
+	// A project that pins its own copy of a package the profile also has. Neither is declared, so
+	// there is nothing to prefer but the path — and the answer must not move between two reads.
+	const files = {
+		'/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
+		'/project/.pi/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
+	};
+	const scopes = [userPackageScope(PROFILE, parseSettings('{}')), projectPackageScope(FOLDER, parseSettings('{}'))];
+
+	const first = piPackages(scopes, fakeFs(files));
+	const second = piPackages(scopes, fakeFs(files));
+
+	assert.deepStrictEqual(first.packages.map(found => found.name), ['sample-pi']);
+	assert.deepStrictEqual(first.packages.map(found => found.path), second.packages.map(found => found.path));
+});
+
+test('two declarations of one package are two rows: an instruction is never hidden', () => {
+	// pi reads both, so both are shown with their own source — collapsing them would hide an
+	// install the owner may have to remove, which is the one thing this listing must not do.
+	const read = fakeFs({
+		'/profile/git/github.com/HazAT/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+		'/profile/npm/node_modules/pi-interactive-subagents/package.json': manifest('pi-interactive-subagents'),
+	});
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["git:github.com/HazAT/pi-interactive-subagents","npm:pi-interactive-subagents"]}'))];
+
+	const result = piPackages(scopes, read);
+
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['pi-interactive-subagents', 'pi-interactive-subagents']);
+});
+
+test('a declaration with nothing installed is reported, never listed', () => {
+	const read = fakeFs({ '/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi') });
+	const scopes = [userPackageScope(PROFILE, parseSettings('{"packages":["npm:sample-pi","npm:not-installed"]}'))];
+
+	const result = piPackages(scopes, read);
+
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['sample-pi']);
 	assert.deepStrictEqual(result.unresolved.map(toPosix), ['/profile/npm/node_modules/not-installed: declared, but nothing is installed there']);
 });
 
@@ -205,17 +253,17 @@ test('a git checkout and a local package resolve to the directories pi keeps', (
 
 test('a project package is looked for under the project, and the profile one under the profile', () => {
 	const read = fakeFs({
-		'/profile/npm/node_modules/gentle-pi/package.json': manifest('gentle-pi'),
+		'/profile/npm/node_modules/sample-pi/package.json': manifest('sample-pi'),
 		'/project/.pi/npm/node_modules/project-only/package.json': manifest('project-only'),
 	});
 	const scopes = [
-		userPackageScope(PROFILE, parseSettings('{"packages":["npm:gentle-pi"]}')),
+		userPackageScope(PROFILE, parseSettings('{"packages":["npm:sample-pi"]}')),
 		projectPackageScope(FOLDER, parseSettings('{"packages":["npm:project-only"]}')),
 	];
 
 	const result = piPackages(scopes, read);
 
-	assert.deepStrictEqual(result.packages.map(found => found.name), ['gentle-pi', 'project-only']);
+	assert.deepStrictEqual(result.packages.map(found => found.name), ['project-only', 'sample-pi']);
 	assert.deepStrictEqual(result.unresolved, []);
 });
 
@@ -225,9 +273,9 @@ test('a project package is looked for under the project, and the profile one und
 
 test('a package says where its skills are, or keeps them where pi looks', () => {
 	const read = fakeFs({
-		// gentle-pi declares `pi.skills: ["./skills"]`.
-		'/pkgs/gentle-pi/package.json': manifest('gentle-pi', { pi: { skills: ['./skills'] } }),
-		'/pkgs/gentle-pi/skills/gentle-ai/SKILL.md': '---\nname: gentle-ai\n---\nBody.',
+		// The package declares `pi.skills: ["./skills"]`.
+		'/pkgs/sample-pi/package.json': manifest('sample-pi', { pi: { skills: ['./skills'] } }),
+		'/pkgs/sample-pi/skills/sample-skill/SKILL.md': '---\nname: sample-skill\n---\nBody.',
 		// A package that declares a glob: its literal part is the directory.
 		'/pkgs/globbed/package.json': manifest('globbed', { pi: { skills: ['./resources/skills/*'] } }),
 		'/pkgs/globbed/resources/skills/one/SKILL.md': '---\nname: one\n---\nBody.',
@@ -238,7 +286,7 @@ test('a package says where its skills are, or keeps them where pi looks', () => 
 		'/pkgs/broken/package.json': manifest('broken', { pi: { skills: ['./elsewhere'] } }),
 	});
 
-	assert.deepStrictEqual(packageSkillDirs('/pkgs/gentle-pi', read).map(toPosix), ['/pkgs/gentle-pi/skills']);
+	assert.deepStrictEqual(packageSkillDirs('/pkgs/sample-pi', read).map(toPosix), ['/pkgs/sample-pi/skills']);
 	assert.deepStrictEqual(packageSkillDirs('/pkgs/globbed', read).map(toPosix), ['/pkgs/globbed/resources/skills']);
 	assert.deepStrictEqual(packageSkillDirs('/pkgs/plain', read).map(toPosix), ['/pkgs/plain/skills']);
 	assert.deepStrictEqual(packageSkillDirs('/pkgs/broken', read), []);

@@ -19,7 +19,7 @@ import * as path from 'node:path';
  *
  * Every path below was read off the runtime that loads it, so nothing here is invented:
  *
- * - Agents: `gentle-pi`'s `lib/agents-config.ts:211` — `<profile>/agents`, `<profile>/subagents`,
+ * - Agents: the runtime's agent config — `<profile>/agents`, `<profile>/subagents`,
  *   `<workspace>/.pi/agents`, `<workspace>/.pi/subagents`. Discovery order is **precedence**
  *   order there: a later directory replaces an earlier definition of the same name, so the project
  *   beats the profile and `subagents/` beats `agents/` within each scope. That is exactly the rule
@@ -132,9 +132,9 @@ function inlineList(value: string): string[] {
  * Just enough YAML for an agent or a skill header: `key: scalar`, `key: [a, b]`, and `key:`
  * followed by `- item` lines.
  *
- * The same three shapes, and the same "anything else stays a plain string" rule, that
- * `gentle-pi`'s own `parseFrontmatter` implements — because these are the same files it parses,
- * and a header it reads as a list must not become a sentence here.
+ * The same three shapes, and the same "anything else stays a plain string" rule, the runtime's
+ * own `parseFrontmatter` implements — because these are the same files it parses, and a header
+ * it reads as a list must not become a sentence here.
  */
 export function parseFrontmatter(text: string): Frontmatter {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
@@ -212,7 +212,7 @@ const MARKDOWN = '.md';
 /**
  * Where pi's agents are, in precedence order — later wins.
  *
- * `gentle-pi`'s `agentDirectories` is the authority, including its choice to place `subagents/`
+ * The runtime's `agentDirectories` is the authority, including its choice to place `subagents/`
  * after `agents/` inside each scope.
  */
 export function agentRoots(profileDir: string, workspaceFolders: readonly string[]): readonly ResourceRoot[] {
@@ -241,7 +241,7 @@ function markdownFiles(dir: string, read: FsReader): readonly string[] {
 export function agentFrom(file: string, text: string, source: ResourceSource): AgentResource | undefined {
 	const frontmatter = parseFrontmatter(text);
 	if (frontmatter.body.length === 0) {
-		// A header with nothing after it defines nothing to run; `gentle-pi` treats it as an
+		// A header with nothing after it defines nothing to run; the runtime treats it as an
 		// error and leaves the file out, and so does this.
 		return undefined;
 	}
@@ -371,8 +371,8 @@ function skillFrom(file: string, text: string, source: ResourceSource): SkillRes
  * Where pi's skills are, in precedence order — later wins.
  *
  * A package's skills come first so that the owner's own copy of the same skill wins: a package
- * installs its skills **into** `<profile>/skills` (`gentle-pi`'s 12 skills are byte-identical in
- * both places), and listing the package's copy as well would show every skill twice.
+ * installs its skills **into** `<profile>/skills` (the same files, byte-identical in both
+ * places), and listing the package's copy as well would show every skill twice.
  */
 export function skillRoots(
 	profileDir: string,

@@ -6,27 +6,37 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { loadPiSdk } from './piSdk';
-import { chatAgentDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { ensureProfilePackages } from './packages-install';
+import { locateNpmCli } from './npm-run';
+import { piProjectSlug } from './sessions-provider';
+import { fileNameOf, piCommandsOfRunner, promptFileText, type PiCommand } from './command-registry';
 
 /**
  * pi's commands, in the editor's own chat input.
  *
  * pi's terminal owns a command registry: the builtin TUI commands plus the commands its
- * loaded extensions register through `pi.registerCommand` — `/omni` and its fellow provider
- * commands among them. This module puts the **extension** commands of the runtime in force
- * into the chat input's slash list, contributed as prompt files the editor's own slash
- * machinery lists.
+ * loaded extensions register through `pi.registerCommand`. This module puts the commands
+ * of the runtime in force into the chat input's slash list, contributed as prompt files
+ * the editor's own slash machinery lists.
  *
- * Two decisions are deliberate here:
+ * Three decisions are deliberate here:
  *
- * - **Extension commands only.** pi's builtin commands (`/model`, `/compact`, …) are the
- *   terminal's own UI — they open selectors and drive session tooling the chat's turn flow
- *   cannot host. An extension command, though, is dispatched by pi's session itself
- *   (`AgentSession.prompt` runs it immediately), so the editor only has to deliver the typed
- *   text `/name args` — which it does, because a slash prompt part keeps its text in the
- *   prompt that reaches the participant. Skills and prompt templates already reach the input
- *   through the skill provider in `extension.ts`.
+ * - **Every command the session holds.** pi's builtin extensions register their commands
+ *   (`/mcp` among them) through the same runner as the installed ones, so a session that
+ *   loaded the built-ins answers with them too — which is why the discovery session below
+ *   is built with pi's own built-in factory list, exactly the way `agent.ts` builds the
+ *   chat's live session (`dist/main.js:451`): a session built without them has no `/mcp`
+ *   to offer, and the owner saw exactly that — package commands with no pi command among
+ *   them. The pure read of the registry lives in `command-registry.ts`.
+ * - **Arguments as a hint, not a picker.** pi's TUI offers a command's sub-options after
+ *   a space through the command's `getArgumentCompletions`; the chat's prompt-file API has
+ *   no per-keystroke completion hook, so the deeper rounds (the server names after
+ *   `/mcp login `) cannot be offered here — that part stays TUI-only. What the editor does
+ *   read is a prompt file's `argument-hint` front matter, shown as a placeholder once a
+ *   space follows the command (chatInputEditorContrib), so the top-level options (`login
+ *   | logout | reconnect`) travel with the command, read from pi's own completion call.
  * - **The runtime in force.** The commands are read from a session built by the same SDK
  *   entry and profile a chat turn uses (`runtime.ts`), so switching `picode.pi.runtime` to
  *   the external pi switches the command list to what THAT pi has loaded. When a chat
@@ -34,46 +44,15 @@ import { chatAgentDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
  *
  * The files are written into this extension's storage as real `.prompt.md` files, because
  * the editor's slash listing parses what a prompt-file provider hands over. The editor only
- * lists them; pi stays the only one who executes anything.
+ * lists them; pi stays the only one who executes anything — the typed text `/name args`
+ * reaches the participant whole, and pi's session runs the command itself
+ * (`AgentSession.prompt` → `_tryExecuteExtensionCommand`).
  */
-
-/** One pi command, as the chat's slash list shows it. */
-export interface PiCommand {
-	readonly name: string;
-	readonly description?: string;
-}
 
 /** A resource as the chat's prompt-file host reads it (the `name`/`description` travel; see `extension.ts`). */
 interface NamedChatResource extends vscode.ChatResource {
 	readonly name: string;
 	readonly description?: string;
-}
-
-/** The commands a pi session's extension runner holds, read structurally. */
-export function piCommandsOfRunner(piSession: unknown): readonly PiCommand[] {
-	const runner = (piSession as { extensionRunner?: { getRegisteredCommands?: () => unknown } } | undefined)?.extensionRunner;
-	if (typeof runner?.getRegisteredCommands !== 'function') {
-		return [];
-	}
-	try {
-		const registered = runner.getRegisteredCommands();
-		if (!Array.isArray(registered)) {
-			return [];
-		}
-		return registered.flatMap(command => {
-			const record = typeof command === 'object' && command !== null ? command as Record<string, unknown> : undefined;
-			const name = typeof record?.['name'] === 'string' && record['name'].length > 0
-				? record['name']
-				: typeof record?.['invocationName'] === 'string' && record['invocationName'].length > 0 ? record['invocationName'] : undefined;
-			if (name === undefined) {
-				return [];
-			}
-			const description = typeof record?.['description'] === 'string' && record['description'].length > 0 ? record['description'] : undefined;
-			return [{ name, ...(description === undefined ? {} : { description }) } satisfies PiCommand];
-		});
-	} catch {
-		return [];
-	}
 }
 
 /** pi's runtime services, opaque here: handed back to pi to build a session from. */
@@ -93,7 +72,14 @@ interface DiscoverySession {
 
 /** pi's SDK, reduced to what opening a throwaway session for its command registry needs. */
 interface DiscoverySdk {
-	createAgentSessionServices(options: { cwd: string; agentDir?: string }): Promise<DiscoveryServices>;
+	createAgentSessionServices(options: {
+		cwd: string;
+		agentDir?: string;
+		/** pi's built-in extension factories, so the registry holds `/mcp` and friends. */
+		resourceLoaderOptions?: {
+			extensionFactories?: unknown[];
+		};
+	}): Promise<DiscoveryServices>;
 	createAgentSessionFromServices(options: { services: DiscoveryServices; sessionManager: DiscoverySessionManager }): Promise<{ session: DiscoverySession }>;
 	SessionManager: { create(cwd: string, sessionDir?: string): DiscoverySessionManager };
 }
@@ -106,26 +92,6 @@ export interface PiCommandDeps {
 	readonly liveSessionCommands: () => { readonly key: string; readonly commands: readonly PiCommand[] } | undefined;
 	/** Fires when the chat's session was created, replaced or dropped, so the list re-reads. */
 	readonly onSessionChanged?: vscode.Event<void>;
-}
-
-/** A file name a command's prompt file can carry. */
-function fileNameOf(command: PiCommand): string {
-	return `${command.name.replace(/[^\p{L}\d_.-]+/gu, '-')}.prompt.md`;
-}
-
-/** The text of one command's prompt file: front matter for the description, one line of body. */
-function promptFileText(command: PiCommand): string {
-	const description = (command.description ?? `pi's /${command.name} command`).replace(/\s+/g, ' ');
-	return `---\ndescription: ${description}\n---\n\nThe message text reaches pi as its /${command.name} command, with any arguments typed after it.\n`;
-}
-
-/** A file's text, or `undefined` when it is not there. */
-function readTextFile(file: string): string | undefined {
-	try {
-		return fs.readFileSync(file, 'utf8');
-	} catch {
-		return undefined;
-	}
 }
 
 /** Opens a session of the runtime in force, reads its command registry and closes it. */
@@ -142,9 +108,33 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		deps.log('commands: this pi does not expose the session SDK this editor expects.');
 		return [];
 	}
+	// pi's own built-in extension factories, loaded from the same install the SDK came
+	// from: pi builds a session's built-in map from the factories the caller passes
+	// (`resource-loader.js` line 246), so a discovery session built without them holds no
+	// `builtin:mcp`, registers no `/mcp`, and the chat's slash list starts its life without
+	// pi's own commands — the exact report this closes. A built-in module that is missing
+	// or unreadable is logged, not fatal: the list then only holds the installed commands.
+	const builtinsLoad = await loadPiSdk<{ builtInExtensions?: unknown }>([builtinsModuleOf(loaded.entry)]);
+	const builtinFactories = !('problem' in builtinsLoad)
+		? piBuiltinExtensions(builtinsLoad.sdk).builtins
+		: [];
+	if ('problem' in builtinsLoad) {
+		deps.log(`commands: pi built-in extensions: ${builtinsLoad.problem} — the listing holds only installed commands`);
+	}
 	const session = await (async () => {
-		const services = await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
-		const sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
+		// Before pi loads anything: the profile's declared-but-missing packages are installed here
+		// (hidden, one run) so pi's loader never installs one itself — its per-package installs
+		// each flashed a console window on Windows.
+		await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+		const services = await sdk.createAgentSessionServices({
+			cwd,
+			...(agentDir === undefined ? {} : { agentDir }),
+			...(builtinFactories.length === 0 ? {} : { resourceLoaderOptions: { extensionFactories: builtinFactories } }),
+		});
+		// pi's own session home for this project — the same shape the chat's live session
+		// uses (`agent.ts`), so a discovery session that ever flushed would file beside the
+		// others instead of at the sessions root.
+		const sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions', piProjectSlug(cwd)));
 		const created = await sdk.createAgentSessionFromServices({ services, sessionManager });
 		return created.session;
 	})();
@@ -158,6 +148,15 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 			// A session that will not close cleanly is pi's own cleanup problem; the
 			// commands were already read.
 		}
+	}
+}
+
+/** A file's text, or `undefined` when it is not there. */
+function readTextFile(file: string): string | undefined {
+	try {
+		return fs.readFileSync(file, 'utf8');
+	} catch {
+		return undefined;
 	}
 }
 

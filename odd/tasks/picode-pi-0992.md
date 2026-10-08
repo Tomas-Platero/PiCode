@@ -322,3 +322,28 @@ del runtime del pack, con perfiles temporales):
   terminal, **falso para el chat**, que es el producto: allí no se cargan las built-in ni se
   emite `session_start`. Lo corrigieron las sondas de la segunda tanda; la copia del
   ajuste y los encabezados se ajustaron a lo que se puede probar.
+
+---
+
+## 2026-10-05 · revertido en parte, en la rama `experimental`
+
+La mitad de esta decisión que dejaba **fuera** las builtin de pi en la sesión del chat se ha
+deshecho, y por un motivo medible: el connector pasaba `resourceLoaderOptions.extensionFactories`
+con **solo** su gate de permisos, y pi construye su mapa de builtins **de esa misma lista**
+(`resource-loader.js:246`) — así que el mapa quedaba vacío, `builtin:mcp` (`:527`) no resolvía y
+**ninguna** builtin de pi existía en la sesión del chat. El síntoma que lo destapó fue un aviso en
+el chat: «MCP connector: MISSING — no loaded extension connects MCP servers in this session», con
+`nan-search` y `nan-media` sin exponer tools.
+
+Ahora se fusionan, igual que hace el CLI de pi (`dist/main.js:451`):
+
+```ts
+const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
+```
+
+Los builtins se leen del **mismo runtime** que carga el SDK, nunca copiados a mano, y son los que
+pi habilita por defecto (`llama.cpp`, `codemode`, `tool-search`, `mcp`), de modo que el ajuste
+`extensions` del perfil —incluido `-builtin:mcp`— sigue mandando.
+
+**Lo que queda pendiente aquí**: un servidor declarado a la vez en el perfil y puenteado desde las
+herramientas del editor se ejecutaría **dos veces**. No se ha tocado; se reconcilia en el perfil.

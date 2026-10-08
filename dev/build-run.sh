@@ -26,13 +26,17 @@
 
 set -eo pipefail
 
+# The one definition of "is an editor running?" lives beside the profile it protects
+# (`dev/data-hold.sh`), because the build asks the same question again before the pack.
+# shellcheck source=dev/data-hold.sh
+source "$( dirname "$0" )/data-hold.sh"
+
 FLAGS=("$@")
 
 mkdir -p .scratch
 LOCK=".scratch/build.lock"
 LOG=".scratch/build-live.log"
 STATUS=".scratch/build.status"
-BACKUP=".scratch/payload-data-backup"
 
 if [[ -f "${LOCK}" ]]; then
   RUNNING=$( cat "${LOCK}" )
@@ -47,9 +51,9 @@ fi
 
 # The pack deletes the platform directory before writing it, and Windows refuses to delete the
 # files of a program that is running: an editor open from that folder turns a build into an EBUSY
-# inside the pack, minutes after it started. Checked here, where it is one line and one second.
-RUNNING_EDITOR=$( tasklist //FI "IMAGENAME eq PiCode.exe" 2>/dev/null | grep -c "PiCode.exe" || true )
-if [[ "${RUNNING_EDITOR}" -gt 0 && "${FLAGS[0]}" != "-DepsOnly" ]]; then
+# inside the pack, minutes after it started. Asked here, where it is one line and one second -- and
+# again in `build.sh` before the pack, because this answer can go stale while a build runs.
+if [[ "${FLAGS[0]}" != "-DepsOnly" ]] && picode_editor_running; then
   if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]]; then
     echo "error: PiCode is running, and the build has to replace PiCode-Win32-x64." >&2
     echo "       Close the editor first (the pack cannot delete a folder in use), or" >&2
@@ -67,11 +71,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The owner's profile, if there is one to keep.
-if [[ -d "PiCode-Win32-x64/data" ]]; then
-  rm -rf "${BACKUP}"
-  cp -r "PiCode-Win32-x64/data" "${BACKUP}" 2> /dev/null || true
-fi
+# The owner's profile is **not** copied here. It lives at <pack>/data, and the pack's own delete would
+# eat it -- which is what `dev/data-hold.sh` exists for: a rename aside (atomic, no 1+ GB duplicate) and
+# back, done by `dev/build.sh` around the pack phase, with its own recovery at the start of the next
+# run. The copy-and-restore that used to sit on these two lines was a second mechanism for the same
+# folder, and it named it without the suffix this runner builds with (PiCode-Win32-x64 instead of
+# "PiCode-win32-x64 - experimental"), so all it ever produced was an empty skeleton profile beside the
+# real one. One mechanism, and it is the one that cannot get the folder wrong: it takes the pack
+# directory it is given.
 
 set +e
 if [[ "${FLAGS[0]}" == "-DepsOnly" ]]; then
@@ -95,7 +102,6 @@ else
 fi
 set -e
 
-node dev/restore-profile.mjs >> "${LOG}" 2>&1 || true
 
 echo "${BUILD_STATUS}" > "${STATUS}"
 exit "${BUILD_STATUS}"

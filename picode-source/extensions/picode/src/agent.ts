@@ -6,9 +6,13 @@
 import * as vscode from 'vscode';
 import { contextBlock, withContext, type EditorContext } from './context';
 import { readPiChatSettings } from './piConfig';
-import { extractTasks, type TaskRow } from './session-tasks';
-import { chatAgentDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
+import { mcpServerNameOfTool } from './mcp-provider';
+import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
+import { areaContextBlock } from './workspace-area';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
@@ -20,10 +24,27 @@ import {
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
-import { activityLines, gentleAgentsHome, readPresenceActivity } from './subagents';
+import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
+import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
+import {
+	BACKGROUND_TOOL,
+	backgroundCallOf,
+	backgroundCompletionOf,
+	backgroundResultOf,
+	backgroundStartOf,
+	completionFailed,
+	finishedResultLine,
+	isBackgroundTool,
+	runningResultLine,
+	type BackgroundCall,
+} from './background-cards';
+import { durableBridgeExtensionPath } from './durable';
 import { THINKING_HEADER, quotedThinking } from './thinking';
-import { loadPiSdk } from './piSdk';
-import { piCommandsOfRunner, type PiCommand } from './commands';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
+import { ensureProfilePackages } from './packages-install';
+import { locateNpmCli } from './npm-run';
+import { piProjectSlug } from './sessions-provider';
+import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 
@@ -101,8 +122,8 @@ interface PiExtensionApi {
 /**
  * A factory pi's built-in extensions return: it registers that extension's tools on the session.
  *
- * `createMcpExtension()`, `createCodemodeExtension()` and `createToolSearchExtension()` are all the
- * same shape — call one and it hands back a function pi runs with the session's API.
+ * The shape of every entry of pi's `builtInExtensions` list, too — the chat hands pi's own entries
+ * to the session unchanged, beside this editor's own factory.
  */
 type PiExtensionFactory = (pi: PiExtensionApi) => void | Promise<void>;
 
@@ -111,6 +132,10 @@ interface PiInlineExtension {
 	name: string;
 	factory: PiExtensionFactory;
 	hidden?: boolean;
+	/** Marks the entry as the code of a `builtin:<name>` path — what makes pi's map take it. */
+	builtin?: true;
+	/** See pi's `InlineExtension`: another extension registering the same name replaces this one. */
+	replaceable?: boolean;
 }
 
 /** pi's session store, created once and handed back to pi across a session's rebuilds. */
@@ -123,7 +148,13 @@ interface PiSession {
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
 	readonly thinkingLevel?: string;
-	prompt(text: string): Promise<void>;
+	/**
+	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
+	 * prompt without it — «Agent is already processing. Specify streamingBehavior ('steer' or
+	 * 'followUp') to queue the message» — which is what the owner read when he asked «como van»
+	 * while a background job's result was being processed.
+	 */
+	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
 	abort(): Promise<void>;
 	subscribe(listener: (event: PiEvent) => void): () => void;
 	setModel(model: PiModel): Promise<void>;
@@ -143,12 +174,21 @@ interface PiSession {
 		mode?: string;
 		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
 	}): Promise<void>;
+	/**
+	 * The tools the running session exposes, by name. Present in pi 1.1.0; read defensively
+	 * (optional call) because the SDK is loaded at runtime and older pins may lack it. The
+	 * `mcp__<server>__<tool>` names are how the session's **connected** MCP servers are
+	 * discovered — servers no file declares, brought in by pi extensions and plugins.
+	 */
+	getAllTools?(): ReadonlyArray<{ readonly name: string }>;
 	dispose(): void;
 }
 
 /** pi's runtime services for one working directory, reduced to what a session needs. */
 interface PiServices {
 	readonly modelRuntime: { getModel(providerId: string, modelId: string): PiModel | undefined };
+	/** Non-fatal issues pi collected while loading its resources — a bridge that failed to load is said here. */
+	readonly diagnostics?: ReadonlyArray<{ readonly type: string; readonly message: string }>;
 }
 
 interface PiSdk {
@@ -156,7 +196,11 @@ interface PiSdk {
 		cwd: string;
 		agentDir?: string;
 		/** Inline extensions of this embedded session — here, the permission gate and pi's MCP. */
-		resourceLoaderOptions?: { extensionFactories?: PiInlineExtension[] };
+		resourceLoaderOptions?: {
+			extensionFactories?: PiInlineExtension[];
+			/** pi extension files loaded from disk — here, the durable bridge. */
+			additionalExtensionPaths?: string[];
+		};
 	}): Promise<PiServices>;
 	createAgentSessionFromServices(options: {
 		services: PiServices;
@@ -165,36 +209,72 @@ interface PiSdk {
 		thinkingLevel?: string;
 		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
 		customTools?: unknown[];
+		/** The agent tools that stay off, by name (pi's own `excludeTools`). See `piConfig.ts`. */
+		excludeTools?: string[];
 	}): Promise<{ session: PiSession }>;
-	/**
-	 * pi's own session tools, as the CLI loads them: `createMcpExtension`, `createCodemodeExtension` and
-	 * `createToolSearchExtension`. None of them is loaded here, on purpose — the chat's MCP servers are
-	 * the **editor's**, and loading pi's MCP as well made every server run twice with its tools
-	 * reachable by two routes. They stay declared so the decision is visible where the session is built,
-	 * and so a future decision to use them has the shape already written down.
-	 *
-	 * See `odd/tasks/picode-pi-0992.md`: the measurement, and why the editor owns the servers.
-	 */
-	createMcpExtension?: () => PiExtensionFactory;
-	createCodemodeExtension?: () => PiExtensionFactory;
-	createToolSearchExtension?: () => PiExtensionFactory;
 	SessionManager: {
 		// `sessionDir` is pi's optional override; without it pi resolves the machine's
 		// default, which is right for the external pi and a leak for the internal one.
+		// The internal mode passes pi's own default **shape**: the per-project folder
+		// under this profile's `sessions/` (see the sessionManager creation below).
 		create(cwd: string, sessionDir?: string): PiSessionStore;
 	};
 }
 
-/** pi's entry, loaded and checked for the two methods an agent turn needs. */
-async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdk | undefined> {
+/**
+ * pi's entry, loaded and checked for the two methods an agent turn needs — **and** the built-in
+ * extension entries pi ships beside it.
+ *
+ * The built-ins are the piece a session cannot work without and also cannot invent: pi builds its
+ * built-in map **from the factories the caller passes** (`resource-loader.js` line 246), so a session
+ * built with only this editor's factories would have no `builtin:mcp`, no `/mcp`, and no MCP servers
+ * connected at all. pi's own CLI avoids that by prepending its built-in list to the caller's
+ * factories (`dist/main.js:451`); the list lives in `dist/extensions/index.js` beside the entry and
+ * is loaded from the **same install** the SDK was, so the session never mixes one pi's built-ins
+ * into another's. What loads then follows pi's own rules: every built-in is enabled by default
+ * unless the profile's `extensions` setting excludes it (`package-manager.js` line 738), so the
+ * owner's `pi config` choices — including `-builtin:mcp` — stay in charge without this editor
+ * taking a position on individual names, which would go stale at the next pi version.
+ *
+ * A built-in module that is missing or unreadable is logged, not fatal: the session still runs,
+ * its MCP is simply absent, and the host guard (`mcp-host-support`) tells the owner why.
+ */
+interface PiSdkWithBuiltins {
+	sdk: PiSdk;
+	builtins: readonly PiInlineExtension[];
+}
+
+async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
 	const loaded = await loadPiSdk<Partial<PiSdk>>(sdkEntryCandidates(distributionRoot));
 	if ('problem' in loaded) {
 		log(loaded.problem);
 		return undefined;
 	}
-	return typeof loaded.sdk?.createAgentSessionServices === 'function' && typeof loaded.sdk.createAgentSessionFromServices === 'function'
-		? (loaded.sdk as PiSdk)
-		: undefined;
+	if (typeof loaded.sdk?.createAgentSessionServices !== 'function' || typeof loaded.sdk.createAgentSessionFromServices !== 'function') {
+		return undefined;
+	}
+	// The built-in module beside the entry that was actually loaded, so the factories handed to the
+	// session are the ones this pi knows by name (`builtin:mcp` resolves against this same map).
+	const builtinsLoad = await loadPiSdk<{ builtInExtensions?: unknown }>([builtinsModuleOf(loaded.entry)]);
+	if ('problem' in builtinsLoad) {
+		log(`pi built-in extensions: ${builtinsLoad.problem} — the session runs without them (no MCP connector)`);
+		return { sdk: loaded.sdk as PiSdk, builtins: [] };
+	}
+	const read = piBuiltinExtensions(builtinsLoad.sdk);
+	for (const skip of read.skipped) {
+		log(`pi built-in extensions: skipped ${skip}`);
+	}
+	// The one built-in this editor re-wraps: pi's `mcp` extension decides each stdio server's
+	// working directory and spawns the server there, and when that directory is not on disk Node
+	// answers `spawn node ENOENT` — or `spawn C:\WINDOWS\system32\cmd.exe ENOENT` for the `.cmd`
+	// shims cross-spawn routes through cmd.exe — naming eight healthy commands for one missing
+	// directory (the multi-root workspace keeps a folder in `workspaceFolders` after it is moved,
+	// renamed or deleted). The wrapper keeps pi's own extension and only guards the transport's
+	// `cwd`: a missing directory never stops a server, and the sentence the owner reads names the
+	// directory, not the command. Everything else — config, OAuth, `/mcp` — stays pi's.
+	const mcp = await mcpBuiltinWithExistingCwd(loaded.entry, log);
+	const builtins = mcp === undefined ? read.builtins : read.builtins.map(entry => (entry.name === 'mcp' ? mcp : entry));
+	return { sdk: loaded.sdk as PiSdk, builtins };
 }
 
 /**
@@ -225,128 +305,52 @@ function editorContext(folder: string | undefined): EditorContext {
 /**
  * The context block the project scope asks for.
  *
- * One folder is the block `context.ts` already writes. In workspace mode the area's
- * remaining folders are appended to that same block: pi runs in the first one, but the
- * area is what the prompt is about, and a context naming only the base folder would
- * hide the rest of it from pi.
+ * One folder is the block `context.ts` already writes, and folder mode is exactly that.
+ * In workspace mode the session is a session of the **area**, so the folder line is
+ * replaced by the area block (`workspace-area.ts`): every root named the way the owner
+ * names it, with the rule for matching a named project to its root, addressing a file
+ * under the right root, and the honest limit — one working directory per shell. The
+ * file and selection still travel through `context.ts`; only the folder line yields,
+ * because the roots list says more and says it about every folder at once. A folder
+ * that is not on disk is named as such — the session must know `guildboard` is not
+ * there rather than discover it with a failed command.
  */
-function contextBlockFor(scope: PiProjectScope): string | undefined {
-	const base = contextBlock(editorContext(scope.cwd));
-	if (scope.mode !== 'workspace') {
+function contextBlockFor(scope: PiProjectScope, picked: SessionCwd): string | undefined {
+	if (scope.mode !== 'workspace' || scope.area === undefined) {
+		return contextBlock(editorContext(picked.cwd));
+	}
+	// Every root's on-disk state is checked on its own (see `missingDirectories`): a folder
+	// the editor keeps after a move or delete sits wherever it sits in the order, and the
+	// context must say it is gone rather than let a command discover it.
+	const missing = missingDirectories(scope.folders);
+	const roots = scope.roots.map(root => ({
+		name: root.name,
+		path: root.path,
+		onDisk: !missing.includes(root.path),
+	}));
+	const base = contextBlock(editorContext(undefined));
+	const area = areaContextBlock(roots, picked.cwd);
+	if (area === undefined) {
 		return base;
 	}
-	const extra = scope.folders.slice(1).map(folder => `- Workspace folder: ${folder}`).join('\n');
-	if (extra.length === 0) {
-		return base;
-	}
-	return base === undefined
-		? `Context from the editor, as it is right now:\n\n${extra}\n`
-		: `${base}${extra}\n`;
+	return base === undefined ? area : `${base}\n${area}`;
 }
 
 /* ------------------------------------------------------------------ *
- * Gentle subagents, as the chat can see them
+ * The durable delegation, as the chat can see it
  * ------------------------------------------------------------------ */
 
-/** The prefixes gentle registers one tool per agent under; the prefix moved between releases. */
-const AGENT_TOOL_PREFIX = /^(?:agent|subagent)_/;
-
-/** The longest a subagent prompt or result gets in a card: it is a pointer, not a transcript. */
-const CARD_PROMPT_CHARS = 200;
-const CARD_RESULT_CHARS = 2000;
-
-/** How often the turn's presence poller looks at gentle's activity file. */
-const AGENT_POLL_MS = 1_500;
-
-/** How long the poller waits before scanning for an incarnation again after a miss. */
-const AGENT_RESCAN_BACKOFF_MS = 10_000;
-
-/** Whether pi is calling a gentle subagent. */
-function isAgentToolName(toolName: string): boolean {
-	return AGENT_TOOL_PREFIX.test(toolName);
-}
-
-/** The tool's agent, spoken: `subagent_gentle_ai_worker` becomes "gentle ai worker". */
-function agentDisplayName(toolName: string): string {
-	return toolName.replace(AGENT_TOOL_PREFIX, '').replace(/_/g, ' ') || toolName;
-}
-
-/** A string capped for a card, with an ellipsis where it was cut. */
-function cardText(value: string, max: number): string {
-	return value.length > max ? `${value.slice(0, max - 1)}…` : value;
-}
-
-/** The subagent's prompt, as the tool's arguments carry it. */
-function agentPromptOf(args: unknown): string | undefined {
-	const record = recordOf(args);
-	const prompt = typeof record?.['task'] === 'string' ? record['task'] : typeof record?.['prompt'] === 'string' ? record['prompt'] : undefined;
-	if (prompt !== undefined) {
-		return cardText(prompt, CARD_PROMPT_CHARS);
-	}
-	try {
-		return args === undefined || args === null ? undefined : cardText(JSON.stringify(args), CARD_PROMPT_CHARS);
-	} catch {
-		return undefined;
-	}
-}
-
-/** The gentle correlation a finished agent tool reports, read from the result's details. */
-function gentleDetailsOf(result: unknown): { taskId?: string; agent?: string; status?: string } | undefined {
-	const details = recordOf(recordOf(result)?.['details']);
-	const gentle = recordOf(details?.['gentleAgents']);
-	if (gentle === undefined) {
-		return undefined;
-	}
-	return {
-		taskId: typeof gentle['taskId'] === 'string' ? gentle['taskId'] : undefined,
-		agent: typeof gentle['agent'] === 'string' ? gentle['agent'] : undefined,
-		status: typeof gentle['status'] === 'string' ? gentle['status'] : undefined,
-	};
-}
-
-/** The text a finished agent tool returned, as the chat's card wants it. */
-function agentResultOf(result: unknown): string | undefined {
-	const content = recordOf(result)?.['content'];
-	if (!Array.isArray(content)) {
-		return undefined;
-	}
-	const text = content
-		.map(part => (recordOf(part)?.['type'] === 'text' && typeof recordOf(part)?.['text'] === 'string' ? recordOf(part)?.['text'] as string : ''))
-		.filter(part => part.length > 0)
-		.join('\n');
-	return text.length === 0 ? undefined : cardText(text, CARD_RESULT_CHARS);
-}
-
 /**
- * What a subagent card carries at each stage.
- *
- * At `tool_execution_start` the card names the agent and its prompt; at
- * `tool_execution_end` it gains the result and `isComplete`. The renderer updates the same
- * card in place because every push carries the same `toolCallId` and
- * `enablePartialUpdate`.
- */
-interface AgentCardData {
-	readonly prompt?: string;
-	readonly result?: string;
-	readonly complete?: boolean;
-	readonly isError?: boolean;
-	readonly modelName?: string;
-}
-
-/**
- * Pushes one subagent card into the chat stream.
+ * Pushes one durable-delegation card into the chat stream.
  *
  * The renderer API is proposed-API surface (`chatParticipantAdditions`); if it ever moves,
- * the turn must not die with it — the card is a window onto the subagent, and losing the
- * window is reported, not fatal.
+ * the turn must not die with it — the card is a window onto the delegated work, and losing
+ * the window is reported, not fatal.
  */
-function pushSubagentCard(stream: vscode.ChatResponseStream, toolName: string, toolCallId: string, data: AgentCardData, log: (line: string) => void): void {
+function pushDurableCard(stream: vscode.ChatResponseStream, toolCallId: string, data: DurableCardData, log: (line: string) => void): void {
 	try {
-		const subagent = new vscode.ChatSubagentToolInvocationData(undefined, agentDisplayName(toolName), data.prompt, data.result);
-		if (data.modelName !== undefined) {
-			subagent.modelName = data.modelName;
-		}
-		const part = new vscode.ChatToolInvocationPart(toolName, toolCallId);
+		const subagent = new vscode.ChatSubagentToolInvocationData(data.description, data.agentName, data.prompt, data.result);
+		const part = new vscode.ChatToolInvocationPart(DURABLE_SEND_TOOL_NAME, toolCallId);
 		part.toolSpecificData = subagent;
 		part.enablePartialUpdate = true;
 		if (data.complete !== undefined) {
@@ -357,7 +361,66 @@ function pushSubagentCard(stream: vscode.ChatResponseStream, toolName: string, t
 		}
 		stream.push(part);
 	} catch (error) {
-		log(`subagent card failed: ${error instanceof Error ? error.message : String(error)}`);
+		log(`durable card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/** The delegation tool's name, as the bridge extension registers it (`durable-cards.ts` owns the check). */
+const DURABLE_SEND_TOOL_NAME = 'durable_send';
+
+/**
+ * The card a background job gets: at its start, and updated once its result names the job it became.
+ *
+ * The agent's `background` tool returns at once, so both ends happen inside this same call — the card
+ * is pushed when the call starts and updated when its result arrives, which is what "running in the
+ * background" should look like while it is true.
+ */
+function pushBackgroundCard(stream: vscode.ChatResponseStream, toolCallId: string, call: BackgroundCall, jobNumber: string | undefined, log: (line: string) => void): void {
+	try {
+		const subagent = new vscode.ChatSubagentToolInvocationData(
+			jobNumber === undefined ? 'Starting in the background' : 'Running in the background',
+			call.label ?? 'background job',
+			call.command ?? '',
+			runningResultLine(jobNumber),
+		);
+		const part = new vscode.ChatToolInvocationPart(BACKGROUND_TOOL, toolCallId);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		part.isComplete = false;
+		stream.push(part);
+	} catch (error) {
+		log(`background card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * The card a **finished** job gets, in the message that brings its result.
+ *
+ * A different card from the one above, and it has to be: the result arrives in a later turn, and the
+ * editor only updates a part inside the response being streamed. So the pair reads as one job — the
+ * first card says it started, this one says how it ended, and both name the same job.
+ */
+function pushBackgroundCompletionCard(
+	stream: vscode.ChatResponseStream,
+	completion: ReturnType<typeof backgroundCompletionOf> & object,
+	log: (line: string) => void,
+): void {
+	try {
+		const failed = completionFailed(completion);
+		const subagent = new vscode.ChatSubagentToolInvocationData(
+			failed ? 'A background job failed' : 'A background job finished',
+			completion.label ?? 'background job',
+			completion.command ?? '',
+			[finishedResultLine(completion), completion.tail ?? ''].filter(line => line.length > 0).join('\n\n'),
+		);
+		const part = new vscode.ChatToolInvocationPart(BACKGROUND_TOOL, `background-job-${completion.id ?? completion.summary}`);
+		part.toolSpecificData = subagent;
+		part.enablePartialUpdate = true;
+		part.isComplete = true;
+		part.isError = failed;
+		stream.push(part);
+	} catch (error) {
+		log(`background completion card failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
 }
 
@@ -372,85 +435,6 @@ function pushSubagentCard(stream: vscode.ChatResponseStream, toolName: string, t
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
 async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void): Promise<void> {
-	/** One gentle agent tool of this turn, by its toolCallId. */
-	const agentCalls = new Map<string, { toolName: string; ended: boolean }>();
-	/** Stops the presence poller; set the first time an agent tool starts. */
-	let stopAgentPolling: (() => void) | undefined;
-
-		/**
-		 * One live progress line for the turn's subagents, polling gentle's presence file.
-		 *
-		 * Started only when an agent tool actually starts — a normal turn pays nothing. One
-		 * tick is one file read of one known incarnation; the incarnation is re-scanned only
-		 * after a miss, and a miss backs off, so an editor without gentle pays one failed
-		 * scan every ten seconds and nothing else. Every reported line is a warning part
-		 * under the spinner — the one part the progress task can carry — reported only when
-		 * the picture changed, and the line settles as soon as every launched tool returned
-		 * (task-mode agent tools block until their subagent is done) or the turn itself ends.
-		 */
-		const startAgentPolling = (): void => {
-			if (stopAgentPolling !== undefined) {
-				return;
-			}
-			const sessionId = session.sessionId;
-			const home = gentleAgentsHome();
-			let incarnation: string | undefined;
-			let rescanAfter = 0;
-			let settled = false;
-			let lastReported: string | undefined;
-			let reporter: vscode.Progress<vscode.ChatResponseWarningPart | vscode.ChatResponseReferencePart> | undefined;
-			const finish = (): void => {
-				if (settled) {
-					return;
-				}
-				settled = true;
-				clearInterval(timer);
-				const launched = agentCalls.size;
-				const done = [...agentCalls.values()].filter(call => call.ended).length;
-				resolvePolling(launched === 0 ? 'Subagents' : `Subagents: ${done}/${launched} finished`);
-			};
-			let resolvePolling!: (value: string) => void;
-			const polling = new Promise<string>(resolve => { resolvePolling = resolve; });
-			const timer = setInterval(() => {
-				if (settled) {
-					return;
-				}
-				// In task mode an agent tool returns only when its subagent is done, so every
-				// tool having returned IS the work having finished.
-				if (agentCalls.size > 0 && [...agentCalls.values()].every(call => call.ended)) {
-					finish();
-					return;
-				}
-				try {
-					if (incarnation === undefined && Date.now() < rescanAfter) {
-						return;
-					}
-					const read = readPresenceActivity(sessionId, home, undefined, incarnation);
-					if (read === undefined) {
-						// A vanished incarnation or no gentle here at all: back off before the
-						// next scan, so absence costs one failed scan per back-off, not per tick.
-						incarnation = undefined;
-						rescanAfter = Date.now() + AGENT_RESCAN_BACKOFF_MS;
-						return;
-					}
-					incarnation = read.incarnation;
-					const lines = activityLines(read.activity);
-					const text = lines.join('  \n');
-					if (lines.length > 0 && reporter !== undefined && text !== lastReported) {
-						lastReported = text;
-						reporter.report(new vscode.ChatResponseWarningPart(text));
-					}
-				} catch {
-					// Presence is a window, not a dependency: a failing tick says nothing.
-				}
-			}, AGENT_POLL_MS);
-			stopAgentPolling = finish;
-			stream.progress('Running subagents', progress => {
-				reporter = progress;
-				return polling;
-			});
-		};
-
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		let thinking = false;
@@ -488,34 +472,76 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
 				// "read" is not.
 				stream.progress(toolProgress(event.toolName, event.args));
-				// A gentle subagent gets a card the renderer can update in place, and the
-				// turn's one presence poller, which reports what the subagents are doing live.
-				if (isAgentToolName(event.toolName) && typeof event.toolCallId === 'string') {
-					agentCalls.set(event.toolCallId, { toolName: event.toolName, ended: false });
-					pushSubagentCard(stream, event.toolName, event.toolCallId, { prompt: agentPromptOf(event.args) }, log);
-					startAgentPolling();
+				// The same line is the pill's "now": what the agent is doing this instant, above
+				// the input where it stays visible while the transcript scrolls on.
+				agentActivity = toolProgress(event.toolName, event.args);
+				notifyAgentStatus();
+				// A durable delegation gets a card the renderer can update in place: which
+				// conversation the work became, what was asked, and — when the call ends —
+				// what came back. Losing the card is reported, never fatal.
+				if (isDurableDelegationTool(event.toolName) && typeof event.toolCallId === 'string') {
+					const card = durableCard(event.toolName, event.args, undefined, false);
+					if (card !== undefined) {
+						pushDurableCard(stream, event.toolCallId, card, log);
+					}
+				}
+				// Work the agent left running: its card says so from the first moment, which is what the
+				// owner asked to be able to see («¿hay alguna forma de que yo vea ese background?»).
+				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
+					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
 				}
 				return;
 			}
-			if (event.type === 'tool_execution_end' && typeof event.toolCallId === 'string') {
-				const call = agentCalls.get(event.toolCallId);
-				if (call !== undefined) {
-					call.ended = true;
-					// The same card, now with the result: the toolCallId and enablePartialUpdate
-					// are what make the renderer update instead of append.
-					const gentle = gentleDetailsOf(event.result);
-					pushSubagentCard(stream, call.toolName, event.toolCallId, {
-						prompt: agentPromptOf(event.args),
-						result: agentResultOf(event.result),
-						complete: true,
-						isError: event.isError === true,
-						modelName: gentle?.agent ?? gentle?.status,
-					}, log);
+			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
+				// The same card, now with the answer: the toolCallId and enablePartialUpdate are
+				// what make the renderer update instead of append.
+				const card = durableCard(event.toolName, event.args, event.result, event.isError === true);
+				if (card !== undefined) {
+					pushDurableCard(stream, event.toolCallId, card, log);
+				}
+				// A background job's call ends at once, when the job **starts**: its result is what names
+				// the job, so the same card is updated with it rather than a second one being pushed.
+				if (isBackgroundTool(event.toolName)) {
+					// The result is what the card can always count on: it names the job, and it repeats the
+					// label the call carried — which is what keeps the card honest when the call's own
+					// arguments are not readable from here (they do arrive serialised often enough).
+					const start = backgroundStartOf(backgroundResultOf(event.result));
+					const call = backgroundCallOf(event.args);
+					pushBackgroundCard(stream, event.toolCallId, {
+						...call,
+						...(call.label === undefined && start.label !== undefined ? { label: start.label } : {}),
+					}, start.jobNumber, log);
+					// The same fact feeds the pill above the chat input: the job is **running now**.
+					const tracked = backgroundJobStartOf(backgroundResultOf(event.result));
+					if (tracked !== undefined) {
+						const label = call.label ?? tracked.label;
+						backgroundJobs.start({
+							jobNumber: tracked.jobNumber,
+							...(label === undefined ? {} : { label }),
+							...(call.command === undefined ? {} : { command: call.command }),
+						}, Date.now());
+						notifyAgentStatus();
+					}
 				}
 				return;
 			}
 			if (event.type === 'message_end') {
 				const message = event.message;
+				// A job that has ended arrives as its own message into the conversation: the card says which
+				// job it was, how it ended, and the tail of its output (`background-cards.ts` reads it, and
+				// only a message of that exact type becomes a card).
+				const completion = backgroundCompletionOf(message);
+				if (completion !== undefined) {
+					pushBackgroundCompletionCard(stream, completion, log);
+					// The same ending closes the job in the pill's registry: no completion, no job.
+					const closed: BackgroundJobCompletion = {
+						...(completion.id === undefined ? {} : { id: completion.id }),
+						...(completion.label === undefined ? {} : { label: completion.label }),
+						...(completion.command === undefined ? {} : { command: completion.command }),
+					};
+					backgroundJobs.complete(closed);
+					notifyAgentStatus();
+				}
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
 					// What happened first, then pi's own sentence — except for the one failure whose advice only works
 					// in a terminal, which is answered with the settings where a provider is added.
@@ -527,6 +553,8 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 			}
 			if (event.type === 'agent_settled' && !settled) {
 				settled = true;
+				agentActivity = undefined;
+				notifyAgentStatus();
 				// What `subscribe` returns is the unsubscribe function itself, not a disposable.
 				subscription();
 				resolve();
@@ -539,12 +567,21 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 			void session.abort().catch(() => undefined);
 		});
 
-		session.prompt(prompt).catch(reject);
+		// pi refuses a prompt while it is streaming unless it is told how to queue it: «Agent is already
+		// processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message» — which is
+		// the error the owner hit by asking «como van» while a background job's result was being
+		// processed. Our own queue (`turnChain`) orders **our** requests, and that is all it can do: it
+		// cannot see what pi is doing for itself, and a background job delivers its result into the
+		// session as a steer, so pi can be busy when our next prompt arrives.
+		//
+		// `followUp` is the honest answer — it waits for the run in flight and then runs — and it is
+		// pi's own machinery rather than a second guess at it. The turn's ending stays paired: pi settles
+		// once, after everything queued has run (`_runAgentPrompt` loops on `hasQueuedMessages` and calls
+		// `_emitAgentSettled` in its `finally`), so the single `agent_settled` this awaits is the end of
+		// the work that includes this prompt.
+		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).catch(reject);
 		void cancellation;
-	})
-		// Whether the turn answered, threw or was cancelled, the poller has nothing more to
-		// watch: its interval must not outlive the turn.
-		.finally(() => stopAgentPolling?.());
+	});
 }
 
 /* ------------------------------------------------------------------ *
@@ -753,8 +790,8 @@ const CHAT_THEME: ChatTheme = new Proxy({} as ChatTheme, {
  * pi's interactive UI, as the chat can host it.
  *
  * pi gives extensions `ctx.ui.confirm/select/input/notify` and a `ctx.hasUI` flag, and this host
- * used to bind extensions with **no** UI context: an extension that needed a question — gentle-pi's
- * destructive-command guard, its `ask_user_question` tool, its panels — saw `hasUI === false` and
+ * used to bind extensions with **no** UI context: an extension that needed a question — a
+ * destructive-command guard, an ask-user tool, a panel — saw `hasUI === false` and
  * either blocked with a reason the model could only relay, or answered "unavailable". The owner
  * approved the command and it still did not run.
  *
@@ -870,20 +907,16 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * one loaded and registered nothing at all). Which extensions the owner has is his business — this is
  * the door they all wait behind, and it opens before the first turn.
  *
- * The extensions are bound with the chat's UI (see `extensionUiContext`) and `mode: "rpc"`, which is
- * the host contract gentle-pi reads: with a UI context its `confirm`/`select`/`input`/`notify`
- * reach the chat instead of blocking with "requires interactive confirmation". `onError` is bound so
- * a broken extension is said and the turn still runs.
+ * The extensions are bound with the chat's UI (see `extensionUiContext`) and `mode: "rpc"`,
+ * which is the interactive-host contract an extension reads: with a UI context its
+ * `confirm`/`select`/`input`/`notify` reach the chat instead of blocking with "requires
+ * interactive confirmation". `onError` is bound so a broken extension is said and the turn
+ * still runs.
  */
 async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
-	// gentle-pi's interactive-host contract (`lib/rpc-host.ts`): `mode === "rpc"` plus this variable
-	// set to `"1"` is how a desktop host declares that its dialogs are answerable. Without it its
-	// destructive-command guard and ask-user tools see no UI and refuse. The value is a host
-	// capability, not a permission: the questions are still asked before anything runs.
-	process.env.GENTLE_SHELL_INTERACTIVE_HOST = '1';
 	let timer: NodeJS.Timeout | undefined;
 	try {
 		// Bounded, like pi does with its own MCP wait: an extension that sits waiting for something
@@ -939,8 +972,6 @@ export interface SessionUsage {
 	readonly cacheWrite?: number;
 	readonly model?: string;
 	readonly thinkingLevel?: string;
-	/** The session's task list (gentle-pi's todo tool), last snapshot; absent when none exists. */
-	readonly tasks?: readonly TaskRow[];
 }
 
 /** A JSON object from an unknown value, or `undefined` when it is not one. */
@@ -964,10 +995,110 @@ let sessionCommandsProvider: (() => { readonly key: string; readonly commands: r
 /** Fires when the chat's session was created, replaced or dropped. */
 const sessionChangedEmitter = new vscode.EventEmitter<void>();
 
+/** The live session's MCP server names, set by registerPiAgent; read by the status answer. */
+let sessionMcpProvider: (() => readonly string[] | undefined) | undefined;
+
+/** The background jobs this window's agent left running, as the pill above the chat input reads them. */
+const backgroundJobs = new BackgroundJobTracker();
+
+/** The command id the pill above the chat input polls for the jobs still running. */
+export const BACKGROUND_JOBS_COMMAND = 'picode.backgroundJobs';
+
+/**
+ * The status the pill above the chat input is told about, as one push.
+ *
+ * The connector pushes; the pill never polls — a poll would wake this extension at window
+ * start just to hear "nothing happening". Every field is a fact the transcript already
+ * reported: the jobs still running, whether a turn is in flight, what it is doing right
+ * now, and how many requests of this window are waiting for their slot.
+ */
+export interface AgentStatusPush {
+	readonly backgroundJobs: ReturnType<typeof backgroundJobRows>;
+	readonly running: boolean;
+	readonly activity?: string;
+	readonly queued: number;
+}
+
+/** What the agent is doing this instant, as the tool's progress line says it. */
+let agentActivity: string | undefined;
+/** Whether a turn is in flight in this window. */
+let agentRunning = false;
+
+/**
+ * The turns waiting for their slot, each with the way out: dropping one makes its request
+ * return without ever running, at once — not when the running turn ends.
+ */
+interface WaitingTurn {
+	drop(): void;
+}
+const waitingTurns = new Set<WaitingTurn>();
+
+/**
+ * The status push: what the pill is told, whenever any of its facts changed. The command
+ * the core registers may be missing (an older editor carrying a newer connector), so the
+ * push is told once and never again — the pill is a nicety, not something to retry.
+ */
+const notifyAgentStatus = (): void => {
+	const status: AgentStatusPush = {
+		backgroundJobs: runningBackgroundJobs(),
+		running: agentRunning,
+		...(agentActivity === undefined ? {} : { activity: agentActivity }),
+		queued: waitingTurns.size,
+	};
+	void vscode.commands.executeCommand('picode.picodeAgentStatusChanged', status)
+		.then(() => undefined, () => undefined);
+};
+
+/**
+ * The status command's answer, so the pill could also ask once (it never needs to): what
+ * this window's agent is doing right now.
+ */
+export function currentAgentStatus(): AgentStatusPush {
+	return {
+		backgroundJobs: runningBackgroundJobs(),
+		running: agentRunning,
+		...(agentActivity === undefined ? {} : { activity: agentActivity }),
+		queued: waitingTurns.size,
+	};
+}
+
+/**
+ * Drops every turn waiting for its slot — the pill's "Cancel" for the queue. Returns how
+ * many were waiting. Turns already running are not touched: the chat's own stop button is
+ * what aborts the turn in flight.
+ */
+export function cancelQueuedTurns(): number {
+	const count = waitingTurns.size;
+	for (const waiting of waitingTurns) {
+		waiting.drop();
+	}
+	waitingTurns.clear();
+	notifyAgentStatus();
+	return count;
+}
+
+/**
+ * The background jobs still running, with how long each has run — the answer the
+ * `picode.backgroundJobs` command gives the pill. An empty list is an honest "nothing
+ * running", and is what a window with no live session answers too.
+ */
+export function runningBackgroundJobs(): ReturnType<typeof backgroundJobRows> {
+	return backgroundJobRows(backgroundJobs.list(), Date.now());
+}
+
+/**
+ * The server names the live session actually connected — every server behind an `mcp__…`
+ * tool pi exposed, whatever file (or pi extension or plugin) brought it in. `undefined`
+ * when there is no live session to ask: no session, no discovery, no invented rows.
+ */
+export function liveSessionMcpServers(): readonly string[] | undefined {
+	return sessionMcpProvider?.();
+}
+
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
-	// The setup bridge needs to drop the live session when Gentle AI is installed or
-	// removed: its agents, skills and commands load when pi's session is created.
-	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; sessionChangedEmitter.fire(); };
+	// The setup bridge needs to drop the live session when the profile's packages change:
+	// what they load (agents, skills, commands) registers when pi's session is created.
+	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire(); };
 	sessionUsageProvider = () => {
 		if (sessionManager === undefined) {
 			return undefined;
@@ -985,12 +1116,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			let ctxTokens: number | undefined;
 			let model: string | undefined;
 			let thinkingLevel: string | undefined;
-			let tasks: readonly TaskRow[] | undefined;
 			for (const entry of entries) {
 				if (entry['type'] === 'message') {
-					// The task list rides on the same entries: gentle-pi's todo tool stamps the full
-					// snapshot on every result, so the last one in order is the current list.
-					tasks = extractTasks([entry]) ?? tasks;
 					// Usage lives nested under `message`, and only assistant messages carry it.
 					const message = recordOf(entry['message']);
 					if (message?.['role'] !== 'assistant') {
@@ -1033,7 +1160,6 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 				...(model === undefined ? {} : { model }),
 				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost } : {}),
-				...(tasks === undefined ? {} : { tasks }),
 			};
 		} catch {
 			return undefined;
@@ -1051,12 +1177,32 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		// serving another session's registry.
 		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: piCommandsOfRunner(session) };
 	};
+	sessionMcpProvider = () => {
+		if (session === undefined || typeof session.getAllTools !== 'function') {
+			return undefined;
+		}
+		try {
+			const names = new Set<string>();
+			for (const tool of session.getAllTools() ?? []) {
+				const server = mcpServerNameOfTool(String(tool?.name ?? ''));
+				if (server !== undefined) {
+					names.add(server);
+				}
+			}
+			return [...names].toSorted((a, b) => a.localeCompare(b));
+		} catch {
+			// A session that cannot answer its tools is "no discovery", not an error to surface.
+			return undefined;
+		}
+	};
 	let session: PiSession | undefined;
 	let sessionFolder: string | undefined;
 	/** The project scope the live session was built against, so a mode or folder change rebuilds it. */
 	let sessionScopeKey: string | undefined;
 	/** The profile the live session was built against, so a runtime switch rebuilds it. */
 	let sessionAgentDir: string | undefined;
+	/** The durable bridge the live session was built with, so a folder change rebuilds it. */
+	let sessionBridgePath: string | undefined;
 	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
 	let services: PiServices | undefined;
 	/**
@@ -1069,6 +1215,26 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	let sessionManager: unknown;
 	/** The MCP tool set the running session was built with. */
 	let mcpSignature = '';
+	/** The disabled tools the running session was built with, so a change rebuilds it. */
+	let disabledToolsKey = '';
+
+	/**
+	 * The turns of this window, one at a time, and how many are waiting for their slot.
+	 *
+	 * There is **one** pi session per window (see `session` above): every chat session the owner has
+	 * open drives the same agent. Sending a message in a second one while the first is still
+	 * streaming makes pi refuse the prompt — «Agent is already processing. Specify streamingBehavior
+	 * ('steer' or 'followUp') to queue the message.» — and that is what the owner saw as soon as he
+	 * opened more than one session: the turn never started, and the chat said so.
+	 *
+	 * Queued **here**, not through pi's `streamingBehavior`: `followUp` would hand the second message
+	 * to pi to run after the current turn, and the event that ends a turn (`agent_settled`) would then
+	 * fire for the *first* one while the second request was still waiting for its answer — the second
+	 * tab would stream nothing and end early, which is worse than the error. Waiting one's turn keeps
+	 * the turn and its ending paired, and the second tab's own stream shows its own answer.
+	 */
+	let turnChain: Promise<void> = Promise.resolve();
+	let turnsWaiting = 0;
 
 	/** What the editor's MCP servers offer right now, as a signature to compare. */
 	const currentMcpSignature = () => toolSetSignature(mcpTools(vscode.lm.tools as readonly EditorToolInfo[]));
@@ -1085,14 +1251,23 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 		};
-		const sdk = await loadSdk(deps.distributionRoot, deps.log);
-		if (sdk === undefined) {
+		const loaded = await loadSdk(deps.distributionRoot, deps.log);
+		if (loaded === undefined) {
 			stream.markdown('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.');
 			return {};
 		}
 
 		const scope = resolveProjectScope();
-		const cwd = scope.cwd ?? process.cwd();
+		// The session's directory must exist on disk: pi itself tolerates a missing one, but
+		// everything spawned into it does not, and the workspace can hold a folder that is open
+		// but not there (moved, renamed, deleted — the editor keeps it in `workspaceFolders`).
+		// The first folder that exists is where pi runs; the home directory when none does; and
+		// every folder skipped is logged, so the missing directory is named once, honestly.
+		const picked = resolveSessionCwd(scope.folders, os.homedir());
+		for (const missing of picked.missing) {
+			deps.log(`the workspace folder "${missing}" does not exist on disk — pi runs in "${picked.cwd}" instead`);
+		}
+		const cwd = picked.cwd;
 		const config = vscode.workspace.getConfiguration('picode');
 		const settings = readPiChatSettings(key => config.get(key));
 
@@ -1103,32 +1278,85 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// switched while the window is open, and a session built against the previous
 			// profile would answer from credentials it does not have ("No API key found").
 			const agentDir = chatAgentDir(deps.distributionRoot);
-			// Rebuilt when the project scope changes — the working directory or the project
-			// mode — when the editor's MCP servers do, and when the chosen pi's profile
-			// changes, which is the same conversation pointed at a different pi.
-			const scopeKey = `${scope.mode}\u0000${scope.folders.join('\u0000')}`;
+			// The bridge extension (durable_send/durable_list/durable_read) is loaded from disk
+			// when it sits next to the durable folder (`durable.ts` resolves it from the same
+			// setting). Resolved per request, so a moved durable folder rebuilds the session.
+			const bridgePath = durableBridgeExtensionPath();
+			// Rebuilt when the project scope changes — the working directory, the project
+			// mode, or the area identity the session files under — when the editor's MCP
+			// servers do, when the chosen pi's profile changes, which is the same
+			// conversation pointed at a different pi, and when the durable bridge the
+			// session should load does.
+			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
-			if (session === undefined || scopeChanged || toolsChanged || profileChanged) {
+			const bridgeChanged = sessionBridgePath !== bridgePath;
+			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
+			const disabledChanged = disabledToolsKey !== settings.disabledTools.join('\u0000');
+			disabledToolsKey = settings.disabledTools.join('\u0000');
+			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged || disabledChanged) {
 				session?.dispose();
-				// The profile is pinned in the environment *before* anything pi loads can resolve it, and the
-				// session is given the permission gate as its only inline extension. pi's own MCP is
-				// **deliberately not** loaded beside it: the servers are the editor's — it runs them and asks
-				// before one of their tools is used — and loading pi's copy made every server run twice, with
-				// its tools reachable by two routes. The measurement and the decision are in
-				// `odd/tasks/picode-pi-0992.md`.
+				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
+				// extensions load beside the permission gate, exactly as pi's own CLI builds a session
+				// (`dist/main.js:451`: built-ins first, the caller's after): pi takes its built-in map **from
+				// the factories the caller passes** (`resource-loader.js:246`), so the earlier list of only the
+				// permission gate left the session with no `builtin:mcp`, no `/mcp` command, and no connector for
+				// the profile's MCP servers — the "MCP connector: MISSING" warning came from exactly that. What
+				// is enabled stays pi's own default — every built-in unless the profile's `extensions` setting
+				// excludes it (`package-manager.js:738`) — so the owner's `pi config` choices, including
+				// `-builtin:mcp`, keep deciding, and this editor takes no position that would go stale. This
+				// reverses one half of `odd/tasks/picode-pi-0992.md`: pi's MCP extension is wanted again,
+				// because the profile's servers (the nan provider's) must connect. The editor's own MCP servers
+				// keep flowing as `customTools` below, so the chat's tools are untouched; a server declared both
+				// in the profile and bridged from the editor would run twice — the pre-0992 overlap — and is
+				// the owner's to reconcile in the profile, not something this editor decides.
+				// Before pi loads anything: the profile's declared-but-missing packages are installed here
+				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
+				// never installs one itself — its per-package installs each flashed a console window.
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
-				services = await sdk.createAgentSessionServices({
+				services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
-					resourceLoaderOptions: { extensionFactories: [permissionExtension(deps.log)] },
+					resourceLoaderOptions: {
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log)],
+						...(bridgePath === undefined ? {} : { additionalExtensionPaths: [bridgePath] }),
+					},
 				});
+				// pi collects load problems instead of failing the session; a bridge extension
+				// that could not be loaded is said here, and the turn still runs without it.
+				for (const diagnostic of services.diagnostics ?? []) {
+					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
+						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
+					}
+				}
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
-					sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions'));
+					// pi's own session home: the per-project folder under the profile's `sessions/`,
+					// the same shape `getDefaultSessionDirPath` builds (replicated by `piProjectSlug`,
+					// which the Sessions listing matches against). In workspace mode the session is a
+					// session of the **area**, so it files under the area's own slug instead of the
+					// first folder's: filed under folder A's slug, every area conversation would read
+					// — in the Sessions panel and on disk — as a session of folder A. The area slug
+					// (see `workspace-area.ts`) is an identity no single path encodes, so the listing
+					// can group it on its own. The override used to be the bare `sessions/` folder,
+					// and pi files a custom session directory **directly in it** — no project folder —
+					// so every conversation the chat saved landed where the listing never walks: the
+					// owner's recent sessions were invisible in Sessions, and clicking a saved one
+					// could only ever replay the CLI's older transcripts. Filing under the project
+					// slug puts the chat's sessions where pi's own live, and the listing — and the
+					// click that replays one — sees them.
+					sessionManager = loaded.sdk.SessionManager.create(
+						cwd,
+						agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(cwd)),
+					);
 				}
 				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
-				const created = await sdk.createAgentSessionFromServices({
+				// The tools the owner turned off, read at session build: a change rebuilds the session
+				// with everything else that reshapes it. What pi keeps is a **denial, not a wall** —
+				// its commands still ask before they run.
+				const disabledTools = settings.disabledTools;
+				const created = await loaded.sdk.createAgentSessionFromServices({
 					services,
 					sessionManager,
 					// pi's own default when the chat is on a model that is not ours: better pi's choice
@@ -1138,6 +1366,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
 					// because a server added a minute ago has to be there on the next message.
 					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
+					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
 				});
 				session = created.session;
 				// The session exists and its extensions are loaded; this is what starts them. Called
@@ -1146,6 +1375,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				sessionFolder = cwd;
 				sessionScopeKey = scopeKey;
 				sessionAgentDir = agentDir;
+				sessionBridgePath = bridgePath;
 				mcpSignature = signature;
 				sessionChangedEmitter.fire();
 			} else {
@@ -1163,8 +1393,39 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor(scope) : undefined;
-			await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
+			const context = settings.attachContext ? contextBlockFor(scope, picked) : undefined;
+			// One turn at a time in this window: the next one waits for the turn in flight to end, so
+			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
+			const previousTurn = turnChain;
+			let releaseTurn!: () => void;
+			turnChain = new Promise<void>(resolve => { releaseTurn = resolve; });
+			turnsWaiting++;
+			// The way out while waiting: dropping the request makes it return at once, without
+			// waiting for the running turn to end first — that is what "Cancel queued" means.
+			let dropWaiting!: () => void;
+			const droppedWhileWaiting = new Promise<void>(resolve => { dropWaiting = resolve; });
+			const waitingTurn: WaitingTurn = { drop: dropWaiting };
+			waitingTurns.add(waitingTurn);
+			agentRunning = true;
+			notifyAgentStatus();
+			try {
+				if (turnsWaiting > 1) {
+					stream.progress('PiCode is finishing the turn already running in this window…');
+				}
+				await Promise.race([previousTurn.catch(() => undefined), droppedWhileWaiting]);
+				if (token.isCancellationRequested) {
+					// Cancelled while waiting: the turn this request would have run must not start.
+					return {};
+				}
+				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
+			} finally {
+				waitingTurns.delete(waitingTurn);
+				turnsWaiting--;
+				agentRunning = false;
+				agentActivity = undefined;
+				notifyAgentStatus();
+				releaseTurn();
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);

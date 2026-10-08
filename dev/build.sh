@@ -148,14 +148,18 @@ fi
 # The pack directory, named for the product and for the system being packed. The task that writes it
 # is `vscode-<platform>-<arch>-min-packing`, and the directory name is set in the gulpfiles
 # (PiCode's own change, written into the tree), so the two have to agree: this is the same table.
+#
+# `PICODE_PACK_SUFFIX` is appended by both sides. Empty in every ordinary build; set to something
+# like " - experimental" to pack beside the tree a release was cut from instead of over it, which is
+# what the gulpfiles' `buildPath` and `destinationFolderName` do with the same variable.
 case "${OS_NAME}" in
   windows)
     PACK_PLATFORM="win32"
-    PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}"
+    PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
     ;;
   linux)
     PACK_PLATFORM="linux"
-    PACK_DIR="./PiCode-linux-${VSCODE_ARCH}"
+    PACK_DIR="./PiCode-linux-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
     ;;
   *)
     echo "error: packing for OS_NAME='${OS_NAME}' is not set up yet." >&2
@@ -194,7 +198,15 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
-trap 'printf "%s" "$?" > "${ROOT_DIR}/.scratch/build.status"' EXIT
+trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+
+# The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
+# The functions and their rationale live in dev/data-hold.sh; build.sh calls recover + move-aside
+# around phase 4 and put-back around phase 5. The trap above is the safety net: if the build
+# dies anywhere between the move-aside and the put-back, the profile still goes home.
+source "${ROOT_DIR}/dev/data-hold.sh"
+PICODE_DATA_DIR="$(picode_data_dir "${PACK_DIR}")"
+PICODE_DATA_HOLD_DIR="$(picode_data_hold_dir "${PACK_DIR}")"
 
 # ---------------------------------------------------------------------------
 # Phase 1 - the source
@@ -493,6 +505,95 @@ cd ..
 echo ""
 echo "== phase 4/5 - pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
 
+# The pack task deletes the whole pack folder before writing it (util.rimraf in
+# picode-source/build/gulpfile.vscode.ts), and data/ -- the portable profile -- lives inside it.
+# So the profile is renamed aside first (dev/data-hold.sh): a rename is atomic on the volume and
+# costs nothing, where a copy would duplicate 1+ GB. If the rename is refused -- a running editor
+# holds a log in data/ open, and Windows refuses to rename a directory with an open file inside
+# -- the build stops HERE, with the folder and the profile untouched, instead of failing halfway
+# through a delete that has already eaten PiCode.exe and resources/app.
+# A hold left by an interrupted run is restored before anything else, so a build never packs on
+# top of a profile that is sitting beside the folder.
+#
+# And the question the wrapper asked at the start is asked again here, where it still helps: the
+# compile phases take minutes, and an editor opened during them is exactly how the build of
+# 2026-10-06 00:19 died -- EBUSY inside the pack, with the profile already renamed aside. Answering
+# it here stops the build while nothing has been moved and nothing deleted.
+if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
+  echo "error: PiCode is running, and the pack has to delete $( basename "${PACK_DIR}" )." >&2
+  echo "       It was not running when this build started, so it was opened while the compile" >&2
+  echo "       phases ran. Close it and build again: nothing has been moved or deleted yet." >&2
+  echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
+  exit 4
+fi
+# The profile goes aside **first**, and the order is the whole point of this phase: `data/` lives inside
+# the folder that is about to be deleted, so a build that deletes without moving it aside first deletes
+# the owner's profile with it. On 2026-10-07 that is exactly what happened: an edit to this file dropped
+# these two lines, and the delete below took 56 861 files -- sessions, skills, providers -- with it. No
+# other mechanism could have saved it: the profile is safe only because it is renamed out of reach
+# *before* the delete runs.
+picode_data_hold_recover "${PACK_DIR}" || exit 1
+picode_data_hold_move_aside "${PACK_DIR}" || exit 1
+
+# And the check that would have caught that edit, asked where it still helps: if `data/` is still inside
+# the folder, then nothing was moved aside, and deleting now would take the profile. Refusing costs a
+# build; deleting costs the owner his sessions, his skills and his providers. (The delete below is the
+# only thing that can destroy them, and it is the one place a mistake is unrecoverable.)
+if [[ -e "$( picode_data_dir "${PACK_DIR}" )" ]]; then
+  echo "error: $( picode_data_dir "${PACK_DIR}" ) is still inside the pack folder, so the portable profile was NOT moved aside." >&2
+  echo "       Refusing to delete '${PACK_DIR}': it is the step that would take the profile with it." >&2
+  exit 1
+fi
+
+# The profile is beside the folder from here until the pack and the staging have finished, and it has
+# to come back even when they fail: a build that dies in between used to leave it in the hold, so the
+# next time the editor was opened it found no data at all. That is what happened on 2026-10-07 -- the
+# pack refused with EBUSY (a handle Windows had not let go of), the build stopped, and the profile
+# stayed aside until it was put back by hand. The restore lives in the trap above, which already runs
+# on every exit: it used to skip when a `data/` existed, and a failed pack has usually seeded one, so
+# the one case that needed it most was the one it did nothing for. It now calls
+# `picode_data_hold_put_back`, which drops the seeded data/ and renames the hold back, and it says so
+# on the way out. A second `trap ... EXIT` here would *replace* that one, taking the status file with
+# it -- which is how this comment came to be written.
+
+# The pack task deletes this folder with `util.rimraf` (see the note above), and that delete is the
+# one that fails with EBUSY when anything still holds a file inside: gulp then kills the whole build
+# minutes in, after everything else has been compiled. On 2026-10-07 that was a handle Windows had not
+# released yet even though no editor was running -- the same teardown the profile's own rename waits
+# 80 s for. So the delete is done here, where it can wait and say so, and only build output is at
+# stake: `data/` was moved aside on the line above.
+if [[ -d "${PACK_DIR}" ]]; then
+  for attempt in $(seq 1 30); do
+    rm -rf "${PACK_DIR}" 2>/dev/null && break
+    if [[ "${attempt}" == "1" ]]; then
+      echo "  -- something still holds $( basename "${PACK_DIR}" ) open: waiting up to 60 s for it to let go"
+    fi
+    sleep 2
+  done
+  if [[ -d "${PACK_DIR}" ]]; then
+    echo "error: the pack folder '${PACK_DIR}' could not be deleted after 60 s: something still holds it open." >&2
+    # Named, because "something holds it" is not something a person can act on. Measured on 2026-10-07:
+    # the files that refused to open were inside it, and Windows' own Restart Manager reported **no**
+    # process using the folder at all -- an antivirus or a search indexer holds it from a driver, which
+    # no process list shows. Both answers are worth giving: the files when there are files, and the
+    # scanner guess (with what to do about it) when there are none.
+    locked="$( picode_data_locked_files "${PACK_DIR}" )"
+    if [[ -n "${locked}" ]]; then
+      echo "       These files inside it are held open right now:" >&2
+      while IFS= read -r file; do
+        echo "         ${file}" >&2
+      done <<< "${locked}"
+      echo "       Close whatever is using them (an editor open from this folder, or a tool watching it)." >&2
+    else
+      echo "       No file inside it refuses to open, so the folder itself is held -- a console whose current" >&2
+      echo "       directory is inside it, or a scanner (antivirus, search indexer) holding it from a driver." >&2
+      echo "       A scanner lets go on its own: build again in a few minutes." >&2
+    fi
+    echo "       Nothing but that folder's own build output was at stake, and the portable profile is safe in $( picode_data_hold_dir "${PACK_DIR}" )." >&2
+    exit 1
+  fi
+fi
+
 cd picode-source || { echo "'picode-source' dir not found"; exit 1; }
 
 node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_modules/gulp/bin/gulp.js "vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing"
@@ -509,7 +610,17 @@ echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 # answer "no encuentro el pi de este editor".
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
+# And the durable agent, which is PiCode's own program (experimental/durable): an installed editor
+# has no repository above it to find it in, so a pack that does not carry it can only answer
+# "the durable agent folder was not found" wherever it is installed.
+bash dev/durable-runtime.sh "${PACK_DIR}"
+
 bash dev/stage-distribution.sh "${PACK_DIR}"
+
+# The pack and the staging seeded a fresh data/ inside the folder; the real profile -- held aside
+# since before the pack -- goes back over it now, so everything after this point (the installer
+# included) sees the owner's data, not a seed (dev/data-hold.sh).
+picode_data_hold_put_back "${PACK_DIR}" || exit 1
 
 # ---------------------------------------------------------------------------
 # The Windows installer
@@ -518,9 +629,25 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 # what a person runs and what a release runs - produces every artifact a release has. On anything
 # but Windows the script says so and stops, and the build carries on.
 echo ""
-echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
+if [[ "${PICODE_SKIP_INSTALLER:-no}" == "yes" ]]; then
+  echo "== phase 5/5 - the Windows installer: skipped (PICODE_SKIP_INSTALLER=yes)"
+  echo "   A side-by-side build does not want one: running it would land on top of the PiCode"
+  echo "   already installed, which is the opposite of what building beside it is for."
+else
+  # A build that packs beside the tree installs beside the editor, unless it is told otherwise.
+  # `PICODE_PACK_SUFFIX` already says "do not overwrite the release's folder"; the installer's
+  # AppId is what decides whether it overwrites the release's *install*, so the same value is
+  # taken for `PICODE_INSTALLER_SUFFIX` when nothing set it. Without this, the pack is new and the
+  # installer quietly replaces the PiCode already on the machine. A release build sets neither.
+  if [[ -z "${PICODE_INSTALLER_SUFFIX:-}" && -n "${PICODE_PACK_SUFFIX:-}" ]]; then
+    export PICODE_INSTALLER_SUFFIX="${PICODE_PACK_SUFFIX}"
+    echo "== phase 5/5 - the Windows installer installs beside the editor, as '${PICODE_INSTALLER_SUFFIX}'"
+    echo "   (PICODE_INSTALLER_SUFFIX defaulted from PICODE_PACK_SUFFIX; set it to override)"
+  fi
+  echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
 
-bash dev/build-installer.sh "${PACK_DIR}"
+  bash dev/build-installer.sh "${PACK_DIR}"
+fi
 
 echo ""
 echo "== done"

@@ -927,7 +927,7 @@ export class GettingStartedPage extends EditorPane {
 		// the page carries the setup itself — the same window, no popups — and the way into a folder.
 		const setupContainer = this.setupContainer = $('div.setup-section');
 		const welcomeColumn = $('.categories-column.categories-column-left', {},
-			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, Gentle AI, your providers and your themes are all part of it. Set up once and start working — you can change any of this later.")),
+			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, your providers and your themes are all part of it. Set up once and start working — you can change any of this later.")),
 			setupContainer,
 			$('ul.welcome-actions', {},
 				this.welcomeAction('openFolder', 'folder', localize('welcome.openFolder', "Open Folder"), undefined),

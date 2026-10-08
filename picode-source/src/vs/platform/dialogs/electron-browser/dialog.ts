@@ -13,8 +13,8 @@ import { process } from '../../../base/parts/sandbox/electron-browser/globals.js
 export function createNativeAboutDialogDetails(
 	productService: IProductService,
 	osProps: IOSProperties,
-	/** The pi in force and Gentle AI when installed; absent while the connector is not up. */
-	agents?: { readonly piVersion?: string; readonly gentleVersion?: string },
+	/** The pi in force; absent while the connector is not up. */
+	agents?: { readonly piVersion?: string },
 ): { title: string; details: string; detailsToCopy: string } {
 	let version = productService.version;
 	if (productService.target) {
@@ -25,8 +25,8 @@ export function createNativeAboutDialogDetails(
 
 	const getDetails = (useAgo: boolean): string => {
 		const date = productService.date ? `${productService.date}${useAgo ? ' (' + fromNow(new Date(productService.date), true) + ')' : ''}` : 'Unknown';
-		// One localized line per fact, joined, rather than a single template: the agents are
-		// optional (Gentle AI shows only when it is installed) and a template would need
+		// One localized line per fact, joined, rather than a single template: the agent is
+		// optional (pi shows only when the connector is up) and a template would need
 		// placeholders for lines that are not always there.
 		const lines = [
 			localize('aboutPiCode', "PiCode: {0}", productService.picodeVersion || 'Unknown'),
@@ -40,9 +40,6 @@ export function createNativeAboutDialogDetails(
 			localize('aboutV8', "V8: {0}", process.versions['v8']),
 			localize('aboutPi', "pi: {0}", agents?.piVersion || 'Unknown'),
 		];
-		if (agents?.gentleVersion !== undefined) {
-			lines.push(localize('aboutGentle', "Gentle AI: {0}", agents.gentleVersion));
-		}
 		lines.push(localize('aboutOs', "OS: {0}", `${osProps.type} ${osProps.arch} ${osProps.release}${isLinuxSnap ? ' snap' : ''}`));
 		return lines.join('\n');
 	};

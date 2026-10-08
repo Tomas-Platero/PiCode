@@ -34,21 +34,96 @@ import { pathToFileURL } from 'node:url';
  * different problems with different fixes.
  */
 
-/** What a load produced: the module, or why there is none. */
-export type PiSdkLoad<T> = { readonly sdk: T } | { readonly problem: string };
+/** What a load produced: the module with the entry it was loaded from, or why there is none. */
+export type PiSdkLoad<T> = { readonly sdk: T; readonly entry: string } | { readonly problem: string };
 
 /**
  * The candidate places pi can live, most-PiCode-first. The **internal** pi's candidates;
  * the external one is resolved by `runtime.ts` (and `piLocate.ts`) and passed directly.
  */
 export function sdkCandidates(distributionRoot: string): string[] {
+	return piInstallRoots(distributionRoot).map(root => path.join(root, 'dist', 'index.js'));
+}
+
+/** The package roots `sdkCandidates` looks in, in the same order. */
+function piInstallRoots(distributionRoot: string): string[] {
 	return [
 		// PiCode's own runtime, where it installs its pinned pi.
-		path.join(distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'index.js'),
+		path.join(distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent'),
 		// A pi already present for this machine. Not the product's own profile — only the
 		// code — so nothing of the owner's configuration is read or written from here.
-		path.join(distributionRoot, 'resources', 'app', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'index.js'),
+		path.join(distributionRoot, 'resources', 'app', 'node_modules', '@earendil-works', 'pi-coding-agent'),
 	];
+}
+
+/**
+ * The built-in extensions module that ships beside an SDK entry, in pi's own layout.
+ *
+ * pi's CLI builds every session's factory list from it (`dist/main.js:451`: its built-ins first,
+ * the caller's after). A session built from the SDK entry alone has **no** built-in extension at
+ * all — pi builds its built-in map from the factories the caller passed — so whoever builds a
+ * session the way the CLI does needs this module from the **same** install, which is why it is
+ * derived from the entry that was actually loaded and not searched for afresh.
+ */
+export function builtinsModuleOf(sdkEntry: string): string {
+	return path.join(path.dirname(sdkEntry), 'extensions', 'index.js');
+}
+
+/**
+ * pi's own OAuth discovery module, from the **same** install as the SDK entry.
+ *
+ * pi reads a remote server's authorization-server metadata through `discoverOAuthServerInfo`,
+ * which lives in its sibling package `@earendil-works/pi-mcp` (`dist/oauth/index.js`). Asking the
+ * module pi will itself use is what keeps the answer from drifting: a second implementation of the
+ * well-known URLs would be a second opinion, and the one that counts is pi's. A pi that keeps the
+ * package somewhere else (a layout this function does not expect) simply has no answer, and the
+ * caller treats that as "leave the sign-in alone".
+ */
+export function mcpOauthModuleOf(sdkEntry: string): string | undefined {
+	// `<node_modules>/@earendil-works/pi-coding-agent/dist/index.js` -> `<node_modules>`.
+	const nodeModules = path.resolve(path.dirname(sdkEntry), '..', '..', '..');
+	const candidate = path.join(nodeModules, '@earendil-works', 'pi-mcp', 'dist', 'oauth', 'index.js');
+	return fs.existsSync(candidate) ? candidate : undefined;
+}
+
+/** One built-in extension entry of pi's `builtInExtensions` module (`dist/extensions/index.js`). */
+export interface PiBuiltinExtension {
+	readonly name: string;
+	readonly factory: (pi: unknown) => void | Promise<void>;
+	/** See pi's `InlineExtension`: another extension registering the same name replaces this one. */
+	readonly replaceable?: boolean;
+	/** What makes pi treat the entry as the code of a `builtin:<name>` path (`isBuiltinExtension`). */
+	readonly builtin: true;
+}
+
+/**
+ * The built-in extension entries a loaded pi module ships, read defensively.
+ *
+ * The list comes from pi, so its shape is pi's to change; an entry without the built-in mark is
+ * not a built-in to pi's loader (`resource-loader.js` `isBuiltinExtension`) and would silently do
+ * nothing here either, so it is reported instead of passed on. The module is never assumed — a
+ * pi without the list yields an empty result with the reason said.
+ */
+export function piBuiltinExtensions(module: unknown): { builtins: PiBuiltinExtension[]; skipped: string[] } {
+	const list = (typeof module === 'object' && module !== null && 'builtInExtensions' in module
+		? (module as { builtInExtensions?: unknown }).builtInExtensions
+		: undefined);
+	if (!Array.isArray(list)) {
+		return { builtins: [], skipped: [`pi's built-in extension list is missing or not a list`] };
+	}
+	const builtins: PiBuiltinExtension[] = [];
+	const skipped: string[] = [];
+	for (const entry of list) {
+		const candidate = entry as Partial<PiBuiltinExtension> | null | undefined;
+		if (typeof candidate !== 'object' || candidate === null
+			|| typeof candidate.name !== 'string' || typeof candidate.factory !== 'function'
+			|| candidate.builtin !== true) {
+			skipped.push(`entry without name, factory and the built-in mark: ${JSON.stringify(entry) ?? String(entry)}`);
+			continue;
+		}
+		builtins.push(candidate as PiBuiltinExtension);
+	}
+	return { builtins, skipped };
 }
 
 /** The first candidate that is a file, or `undefined` when none is. */
@@ -70,6 +145,11 @@ export function firstExisting(candidates: readonly string[]): string | undefined
  */
 const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>;
 
+/** Loads a module from an exact path beside pi's entry — the MCP runtime, for instance. */
+export function importPiModule<T>(entry: string): Promise<T> {
+	return dynamicImport(pathToFileURL(entry).href) as Promise<T>;
+}
+
 /** Loads pi's entry, or says why it could not. An empty candidate list is "no pi chosen". */
 export async function loadPiSdk<T>(candidates: readonly string[]): Promise<PiSdkLoad<T>> {
 	const entry = firstExisting(candidates);
@@ -78,7 +158,7 @@ export async function loadPiSdk<T>(candidates: readonly string[]): Promise<PiSdk
 	}
 
 	try {
-		return { sdk: (await dynamicImport(pathToFileURL(entry).href)) as T };
+		return { sdk: (await dynamicImport(pathToFileURL(entry).href)) as T, entry };
 	} catch (error) {
 		return { problem: `pi is installed but could not be loaded: ${error instanceof Error ? error.message : String(error)}` };
 	}
