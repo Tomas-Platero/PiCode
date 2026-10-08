@@ -8,6 +8,7 @@
 
 | Hecho | Cómo se sabe |
 | --- | --- |
+| **El número que leen las extensiones, en 1.141** | Un solo valor, `distribution/product-delta.json`; el build lo escribe en `product.json` y `package.json`. Comprobado: 1.135.7 no cumple `engines.vscode: ^1.141.0` y 1.141.0 sí. **Nuestro código no cambió** — se decidió NO traer el refactor de upstream (ver `odd/tasks/picode-rebase-141.md`) |
 | **Se compila desde la fuente** con parches fijados (12 parches) | Builds completas que terminan en `PiCode.exe` |
 | **Copilot fuera del Chat** | El aviso que bloqueaba el chat desapareció; su causa se encontró en los registros reales, y eran **dos** |
 | **El selector de modelos sin marca de Copilot** | Las cadenas comprobadas a cero en el editor construido |
