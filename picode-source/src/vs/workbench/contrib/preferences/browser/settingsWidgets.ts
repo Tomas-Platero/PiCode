@@ -152,7 +152,8 @@ export interface ISettingListResetEvent<TDataItem extends object> {
 export type SettingListEvent<TDataItem extends object> = ISettingListChangeEvent<TDataItem> | ISettingListAddEvent<TDataItem> | ISettingListMoveEvent<TDataItem> | ISettingListRemoveEvent<TDataItem> | ISettingListResetEvent<TDataItem>;
 
 export abstract class AbstractListSettingWidget<TDataItem extends object> extends Disposable {
-	private listElement: HTMLElement;
+	/** Read by subclasses that append their own rows after the list renders (PiCode's providers). */
+	protected listElement: HTMLElement;
 	private rowElements: HTMLElement[] = [];
 
 	protected readonly _onDidChangeList = this._register(new Emitter<SettingListEvent<TDataItem>>());
@@ -1742,7 +1743,7 @@ export class ProviderListSettingWidget extends AbstractListSettingWidget<IProvid
 		rowElement.setAttribute('aria-label', description);
 	}
 
-	protected renderList(): void {
+	protected override renderList(): void {
 		super.renderList();
 		void this.renderProfileRows();
 	}
