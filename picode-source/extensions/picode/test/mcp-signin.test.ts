@@ -230,7 +230,7 @@ test('the login arguments trim the server name', () => {
 });
 
 test('the login environment points pi\'s profile at PiCode\'s own and leaves the rest alone', () => {
-	const base = { PATH: 'C:/tools', ELECTRON_RUN_AS_NODE: undefined };
+	const base: NodeJS.ProcessEnv = { PATH: 'C:/tools', ELECTRON_RUN_AS_NODE: undefined };
 	const env = mcpLoginEnv('D:/app/data/pi-agent', base);
 
 	assert.strictEqual(env['PI_CODING_AGENT_DIR'], 'D:/app/data/pi-agent');

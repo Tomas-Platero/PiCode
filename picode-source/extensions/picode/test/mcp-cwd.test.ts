@@ -118,7 +118,7 @@ test('when no directory can be resolved at all, the error names the directory an
 test('a file where the directory should be counts as not there', () => {
 	const file = join(session, 'a-file');
 	writeFileSync(file, 'not a directory');
-	const { calls, createDefaultTransport } = recorder();
+	const { createDefaultTransport } = recorder();
 	const lines: string[] = [];
 	const transport = createCwdSafeTransport({ createDefaultTransport, home, log: log(lines) })(
 		{ name: 'aikido', config: { cwd: file } }, session, undefined,

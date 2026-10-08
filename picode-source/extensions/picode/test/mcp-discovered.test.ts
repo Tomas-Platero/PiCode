@@ -44,13 +44,13 @@ test('without a live session there is no discovery and no invented row', () => {
 
 test('merge keeps the first source on a name clash: profile over project over discovered', () => {
 	const merged = mergeMcpServers(
-		[{ name: 'github', on: true, signIn: 'ok', origin: 'profile' }],
+		[{ name: 'github', on: true, origin: 'profile' }],
 		[{ name: 'github', on: false, origin: 'project' }, { name: 'local-tools', on: true, origin: 'project' }],
 		[{ name: 'local-tools', on: true, origin: 'discovered' }, { name: 'storybook', on: true, origin: 'discovered' }],
 	);
 
 	assert.deepStrictEqual(merged, [
-		{ name: 'github', on: true, signIn: 'ok', origin: 'profile' },
+		{ name: 'github', on: true, origin: 'profile' },
 		{ name: 'local-tools', on: true, origin: 'project' },
 		{ name: 'storybook', on: true, origin: 'discovered' },
 	]);

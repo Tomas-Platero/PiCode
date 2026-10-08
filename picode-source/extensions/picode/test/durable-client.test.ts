@@ -15,7 +15,7 @@
 import assert from 'assert';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { DaemonClient, DaemonUnavailableError, daemonEndpoint, LineStream } from '../src/durable-client.ts';
+import { DaemonClient, daemonEndpoint, LineStream } from '../src/durable-client.ts';
 
 /** A socket the client can talk to without a daemon: writes are recorded for the test to read. */
 function fakeSocket(): EventEmitter & { written: string[]; setEncoding(): void; write(chunk: string): boolean; end(): void; destroy(): void } {
