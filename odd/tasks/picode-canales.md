@@ -1,6 +1,23 @@
-# Feature: tres canales de release — RC / Beta / Experimental
+# Feature: tres canales de release — Stable / Beta / Experimental
 
 **Estado:** diseño medido, primeras piedras puestas · **Rama:** `experimental` · **Abierta:** 2026-10-08
+
+## Relación canal ↔ rama (regla del dueño, 2026-10-08)
+
+Una rama por canal, y el canal se llama como su feed:
+
+| Canal | Rama | Calidad (`quality`) | Feed |
+| --- | --- | --- | --- |
+| **Stable** | `master` | `stable` | `updates/stable/…` |
+| **Beta** | `beta` | `beta` | `updates/beta/…` |
+| **Experimental** | `experimental` | `experimental` | `updates/experimental/…` |
+
+**El nombre `rc` no existe** como canal: se retiró el 2026-10-08. El canal estable se llama
+`stable` en todas partes — el generador de feeds (`dev/update-feed.mjs`) y el sellado de la
+build (`dev/build.sh`, `PICODE_CHANNEL=stable|beta|experimental`) ya no aceptan `rc`.
+
+> Las frases del dueño que citan «RC» se conservan tal cual, sin reescribir: son la intención
+> original. Donde el papel explica el diseño, el canal se llama **Stable**.
 
 ## Intención del dueño
 
@@ -42,9 +59,9 @@ de un `PICODE_CHANNEL` (o del delta por canal). De ahí salen las dos cosas que 
 
 | Canal | Calidad | Versión PiCode | Feed | Publicación |
 | --- | --- | --- | --- | --- |
-| **RC** (el "Chrome estable") | `stable` (sin renombrar — es la ruta que ya funciona) | `x.0.0` sin sufijo (`1.0.0`) | `updates/stable/…` (hoy) | `release.yml`, etiquetas `v*` — ya existe |
-| **Beta** | `beta` | `x.y.z-beta` | `updates/beta/…` | etiquetas `v*-beta` → pipeline propio (o manual como las experimentales hasta que exista) |
-| **Experimental** | `experimental` | `x.y.z-experimental` | `updates/experimental/…` | a mano, el mismo script de hoy con `--channel` |
+| **Stable** — rama `master` (antes «RC») | `stable` (sin renombrar — es la ruta que ya funciona) | `x.0.0` sin sufijo (`1.0.0`) | `updates/stable/…` (hoy) | `release.yml`, etiquetas `v*` — ya existe |
+| **Beta** — rama `beta` | `beta` | `x.y.z-beta` | `updates/beta/…` | etiquetas `v*-beta` → pipeline propio (o manual como las experimentales hasta que exista) |
+| **Experimental** — rama `experimental` | `experimental` | `x.y.z-experimental` | `updates/experimental/…` | a mano, el mismo script de hoy con `--channel` |
 
 ### «Un Beta no puede actualizarse por el canal de experimental, ni rc por beta»
 
@@ -73,7 +90,7 @@ correspondiente. Así un mismo commit puede acabar en beta y, corregido, en rc.
 La maquinaria side-by-side ya distingue dos instalaciones; se extiende a tres identidades
 fijas (una por canal), no por sufijo libre:
 
-| | RC (estable) | Beta | Experimental |
+| | Stable (rama `master`) | Beta (rama `beta`) | Experimental (rama `experimental`) |
 | --- | --- | --- | --- |
 | Carpeta | `PiCode` | `PiCode Beta` | `PiCode Experimental` |
 | Menú inicio / Apps | PiCode | PiCode Beta | PiCode Experimental |

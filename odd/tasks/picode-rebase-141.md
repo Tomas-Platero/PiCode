@@ -120,7 +120,7 @@ commit normal. Pasos, con su estado:
 
 ## Relación con los canales
 
-El rebaso va **antes** de congelar los canales: RC/Beta/Experimental se cortan todos de la
+El rebaso va **antes** de congelar los canales: Stable/Beta/Experimental se cortan todos de la
 base nueva, y el número que casan las extensiones (`1.141.x`) viaja a los tres con el diseño
 de `picode-canales.md`. La trampa del sufijo por calidad (C2, ya resuelta) se comprueba de
 nuevo tras el merge, porque el fichero que la llevaba es de upstream y viene cambiado.

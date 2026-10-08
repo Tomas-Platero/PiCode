@@ -36,7 +36,11 @@ import * as path from "node:path";
 // `odd/tasks/picode-canales.md`): a build ships with its channel in product.json's
 // `quality`, and reads its own feed — one channel is never offered another's build.
 // `insider` stays accepted because upstream tooling may still name it.
-const QUALITIES = new Set(["stable", "insider", "beta", "experimental", "rc"]);
+// One channel per branch — the relation is the owner's, 2026-10-08:
+//   stable <-> master    beta <-> beta    experimental <-> experimental
+// `insider` is not one of ours: it is upstream's own quality, kept here because a
+// feed can be cut for it and because the version-suffix rule keys off it.
+const QUALITIES = new Set(["stable", "insider", "beta", "experimental"]);
 const PLATFORMS = new Set([
   "aix",
   "android",

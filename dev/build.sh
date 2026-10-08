@@ -319,18 +319,22 @@ if [[ "${DELTA_EXIT}" -ne 0 ]]; then
   exit "${DELTA_EXIT}"
 fi
 
-# The channel (RC / Beta / Experimental) is sealed into the build here, as product.json's
-# `quality`: it is what the updater uses to build its feed URL, so a beta build asks
-# updates/beta/… and can never be offered another channel's release. It is NOT a user
-# setting and NOT the editor's version — the version the extensions match is untouched
-# (see build/gulpfile.vscode.ts, where the upstream version-suffix by quality is scoped
-# back to upstream's own 'insider'). RC keeps the stable feed the product has always had.
+# The channel is sealed into the build here, as product.json's `quality`: it is what the
+# updater uses to build its feed URL, so a beta build asks updates/beta/… and can never be
+# offered another channel's release. One channel per branch, which is the owner's rule
+# (2026-10-08) and the reason the four names below are the four that exist:
+#
+#   stable <-> master        beta <-> beta        experimental <-> experimental
+#
+# The channel is NOT a user setting and NOT the editor's version — the version the extensions
+# match is untouched (see build/gulpfile.vscode.ts, where the upstream version-suffix by
+# quality is scoped back to upstream's own 'insider', which is not a channel of ours).
 if [[ -n "${PICODE_CHANNEL:-}" ]]; then
   case "${PICODE_CHANNEL}" in
-    rc)           QUALITY_VALUE="stable" ;;
+    stable)       QUALITY_VALUE="stable" ;;
     beta)         QUALITY_VALUE="beta" ;;
     experimental) QUALITY_VALUE="experimental" ;;
-    *) echo "error: PICODE_CHANNEL must be one of rc, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
+    *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
   PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" node <<'NODE'
 const fs = require('fs');
