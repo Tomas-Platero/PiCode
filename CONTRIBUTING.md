@@ -1,7 +1,7 @@
 # Contributing to PiCode
 
 PiCode is a VSCodium distribution built from source, with the [Pi](https://pi.dev) coding
-agent and [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) integrated into the
+agent integrated into the
 editor core — not as side extensions.
 
 Three things to read before anything else:
