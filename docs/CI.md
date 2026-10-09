@@ -16,7 +16,8 @@ Hay dos workflows:
   **Release**: se dispara con un tag `v*` o a mano (`workflow_dispatch`).
   Construye, crea la release de GitHub con el zip y su SHA-256, genera el feed
   de actualizaciones y lo aterriza en la rama del canal **abriendo y
-  fusionando un pull request** (las ramas ya no aceptan push directo), y
+  fusionando un pull request** (las ramas no aceptan push directo salvo
+  para el rol Admin), y
   verifica el feed en vivo.
 
 ## Por qué es rápido
@@ -70,7 +71,8 @@ descargar la release.
 1. Bump de versión en `distribution/product-delta.json`: `set.picodeVersion`
    (el nombre de la release, `0.1.1-beta`) y `set.version` (el número del
    editor, estrictamente mayor que el del feed anterior).
-2. Commit, **pull request y merge** (las ramas no aceptan push directo),
+2. Commit, **pull request y merge** (las ramas no aceptan push directo
+   salvo para el rol Admin),
    y después el tag: `git tag v<picodeVersion> && git push origin
    v<picodeVersion>`. El workflow hace el resto: release + zip + SHA-256 +
    feed en la rama del canal.
