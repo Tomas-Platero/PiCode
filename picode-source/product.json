@@ -741,6 +741,6 @@
       "default": false
     }
   },
-  "version": "1.141.1",
-  "picodeVersion": "0.2.1-experimental"
+  "version": "1.141.2",
+  "picodeVersion": "0.2.2-experimental"
 }
