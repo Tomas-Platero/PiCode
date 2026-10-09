@@ -348,6 +348,15 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
     experimental) QUALITY_VALUE="experimental"; FEED_BRANCH="experimental" ;;
     *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
+  # A seal a hard-killed build left behind (the trap cannot run on a taskkill) is undone
+  # first, so the source enters this build as the delta wrote it — a sealed tree fails the
+  # identity check above, and this is the only recovery that cannot mistake the backup THIS
+  # build is about to make for a leftover: it runs before that save exists.
+  if [[ -f .scratch/product.json.pre-seal ]]; then
+    cp .scratch/product.json.pre-seal picode-source/product.json
+    rm -f .scratch/product.json.pre-seal
+    echo "  -- the last build died between the seal and the restore: the source product.json is the delta's again"
+  fi
   # The seal rewrites the SOURCE product.json, and the identity check above reads it back
   # against the delta — a tree left sealed fails its own next build. So the source copy is
   # saved before the seal and put back when the pack is done (the trap restores it on any
@@ -640,14 +649,6 @@ if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
   echo "       phases ran. Close it and build again: nothing has been moved or deleted yet." >&2
   echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
   exit 4
-fi
-# A product.json a hard-killed build left sealed (the trap cannot run on a taskkill) is put
-# back before anything reads it, exactly like the interrupted hold above: the source always
-# enters a build as the delta wrote it.
-if [[ -f .scratch/product.json.pre-seal ]]; then
-  cp .scratch/product.json.pre-seal picode-source/product.json
-  rm -f .scratch/product.json.pre-seal
-  echo "  -- the last build was killed between the seal and the restore: the source product.json is the delta's again"
 fi
 # The profile goes aside **first**, and the order is the whole point of this phase: `data/` lives inside
 # the folder that is about to be deleted, so a build that deletes without moving it aside first deletes
