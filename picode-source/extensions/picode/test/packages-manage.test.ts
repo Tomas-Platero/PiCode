@@ -47,6 +47,7 @@ const {
 	packagesArrayWith,
 	packagesArrayWithout,
 	profileSettingsFile,
+	removePackage,
 	workspaceSettingsFile,
 } = await import('../src/packages-manage.ts');
 
@@ -321,3 +322,62 @@ function packageAt(dir: string, name: string, version?: string): {
 } {
 	return version === undefined ? { id: name, name, path: dir } : { id: name, name, path: dir, version };
 }
+
+/* ------------------------------------------------------------------ *
+ * The removal run, and the removal that already happened
+ * ------------------------------------------------------------------ */
+
+/** A spawn that answers as pi's CLI does when the settings no longer declare the source. */
+function spawnSayingNoMatch(): { calls: number; spawn: (file: string, args: readonly string[], options: unknown) => Promise<{ ok: boolean; stderr: string }> } {
+	const state = { calls: 0 };
+	const spawn = (_file: string, _args: readonly string[], _options: unknown) => {
+		state.calls += 1;
+		return Promise.resolve({ ok: false, stderr: 'No matching package found for npm:gone-pkg' });
+	};
+	return { ...state, spawn };
+}
+
+/** The profile settings a caller hands the flow, as text under its own path. */
+function settingsReader(text: string | undefined): (file: string) => Promise<string | undefined> {
+	return file => file.endsWith('settings.json') ? Promise.resolve(text) : Promise.resolve(undefined);
+}
+
+test('a removal pi refuses because the package is already gone reads as done, not as a failure', async () => {
+	// The ghost row: the page has not refreshed since the removal succeeded, the owner clicks
+	// again, and pi answers "No matching package found". The settings confirm the declaration
+	// is gone — the truth is "already removed".
+	const { spawn } = spawnSayingNoMatch();
+	const result = await removePackage('npm:gone-pkg', {
+		cliEntry: '/cli.js',
+		profileDir: '/profile',
+		spawn: spawn as never,
+		readSettingsFile: settingsReader('{ "packages": ["npm:other-pkg"] }'),
+	});
+	assert.deepStrictEqual(result, { ok: true, message: 'Package npm:gone-pkg was already removed.' });
+});
+
+test('a missing profile settings file reads the same way: already removed', async () => {
+	const { spawn } = spawnSayingNoMatch();
+	const result = await removePackage('npm:gone-pkg', {
+		cliEntry: '/cli.js',
+		profileDir: '/profile',
+		spawn: spawn as never,
+		readSettingsFile: settingsReader(undefined),
+	});
+	assert.deepStrictEqual(result, { ok: true, message: 'Package npm:gone-pkg was already removed.' });
+});
+
+test('a removal pi refuses while the settings still declare the package stays a failure', async () => {
+	// The declaration is present, so pi's refusal is a real one — say what pi said.
+	const { spawn } = spawnSayingNoMatch();
+	const result = await removePackage('npm:gone-pkg', {
+		cliEntry: '/cli.js',
+		profileDir: '/profile',
+		spawn: spawn as never,
+		readSettingsFile: settingsReader('{ "packages": ["npm:gone-pkg"] }'),
+	});
+	assert.deepStrictEqual(result, {
+		ok: false,
+		message: 'Package npm:gone-pkg could not be removed: No matching package found for npm:gone-pkg',
+	});
+});

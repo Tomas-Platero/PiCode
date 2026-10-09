@@ -9,6 +9,7 @@ import { readPiChatSettings } from './piConfig';
 import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
 import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
@@ -26,6 +27,17 @@ import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolProgress } from './progress';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
+import {
+	beforeUriPathOf,
+	clearTurnEdits,
+	isFileMutationTool,
+	mutatedPathOf,
+	PICODE_BEFORE_SCHEME,
+	recordAfter,
+	snapshotBefore,
+	turnFileEdits,
+	whenEditsSettled,
+} from './chat-edits';
 import {
 	BACKGROUND_TOOL,
 	backgroundCallOf,
@@ -425,6 +437,104 @@ function pushBackgroundCompletionCard(
 }
 
 /* ------------------------------------------------------------------ *
+ * The turn's changed files, as the chat can see them
+ * ------------------------------------------------------------------ */
+
+/**
+ * Reads a file as the ledger asks: text, or nothing when it is not there.
+ *
+ * The `catch` lives in the ledger's own reads; this one only normalizes encoding errors
+ * into the same "no file" answer, because a file that cannot be decoded was never a
+ * change the chat can show.
+ */
+async function readLedgerFile(absolutePath: string): Promise<string | undefined> {
+	try {
+		return await fs.promises.readFile(absolutePath, 'utf8');
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The workspace path pi reported, made absolute against the turn's working directory —
+ * the same resolution pi's own tools apply (`resolveToCwd`), so the ledger's snapshot and
+ * its re-read hit the same file, and the diff opens the file the tool actually wrote.
+ *
+ * The session's directory is the caller's knowledge (`registerPiAgent` builds the session
+ * against it), so it travels here as a parameter rather than being read from shared state.
+ */
+function toLedgerPath(reported: string, sessionCwd: string): string {
+	return path.isAbsolute(reported) ? reported : path.join(sessionCwd, reported);
+}
+
+/**
+ * Snapshots the file a mutating tool is about to write. Called from `tool_execution_start`,
+ * where the "before" still exists on disk — by the time the result arrives, it does not.
+ */
+function snapshotToolTarget(toolName: string, args: unknown, sessionCwd: string): void {
+	if (!isFileMutationTool(toolName)) {
+		return;
+	}
+	const reported = mutatedPathOf(args);
+	if (reported !== undefined) {
+		snapshotBefore(toLedgerPath(reported, sessionCwd), readLedgerFile);
+	}
+}
+
+/**
+ * Records the file a mutating tool has written, when the tool succeeded — a failed tool
+ * did not change the file, and the card never says it did.
+ */
+function recordToolResult(toolName: string, args: unknown, isError: boolean | undefined, sessionCwd: string): void {
+	if (!isFileMutationTool(toolName) || isError === true) {
+		return;
+	}
+	const reported = mutatedPathOf(args);
+	if (reported !== undefined) {
+		recordAfter(toLedgerPath(reported, sessionCwd), readLedgerFile);
+	}
+}
+
+/** The title the multi-diff editor opens with; the card's own header is the renderer's. */
+const TURN_EDITS_TITLE = 'Changed files';
+
+/**
+ * Pushes the turn's change card — "Changed N files", one row per file with its +N/−M, and
+ * the button that opens every diff at once. One card per turn, at its very end: the row
+ * counts need the file's re-read, and a card that appears before the turn ends would have
+ * to be updated in place, which this part does not do.
+ *
+ * The renderer API is proposed-API surface (`chatParticipantAdditions`); if it ever moves,
+ * the turn must not die with it — the card is a window onto the work, and losing the
+ * window is reported, not fatal (the same posture as the other cards).
+ */
+async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: string) => void): Promise<void> {
+	try {
+		await whenEditsSettled();
+		const edits = turnFileEdits();
+		if (edits.length === 0 || typeof vscode.ChatResponseMultiDiffPart !== 'function') {
+			return;
+		}
+		const entries = edits.map((edit): vscode.ChatResponseDiffEntry => {
+			const file = vscode.Uri.file(edit.path);
+			return {
+				// The original side is the snapshot this turn took, served by the content
+				// provider on the before-scheme; a file the tool created has no before, and
+				// its row shows the whole file as added.
+				...(edit.isNew ? {} : { originalUri: vscode.Uri.from({ scheme: PICODE_BEFORE_SCHEME, path: beforeUriPathOf(edit.path) }) }),
+				modifiedUri: file,
+				goToFileUri: file,
+				added: edit.added,
+				removed: edit.removed,
+			};
+		});
+		stream.push(new vscode.ChatResponseMultiDiffPart(entries, TURN_EDITS_TITLE));
+	} catch (error) {
+		log(`turn edits card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * The turn, as the editor's chat wants it
  * ------------------------------------------------------------------ */
 
@@ -434,7 +544,10 @@ function pushBackgroundCompletionCard(
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
-async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void): Promise<void> {
+async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<void> {
+	// One ledger per turn: the card says what THIS answer changed, and the queue above
+	// (`turnChain`) guarantees two turns never overlap.
+	clearTurnEdits();
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		let thinking = false;
@@ -490,6 +603,9 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
 					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
 				}
+				// A file this tool is about to write is snapshotted now — this is where the "before"
+				// still exists on disk; by the tool's end it does not.
+				snapshotToolTarget(event.toolName, event.args, sessionCwd);
 				return;
 			}
 			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
@@ -499,6 +615,9 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				if (card !== undefined) {
 					pushDurableCard(stream, event.toolCallId, card, log);
 				}
+				// A file this tool has written lands in the ledger — when the tool succeeded;
+				// a failed tool did not change the file, and the card never says it did.
+				recordToolResult(event.toolName, event.args, event.isError, sessionCwd);
 				// A background job's call ends at once, when the job **starts**: its result is what names
 				// the job, so the same card is updated with it rather than a second one being pushed.
 				if (isBackgroundTool(event.toolName)) {
@@ -557,7 +676,10 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 				notifyAgentStatus();
 				// What `subscribe` returns is the unsubscribe function itself, not a disposable.
 				subscription();
-				resolve();
+				// The change card comes last, once the ledger's reads have settled: the turn ends
+				// with it, so "what changed" is the last thing the transcript says — never a card
+				// missing the file whose read was still in flight.
+				void pushTurnEditsCard(stream, log).then(resolve, () => resolve());
 			}
 		});
 
@@ -1417,7 +1539,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
-				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log);
+				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log, cwd);
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;
