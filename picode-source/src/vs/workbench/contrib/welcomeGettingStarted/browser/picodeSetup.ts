@@ -400,7 +400,7 @@ export class PiCodeSetup extends Disposable {
 		* The way forward from each step. The provider step persists the picked default
 		* model (pi's own setting) before moving on; skipping it moves on without saving.
 		*/
-	private async advanceFrom(state: SetupState, skipping = false): Promise<void> {
+	private async advanceFrom(_state: SetupState, skipping = false): Promise<void> {
 		if (this.step === 0) {
 			this.goTo(1);
 			return;
@@ -497,8 +497,8 @@ export class PiCodeSetup extends Disposable {
 	 * Step 1, the PiCode Account sign-in: the status as the authentication service sees
 	 * it, the provider's own one-time-code flow behind one button, and the pricing line
 	 * for the Pro plan the sync needs. Signing in is offered, never forced — the Next
-	 * stays enabled for the owner who would rather set the editor up first (a Free
-	 * account cannot sign in here at all).
+	 * stays enabled for the owner who would rather set the editor up first. Every
+	 * account can sign in; only a Pro one can turn sync on.
 	 */
 	private renderLoginStep(): HTMLElement {
 		const status = $('.picode-login-status');
@@ -508,7 +508,7 @@ export class PiCodeSetup extends Disposable {
 				$('span.picode-hint', {}, localize('picodeSetup.login.hint', "PiCode Account")),
 			),
 			$('p.picode-row-description', {}, localize('picodeSetup.login.detail',
-				"Sync your settings, extensions and your pi profile across devices with a PiCode Account.")),
+				"Sync your settings, extensions and your pi profile across devices with PiCode Pro.")),
 			status,
 			$('.picode-login-pricing', {},
 				localize('picodeSetup.login.pricing', "PiCode Sync requires a Pro account. Plans at "),
@@ -543,13 +543,15 @@ export class PiCodeSetup extends Disposable {
 				...(status.avatar !== undefined ? [$('img.picode-login-avatar', { 'src': status.avatar, 'alt': '' })] : []),
 				$('span.picode-login-state', {}, localize('picodeSetup.login.signedInAs', "Signed in as {0}", status.label ?? '')),
 			));
-			// The sync status, live from the sync service — the step says what the cloud is doing.
-			const syncLine = $('.picode-sync-status', {},
-				localize('picodeSetup.login.syncing', "Syncing your settings…"));
+			// What this service alone can prove: while it is syncing, say so. Whether sync is even
+			// ON is not knowable from here — and a Free account never turns it on — so the card makes
+			// no "everything is in sync" claim: the pricing line below is what tells a Free owner
+			// where sync lives.
+			const syncLine = $('.picode-sync-status', {}, '');
 			const paintSync = (): void => {
 				syncLine.textContent = this.services.userDataSyncService.status === SyncStatus.Syncing
 					? localize('picodeSetup.login.syncing', "Syncing your settings…")
-					: localize('picodeSetup.login.synced', "Everything is in sync");
+					: '';
 			};
 			paintSync();
 			this.disposables.add(this.services.userDataSyncService.onDidChangeStatus(paintSync));
@@ -564,7 +566,7 @@ export class PiCodeSetup extends Disposable {
 	/**
 	 * "Sign in / Create account": the account provider's own browser flow, then the
 	 * status repaints from the session it minted. Every failure — a cancelled sign-in,
-	 * a Free account, an unreachable service — is one honest line in the card's note.
+	 * an unreachable service — is one honest line in the card's note.
 	 */
 	private async signIn(): Promise<void> {
 		this.setNote(localize('picodeSetup.login.opening', "Opening your browser to sign in…"), false);
@@ -1852,8 +1854,8 @@ function registerAccountCommands(): void {
 	CommandsRegistry.registerCommand(PICODE_SIGN_IN_COMMAND, async (accessor: ServicesAccessor): Promise<AccountStatus> => {
 		const authenticationService = accessor.get(IAuthenticationService);
 		// The provider's own flow: the browser opens, the web app sends back a one-time
-		// code, and the session is minted here. Cancellations, timeouts and a Free plan
-		// reject — the page reports what came of it in one line.
+		// code, and the session is minted here. Cancellations and timeouts — the page
+		// reports what came of it in one line.
 		const session = await authenticationService.createSession(PICODE_AUTH_PROVIDER_ID, PICODE_AUTH_SCOPES);
 		return { signedIn: true, label: session.account.label, avatar: session.account.icon?.toString(true) };
 	});

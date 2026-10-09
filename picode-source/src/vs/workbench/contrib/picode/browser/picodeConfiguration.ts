@@ -193,8 +193,8 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			markdownDescription: localize('picode.context.attach', "Send the folder, the file you have open and what is selected in it with every message, so \"fix this\" needs no explaining. The selection is capped: pi can read the rest of the file itself when it needs it."),
 		},
 
-		// The experimental durable agent lives in the repository's `experimental/durable` folder
-		// (the folder setting below says where), and the editor can now run it: the status panel's
+		// The durable agent lives in the repository's `picode-source/durable` folder
+		// (the folder setting below says where), and the editor runs it: the status panel's
 		// Durable section and the "PiCode: Durable" commands start and stop its daemon, list its
 		// conversations and send prompts through it. These settings are that agent's own options,
 		// kept here (and not only as CLI flags) because this is where options belong; the agent
@@ -202,7 +202,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		// setting actually does to that agent, and no more.
 		[PICODE_DURABLE_FOLDER_SETTING]: {
 			type: 'string',
-			default: 'experimental/durable',
+			default: 'picode-source/durable',
 			scope: ConfigurationScope.APPLICATION,
 			markdownDescription: localize('picode.durable.folder', "Where the durable agent lives: the folder that holds its cli.js. A relative path is resolved against your open workspace folders, and then beside the application itself — which is what finds the agent of a build packed inside the PiCode repository while you work in another project. The status panel's Durable section and the PiCode: Durable commands use it to find the agent."),
 		},

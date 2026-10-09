@@ -134,7 +134,14 @@ export class UserDataSyncStoreManagementService extends AbstractUserDataSyncStor
 
 		const previousConfigurationSyncStore = this.storageService.get(SYNC_PREVIOUS_STORE, StorageScope.APPLICATION);
 		if (previousConfigurationSyncStore) {
-			this.previousConfigurationSyncStore = JSON.parse(previousConfigurationSyncStore);
+			try {
+				this.previousConfigurationSyncStore = JSON.parse(previousConfigurationSyncStore);
+			} catch {
+				// The editor wrote this value itself, so unreadable means corrupted — and a corrupted
+				// value cannot be trusted. Drop it (as if there were no previous store) instead of
+				// throwing while the sync service is being constructed, which would take down every
+				// sync path rather than one stale entry.
+			}
 		}
 
 		const syncStore = this.productService[CONFIGURATION_SYNC_STORE_KEY];
@@ -188,7 +195,7 @@ export class UserDataSyncStoreClient extends Disposable {
 		super();
 		this.updateUserDataSyncStoreUrl(userDataSyncStoreUrl);
 		this.commonHeadersPromise = getServiceMachineId(environmentService, fileService, storageService)
-			.then(uuid => {
+			.then(() => {
 				const headers: IHeaders = {
 					'X-Client-Name': `${productService.applicationName}${isWeb ? '-web' : ''}`,
 					'X-Client-Version': productService.version,
@@ -238,7 +245,7 @@ export class UserDataSyncStoreClient extends Disposable {
 			if (this._donotMakeRequestsUntil) {
 				this.storageService.store(DONOT_MAKE_REQUESTS_UNTIL_KEY, this._donotMakeRequestsUntil.getTime(), StorageScope.APPLICATION, StorageTarget.MACHINE);
 				this.resetDonotMakeRequestsUntilPromise = createCancelablePromise(token => timeout(this._donotMakeRequestsUntil!.getTime() - Date.now(), token).then(() => this.setDonotMakeRequestsUntil(undefined)));
-				this.resetDonotMakeRequestsUntilPromise.then(null, e => null /* ignore error */);
+				this.resetDonotMakeRequestsUntilPromise.then(null, () => null /* ignore error */);
 			} else {
 				this.storageService.remove(DONOT_MAKE_REQUESTS_UNTIL_KEY, StorageScope.APPLICATION);
 			}
@@ -436,7 +443,13 @@ export class UserDataSyncStoreClient extends Disposable {
 			}
 
 			if (content) {
-				manifest = { ...JSON.parse(content), ref };
+				try {
+					manifest = { ...JSON.parse(content), ref };
+				} catch (error) {
+					// A manifest the client cannot parse is not recoverable here: fail with a message that
+					// names the cause instead of a raw SyntaxError from inside the store client.
+					throw new Error(`Server returned a manifest that could not be parsed (${url.toString()}).`, { cause: error });
+				}
 			}
 		}
 
@@ -638,6 +651,14 @@ export class UserDataSyncStoreClient extends Disposable {
 		}
 
 		this._onTokenSucceed.fire();
+
+		if (context.res.statusCode === 402) {
+			// The sync service (PiCode's own store) answers 402 when the signed-in account's plan
+			// does not include sync. It is not an authentication failure: the session is valid and
+			// the account stays linked, so nothing is cleared here — the caller decides how to say
+			// "this needs a Pro plan".
+			throw new UserDataSyncStoreError(`${options.type} request '${url}' failed because the account's plan does not include sync (402).`, url, UserDataSyncErrorCode.PaymentRequired, context.res.statusCode, operationId);
+		}
 
 		if (context.res.statusCode === 404) {
 			throw new UserDataSyncStoreError(`${options.type} request '${url}' failed because the requested resource is not found (404).`, url, UserDataSyncErrorCode.NotFound, context.res.statusCode, operationId);
