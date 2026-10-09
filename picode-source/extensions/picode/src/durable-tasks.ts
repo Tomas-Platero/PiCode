@@ -8,7 +8,7 @@
  * The daemon's `sessions` method answers one row per conversation: its id, entry count,
  * newest entry, and a `note` that says what the conversation **is** — `subagent (task …)`
  * when a background anchor task owns it, `fork of …` when it is a fork, empty when it is
- * ownerless. The note is durable's own wording (`experimental/durable/lib/common.js`
+ * ownerless. The note is durable's own wording (`picode-source/durable/lib/common.js`
  * `listConversations`), parsed here as the tolerant reader every other daemon shape gets.
  *
  * The protocol carries no task-level state — not a phase, not an outcome. What it does
