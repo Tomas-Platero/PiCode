@@ -117,6 +117,65 @@ public sealed class Pipeline
 
 	public static string RepoRoot => LazyRoot.Value;
 
+	/// <summary>
+	/// The branch the repository is on, as git answers it. The channel the build seals comes from
+	/// this: one channel per branch is the owner's rule (2026-10-08), so building from `beta` has
+	/// to produce the beta product and building from `experimental` the experimental one — the
+	/// same relation the release workflow reads from the tag.
+	/// </summary>
+	public static string? CurrentBranch
+	{
+		get
+		{
+			if (!Found)
+			{
+				return null;
+			}
+			var result = Run("git", "rev-parse --abbrev-ref HEAD", RepoRoot, 15000);
+			var branch = result.Ok ? result.Output.Trim() : "";
+			return branch.Length > 0 && branch != "HEAD" ? branch : null;
+		}
+	}
+
+	/// <summary>
+	/// The channel the build will seal, derived from the branch. `master` builds stable, `beta`
+	/// builds beta and `experimental` builds experimental; any other branch (a feature one, for
+	/// example) seals nothing, and the pipeline keeps its own plain behaviour — which installs
+	/// as the stable product without asking a channel feed. Returning the name rather than a
+	/// value keeps the one mapping the release workflow also carries, and an unknown branch is
+	/// a fact to show, not an error to stop on.
+	/// </summary>
+	public static (string? Channel, string Branch) ChannelForBranch()
+	{
+		var branch = CurrentBranch;
+		var channel = branch switch
+		{
+			"master" => "stable",
+			"beta" => "beta",
+			"experimental" => "experimental",
+			_ => (string?)null,
+		};
+		return (channel, branch ?? "");
+	}
+
+	/// <summary>The product version the delta carries, as `dev/build.sh` reads it. Shown, not decided.</summary>
+	public static string ProductVersion
+	{
+		get
+		{
+			try
+			{
+				using var document = System.Text.Json.JsonDocument.Parse(
+					File.ReadAllText(Path.Combine(RepoRoot, "distribution", "product-delta.json")));
+				return document.RootElement.GetProperty("set").GetProperty("picodeVersion").GetString() ?? "";
+			}
+			catch
+			{
+				return "";
+			}
+		}
+	}
+
 	public static string PackDirectory => Path.Combine(RepoRoot, "PiCode-Win32-x64");
 
 	public static string EditorExecutable => Path.Combine(PackDirectory, "PiCode.exe");
@@ -384,6 +443,15 @@ public sealed class Pipeline
 					CreateNoWindow = true,
 				},
 			};
+			// The channel is not a flag of the scripts: it arrives as an environment variable,
+			// the same door the release workflow uses. Building from `beta` must seal the beta
+			// product, so the window asks the branch once and passes the answer through. An
+			// unmapped branch passes nothing, and the build keeps its own plain behaviour.
+			var (channel, _) = ChannelForBranch();
+			if (channel is not null)
+			{
+				process.StartInfo.EnvironmentVariables["PICODE_CHANNEL"] = channel;
+			}
 			process.Start();
 			return true;
 		}
