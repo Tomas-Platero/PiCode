@@ -16,7 +16,7 @@
 //
 // A running daemon is required (the ACP endpoint is a daemon client, never a
 // second owner of sessions.sqlite):
-//   cd experimental/durable && node cli.js serve
+//   cd picode-source/durable && node cli.js serve
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -272,7 +272,7 @@ async function proofPermission() {
 const proof = process.argv[2];
 const proofs = { flow: proofFlow, cancel: proofCancel, permission: proofPermission };
 if (!proofs[proof]) {
-	console.error("Usage: node client.js flow|cancel|permission [\"<prompt>\"]\nStart the daemon first: cd experimental/durable && node cli.js serve");
+	console.error("Usage: node client.js flow|cancel|permission [\"<prompt>\"]\nStart the daemon first: cd picode-source/durable && node cli.js serve");
 	process.exit(1);
 }
 await proofs[proof]();

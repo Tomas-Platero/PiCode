@@ -75,7 +75,7 @@ export function mcpToolName(server, tool) {
  * `${VAR}` from the environment, which is what pi's own config expands. An unset variable
  * becomes the empty string, as it does there. A leading `!command` value — the other thing
  * pi expands — is deliberately left alone: running a shell command to build a credential is
- * not something this experiment should do behind the owner's back.
+ * not something the agent should do behind the owner's back.
  */
 export function expand(value) {
 	if (typeof value !== "string") {
@@ -224,7 +224,7 @@ export function storedMcpAuth(name, serverUrl, { authFile, now = Date.now() } = 
 		serverUrl,
 		// pi's own fallback redirect URL. Never used: no flow is ever started below.
 		redirectUrl: "http://127.0.0.1/callback",
-		clientMetadata: { client_name: "picode-durable-experiment" },
+		clientMetadata: { client_name: "picode-durable" },
 		store,
 		onRedirect: () => {
 			throw new Error(`stored sign-in unusable — ${loginAdvice(name)}`);
@@ -291,7 +291,7 @@ export async function connectMcpServers(servers, { profileDir, timeoutMs = CONNE
 					env: { ...process.env, ...expandMap(entry.env) },
 					onStderr: () => undefined,
 				});
-			const client = new McpClient({ name: "picode-durable-experiment", version: "0.1.0", requestTimeoutMs: timeoutMs });
+			const client = new McpClient({ name: "picode-durable", version: "0.1.0", requestTimeoutMs: timeoutMs });
 			await client.connect(transport);
 			connection.client = client;
 			connection.tools = await client.listTools({ timeoutMs });
@@ -553,7 +553,7 @@ export function mcpBridgeWaitMs(profileDir, cwd = process.cwd()) {
  *
  * The tools are registered but kept OUT of the conversation (`filter`), so what reaches the
  * prompt is the small discovery tool and not three hundred schemas. The cost line below is
- * printed for both ways round: the experiment's whole claim about size is that number.
+ * printed for both ways round: the agent's whole claim about size is that number.
  * Why the bridge is on or off was already printed by the [settings] lines.
  */
 export async function connectBridge(enabled, profileDir, { authFile = mcpAuthPath(profileDir) } = {}) {

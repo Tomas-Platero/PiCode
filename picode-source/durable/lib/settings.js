@@ -12,7 +12,7 @@
 // Precedence for every option: command-line flag > setting > built-in default.
 // (For the model only, environment variables sit between the setting and the
 // built-in default, because PI_AGENT_MODEL/PI_AGENT_PROVIDER are the override
-// the experiment has always had: flag > setting > env > default.)
+// the agent has always had: flag > setting > env > default.)
 //
 // Every effective option is reported on stderr, one line, so nobody has to
 // guess why the agent behaved as it did:

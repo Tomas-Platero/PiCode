@@ -1,0 +1,5 @@
+# The agent's scratch: proofs' state, daemon logs, and credentials a hand-run
+# profile may drop in (`bare-profile/auth.json`). None of it is the product —
+# the durable conversations live in the daemon's own SQLite, under
+# `.data/sessions.sqlite` (the daemon is the only process that opens it).
+.data/

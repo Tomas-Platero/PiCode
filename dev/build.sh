@@ -271,14 +271,22 @@ if (!fs.existsSync(`${root}/resources/server/manifest.json`) || JSON.parse(fs.re
 if (!fs.existsSync(`${root}/extensions/picode/package.json`)) {
   fail.push('extensions/picode/package.json is missing, and that is the connector');
 }
-// The update window's title comes from a dialog resource inside this binary, and nothing in the
-// toolchain rewrites resources: the strings are branded in the file, by dev/patch-inno-updater.mjs.
-// A binary that has not been through it shows "Visual Studio Code" over the progress bar.
+// The updater's strings live inside this binary and nothing in the toolchain rewrites them:
+// dev/patch-inno-updater.mjs brands them in the file. Two shapes, so two checks - the progress
+// window's caption is a UTF-16 dialog resource, and the failure box the owner can actually end
+// up reading (plus the "... - Updater" title, the "... is updating..." line and the
+// `vscode-inno-updater-<pid>.log` prefix) are the program's own single-byte literals. A binary
+// that has not been through the script still says "Visual Studio Code" on an update that fails.
 const updater = `${root}/build/win32/inno_updater.exe`;
 if (!fs.existsSync(updater)) {
   fail.push('build/win32/inno_updater.exe is missing, and the installer packs it');
-} else if (fs.readFileSync(updater).indexOf(Buffer.from('Visual Studio Code', 'utf16le')) !== -1) {
-  fail.push('build/win32/inno_updater.exe still says "Visual Studio Code" in its update window; run node dev/patch-inno-updater.mjs');
+} else {
+  const binary = fs.readFileSync(updater);
+  const stale = ['Visual Studio Code', 'vscode-inno-updater-'].filter(term =>
+    binary.indexOf(Buffer.from(term, 'utf16le')) !== -1 || binary.indexOf(Buffer.from(term, 'latin1')) !== -1);
+  if (stale.length > 0) {
+    fail.push(`build/win32/inno_updater.exe still says ${stale.map(term => `"${term}"`).join(' and ')}; run node dev/patch-inno-updater.mjs`);
+  }
 }
 
 if (fail.length > 0) {
@@ -354,8 +362,8 @@ const product = JSON.parse(raw);
 // loudly beats shipping a HEAD URL silently: HEAD follows whatever the default
 // branch happens to be, and that moving target is what this removes.
 if (typeof product.updateUrl !== 'string'
-  || product.updateUrl.indexOf('/HEAD/') === -1) {
-  console.error('  updateUrl has no /HEAD/ to point at a branch:');
+  || !/\/(HEAD|master|beta|experimental)\//.test(product.updateUrl)) {
+  console.error('  updateUrl names no channel this build can seal (HEAD, master, beta, experimental):');
   console.error(`  ${product.updateUrl}`);
   process.exit(1);
 }
@@ -379,7 +387,11 @@ if (CHANNEL === undefined) {
 }
 
 product.quality = quality;
-product.updateUrl = product.updateUrl.replace('/HEAD/', `/${branch}/`);
+// The branch segment is replaced wherever it sits: a delta product.json carries /HEAD/, and
+// one a previous build sealed carries the channel it was sealed for — re-sealing the same
+// channel is a no-op (the `after === raw` short-circuit below says so), and re-pointing the
+// identity at another channel is the seal doing its job, not an error.
+product.updateUrl = product.updateUrl.replace(/\/(HEAD|master|beta|experimental)\//, `/${branch}/`);
 product.nameShort = `PiCode${CHANNEL.label}`;
 product.nameLong = product.nameLong.replace('PiCode', `PiCode${CHANNEL.label}`);
 product.win32DirName = `PiCode${CHANNEL.label}`;
@@ -695,7 +707,7 @@ echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 # answer "no encuentro el pi de este editor".
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
-# And the durable agent, which is PiCode's own program (experimental/durable): an installed editor
+# And the durable agent, which is PiCode's own program (picode-source/durable): an installed editor
 # has no repository above it to find it in, so a pack that does not carry it can only answer
 # "the durable agent folder was not found" wherever it is installed.
 bash dev/durable-runtime.sh "${PACK_DIR}"

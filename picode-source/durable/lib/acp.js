@@ -1,6 +1,6 @@
 // lib/acp.js — the Agent Client Protocol (ACP) entry point: the durable agent
 // speaking ACP v1 over stdio, so any ACP client (Zed, JetBrains, this repo's
-// experimental/acp-client) can drive the durable daemon.
+// picode-source/durable-acp-client) can drive the durable daemon.
 //
 // Why v1 (protocolVersion 1, the SDK's stable entry point) and not the v2
 // draft: v1 is what existing clients speak, and the SDK itself marks v2 as an
