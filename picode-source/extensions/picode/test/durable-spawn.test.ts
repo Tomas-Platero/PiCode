@@ -11,7 +11,7 @@
  * never backgrounded by construction) and carries the lifeline pipe in its spawn
  * contract: stdin is a pipe the editor holds open and never writes, and the daemon is
  * told to stop itself when that pipe reads EOF (the editor died without running
- * `deactivate`). The daemon's half lives in `experimental/durable/lib/daemon.js`.
+ * `deactivate`). The daemon's half lives in `picode-source/durable/lib/daemon.js`.
  */
 
 import assert from 'assert';
@@ -19,9 +19,9 @@ import { test } from 'node:test';
 import { daemonSpawnPlan, PICODE_PARENT_PIPE_ENV, RUN_AS_NODE_ENV } from '../src/durable-spawn.ts';
 
 test('the daemon is spawned attached: never detached, and it is `serve` on the daemon cli', () => {
-	const plan = daemonSpawnPlan('experimental/durable/cli.js', { PATH: 'x' }, undefined);
+	const plan = daemonSpawnPlan('picode-source/durable/cli.js', { PATH: 'x' }, undefined);
 	assert.equal(plan.detached, false);
-	assert.deepEqual(plan.args, ['experimental/durable/cli.js', 'serve']);
+	assert.deepEqual(plan.args, ['picode-source/durable/cli.js', 'serve']);
 });
 
 test("the daemon runs on the editor's own binary as Node, not on whatever `node` the PATH finds", () => {

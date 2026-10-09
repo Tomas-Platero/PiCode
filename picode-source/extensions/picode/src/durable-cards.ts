@@ -5,7 +5,7 @@
 /**
  * The durable delegation, as a chat card.
  *
- * The bridge extension (`experimental/pi-durable-bridge/extension.ts`) registers pi tools that
+ * The bridge extension (`picode-source/durable-bridge/extension.ts`) registers pi tools that
  * hand work to the durable daemon; `durable_send` is the delegation tool among them. When the
  * chat's model calls it, the turn shows a subagent card for that work — the same shape the
  * chat's renderer already knows how to draw (`vscode.ChatSubagentToolInvocationData`), but the

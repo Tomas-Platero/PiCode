@@ -55,6 +55,19 @@
 				]
 			}
 		],
+		"chatSessions": [
+			{
+				"type": "durable",
+				"name": "durable",
+				"displayName": "Durable",
+				"description": "A chat that runs in the durable agent daemon: the conversation survives closing the tab and reloading the window, and its tools run in the first workspace folder that exists.",
+				"icon": "server-process",
+				"canDelegate": true,
+				"supportsAutoModel": true,
+				"welcomeTitle": "Durable",
+				"welcomeMessage": "This chat runs in the **durable agent** — the conversation survives closing this tab and reloading the window. Its tools run in the workspace folder; the model is the one the durable agent is configured with."
+			}
+		],
 		"mcpServerDefinitionProviders": [
 			{
 				"id": "pi",

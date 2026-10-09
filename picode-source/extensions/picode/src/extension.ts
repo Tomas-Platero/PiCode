@@ -46,9 +46,11 @@ import {
 	type ProviderConfiguration,
 } from './providers';
 import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
+import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
+import { registerDurableSessionsProvider } from './durable-sessions-register';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
@@ -2280,6 +2282,16 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
 
+	// The "before" half of the chat's change card: the diff the card opens compares the real
+	// file against the snapshot the turn took, which exists nowhere on disk — a content
+	// provider on the before-scheme is what serves it. The path a snapshot URI carries is
+	// encoded whole, so any absolute path (drives and backslashes included) round-trips.
+	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(PICODE_BEFORE_SCHEME, {
+		provideTextDocumentContent(uri: vscode.Uri): string | undefined {
+			return beforeContentFor(absolutePathOfBeforeUriPath(uri.path));
+		},
+	}));
+
 	// The editor owns the packages of its own profile: whatever the settings declare and the disk
 	// lacks is installed here, in one hidden npm run, before anything loads pi. Left alone, pi's
 	// own loader installs each missing declaration with its own npm process
@@ -2356,6 +2368,14 @@ export function activate(context: vscode.ExtensionContext): void {
 	// fires it when a tree of transcripts lands.
 	const piSessions = registerPiSessionsProvider(piParticipant);
 	context.subscriptions.push(piSessions);
+
+	// The durable daemon's conversations, in the same panel: a **third** source, next to the
+	// editor's Local list and pi's transcripts. Its rows come from the daemon's own answers
+	// over the local pipe (never from its SQLite, which only it may open), and when it is
+	// down the last real listing stands rather than an empty panel that would read as
+	// "every durable conversation is gone". The registration is what puts `durable` in the
+	// panel's provider filter, beside Local and `pi`.
+	context.subscriptions.push(registerDurableSessionsProvider({ participant: piParticipant }));
 
 	const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
@@ -2467,6 +2487,6 @@ export function deactivate(): void {
 	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
 	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
 	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
-	// it stops itself (experimental/durable/lib/daemon.js).
+	// it stops itself (picode-source/durable/lib/daemon.js).
 	stopDurableAgentOnShutdown();
 }

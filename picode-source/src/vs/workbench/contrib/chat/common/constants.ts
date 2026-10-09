@@ -274,13 +274,22 @@ export function isSupportedChatFileScheme(accessor: ServicesAccessor, scheme: st
 }
 
 /**
+ * The session type a new chat defaults to in PiCode: the durable agent's chat, contributed
+ * by the connector (`extensions/picode/package.json`). A conversation there survives closing
+ * its tab and the window reload, which is what a chat is for; Local remains, and the owner's
+ * own pick (the remembered session type) wins over this default.
+ */
+const DURABLE_CHAT_SESSION_TYPE = 'durable';
+
+/**
  * Returns the effective default session type for a new chat in the VS Code
  * editor window.
  *
- * Virtual workspaces always default to {@link localChatSessionType}. Otherwise,
- * when the agent host is enabled and either `chat.defaultToCopilotHarness` is opted in or the
- * agent sandbox is enforced by policy, Agent Host Copilot CLI is the default. It falls back to
- * the local harness when enabled, or to the first visible non-local provider.
+ * PiCode: when the durable agent's contribution is registered, it IS the default — every
+ * window, folder or virtual — and the local harness retires from the pickers while it is
+ * available (see {@link isVisibleEditorChatSessionType}). Upstream's ordering (Copilot harness,
+ * then local, then the first non-local provider) remains as the fall-back for a window where
+ * the connector has not activated yet.
  */
 export function getComputedDefaultSessionType(
 	configurationService: IConfigurationService,
@@ -289,10 +298,23 @@ export function getComputedDefaultSessionType(
 	agentHostEnabled: boolean,
 	managedSandboxEnforced = false
 ): string {
+	// PiCode's own default, and not just the usual one: the durable agent, in every window —
+	// a folder's, a workspace's, a virtual one. Its tools run where the session's directory
+	// rule puts them (the first workspace folder that exists, the home one otherwise), so a
+	// virtual window still gets an honest answer. When the connector has not activated yet
+	// the contribution is absent and upstream's order stands for that instant; the chip and
+	// the welcome view re-resolve when it lands.
+	if (chatSessionsService.getChatSessionContribution(DURABLE_CHAT_SESSION_TYPE)) {
+		return DURABLE_CHAT_SESSION_TYPE;
+	}
+
 	if (isVirtualWorkspace(workspace)) {
 		return localChatSessionType;
 	}
 
+	// PiCode's own default: the durable agent (`DURABLE_CHAT_SESSION_TYPE`, above). The window
+	// shapes that fall through here are a window where the connector has not activated yet —
+	// upstream's own order answers for that instant.
 	if (agentHostEnabled && isCopilotHarnessDefault(configurationService, managedSandboxEnforced)) {
 		return SessionType.AgentHostCopilot;
 	}
@@ -486,6 +508,14 @@ export function isVisibleEditorChatSessionType(
 	agentHostEnabled = true
 ): boolean {
 	if (sessionType === localChatSessionType) {
+		// PiCode: Local retires while the durable chat is available — the owner's decision,
+		// «el orquestador siempre sea durable». Not offered in the pickers, and a remembered
+		// 'local' choice stops being usable, so new chats are durable even for an owner who
+		// once picked Local. The fall-back stands for a window where no non-local session
+		// type exists (the connector missing or disabled): something must answer.
+		if (chatSessionsService.getChatSessionContribution(DURABLE_CHAT_SESSION_TYPE)) {
+			return getVisibleNonLocalEditorChatSessionTypes(configurationService, chatSessionsService, workspace).length === 0;
+		}
 		return isEditorLocalAgentEnabled(configurationService, workspace, agentHostEnabled && managedSandboxEnforced) || getVisibleNonLocalEditorChatSessionTypes(configurationService, chatSessionsService, workspace).length === 0;
 	}
 
