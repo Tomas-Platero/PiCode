@@ -186,6 +186,44 @@ public sealed partial class MainWindow : Window
 		TargetLine.Text = windows ? "Windows" : "Linux through WSL";
 		RailArchitecture.Text = windows ? "Win32 x64" : "the same pipeline, in WSL";
 		FooterTarget.Text = windows ? "Windows" : "Linux (WSL)";
+		PaintChannel();
+	}
+
+	/// <summary>
+	/// The channel the build will seal, read from the branch the repository is on. One channel per
+	/// branch is the owner's rule, and the window only reports it: the branch decides, and there is
+	/// no control for it because a control would promise a choice the pipeline does not offer.
+	/// </summary>
+	private void PaintChannel()
+	{
+		var (channel, branch) = Pipeline.ChannelForBranch();
+		var version = Pipeline.ProductVersion;
+		if (branch.Length == 0)
+		{
+			ChannelLine.Text = "Channel: unknown (not a git repository)";
+			ChannelLine.Opacity = 0.6;
+			return;
+		}
+		ChannelLine.Opacity = 1;
+		ChannelLine.Text = channel is null
+			? $"Channel: none — branch '{branch}' is not a release branch (builds plain PiCode)"
+			: $"Channel: {channel} — branch '{branch}'";
+		if (version.Length > 0)
+		{
+			ChannelLine.Text += $" · version {version}";
+		}
+		FooterTarget.Text = FooterTarget.Text + (channel is null ? " · no channel" : $" · {channel}");
+	}
+
+	/// <summary>What the build button says, with the channel it is about to build.</summary>
+	private string BuildLabel(string suffix)
+	{
+		var (channel, branch) = Pipeline.ChannelForBranch();
+		if (branch.Length == 0)
+		{
+			return "Build PiCode" + suffix;
+		}
+		return channel is null ? $"Build PiCode ({branch}){suffix}" : $"Build PiCode {channel}{suffix}";
 	}
 
 	/// <summary>
@@ -329,7 +367,7 @@ public sealed partial class MainWindow : Window
 
 		// A build that cannot work is not offered, and the reason is on the page that lists it.
 		BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
-		BuildButtonText.Text = _blockers.Count > 0 ? "Build PiCode (something is missing)" : "Build PiCode";
+		BuildButtonText.Text = _blockers.Count > 0 ? BuildLabel(" (something is missing)") : BuildLabel("");
 	}
 
 	/// <summary>A line that only says something, for when there is nothing to list.</summary>
@@ -686,7 +724,7 @@ public sealed partial class MainWindow : Window
 		}
 		else
 		{
-			BuildButtonText.Text = _blockers.Count == 0 ? "Build PiCode" : "Build PiCode (something is missing)";
+			BuildButtonText.Text = _blockers.Count == 0 ? BuildLabel("") : BuildLabel(" (something is missing)");
 			BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
 
 			_progress = Pipeline.ReadProgress(_target);
