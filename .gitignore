@@ -128,5 +128,3 @@ service-account*.json
 .vercel
 *.tsbuildinfo
 .eslintcache
-experimental/durable/node_modules
-experimental/durable/.data

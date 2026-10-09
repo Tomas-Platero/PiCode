@@ -1,4 +1,4 @@
-// proof-kill-survive.mjs — the one-command proof of the pi ⇄ pi-durable bridge.
+// proof-kill-survive.mjs — the one-command proof of the pi ⇄ durable bridge.
 //
 // The pi under test is PiCode's OWN internal pi — the runtime bundled in the
 // product's resources (resources/pi-runtime) with PiCode's internal profile
@@ -19,9 +19,9 @@
 //      durable_read and shows the finished conversation with the answer.
 //
 // Run it:
-//     node experimental/pi-durable-bridge/proof-kill-survive.mjs
+//     node picode-source/durable-bridge/proof-kill-survive.mjs
 //
-// Scratch (pi logs, sessions, daemon log) goes to experimental/pi-durable-bridge/.data/
+// Scratch (pi logs, sessions, daemon log) goes to picode-source/durable-bridge/.data/
 // (gitignored). The durable conversations go to the daemon's own database —
 // this script never touches SQLite: the daemon is the single owner.
 import { spawn } from "node:child_process";

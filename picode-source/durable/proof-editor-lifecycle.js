@@ -23,7 +23,7 @@
 //      and a new client — a fresh daemon, as the next window's autoStart brings one up —
 //      resumes it.
 //
-// Run from experimental/durable/:  node proof-editor-lifecycle.js
+// Run from picode-source/durable/:  node proof-editor-lifecycle.js
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";

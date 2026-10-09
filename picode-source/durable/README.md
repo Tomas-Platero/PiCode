@@ -1,4 +1,4 @@
-# PiCode × pi-durable — experimental proofs
+# PiCode × pi-durable — the durable agent
 
 A self-contained program that runs `@earendil-works/pi-durable` (1.0.2) against the
 owner's LAN gateway **OmniRoute** and proves, with real runs, the three promises that
@@ -18,7 +18,7 @@ ids are session-assigned integers.
 
 The answer (and `attach` stream) goes to **stdout**; conversation ids, tool activity,
 guard blocks, and hints go to **stderr**, so `node cli.js run "..." > answer.txt`
-captures just the answer. All commands run from `experimental/durable/`.
+captures just the answer. All commands run from `picode-source/durable/`.
 
 ```bash
 node cli.js serve [--no-mcp] [--no-guard]      # become the ONE owner of sessions.sqlite; serve local clients
@@ -35,8 +35,8 @@ node cli.js stop                                   # ask the daemon to shut down
 
 ### PiCode settings (`picode.durable.*`)
 
-The agent's options live in **PiCode's own settings** (Settings > PiCode > Durable agent
-(experimental), declared in `picode-source/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts`),
+The agent's options live in **PiCode's own settings** (Settings > PiCode > Durable agent,
+declared in `picode-source/src/vs/workbench/contrib/picode/browser/picodeConfiguration.ts`),
 not only as CLI flags — a flag that is the only way to set an option is a setting that does
 not exist. `lib/settings.js` reads the editor's user settings file
 (`%APPDATA%/PiCode/User/settings.json`, override with `PICODE_USER_SETTINGS`)
@@ -53,7 +53,7 @@ deliberate, because this program is not inside the editor yet.
 **Precedence: command-line flag > setting > built-in default.** For the model only,
 `PI_AGENT_MODEL`/`PI_AGENT_PROVIDER` sit between the setting and the default
 (flag > setting > env > default), because the environment variables are the override the
-experiment has always had.
+agent has always had.
 
 Where every effective option came from is printed on stderr, one line per option, so
 nobody has to guess why the agent behaved as it did:
@@ -208,7 +208,7 @@ event.
 
 This protocol is deliberately small and local; an editor panel that wanted to embed the
 agent would eventually speak ACP rather than this one — that is future work, not this
-experiment. One client is already shaped like a panel: `send` subscribes to its own
+agent. One client is already shaped like a panel: `send` subscribes to its own
 conversation before submitting, so the client that starts a run sees it live.
 
 When no daemon is running, a client says so plainly and does not hang — the connect is
@@ -253,7 +253,7 @@ stdio — the protocol Zed and JetBrains speak — so an editor panel drives the
 with a protocol that has a spec instead of the local NDJSON one. It is implemented in
 `lib/acp.js` with the authoritative typed definitions from `@agentclientprotocol/sdk` (the
 endpoint is a daemon CLIENT, like `send` and `attach`; it never opens the storage), and
-proven by `experimental/acp-client/` with `bash proof-acp.sh` (ends `PROOF-ACP-OK`).
+proven by `picode-source/durable-acp-client/` with `bash proof-acp.sh` (ends `PROOF-ACP-OK`).
 
 **v1, not the v2 draft.** v1 is what existing clients speak, and the SDK itself marks v2 as
 an unstable draft whose wire protocol "may change incompatibly in any SDK release". The
@@ -278,7 +278,7 @@ the daemon's, not the endpoint's.
 
 ### Proving the daemon
 
-`bash proof-daemon.sh` (from `experimental/durable/`) runs the whole story with real
+`bash proof-daemon.sh` (from `picode-source/durable/`) runs the whole story with real
 processes and prints the evidence: it starts its own daemon, is refused a direct `run`,
 creates a conversation through the daemon, attaches TWO separate client processes, runs a
 second prompt through the daemon while both watch (both logs show the live tool calls and
@@ -470,7 +470,7 @@ reconnecting 11 servers per run.)
 
 **Limits, said plainly:** `${VAR}` in `env`/`headers` is expanded as pi expands it; a
 `!command` value is **not** run — building a credential by shelling out is not something
-this experiment should do unasked. The guard's `beforeTool` hook runs for MCP tool calls
+the agent should do unasked. The guard's `beforeTool` hook runs for MCP tool calls
 like any other, but its rules today name `bash` and the file tools, so an MCP call passes
 unless a rule names it.
 
@@ -491,7 +491,7 @@ unless a rule names it.
 | `lib/render.js` | Agent events and transcript entries → CLI output, shared by the in-process `runPrompt` and the daemon clients (`send`, `attach`). |
 | `lib/acp.js` | The ACP entry point: the Agent Client Protocol (v1) over stdio, mapped onto the daemon (see "ACP: the editor protocol"). |
 | `proof-daemon.sh` | Reproducible multi-process evidence for the daemon (see "Proving the daemon"). |
-| `proof-acp.sh` | Reproducible evidence for the ACP endpoint via `experimental/acp-client/` (see "ACP: the editor protocol"). |
+| `proof-acp.sh` | Reproducible evidence for the ACP endpoint via `picode-source/durable-acp-client/` (see "ACP: the editor protocol"). |
 | `lib/extensions.js` | `slow_step` tool (a deterministic 2 s tool, `replay: "safe"`) and the background subagent: a `subagent` tool that spawns a **background anchor task** owning a child conversation, drives it, and reports its answer back to the parent as a follow-up input. |
 | `proof1-kill.js` / `proof1-resume.js` | Proof 1, phases A and B. |
 | `proof2-subagent.js` | Proof 2. |
@@ -506,11 +506,11 @@ proof deletes its own file (+ `-shm`/`-wal`) when it starts, so a retry always b
 from a clean slate.
 
 The provider profile is only ever **read**; the harness writes its SQLite under
-`experimental/durable/.data/`.
+`picode-source/durable/.data/`.
 
 ## ▶️ Running the proofs
 
-From `experimental/durable/` (Node ≥ 24; developed on Node 24.19.0, Windows + Git Bash):
+From `picode-source/durable/` (Node ≥ 24; developed on Node 24.19.0, Windows + Git Bash):
 
 ```bash
 npm install   # once: @earendil-works/pi-durable, pi-ai, chord

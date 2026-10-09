@@ -1,8 +1,8 @@
-# pi-durable-bridge — pi stays the driver, durable does the surviving
+# durable-bridge — pi stays the driver, durable does the surviving
 
 A pi extension (TypeScript, loaded by path — **nothing is installed into any pi**,
 and no pi directory is written) that bridges the coding agent you use every day
-to the headless durable daemon in [`experimental/durable/`](../durable/).
+to the headless durable daemon in [`picode-source/durable/`](../durable/).
 
 The two runtimes still do not compose — one conversation runs on one engine, and
 this does not change that. What the bridge adds is a **handoff**: pi can hand a
@@ -24,10 +24,10 @@ plain message naming the endpoint and the start command — it never hangs.
 
 ## 🖱️ How to run each piece by hand
 
-Start the daemon (the single owner of `experimental/durable/.data/sessions.sqlite`):
+Start the daemon (the single owner of `picode-source/durable/.data/sessions.sqlite`):
 
 ```bash
-node experimental/durable/cli.js serve          # or: serve --no-mcp (faster, offline)
+node picode-source/durable/cli.js serve          # or: serve --no-mcp (faster, offline)
 ```
 
 Load the extension into **PiCode's internal pi** (the runtime in PiCode's
@@ -37,9 +37,9 @@ internal profile and `PI_CODING_AGENT_SESSION_DIR` keeps session files here):
 
 ```bash
 PI_CODING_AGENT_DIR="C:/Users/tapla/AppData/Local/Programs/PiCode/data/pi-agent" \
-PI_CODING_AGENT_SESSION_DIR="experimental/pi-durable-bridge/.data/pi-sessions" \
+PI_CODING_AGENT_SESSION_DIR="picode-source/durable-bridge/.data/pi-sessions" \
 node "C:/Users/tapla/AppData/Local/Programs/PiCode/resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
-  --extension experimental/pi-durable-bridge/extension.ts
+  --extension picode-source/durable-bridge/extension.ts
 ```
 
 Then, in pi: *"Call durable_send with the prompt: run slow_step six times…"*,
@@ -48,7 +48,7 @@ Then, in pi: *"Call durable_send with the prompt: run slow_step six times…"*,
 The one-command proof (kill-and-survive, real `taskkill`):
 
 ```bash
-node experimental/pi-durable-bridge/proof-kill-survive.mjs
+node picode-source/durable-bridge/proof-kill-survive.mjs
 ```
 
 It starts the daemon if none is up, starts pi with the extension, waits until
@@ -98,7 +98,7 @@ finished conversation with `durable_list`/`durable_read`. Prints
   Only what it *delegated* survives. The bridge moves work, not pi's session.
 - **No ACP.** The bridge speaks the durable daemon's own local NDJSON protocol;
   an editor that wanted to embed the agent properly would eventually speak ACP
-  (that is future work in `experimental/durable/`, not here).
+  (that is future work in `picode-source/durable/`, not here).
 - **One owner of the SQLite, always.** The daemon must be the only process
   opening `sessions.sqlite` — two writers corrupt ids (verified in the durable
   README). The bridge is a pure client and must stay one.
