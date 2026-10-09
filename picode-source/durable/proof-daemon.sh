@@ -11,7 +11,7 @@
 #      the daemon (the `send` client itself is a third live watcher).
 #   5. A client started with NO daemon up says so plainly, does not hang, and exits 1.
 #
-# Run from experimental/durable/:  bash proof-daemon.sh
+# Run from picode-source/durable/:  bash proof-daemon.sh
 # All output lands in .data/daemon-proof/ (gitignored) and is printed at the end.
 set -uo pipefail
 cd "$(dirname "$0")"

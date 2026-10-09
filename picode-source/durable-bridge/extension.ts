@@ -1,8 +1,8 @@
-// extension.ts — the pi ⇄ pi-durable bridge.
+// extension.ts — the pi ⇄ durable bridge.
 //
 // A pi extension (TypeScript, loaded with `pi --extension <this file>`; pi runs
 // it through jiti, no build step). It registers three tools that hand work to
-// the durable daemon in experimental/durable and read back what it did:
+// the durable daemon in picode-source/durable and read back what it did:
 //
 //   durable_send  — hand a prompt to the durable daemon and wait for its answer.
 //                   The run executes INSIDE the daemon process: if pi dies
@@ -12,7 +12,7 @@
 //   durable_read  — read one durable conversation's transcript.
 //
 // Wire format and client are REUSED, not reimplemented: everything talks through
-// experimental/durable/lib/client.js and lib/protocol.js, imported by relative
+// picode-source/durable/lib/client.js and lib/protocol.js, imported by relative
 // path. This extension never opens sessions.sqlite — the daemon is the single
 // owner — and it never writes anywhere: no installs, no ~/.pi, no settings.
 //
@@ -31,7 +31,7 @@ import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "../durable/lib
 import { daemonEndpoint } from "../durable/lib/protocol.js";
 import { describeEntry, entryText } from "../durable/lib/render.js";
 
-const START_HINT = "node experimental/durable/cli.js serve   (run from the repository root; --no-mcp starts faster)";
+const START_HINT = "node picode-source/durable/cli.js serve   (run from the repository root; --no-mcp starts faster)";
 
 /** Every tool failure is a plain sentence for the model, never a hang. */
 function fail(error: unknown): never {

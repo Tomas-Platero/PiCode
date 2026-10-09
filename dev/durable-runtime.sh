@@ -2,10 +2,10 @@
 #
 # Puts the durable agent inside the editor that was just built.
 #
-# Why this step exists: the agent is the repository's `experimental/durable` program — a headless
+# Why this step exists: the agent is the repository's `picode-source/durable` program — a headless
 # daemon that owns its conversations in SQLite and serves local clients over a named pipe — and the
 # editor finds it by walking a short list of folders (`extensions/picode/src/durable-folder.ts`).
-# Two of those folders are the source tree's. The third is this one, `<pack>/resources/pi-durable`,
+# Two of those folders are the source tree's. The third is this one, `<pack>/resources/durable`,
 # and it is the only candidate an *installed* PiCode has: an installation has no repository above it
 # and the folder that happens to be open is somebody else's project. Without this step an installed
 # editor can only answer "the durable agent folder was not found" — which is exactly what the
@@ -17,7 +17,7 @@
 #     profiles with credentials in them (`bare-profile/auth.json`) — none of it is the product, and a
 #     published installer must not carry any of it.
 #   * the proofs are left behind too (`proof-*.sh`, `proof*.js`, `smoke.js`): they are how the
-#     experiment was measured, not what the editor runs.
+#     agent was measured, not what the editor runs.
 #   * everything else goes, `node_modules` included: `cli.js` resolves its dependencies from this
 #     folder's own `node_modules`, so a missing package is an agent that does not start. The build
 #     also installs them here when a fresh clone has none (they are ignored by git), because a step
@@ -31,14 +31,14 @@ set -eo pipefail
 
 PACK_DIR="${1:?usage: dev/durable-runtime.sh <pack dir>}"
 
-SOURCE="./experimental/durable"
-BRIDGE="./experimental/pi-durable-bridge"
-TARGET="${PACK_DIR}/resources/pi-durable"
-BRIDGE_TARGET="${PACK_DIR}/resources/pi-durable-bridge"
+SOURCE="./picode-source/durable"
+BRIDGE="./picode-source/durable-bridge"
+TARGET="${PACK_DIR}/resources/durable"
+BRIDGE_TARGET="${PACK_DIR}/resources/durable-bridge"
 
 if [[ ! -f "${SOURCE}/cli.js" ]]; then
   echo "error: ${SOURCE}/cli.js is missing, so there is no durable agent to ship." >&2
-  echo "       The editor looks for it at \"experimental/durable\" and in resources/pi-durable;" >&2
+  echo "       The editor looks for it at \"picode-source/durable\" and in resources/durable;" >&2
   echo "       without the file the installed editor can only say it was not found." >&2
   exit 2
 fi
@@ -57,7 +57,7 @@ rm -rf "${TARGET}/.data" \
        "${TARGET}"/proof*.js "${TARGET}/smoke.js"
 
 # The bridge, right where the agent expects its sibling: `durableBridgeExtensionPath()` reads
-# `path.join(folder, '..', 'pi-durable-bridge', 'extension.ts')`.
+# `path.join(folder, '..', 'durable-bridge', 'extension.ts')`.
 echo "copying the chat's bridge into ${BRIDGE_TARGET}"
 mkdir -p "${BRIDGE_TARGET}"
 cp -r "${BRIDGE}/." "${BRIDGE_TARGET}/"

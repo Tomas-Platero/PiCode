@@ -12,7 +12,7 @@ import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.l
  *
  * PiCode always names it (`PI_AGENT_PROFILE`), because the editor is the one that knows which
  * installation this is. This fallback is for the agent started by hand, and it is derived from
- * where the agent itself lives — `<app>/resources/pi-durable` carries the program, so the profile
+ * where the agent itself lives — `<app>/resources/durable` carries the program, so the profile
  * is `<app>/data/pi-agent`, two levels up and back down. It used to be one machine's absolute
  * path, which was wrong for every install but the one it was written on: the agent ships inside
  * PiCode now, and "wherever PiCode is installed" has to hold for a human running the cli too.

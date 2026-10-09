@@ -591,10 +591,15 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 			glob('**/tgrep.exe', { cwd }),
 			glob('**/*explorer_command*.dll', { cwd }),
 			// PiCode: the updater that runs while the app restarts is a Microsoft binary and its
-			// VERSION resource says so (ProductName "Visual Studio Code", FileDescription "VSCode
-			// Inno Updater"). It is stamped like the rest, so the file properties carry PiCode. Its
-			// update window's title is a dialog resource, which rcedit does not touch: that one is
-			// branded in the vendored binary by dev/patch-inno-updater.mjs.
+			// strings used to say so - both its VERSION resource and the windows it opens. The
+			// windows are branded in the vendored binary by dev/patch-inno-updater.mjs, because
+			// nothing in the toolchain rewrites a dialog resource.
+			//
+			// This glob is a safety net, not the stamp that does the work: `copyInnoUpdater` lands
+			// the file in the pack during the *installer* phase, so on an ordinary build it is not
+			// here yet and this matches nothing. The stamp that reaches it is `brandInnoUpdater` in
+			// build/gulpfile.vscode.win32.ts, next to the copy itself. Kept for a build that puts
+			// the updater in place before packing.
 			glob('**/tools/inno_updater.exe', { cwd }),
 		])).flatMap(o => o);
 		let packageJson: { version: string };

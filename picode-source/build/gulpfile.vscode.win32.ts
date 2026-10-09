@@ -191,12 +191,33 @@ function copyInnoUpdater(arch: string) {
 	};
 }
 
-function updateIcon(executablePath: string): task.CallbackTask {
+// PiCode: the updater's icon **and** its version resource, and this is the only place that can do
+// it. `patchWin32DependenciesTask` (build/gulpfile.vscode.ts) stamps `**/tools/inno_updater.exe`
+// along with the rest of the pack, but the file is not in the pack yet when it runs: this task is
+// what copies it there, and it runs a phase later (measured 2026-10-09: packing finished at
+// 17:45:41, the copy ran at 17:46:32, and the packed file still read FileDescription "VSCode Inno
+// Updater", CompanyName "Microsoft Corporation" and ProductVersion "acda8ead" -- VS Code's commit).
+// The fields and their values are the ones that stamp writes, read from the same two files it reads
+// them from, so the updater ends up looking like the rest of the pack.
+function brandInnoUpdater(executablePath: string, basename: string): task.CallbackTask {
 	return cb => {
 		const icon = path.join(repoPath, 'resources', 'win32', 'code.ico');
-		rcedit(executablePath, { icon }, cb);
+		rcedit(executablePath, {
+			icon,
+			'file-version': pkg.version.replace(/-.*$/, ''),
+			'version-string': {
+				'CompanyName': 'TomasPlatero',
+				'FileDescription': product.nameLong,
+				'FileVersion': pkg.version,
+				'InternalName': basename,
+				'LegalCopyright': 'Copyright (C) 2026 TomasPlatero. All rights reserved',
+				'OriginalFilename': basename,
+				'ProductName': product.nameLong,
+				'ProductVersion': pkg.version,
+			}
+		}, cb);
 	};
 }
 
-task.task(task.define('vscode-win32-x64-inno-updater', task.series(copyInnoUpdater('x64'), updateIcon(path.join(buildPath('x64'), 'tools', 'inno_updater.exe')))));
-task.task(task.define('vscode-win32-arm64-inno-updater', task.series(copyInnoUpdater('arm64'), updateIcon(path.join(buildPath('arm64'), 'tools', 'inno_updater.exe')))));
+task.task(task.define('vscode-win32-x64-inno-updater', task.series(copyInnoUpdater('x64'), brandInnoUpdater(path.join(buildPath('x64'), 'tools', 'inno_updater.exe'), 'inno_updater.exe'))));
+task.task(task.define('vscode-win32-arm64-inno-updater', task.series(copyInnoUpdater('arm64'), brandInnoUpdater(path.join(buildPath('arm64'), 'tools', 'inno_updater.exe'), 'inno_updater.exe'))));

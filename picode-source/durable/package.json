@@ -1,9 +1,9 @@
 {
-  "name": "picode-durable-experiment",
+  "name": "picode-durable",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Experimental proof that @earendil-works/pi-durable delivers: (1) crash-resilient conversations, (2) subagents as background tasks, (3) multiple clients on one live conversation.",
+  "description": "PiCode's durable agent: a headless daemon that runs @earendil-works/pi-durable to deliver (1) crash-resilient conversations, (2) subagents as background tasks, (3) several clients on one live conversation.",
   "scripts": {
     "smoke": "node smoke.js",
     "proof1": "node proof1-kill.js",

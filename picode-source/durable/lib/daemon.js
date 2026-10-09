@@ -22,6 +22,7 @@
 // `watchEvents` stream. Clients never open the database; they only talk to the
 // daemon. See README.md ("The daemon") for the full protocol.
 import net from "node:net";
+import path from "node:path";
 import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
 import { CTX, SHARED_DB, answerText, listConversations, openHarness } from "./common.js";
 import { allowCommand, makeGuardExtension } from "./guard.js";
@@ -32,13 +33,20 @@ import { armAllMcpFilters, armMcpFilter, closeMcpConnections, connectBridge, mcp
 import { parseModelSetting } from "./settings.js";
 import { LineStream, PROTOCOL_VERSION, daemonEndpoint, endpointIsUp } from "./protocol.js";
 
-/** Resolve `model`/`agent` request parameters against the daemon's own resolved options. */
-function agentFor(resolved, agents, params) {
+/** Resolve `model`/`agent`/`cwd` request parameters against the daemon's own resolved options. */
+export function agentFor(resolved, agents, params) {
 	const agent = {};
 	const model = parseModelSetting(params.model ?? resolved.options.model.value);
 	if (model) agent.model = model;
 	const change = resolveAgentChange(agents, params.agent ?? resolved.options.agent?.value, DEFAULT_PROFILE_DIR);
 	if (change) Object.assign(agent, change);
+	// The conversation's working directory — where its tools run. Only a directory that is
+	// absolute is accepted: a relative one would mean wherever the daemon happens to have
+	// been started, which is the daemon's own folder and nobody's project. `configure`
+	// replaces the stored cwd, so `run` can re-home an existing conversation too.
+	if (typeof params.cwd === "string" && params.cwd.length > 0 && path.isAbsolute(params.cwd)) {
+		agent.cwd = params.cwd;
+	}
 	return agent;
 }
 
@@ -209,7 +217,7 @@ async function serveStorage(resolved, agents, skills) {
 			if (profileProblem) throw new Error(profileProblem);
 			const conversation = await requireConversation(harness, params.conversationId);
 			const change = agentFor(resolved, agents, params);
-			if (change.model || change.instructions) await conversation.configure(change, CTX);
+			if (change.model || change.instructions || change.cwd) await conversation.configure(change, CTX);
 			// The deferral needs the CONNECTED tools' names: wait for the bridge (bounded).
 			const settledBridge = await bridgeForAgent();
 			await armMcpFilter(harness, conversation, settledBridge, CTX);
