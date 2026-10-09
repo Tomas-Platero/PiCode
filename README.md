@@ -61,14 +61,16 @@
 
 ## ☁️ PiCode Account
 
-Create a free account and PiCode keeps your editor the same everywhere:
+Create a free account, and add **Pro** when you want your editor the same
+everywhere:
 
 - **Settings, extensions and AI configuration** — synced and encrypted.
 - **Your agent's memory and skills** — the setup that took hours, kept.
 - **Last week of conversations** — always with you, a rolling window that cleans itself.
 - **Three ways in** — email, Google or GitHub.
 
-The free plan syncs a small allowance — enough for your settings and extensions — and **Pro** is what covers the heavy things: your whole pi profile and its sessions. See [plans](https://www.getpicode.app/pricing).
+The account is free and links your editor to it. **Cloud sync is a Pro
+feature**: the free plan stores nothing. See [plans](https://www.getpicode.app/pricing).
 
 <a id="download"></a>
 

@@ -13,7 +13,7 @@ la cara pública (README, wiki) se escribe desde aquí, no al revés.
 | [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
 | [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
-| [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y pi-durable | ES |
+| [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y durable | ES |
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si un papel de `odd/tasks/` dice otra cosa, gana este | ES |
 
 ## Cómo se lee esto sin perderse

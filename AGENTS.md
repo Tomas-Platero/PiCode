@@ -99,6 +99,14 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
   * **Migrar** datos desde el Pi del PATH al interno es una opción explícita a petición del usuario, nunca un proceso automático.
 * **Credenciales:** Las claves de endpoints se guardan como variables de entorno o valores cifrados; nunca se muestran en pantalla.
 
+### pi durable ya no es experimental
+>
+> *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
+
+* **Residencia:** el agente durable vive en el propio árbol del editor (`picode-source/durable`, con su puente de chat en `picode-source/durable-bridge` y su cliente de prueba ACP en `picode-source/durable-acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
+* **Nombre:** en todo lo que ve el dueño es **Durable agent**, a secas. Ninguna UI, ajuste o documento vivo lo presenta como experimental.
+* **Build:** viaja dentro de la instalación (`resources/durable`), como ya hacía; solo cambia el nombre de la carpeta destino.
+
 ---
 
 ## 5. Personalización del Editor
@@ -182,3 +190,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
+* **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
