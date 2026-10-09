@@ -1,35 +1,48 @@
-name: Bug report
-description: Something PiCode does that it should not,
-  or does not do that it should
+name: 🐞 Bug report
+description: >-
+  Something PiCode does that it should not — or does not do that it should
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        PiCode is agent-first and built from a pinned
-        upstream, so the exact version and how it was
-        obtained matter as much as the symptom.
-        For anything that could be a **security**
-        problem, use a private
-        [security advisory][adv] instead of this form.
+        Thanks for taking the time to report this. A precise report is the
+        difference between a fix in minutes and a week of guessing.
+
+        **Do not report security problems here.** Anything that could be a
+        vulnerability goes privately through the
+        [security advisory form][adv] instead — see [SECURITY.md][sec].
+
+        Not sure whether it is a PiCode bug or a Pi one?
+        The [wiki](https://github.com/Tomas-Platero/PiCode/wiki) and the
+        [FAQ](https://github.com/Tomas-Platero/PiCode/wiki/FAQ) tell you which
+        project owns which part.
 
         [adv]: https://github.com/Tomas-Platero/PiCode/security/advisories/new
+        [sec]: https://github.com/Tomas-Platero/PiCode/blob/master/SECURITY.md
+  - type: markdown
+    attributes:
+      value: |
+        ### What you are running
   - type: input
     id: version
     attributes:
       label: PiCode version
-      description: Release tag, or the output of Help → About
-      placeholder: v0.1.2
+      description: >-
+        Open **Help → About**, or read the name of the file you downloaded.
+      placeholder: "0.2.1"
     validations:
       required: true
   - type: dropdown
-    id: origin
+    id: channel
     attributes:
-      label: How did you get this PiCode?
+      label: Release channel
+      description: Each channel has its own update feed and its own branch.
       options:
-        - Release ZIP / installer
-        - Built from source (dev/build.sh or builder)
-        - Applied distribution layer over a VSCodium archive
+        - Stable (recommended)
+        - Beta (early access)
+        - Experimental (freshest work)
+        - I built it myself from source
     validations:
       required: true
   - type: dropdown
@@ -37,16 +50,21 @@ body:
     attributes:
       label: Operating system
       options:
-        - Windows x64
-        - Linux x64
-        - Other (describe below)
+        - Windows 11
+        - Windows 10
+        - Linux — Arch / Debian / Fedora / other (say which below)
+        - Other
     validations:
       required: true
+  - type: markdown
+    attributes:
+      value: |
+        ### What happened
   - type: textarea
     id: what
     attributes:
       label: What happened
-      description: The symptom, in plain words. What you did, what you saw.
+      description: The symptom in plain words — what you did and what you saw.
     validations:
       required: true
   - type: textarea
@@ -56,35 +74,40 @@ body:
     validations:
       required: true
   - type: textarea
-    id: evidence
-    attributes:
-      label: Evidence
-      description: >
-        Log lines, the output channel text, a
-        screenshot. PiCode's own log lives under
-        `data/user-data/logs/` in a portable install.
-        If a patch or build step failed, paste the
-        exact message — the build names the guilty
-        file.
-      render: text
-    validations:
-      required: true
-  - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
       placeholder: |
         1. Open PiCode
-        2. Run 'PiCode: Open pi Chat'
-        3. ...
+        2. Run 'PiCode: Set up PiCode'
+        3. Choose ...
+        4. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        A screenshot, the exact error text, or the log. In a portable install
+        the log lives under `data/user-data/logs/`, in the newest folder.
+        Paste the **first** error, not the last — the last one is usually a
+        consequence.
+      render: text
+    validations:
+      required: true
   - type: checkboxes
     id: checks
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing issues (open and closed)
+        - label: I searched the existing issues, open and closed
           required: true
-        - label: I can reproduce it, or the evidence above shows it happening
+        - label: >-
+            It happens on the latest release of my channel, or I say
+            below why I cannot use it
           required: true
-        - label: This is not a security report (those go privately)
+        - label: This is a bug in PiCode, not in the Pi agent itself
+          required: true
+        - label: This is not a security report — those go privately
           required: true

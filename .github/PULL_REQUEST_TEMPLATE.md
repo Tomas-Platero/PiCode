@@ -1,6 +1,9 @@
 <!--
 One reviewable unit per PR. If the diff covers two decisions,
 open two PRs. Delete these comments before submitting.
+
+Direct pushes to branches are disabled: every change lands through a
+pull request, including the maintainer's.
 -->
 
 ## What changes, in one line
@@ -24,24 +27,25 @@ of leaving it implied.
 
 ## Which layer
 
-- [ ] `patches/picode/` (source patches — CI pin-check will re-apply them)
-- [ ] `patches/vscodium/` (vendored — should be **empty** in a PR; it mirrors upstream)
-- [ ] `distribution/` (product delta, settings, apply scripts)
-- [ ] Agent integration (core chat / connector / agent host)
-- [ ] `dev/` pipeline or `.github/workflows/`
-- [ ] Docs / records only
+- [ ] The editor itself (`picode-source/`)
+- [ ] The product layer (`distribution/`, `dev/`, `builder/`)
+- [ ] Agent integration (chat, connector, agent host)
+- [ ] Build pipeline or `.github/workflows/`
+- [ ] Docs and records only
 
 ## Review workload
 
 - Approx. lines changed: ______
-- Does a pin move? `upstream/stable.json` and `upstream/vscodium.json` move **together**,
-  and the VSCodium patch set must be re-vendored — if either is touched here, say so.
-- Anything a reviewer should run before reading: `./dev/build.sh -o`, `npm test` in the
-  extension, etc.
+- Does the VS Code pin move? If `upstream/stable.json` is touched, say so
+  and point at the merge that produced the tree.
+- Anything a reviewer should run before reading: `./dev/build.sh -o`,
+  `npm test` in the connector, etc.
 
 ## Records
 
-- [ ] Feature record added/updated in `odd/tasks/` (expected for any non-trivial change)
-- [ ] `docs/DECISIONS.md` updated if a decision changed or an ADR was superseded
-- [ ] Product-facing strings are English (ADR-012); Spanish only in `AGENTS.md` and
-      `odd/tasks/`
+- [ ] Feature record added/updated in `odd/tasks/` (expected for any
+      non-trivial change)
+- [ ] The decision log updated if a decision changed or an ADR was
+      superseded
+- [ ] Product-facing strings are English (ADR-012); Spanish only in
+      `AGENTS.md` and `odd/tasks/`

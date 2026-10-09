@@ -11,6 +11,7 @@
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square)](#download)
 [![Website](https://img.shields.io/badge/website-getpicode.app-3B9BFF?style=flat-square)](https://www.getpicode.app)
+[![Wiki](https://img.shields.io/badge/docs-wiki-3B9BFF?style=flat-square&logo=readthedocs&logoColor=white)](https://github.com/Tomas-Platero/PiCode/wiki)
 [![Node](https://img.shields.io/badge/node-24.19.0-339933?style=flat-square&logo=nodedotjs&logoColor=white)](./.nvmrc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](./picode-source/)
 
@@ -39,7 +40,7 @@
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
-| [Download a release](https://github.com/Tomas-Platero/PiCode/releases) · unzip · run `PiCode.exe` · [getpicode.app](https://www.getpicode.app) | [Source build guide](#building-from-source) · [Contributing docs](CONTRIBUTING.md) · [How to compile](docs/howto-build.md) |
+| [Download a release](https://github.com/Tomas-Platero/PiCode/releases) · unzip · run `PiCode.exe` · [getpicode.app](https://www.getpicode.app) | [Wiki](https://github.com/Tomas-Platero/PiCode/wiki) · [Source build guide](#building-from-source) · [Contributing docs](CONTRIBUTING.md) |
 
 <br />
 
