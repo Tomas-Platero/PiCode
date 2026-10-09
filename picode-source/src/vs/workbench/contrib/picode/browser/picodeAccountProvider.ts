@@ -7,8 +7,6 @@ import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
-import { toAction } from '../../../../base/common/actions.js';
-import { createErrorWithActions } from '../../../../base/common/errorMessage.js';
 import { IRequestContext } from '../../../../base/parts/request/common/request.js';
 import { URI } from '../../../../base/common/uri.js';
 import { AUTH_CALLBACK_PATH, oneTimeCodeFromCallback } from './picodeAuthCallback.js';
@@ -41,9 +39,6 @@ export const PICODE_AUTH_PROVIDER_ID = 'picode';
 
 /** The provider's label, declared once here and reused by the contribution that registers it. */
 export const PICODE_ACCOUNT_LABEL = localize('picode.account.label', "PiCode Account");
-
-/** Where the plans and their prices are described. */
-const PICODE_PRICING_URL = 'https://www.getpicode.app/pricing';
 
 /** Secret storage key for the refresh token of the editor's own Firebase session. */
 const PICODE_REFRESH_TOKEN_SECRET_KEY = 'picode.account.refreshToken';
@@ -121,30 +116,21 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		const code = await this._requestOneTimeCode();
 
 		// 2. Exchange the code for a Firebase custom token (server-side, on the web app's API).
-		//    The plan travels in the same response (the web reads it with Admin server-side).
-		const exchange = await this._exchangeOneTimeCode(code);
+		const { customToken } = await this._exchangeOneTimeCode(code);
 
-		// 3. Gate the sign-in on the account's plan: Settings Sync requires a Pro account.
-		//    Nothing is minted or persisted before this check passes, so a Free sign-in
-		//    leaves no refresh token, account data or cached ID token behind.
-		if (exchange.plan !== 'pro') {
-			// The URL never shows up as text: wherever this failure is surfaced as a notification,
-			// it carries the button that opens the plans page instead.
-			throw createErrorWithActions(localize('picode.account.proRequired', "PiCode Sync requires a Pro account."), [
-				toAction({
-					id: 'picode.account.upgrade',
-					label: localize('picode.account.upgrade', "See plans"),
-					run: () => { this._openerService.open(URI.parse(PICODE_PRICING_URL), { openExternal: true }); },
-				}),
-			]);
-		}
+		// 3. Anyone with a PiCode Account signs in and stays linked — the account itself is free.
+		//    What a free account cannot do is SYNC: the sync service is the authority for that and
+		//    answers 402 to any plan that is not Pro, which the sync UI turns into one clear notice
+		//    (see the PaymentRequired handling in the userDataSync contribution). Gating the
+		//    sign-in here instead would lock a free owner out of the whole account surface — and
+		//    would keep a user who subscribed after signing in locked out until a new sign-in.
 
 		// 4. Mint the editor's own session: a custom token is exchanged at the identitytoolkit
 		//    endpoint (`accounts:signInWithCustomToken`) — the securetoken endpoint only accepts
 		//    refresh tokens. The refresh token that comes back belongs to the editor,
 		//    independent of the browser session. The identitytoolkit answer carries no user
 		//    fields, so uid/email are read from the ID token payload itself.
-		const minted = await this._mintFromCustomToken(exchange.customToken);
+		const minted = await this._mintFromCustomToken(customToken);
 		if (minted.statusCode !== 200 || !minted.json?.idToken || !minted.json.refreshToken) {
 			throw new Error(localize('picode.account.signInFailed', "Sign-in could not be completed. Please try again."));
 		}
@@ -357,13 +343,16 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		}).finally(() => disposables.dispose());
 	}
 
-	private async _exchangeOneTimeCode(code: string): Promise<{ customToken: string; plan: 'free' | 'pro' }> {
+	private async _exchangeOneTimeCode(code: string): Promise<{ customToken: string }> {
+		// The answer also carries the account's `plan`. The editor deliberately does NOT gate on
+		// it: the plan is a snapshot from this moment, and the sync service keeps being the
+		// authority for every request afterwards (see `createSession`).
 		const response = await this._postJson<{ customToken?: string; plan?: string }>(`${this._config.webOrigin}/api/auth/editor-exchange`, { code }, 'finishing the sign-in');
 		if (response.statusCode !== 200 || !response.json?.customToken) {
 			// The most common failure is a code that expired or was already used.
 			throw new Error(localize('picode.account.codeExchangeFailed', "Sign-in could not be completed. The sign-in request may have expired or was already used — please try signing in again."));
 		}
-		return { customToken: response.json.customToken, plan: response.json.plan === 'pro' ? 'pro' : 'free' };
+		return { customToken: response.json.customToken };
 	}
 
 	private async _postFirebaseToken(refreshToken: string): Promise<{ statusCode: number | undefined; json: FirebaseTokenResponse | undefined }> {

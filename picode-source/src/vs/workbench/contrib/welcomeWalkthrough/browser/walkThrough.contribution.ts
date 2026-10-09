@@ -12,7 +12,7 @@ import { EditorWalkThroughAction, EditorWalkThroughInputSerializer } from './edi
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { EditorExtensions, IEditorFactoryRegistry } from '../../../common/editor.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { MenuRegistry, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { IEditorPaneRegistry, EditorPaneDescriptor } from '../../../browser/editor.js';
 import { KeybindingsRegistry } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
@@ -39,11 +39,5 @@ KeybindingsRegistry.registerCommandAndKeybindingRule(WalkThroughPageUp);
 
 KeybindingsRegistry.registerCommandAndKeybindingRule(WalkThroughPageDown);
 
-MenuRegistry.appendMenuItem(MenuId.MenubarHelpMenu, {
-	group: '1_welcome',
-	command: {
-		id: 'workbench.action.showInteractivePlayground',
-		title: localize({ key: 'miPlayground', comment: ['&& denotes a mnemonic'] }, "Editor Playgrou&&nd")
-	},
-	order: 3
-});
+// PiCode: the editor playground is gone from Help. It is VS Code's own interactive tour of its
+// editor, not this product's menu entry (owner, 2026-10-09). The command stays in the palette.

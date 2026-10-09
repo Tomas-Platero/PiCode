@@ -233,6 +233,14 @@ export class UserDataAutoSyncService extends Disposable implements IUserDataAuto
 			this.logService.info('[AutoSync] Turned off sync because current session is expired');
 		}
 
+		// No plan for sync (the service answered 402: the account is linked, but its plan does not
+		// include sync). Turn sync off softly so a downgrade stops retrying on every trigger; the
+		// user is told where it matters — when they try to turn sync on, and in the sync log.
+		else if (userDataSyncError.code === UserDataSyncErrorCode.PaymentRequired) {
+			await this.turnOff(false, true /* force soft turnoff on error */);
+			this.logService.info('[AutoSync] Turned off sync because the account plan does not include sync (402).');
+		}
+
 		// Turned off from another device
 		else if (userDataSyncError.code === UserDataSyncErrorCode.TurnedOff) {
 			await this.turnOff(false, true /* force soft turnoff on error */);

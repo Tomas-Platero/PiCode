@@ -204,11 +204,9 @@ registerAction2(class extends Action2 {
 			title: localize2('welcome.showAllWalkthroughs', 'Open Walkthrough...'),
 			category,
 			f1: true,
-			menu: {
-				id: MenuId.MenubarHelpMenu,
-				group: '1_welcome',
-				order: 3,
-			},
+			// PiCode: no Help entry. The walkthrough list is where the Welcome page already leads, so
+			// a second door to it in Help is the redundancy the product menu does not carry
+			// (owner, 2026-10-09). The command stays in the palette.
 		});
 	}
 
