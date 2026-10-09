@@ -2,21 +2,23 @@
 
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
 > `AGENTS.md`; su visión completa, en `docs/VISION.md`. Este documento dice **cómo se junta
-> todo**.
+> todo**. Los `patch` que aparecen en documentos históricos ya no existen: el árbol vive en
+> `picode-source/`.
 
-## Qué es PiCode, en una frase
+## 💡 Qué es PiCode, en una frase
 
 Un **VS Code compilado desde su fuente** donde **pi es el agente nativo**, no una extensión
 añadida. Sin Copilot en ningún sitio, y con todo integrado como si el editor siempre
 hubiera sido así.
 
-## Las capas
+## 🧱 Las capas
 
 ```text
-  Fuente de VS Code (versión fijada)
-        │  + patches/vscodium/   ← quitan la marca de Microsoft
-        │  + patches/picode/     ← lo nuestro
-        │  + distribution/       ← el producto (nombre, icono, galería, ajustes)
+  Fuente de VS Code 1.135.0   (upstream/stable.json — el pin de procedencia)
+        │
+        │  el árbol propio: picode-source/  ← los cambios de VSCodium y los nuestros, ya dentro
+        │
+        │  + distribution/product-delta.json ← el producto (nombre, icono, galería, ajustes, versión)
         ▼
   PiCode  ────────────────────────────────────────────────┐
         │                                                  │
@@ -30,15 +32,25 @@ hubiera sido así.
         └──────────────────────────────────────────────────┘
 ```
 
-### 1. La fuente y los parches
+### 1. La fuente propia y el delta de producto
 
-Se clona la fuente oficial de VS Code en una **versión fijada**, se le aplican los parches de
-VSCodium (quitada la marca de Microsoft) y después **los nuestros**. Después la capa
-`distribution/` pone el producto: nombre, icono, carpeta de datos propia, galería, ajustes de
-primer arranque.
+El árbol de VS Code **ya no se clona ni se parchea en cada build**: desde el 2026-09-27
+`picode-source/` **es la fuente de PiCode**, versionada en este repositorio, con los cambios
+de VSCodium y los propios ya dentro. El build no descarga ni aplica parches; compila ese
+árbol.
 
-**Por qué así y no un binario ajeno:** cualquiera puede auditar y recompilar. El ZIP
-precompilado sigue siendo el camino para quien solo quiere *usarlo*.
+La capa `distribution/` pone el producto **antes** de compilar: nombre, icono, carpeta de
+datos propia, galería, ajustes de primer arranque y el **número** que leen las extensiones.
+El delta es data (`product-delta.json`) y se aplica a `picode-source/product.json` en la
+fase 1.
+
+**Procedencia y número no son lo mismo.** El pin `upstream/stable.json` registra de qué VS
+Code desciende el árbol (1.135.0); el número declarado (`set.version`, hoy 1.141.1) se sube
+para que las extensiones que piden `engines.vscode: ^1.141.0` sigan instalándose. Es una
+decisión medida, no un rebase: ver `odd/tasks/picode-rebase-141.md` y ADR-016.
+
+**Por qué así y no un binario ajeno:** cualquiera puede auditar y recompilar. El instalador
+sigue siendo el camino para quien solo quiere *usarlo*.
 
 ### 2. El núcleo: las superficies son del editor
 
@@ -105,7 +117,7 @@ El programa es **gratis y completo**. Lo que se vende es **guardar toda la confi
 nube** —la de PiCode y la de pi— como **una sola cosa**, que es exactamente
 el perfil propio.
 
-## Las reglas de diseño
+## 📐 Las reglas de diseño
 
 1. **No hay superficie propia de PiCode.** Chat, Agente y sus ajustes.
 2. **Nada se escribe fuera del perfil de PiCode.**
@@ -116,7 +128,7 @@ el perfil propio.
 7. **Nada se marca como hecho sin verlo funcionar.** El registro de este repositorio tiene
    tres casos de lo contrario.
 
-## El recorrido del usuario
+## 🚶 El recorrido del usuario
 
 1. **Instala PiCode y abre.** No hay que configurar nada para empezar.
 2. **El asistente de primer arranque** pregunta qué hacer: usar el pi de dentro (lo normal),
@@ -127,7 +139,7 @@ el perfil propio.
    sus habilidades.
 5. **Todo queda en su perfil**, listo para subirse cuando exista la nube.
 
-## Qué NO es PiCode
+## 🚫 Qué NO es PiCode
 
 - Un panel propio, una pestaña propia, unos ajustes propios.
 - Una extensión al lado del editor.
