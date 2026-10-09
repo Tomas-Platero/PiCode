@@ -164,7 +164,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * La página **«Agent Customizations»** del chat debe listar los elementos reales del runtime pi (perfil en fuerza), no los de las convenciones de GitHub/Copilot.
 * **Agents**: los agentes de pi. **Skills**: las de pi y las del proyecto. **MCP Servers**: los servidores mcp de pi. **Plugins**: los paquetes instalados de pi.
-* **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejeta de la página.
+* **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejilla de la página.
 
 ---
 

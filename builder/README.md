@@ -3,7 +3,7 @@
 The window for building PiCode. C# and WinUI 3, in this folder so the pipeline in `dev/` stays what it
 is: the engine, runnable without any of this, from a terminal and from CI.
 
-## Building and running it
+## 🔨 Building and running it
 
 **Double-click `build.cmd`.** That is the whole thing: it builds this and opens it. If something goes
 wrong the window stays open with the message instead of vanishing with it.
@@ -12,7 +12,7 @@ Or from a terminal:
 
 ```bash
 cd builder
-.uild.cmd                      # same thing
+build.cmd                       # same thing
 dotnet build                     # compile only
 dotnet run                       # compile and open
 dotnet run -c Release            # the smaller, faster one
@@ -26,7 +26,7 @@ builder\bin\Debug\net10.0-windows10.0.19041.0\win-x64\PiCode.Builder.exe
 
 Both are also in the editor's task list: **PiCode: build the builder** and **PiCode: run the builder**.
 
-## Where it has to live
+## 📍 Where it has to live
 
 **Inside the repository.** It drives the scripts in `dev/`, so it finds the tree by looking upwards from
 where the executable is: keep it anywhere under the repository and everything it needs is found from
@@ -41,7 +41,7 @@ remembered, the window opened and then died while drawing, before a single line 
 ran. It is not offered, because a door that crashes is worse than no door. The state that works is the
 one that is shipped.
 
-## What it needs on the machine
+## 🧰 What it needs on the machine
 
 **Nothing installed.** The .NET SDK is the only requirement, and the Windows App SDK arrives as a NuGet
 package the first time you build. No Visual Studio workload, no administrator, no runtime installed
@@ -49,7 +49,7 @@ beside the executable (it is self-contained).
 
 That is deliberate, and it is the same promise the PowerShell window made before it.
 
-## What it does, and what it deliberately does not
+## 🎛️ What it does, and what it deliberately does not
 
 It is a **front-end**: it starts the same `dev/build.sh` pipeline and reads the same
 `dev/build-progress.mjs` and `dev/build-requirements.mjs` that the terminal and the old window read.
@@ -64,7 +64,7 @@ Nothing about the build lives here.
 - **No colours of its own.** WinUI follows Windows, including the accent colour, which is what makes it
   look native instead of looking like one machine.
 
-## Why it is here and not in `dev/`
+## 🧭 Why it is here and not in `dev/`
 
 `dev/` is the pipeline: shell scripts anyone can run, and the thing CI would run. This is a way of
 pressing a button, and it belongs beside the pipeline rather than inside it. The terminal viewer

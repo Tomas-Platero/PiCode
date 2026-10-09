@@ -12,7 +12,7 @@ Three things to read before anything else:
 - [AGENTS.md](AGENTS.md) — the owner's own words. It is Spanish on purpose; it is the product
   contract, not documentation.
 
-## Which path are you on
+## 🧭 Which path are you on
 
 | You want to… | You work on… | Start with |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ Three things to read before anything else:
 | Change the agent integration | the core connector and agent host under `picode-source/extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Fix the pipeline | `dev/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
 
-## Building from source
+## 🔨 Building from source
 
 The scripts are **Bash** — on Windows run them from Git Bash, PowerShell will not work.
 
@@ -33,10 +33,10 @@ The scripts are **Bash** — on Windows run them from Git Bash, PowerShell will 
 ```
 
 `./picode-source` is PiCode's own source, not a download: it already carries the VSCodium
-patch set, PiCode's changes and the PiCode product identity, and it is committed **in its own
-git repository inside that folder**. The PiCode repository ignores it. Building is therefore
-local work on the tree: there is no fetch and no patch step to wait for, and the dependencies
-are installed once instead of on every build.
+changes, PiCode's own work and the PiCode product identity, and it is committed **in this
+repository** — a plain tracked folder, no submodule and no nested repository. Building is
+therefore local work on the tree: there is no fetch and no patch step to wait for, and the
+dependencies are installed once instead of on every build.
 
 Dependencies (Windows): Git for Windows, Node matching `.nvmrc`, Python 3.11, Rustup,
 and Visual Studio 2022 with the **Spectre-mitigated libraries** — without that component the
@@ -50,13 +50,13 @@ same scripts; needs only the .NET SDK).
 
 `picode-source/` is **not** a build output any more: it is the source, and it is versioned in
 this repository (decided by the owner on 2026-09-27: one clone carries everything). `PiCode-*`
-still is a build output and is ignored. Because Microsoft's source now lives in this tree, the
-old "never upload it here" rule moved up a level: **this repository must never be pushed to a
-public remote** — publishing it is the owner's decision alone, never a collaborator's or an
-agent's. The pre-import history of the tree is kept in a bundle outside the repository
-(`.scratch/picode-source-history.bundle`).
+still is a build output and is ignored. Because Microsoft's MIT-licensed source now lives in
+this tree, the upstream licence and attribution notices travel with it and must never be
+removed (see [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md)). This repository is **public**,
+and that is the owner's decision alone; a collaborator or an agent never publishes it, pushes
+it to another remote, or lifts its `.gitignore` fences.
 
-## The pin
+## 📌 The pin
 
 `upstream/stable.json` records the VS Code commit the tree descends from (`08d4889f`, 1.135.0).
 It no longer drives the build — nothing is fetched or patched any more, and the VSCodium patch
@@ -65,7 +65,7 @@ point for the day a newer VS Code is brought in. That day is a **merge**, and
 [docs/howto-build.md](docs/howto-build.md), section *Traer una versión nueva de VS Code*, is the
 plan (unexercised so far).
 
-## Rules that have burned us before
+## ⚠️ Rules that have burned us before
 
 - **A key that core iterates must be empty, not absent.**
   `builtInExtensionsEnabledWithAutoUpdates` missing crashed the editor; the delta keeps it as
@@ -80,7 +80,7 @@ plan (unexercised so far).
 - **Reverse-applying a patch does not prove it applies forward.** Test against a clean copy.
 - **Never edit a running bash script** — `dev/build.sh` will be re-read mid-flight.
 
-## Language
+## 🌐 Language
 
 Every string the product shows is **English** (ADR-012): dialogs, notifications, command
 titles, settings descriptions. Code, comments, commit messages and docs aimed at GitHub are
@@ -88,7 +88,7 @@ English too. Spanish stays where it is the conversation rather than the product:
 and the feature records in `odd/tasks/`. Other languages come later through language packs —
 do not translate sources in place.
 
-## Style of work
+## 🧱 Style of work
 
 - One reviewable unit per commit and per PR. The project's rule: a human should be able to
   hold the change in their head.
@@ -101,7 +101,7 @@ do not translate sources in place.
 - Features leave a record in `odd/tasks/<feature>.md`: what was asked, what was verified,
   what was deliberately not built, and the defects found along the way.
 
-## Tests
+## 🧪 Tests
 
 The core is verified today by building and running — a fresh-clone build is the first thing
 a maintainer will look at in a PR that touches `dev/` or `distribution/`. (The agent-layer
@@ -109,7 +109,7 @@ suites used to live inside `extensions/picode-pi-chat/`, hermetic `npm test` plu
 `test:live` against a real pi; that folder was deleted on 2026-09-27 by the owner's
 decision, and the panel returns as core code, with its tests, when the migration is done.)
 
-## Reporting
+## 🐞 Reporting
 
 Use the issue templates. For anything that could be a security problem, see
 [SECURITY.md](SECURITY.md) — do not open a public issue.

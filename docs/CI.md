@@ -1,6 +1,6 @@
 # CI y releases en GitHub
 
-## Estado actual: workflows activos (decisión del dueño, 2026-09-28)
+## ✅ Estado actual: workflows activos (decisión del dueño, 2026-09-28)
 
 Los workflows se eliminaron el 2026-09-27 (consumían minutos y dinero); el
 2026-09-28 el dueño pidió volver a tener build y release en GitHub, y rápidos.
@@ -20,7 +20,7 @@ Hay dos workflows:
   para el rol Admin), y
   verifica el feed en vivo.
 
-## Por qué es rápido
+## ⚡ Por qué es rápido
 
 - **Cachés**: `node_modules` + caché de npm (cubierto también el runtime de pi)
   y el binario de electron, con clave por `package-lock.json`. Con árbol
@@ -33,7 +33,7 @@ Hay dos workflows:
   por debajo del timeout de 40. En frío (primera vez o lockfile movido) tarda
   más: eso es `npm ci`, no un fallo.
 
-## Las reglas duras que el release enforcing
+## 🔒 Las reglas duras que el release enforcing
 
 La guía `picode-release` (skill) documenta el procedimiento y sus reglas. El
 workflow las lleva dentro para que no puedan ejecutarse mal:
@@ -66,7 +66,7 @@ El zip se hace con 7-Zip excluyendo `data/` (el perfil portable no es
 producto). El zip se sube además como artefacto del run para depurar sin
 descargar la release.
 
-## Cómo se publica una release
+## 🚀 Cómo se publica una release
 
 1. Bump de versión en `distribution/product-delta.json`: `set.picodeVersion`
    (el nombre de la release, `0.1.1-beta`) y `set.version` (el número del
@@ -83,7 +83,7 @@ descargar la release.
 La **vía manual** de la skill `picode-release` sigue válida como reserva
 (por ejemplo, si Actions no está disponible); las reglas son las mismas.
 
-## Trampas conocidas del build (siguen vigentes)
+## ⚠️ Trampas conocidas del build (siguen vigentes)
 
 - **RAM del runner/máquina**: el empaquetado pide más de 6 GB de heap. En una
   máquina con 8 GB, `NODE_OPTIONS="--max-old-space-size=5632"`; con 16 GB,
@@ -99,15 +99,16 @@ La **vía manual** de la skill `picode-release` sigue válida como reserva
   invocaciones — en paralelo, `build` corre antes de que `prepare` cree el
   directorio (`spawn /bin/sh ENOENT`).
 - **npm 11 bloquea install scripts** sin aprobación explícita por
-  nombre@versión completos: la etapa `metadata` de `prepare_vscode.sh` escribe
-  las aprobaciones de los paquetes nativos de VSCodium.
+  `nombre@versión` completos: las aprobaciones de los paquetes nativos viven **en el árbol**
+  (committed) y `npm ci` las lee de ahí. Si un cambio de dependencias las deja obsoletas, hay
+  que regenerarlas en el propio árbol, no en un script de preparación que ya no existe.
 - **Windows busca Visual Studio en rutas fijas**: si el árbol está en otra
   ruta, `vs2022_install=<ruta>` es el override que honra.
 - **`zip` no existe en los runners de Windows**: el zip del release se hace
   con 7-Zip (`7z a -tzip`), preinstalado ahí; el binario de la release local
   sigue la misma regla de excluir `data/`.
 
-## El pin, sin vigilancia automática
+## 📌 El pin, sin vigilancia automática
 
 El pin de VS Code (`upstream/stable.json`) se mueve a mano (los pasos en
 [`howto-build.md`](howto-build.md)). El workflow que lo vigilaba

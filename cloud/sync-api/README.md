@@ -1,13 +1,13 @@
 # PiCode Cloud Sync API
 
-Backend del servicio de sync de PiCode: implementa el contrato REST que espera el motor
-Settings Sync del editor, autentica contra Firebase Auth y guarda los datos por usuario
-en Firestore.
+The backend of PiCode's sync service: it implements the REST contract the editor's
+Settings Sync engine expects, authenticates against Firebase Auth, and stores each
+user's data in Firestore.
 
-- Proyecto Firebase: `picode-7f24f`
-- Contrato REST del cliente: ver `odd/tasks/picode-cloud-sync.md` (sección T1)
+- Firebase project: `picode-7f24f`
+- Client REST contract: see `odd/tasks/picode-cloud-sync.md` (section T1)
 
-## Arranque en desarrollo
+## 🔨 Development
 
 ```bash
 cd cloud/sync-api
@@ -15,33 +15,33 @@ npm install
 npm run dev   # http://localhost:3400
 ```
 
-## Variables de entorno
+## 🔑 Environment variables
 
-Crea `.env.local` (no se sube al repo) con:
+Create `.env.local` (it is not committed) with:
 
-```
+```bash
 FIREBASE_PROJECT_ID=picode-7f24f
 FIREBASE_CLIENT_EMAIL=<firebase-adminsdk@picode-7f24f.iam.gserviceaccount.com>
-FIREBASE_PRIVATE_KEY=<clave privada del service account, con \n escapados>
+FIREBASE_PRIVATE_KEY=<the service account's private key, with escaped \n>
 PICODE_WEB_ORIGIN=http://localhost:3600
 PICODE_ALLOWED_CLIENTS=picode
 ```
 
-`FIREBASE_CLIENT_EMAIL` y `FIREBASE_PRIVATE_KEY` salen del service account JSON:
-Firebase console → Configuración del proyecto → Cuentas de servicio → Generar nueva clave
-privada. En Vercel se configuran como variables de entorno del proyecto (nunca en el repo).
+`FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` come from the service account JSON:
+Firebase console → Project settings → Service accounts → Generate new private key.
+On Vercel they are set as project environment variables (never in the repository).
 
-## Estructura
+## 🗂️ Layout
 
-```
+```text
 src/
-  lib/firebase-admin.ts   # init único de Firebase Admin SDK
-  lib/auth.ts             # verificación de token del editor (cabeceras de sync)
-  lib/contract.ts         # tipos del contrato REST del motor de sync
-  app/api/                # rutas del contrato (manifest, collection, resource, ...)
+  lib/firebase-admin.ts   # single Firebase Admin SDK init
+  lib/auth.ts             # editor token verification (sync headers)
+  lib/contract.ts         # REST contract types for the sync engine
+  app/api/                # contract routes (manifest, collection, resource, ...)
 ```
 
-## API endpoints
+## 🔌 API endpoints
 
 All routes live under `/api/v1` (the client computes `<storeUrl>/v1`), require
 `Authorization: Bearer <firebaseIdToken>` plus `X-Account-Type`, and always
@@ -61,7 +61,7 @@ return an `x-operation-id` header (UUID) for diagnostics.
 | `DELETE /api/v1/collection/:id` | Delete one collection (idempotent). |
 | `GET /api/v1/download(/latest)` | `404` (not used in v1). |
 
-## Size limits
+## 📏 Size limits
 
 The request body cap is 4 MiB, but it is only a buffering guard: it bounds what
 the server is willing to read, not what the store accepts. What is stored is
@@ -94,7 +94,7 @@ Firestore layout (paths strictly alternate collection/document segments):
 The manifest's `latest[resource]` entry is the authoritative latest ref and is
 updated in the same transaction as every write.
 
-## Data encryption at rest
+## 🔐 Data encryption at rest
 
 All synced resource content is **encrypted server-side before it is written to
 Firestore** (AES-256-GCM, authenticated encryption). This is transparent to
@@ -119,10 +119,10 @@ exposes synced data in readable form.
   be decrypted (wrong key or corrupt data) answers `500 DecryptionFailed`
   instead of ever returning garbage.
 
-## Despliegue (Vercel, plan gratuito)
+## 🚀 Deploy (Vercel, free plan)
 
-1. `vercel link` dentro de esta carpeta.
-2. Configurar las variables de entorno anteriores en el proyecto de Vercel.
+1. `vercel link` inside this folder.
+2. Set the environment variables above on the Vercel project.
 3. `vercel deploy --prod`.
-4. La URL resultante (p. ej. `https://picode-sync-api.vercel.app/v1`) es la que irá en
-   `configurationSync.store` del `product.json` del editor (tarea T6).
+4. The resulting URL (e.g. `https://picode-sync-api.vercel.app/v1`) is the one that goes in
+   the editor's `product.json` `configurationSync.store` (task T6).
