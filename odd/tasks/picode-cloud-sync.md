@@ -125,6 +125,14 @@ Cloud Functions descartadas por requerir plan Blaze).
   `free` ≈ 1 MB, `pro` ≈ 25 MB (ajustables con `PICODE_QUOTA_FREE_BYTES` /
   `PICODE_QUOTA_PRO_BYTES`). Excedido → 413 TooLarge. Implementado en `src/lib/quota.ts`.
 
+> **2026-10-09 — corregido (ADR-017): la sync es solo Pro.** El plan free no almacena nada: su
+> cuota es **0** y `PICODE_QUOTA_FREE_BYTES` se ignora, porque `requirePro` responde `402` antes de
+> tocar el almacén. `PICODE_QUOTA_PRO_BYTES` (50 MiB por defecto) es la única palanca. La política
+> vive ahora en `src/lib/plans.ts` (sin Firestore) y la parte con I/O en `quota.ts`. La web ya no
+> anuncia sync en el plan free. En el editor **cualquier plan puede iniciar sesión y quedar
+> vinculado**; lo que se bloquea es encender la sync, con un aviso «PiCode Sync requires a Pro
+> account» + botón «See plans», y el `402` apaga la auto-sync de una cuenta que perdió el plan.
+
 ## Instrucciones para el dueño (T2 — solo tú puedes hacerlo)
 
 1. Entra en console.firebase.google.com con tu cuenta y crea el proyecto **picode-cloud**.
