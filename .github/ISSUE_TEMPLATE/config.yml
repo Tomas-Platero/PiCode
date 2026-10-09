@@ -1,15 +1,17 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Security report
-    url: >-
-      https://github.com/Tomas-Platero/PiCode/security/advisories/new
+  - name: 📖 Wiki — guides, concepts and FAQ
+    url: https://github.com/Tomas-Platero/PiCode/wiki
     about: >-
-      Anything that could be a vulnerability goes
-      privately, never as an issue. See SECURITY.md.
-  - name: Upstream Pi issues
+      How to install it, how the setup works, what each feature does, and
+      the questions that come up most. Start here before opening an issue.
+  - name: 💬 PiCode website
+    url: https://www.getpicode.app
+    about: >-
+      Downloads, the three release channels, and what PiCode Account
+      syncs.
+  - name: 🐘 Upstream Pi issues
     url: https://github.com/earendil-works/pi
-    about: >
-      The agent itself (RPC protocol, providers,
-      model catalog) is Pi's project — if the panel
-      is only reporting what Pi did, report it
-      there.
+    about: >-
+      The agent itself — its loop, tools, providers and model catalog — is
+      Pi's project. If PiCode is only reporting what Pi did, report it there.

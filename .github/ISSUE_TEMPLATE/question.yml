@@ -1,0 +1,59 @@
+name: ❓ Question or help
+description: >-
+  Something does not work as you expected and the docs did not answer it
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening an issue, the wiki usually has the answer in one page —
+        [browse it here](https://github.com/Tomas-Platero/PiCode/wiki):
+
+        - **Getting PiCode** — install, update channels, verify a download.
+        - **First Run and the Wizard** — from install to a working agent.
+        - **FAQ** — the questions that come up most.
+        - **Troubleshooting** — first-run and build problems.
+
+        If none of them covers it, ask here and tell us what you already read.
+  - type: input
+    id: version
+    attributes:
+      label: PiCode version
+      description: Help → About, or the file you downloaded.
+      placeholder: "0.2.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Release channel
+      options:
+        - Stable (recommended)
+        - Beta (early access)
+        - Experimental (freshest work)
+        - I built it myself from source
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you want to do
+      description: >-
+        What you are trying to achieve, what you tried, and where it stopped
+        making sense.
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you already read or tried
+      description: >-
+        The wiki page, the setting, the command — anything, so we do not
+        repeat it.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >-
+        A screenshot or the exact text that confused you, if you have one.
+      render: text
