@@ -8,6 +8,27 @@ Format: `## ADR-00N — Title`, followed by `Status`, `Context`, `Decision` and
 `Consequences`. A `Rejected alternatives` subsection is included where the
 alternatives were seriously considered.
 
+## Status at a glance
+
+| ADR | Title | Status |
+| --- | --- | --- |
+| 001 | Distribution layered on VS Code/VSCodium instead of a full fork | accepted |
+| 002 | Use VSCodium as the upstream base | accepted |
+| 003 | Integrate pi over `pi --mode rpc` | **superseded by ADR-014** |
+| 004 | Windows first, for the MVP | accepted |
+| 005 | Strict LF-only framing in the RPC client | **superseded by ADR-014** |
+| 006 | RPC payloads forwarded without re-validation | **superseded by ADR-014** |
+| 007 | `set_model` needs `provider` + `modelId` | accepted |
+| 008 | Layer on VSCodium without compiling a fork | **superseded by ADR-011 and ADR-013** |
+| 009 | The pi panel is opt-in, never auto-opened | **superseded** — the panel was retired; the principle lives on |
+| 010 | Pin and ship pi rather than using the user's PATH | accepted (details updated) |
+| 011 | Own the editor tree and remove product keys | accepted; mechanics **superseded by ADR-013** |
+| 012 | The product's own copy is English | accepted |
+| 013 | Own and compile the editor source in-repository | accepted |
+| 014 | Integrate pi through its in-process SDK | accepted |
+| 015 | Three release channels, one branch each | accepted |
+| 016 | The declared product version may lead the tree's base | accepted |
+
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
 **Status:** accepted.
@@ -61,7 +82,8 @@ is included in the build.
 
 ## ADR-003 — Integrate pi as a child process over `pi --mode rpc`, not via the in-process SDK
 
-**Status:** accepted.
+**Status:** accepted; **superseded by ADR-014** — the connector now drives pi through its
+in-process SDK. Kept because it is the record of why the boundary moved.
 
 **Context:** pi can be driven two ways from the agent layer: in process through
 the SDK (`createAgentSession`), or out of process through `pi --mode rpc`. The
@@ -114,7 +136,7 @@ Linux remain unverified until they are added.
 
 ## ADR-005 — Strict LF-only framing in the RPC client (reject `readline`)
 
-**Status:** accepted.
+**Status:** accepted; **superseded by ADR-014** — there is no RPC client any more.
 
 **Context:** The pi RPC protocol uses LF (`\n`) as the only record delimiter.
 `U+2028` and `U+2029` are legal inside JSON strings. Node's `readline` also
@@ -131,7 +153,7 @@ module that is wrong for this protocol.
 
 ## ADR-006 — The RPC client forwards protocol payloads without re-validating field types
 
-**Status:** accepted.
+**Status:** accepted; **superseded by ADR-014** — there is no RPC client any more.
 
 **Context:** The authoritative schema for RPC payloads lives in pi. After the
 discriminant (`type`) is checked, the payload is already declared to be of that
@@ -211,7 +233,9 @@ path stops being an escape hatch and becomes the only option.
 
 ## ADR-009 — The pi panel is opt-in, never auto-opened
 
-**Status:** accepted.
+**Status:** accepted; **superseded** — the panel was retired on 2026-09-24 and the surface is
+the native chat. The principle it recorded (nothing PiCode adds opens itself on startup) still
+holds for whatever surface replaces it.
 
 **Context:** PiCode is agent-first, but it is still an editor, and an editor's
 primary surface is the file being edited. A panel that opens itself on startup
@@ -248,16 +272,15 @@ between pi releases (ADR-007 records a corrected assumption that came directly
 from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
-PiCode therefore pins the runtime it is verified against: pi `1.0.0`. The pin
-requires Node `22.19.0` or newer, which the machine running PiCode is expected to
-have.
+PiCode therefore pins the runtime it is verified against. The pin lives in one place,
+`distribution/runtime.json` — pi `1.1.0` today — and `dev/pi-runtime.sh` installs it into the
+pack during the build, so a freshly built editor is born working.
 
-**Decision:** PiCode pins and ships its own pi, and installs it through its own
-supported mechanism (`npm install -g`), instead of resolving it from the user's
-`PATH`.
+**Decision:** PiCode pins and ships its own pi inside the build, instead of resolving it from
+the user's `PATH`.
 
-The pin is not a lock-in: the extension setting `picode.pi.executablePath` lets a
-user point PiCode at a different pi binary.
+The pin is not a lock-in: the `picode.pi.runtime` setting (and its executable-path variant)
+lets a user point PiCode at a different pi.
 
 **Consequences:** Every PiCode install behaves the same way, verification is
 meaningful because the agent version is known, and PiCode's extension and pi
@@ -269,7 +292,10 @@ setting.
 
 ## ADR-011 — Own the editor tree and remove product keys instead of overriding them
 
-**Status:** accepted. Supersedes ADR-008 in part.
+**Status:** accepted. Supersedes ADR-008 in part; its *mechanics* are **superseded by
+ADR-013** — the tree is now the versioned source and is compiled, not a build artefact branded
+after extraction. What still stands from this ADR: PiCode owns the tree, and product keys are
+**deleted**, not merely overridden.
 
 **Context:** ADR-008 chose the no-compile path: brand a separately installed
 VSCodium through a user-level `%APPDATA%\VSCodium\product.json` overlay. That
@@ -295,14 +321,13 @@ against upstream.
 
 - Keys can be deleted, not merely overridden, which is what makes the Copilot
   removal real rather than cosmetic.
-- The tree is a build artefact and is not versioned. What is versioned is the
-  delta, the applier, the defaults and the extension; `.gitignore` fences the
-  700 MB payload.
-- Upgrading becomes "extract a new archive, re-run the apply script" rather than
-  an in-place update. `updateUrl` is emptied for that reason: the in-product
-  updater pointed at VSCodium releases and would have replaced the patched tree
-  and silently dropped the brand. Observed in the running editor as
-  `update#ctor - updates are disabled as there is no update URL`.
+- The tree was a build artefact and was not versioned; what was versioned was the
+delta, the applier, the defaults and the extension, and `.gitignore` fenced the
+700 MB payload. **Superseded by ADR-013**: the tree is now `picode-source/`, versioned.
+- Upgrading was "extract a new archive, re-run the apply script" rather than
+  an in-place update, and `updateUrl` was emptied for that reason. **Superseded by
+  ADR-013/ADR-015**: the build compiles the tree, and the updater reads the channel's own
+  static feed (see ADR-015 and `updates/README.md`).
 - The edit surface is product configuration and the shipped file set. Anything
   compiled into the bundle stays untouchable.
 
@@ -375,3 +400,100 @@ only supported way to get a different language on screen.
 **Reversal trigger:** this decision stops paying for itself if a language pack cannot be
 built or loaded for the platforms PiCode targets — at that point the sources would have to
 carry translations again.
+
+## ADR-013 — PiCode owns and compiles its editor source in-repository
+
+**Status:** accepted. Supersedes ADR-008 in full and ADR-011 in its distribution mechanics.
+
+**Context:** ADR-008 and ADR-011 kept the distribution **uncompiled**: a stock VSCodium archive
+was extracted, branded after the fact with a data delta, and fenced out of git as a build
+artefact. On 2026-09-27 the owner reversed the frame: *"lo que si OLVIDATE de una extensión,
+todo ha de vivir en el núcleo"* and the prepared tree stopped being an artefact. It is now
+PiCode's source.
+
+**Decision:** `picode-source/` is PiCode's own, versioned source tree — the VSCodium changes,
+PiCode's work and the product identity already baked in. Nothing is fetched or patched per
+build; `dev/build.sh` compiles it in five phases, and the product delta is applied to
+`picode-source/product.json` **before** packing.
+
+**Consequences:** A core behaviour change is TypeScript in the tree, compiled, with the
+checksums computed over the finished product — the `checksums` map that made the minified
+bundle untouchable (ADR-011) no longer bounds us. A newer VS Code becomes a **merge against
+`picode-source/`** instead of an archive swap. The trade-off accepted: the repository carries
+Microsoft's MIT-licensed source and must keep its attribution, and the tree is large, so the
+first build installs its dependencies once.
+
+**Rejected alternatives:** keeping the delta-only path — it could not delete product keys from
+minified core, which is exactly what the Copilot removal needs.
+
+**Reversal trigger:** it stops paying if maintaining the merged tree against upstream costs
+more than the layer-only path did and a genuine fork is unavoidable.
+
+## ADR-014 — pi is integrated through its in-process SDK, not `pi --mode rpc`
+
+**Status:** accepted. Supersedes ADR-003, ADR-005 and ADR-006.
+
+**Context:** ADR-003 chose a child process over `pi --mode rpc` for process isolation and
+version independence; ADR-005 and ADR-006 governed that RPC client's framing and payload
+handling. The connector now loads pi's SDK at runtime (`piSdk.ts`) and opens the session with
+`createAgentSessionServices` / `createAgentSessionFromServices` inside the extension host. There
+is no RPC client, no hand-rolled framing and no payload forwarding left to govern.
+
+**Decision:** The session runs through pi's in-process SDK. The runtime is still the pinned,
+in-tree one (`distribution/runtime.json`), and the CLI is used only for what the SDK does not
+expose (package management).
+
+**Consequences:** Events arrive as typed SDK objects instead of JSONL, so ADR-005's framing
+rule and ADR-006's forwarding rule no longer apply. The isolation and version-independence
+benefits ADR-003 wanted are given up: a pi failure now runs in the extension host, and the pi
+version is the one the build ships. That is accepted because the runtime is pinned and shipped
+(ADR-010), so there is no unknown-version drift left to defend against.
+
+**Rejected alternative:** keeping the RPC child process — rejected because the chat had to
+carry typed model, thinking and queue operations that only the SDK exposes cleanly, and the
+pinned runtime removes the version-independence argument.
+
+## ADR-015 — Three release channels, one branch each, feed beside the channel
+
+**Status:** accepted.
+
+**Context:** The owner asked for three channels — stable, beta and experimental — each
+installable beside the others, with no channel able to receive another's release.
+
+**Decision:** `master` is **stable**, `beta` and **experimental** are the other two. Each
+channel's update feed lives on **its own branch**, under
+`updates/<channel>/win32/x64/<target>/`, and `dev/build.sh` seals the channel into
+`product.json` (`quality`) and rewrites the `updateUrl` branch from `/HEAD/` to the channel's
+branch (`PICODE_CHANNEL=stable|beta|experimental`).
+
+**Consequences:** A beta install cannot be handed a stable release even if a pipeline errs,
+because it reads a different branch. Side-by-side installs use separate folders, profiles and
+AppIds. The cost accepted: three branches to keep aligned, and a feed that must never be
+copied across channels — a stray copy is exactly what a later merge would land in the wrong
+place.
+
+**Reversal trigger:** if keeping three branches aligned costs more than the separation is
+worth, or if the updater stops being able to read a branch-scoped feed.
+
+## ADR-016 — The declared product version may lead the tree's upstream base
+
+**Status:** accepted; **recorded as a corrected assumption** — the first plan was a real rebase.
+
+**Context:** A VS Code-derived extension validates against `engines.vscode`, which the editor
+compares against its **product version**. A tree descending from VS Code 1.135.0 could not
+install extensions that ask for `^1.141.0`, and the plan was to rebase the tree onto 1.141.0.
+The owner refused: *"NO estamos trabajando en un fork ya, es nuestro código"* and *"QUIERO QUE
+NUESTRO PRODUCTO NO CAMBIE SOLO QUERIA CAMBIAR UN NUMERO"*.
+
+**Decision:** Keep the tree as it is and raise only `distribution/product-delta.json →
+set.version` (1.135.0 → 1.141.1). The pin `upstream/stable.json` keeps telling the truth about
+where the tree descends from; the declared number is free to lead it.
+
+**Consequences:** Extensions install, and not a line of PiCode's product changes. The measured
+risk — an extension calling a function added between 1.136 and 1.141 — is negligible: against a
+clone, the stable API surface (`vscode.d.ts`) changed only in comments, and the new proposed
+APIs are unreachable unless `product.json` enables them. The price is upstream behaviour and
+fixes we do not inherit, not surface, and that price is knowingly accepted.
+
+**Reversal trigger:** a required extension that genuinely needs 1.141 behaviour, or an upstream
+security fix that only lands in the code, turns this back into a real merge.

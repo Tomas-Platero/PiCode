@@ -2,8 +2,8 @@
 One reviewable unit per PR. If the diff covers two decisions,
 open two PRs. Delete these comments before submitting.
 
-Direct pushes to branches are disabled for contributors; the repository
-admin keeps a bypass. Everyone else lands changes through a pull request.
+Direct pushes to protected branches are disabled for everyone; every
+change lands through a pull request and passes the branch ruleset.
 -->
 
 ## What changes, in one line

@@ -1,10 +1,10 @@
 # El harness de agentes en PiCode: cómo está integrado
 
-> Documento de arquitectura, medido sobre el pack experimental **0.1.5-experimental**
-> (editor 1.135.7, pi 1.1.0). Fechas y commits citados. Si este papel y el código
-> discrepan, gana el código — y este papel se corrige.
+> Documento de arquitectura, medido sobre el pack experimental **0.2.1-experimental**
+> (número declarado 1.141.1, árbol de VS Code 1.135.0, pi 1.1.0). Fechas y commits citados.
+> Si este papel y el código discrepan, gana el código — y este papel se corrige.
 
-## Primero, las palabras — porque hay dos "harness"
+## 🤝 Primero, las palabras — porque hay dos "harness"
 
 | Palabra | En el vocabulario del dueño | En el vocabulario de VS Code 1.141 |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Este documento describe cómo está montado.
 
 ---
 
-## Parte 1 — El harness que hay: pi, integrado en cinco capas
+## 🧩 Parte 1 — El harness que hay: pi, integrado en cinco capas
 
 ### 1. El runtime (lo que ejecuta)
 
@@ -24,7 +24,7 @@ Este documento describe cómo está montado.
   de la instalación. El pin vive en **un solo sitio**: `distribution/runtime.json`
   (hoy **1.1.0**). El SDK no es dependencia de compilación: se carga por `dynamicImport`
   en runtime, y los pocos miembros que se usan se tipan **estructuralmente**
-  (`extensions/picode/src/piSdk.ts`). Si el `createAgentSession` no está, se dice
+  (`picode-source/extensions/picode/src/piSdk.ts`). Si el `createAgentSession` no está, se dice
   `no-sdk`; si la ruta no se puede leer, `unreadable` — dos frases distintas para dos
   problemas distintos.
 - **Se usa como SDK**, no como CLI ni por RPC: el conector importa
@@ -87,7 +87,7 @@ extensión para vivir en el proceso host del editor. Está registrado como tarea
 
 ---
 
-## Parte 2 — pi-durable: el runtime que reemplaza al harness
+## 💾 Parte 2 — pi-durable: el runtime que reemplaza al harness
 
 La rama `experimental` existe para probar `pi-durable` como runtime del agente.
 
@@ -95,13 +95,13 @@ La rama `experimental` existe para probar `pi-durable` como runtime del agente.
   el binario del propio editor en modo Node: una instalación es autocontenida.
 - **Qué hace**: posee sus conversaciones en SQLite (`data/durable`, junto al perfil, nunca
   en la carpeta que una actualización reemplaza), sirve clientes locales por named pipe, y
-  recupera una提交 enviada si el proceso muere a mitad de turno.
+  recupera un envío (submission) si el proceso muere a mitad de turno.
 - **Cómo entra en el chat**: el conector delega en durable lo que no puede perderse; las
   tarjetas de background y de subagente dibujan su identidad.
 
 ---
 
-## Los caminos que NO existen (y no deben abrirse)
+## 🚫 Los caminos que NO existen (y no deben abrirse)
 
 - **No hay superficie de Copilot en el editor**: el chat es `@pi` y nadie
   más. `defaultChatAgent` está a `null` y los ajustes de los subagentes de la familia

@@ -6,22 +6,24 @@ la cara pública (README, wiki) se escribe desde aquí, no al revés.
 
 | Documento | De qué habla | Idioma |
 | --- | --- | --- |
-| [VISION.md](VISION.md) | La visión del dueño: qué quiere que PiCode llegue a ser | ES |
-| [DISENO.md](DISENO.md) | Cómo se junta todo hoy: capas, núcleo, perfil, reglas de diseño | ES |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | El modelo de 4 capas, la capa de agente, el contrato RPC, testing | EN |
-| [DECISIONS.md](DECISIONS.md) | Los ADR (001–012): qué se decidió, por qué, y qué lo revertiría | EN |
-| [DISTRIBUTION.md](DISTRIBUTION.md) | El árbol propio: delta de producto, perfil portable, verificación | EN |
-| [howto-build.md](howto-build.md) | Compilar desde la fuente: pins, parches, reparación, verificación | ES |
-| [CI.md](CI.md) | La vigilancia del pin: los tres workflows, cachés, política de urgencia | ES |
-| [HARNESS.md](HARNESS.md) | Cómo está integrado hoy el harness de agentes: las cinco capas de pi y pi-durable | ES |
-| [TAREAS.md](TAREAS.md) | **La única lista de qué queda.** Si un papel de `odd/tasks/` dice otra cosa, gana este | ES |
+| [VISION.md](VISION.md) | 🌱 La visión del dueño: qué quiere que PiCode llegue a ser | ES |
+| [DISENO.md](DISENO.md) | 🧱 Cómo se junta todo hoy: capas, núcleo, perfil, reglas de diseño | ES |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 🏗️ El modelo de 4 capas, la capa de agente, el SDK de pi, testing | EN |
+| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–016): qué se decidió, por qué, y qué lo revertiría | EN |
+| [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
+| [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
+| [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
+| [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y pi-durable | ES |
+| [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si un papel de `odd/tasks/` dice otra cosa, gana este | ES |
 
 ## Cómo se lee esto sin perderse
 
+0. ¿**Qué está pasando ahora mismo**? → `TAREAS.md` (qué queda) y `odd/tasks/` (cómo se llegó).
+
 1. ¿**Qué es PiCode** y por qué existe? → `VISION.md`, luego el README.
 2. ¿**Cómo está montado** hoy? → `DISENO.md` (capas) y `ARCHITECTURE.md` (mecánica).
-3. ¿**Por qué así y no de otra forma**? → `DECISIONS.md`. Cada ADR lleva sugatilla de
-   reversión: cuándo deja de pagar la decisión.
+3. ¿**Por qué así y no de otra forma**? → `DECISIONS.md`. Cada ADR lleva su estado (qué lo
+   sustituye) y su condición de reversión: cuándo deja de pagar la decisión.
 4. ¿**Cómo lo compilo yo**? → `howto-build.md`. ¿Por qué falla CI? → `CI.md`.
 5. ¿**Qué queda por hacer**? → `TAREAS.md`. Nada más. Los `odd/tasks/*.md` son el *cómo se
    llegó aquí*, con sus errores incluidos; útiles antes de re-decidir algo que ya se

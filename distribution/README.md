@@ -8,7 +8,7 @@ holds the **product identity as data**: the build (and CI, and the release workf
 applies the delta to the source tree's `product.json`, and the staging step lays the
 first-run defaults and the brand assets onto the packed output.
 
-## Files
+## 🗂️ Files
 
 | File | Purpose |
 | --- | --- |
@@ -19,14 +19,14 @@ first-run defaults and the brand assets onto the packed output.
 | `picode.ico` | The Windows icon; the Linux pack derives its PNG icons from it (`dev/ico-to-png.mjs`). The builder app reads it too. |
 | `picode-icon.svg` / `picode.svg` | The brand marks the staging step lays onto the packed tree: the filled plate for icon surfaces, the strokes-only drawing for watermark surfaces. |
 
-## How the build uses it
+## 🔗 How the build uses it
 
 - Phase 1 of `dev/build.sh` applies `product-delta.json` to `picode-source/product.json`.
 - Phase 5 (`dev/stage-distribution.sh`) stages `settings.json`, the icons and the marks
   onto the pack output (`./PiCode-Win32-x64`).
 - The release workflow reads the version from `product-delta.json` before tagging.
 
-## Publishing an update feed
+## 📡 Publishing an update feed
 
 The editor's updater reads a static JSON per platform, not the GitHub Releases API. After
 `gh release create` uploads the asset, write that document and commit it:
@@ -39,7 +39,7 @@ node dev/update-feed.mjs --version <v> --commit <sha> --url <asset-url> \
 The layout, the URL template and the version-numbering dependency are in
 [`updates/README.md`](../updates/README.md).
 
-## Changing the product
+## 🎛️ Changing the product
 
 Edit `product-delta.json`; the build applies it. Two rules this file has already learned
 the hard way, both by running the build rather than by reading the diff:
@@ -51,7 +51,7 @@ the hard way, both by running the build rather than by reading the diff:
 
 `docs/DISTRIBUTION.md` section 3 carries both cases with their symptoms.
 
-## Retired
+## 🗄️ Retired
 
 - `bootstrap.ps1` branded a *separately installed* VSCodium through a
 user-level overlay. That path could override product keys but never delete one, which is
