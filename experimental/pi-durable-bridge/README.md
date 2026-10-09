@@ -11,7 +11,7 @@ work runs **inside the daemon's process**; if pi is killed mid-work, the daemon
 finishes the conversation and commits the answer to its SQLite. A later pi — the
 same one or a brand-new process — can read the finished conversation back.
 
-## The three tools it registers
+## 🧰 The three tools it registers
 
 | Tool | What it does |
 | --- | --- |
@@ -22,7 +22,7 @@ same one or a brand-new process — can read the finished conversation back.
 If the daemon is not running, every tool fails fast (bounded 3 s connect) with a
 plain message naming the endpoint and the start command — it never hangs.
 
-## How to run each piece by hand
+## 🖱️ How to run each piece by hand
 
 Start the daemon (the single owner of `experimental/durable/.data/sessions.sqlite`):
 
@@ -58,7 +58,7 @@ finished conversation with `durable_list`/`durable_read`. Prints
 `PROOF-BRIDGE-OK` and exits 0 when every step held. Logs land in
 `.data/` (gitignored).
 
-## Implementation notes
+## 🧠 Implementation notes
 
 - **Wire format is reused, not reimplemented.** The extension imports
   `../durable/lib/client.js` and `lib/protocol.js` by relative path, and
@@ -77,7 +77,7 @@ finished conversation with `durable_list`/`durable_read`. Prints
   files. The durable conversations live in the **daemon's** database — the
   daemon is the only process that ever opens it; the bridge never touches it.
 
-## What the hybrid gives — and what it does not
+## ⚖️ What the hybrid gives — and what it does not
 
 **Gives:**
 

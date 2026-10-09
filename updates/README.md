@@ -3,7 +3,7 @@
 The static documents the editor's updater reads. They are served directly from this
 directory by `raw.githubusercontent.com`, which is why there is no update server to run.
 
-## Why it lives here and not in GitHub Releases
+## 🧭 Why it lives here and not in GitHub Releases
 
 With the updater change baked into the source tree (VSCodium's
 `11-update-use-github-release`, now ordinary code in `picode-source/`), the updater asks for
@@ -25,41 +25,45 @@ answer in that shape, so `updateUrl` points at this directory instead, and
 https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates
 ```
 
-## The two Windows feeds (why there are two)
+## 🧩 The two Windows feeds (why there are two)
 
 PiCode ships one release with two artifacts, and each is updated from a different path:
 
 | Build | Update type | Target the editor asks for | Feed |
 | --- | --- | --- | --- |
-| Portable zip, run in place | `Archive` | `archive` | `updates/stable/win32/x64/archive/latest.json` |
-| Installed with the Inno user setup | `Setup` | `user` (the `user-setup` task injects `target: "user"` into the product it ships) | `updates/stable/win32/x64/user/latest.json` |
+| Portable zip, run in place | `Archive` | `archive` | `updates/<channel>/win32/x64/archive/latest.json` |
+| Installed with the Inno user setup | `Setup` | `user` (the `user-setup` task injects `target: "user"` into the product it ships) | `updates/<channel>/win32/x64/user/latest.json` |
+
+`<channel>` is `stable`, `beta` or `experimental`, and the feed lives **on that channel's own
+branch** (`master`, `beta`, `experimental`) — ADR-015. A beta install reads the `beta` branch
+and cannot be handed a stable release, even by mistake.
 
 The installed feed is not optional. Without it the installed editor requests
 `.../user/latest.json`, finds nothing, and the update dialog answers **`Server returned
 404`** — which is exactly what 0.1.0-beta and 0.1.1-beta shipped without. Both feeds
 point at the same release; they differ in the asset they name (zip vs `-setup.exe`).
 
-## Publishing them
+## 🚀 Publishing them
 
 After `gh release create` has uploaded both assets:
 
 ```bash
 # 1. The portable feed (zip)
 node dev/update-feed.mjs \
-  --version 1.135.3 \
-  --picode-version 0.1.1-beta \
+  --version 1.141.1 \
+  --picode-version 0.2.1 \
   --commit <the commit the build was made from> \
-  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.1.1-beta/PiCode-win32-x64-0.1.1-beta.zip \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.2.1/PiCode-win32-x64-0.2.1.zip \
   --sha256 <sha256 of the zip> \
   --platform win32 --arch x64 --target archive \
   --installed <the editor version the previous release shipped>
 
 # 2. The installed feed (setup exe)
 node dev/update-feed.mjs \
-  --version 1.135.3 \
-  --picode-version 0.1.1-beta \
+  --version 1.141.1 \
+  --picode-version 0.2.1 \
   --commit <the same commit> \
-  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.1.1-beta/PiCode-win32-x64-0.1.1-beta-setup.exe \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.2.1/PiCode-win32-x64-0.2.1-setup.exe \
   --sha256 <sha256 of the setup exe> \
   --platform win32 --arch x64 --target user \
   --installed <the editor version the previous release shipped>
@@ -70,14 +74,14 @@ bookkeeping: a feed whose `productVersion` is not newer than what is installed m
 editor claim an update is available forever. That is the known failure mode of this
 mechanism and the reason the generator refuses to write such a feed without `--force`.
 
-## Which versions the feed must name
+## 🔢 Which versions the feed must name
 
 Two numbers, because they do two jobs:
 
 - **`productVersion`** — the **editor's** number, the one the updater compares against the
   installed product. It has **one home**: `distribution/product-delta.json → set.version`.
-  Both build paths apply that file (the build's prepare phase, and the staging step onto
-  the packed tree), so the compiled editor and the released one cannot disagree. Bumping a
+  The build's prepare phase applies that file to the tree before packing, so the compiled
+  editor and the released one cannot disagree. Bumping a
   release is editing that one value, and it must be **strictly greater** than the version
   the previous release shipped; the `--installed` check refuses otherwise.
 - **`picodeVersion`** — **PiCode's** own number (`0.1.0-beta`, `0.1.1-beta`, …). It names
@@ -85,13 +89,15 @@ Two numbers, because they do two jobs:
   `distribution/product-delta.json → set.picodeVersion`.
 
 The major.minor of `productVersion` stay VS Code's on purpose: every extension's
-`engines.vscode` (`^1.90.0`) is matched against the product version, so an independent
-`0.x` numbering would make every extension look incompatible. Today it reads `1.135.3`.
+`engines.vscode` is matched against the product version, so an independent
+`0.x` numbering would make every extension look incompatible. Today it reads `1.141.1`,
+while the tree still descends from VS Code 1.135.0 — the gap is deliberate and recorded in
+ADR-016.
 
 ### What is still not unified
 
-**Unified**: both build paths take `set.version` as the product version, so a tree branded
-by either one reports the same number; and the updater UI reads `picodeVersion` when the
+**Unified**: the build takes `set.version` as the product version, so a tree branded
+by the build reports the same number; and the updater UI reads `picodeVersion` when the
 feed carries one, falling back to `productVersion` for an older feed.
 
 **Not unified**: an installation released *before* the two-number split still reports

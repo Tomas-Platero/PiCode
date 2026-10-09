@@ -8,7 +8,7 @@ justify replacing what came before it:
 2. **A subagent is a background task that does not block the parent conversation.**
 3. **Two clients can attach to the same live conversation at once.**
 
-## The CLI (`cli.js`)
+## 🖥️ The CLI (`cli.js`)
 
 A headless agent over the same provider chain. The CLI uses **one shared database**
 (`.data/sessions.sqlite`): every conversation lives there and is reused across
@@ -474,7 +474,7 @@ this experiment should do unasked. The guard's `beforeTool` hook runs for MCP to
 like any other, but its rules today name `bash` and the file tools, so an MCP call passes
 unless a rule names it.
 
-## Layout (original proofs)
+## 🗂️ Layout (original proofs)
 
 | Path | Purpose |
 | --- | --- |
@@ -508,7 +508,7 @@ from a clean slate.
 The provider profile is only ever **read**; the harness writes its SQLite under
 `experimental/durable/.data/`.
 
-## Running the proofs
+## ▶️ Running the proofs
 
 From `experimental/durable/` (Node ≥ 24; developed on Node 24.19.0, Windows + Git Bash):
 
@@ -567,7 +567,7 @@ supported shape for two UI panels; the multi-process variant now exists — the 
 (see "The daemon: one owner, many clients") is that relay, with proof3's single-process
 watch pair unchanged as the minimal shape.
 
-## Environment overrides
+## 🎛️ Environment overrides
 
 - `PI_AGENT_PROFILE` — profile directory (default: the portable PiCode profile).
 - `PI_AGENT_PROVIDER` / `PI_AGENT_MODEL` — provider id / model id from the profile.

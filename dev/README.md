@@ -24,7 +24,7 @@ destroying it is an error and the flag says so instead of doing it. `-s` used to
 tree instead of fetching it", which is now the only thing that can happen; it is accepted with a
 note so that old commands keep working.
 
-## Phases
+## 🧱 Phases
 
 | # | Phase | What runs |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ note so that old commands keep working.
 anything is installed. It exists so the source can be checked in seconds rather than discovered to
 be wrong after an hour of compiling.
 
-## A build beside the editor
+## 🧪 A build beside the editor
 
 The ordinary build replaces what is here: the pack goes to `PiCode-Win32-x64`, and the installer it
 produces carries the release's AppId, so running it upgrades the PiCode already on the machine. A
@@ -68,9 +68,9 @@ PICODE_PACK_SUFFIX="-experimental" ./dev/build.sh
 The installer excludes `data/` on purpose, so an installed editor starts with a profile of its own; the
 portable profile stays with the portable pack.
 
-## Requirements
+## 🧰 Requirements
 
-- `git`, `node` (`.nvmrc`: 24.18.0 — `npm ci` and the gulp tasks need the repository's Node
+- `git`, `node` (`.nvmrc`: 24.19.0 — `npm ci` and the gulp tasks need the repository's Node
   version), `npm`.
 - Windows: **Git Bash**. `OS_NAME` comes from `OSTYPE`; an `OSTYPE` that yields neither
   `windows`, `osx` nor `linux` is a hard error.
@@ -82,7 +82,7 @@ portable profile stays with the portable pack.
   with the patch machinery on the same day.
 - `shellcheck` is not installed here, so the scripts are validated with `bash -n`.
 
-## The deleted path
+## 📜 The deleted path
 
 On 2026-09-27 the owner decided to stop keeping the VSCodium-style machinery. **Deleted**:
 `patches/**`, `upstream/vscodium.json`, `dev/get_repo.sh`, `dev/prepare_vscode.sh`,
@@ -95,11 +95,11 @@ Nothing is lost that a repository should hold:
 - **Which VS Code the tree descends from** is the one remaining pin, `upstream/stable.json`
   (commit `08d4889f`, VS Code 1.135.0). Diffing against pristine VS Code means fetching that
   public commit, and `docs/howto-build.md` ("Traer una versión nueva de VS Code") is the plan.
-- The full pristine-to-prepared history also exists locally as a git bundle
-  (`.scratch/picode-source-history.bundle`, not versioned, session-fragile): the permanent
-  record is the public pin plus this repository's history.
+- The full pristine-to-prepared history lived in a local git bundle that is **no longer in the
+  repository** (it was never versioned): the permanent record is `upstream/stable.json` plus
+  this repository's history, and `docs/howto-build.md` is the merge plan.
 
-## Where PiCode's identity lives
+## 🏷️ Where PiCode's identity lives
 
 - `distribution/product-delta.json` owns the PiCode **product** (`nameShort`, `nameLong`,
   `applicationName`, `urlProtocol`, the gallery, the URLs, the removals). Phase 1 applies it to
@@ -111,7 +111,7 @@ Nothing is lost that a repository should hold:
   script approvals — is **in the tree**, committed. Phase 1 verifies it rather than re-applying
   it, because a silent re-application is what let the first full build ship VS Code's icon.
 
-## Known gaps
+## 🚧 Known gaps
 
 - **The Windows icon has to be right before the pack (phase 4).** `rcedit` stamps the
   executable during the pack, so replacing `code.ico` afterwards changes nothing. To re-brand
@@ -138,16 +138,19 @@ Nothing is lost that a repository should hold:
   build: `compile-build-without-mangling` starts with `util.rimraf('out-build')`, and
   `bundle-vscode` and `minify-vscode` wipe `out-vscode` and `out-vscode-min`. This is the next
   thing to fix, and it is what makes a build cost hours.
-- **No CI.** Declared out of scope.
+- **CI is on.** Two workflows: `.github/workflows/ci.yml` (compile, connector tests, artifact,
+  on pushes and PRs, doc-only changes ignored) and `.github/workflows/release.yml` (tag-driven
+  release: build, publish, feed, verify). The long poles — `npm ci` and the electron download —
+  are cached; `docs/CI.md` has the policy.
 
-## What the build never writes
+## 🔒 What the build never writes
 
 `distribution/**` (the delta is read, never rewritten), `extensions/**` and
 `.git/**`. `picode-source` is written, and it is versioned — in this repository, since
 2026-09-27.
 `PiCode-*` is a build output and is ignored.
 
-## Building without a terminal
+## 🖱️ Building without a terminal
 
 `dev/build-window.cmd` opens a small window (`dev/build-window.ps1`, PowerShell and WPF, nothing to
 install) that a collaborator can use without knowing any of the above:
@@ -185,7 +188,7 @@ tool). The default task is the live build, the one with the bar. Two builds in o
 `node_modules` and over the directory they pack into — one of those left a half-installed tree
 behind — so the lock is checked before starting, never after.
 
-## The window is also an application now
+## 🪟 The window is also an application now
 
 `dev/build-window.cmd` is the PowerShell window, and it works. There is also a C# application in
 [`builder/`](../builder/README.md) with the same job - `cd builder && dotnet run` - which builds for
