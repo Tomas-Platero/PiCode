@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -45,8 +46,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      # fetch-depth 0 because the feed commit is pushed to master below;
-      # persist-credentials (default) is what lets that push authenticate
+      # fetch-depth 0 because the feed branch is rebuilt from the channel
+      # branch below (and the pull request merge walks that history);
+      # persist-credentials (default) is what lets the push authenticate
       # with the workflow token.
       - uses: actions/checkout@v7
         with:
@@ -397,8 +399,15 @@ jobs:
             --platform win32 --arch x64 --target user \
             "${INSTALLED[@]}"
 
-      - name: Land the feeds on master
+      - name: Land the feeds on the channel branch, through a pull request
         shell: bash
+        env:
+          # Branch rules require a pull request on every branch, and the
+          # GitHub Actions app cannot be a ruleset bypass actor here, so
+          # the feed lands the way any other change does: a short-lived
+          # branch, a pull request, merged at once. `gh` uses the same
+          # workflow token the push already authenticates with.
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email \
@@ -412,20 +421,30 @@ jobs:
           # that branch already tracks a different latest.json.
           mv "${FEED_ARCHIVE}" "${TMP_ARCHIVE}"
           mv "${FEED_USER}" "${TMP_USER}"
+          # The head branch is built FROM the channel branch and named
+          # after the version, so a rerun can never collide with a stale
+          # ref an earlier release left behind.
+          HEAD_BRANCH="feed-ship-v${PICODE_VERSION}"
           git fetch origin "${FEED_BRANCH}"
-          git checkout -B feed-ship "origin/${FEED_BRANCH}"
+          git checkout -B "${HEAD_BRANCH}" "origin/${FEED_BRANCH}"
           mkdir -p "$(dirname "${FEED_ARCHIVE}")" "$(dirname "${FEED_USER}")"
           mv "${TMP_ARCHIVE}" "${FEED_ARCHIVE}"
           mv "${TMP_USER}" "${FEED_USER}"
           git add updates/
           if git diff --cached --quiet; then
             echo "Feeds on ${FEED_BRANCH} are already identical; nothing" \
-              "to push."
-          else
-            git commit -m \
-              "release: update feed for v${PICODE_VERSION} [skip ci]"
-            git push origin "HEAD:${FEED_BRANCH}"
+              "to land."
+            exit 0
           fi
+          git commit -m \
+            "release: update feed for v${PICODE_VERSION} [skip ci]"
+          git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
+          gh pr create \
+            --base "${FEED_BRANCH}" \
+            --head "${HEAD_BRANCH}" \
+            --title "release: feed for v${PICODE_VERSION}" \
+            --body "Automated update feed for v${PICODE_VERSION}."
+          gh pr merge "${HEAD_BRANCH}" --squash --delete-branch
 
       - name: Verify the feeds are live
         env:
