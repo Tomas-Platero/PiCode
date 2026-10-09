@@ -1,72 +1,28 @@
-name: Build or CI failure
-description: A patch stopped applying, the
-  pipeline broke, or a release artifact is wrong
+name: 🧱 Build or CI failure
+description: The build broke, CI is red, or a release artifact is wrong
 labels: ["build"]
 body:
   - type: markdown
     attributes:
       value: |
-        Most build failures here are **the pin moving
-        under a patch**. The log usually names the
-        guilty patch file — if it does, this issue is
-        minutes of work for a maintainer and the title
-        should contain that filename.
+        PiCode compiles from its own source tree, so a build failure is almost
+        always one of three things: a missing dependency, a tree that is not
+        clean, or a release artifact that does not match the version it claims.
+
+        The log usually names the guilty file. Put that name in the title and
+        this becomes minutes of work instead of an investigation.
   - type: dropdown
     id: where
     attributes:
       label: Where did it fail
       options:
-        - Local dev/build.sh
-        - builder app
-        - CI pin-check workflow
-        - CI full-build workflow
-        - CI pin-watch (the PR it opened)
-        - A release artifact behaves wrong
+        - Local `./dev/build.sh`
+        - The `builder/` app
+        - GitHub Actions — CI workflow
+        - GitHub Actions — Release workflow
+        - A downloaded release artifact behaves wrong
     validations:
       required: true
-  - type: input
-    id: pin
-    attributes:
-      label: Pinned VS Code commit
-      description: >
-        `jq -r .commit upstream/stable.json`
-      placeholder: 08d4889f…
-    validations:
-      required: true
-  - type: textarea
-    id: output
-    attributes:
-      label: Exact failure output
-      description: >
-        The first error, not the last. Include the
-        patch path if the log names one
-        (`failed to apply patch <ruta>`).
-      render: text
-    validations:
-      required: true
-  - type: textarea
-    id: context
-    attributes:
-      label: What changed
-      description: >
-        A pin bump? A new patch? A machine that
-        used to build? `git log --oneline -5` of
-        your branch helps.
-      render: text
-  - type: checkboxes
-    id: checks
-    attributes:
-      label: Things already ruled out
-      options:
-        - label: >-
-            ./dev/build.sh -o reproduces it
-            (phases 1-5, no compile)
-        - label: >-
-            The dependency check passed
-            (node --version matches .nvmrc,
-            jq/python/rust present, Spectre
-            libraries found by vswhere)
-        - label: picode-source/ was a clean re-fetch
   - type: dropdown
     id: os2
     attributes:
@@ -75,6 +31,49 @@ body:
         - Windows x64 (Git Bash)
         - Linux x64
         - WSL (Ubuntu)
-        - GitHub runner
+        - GitHub Actions runner
     validations:
       required: true
+  - type: input
+    id: base
+    attributes:
+      label: Pinned VS Code base
+      description: >
+        Run `node -e "console.log(require('./upstream/stable.json').commit)"`
+        in the repository root and paste the result.
+      placeholder: 08d4889f…
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Exact failure output
+      description: >
+        The **first** error, not the last. Include the file or phase the log
+        names, if it names one.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What changed
+      description: >
+        A fresh clone? A dependency update? A machine that used to build?
+        `git log --oneline -5` and your `node --version` help.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Things already ruled out
+      options:
+        - label: >-
+            `./dev/build.sh -o` (check mode, no compile)
+            reproduces it
+        - label: >-
+            The dependencies are right — `node --version` matches
+            `.nvmrc`, Python, Rust and the Spectre libraries are present
+        - label: >-
+            The working tree is clean and `picode-source/` has not
+            been edited by hand
+        - label: I checked the build section of the wiki

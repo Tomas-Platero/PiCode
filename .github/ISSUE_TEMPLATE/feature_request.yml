@@ -1,25 +1,25 @@
-name: Feature request
+name: ✨ Feature request
 description: A change to what PiCode is or does
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        PiCode's product rules are written down (see
-        `AGENTS.md` and `docs/DISENO.md`): no PiCode-
-        owned panel, tab or settings page; nothing is
-        reimplemented that Pi already
-        ships; a datum appears once; anything
-        requiring action is a button.
-        Saying how your idea fits those rules saves a
-        round of questions.
+        PiCode has written product rules, and a proposal that fits them saves a
+        round of questions. The short version: no PiCode-owned panel, tab or
+        settings page; nothing is reimplemented that Pi already ships; a datum
+        appears once; anything that requires an action is a button.
+
+        The long version lives in the
+        [wiki](https://github.com/Tomas-Platero/PiCode/wiki), and in the
+        product rules written in `AGENTS.md` at the repository root.
   - type: textarea
     id: problem
     attributes:
       label: What hurts today
       description: >
-        The situation and what you actually wanted to
-        do. Not the solution — the problem.
+        The situation and what you actually wanted to do. Not the solution —
+        the problem.
     validations:
       required: true
   - type: textarea
@@ -32,13 +32,13 @@ body:
     id: layer
     attributes:
       label: Which layer would it touch
-      description: Guesses are fine.
+      description: A guess is fine.
       options:
-        - Editor patches (patches/picode)
-        - Product / distribution layer
-        - Agent integration (core chat, connector, agent host)
+        - The editor itself
+        - The product layer (identity, defaults, packaging)
+        - Agent integration (chat, providers, MCP, agent host)
         - Build pipeline or CI
-        - Documentation
+        - Documentation or wiki
         - Don't know
     validations:
       required: true
@@ -52,10 +52,9 @@ body:
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing issues (open and closed)
+        - label: I searched the existing issues, open and closed
           required: true
         - label: >-
-            It does not contradict a decision in
-            docs/DECISIONS.md (or I explain why the
-            ADR should change)
+            It does not contradict a decision recorded in the wiki (or I
+            explain below why that decision should change)
           required: true
