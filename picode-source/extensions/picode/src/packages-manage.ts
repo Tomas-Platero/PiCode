@@ -26,6 +26,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { parsePackageSource, projectPackageScope, userPackageScope, type PackageScope, type PiPackage } from './packages-data';
 import type { InstallContext, InstallResult, SpawnOptions, SpawnOutcome } from './packages-registry';
@@ -413,6 +414,51 @@ function lastMeaningfulLine(text: string): string | undefined {
 const REMOVE_TIMEOUT_MS = 180_000;
 
 /**
+ * Reads the profile's settings file as text, or nothing when it is not there. Injectable
+ * through the context, so the already-removed branch can be exercised without a profile.
+ */
+export type SettingsRead = (filePath: string) => Promise<string | undefined>;
+
+async function defaultSettingsRead(filePath: string): Promise<string | undefined> {
+	try {
+		return await readFile(filePath, 'utf8');
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Whether the profile's settings file still declares this source — any entry whose text (a
+ * plain string, or the `source` of an object) equals it.
+ *
+ * This is the check pi's own `remove` performs against the same file, repeated here for the
+ * one case where its answer misleads the page: a removal that already happened. The row the
+ * page shows comes from the declaration, so a stale row (the page not yet refreshed, or a
+ * second click) sends pi after a package that is no longer declared, and pi's "No matching
+ * package found" is the removal having **succeeded** earlier — not a failure.
+ */
+async function profileDeclaresSource(source: string, context: InstallContext): Promise<boolean> {
+	const read = context.readSettingsFile ?? defaultSettingsRead;
+	const text = await read(path.join(context.profileDir, 'settings.json'));
+	if (text === undefined) {
+		return false;
+	}
+	try {
+		const parsed: unknown = JSON.parse(text);
+		const packages = (parsed as { readonly packages?: unknown }).packages;
+		if (!Array.isArray(packages)) {
+			return false;
+		}
+		return packages.some(entry => {
+			const declared = typeof entry === 'string' ? entry : (entry as { readonly source?: unknown }).source;
+			return typeof declared === 'string' && declared.trim() === source;
+		});
+	} catch {
+		return false;
+	}
+}
+
+/**
  * One removal, run now: `pi remove <source>` into the profile in force.
  *
  * The source is passed to pi **as the settings file spells it** — the declaration came from
@@ -438,6 +484,14 @@ export async function removePackage(rawSource: string, context: InstallContext):
 	}
 	if (!outcome.ok) {
 		const reason = lastMeaningfulLine(outcome.stderr);
+		// pi refuses a source the settings no longer declare. After one successful removal —
+		// or a click on a row the page has not refreshed yet — that is the removal having
+		// already happened, and saying "could not be removed" would read as the opposite of
+		// the truth. Said as what it is.
+		if (reason !== undefined && reason.includes('No matching package found')
+			&& !await profileDeclaresSource(source, context)) {
+			return { ok: true, message: `Package ${source} was already removed.` };
+		}
 		return { ok: false, message: `Package ${source} could not be removed${reason === undefined ? '.' : `: ${reason}`}` };
 	}
 	return { ok: true, message: `Package ${source} removed with pi.` };
