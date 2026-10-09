@@ -1,0 +1,39 @@
+name: probe-ruleset
+
+# TEMPORARY. Proves that a GitHub Actions job on a user-owned repository
+# can still land a commit when a ruleset requires a pull request on every
+# branch and the Actions app cannot be a bypass actor. Deleted once the
+# answer is known.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: branch, push, open a PR and merge it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          HEAD_BRANCH="probe-head-${GITHUB_RUN_ID}"
+          git checkout -b "${HEAD_BRANCH}"
+          echo "probe ${GITHUB_RUN_ID}" > .probe.txt
+          git add .probe.txt
+          git commit -m "probe: ${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
+          gh pr create --base probe-base --head "${HEAD_BRANCH}" \
+            --title "probe ${GITHUB_RUN_ID}" \
+            --body "Temporary ruleset probe."
+          gh pr merge "${HEAD_BRANCH}" --squash --delete-branch
+          echo "PROBE OK: branch created, PR opened and merged"
