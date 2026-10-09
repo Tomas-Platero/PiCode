@@ -17,7 +17,7 @@
  *  2. **the repository a packed build sits in** — `PiCode-win32-x64` is unpacked *inside* the PiCode
  *     source tree, so its agent is up there, and that is how the live copy is used while the owner
  *     works in some other project;
- *  3. **what this installation ships** — `<app>/resources/pi-durable`. This is the candidate that
+ *  3. **what this installation ships** — `<app>/resources/durable`. This is the candidate that
  *     works *wherever PiCode is installed*: an installed editor has no repository above it, and the
  *     folder that happens to be open is somebody else's project. It does not come from the setting's
  *     value: the agent is carried by the installation, not by whatever the setting is spelled as.
@@ -28,10 +28,10 @@
 import { join, resolve } from 'path';
 
 /** The folder the default setting names, resolved against the roots below when relative. */
-export const DEFAULT_DURABLE_FOLDER = 'experimental/durable';
+export const DEFAULT_DURABLE_FOLDER = 'picode-source/durable';
 
 /** Where a build puts the agent inside its own installation, under `resources/`. */
-export const SHIPPED_DURABLE_FOLDER = 'pi-durable';
+export const SHIPPED_DURABLE_FOLDER = 'durable';
 
 /**
  * The folders to try, in order, for a configured value that is relative.

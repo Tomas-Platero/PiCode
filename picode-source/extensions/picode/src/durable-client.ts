@@ -7,9 +7,9 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 
 /**
- * The wire client of the durable daemon, **copied** from the experiment that owns the
- * protocol (`experimental/durable/lib/protocol.js` and `lib/client.js`). The connector is a
- * different process from that experiment and cannot import from its directory at runtime,
+ * The wire client of the durable daemon, **copied** from the agent that owns the
+ * protocol (`picode-source/durable/lib/protocol.js` and `lib/client.js`). The connector is a
+ * different process from that agent and cannot import from its directory at runtime,
  * so the small framing is duplicated here instead — a duplication the owner accepted, and
  * one that stays honest by naming its source: if the protocol there changes, this file is
  * the one that has to move with it.
@@ -27,7 +27,7 @@ import * as path from 'node:path';
 
 export const PROTOCOL_VERSION = 1;
 
-/** The named pipe the daemon listens on, matching the experiment's choice exactly. */
+/** The named pipe the daemon listens on, matching the agent's choice exactly. */
 const WINDOWS_PIPE = '\\\\.\\pipe\\picode-durable-agent';
 
 /**
@@ -38,7 +38,7 @@ const WINDOWS_PIPE = '\\\\.\\pipe\\picode-durable-agent';
 export function daemonEndpoint(durableFolder?: string): string {
 	return process.platform === 'win32'
 		? WINDOWS_PIPE
-		: path.join(durableFolder ?? 'experimental/durable', '.data', 'durable.sock');
+		: path.join(durableFolder ?? 'picode-source/durable', '.data', 'durable.sock');
 }
 
 /** Thrown when the daemon is not running (or does not answer in time). */
@@ -102,7 +102,7 @@ export class LineStream {
  *
  * `connect` is **bounded** (`timeoutMs`, default 3 s) and fails with a
  * `DaemonUnavailableError` whose message names the endpoint — a client never hangs on a
- * missing daemon, exactly as the experiment's own client does.
+ * missing daemon, exactly as the agent's own client does.
  */
 export class DaemonClient {
 

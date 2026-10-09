@@ -17,7 +17,7 @@ export { DEFAULT_DURABLE_FOLDER };
 /**
  * The durable agent, seen from the editor.
  *
- * The agent is the repository's `experimental/durable` program: a headless daemon that owns
+ * The agent is the repository's `picode-source/durable` program: a headless daemon that owns
  * its conversations in SQLite and serves local clients over a named pipe. This module is
  * the editor's client for it — nothing more. It starts and stops the daemon, asks it what
  * it holds (`ping` / `sessions`), lets the owner open a conversation's transcript and send
@@ -92,7 +92,7 @@ export function durableFolder(): string | undefined {
 	const folders = (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
 	// The roots, their order and the reason each one is in the list live in durable-folder.ts, where
 	// `node --test` pins them: the open folders, the repository a packed build sits in, and the agent
-	// this installation carries (`resources/pi-durable`) — the one that works wherever PiCode is
+	// this installation carries (`resources/durable`) — the one that works wherever PiCode is
 	// installed, which is what an installed editor has instead of a repository above it.
 	for (const candidate of durableFolderCandidates(trimmed, folders, vscode.env.appRoot)) {
 		if (fs.existsSync(path.join(candidate, 'cli.js'))) {
@@ -109,7 +109,7 @@ export function durableFolder(): string | undefined {
  * `durable_read`), as the chat's session loads it.
  *
  * It lives next to the durable folder — the `picode.durable.folder` setting names the
- * folder, the bridge is its `../pi-durable-bridge/extension.ts` sibling — and it is only
+ * folder, the bridge is its `../durable-bridge/extension.ts` sibling — and it is only
  * real when the file is on disk: `undefined` means "no bridge here", which the caller
  * treats as "the chat runs without it", never as an error.
  */
@@ -118,7 +118,7 @@ export function durableBridgeExtensionPath(): string | undefined {
 	if (folder === undefined) {
 		return undefined;
 	}
-	const candidate = path.join(folder, '..', 'pi-durable-bridge', 'extension.ts');
+	const candidate = path.join(folder, '..', 'durable-bridge', 'extension.ts');
 	return fs.existsSync(candidate) ? candidate : undefined;
 }
 
@@ -191,7 +191,7 @@ export async function readDurableStatus(): Promise<DurableStatus> {
 
 /**
  * Concatenated text of a pi-ai assistant message (content may be a string, an array of
- * blocks, or missing) — copied from `experimental/durable/lib/common.js`'s `textOf`, for
+ * blocks, or missing) — copied from `picode-source/durable/lib/common.js`'s `textOf`, for
  * the same reason the wire client is copied: the connector cannot import from there.
  */
 function textOf(message: unknown): string {
@@ -208,7 +208,7 @@ function textOf(message: unknown): string {
 		.join('');
 }
 
-/** Text of one transcript entry — copied from `experimental/durable/lib/common.js`'s `entryText`. */
+/** Text of one transcript entry — copied from `picode-source/durable/lib/common.js`'s `entryText`. */
 function entryText(entry: unknown): string {
 	const record = entry as { model?: unknown; data?: unknown } | null | undefined;
 	const messages = Array.isArray(record?.model) ? record.model : Array.isArray(record?.data) ? record.data : [];
@@ -549,7 +549,7 @@ function autoStartEnabled(): boolean {
  *
  * Deliberately quiet and deliberately conditional: it does nothing when the owner stopped the
  * agent in this window, when `picode.durable.autoStart` is off, or when the folder is not there
- * — an experiment that is not installed must not complain on every window start. A failure to
+ * — an agent that is not installed must not complain on every window start. A failure to
  * start, once the folder IS there, is reported like any other.
  */
 export async function ensureDurableAgentRunning(paths: DurableAgentPaths): Promise<void> {

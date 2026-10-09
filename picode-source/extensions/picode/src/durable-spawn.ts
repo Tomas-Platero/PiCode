@@ -9,7 +9,7 @@
  * decision is the editor's half of the daemon's lifetime contract and is the part worth
  * pinning with tests, so it lives here with no `vscode` import — next to
  * `durable-client.ts`, which carries the other half (the wire). If the daemon's contract
- * changes (`experimental/durable/lib/daemon.js`), this file moves with it.
+ * changes (`picode-source/durable/lib/daemon.js`), this file moves with it.
  *
  * The contract: the daemon's life is the editor's life. It is spawned ATTACHED (never
  * `detached`), and its stdin is a pipe this process holds open and never writes. The
