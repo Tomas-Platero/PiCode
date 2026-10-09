@@ -143,6 +143,7 @@
                                     <TextBlock Text="Settings" Style="{StaticResource SubtitleTextBlockStyle}"/>
                                     <TextBlock Text="Where the build runs" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     <TextBlock Name="TargetLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Name="ChannelLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                                     <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                                     <Button Name="InstallWslButton" Content="Install WSL and Ubuntu" Click="OnInstallWsl"
@@ -168,7 +169,7 @@
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE7F4;" FontSize="14"/>
-                                <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
