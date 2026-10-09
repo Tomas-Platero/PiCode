@@ -9,7 +9,7 @@
 [![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fdistribution%2Fproduct-delta.json&query=%24.set.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./odd/tasks/picode-versionado.md)
 [![Status: beta](https://img.shields.io/badge/status-beta-FFB000?style=flat-square)](./CHANGELOG.md)
 
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square&logo=windows&logoColor=3B9BFF)](#download)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square)](#download)
 [![Website](https://img.shields.io/badge/website-getpicode.app-3B9BFF?style=flat-square)](https://www.getpicode.app)
 [![Node](https://img.shields.io/badge/node-24.19.0-339933?style=flat-square&logo=nodedotjs&logoColor=white)](./.nvmrc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](./picode-source/)
@@ -35,7 +35,7 @@
 
 **PiCode is free and complete.** No feature is held back. The editor is 100% open-source and works fully offline with your own provider keys.
 
-**Version.** PiCode carries its own version — `0.1.0-beta` today, with the minor moving in each release — and is built on a pinned VS Code base, `1.135.0`. The number the editor reports stays the base's, because that is the one extensions are validated against; the version you are offered is PiCode's. Both live in one file, [`distribution/product-delta.json`](./distribution/product-delta.json), and the reasoning is recorded in [`odd/tasks/picode-versionado.md`](./odd/tasks/picode-versionado.md).
+**Version.** PiCode carries its own version — `0.2.1` today, on three release channels (stable, `beta` and `experimental`) — and is built on a pinned VS Code base, now `1.141.0`. The number the editor reports stays the base's, because that is the one extensions are validated against; the version you are offered is PiCode's. Both live in one file, [`distribution/product-delta.json`](./distribution/product-delta.json), and the reasoning is recorded in [`odd/tasks/picode-versionado.md`](./odd/tasks/picode-versionado.md).
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
@@ -49,12 +49,15 @@
 | --- | --- |
 | 💬 **AI chat, built in** | An agentic assistant that lives in the editor: streaming answers, tools, reasoning, your project's context. It reads your code, edits files, runs commands — and asks before it does. |
 | 🔌 **Your AI providers** | Connect with an API key or an OAuth subscription (ChatGPT, Claude, Copilot, Grok, Kimi, Meta, OpenRouter…), or declare a compatible endpoint with your own base URL. Pick the model per conversation. |
-| 🚀 **First-run setup** | Six steps from a fresh install to a working agent: sign in, choose which pi answers (the built-in one or your own), connect a provider, pick the packages, choose a theme. Any of it can be changed later. |
+| 🚀 **First-run setup** | Five steps from a fresh install to a working agent: sign in, choose which pi answers (the built-in one or your own), connect a provider, pick the packages, choose a theme. Any of it can be changed later. |
 | 🎨 **Themes** | A gallery that shows each theme's real colours, read from the theme itself: hover to try it on, click to keep it. Anything you install is picked from the same page. |
 | 🧩 **MCP servers, in one place** | Your agent's external tools live in one screen: add a server, edit it, switch it off or remove it. pi calls them through the editor, so its confirmations and permissions apply — you are asked before one of their tools runs. |
 | 📊 **A status panel that tells the truth** | Which pi is answering, its version, your providers, every MCP server and its state, the model and thinking level in use, what the session has cost, the tokens and cache it has used, the plan the agent is working through, your project's branch and changes. |
 | 🗂️ **Sessions** | Every conversation is kept per project. Search them, reopen them, read any transcript. |
 | ☁️ **PiCode Account** | Sign in and your settings, extensions, AI configuration and your agent's memory follow you to any machine — encrypted in transit and at rest. |
+
+<br />
+
 ## ☁️ PiCode Account
 
 Create a free account and PiCode keeps your editor the same everywhere:
@@ -70,7 +73,9 @@ The free plan syncs a small allowance — enough for your settings and extension
 
 ## ⬇️ Download
 
-Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases), unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
+Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases) — the **installer** (`PiCode-win32-x64-…-setup.exe`) or a portable **zip**: unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
+
+Three channels share the same code, each on its own branch of this repo: **stable** (recommended, no suffix), **beta** (`-beta`, early access to what is coming) and **experimental** (`-experimental`, built from the freshest work). Each has its own update feed, so switching channels is switching branches — [choose a channel](https://www.getpicode.app/#download).
 
 <a id="building-from-source"></a>
 
@@ -89,7 +94,7 @@ prepare → connector → compile → pack → stage
 
 Prefer buttons? The **builder** in [`builder/`](builder) is a small desktop app that drives the same pipeline. Full dependency list and troubleshooting in the [Contributing docs](CONTRIBUTING.md) and [howto-build](docs/howto-build.md).
 
-Releasing is by hand, and the version rule is the one above: a release bumps PiCode's own minor, and moves the editor version too (its patch, or the base when upstream moves) — because the updater compares the editor's number. The tag, the release title and the zip carry PiCode's version. Details in [docs/CI.md](docs/CI.md).
+Releases are built and published by GitHub Actions: bump the version in [`distribution/product-delta.json`](./distribution/product-delta.json), tag `v<version>`, push — the [release workflow](./.github/workflows/release.yml) builds, publishes the release with its SHA-256, generates the update feed and verifies it live. The version rule is the one above: a release moves the editor's number too (its patch, or the base when upstream moves) — because the updater compares the editor's number. The tag, the release title and the zip carry PiCode's version. Details in [docs/CI.md](docs/CI.md).
 
 ## 🙏 Credits
 
