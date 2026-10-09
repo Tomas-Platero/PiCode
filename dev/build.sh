@@ -198,7 +198,11 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
-trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+# The channel seal's undo: a no-op until the seal replaces it with the real saver. Defined
+# here so the exit trap below can call it on any path, even one that exits before phase 1
+# reaches the channel block.
+restore_product() { :; }
+trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; restore_product; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
 
 # The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
 # The functions and their rationale live in dev/data-hold.sh; build.sh calls recover + move-aside
@@ -344,6 +348,18 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
     experimental) QUALITY_VALUE="experimental"; FEED_BRANCH="experimental" ;;
     *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
+  # The seal rewrites the SOURCE product.json, and the identity check above reads it back
+  # against the delta — a tree left sealed fails its own next build. So the source copy is
+  # saved before the seal and put back when the pack is done (the trap restores it on any
+  # earlier exit, the same promise the profile's hold makes). What the channel owns is the
+  # PACKED product; the source stays what the delta wrote.
+  cp picode-source/product.json .scratch/product.json.pre-seal
+  restore_product() {
+    if [[ -f .scratch/product.json.pre-seal ]]; then
+      cp .scratch/product.json.pre-seal picode-source/product.json
+      rm -f .scratch/product.json.pre-seal
+    fi
+  }
   PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" FEED_BRANCH="${FEED_BRANCH}" node <<'NODE'
 const fs = require('fs');
 const crypto = require('crypto');
@@ -441,6 +457,8 @@ console.log(`  profile: ${product.dataFolderName}`);
 console.log(`  installs as: ${product.win32DirName}`);
 console.log(`  mutex: ${product.win32MutexName}`);
 NODE
+else
+  restore_product() { :; }
 fi
 
 if ! APP_VERSION="${APP_VERSION}" node <<'NODE'
@@ -623,6 +641,14 @@ if [[ "${PICODE_BUILD_ANYWAY:-0}" != "1" ]] && picode_editor_running; then
   echo "       PICODE_BUILD_ANYWAY=1 tries anyway (and will fail inside the pack if it is still open)." >&2
   exit 4
 fi
+# A product.json a hard-killed build left sealed (the trap cannot run on a taskkill) is put
+# back before anything reads it, exactly like the interrupted hold above: the source always
+# enters a build as the delta wrote it.
+if [[ -f .scratch/product.json.pre-seal ]]; then
+  cp .scratch/product.json.pre-seal picode-source/product.json
+  rm -f .scratch/product.json.pre-seal
+  echo "  -- the last build was killed between the seal and the restore: the source product.json is the delta's again"
+fi
 # The profile goes aside **first**, and the order is the whole point of this phase: `data/` lives inside
 # the folder that is about to be deleted, so a build that deletes without moving it aside first deletes
 # the owner's profile with it. On 2026-10-07 that is exactly what happened: an edit to this file dropped
@@ -747,6 +773,7 @@ else
 fi
 
 echo ""
+restore_product
 echo "== done"
 echo "source:    ./picode-source (PiCode's own tree, versioned in this repository)"
 # The product reports APP_VERSION (PiCode's own release). There is no VS Code tag to name any
