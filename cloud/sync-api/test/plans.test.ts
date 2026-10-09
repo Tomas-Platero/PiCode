@@ -7,6 +7,9 @@
  * that says what it is — and that the environment override, the thing that actually went stale,
  * behaves the way the code claims.
  *
+ * One promise is that there is only one storage-bearing plan: the free plan has no cloud sync, so
+ * its quota is 0 and no environment variable can raise it.
+ *
  * Imported from `plans.ts`, which has no Firestore in it, so this runs with no credentials.
  *
  *   node --experimental-strip-types --test test/*.test.ts
@@ -18,7 +21,6 @@ import test from "node:test";
 import { quotaBytesFor, readPlanId } from "../src/lib/plans.ts";
 
 const PRO_LIMIT_BYTES = 52_428_800; // 50 MiB — what the product promises Pro
-const FREE_LIMIT_BYTES = 1_000_000;
 
 function withEnv(name: string, value: string | undefined, body: () => void): void {
   const before = process.env[name];
@@ -56,9 +58,14 @@ test("Pro is 50 MB, which is what the product promises", () => {
   });
 });
 
-test("free is a megabyte", () => {
+test("free has no cloud storage, whatever the environment says", () => {
   withEnv("PICODE_QUOTA_FREE_BYTES", undefined, () => {
-    assert.equal(quotaBytesFor("free"), FREE_LIMIT_BYTES);
+    assert.equal(quotaBytesFor("free"), 0);
+  });
+  // A leftover variable from when the free plan had 1 MB must not resurrect a quota the product
+  // no longer sells: a non-Pro request never reaches the store, because `requirePro` answers 402.
+  withEnv("PICODE_QUOTA_FREE_BYTES", "999999999", () => {
+    assert.equal(quotaBytesFor("free"), 0);
   });
 });
 
@@ -78,11 +85,11 @@ test("nonsense in the environment falls back to the default, never to zero", () 
   }
 });
 
-test("each plan reads its own variable", () => {
+test("only Pro reads a quota variable", () => {
   withEnv("PICODE_QUOTA_PRO_BYTES", "111", () => {
     withEnv("PICODE_QUOTA_FREE_BYTES", "222", () => {
       assert.equal(quotaBytesFor("pro"), 111);
-      assert.equal(quotaBytesFor("free"), 222);
+      assert.equal(quotaBytesFor("free"), 0);
     });
   });
 });

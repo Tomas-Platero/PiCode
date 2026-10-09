@@ -94,6 +94,17 @@ Firestore layout (paths strictly alternate collection/document segments):
 The manifest's `latest[resource]` entry is the authoritative latest ref and is
 updated in the same transaction as every write.
 
+## 🧾 Plans and quotas
+
+Cloud sync is **Pro-only**. Every contract route calls `requirePro`, which
+answers `402 PaymentRequired` for any account whose `users/{uid}.plan` is not
+`pro`, so a free account can sign up and link the editor but stores nothing:
+its quota is 0 on purpose and `PICODE_QUOTA_FREE_BYTES` is ignored.
+
+The Pro quota is `PICODE_QUOTA_PRO_BYTES` (default 50 MiB) and is enforced
+inside the write transaction: a revision that would push the stored total over
+the ceiling answers `413 TooLarge` and nothing is written.
+
 ## 🔐 Data encryption at rest
 
 All synced resource content is **encrypted server-side before it is written to
