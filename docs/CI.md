@@ -15,7 +15,9 @@ Hay dos workflows:
 - [`.github/workflows/release.yml`](../.github/workflows/release.yml) —
   **Release**: se dispara con un tag `v*` o a mano (`workflow_dispatch`).
   Construye, crea la release de GitHub con el zip y su SHA-256, genera el feed
-  de actualizaciones y lo aterriza en `master`, y verifica el feed en vivo.
+  de actualizaciones y lo aterriza en la rama del canal **abriendo y
+  fusionando un pull request** (las ramas ya no aceptan push directo), y
+  verifica el feed en vivo.
 
 ## Por qué es rápido
 
@@ -49,8 +51,12 @@ workflow las lleva dentro para que no puedan ejecutarse mal:
    Inno, que es el destino que el producto instalado lleva inyectado). Ambas llevan
    `--picode-version`. **Nunca** se pasa `--force` — si el generador se niega,
    la release se para.
-5. Los dos feeds se comprometen en `master` (rama efímera `feed-ship` → push)
-   y se verifican contra `raw.githubusercontent.com` hasta verlos en vivo (10
+5. Los dos feeds se aterrizan en la rama del canal **a través de un pull
+   request**: el workflow empuja una rama efímera
+   `feed-ship-v<picodeVersion>` construida desde la rama del canal, abre el
+   PR y lo fusiona al momento (las reglas de rama exigen PR en todas las
+   ramas y la app de GitHub Actions no puede ser excepción aquí). Después se
+   verifican contra `raw.githubusercontent.com` hasta verlos en vivo (10
    intentos de 20 s, con bust de la caché CDN), y el resumen del job avisa si
    el repositorio sigue **privado** — el feed solo llega a usuarios con el
    repositorio público.
@@ -64,8 +70,10 @@ descargar la release.
 1. Bump de versión en `distribution/product-delta.json`: `set.picodeVersion`
    (el nombre de la release, `0.1.1-beta`) y `set.version` (el número del
    editor, estrictamente mayor que el del feed anterior).
-2. Commit, push y tag: `git tag v<picodeVersion> && git push origin master --tags`.
-   El workflow hace el resto: release + zip + SHA-256 + feed en `master`.
+2. Commit, **pull request y merge** (las ramas no aceptan push directo),
+   y después el tag: `git tag v<picodeVersion> && git push origin
+   v<picodeVersion>`. El workflow hace el resto: release + zip + SHA-256 +
+   feed en la rama del canal.
 3. El resumen del run (Actions → Release → summary) lleva la versión, el
    commit, el SHA-256, la URL de la release y del feed, y el aviso de
    visibilidad si procede.
