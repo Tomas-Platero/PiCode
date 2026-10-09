@@ -314,7 +314,7 @@ export interface McpAuthFile {
 /**
  * The key pi stores one server's OAuth state under, by pi's own rule.
  *
- * Mirrored from `experimental/durable/lib/mcp.js` (`mcpAuthKey`, which cites pi's
+ * Mirrored from `picode-source/durable/lib/mcp.js` (`mcpAuthKey`, which cites pi's
  * `mcpNamespace` + `storeKeys`): `mcp__<name with - → _>|<normalized url>`. `legacyKey` is
  * the url-only key older pi versions wrote; it is read for compatibility, never written.
  * A `url` that cannot be parsed has no stored key to look up.
@@ -363,7 +363,7 @@ export function storedDiscoveryOf(authFile: McpAuthFile | undefined, name: strin
 }
 
 /**
- * Whether pi can use one remote server, mirroring `experimental/durable/lib/mcp.js`.
+ * Whether pi can use one remote server, mirroring `picode-source/durable/lib/mcp.js`.
  *
  * That bridge decides the same question before every request (`storedMcpAuth` + `ownHeaders`):
  * a stored sign-in whose token is still valid is used; an expired one fails fast; without a

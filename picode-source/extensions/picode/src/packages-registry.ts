@@ -312,6 +312,12 @@ export interface InstallContext {
 	readonly profileDir: string;
 	/** The process run. Defaults to `execFile` with an args array. */
 	readonly spawn?: SpawnFn;
+	/**
+	 * Reads a file as text, or nothing when it is not there. Defaults to the real disk; the
+	 * removal flow injects a stub so the already-removed branch can be exercised without a
+	 * profile on disk.
+	 */
+	readonly readSettingsFile?: (filePath: string) => Promise<string | undefined>;
 }
 
 /** How long pi may take to install one package before the run is cut. */
