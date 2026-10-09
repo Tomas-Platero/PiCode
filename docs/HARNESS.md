@@ -87,11 +87,12 @@ extensión para vivir en el proceso host del editor. Está registrado como tarea
 
 ---
 
-## 💾 Parte 2 — pi-durable: el runtime que reemplaza al harness
+## 💾 Parte 2 — durable: el runtime que reemplaza al harness
 
-La rama `experimental` existe para probar `pi-durable` como runtime del agente.
+`durable` es el runtime del agente, integrado en el propio árbol del editor
+(`picode-source/durable`) y ejecutado por él.
 
-- **Dónde**: `resources/pi-durable`, junto a las dependencias que carga. Se ejecuta sobre
+- **Dónde**: `resources/durable`, junto a las dependencias que carga. Se ejecuta sobre
   el binario del propio editor en modo Node: una instalación es autocontenida.
 - **Qué hace**: posee sus conversaciones en SQLite (`data/durable`, junto al perfil, nunca
   en la carpeta que una actualización reemplaza), sirve clientes locales por named pipe, y

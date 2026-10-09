@@ -28,6 +28,7 @@ alternatives were seriously considered.
 | 014 | Integrate pi through its in-process SDK | accepted |
 | 015 | Three release channels, one branch each | accepted |
 | 016 | The declared product version may lead the tree's base | accepted |
+| 017 | Cloud sync is a Pro feature; the free plan is an account, not storage | accepted |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -497,3 +498,47 @@ fixes we do not inherit, not surface, and that price is knowingly accepted.
 
 **Reversal trigger:** a required extension that genuinely needs 1.141 behaviour, or an upstream
 security fix that only lands in the code, turns this back into a real merge.
+
+## ADR-017 — Cloud sync is a Pro feature; the free plan is an account, not storage
+
+**Status:** accepted.
+
+**Context:** The first design gave every plan a storage quota and agreed it with the website:
+`free` ≈ 1 MB, `pro` ≈ 50 MB, enforced in `cloud/sync-api` (`DEFAULT_PLAN_QUOTAS`). The editor
+then became stricter than that: `picodeAccountProvider.createSession` refused to mint a sync
+session for an account whose plan is not `pro`, and every API route called `requirePro`
+(`402 PaymentRequired`) — so a Free owner could not even sign in for an account. Three layers
+were saying three different things — the pricing card promised *«Cloud sync for your settings
+(1 MB)»* on the free plan, the editor refused the sign-in, and the API refused the request.
+
+**Decision (owner, 2026-10-09):** *«El free no sincroniza, no hay sync gratis. Puedes tener tu
+cuenta, y vincularla, pero para usar la sync has de ser pro.»* The **account is free and the
+sync is not**, and the two are separated on purpose:
+
+- **Anyone can sign in and stay linked.** `picodeAccountProvider.createSession` no longer looks
+  at the plan, so a Free owner keeps a real account in the editor.
+- **The service is the gate.** Every sync route answers `402 PaymentRequired` to a plan that is
+  not Pro — the authority is the server, not a plan snapshot stored on the client (which would go
+  stale the moment someone subscribed after signing in).
+- **The editor says it out loud.** The `402` is mapped to its own `UserDataSyncErrorCode`, and
+  turning sync on answers with *«PiCode Sync requires a Pro account»* plus a **See plans** button
+  (the URL comes from `product.picode.webOrigin`, not a second hardcoded string). Auto-sync turns
+  itself off softly on that same code, so an account that loses the plan stops retrying instead of
+  hammering the API.
+- **Free's quota is 0** — a promise, not a small allowance — and `PICODE_QUOTA_FREE_BYTES` is
+  ignored so no leftover variable can hand out storage the product does not sell. The website
+  stops advertising a free tier for sync (web, pricing card, terms).
+
+**Consequences:** One story across web, editor and API. The 1 MB free quota — dead code while the
+gate existed, and broken anyway (the quota counts the 20 retained revisions per resource, so a
+real PiCode profile at ~262 KB stored per revision would have allowed exactly three uploads before
+a permanent `413`) — is gone rather than fixed. `PICODE_QUOTA_PRO_BYTES` is the only remaining
+quota knob. The Welcome card no longer claims *«Everything is in sync»*: whether sync is even on
+is not knowable from the service the card holds, and a Free account never turns it on. The
+accepted cost: a free user who wants sync has to subscribe, and the `1 MB` the pricing page used
+to advertise can never be turned back on without deciding, again, that free gets storage.
+
+**Reversal trigger:** a product decision to give the free plan real (working) sync. If that
+happens, the retention cap must become plan-aware first: the byte ceiling is compared against all
+retained revisions, so a 1 MB free tier with a 20-revision retention cannot hold even one real
+profile beyond the third upload.

@@ -10,6 +10,48 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
 ## [Unreleased]
 
 ### Added
+- **El chat SIEMPRE es durable — Local se retira del selector.** Durable ya no es solo el
+  defecto que se puede cambiar: en todas las ventanas (con carpeta o sin ella) un chat nuevo
+  corre en el agente durable, y Local desaparece del selector bajo el chat mientras durable
+  esté disponible. Si en algún momento se elige Local, la elección no pega: el siguiente chat
+  vuelve a ser durable. Local solo volvería a ofrecerse si ningún otro tipo de sesión
+  existiera (conector ausente). El historial Local y pi del panel de Sessions no se toca:
+  retirar eso sería borrar el pasado.
+- **Un chat nuevo es durable por defecto.** El selector bajo el chat abre ahora *Durable* sin que
+  tengas que elegirlo: el botón de nuevo chat, Ctrl+N y la vista de chat arrancan todos en el
+  agente durable — la conversación que sobrevive a cerrar pestañas y recargar la ventana. Local no
+  desaparece: si lo eliges una vez, se recuerda tu elección y los chats nuevos siguen siendo Local
+  hasta que vuelvas a elegir Durable. En ventanas sin carpeta real (workspaces virtuales) el
+  defecto sigue siendo Local, porque las herramientas del agente no tendrían dónde ejecutarse.
+- **El chat puede correr en el agente durable: «Durable» es ya un destino, no solo una lista.**
+  En el selector bajo el chat, al lado de *Local*, aparece *Durable*: abrirlo crea una conversación
+  cuyo motor es el daemon — sobrevive a cerrar la pestaña y a recargar la ventana, y sus herramientas
+  trabajan en la primera carpeta del workspace que exista (el daemon acepta ya un directorio por su
+  protocolo; nunca la suya propia). La respuesta se transmite en vivo mientras el agente trabaja, con
+  las herramientas en marcha anunciadas; cancelar corta el run de verdad. Y «Continue in Durable»
+  existe: una conversación Local o de pi puede entregársele al daemon y que siga con ella. El modelo
+  es el que tenga configurado el agente durable (el selector enseña *Auto*).
+- **Las conversaciones del durable entran en el panel de Sessions, con su filtro.** El panel tiene
+  ahora una tercera fuente junto a *Local* y *pi*: **durable**. Cada fila es una conversación del
+  daemon, con su primera pregunta como título y la fecha que dicen sus propios mensajes (el daemon
+  no guarda fechas: si una conversación no las tiene, no se inventa ninguna). Una conversación con
+  trabajo en marcha se marca *In Progress* y una quieta *Completed*; las de un subagente dicen su
+  procedencia (`subagent (task …)`). Al abrir una se relee su transcripción como historial de solo
+  lectura. Si el daemon no está en marcha, la lista se queda como estaba — un panel vacío diría
+  "se han perdido", y no es cierto: el almacenaje sobrevive al proceso.
+- **pi durable ya no es experimental: vive en el source de PiCode.** El agente durable deja la
+  carpeta `experimental/` y pasa a ser parte del propio árbol del editor (`picode-source/durable`,
+  con su puente de chat en `picode-source/durable-bridge` y su cliente de prueba ACP en
+  `picode-source/durable-acp-client`). La build lo sigue llevando dentro de la instalación (ahora
+  en `resources/durable`), el editor lo encuentra y lo arranca igual que antes, y los ajustes se
+  llaman "Durable agent" a secas — sin el "(experimental)".
+- **El chat enseña qué ficheros cambió el agente, con su recuento.** Al terminar cada respuesta
+  aparece una tarjeta "Changed N files": una fila por fichero con sus líneas añadidas y quitadas
+  (`+N / −M`), y al pinchar se abre el diff de ese fichero — o todos a la vez con el botón de la
+  tarjeta. Lo que se compara es el fichero de verdad: el conector guarda cómo estaba cada uno justo
+  antes de que la herramienta lo escriba, así que el diff es real, no una estimación. Cuenta `edit`
+  y `write` — las dos herramientas que llegan estructuradas; lo que un comando de terminal cambie
+  por su cuenta no entra en la tarjeta, porque no llega con nombre de fichero.
 - **Los servidores MCP que pi descubre solo ya se ven en la página de MCP.** La página lista tres
   orígenes distintos: los del perfil (los de siempre, editables), los del `.pi/mcp.json` del
   proyecto (cuando el espacio es de confianza, que es la regla con la que pi los carga) y los que
@@ -30,22 +72,58 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   de seguridad — sus comandos siguen preguntando antes de ejecutarse.
 
 ### Fixed
+- **Quitar un paquete que ya estaba quitado ya no da miedo.** La página de paquetes enseñaba
+  también los **Disabled** (sin declaración, ficheros en el disco), y al picar *Remove* sobre uno
+  de ellos pi limpiaba el disco pero contestaba «No matching package found» — porque la declaración
+  ya no estaba — y la página lo pintaba como error, dejando la fila fantasma para siempre. Ahora el
+  conector mira la lista de verdad: si el paquete ya no está declarado, la quitación se cuenta como
+  hecha ("was already removed"), el registro de desactivados se limpia y la fila desaparece.
 - **El borde inferior del chat ya no se corta.** A veces los iconos de la respuesta o la última
   frase quedaban medio fuera al final del chat: la lista se dimensionaba con la altura del input
   **en caché** — la que midió el ciclo anterior — y cuando algo sobre el input crecía (una
   sugerencia, un aviso), la lista tardaba un ciclo en enterarse y empujaba el borde del input
   fuera de la vista. Ahora el espacio se reparte con la altura que el input ocupa **de verdad**
   en ese momento, no con la última medida.
-- **La ventana de actualización ya no se titula «Visual Studio Code».** `inno_updater.exe` —el
-  binario que aplica la actualización y pinta la barra de progreso— lleva el título y el texto en un
-  recurso de diálogo, y ahí seguía el nombre viejo (la ventana de versión también, con
-  `FileDescription` «VSCode Inno Updater»). El título se reescribe en el propio binario
-  (`dev/patch-inno-updater.mjs`; cadenas de la **misma longitud** para no desplazar la plantilla del
-  diálogo), la fase 1 del build rechaza un binario sin marcar y el sello de `rcedit` ya cubre su
-  recurso de versión.
+- **Los diálogos de actualización ya no dicen «Visual Studio Code».** `inno_updater.exe` —el
+  binario que aplica la actualización, pinta la barra de progreso y avisa cuando **no** pudo
+  instalarla— llevaba el nombre viejo en tres formas distintas. El recurso de diálogo de la ventana
+  de progreso, en UTF-16; sus propias cadenas de programa (la caja de error «Failed to install
+  Visual Studio Code update.», el título con el que se muestra, «… is updating…», «… processes
+  still executing.» y el prefijo del registro `vscode-inno-updater-<pid>.log`); y el mensaje
+  traducido de las nueve lenguas del instalador. Las tres se reescriben: las del binario en
+  `dev/patch-inno-updater.mjs`, con cadenas de la **misma longitud** (una plantilla de diálogo y un
+  `&str` de Rust se leen por longitud, no por terminador) y relleno de espacios donde no se ve —al
+  final de cada literal, salvo en la caja de error, donde el updater le pega la ruta del registro y
+  los espacios van antes del salto final para no sangrarla—; las del instalador, en los `.isl`. La
+  fase 1 del build rechaza un binario que aún diga «Visual Studio Code» en cualquiera de las dos
+  formas.
+- **Los datos del fichero del updater ya dicen PiCode.** Botón derecho → Propiedades sobre
+  `tools\inno_updater.exe` seguía enseñando «VSCode Inno Updater», «Microsoft Corporation» y, como
+  versión de producto, el hash de commit de VS Code (`acda8ead`). El dato no faltaba por descuido:
+  el sellado del pack sí lo pedía, pero el fichero **todavía no estaba en el pack** cuando ese
+  sellado corría —lo copia una tarea de la fase del instalador, minutos después—, así que nunca
+  llegaba a tocarlo. Ahora la propia copia lo marca, con los mismos campos que el resto del pack
+  (icono, compañía, descripción, copyright y la versión de la release).
 - **Un servidor MCP que se podía renovar vuelve a pedir login cada hora, y ahora se pide el permiso que lo evita.** Vercel se entraba bien pero, una hora después, la fila volvía a **Needs sign-in** y reiniciar no cambiaba nada: la credencial que pi guardaba **no traía refresh token** (scope `openid`, `expires_in: 3600`), así que no había con qué renovarla. La petición solo pedía los permisos que el recurso anuncia; `offline_access`, que es el que hace que el proveedor emita un refresh token, no se pedía nunca. Ahora, antes de abrir el navegador, el login mira los metadatos del servidor —los que pi ya dejó guardados, o los descubre con el propio descubridor de pi para uno nuevo— y si el servidor de autorización dice que puede emitir `offline_access`, lo añade a los permisos de la entrada **sin quitar ninguno** de los que ya se pedían. Aplica a cualquiera en la misma situación, no solo a Vercel.
 
 ### Changed
+- **La sync en la nube es solo de Pro, y ahora lo dicen las tres capas.** El plan Free conserva su
+  cuenta —se entra, se queda vinculada y sus ajustes siguen ahí— pero no sincroniza nada: el
+  servicio responde `402` y el editor lo traduce en un aviso claro con el botón *See plans*, en vez
+  del «Server returned 402» que no decía nada. Si una cuenta deja de ser Pro con la sync encendida,
+  esta se apaga sola en lugar de insistir en cada latido. La web deja de anunciar sync en el plan
+  Free (adiós al «1 MB» de la tarjeta, a los términos legales y a la página de enlace con el
+  editor), y el `1 MB` que la API guardaba como cuota del plan Free desaparece en vez de arreglarse:
+  contaba las 20 revisiones guardadas de cada recurso, así que con un perfil real (~262 KB por
+  revisión) habría permitido **tres subidas** antes de un bloqueo permanente.
+- **El menú Help ya no es el de VS Code.** Se quedan las ocho entradas que hablan del producto:
+  *Welcome*, *Show All Commands*, *Documentation*, *Show Release Notes*, *Report Issue*, *View
+  License*, *Check for Updates…* y *About*. Salen las que venían del editor heredado: *Editor
+  Playground*, *Open Walkthrough…*, *Get Started with Accessibility Features*, *Ask @vscode*,
+  *Search Feature Requests*, *Toggle Developer Tools* y *Open Process Explorer*. Los comandos
+  siguen en la paleta, así que nada se pierde — el menú deja de ofrecer herramientas internas y
+  onboarding ajeno. Dos se van del todo: *Ask @vscode* (el chat habla pi y no tiene ese
+  participante) y *Search Feature Requests* (apuntaba al mismo sitio que *Report Issue*).
 - **El thinking del agente se muestra por defecto.** El ajuste pasaba a estar apagado salvo
   configuración contraria; ahora es al revés: se muestra salvo que lo ocultes tú.
 - **La página de Providers enseña también los proveedores del perfil.** Lo que pi conoce por su

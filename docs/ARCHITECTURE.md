@@ -16,9 +16,13 @@ upstream merges cheap and the product layers replaceable:
 | `odd/tasks/` | The ODD feature records — one per non-trivial change, with decisions, checks and defects. |
 | `assets/` | Brand images of the repository itself. |
 
-Nothing of ours lives inside `picode-source/` except code the editor itself runs. The
-identity, defaults and release data stay outside the tree, applied onto it — that is why
-bringing a newer VS Code is a merge against `picode-source/` and nothing else has to move.
+Nothing of ours lives inside `picode-source/` except code the editor itself runs: the
+PiCode changes to the editor, and beside them the **durable agent**
+(`picode-source/durable`, its chat bridge in `picode-source/durable-bridge` and its ACP
+proof client in `picode-source/durable-acp-client`), which the editor carries and spawns as
+its own program. The identity, defaults and release data stay outside the tree, applied onto
+it — that is why bringing a newer VS Code is a merge against `picode-source/` and nothing
+else has to move.
 
 ## 🧱 The layered model
 
