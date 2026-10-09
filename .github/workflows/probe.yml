@@ -27,15 +27,14 @@ jobs:
           git config user.email \
             "github-actions[bot]@users.noreply.github.com"
           HEAD_BRANCH="probe-head-${GITHUB_RUN_ID}"
-          git checkout -b "${HEAD_BRANCH}"
+          # Build the head branch FROM the base, exactly like the release
+          # workflow builds its feed branch from the feed branch.
+          git fetch origin probe-base
+          git checkout -B "${HEAD_BRANCH}" origin/probe-base
           echo "probe ${GITHUB_RUN_ID}" > .probe.txt
           git add .probe.txt
           git commit -m "probe: ${GITHUB_RUN_ID}"
           git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
-          # `gh pr merge` walks the local checkout, so the base has to
-          # exist as a local ref. The release workflow already fetches
-          # its feed branch before this point.
-          git fetch origin probe-base
           gh pr create --base probe-base --head "${HEAD_BRANCH}" \
             --title "probe ${GITHUB_RUN_ID}" \
             --body "Temporary ruleset probe."
