@@ -483,6 +483,15 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}
 	}
 
+	/**
+	 * Where the plans live, taken from the product's own web origin — the same source the
+	 * sync store and the account provider read, so there is no second hardcoded URL to go stale.
+	 */
+	private get pricingUrl(): string | undefined {
+		const origin = this.productService.picode?.webOrigin;
+		return origin ? `${origin}/pricing` : undefined;
+	}
+
 	private async turnOn(): Promise<void> {
 		try {
 			if (!this.userDataSyncWorkbenchService.authenticationProviders.length) {
@@ -539,6 +548,25 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 							}
 						});
 						return;
+					case UserDataSyncErrorCode.PaymentRequired: {
+						// The store answered 402: the session and the account are fine — the PLAN is what does
+						// not include sync. Say that, and offer the one action that changes it.
+						const pricingUrl = this.pricingUrl;
+						this.notificationService.notify({
+							severity: Severity.Warning,
+							message: localize('sync requires pro', "PiCode Sync requires a Pro account."),
+							actions: {
+								primary: pricingUrl ? [
+									toAction({
+										id: 'picode.sync.seePlans',
+										label: localize('see plans', "See plans"),
+										run: () => { void this.openerService.open(URI.parse(pricingUrl), { openExternal: true }); }
+									})
+												] : []
+											}
+									});
+									return;
+					}
 					case UserDataSyncErrorCode.Unauthorized:
 					case UserDataSyncErrorCode.Forbidden:
 						this.notificationService.error(localize('auth failed', "Error while turning on Settings Sync: Authentication failed."));

@@ -6,7 +6,7 @@
 import { localize, localize2 } from '../../../nls.js';
 import { INativeHostService } from '../../../platform/native/common/native.js';
 import { IEditorService } from '../../services/editor/common/editorService.js';
-import { Action2, MenuId } from '../../../platform/actions/common/actions.js';
+import { Action2 } from '../../../platform/actions/common/actions.js';
 import { Categories } from '../../../platform/action/common/actionCommonCategories.js';
 import { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
@@ -33,12 +33,10 @@ export class ToggleDevToolsAction extends Action2 {
 				when: IsDevelopmentContext,
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyI,
 				mac: { primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyI }
-			},
-			menu: {
-				id: MenuId.MenubarHelpMenu,
-				group: '5_tools',
-				order: 1
 			}
+			// PiCode: no Help entry. Developer Tools is an inherited internal tool; it stays in the
+			// command palette for whoever needs it, but the product menu does not offer it
+			// (owner, 2026-10-09).
 		});
 	}
 

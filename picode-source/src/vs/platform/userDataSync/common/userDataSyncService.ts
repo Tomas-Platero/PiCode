@@ -908,6 +908,9 @@ function canBailout(e: unknown): boolean {
 	if (e instanceof UserDataSyncError) {
 		switch (e.code) {
 			case UserDataSyncErrorCode.MethodNotFound:
+			// A plan that does not include sync will not include it for the next resource either:
+			// bail out instead of collecting the same 402 once per synced resource.
+			case UserDataSyncErrorCode.PaymentRequired:
 			case UserDataSyncErrorCode.TooLarge:
 			case UserDataSyncErrorCode.TooManyRequests:
 			case UserDataSyncErrorCode.TooManyRequestsAndRetryAfter:

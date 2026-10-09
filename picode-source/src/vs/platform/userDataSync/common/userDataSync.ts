@@ -306,6 +306,7 @@ export function createSyncHeaders(executionId: string): IHeaders {
 export const enum UserDataSyncErrorCode {
 	// Client Errors (>= 400 )
 	Unauthorized = 'Unauthorized', /* 401 */
+	PaymentRequired = 'PaymentRequired', /* 402: the account's plan does not include sync */
 	Forbidden = 'Forbidden', /* 403 */
 	NotFound = 'NotFound', /* 404 */
 	MethodNotFound = 'MethodNotFound', /* 405 */
