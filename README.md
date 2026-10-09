@@ -36,7 +36,7 @@
 
 **PiCode is free and complete.** No feature is held back. The editor is 100% open-source and works fully offline with your own provider keys.
 
-**Version.** PiCode carries its own version — `0.2.1` today, on three release channels (stable, `beta` and `experimental`) — and is built on a pinned VS Code base, now `1.141.0`. The number the editor reports stays the base's, because that is the one extensions are validated against; the version you are offered is PiCode's. Both live in one file, [`distribution/product-delta.json`](./distribution/product-delta.json), and the reasoning is recorded in [`odd/tasks/picode-versionado.md`](./odd/tasks/picode-versionado.md).
+**Version.** Three numbers, one file. The tree descends from a pinned VS Code **1.135.0** ([`upstream/stable.json`](./upstream/stable.json)); the number the editor *reports* — `1.141.1` today — is decoupled from it so extensions validating `engines.vscode: ^1.141.0` keep installing, and the bump is deliberate ([`odd/tasks/picode-rebase-141.md`](./odd/tasks/picode-rebase-141.md)). PiCode's own version — `0.2.1` on stable, `0.2.1-beta` and `0.2.1-experimental` on the pre-release channels — is the one you are offered. Both live in [`distribution/product-delta.json`](./distribution/product-delta.json), and the reasoning is recorded in [`odd/tasks/picode-versionado.md`](./odd/tasks/picode-versionado.md).
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |

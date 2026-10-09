@@ -1,6 +1,6 @@
 # Architecture
 
-## The repository layout
+## 🗂️ The repository layout
 
 Every top-level folder is one role, and the boundaries between them are what keeps
 upstream merges cheap and the product layers replaceable:
@@ -20,7 +20,7 @@ Nothing of ours lives inside `picode-source/` except code the editor itself runs
 identity, defaults and release data stay outside the tree, applied onto it — that is why
 bringing a newer VS Code is a merge against `picode-source/` and nothing else has to move.
 
-## The layered model
+## 🧱 The layered model
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -28,7 +28,7 @@ bringing a newer VS Code is a merge against `picode-source/` and nothing else ha
 │                       the portable profile, the update feed      │
 ├──────────────────────────────────────────────────────────────────┤
 │ 3. Agent layer        the native chat, modified in the core,     │
-│                       speaking to pi (RPC + CLI)                 │
+│                       speaking to pi (in-process SDK + CLI)      │
 ├──────────────────────────────────────────────────────────────────┤
 │ 2. Extension layer    the agent runtime (pi), the                │
 │                       trimmed built-in extensions, Open VSX      │
@@ -45,8 +45,8 @@ identity is applied to `picode-source/product.json` before compilation, and the 
 are computed over the result — so a behaviour change is written in TypeScript, in the
 tree itself, never patched onto a minified bundle.
 
-The build is `dev/build.sh` in five phases: prepare (identity, dependencies, the
-connector), the connector, compile, pack, stage. `builder/` drives the same pipeline
+The build is `dev/build.sh` in five phases: prepare (source check, identity, dependencies),
+the connector, compile, pack, stage. `builder/` drives the same pipeline
 through a GUI. CI (`.github/workflows/ci.yml`) builds on push; the release workflow reads
 the version from `distribution/product-delta.json` before tagging.
 
@@ -84,25 +84,20 @@ retired on 2026-09-27 and its replacement is **the native chat modified in the c
 (`src/vs/workbench/contrib/chat/**` carries the PiCode changes: the model selector, the
 removal of the Copilot paywall, sessions). The multi-harness service
 (`src/vs/platform/agentHost/`) provides the chat-addressed orchestration, and
-`extensions/picode` — the connector, compiled by phase 2 — contributes the providers and
-models surface. The bridge that binds a chat session to the pi runtime is the layer's
-open work; the task board (`docs/TAREAS.md`) tracks it.
+`picode-source/extensions/picode` — the connector, compiled by phase 2 — contributes the
+providers and models surface. The bridge that binds a chat session to the pi runtime is the
+layer's open work; the task board (`docs/TAREAS.md`) tracks it.
 
-pi is spoken to two ways, and the contract below is the stable part of this layer:
-**RPC** (`pi --mode rpc`, JSONL over stdin/stdout) for the session, and the **CLI** of
-the *active runtime* for everything the protocol does not expose — package management
-(`pi install`, `remove`, `update`, `list`).
+pi is reached two ways. The **in-process SDK** owns the session: `piSdk.ts` loads
+`@earendil-works/pi-coding-agent` at runtime (`createAgentSessionServices` /
+`createAgentSessionFromServices`) and opens it inside the connector's process, so the chat,
+its tools and its event stream are all in-process. The **CLI** of the *active runtime* covers
+what the SDK does not expose — package management (`pi install`, `remove`, `update`, `list`).
 
-**Framing (strict).** Records are delimited by LF (`\n`) **only**. Unicode line
-separators (`U+2028`, `U+2029`) are legal inside JSON strings, so Node's `readline` is
-*not* protocol-compliant and is not used: the client splits the byte stream itself.
-
-**Commands** (host → agent): `prompt` (with `streamingBehavior` when busy), `abort`,
-`new_session`, `get_state`, `get_commands`, `get_available_models`/`set_model`/
-`cycle_model`, `set_thinking_level`/`cycle_thinking_level`/
-`get_available_thinking_levels`. `set_model` needs both halves of the reference
-(`provider` + `modelId`); a bare `model` field is rejected (ADR-007). The reasoning
-picker offers what `get_available_thinking_levels` returns rather than the full enum.
+Until October 2026 the integration used `pi --mode rpc` as a child process (ADR-003, with
+ADR-005/006 for its framing); ADR-014 supersedes all three. The RPC framing below is kept as
+history — the payloads are still pi's, and the connector now consumes them as typed SDK
+events.
 
 **Events** (agent → host): `agent_start`, `agent_end`, `agent_settled`,
 `turn_start`/`turn_end`, `message_start`/`message_end`, `message_update`,
@@ -112,7 +107,20 @@ picker offers what `get_available_thinking_levels` returns rather than the full 
 `delta` and treats `message_end` as the authoritative final state. **Usage is per
 message, never a total**: tokens and cost arrive on each assistant message, the panel
 sums them from `message_end` records, and the context size is the *last* turn's figure
-rather than a sum, because a window's fullness is not cumulative.
+rather than a sum, because a window's fullness is not cumulative. `set_model` takes both
+halves of the reference (`provider` + `modelId`); a bare `model` field is rejected (ADR-007),
+and the reasoning picker offers what the runtime reports rather than the full enum.
+
+### 🗄️ Superseded — the RPC contract (ADR-003, superseded by ADR-014)
+
+**Framing (strict).** Records are delimited by LF (`\n`) **only**. Unicode line
+separators (`U+2028`, `U+2029`) are legal inside JSON strings, so Node's `readline` was
+*not* protocol-compliant and was not used: the client split the byte stream itself.
+
+**Commands** (host → agent): `prompt` (with `streamingBehavior` when busy), `abort`,
+`new_session`, `get_state`, `get_commands`, `get_available_models`/`set_model`/
+`cycle_model`, `set_thinking_level`/`cycle_thinking_level`/
+`get_available_thinking_levels`.
 
 ### Layer 4 — Experience
 
@@ -120,10 +128,11 @@ rather than a sum, because a window's fullness is not cumulative.
 by the build so the compiled editor and the released one cannot disagree.
 `distribution/settings.json` are the first-run defaults, copied only when the user has
 no settings of their own. The profile is portable and disposable. The updater reads the
-static feed produced by `dev/update-feed.mjs` (layout in `updates/README.md`); the
-in-product update URL of the upstream tree stays empty.
+static feed produced by `dev/update-feed.mjs` (layout in `updates/README.md`) from the
+build's own channel branch, sealed into `product.json` by `dev/build.sh`; each channel reads
+only its own feed (ADR-015).
 
-## Testing
+## 🧪 Testing
 
 The connector (`extensions/picode`) keeps hermetic suites for the parts that can be
 wrong without an editor: the runtime resolver, the `pi list` parser, the usage
@@ -131,7 +140,7 @@ arithmetic, the context block. The editor's own behaviour is verified by reading
 writes — the log directory it chose, the extension activation line, the output channel —
 because a passing unit test says nothing about whether the editor loads the result.
 
-## Language
+## 🌐 Language
 
 All user-facing copy is **English**: the editor, the chat, notifications, command
 titles, setting descriptions and the labels shown for pi's tools. Code, comments, commit
@@ -141,7 +150,7 @@ papers in `odd/tasks/`. Other languages are reached later through **language pac
 separate layer over the shipped text, never a translation of the sources in place
 (ADR-012).
 
-## Non-goals
+## 🚫 Non-goals
 
 - Patching a minified core: changes are made in the source tree and compiled.
 - A custom language server for pi.
