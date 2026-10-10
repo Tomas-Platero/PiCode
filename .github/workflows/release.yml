@@ -296,10 +296,10 @@ jobs:
           # presented to everyone arriving at the repository as THE release.
           # `stable` is the only channel whose release is the real thing.
           CREATE=()
-          EDIT=(--prerelease=false)
+          EDIT=(--prerelease=false --draft=false)
           if [ "${CHANNEL}" != "stable" ]; then
             CREATE=(--prerelease)
-            EDIT=(--prerelease=true)
+            EDIT=(--prerelease=true --draft=false)
           fi
           # Idempotent: a re-run after a partial failure must not die on an
           # existing release and must still refresh the assets.
