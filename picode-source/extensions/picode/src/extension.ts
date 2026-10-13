@@ -54,10 +54,11 @@ import { registerDurableSessionsProvider } from './durable-sessions-register';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
-import { onDidToggleMcpServer, registerStatusTreeView } from './status-view';
+import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, windowSessionScope } from './runtime';
-import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
+import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
+import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 
 /**
@@ -2088,8 +2089,8 @@ let lastConfiguration: ProviderConfiguration | undefined;
 /** The setting that turns the whole check off; on unless the owner says otherwise. */
 const UPDATES_CHECK_SETTING = 'picode.updates.check';
 
-/** Where the last check's answer lives, so the status-bar item survives a restart. */
-const UPDATES_STATE_KEY = 'picode.updates.lastCheck';
+// Where the answer is stored is `updates-check.ts`'s business, beside the shape it holds: the status
+// panel reads the same answer, and two spellings of that key would be one too many.
 
 /** The check starts this long after activation: past the work every startup actually does. */
 const UPDATES_FIRST_CHECK_DELAY_MS = 30_000;
@@ -2243,10 +2244,16 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		showUpdatesNotice(readUpdatesSnapshot(context.globalState))));
 
 	let checking = false;
-	const scheduledCheck = async (): Promise<void> => {
+	/**
+	 * One check, run now: by the timer on its own rhythm, or by the owner asking (`picode.updates.check`).
+	 *
+	 * `force` is that second case. The setting silences the **background** check; somebody asking for an
+	 * answer out loud has already overruled it, so a manual check runs even with the setting off.
+	 */
+	const scheduledCheck = async (force = false): Promise<void> => {
 		// One flight at a time — a slow registry must not stack checks — and the setting is read
 		// at fire time, so turning it off silences the check without a restart.
-		if (checking || !updatesCheckEnabled()) {
+		if (checking || (!force && !updatesCheckEnabled())) {
 			return;
 		}
 		checking = true;
@@ -2268,6 +2275,11 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		clearTimeout(firstCheck);
 		clearInterval(interval);
 	}));
+
+	// The status panel's Updates block reaches the very same two flows: this extension has one update
+	// path and one check path, and the panel is a second door onto them, not a second copy of them.
+	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_APPLY_COMMAND, () => runUpdateFlow()));
+	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_CHECK_COMMAND, () => scheduledCheck(true)));
 }
 
 function requireProfileUri(): vscode.Uri {
@@ -2377,10 +2389,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	// panel's provider filter, beside Local and `pi`.
 	context.subscriptions.push(registerDurableSessionsProvider({ participant: piParticipant }));
 
-	const setupDeps = {
+const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		globalState: context.globalState,
+		// The Tasks block lists the background jobs the chat itself launched, from the same tracker the
+		// pill above the chat input reads — one holder of the truth, two surfaces.
+		runningJobs: runningBackgroundJobs,
 		forgetRuntime: forgetPiRuntime,
 		// A package install or removal must be visible to the chat immediately.
 		resetChat: resetChatSession,
@@ -2401,11 +2416,22 @@ export function activate(context: vscode.ExtensionContext): void {
 	// read one theme's colours, install it — travel as commands. Without this registration they do
 	// not exist, and the gallery answers an empty list as if the search had found nothing.
 	context.subscriptions.push(...registerThemeGalleryCommands(context));
-	// The activity-bar status view is a native tree (declared `type: "tree"` in the manifest), so
-	// its rows come from the data command. The command is registered before the view, because the
+	// The activity-bar panel is six native trees (declared `type: "tree"` in the manifest), so each
+	// block's rows come from the data command. The command is registered before the views, because a
 	// view refreshes the moment it is registered and would otherwise answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
-	context.subscriptions.push(registerStatusTreeView(context.extensionUri));
+	// The Thinking row of the Host block is the switch: a click flips `picode.pi.reasoning`, and the
+	// chat stops (or starts) writing the model's thinking from the next turn on. The setting was
+	// always there; what the owner was missing was something to click.
+	context.subscriptions.push(vscode.commands.registerCommand(THINKING_TOGGLE_COMMAND, async () => {
+		const config = vscode.workspace.getConfiguration('picode');
+		const shown = config.get<string>(REASONING_SETTING, 'show') !== 'hide';
+		await config.update(REASONING_SETTING, shown ? 'hide' : 'show', vscode.ConfigurationTarget.Global);
+		void vscode.window.showInformationMessage(shown
+			? 'The model\'s thinking is now hidden in the chat. New turns will not show it.'
+			: 'The model\'s thinking is now shown in the chat.');
+	}));
+	context.subscriptions.push(registerStatusTreeViews());
 	// The durable agent's commands: start, stop, list/open its conversations, and send it a
 	// prompt. The status panel's Durable section rows run the same ones.
 	// The agent is told which profile, which storage directory and which settings file to use: a

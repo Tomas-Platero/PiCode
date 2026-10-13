@@ -1,6 +1,6 @@
 # PiCode × pi-durable — the durable agent
 
-A self-contained program that runs `@earendil-works/pi-durable` (1.0.2) against the
+A self-contained program that runs `@earendil-works/pi-durable` (1.2.0) against the
 owner's LAN gateway **OmniRoute** and proves, with real runs, the three promises that
 justify replacing what came before it:
 
@@ -133,7 +133,7 @@ CLI-OK (FROM-THE-FORK)
 ### The daemon: one owner, many clients
 
 pi-durable's spec allows **one process to own a storage at a time**, and its watches are
-fed by same-process commits only. Measured on this version (1.0.2): a second process can
+fed by same-process commits only. Measured on the 1.0.2 pin: a second process can
 still open the same SQLite and read AND write it — the invariant is not machine-enforced —
 but doing so is undefined behaviour, and it is real: two writers independently allocated
 the same conversation id (`ID 368 already belongs to conversation`), after which the
@@ -362,7 +362,7 @@ golden transcript expectations — is untouched.
 
 Durable ships no MCP client, and pi gets most of its reach from MCP, so this was the widest
 gap. `lib/mcp.js` reads the profile's `mcp.json` (**read-only**) and connects with **pi's own
-MCP library** (`@earendil-works/pi-mcp@1.0.2`), so the transports are the ones the owner
+MCP library** (`@earendil-works/pi-mcp@1.2.0`), so the transports are the ones the owner
 already lives with. Every server tool becomes a durable tool named `mcp__<server>__<tool>`
 (anything that is not a letter, a digit or `_` becomes `_`, as pi does it).
 

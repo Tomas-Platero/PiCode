@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { contextBlock, withContext, type EditorContext } from './context';
+import { withContext } from './context';
+import { contextBlockFor } from './editor-context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
-import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
-import { areaContextBlock } from './workspace-area';
+import { resolveSessionCwd } from './session-cwd';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
@@ -287,65 +287,6 @@ async function loadSdk(distributionRoot: string, log: (line: string) => void): P
 	const mcp = await mcpBuiltinWithExistingCwd(loaded.entry, log);
 	const builtins = mcp === undefined ? read.builtins : read.builtins.map(entry => (entry.name === 'mcp' ? mcp : entry));
 	return { sdk: loaded.sdk as PiSdk, builtins };
-}
-
-/**
- * The editor as the context block wants it: the folder, the file and the selection.
- *
- * Read here rather than passed around, because this is the only place that knows about the
- * editor's own objects; what is written from them is decided in `context.ts`, where it can be
- * exercised.
- */
-function editorContext(folder: string | undefined): EditorContext {
-	const editor = vscode.window.activeTextEditor;
-	if (editor === undefined || editor.document.uri.scheme !== 'file') {
-		return { ...(folder === undefined ? {} : { folder }) };
-	}
-	const selection = editor.selection.isEmpty
-		? undefined
-		: {
-			text: editor.document.getText(editor.selection),
-			lines: editor.selection.end.line - editor.selection.start.line + 1,
-		};
-	return {
-		...(folder === undefined ? {} : { folder }),
-		file: editor.document.uri.fsPath,
-		...(selection === undefined ? {} : { selection }),
-	};
-}
-
-/**
- * The context block the project scope asks for.
- *
- * One folder is the block `context.ts` already writes, and folder mode is exactly that.
- * In workspace mode the session is a session of the **area**, so the folder line is
- * replaced by the area block (`workspace-area.ts`): every root named the way the owner
- * names it, with the rule for matching a named project to its root, addressing a file
- * under the right root, and the honest limit — one working directory per shell. The
- * file and selection still travel through `context.ts`; only the folder line yields,
- * because the roots list says more and says it about every folder at once. A folder
- * that is not on disk is named as such — the session must know `guildboard` is not
- * there rather than discover it with a failed command.
- */
-function contextBlockFor(scope: PiProjectScope, picked: SessionCwd): string | undefined {
-	if (scope.mode !== 'workspace' || scope.area === undefined) {
-		return contextBlock(editorContext(picked.cwd));
-	}
-	// Every root's on-disk state is checked on its own (see `missingDirectories`): a folder
-	// the editor keeps after a move or delete sits wherever it sits in the order, and the
-	// context must say it is gone rather than let a command discover it.
-	const missing = missingDirectories(scope.folders);
-	const roots = scope.roots.map(root => ({
-		name: root.name,
-		path: root.path,
-		onDisk: !missing.includes(root.path),
-	}));
-	const base = contextBlock(editorContext(undefined));
-	const area = areaContextBlock(roots, picked.cwd);
-	if (area === undefined) {
-		return base;
-	}
-	return base === undefined ? area : `${base}\n${area}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1515,7 +1456,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor(scope, picked) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
 			// One turn at a time in this window: the next one waits for the turn in flight to end, so
 			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
 			const previousTurn = turnChain;

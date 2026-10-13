@@ -89,14 +89,30 @@ retired on 2026-09-27 and its replacement is **the native chat modified in the c
 removal of the Copilot paywall, sessions). The multi-harness service
 (`src/vs/platform/agentHost/`) provides the chat-addressed orchestration, and
 `picode-source/extensions/picode` — the connector, compiled by phase 2 — contributes the
-providers and models surface. The bridge that binds a chat session to the pi runtime is the
-layer's open work; the task board (`docs/TAREAS.md`) tracks it.
+providers and models surface.
 
-pi is reached two ways. The **in-process SDK** owns the session: `piSdk.ts` loads
-`@earendil-works/pi-coding-agent` at runtime (`createAgentSessionServices` /
-`createAgentSessionFromServices`) and opens it inside the connector's process, so the chat,
-its tools and its event stream are all in-process. The **CLI** of the *active runtime* covers
-what the SDK does not expose — package management (`pi install`, `remove`, `update`, `list`).
+**Who runs the chat (ADR-020).** The chat's agent is **pi**, in process: `agent.ts` registers
+the `@pi` chat participant, which owns the model, the agent profile and the tools, and streams
+the answer into the panel. `durable` is the **backend**, not a harness: pi reaches it through
+its own tools (the `durable_send` / `durable_list` / `durable_read` bridge in
+`picode-source/durable-bridge`, plus MCP), and durable keeps in its own SQLite the
+conversations it is handed. The durable `chatSessions` contribution stays declared but disabled
+(`"when": "false"`): a `chatSessions` type is a session **provider**, and the CHAT panel runs
+**agents** — selecting it made the panel call `invokeAgent('durable')`, which has no
+implementation, and the chat answered `No activated agent with id "durable"`. The panel's
+harness is pi's own, and Local is its session.
+
+pi is reached two ways. The **in-process SDK** owns the chat's session: `piSdk.ts` loads
+`@earendil-works/pi-coding-agent` at runtime
+(`createAgentSessionServices` / `createAgentSessionFromServices`) inside the connector's
+process, so the chat, its tools and its event stream are all in-process; the same SDK serves
+providers, models, login and packages. The **CLI** of the *active runtime* covers what the SDK
+does not expose — package management (`pi install`, `remove`, `update`, `list`).
+
+**The editor travels with every turn.** `editor-context.ts` reads the folder (or the area),
+the open file, the selection, its errors and warnings, and the message's own references, and
+`context.ts` writes them into the prompt. Both the in-process chat and the durable turn go
+through it, so the agent answers about the screen the owner is looking at (ADR-019).
 
 Until October 2026 the integration used `pi --mode rpc` as a child process (ADR-003, with
 ADR-005/006 for its framing); ADR-014 supersedes all three. The RPC framing below is kept as

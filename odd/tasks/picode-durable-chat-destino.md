@@ -156,3 +156,98 @@ build que lo empaqueta. Build lanzada con el canal de la rama: `PICODE_CHANNEL=e
 PICODE_PACK_SUFFIX="-experimental"` (carpeta `PiCode-Win32-x64-experimental`, la del perfil
 del dueño; la build anterior sin canal fue a `PiCode-Win32-x64` a secas — lección: la build
 SIEMPRE con el canal de la rama en la que se está).
+
+## Coda III: el harness se llama PiCode y durable manda incluso sin carpeta (mismo día)
+
+> «En el chat no quiero usar el harness de local más, quiero usar el de durable como
+> default, siempre será durable. … Aunque no pongas durable ni nada así en el harness
+> porque estéticamente será PiCode.»
+
+Detrás de la petición hay un malentendido que ya estaba resuelto: el defecto durable y la
+retirada de Local del selector viven en `chat/common/constants.ts` desde la Coda II, y el
+dueño seguía viendo Local **porque la app en marcha era anterior a esos cambios** (la carpeta
+`PiCode-Win32-x64` sin canal, del 9-10, no llevaba la Coda II; la del perfil,
+`PiCode-Win32-x64-experimental`, sí). El núcleo de la app instalada tenía `mKt` con la
+retirada; el ejecutable viejo no. Lección: **la build SIEMPRE con el canal de la rama**, y
+antes de «no funciona» comprobar qué binario está corriendo.
+
+Lo que sí faltaba de verdad, y se ha hecho:
+
+1. **El harness se presenta como PiCode.** En `extensions/picode/package.json`, la
+   contribución `chatSessions`/`durable` pasa de `displayName: "Durable"` a **`"PiCode"`**,
+   con `welcomeTitle: "PiCode"` y textos que ya no invocan al «durable agent» como nombre
+   visible. El `type` y el `name` internos siguen siendo `durable` (es la clave de la
+   contribución y del `@` dinámico; renombrar el `type` rompería sesiones y memoria). Lo que
+   ve el dueño —chip bajo el input, selector, welcome— dice PiCode.
+
+2. **`getDefaultNewChatSessionType` y `resolveDefaultNewChatSessionType` alineados con el
+   cómputo.** La Coda II puso durable por delante del guard de workspaces virtuales en
+   `getComputedDefaultSessionType`, pero las dos puertas que resuelven el chat nuevo seguían
+   devolviendo Local para una ventana sin carpeta antes de consultar nada. Ahora el guard
+   virtual solo devuelve Local **si no existe la contribución durable**
+   (`isVirtualWorkspace(workspace) && !getChatSessionContribution('durable')`), de modo que
+   «siempre durable» es literal en todas las ventanas. Sin carpeta, las herramientas corren
+   donde manda la regla de directorio de sesión (primera carpeta existente, la de usuario si
+   no hay), que es lo que la Coda II ya documentó.
+
+3. **Un test lo fija.** `chat/test/common/constants.test.ts` gana «durable retires local and
+   stays the default, virtual window included»: con la contribución `durable` registrada, el
+   defecto computado y el resuelto son `durable` en workspace normal y virtual, `Local` no
+   aparece en el selector y una elección recordada de Local deja de ser utilizable. Los tests
+   upstream siguen pasando porque su mock no registra ningún tipo `durable`.
+
+4. **La elección recordada de Local tampoco gana.** Al escribir el test anterior salió un
+   agujero real de la Coda II: `isNewChatSessionTypeUsable(local)` devolvía
+   `isEditorLocalAgentEnabled(...)` sin mirar nunca si el chat durable existía. La retirada de
+   Local en `isVisibleEditorChatSessionType` lo escondía del selector, pero un perfil con
+   «local» recordado de antes seguía abriendo chats Local — justo lo que el dueño no quiere.
+   Ahora esa rama, cuando la contribución durable está registrada, responde con la misma regla
+   que el selector (`getVisibleNonLocalEditorChatSessionTypes(...).length === 0`), de modo que
+   la memoria de Local deja de ser utilizable y el siguiente chat nuevo es durable. Sin
+   contribución durable el comportamiento upstream queda intacto.
+
+Lo que NO cambia: el filtro del panel de Sessions mantiene Local y pi (es el historial); las
+conversaciones Local ya abiertas siguen abiertas; el nombre «Durable agent» permanece en la
+página de Status y en los ajustes, como manda `AGENTS.md` — lo que se renombra es la
+presentación del harness en el chat, no la pieza.
+
+## Coda IV: el chat que se quedaba en Local por la carrera de arranque (mismo día)
+
+> «por defecto las sesiones salen como local… Hasta que no eligo "PiCode" en el desplegable
+> … en local nada.»
+
+Con la build ya con el nombre PiCode en la mano, el dueño reprodujo el síntoma que la Coda II
+creía cerrado: el chat abría en **Local** y había que elegir PiCode a mano. El forense:
+
+- El perfil no guardaba **ninguna** preferencia de tipo de sesión (`chat.userSelectedSessionType`
+  no existía en ningún `state.vscdb`), así que no era la memoria del dueño.
+- El memento de la vista (`memento/interactive-session-view-copilot`) ya decía `durable` — pero
+  eso era **después** de que el dueño eligiera PiCode a mano.
+- `workbench.desktop.main.js` del pack era **idéntico** al `out-vscode-min` recién compilado, y el
+  source map contenía el arreglo: la build estaba bien. El problema no era la compilación.
+
+La causa es una **carrera de arranque**, no la resolución del tipo:
+
+1. La contribución `chatSessions` de `picode` se registra por el *extension point* cuando el
+   renderer ya conoce las extensiones; en ese primer instante todavía no está.
+2. La vista de chat resuelve su sesión (Coda II y III) antes, así que el defecto computado es
+   **Local**, y `shouldSkipRestoredLocalSession` no descarta la sesión Local vacía.
+3. Cuando la contribución aterriza, `onDidChangeAgents` sí se dispara — pero el cuerpo upstream
+   solo mira `if (!this._widget?.viewModel && !this.restoringSession)`. Como ya hay un chat en el
+   widget, **no hace nada**: el Local se queda para siempre y el dueño lo cambia a mano.
+
+Arreglo, en `chat/browser/widgetHosts/viewPane/chatViewPane.ts`:
+
+- `onDidChangeAgents()` llama a **`scheduleHarnessCheck()`**, que encola una comprobación **después**
+  de cualquier restauración en vuelo (`this.restoringSession ?? Promise.resolve()`) para no
+  competir con ella, y se serializa con un flag (`harnessCheck`) para que las varias llegadas de
+  agentes no disparen una estampida.
+- `switchEmptyLocalSessionToDefault()` reutiliza la regla que ya existía
+  (`shouldSkipRestoredLocalSession`: Local + sin peticiones + defecto no-Local) y, si se cumple,
+  pide el defecto con `showModel(None, undefined, true, true)`. Una sesión Local **con** peticiones
+  se deja intacta: esa conversación es del dueño, no un defecto transitorio.
+
+Con esto el chat de un arranque en frío abre ya en PiCode, sin tocar el desplegable. Lo que sigue
+sin poder retirarse es un Local que el dueño ya tenía abierto **con** contenido.
+
+Verificado: `tsc` del proyecto entero, exit 0. Build del canal experimental relanzada.

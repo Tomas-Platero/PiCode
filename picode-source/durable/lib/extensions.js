@@ -136,7 +136,7 @@ const spawnSubagent = defineTool({
 		// Durable memo keeps a crash between create and record from spawning two anchors.
 		const existing = await api.memo("anchorTaskId", context);
 		if (existing) {
-			return { content: [{ type: "text", text: `Subagent already running (anchor task ${existing}).` }] };
+			return { output: [{ type: "text", text: `Subagent already running (anchor task ${existing}).` }] };
 		}
 		const anchorId = await api.commit(
 			(tx) =>
@@ -149,7 +149,7 @@ const spawnSubagent = defineTool({
 		await api.memo("anchorTaskId", anchorId, context);
 		await api.details({ anchorTaskId: anchorId }, context);
 		return {
-			content: [
+			output: [
 				{ type: "text", text: `Subagent spawned in the background (anchor task ${anchorId}). You can keep working; its answer will be reported back when ready.` },
 			],
 		};

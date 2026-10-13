@@ -471,10 +471,10 @@ function mcpTool({ connection, tool, fullName }) {
 		execute: async (args) => {
 			try {
 				const result = await connection.client.callTool(tool.name, args ?? {});
-				return { content: toContent(result), isError: result?.isError === true };
+				return { output: toContent(result), isError: result?.isError === true };
 			} catch (error) {
 				return {
-					content: [{ type: "text", text: `MCP call failed: ${error instanceof Error ? error.message : String(error)}` }],
+					output: [{ type: "text", text: `MCP call failed: ${error instanceof Error ? error.message : String(error)}` }],
 					isError: true,
 				};
 			}
@@ -503,7 +503,7 @@ export function makeMcpExtension(connections, { maxAdd = MAX_ADD } = {}) {
 			const matches = searchCatalog(catalog, args ?? {});
 			if (matches.length === 0) {
 				return {
-					content: [{
+					output: [{
 						type: "text",
 						text: catalog.length === 0
 							? "No MCP server is connected, so there are no MCP tools."
@@ -513,7 +513,7 @@ export function makeMcpExtension(connections, { maxAdd = MAX_ADD } = {}) {
 			}
 			const added = matches.slice(0, maxAdd).map(row => row.fullName);
 			return {
-				content: [{ type: "text", text: renderMatches(matches, added) }],
+				output: [{ type: "text", text: renderMatches(matches, added) }],
 				control: { addTools: added },
 			};
 		},

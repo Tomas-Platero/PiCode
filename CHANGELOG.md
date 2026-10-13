@@ -170,6 +170,48 @@ Releases are built locally with `dev/build.sh` and published by hand: there is n
   las novedades (Claude Haiku 5.5, los clasificadores nuevos) llegan solas por el catálogo de pi
   que el desplegable ya lee. Verificado antes de fijarlo: las 7 entradas del SDK, `dist/cli.js`,
   los built-ins y el validador de MCP de 1.1.0 contra los 12 escritores de PiCode.
+- **El pi que PiCode lleva dentro sube a 1.2.0.** El escalón (1.1.0 → 1.2.0) tiene cuatro rupturas y
+  ninguna toca a la app: los esquemas publicados de configuración (el de temas se muda a
+  `https://pi.dev/schemas/theme.schema.json` y los temas ya se validan al arrancar) son de ficheros
+  de tema de pi, y PiCode no trae ninguno ni la importación copia temas; `before_agent_start` pasa a
+  ser una unión por `messageType` y un run cuenta como ocupado mientras arranca (`sendUserMessage()`
+  exige `deliverAs`), pero el conector no registra manejadores de extensión ni usa `sendUserMessage`
+  —ordena sus turnos y pide por `session.prompt(..., { streamingBehavior })`—; `pi mcp list --json`
+  cambia su campo `resources` y PiCode no ejecuta `pi mcp list` —lista los MCP por las herramientas
+  de la sesión en vivo—; y desaparecen el stack experimental de servidor/cliente/plugin con sus
+  paquetes `pi-client`/`pi-protocol`/`pi-server` y la dependencia de `@earendil-works/chord`, que ni
+  el producto importa (el daemon durable declara su propio `chord`). Lo que llega al dueño son
+  arreglos dentro de pi —escribir o leer `auth.json` en Windows reintenta tras un `EPERM` en vez de
+  fallar, Anthropic reintenta una vez con herramientas no estrictas cuando rechaza el juego estricto,
+  «The upstream provider returned an error» se reintenta como transitorio, los MCP con contenido
+  estructurado que no es objeto dejan de fallar, los modelos router de OpenRouter dejan de mostrar
+  -$1.000.000 por 1M de tokens, y los flujos de Mistral ya no se abortan tras el timeout— y una
+  novedad que aparece sola: con una clave de OpenRouter, pi lista solo los modelos que esa clave
+  puede usar y el desplegable lee ese catálogo en vivo. Verificado antes de fijarlo: las 7 entradas
+  del SDK, `dist/cli.js`, los built-ins, el árbol instala y el validador de MCP de 1.2.0 acepta los
+  12 escritores de PiCode.
+- **El agente durable sube a la familia `@earendil-works` 1.2.0.** `picode-source/durable` pasa de
+  `pi-durable`/`pi-ai`/`chord` `^1.0.2` y `pi-mcp` `1.0.2` a **`^1.2.0`** (`pi-mcp` `1.2.0`), y su
+  lockfile se regenera. El escalón (1.0.2 → 1.2.0) trae rupturas que **sí** tocan al daemon, y la
+  única que había que aplicar está aplicada: en `pi-durable` 1.2.0 el resultado de una herramienta
+  llama **`output`** a lo que antes era `content` (el `content` viejo se ignora: el modelo recibía un
+  resultado vacío). Las **8** devoluciones del daemon —subagente, skills y las cuatro del puente
+  MCP— usan ya la clave nueva. Lo demás que cambia queda fuera de la superficie del daemon:
+  `chord` 1.2.0 reescribe entero su runtime de facetas/servicios, pero el daemon solo importa
+  `BACKGROUND_CONTEXT` de `chord/context`, que es idéntico; `pi-mcp` 1.2.0 abre el tipo de
+  `structuredContent` a `unknown` (el daemon lo serializa tal cual) y añade un `signal` a las
+  peticiones; y `pi-durable` cambia `ToolTaskInput`/`ToolTaskResult` a uniones etiquetadas
+  (`{kind:"model"|"nested"}`) y hace que `bash`/`powershell` respondan a un exit distinto de cero
+  con un error en vez de lanzar —el daemon no construye esos tipos, y su guard observa la llamada,
+  no el resultado—. Llegan además los arreglos de 1.0.3/1.0.4/1.1.0/1.2.0: una compactación
+  bloqueante que fallaba ya no deja pasar la petición sin resumen, el scheduler deja de recorrer
+  todas las tareas vivas en cada pasada (una cadena de 500 pasos tarda 50 ms en vez de 12 s), la
+  caché de documentos de la sesión se acota por uso (dejaba de retener cada conversación vista), el
+  `read` del harness devuelve imágenes y lee ficheros que crecen durante la lectura, y las consultas
+  de almacenamiento respetan el orden (`order`) que pide quien pagina. Verificado antes de fijarlo:
+  el árbol instala, el grafo de módulos carga y el harness abre sobre SQLite, registra sus
+  extensiones (guard, skills, subagente), crea una conversación y cierra. Los proofs con modelo real
+  no se ejecutan aquí (hacen llamadas al proveedor).
 
 ## [0.1.3-beta] — 2026-10-04
 

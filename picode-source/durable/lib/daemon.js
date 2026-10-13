@@ -27,6 +27,7 @@ import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
 import { CTX, SHARED_DB, answerText, listConversations, openHarness } from "./common.js";
 import { allowCommand, makeGuardExtension } from "./guard.js";
 import { loadSkills, makeSkillsExtension } from "./skills.js";
+import { SubagentExtension } from "./extensions.js";
 import { loadAgents, resolveAgentChange } from "./agents.js";
 import { DEFAULT_PROFILE_DIR } from "./profile.js";
 import { armAllMcpFilters, armMcpFilter, closeMcpConnections, connectBridge, mcpBridgeWaitMs, NO_BRIDGE } from "./mcp.js";
@@ -83,6 +84,13 @@ async function serveStorage(resolved, agents, skills) {
 	const extensions = [
 		makeGuardExtension({ enabled: resolved.options.guard.value, consultPermission }),
 		makeSkillsExtension(skills),
+		// The durable agent's own `subagent` tool: it hands a self-contained task to a background
+		// anchor task, which owns a child conversation the panel's Tasks block lists. Without it the
+		// model reaches for whatever else answers the same need — the profile packages' pane
+		// launchers, which shell out to the separate Herdr CLI this installation does not carry, and
+		// the chat answers with HERDR_UNAVAILABLE instead of work. The child conversation drops this
+		// extension again (no recursion), and no profile package registers a tool of the same name.
+		SubagentExtension,
 	];
 	const { harness, storage, registry, profileProblem } = await openHarness({ db: SHARED_DB, extensions });
 	if (profileProblem) {

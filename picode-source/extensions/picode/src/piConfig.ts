@@ -29,11 +29,16 @@ export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhig
 /** How the model's thinking is shown in the chat. */
 export const REASONING_MODES = ['hide', 'show'] as const;
 
-/** The most of the editor's own text that travels with the prompt, in characters. */
-export const CONTEXT_MAX_CHARS = 8000;
-
-/** The most of a selection that travels with it, in lines. */
-export const CONTEXT_MAX_LINES = 120;
+/**
+ * The setting the modes are stored under, and the command that flips it.
+ *
+ * The status panel's Thinking row is the button: a click flips `picode.pi.reasoning` between
+ * `show` and `hide`, and the row's own description repaints on the next refresh to say which it
+ * now is. The chat then stops writing the thinking from the next turn on — turns already on
+ * screen keep what they showed.
+ */
+export const REASONING_SETTING = 'pi.reasoning';
+export const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
 
 export interface PiChatSettings {
 	/** The thinking level to run pi at, or `undefined` to leave pi's own default alone. */

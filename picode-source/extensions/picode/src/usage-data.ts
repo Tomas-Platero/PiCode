@@ -403,7 +403,7 @@ export function nanUsageSummary(usage: NanUsage, modelId: string | undefined): s
 }
 
 /** A window label spoken as a length, so a part reads as time: `4h` becomes `4-hour`. */
-function spokenWindowLabel(label: string): string {
+export function spokenWindowLabel(label: string): string {
 	// The week-long window is the one label that is not a count of hours, days or minutes.
 	if (label === 'week') {
 		return 'weekly';

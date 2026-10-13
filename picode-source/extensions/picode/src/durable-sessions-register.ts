@@ -8,6 +8,10 @@ import { DaemonClient, daemonEndpoint } from './durable-client';
 import { durableFolder } from './durable';
 import { listingForPanel, reuseRows } from './sessions-provider';
 import { resolveSessionCwd } from './session-cwd';
+import { contextBlockFor } from './editor-context';
+import { withContext } from './context';
+import { readPiChatSettings } from './piConfig';
+import { readRuntimeMode, resolveProjectScope } from './runtime';
 import type { DurableConversationRow } from './durable-tasks';
 import { DurableRunStreamMapper } from './durable-run-stream';
 import {
@@ -268,7 +272,18 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 		if (prompt === undefined) {
 			return;
 		}
-		const cwd = resolveSessionCwd((vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath), os.homedir()).cwd;
+		// The editor's context travels with every turn, the same block the in-process chat sends:
+		// the folder (or the area), the file the owner has open, what is selected in it, its
+		// problems, and what this message attached. Without it the durable agent answers from the
+		// folder alone — a different agent next door instead of the one looking at the same screen.
+		// The frame `withContext` adds is stripped back out when the transcript is replayed, so the
+		// chat keeps showing the owner's own words (`durable-sessions.ts`).
+		const scope = resolveProjectScope();
+		const picked = resolveSessionCwd(scope.folders, os.homedir());
+		const cwd = picked.cwd;
+		const settings = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key));
+		const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
+		const framed = withContext(prompt, context, readRuntimeMode());
 		let conversationId: number | undefined = untitled ? undefined : Number(resource.path.split('/').pop());
 		const mapper = new DurableRunStreamMapper();
 		try {
@@ -303,7 +318,7 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 					void client.request('cancel', { conversationId }).catch(() => { /* the run settling is the answer */ });
 				});
 				try {
-					const run = await client.request('run', { conversationId, prompt, cwd }) as { status?: string; reason?: string } | undefined;
+					const run = await client.request('run', { conversationId, prompt: framed, cwd }) as { status?: string; reason?: string } | undefined;
 					if (run?.status !== undefined && run.status !== 'done') {
 						response.warning(run.reason !== undefined
 							? `The run ended without an answer (${run.reason}).`

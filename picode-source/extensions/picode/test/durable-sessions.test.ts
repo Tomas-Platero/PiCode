@@ -127,3 +127,20 @@ test('the poll\'s digest moves when a conversation is added, removed, or grown �
 	// neither can be told apart from the other, and neither is a zero.
 	assert.equal(sessionsDigest([{ id: 1, entries: undefined as unknown as number, note: '' }]), sessionsDigest([{ id: 1, entries: -1, note: '' }]));
 });
+
+test('the frame the editor adds is stripped from the label and from the replayed turn', () => {
+	const frame = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.\n\nContext from the editor, as it is right now:\n\n- Workspace: D:\\repos\\app\n\n---\n\n';
+	const framed = `${frame}arregla el panel`;
+	const snapshot = { entries: [entry('pi.user', framed), entry('pi.assistant', 'Hecho.')] };
+	assert.equal(durableSessionRow(conversation(7), snapshot).label, 'arregla el panel');
+	assert.deepEqual(durableSessionTurns(snapshot), [
+		{ role: 'user', text: 'arregla el panel' },
+		{ role: 'assistant', text: 'Hecho.' },
+	]);
+});
+
+test('a message the editor did not frame is left whole, separator or not', () => {
+	assert.equal(durableSessionRow(conversation(7), { entries: [entry('pi.user', 'antes --- después')] }).label, 'antes --- después');
+	const bare = 'una nota escrita a mano\n\n---\n\ny su continuación';
+	assert.deepEqual(durableSessionTurns({ entries: [entry('pi.user', bare)] }), [{ role: 'user', text: bare }]);
+});

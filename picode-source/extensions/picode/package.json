@@ -59,13 +59,17 @@
 			{
 				"type": "durable",
 				"name": "durable",
-				"displayName": "Durable",
-				"description": "A chat that runs in the durable agent daemon: the conversation survives closing the tab and reloading the window, and its tools run in the first workspace folder that exists.",
-				"icon": "server-process",
-				"canDelegate": true,
+				"displayName": "PiCode",
+				"description": "PiCode's own agent: the conversation survives closing the tab and reloading the window, and its tools run in the first workspace folder that exists.",
+				"icon": {
+					"light": "media/picode-light.svg",
+					"dark": "media/picode.svg"
+				},
+				"when": "false",
+				"canDelegate": false,
 				"supportsAutoModel": true,
-				"welcomeTitle": "Durable",
-				"welcomeMessage": "This chat runs in the **durable agent** — the conversation survives closing this tab and reloading the window. Its tools run in the workspace folder; the model is the one the durable agent is configured with."
+				"welcomeTitle": "PiCode",
+				"welcomeMessage": "PiCode's own agent — the conversation survives closing this tab and reloading the window. Its tools run in the workspace folder; the model is the one PiCode is configured with."
 			}
 		],
 		"mcpServerDefinitionProviders": [
@@ -121,6 +125,27 @@
 			}
 		],
 		"commands": [
+			{
+				"command": "picode.pi.toggleThinking",
+				"title": "Toggle Thinking in Chat",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.status.openProviderSettings",
+				"title": "Open Provider Settings",
+				"category": "PiCode",
+				"icon": "$(gear)"
+			},
+			{
+				"command": "picode.updates.apply",
+				"title": "Update Pi",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.updates.check",
+				"title": "Check for Pi updates",
+				"category": "PiCode"
+			},
 			{
 				"command": "picode.durable.start",
 				"title": "Start Durable Agent",
@@ -198,6 +223,13 @@
 			}
 		],
 		"menus": {
+			"view/title": [
+				{
+					"command": "picode.status.openProviderSettings",
+					"when": "view == picode.status.providers",
+					"group": "navigation"
+				}
+			],
 			"commandPalette": [
 				{
 					"command": "picode.setup.gallerySearch",
@@ -236,8 +268,53 @@
 			"picode-status": [
 				{
 					"type": "tree",
-					"id": "picode.statusView",
-					"name": "Status"
+					"id": "picode.status.host",
+					"name": "Host",
+					"icon": "media/picode-status.svg"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.subscription",
+					"name": "Model Subscription",
+					"icon": "$(credit-card)",
+					"when": "picode.status.subscriptionVisible"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.updates",
+					"name": "Updates",
+					"icon": "$(cloud-download)"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.providers",
+					"name": "Providers",
+					"icon": "$(plug)"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.mcp",
+					"name": "MCP servers",
+					"icon": "$(server-environment)"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.session",
+					"name": "Session",
+					"icon": "$(history)"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.project",
+					"name": "Project",
+					"icon": "$(root-folder)"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.tasks",
+					"name": "Tasks",
+					"icon": "$(checklist)",
+					"when": "picode.status.tasksVisible"
 				}
 			]
 		}

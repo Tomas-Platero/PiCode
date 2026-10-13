@@ -85,6 +85,37 @@ function capLabel(value: string): string {
 	return value.length > LABEL_CHARS ? `${value.slice(0, LABEL_CHARS - 1)}…` : value;
 }
 
+/**
+ * The separator `withContext` puts between what the editor adds and what the owner wrote
+ * (`context.ts`): who the agent is, then the editor's context, then `---`, then the request.
+ *
+ * Duplicated rather than imported, the same way `textOf` below is: this module imports nothing
+ * relative, which is what lets `node --test` run it directly, and importing `context.ts` here
+ * would drag its own imports into the runner.
+ */
+const CONTEXT_SEPARATOR = '\n\n---\n\n';
+
+/**
+ * The owner's own words in a message the editor framed.
+ *
+ * The durable turn sends the frame, the context and then the request (`durable-sessions-register.ts`),
+ * and the daemon stores that whole text as the user entry. A replayed conversation is a
+ * conversation, so what it shows has to be what **he** wrote; labelling or replaying the frame
+ * is how every turn ends up reading the same. A message the frame did not produce (a
+ * conversation the pi CLI wrote, or the bare prompt of an older turn) has no separator before
+ * it and is returned whole, and a frame with nothing after it is left as is rather than
+ * becoming an empty label.
+ */
+function ownerTextOf(text: string): string {
+	const at = text.indexOf(CONTEXT_SEPARATOR);
+	// The frame is the only thing that precedes the separator, and both frames name the editor.
+	if (at === -1 || !text.slice(0, at).includes('PiCode editor')) {
+		return text;
+	}
+	const asked = text.slice(at + CONTEXT_SEPARATOR.length).trim();
+	return asked.length > 0 ? asked : text;
+}
+
 /** A JSON object from an unknown value, or `undefined` when it is not one. */
 function recordOf(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -172,7 +203,7 @@ export function durableSessionRow(conversation: DurableConversationRow, snapshot
 		}
 		const text = durableEntryText(entry);
 		if (text.length > 0) {
-			label = capLabel(text);
+			label = capLabel(ownerTextOf(text));
 			break;
 		}
 	}
@@ -234,7 +265,7 @@ export function durableSessionTurns(snapshot: unknown): DurableSessionTurn[] {
 		const kind = entryKind(entry);
 		const text = durableEntryText(entry);
 		if (kind === 'pi.user' && text.length > 0) {
-			turns.push({ role: 'user', text });
+			turns.push({ role: 'user', text: ownerTextOf(text) });
 		} else if (kind === 'pi.assistant' && text.length > 0) {
 			turns.push({ role: 'assistant', text });
 		}
