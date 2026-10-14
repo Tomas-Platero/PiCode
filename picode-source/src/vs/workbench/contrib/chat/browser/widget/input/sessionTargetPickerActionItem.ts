@@ -11,7 +11,6 @@ import { autorun } from '../../../../../../base/common/observable.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
-import { URI } from '../../../../../../base/common/uri.js';
 import { localize } from '../../../../../../nls.js';
 import { MenuItemAction } from '../../../../../../platform/actions/common/actions.js';
 import { IActionWidgetService } from '../../../../../../platform/actionWidget/browser/actionWidget.js';
@@ -166,7 +165,10 @@ export class SessionTypePickerActionItem extends ChatInputPickerActionViewItem {
 
 		const actionBarActionProvider: IActionProvider = {
 			getActions: () => {
-				return [this._getLearnMore()];
+				// PiCode: `_getLearnMore` may return undefined — the upstream docs links do not
+				// exist in this product, and an action with nowhere to go is a lie.
+				const learnMore = this._getLearnMore();
+				return learnMore ? [learnMore] : [];
 			}
 		};
 
@@ -233,18 +235,10 @@ export class SessionTypePickerActionItem extends ChatInputPickerActionViewItem {
 		return [];
 	}
 
-	protected _getLearnMore(): IAction {
-		const learnMoreUrl = 'https://aka.ms/vscode-concept-harnesses';
-		return {
-			id: 'workbench.action.chat.agentOverview.learnMore',
-			label: localize('chat.learnMoreAgentTypes', "Learn about harnesses..."),
-			tooltip: learnMoreUrl,
-			class: undefined,
-			enabled: true,
-			run: async () => {
-				await this.openerService.open(URI.parse(learnMoreUrl));
-			}
-		};
+	protected _getLearnMore(): IAction | undefined {
+		// PiCode: no "Learn about harnesses..." — the link opens upstream VS Code docs this
+		// product does not ship.
+		return undefined;
 	}
 
 	private _updateAgentSessionItems(): void {

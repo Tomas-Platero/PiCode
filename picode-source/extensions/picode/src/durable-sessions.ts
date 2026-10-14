@@ -32,6 +32,34 @@ export interface DurableConversationRow {
 	readonly entries: number;
 	readonly newest?: string;
 	readonly note?: string;
+	/** The conversation's working directory — the project it belongs to. Absent when the daemon could not read it. */
+	readonly cwd?: string;
+}
+
+/**
+ * Whether one conversation belongs to the window's workspace: its own directory equals a
+ * workspace folder, sits inside one, or contains one (a window opened on a subfolder of
+ * the project the conversation runs in is still that project's window). A window with no
+ * folders has no project identity to filter by and lists everything; a conversation with
+ * no cwd has no project identity to match and only that unfiltered window lists it.
+ */
+export function conversationInWorkspace(conversation: DurableConversationRow, workspacePaths: readonly string[]): boolean {
+	if (workspacePaths.length === 0) {
+		return true;
+	}
+	if (typeof conversation.cwd !== 'string' || conversation.cwd.length === 0) {
+		return false;
+	}
+	const cwd = normalizeDirectory(conversation.cwd);
+	return workspacePaths.some(folder => {
+		const path = normalizeDirectory(folder);
+		return cwd === path || cwd.startsWith(`${path}/`) || path.startsWith(`${cwd}/`);
+	});
+}
+
+/** One path, comparable: separators forward, no trailing slash, case folded (Windows). */
+function normalizeDirectory(directory: string): string {
+	return directory.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
 /**
@@ -55,6 +83,24 @@ export interface DurableSnapshotLike {
 	readonly run?: unknown;
 }
 
+/**
+ * Whether the snapshot's LAST model entry is the owner's own prompt: a turn that was
+ * recorded (or asked) and never answered — the "te toca" the panel marks. A run in flight
+ * is not owed: it is answering.
+ */
+export function lastModelEntryIsUser(snapshot: unknown): boolean {
+	let last: 'user' | 'assistant' | undefined = undefined;
+	for (const entry of inTranscriptOrder(entriesOf(snapshot))) {
+		const kind = entryKind(entry);
+		if (kind === 'pi.user') {
+			last = 'user';
+		} else if (kind === 'pi.assistant') {
+			last = 'assistant';
+		}
+	}
+	return last === 'user';
+}
+
 /** One panel row's worth of facts, before the editor's shapes are built. */
 export interface DurableSessionRow {
 	/** The durable conversation id (the daemon assigns them in creation order). */
@@ -69,6 +115,10 @@ export interface DurableSessionRow {
 	readonly lastActivity: number | undefined;
 	/** The snapshot's own `run` presence (`durable-tasks.ts`): in flight, idle, or unreadable. */
 	readonly inFlight: boolean | undefined;
+	/** The conversation's last model entry is an unanswered prompt: the panel marks "Input Needed". */
+	readonly owes: boolean;
+	/** What repeated imports of the same transcript share: turn count, first prompt, last turn. */
+	readonly fingerprint: string;
 }
 
 /** One replayed turn of a durable conversation. */
@@ -127,6 +177,26 @@ function recordOf(value: unknown): Record<string, unknown> | undefined {
 function entriesOf(snapshot: unknown): readonly unknown[] {
 	const entries = recordOf(snapshot)?.['entries'];
 	return Array.isArray(entries) ? entries : [];
+}
+
+/**
+ * The snapshot's entries in transcript order — oldest first — whichever way they arrived.
+ *
+ * The daemon's entries read newest-first, and a rule that walks the array assuming
+ * chronology reads the conversation BACKWARDS: the "owes an answer" check kept finding
+ * the owner's very first prompt at the array's end and marked every conversation ever
+ * recorded as "Input Needed". The entry ids are session-assigned integers, so the
+ * direction is told by comparing the array's own ends.
+ */
+function inTranscriptOrder(entries: readonly unknown[]): readonly unknown[] {
+	if (entries.length < 2) {
+		return entries;
+	}
+	const head = Number(recordOf(entries[0])?.['id']);
+	const tail = Number(recordOf(entries[entries.length - 1])?.['id']);
+	return Number.isFinite(head) && Number.isFinite(tail) && head > tail
+		? [...entries].reverse()
+		: entries;
 }
 
 /**
@@ -197,7 +267,8 @@ function messageTimestamps(snapshot: unknown): number[] {
  */
 export function durableSessionRow(conversation: DurableConversationRow, snapshot: unknown): DurableSessionRow {
 	let label = '';
-	for (const entry of entriesOf(snapshot)) {
+	const turns = durableSessionTurns(snapshot);
+	for (const entry of inTranscriptOrder(entriesOf(snapshot))) {
 		if (entryKind(entry) !== 'pi.user') {
 			continue;
 		}
@@ -207,14 +278,26 @@ export function durableSessionRow(conversation: DurableConversationRow, snapshot
 			break;
 		}
 	}
+	// The content fingerprint: what repeated imports of the same transcript look like.
+	// The panel keeps the OLDEST conversation per fingerprint and leaves the later copies
+	// out — several test sessions may share a first prompt ("hola"), but only copies share
+	// prompt AND turn count AND their exact last turn.
+	const lastTurn = turns[turns.length - 1];
+	const fingerprint = `${turns.length}\u0000${label}\u0000${lastTurn?.role ?? ''}\u0000${lastTurn?.text ?? ''}`;
 	const stamps = messageTimestamps(snapshot);
 	return {
 		id: conversation.id,
+		// The row's state carries what the transcript says: a conversation whose last model
+		// entry is the OWNER's own prompt — a turn recorded without an answer, the chat's
+			// "closed mid-work" — is owed one, and the panel says so ("Input Needed"), exactly
+		// as it says "in progress" for a run in flight.
+		owes: lastModelEntryIsUser(snapshot) && snapshotInFlight(snapshot) !== true,
 		label: label.length > 0 ? label : `Conversation ${conversation.id}`,
 		note: typeof conversation.note === 'string' ? conversation.note : '',
 		created: stamps.length > 0 ? Math.min(...stamps) : undefined,
 		lastActivity: stamps.length > 0 ? Math.max(...stamps) : undefined,
 		inFlight: snapshotInFlight(snapshot),
+		fingerprint,
 	};
 }
 
@@ -237,8 +320,20 @@ export function durableSessionRows(
 		}
 		rows.push(durableSessionRow(conversation, snapshotOf(conversation)));
 	}
+	// Repeated imports left COPIES of the same transcript (same fingerprint: turn count,
+	// first prompt, exact last turn). The panel keeps the OLDEST conversation of each
+	// group — the original — and leaves the later copies out; the data is untouched, and
+	// two sessions that merely share a first prompt never collide (their last turn and
+	// turn count differ).
+	const best = new Map<string, DurableSessionRow>();
+	for (const row of rows) {
+		const current = best.get(row.fingerprint);
+		if (current === undefined || row.id < current.id) {
+			best.set(row.fingerprint, row);
+		}
+	}
 	const recency = (row: DurableSessionRow): number => row.lastActivity ?? row.created ?? 0;
-	return rows.sort((a, b) => (recency(b) - recency(a)) || (b.id - a.id));
+	return [...best.values()].sort((a, b) => (recency(b) - recency(a)) || (b.id - a.id));
 }
 
 /** The digest a poll compares: who the daemon holds, and how much each conversation holds. */

@@ -20,8 +20,6 @@ import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, sing
 import { installPackage, searchPackages } from './packages-registry';
 import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
-import { areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
-import { lastActivity, launchedAgents, type AgentState } from './agents';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -51,12 +49,13 @@ import { registerPiCommandPromptFiles } from './commands';
 import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerDurableSessionsProvider } from './durable-sessions-register';
+import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, windowSessionScope } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
@@ -746,205 +745,6 @@ function profileInForce(): string {
 	return readRuntimeMode() === 'external' ? externalProfileDir() : profileDirectory(requireProfileUri());
 }
 
-/** The URI scheme pi's session transcripts use; the editor derives the chat session type from it, so it must match the type the providers register under. */
-const PI_SESSION_SCHEME = 'pi';
-
-/**
- * pi's sessions, listed for the editor's Sessions panel.
- *
- * Nothing in the editor reads the runtime profile's `sessions/` directory — the panel's
- * 'Local' group is the chat service's own index. This provider is the bridge: it lists
- * pi's transcripts under a `pi` group, replays one as a read-only history when opened,
- * and fires the change event when the import lands a tree of transcripts.
- */
-function registerPiSessionsProvider(participant: vscode.ChatParticipant): { fireChanged(): void } & vscode.Disposable {
-	const sessionsChangedEmitter = new vscode.EventEmitter<void>();
-	// The last listing the panel accepted. A cancelled refresh must return it, not `[]`:
-	// the extension-host bridge diffs by reference and emits a removal for every item
-	// absent from the returned array, so an empty listing from a cancelled run would
-	// clear the panel — every pi session disappearing — until the next non-cancelled
-	// refresh listed them all again.
-	let lastItems: vscode.ChatSessionItem[] | undefined = undefined;
-	const provider: vscode.ChatSessionItemProvider & vscode.ChatSessionContentProvider = {
-		onDidChangeChatSessionItems: sessionsChangedEmitter.event,
-		onDidCommitChatSessionItem: new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>().event,
-		provideChatSessionItems(token: vscode.CancellationToken): vscode.ProviderResult<vscode.ChatSessionItem[]> {
-			if (token.isCancellationRequested) {
-				// Return the previous listing: see `lastItems` — a cancelled refresh must
-				// never look like "everything was deleted".
-				return lastItems ?? [];
-			}
-			// **The workspace's own conversations, and only those**, when the window is a workspace:
-			// the sessions filed under the area's slug, which are the ones this window's chats wrote
-			// (`runtime.ts` `windowSessionSlugs`, and the owner's own instruction there). A folder's
-			// history is the folder's — it shows when that project is opened on its own, not gathered
-			// up by a workspace that happens to contain it. Nothing else can appear: with no project
-			// open the slugs are empty and the listing is empty, never a fall-back to every project in
-			// the profile.
-			//
-			// **No group label per row**, because there is one list: the label that said
-			// *«Artictempest (Workspace) (workspace area)»* said the same word twice on every row.
-			// The title and the date are what tell two rows apart.
-			//
-			// **No cap either**: the limit existed so one busy *project* could not turn a list of
-			// groups into an endless one, and there are no groups any more — while a cap here would
-			// hide the older rows with nothing to say they exist, which is the reading the owner
-			// already reported as «salen menos».
-			//
-			// `undefined` is not "no folders": it is a window whose workspace has not been
-			// resolved yet, and that is the moment the panel first asks. Publishing the
-			// emptiness of a listing nobody could build would clear the panel — see
-			// `listingForPanel`.
-			const folders = vscode.workspace.workspaceFolders;
-			const sessionsDir = path.join(profileInForce(), 'sessions');
-			// In a workspace, the listing asks for **every identity** that workspace ever filed under
-			// (`listAreaConversations`): the area's identity moves whenever the folder list does, and a
-			// listing that looked only for the identity computed this instant found an empty folder and
-			// dropped every row — «primero me salen 8 sesiones y luego 5». In a folder window there is
-			// one project and its own slug is the whole answer.
-			const listing = windowSessionScope();
-			const report = listing.mode === 'workspace' && listing.slugs[0] !== undefined
-				? areaConversationsReport(sessionsDir, listing.slugs[0])
-				: conversationsReport(sessionsDir, listing.slugs);
-			const built = report.files.map(file => ({
-				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
-				label: file.label,
-				iconPath: vscode.ThemeIcon.File,
-				// The mtime is the one timestamp a transcript file carries: it feeds both the
-				// created marker and the last-activity marker, because a transcript is never
-				// rewritten — pi only appends to it. Without a timestamp the panel renders
-				// every session as dated 1970 ('57y ago').
-				timing: { created: file.mtime, lastRequestEnded: file.mtime },
-			}));
-			// The rows nobody touched come back as the objects the panel already has: the bridge
-			// compares them by reference, so rebuilding one per refresh is what makes the whole
-			// list republish — and blink — on every refresh. See `reuseRows`.
-			const reusable = reuseRows(
-				lastItems ?? [],
-				built,
-				row => row.resource.toString(),
-				(before, after) => before.label === after.label
-					&& before.timing?.created === after.timing?.created
-					&& before.timing?.lastRequestEnded === after.timing?.lastRequestEnded,
-			);
-			// **Publishable** is the whole question: the projects are known, and the walk could read
-			// every directory it needed. A listing that came back short because a directory refused
-			// to be read is not a listing of fewer sessions — it is no answer, and publishing it is
-			// what emptied this panel over and over while the profile was being written. See
-			// `listingForPanel`.
-			lastItems = listingForPanel(reusable, lastItems, folders !== undefined && report.complete);
-			return lastItems;
-		},
-		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-			// No `requestHandler`: the transcript replays as read-only history, and the
-			// editor disables the input for sessions that cannot take requests.
-			const readSession: vscode.ChatSession = { history: [], requestHandler: undefined };
-			if (token.isCancellationRequested) {
-				return readSession;
-			}
-			const sessionsDir = path.join(profileInForce(), 'sessions');
-			const id = resource.path.split('/').pop();
-			// Every transcript of the open projects, **not** only the ones the panel lists: an
-			// agent's own transcript is not a conversation, and the agents view opens it. The cap
-			// bounds the list, not the history, so nothing here is capped either. The area's **whole
-			// family** comes along: the panel lists the identities a workspace filed under, so a row
-			// it shows has to resolve when it is clicked, whatever identity it was written under.
-			const areaSlug = resolveProjectScope().area?.slug;
-			const lookupSlugs = [
-				...projectSlugsOfWindow(),
-				...(areaSlug === undefined ? [] : areaFamilySlugs(sessionsDir, areaSlug)),
-			];
-			const file = listProjectSessionFiles(sessionsDir, lookupSlugs).find(entry => entry.id === id);
-			if (file === undefined) {
-				return readSession;
-			}
-			const history: Array<vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2> = [];
-			for (const turn of sessionTurns(readTextFile(file.file) ?? '')) {
-				if (turn.role === 'user') {
-					history.push(new vscode.ChatRequestTurn2(turn.text, undefined, [], 'pi', [], undefined, undefined, undefined, undefined));
-				} else {
-					history.push(new vscode.ChatResponseTurn2(
-						[new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(turn.text))],
-						{},
-						'pi',
-					));
-				}
-			}
-			return { ...readSession, history };
-		},
-	};
-	// What `/agents` answers in the terminal, in one place: every delegation filed under the open
-	// projects — whether or not the conversation that launched it is open — with the state its
-	// own transcript carries, and a way into it. The daemon is not asked: `agents.ts` says why
-	// the transcript is the state.
-	const agentsCommand = vscode.commands.registerCommand('picode.agents', async () => {
-		const agents = launchedAgents(listProjectSessionFiles(
-			path.join(profileInForce(), 'sessions'),
-			projectSlugsOfWindow(),
-		));
-		if (agents.length === 0) {
-			void vscode.window.showInformationMessage('No agent was launched from the folders open in this window.');
-			return;
-		}
-		const picked = await vscode.window.showQuickPick(agents.map(agent => ({
-			label: `$(${agentIcon(agent.state)}) ${agent.label}`,
-			description: [
-				agent.parentLabel === undefined ? undefined : `from ${agent.parentLabel}`,
-				lastActivity(agent.mtime, Date.now()),
-			].filter((part): part is string => part !== undefined).join(' · '),
-			detail: agentDetail(agent.state),
-			agent,
-		})), {
-			title: 'Launched agents',
-			placeHolder: `${agents.length} launched — pick one to read it`,
-			matchOnDescription: true,
-		});
-		if (picked === undefined) {
-			return;
-		}
-		// The scheme the provider registered has its own editor resolver in the core, so this is
-		// the read-only chat transcript, exactly as clicking the session in the panel would be.
-		await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${picked.agent.id}` }));
-	});
-	const registration = vscode.chat.registerChatSessionItemProvider('pi', provider);
-	// The listing is filtered by the folders this window has open, so a window whose folders
-	// arrive after the first ask must be asked again — nothing else fires this event, and without
-	// it the panel would sit on the answer it got while the workspace was still being resolved.
-	const foldersSubscription = vscode.workspace.onDidChangeWorkspaceFolders(() => sessionsChangedEmitter.fire());
-	// The deprecated item-provider interface cannot carry session content, so the same object
-	// registers again as the content provider for the scheme. Without it the editor cannot
-	// resolve a pi session and falls back to a text editor for an unresolvable resource.
-	const contentRegistration = vscode.chat.registerChatSessionContentProvider(PI_SESSION_SCHEME, provider, participant);
-	return {
-		fireChanged: () => sessionsChangedEmitter.fire(),
-		dispose: () => {
-			agentsCommand.dispose();
-			foldersSubscription.dispose();
-			contentRegistration.dispose();
-			registration.dispose();
-		},
-	};
-}
-
-/** The icon one agent state wears in the list (`agents.ts` reads it; this names it). */
-function agentIcon(state: AgentState): string {
-	if (state === 'working') {
-		return 'sync~spin';
-	}
-	return state === 'answered' ? 'check' : 'circle-outline';
-}
-
-/** What one agent state means, in the words the transcript earned. */
-function agentDetail(state: AgentState): string {
-	if (state === 'working') {
-		return 'Still owed an answer: its transcript does not end with the agent\u2019s own reply yet.';
-	}
-	if (state === 'answered') {
-		return 'Answered: its transcript ends with the agent\u2019s own reply.';
-	}
-	return 'Nothing was written to it yet.';
-}
-
 /** The directory holding the bundled pi runtime's `node_modules` — what npm reinstalls into. */
 function piRuntimeDir(): string {
 	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime');
@@ -1234,7 +1034,11 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		const profileDir = profileInForce();
 		const result = await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
 		if (result.ok) {
-			fire();
+			// The panel reads the STORED snapshot: an update that does not re-run the check
+			// leaves the row saying it is behind until the next six-hourly pass — the "it
+			// said it updated and it still says so" the owner hit. The check runs now, over
+			// the profile the update just touched, and the panel repaints its answer.
+			void runUpdateCheck(globalState).then(() => fire(), () => fire());
 		}
 		return result;
 	}));
@@ -1450,7 +1254,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			timeout: MCP_LOGIN_TIMEOUT_MS,
 		}, (error, _stdout, stderr) => {
 			if (error === null) {
-				void vscode.window.showInformationMessage(`PiCode: "${server}" is signed in. The credential is stored in PiCode's own profile and survives restarts.`);
+				void vscode.window.showInformationMessage(`PiCode: signed in to "${server}".`);
 				return;
 			}
 			// pi's last stderr line is the sentence that matters (a cancelled sign-in, a server
@@ -2159,9 +1963,9 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
  * One check, run and stored: the snapshot is what the status bar and the notification read,
  * and what the next start finds in globalState.
  */
-async function runUpdateCheck(context: vscode.ExtensionContext): Promise<UpdatesSnapshot | undefined> {
+async function runUpdateCheck(globalState: vscode.Memento): Promise<UpdatesSnapshot | undefined> {
 	const snapshot: UpdatesSnapshot = { checkedAt: Date.now(), targets: updatableTargets(await gatherUpdateCandidates()) };
-	await context.globalState.update(UPDATES_STATE_KEY, snapshot);
+	await globalState.update(UPDATES_STATE_KEY, snapshot);
 	return snapshot;
 }
 
@@ -2258,7 +2062,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 		checking = true;
 		try {
-			showStatus(await runUpdateCheck(context));
+			showStatus(await runUpdateCheck(context.globalState));
 		} catch (error) {
 			report(`updates: the check failed (${error instanceof Error ? error.message : String(error)})`);
 		} finally {
@@ -2378,16 +2182,15 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own sessions, in the editor's Sessions panel. Nothing in the editor lists the
 	// runtime profile's sessions directory; this provider is the bridge, and the import
 	// fires it when a tree of transcripts lands.
-	const piSessions = registerPiSessionsProvider(piParticipant);
-	context.subscriptions.push(piSessions);
-
-	// The durable daemon's conversations, in the same panel: a **third** source, next to the
-	// editor's Local list and pi's transcripts. Its rows come from the daemon's own answers
-	// over the local pipe (never from its SQLite, which only it may open), and when it is
-	// down the last real listing stands rather than an empty panel that would read as
-	// "every durable conversation is gone". The registration is what puts `durable` in the
-	// panel's provider filter, beside Local and `pi`.
-	context.subscriptions.push(registerDurableSessionsProvider({ participant: piParticipant }));
+	// The durable daemon's conversations, in the panel: THE one list (`RETIRED_SESSION_PROVIDERS`
+	// names `local` and `pi`, so the old pi-transcripts provider is no longer registered — it
+	// only bought the startup flicker the owner saw, its rows painting first and the filter
+	// hiding them). Its rows come from the daemon's own answers over the local pipe (never
+	// from its SQLite, which only it may open), and when it is down the last real listing
+	// stands rather than an empty panel that would read as "every durable conversation is
+	// gone". The registration is what puts `durable` in the panel's provider filter.
+	const durableSessions = registerDurableSessionsProvider({ participant: piParticipant, deps: { distributionRoot: distributionRoot(context.extensionUri), log: line => console.error(`[pi] ${line}`) } });
+	context.subscriptions.push(durableSessions, new vscode.Disposable(disposeResumedSessions));
 
 const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
@@ -2405,8 +2208,9 @@ const setupDeps = {
 			configuredModelsCache.clear();
 			onDidChangeModels.fire();
 		},
-		// An import also lands a tree of session transcripts: the Sessions panel re-lists.
-		sessionsChanged: () => piSessions.fireChanged(),
+		// An import also lands a tree of session transcripts: the panel re-lists (the durable
+		// handle's fire — the pi provider it replaced is retired and unregistered).
+		sessionsChanged: () => durableSessions.fireChanged(),
 		// npm runs shell-free, over npm's own CLI script (npm-run.ts) — the spaced install
 		// folder a side-by-side build carries must not be split by a shell's concatenation.
 		npmCli: locateNpmCli(),

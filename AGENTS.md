@@ -142,6 +142,13 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Una vez autorizado un trabajo, se ejecuta hasta el final sin interrupciones. Las decisiones de producto no cerradas se toman, se registran y se explican al terminar.
 * Transparencia total: lo que no se pueda completar se informa con la misma claridad que lo terminado.
 
+### Builds sin instalador por defecto
+>
+> *"Generame solo la build portable luego y no el instalador, el instalador dejalo a partir de ahora si no te lo pido explicitamente."* — 2026-10-14
+
+* Toda build local produce **solo el pack portable** (`PICODE_SKIP_INSTALLER=yes`).
+* El instalador se construye **solo a petición explícita** del dueño.
+
 ### Reportes de cierre
 >
 > *"Una vez finalices dame un reporte."*
@@ -176,6 +183,17 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 ---
 
+## 8. Trabajo por Fases
+
+### Quiero ver las fases del trabajo mientras avanza
+>
+> *"Cuando lanzo fases de tareas no las veo… Tengo una lista con fases y no se ven."*
+> *"gentle-ai siempre lo muestra ¿no deberíamos hacer lo mismo?"*
+
+* **Panel de fases siempre visible:** al empezar cualquier trabajo con varias fases o pasos, el agente registra la lista completa con la herramienta `set_plan` (extensión pi-plan-widget de pi) y la mantiene actualizada: `in_progress` en la fase en marcha, `done` al cerrar cada una.
+* **El panel es estado real, no decoración:** no se eliminan las fases ya hechas y cada cambio de fase se refleja en el panel en el mismo turno.
+* **Sin ruido:** trabajos triviales de un solo paso no llevan plan.
+
 ## Registro de Cambios
 
 * **2026-09-23** · Creado con las frases iniciales de la sesión de trabajo.
@@ -191,3 +209,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
 * **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
+* **2026-10-13** · Regla de fases visibles: el trabajo por fases se muestra en el panel de pi (`set_plan`, widget de pi-plan-widget) («tengo una lista con fases y no se ven»). Confirmado funcionando por el dueño.
+* **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»).

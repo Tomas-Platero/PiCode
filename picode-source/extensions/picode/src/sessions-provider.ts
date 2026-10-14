@@ -28,6 +28,8 @@ import * as path from 'node:path';
 export interface PiSessionTurn {
 	readonly role: 'user' | 'assistant';
 	readonly text: string;
+	/** The transcript entry's own timestamp, in epoch ms — when it actually happened. */
+	readonly timestamp?: number;
 }
 
 /** One session file as the panel lists it. */
@@ -78,6 +80,20 @@ export function conversationFiles(files: readonly PiSessionFile[]): PiSessionFil
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * One transcript entry's own timestamp, in epoch ms — pi stamps every entry in ISO, and
+ * the panel dates conversations from these. `undefined` when the entry carries no
+ * readable stamp, never a guessed clock.
+ */
+function entryTimestamp(entry: unknown): number | undefined {
+	const stamp = isRecord(entry) ? entry['timestamp'] : undefined;
+	if (typeof stamp !== 'string' && typeof stamp !== 'number') {
+		return undefined;
+	}
+	const ms = Date.parse(String(stamp));
+	return Number.isFinite(ms) ? ms : undefined;
 }
 
 /** The text of one content part list: only `text` parts, `thinking` stays out. */
@@ -172,12 +188,12 @@ export function sessionTurns(text: string): PiSessionTurn[] {
 		if (role === 'user') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'user', text });
+				turns.push({ role: 'user', text, timestamp: entryTimestamp(entry) });
 			}
 		} else if (role === 'assistant') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'assistant', text });
+				turns.push({ role: 'assistant', text, timestamp: entryTimestamp(entry) });
 			}
 		}
 	}
@@ -861,7 +877,7 @@ export function listSessionBackupFiles(sessionsDir: string, backupFs: BackupFs =
 }
 
 /** The transcript's first record as an object, or `undefined` when the file is not a session transcript. */
-function sessionHeader(text: string): Record<string, unknown> | undefined {
+export function sessionHeader(text: string): Record<string, unknown> | undefined {
 	const firstLineEnd = text.indexOf('\n') === -1 ? text.length : text.indexOf('\n');
 	try {
 		const value: unknown = JSON.parse(text.slice(0, firstLineEnd).trim());

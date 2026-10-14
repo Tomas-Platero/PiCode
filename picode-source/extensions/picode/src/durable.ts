@@ -330,6 +330,10 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 		PI_AGENT_PROFILE: paths.agentProfile,
 		PICODE_DURABLE_DATA: paths.agentDataDir,
 		PICODE_USER_SETTINGS: paths.userSettingsFile,
+		// The daemon listens on the EDITOR's own endpoint (the same name the clients here
+		// dial). Its default is the external pi's pipe, and whoever started first would
+		// serve the other's chats.
+		PICODE_DURABLE_ENDPOINT: daemonEndpoint(folder),
 	}, logFd);
 	const child = spawn(plan.command, [...plan.args], {
 		cwd: folder,

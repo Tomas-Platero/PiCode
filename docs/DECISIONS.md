@@ -661,3 +661,65 @@ durable; that is a project, and ADR-018's mechanism alone never provided it.
 **Reversal trigger:** the CHAT panel gains a supported path that runs a `chatSessions` content
 provider's `requestHandler` as the turn (then durable can be a harness again), or the product
 decides conversations must live in durable and pays for the agent implementation.
+
+## ADR-021 — One orchestrator (pi), one list, sessions always durable
+
+**Status:** accepted. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
+in 0.2.3-experimental.
+
+**Context:** The 0.2.3 build shipped three coexisting engines (the in-window harness "Local",
+the durable chat destination, the `pi` transcript reader) and a sessions panel that filtered
+between them with a one-at-a-time toggle. The owner, 2026-10-13: *«Quiero que elijas al que sea
+el mejor orquestador del chat, en este caso creo que es Pi. Siempre. Ni local, ni durable. Luego
+que las sesiones las lleve siempre durable ¿No?, y que dejemos de filtrar por durable, pi o
+local.»* — the shape his own pi lives by: one orchestrator, conversations that survive, one list.
+
+**Decision:**
+
+- **The chat's engine is pi, always.** The core blocks that made `durable` the default session
+  type (`DURABLE_CHAT_SESSION_TYPE` in `constants.ts` and its readers) are removed; ADR-020's
+  shape stands with nothing to re-ship. durable is the backend pi reaches through tools.
+- **The sessions panel shows one list: pi's durable transcripts.** The provider filter menu
+  loses its provider toggles (they remain as an opt-in for a consumer with genuinely several
+  providers). `Local` — the editor's duplicate record — and `durable` — no longer an engine —
+  are excluded unconditionally, normalized against any stored filter state
+  (`normalizedExcludes`). The local harness's provider name reads **"Pi"**, not "Local": it
+  names the engine, not the plumbing.
+- **A listed conversation continues.** Opening a pi transcript binds it to an in-process pi
+  session (`sessions-resume.ts`, `SessionManager.open`): the next prompt appends to the same
+  file, with its own permission gate, editor MCP tools and turn queue per resumed session. This
+  is ADR-020's known follow-up resolved for pi's own transcripts — the property durable had,
+  without a second engine.
+
+**Consequences:** New chats run pi; old chats are reachable, continuable and durable in one
+list; the "engine question" disappears from both the chat and the panel. Old durable
+conversations remain in the daemon's storage with no UI path — recovering them, if ever asked,
+is a migration, never a filter.
+
+**Ficha:** `odd/tasks/picode-un-orchestrador-pi.md`.
+
+### Corrección de ADR-021 (2026-10-13, noche): la sesión vive en durable, no en un fichero
+
+El dueño revisó el reparto la misma tarde: *«las sesiones no deberían llevarla siempre durable?
+O sea el chat habla con pi y pi crea una sesión durable»* — y es la forma exacta del propio pi
+que él usa. El estado aceptado queda:
+
+- **pi piensa, durable recuerda, el editor es la sala.** Cada turno lo ejecuta pi en la ventana
+  (modelo, permisos, pantalla) y al terminar **apunta la ronda en durable** (`record`): la
+  conversación vive en el almacén del daemon, sobrevive a todo y continúa desde cualquier
+  ventana. La lista del panel es **durable**, no los transcríptos JSONL.
+- **Los transcríptos de fichero quedan como registro de referencia** para lo que llega de
+  fuera (importaciones, CLI) — y **una importación los convierte a durable al entrar**
+  (`sessions-import.ts`), así que lo importado aparece y continúa como una conversación más.
+- **Continuar = pi, nunca el daemon.** Abrir una conversación del panel siembra una sesión pi
+  en proceso con su historia y graba de vuelta en la misma conversación (`sessions-resume.ts`,
+  `piDurableResumeHandler`). El camino viejo de "mandar el turno al daemon" quedó eliminado.
+- **Delegar a tiempo**: `durable_send` lleva la regla DELEGATE ON TIME — lo largo va a durable
+  antes de empezar — y el panel marca "Input Needed" una conversación cortada a medias
+  (`lastModelEntryIsUser`).
+
+Piezas de la primera versión de ADR-021 que quedaron **reemplazadas**: la continuación por
+fichero (`sessions-resume` sobre JSONL como lista principal) pasa a ser el lector de lo externo,
+y la conversión durable→fichero se deshizo antes de llegar a construirse.
+
+**Ficha viva:** `odd/tasks/picode-un-orchestrador-pi.md`.

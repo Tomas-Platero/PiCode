@@ -51,7 +51,7 @@ import {
 	type BackgroundCall,
 } from './background-cards';
 import { durableBridgeExtensionPath } from './durable';
-import { THINKING_HEADER, quotedThinking } from './thinking';
+import { ensureConversation, recordChatTurn } from './chat-record';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
@@ -110,7 +110,7 @@ interface PiEvent {
 }
 
 /** pi's `Model`, opaque here: it is handed back to pi and never inspected. */
-interface PiModel {
+export interface PiModel {
 	readonly [key: string]: unknown;
 }
 
@@ -140,7 +140,7 @@ interface PiExtensionApi {
 type PiExtensionFactory = (pi: PiExtensionApi) => void | Promise<void>;
 
 /** pi's inline extension shape (`resourceLoaderOptions.extensionFactories`). */
-interface PiInlineExtension {
+export interface PiInlineExtension {
 	name: string;
 	factory: PiExtensionFactory;
 	hidden?: boolean;
@@ -151,11 +151,11 @@ interface PiInlineExtension {
 }
 
 /** pi's session store, created once and handed back to pi across a session's rebuilds. */
-interface PiSessionStore {
+export interface PiSessionStore {
 	readonly [key: string]: unknown;
 }
 
-interface PiSession {
+export interface PiSession {
 	readonly sessionId: string;
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
@@ -197,13 +197,13 @@ interface PiSession {
 }
 
 /** pi's runtime services for one working directory, reduced to what a session needs. */
-interface PiServices {
+export interface PiServices {
 	readonly modelRuntime: { getModel(providerId: string, modelId: string): PiModel | undefined };
 	/** Non-fatal issues pi collected while loading its resources — a bridge that failed to load is said here. */
 	readonly diagnostics?: ReadonlyArray<{ readonly type: string; readonly message: string }>;
 }
 
-interface PiSdk {
+export interface PiSdk {
 	createAgentSessionServices(options: {
 		cwd: string;
 		agentDir?: string;
@@ -230,6 +230,10 @@ interface PiSdk {
 		// The internal mode passes pi's own default **shape**: the per-project folder
 		// under this profile's `sessions/` (see the sessionManager creation below).
 		create(cwd: string, sessionDir?: string): PiSessionStore;
+		// An **existing** transcript, opened to go on being written: the Sessions panel's
+		// continued conversations bind to their file this way (`sessions-resume.ts`).
+		// `cwdOverride` moves the conversation to the directory the window runs in.
+		open(path: string, sessionDir?: string, cwdOverride?: string): PiSessionStore;
 	};
 }
 
@@ -256,7 +260,7 @@ interface PiSdkWithBuiltins {
 	builtins: readonly PiInlineExtension[];
 }
 
-async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
+export async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
 	const loaded = await loadPiSdk<Partial<PiSdk>>(sdkEntryCandidates(distributionRoot));
 	if ('problem' in loaded) {
 		log(loaded.problem);
@@ -485,39 +489,28 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
-async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<void> {
+export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<string> {
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
 	clearTurnEdits();
+	// The answer's own text, as it streamed: what the durable copy of this conversation
+	// records (`chat-record.ts`) — the room saw it, so the file holds the same words.
+	let answer = '';
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
-		let thinking = false;
-		// The chat appends what is streamed, token by token, so the quote marker belongs where a
-		// line *starts*: prefixing every token renders "The> user> asks". See `thinking.ts`.
-		let atLineStart = true;
 		const subscription = session.subscribe(event => {
 			if (event.type === 'message_update') {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === 'text_delta' && typeof delta.delta === 'string') {
-					if (thinking) {
-						// The answer starts: the thinking block is closed so the two are not one wall of
-						// text. A blockquote is what the chat renders as thinking, and it needs no API the
-						// editor does not have.
-						thinking = false;
-						stream.markdown('\n\n');
-					}
+					answer += delta.delta;
 					stream.markdown(delta.delta);
 					return;
 				}
 				if (delta?.type === 'thinking_delta' && typeof delta.delta === 'string' && showReasoning) {
-					if (!thinking) {
-						thinking = true;
-						stream.markdown(THINKING_HEADER);
-						atLineStart = true;
-					}
-					const quoted = quotedThinking(delta.delta, atLineStart);
-					atLineStart = quoted.atLineStart;
-					stream.markdown(quoted.text);
+					// Real thinking parts, not a quoted wall of text: the editor builds its own
+					// collapsible card from them — the accordion, the chevron, the auto-collapse
+					// — and the chat model merges consecutive parts into that one card.
+					stream.push(new vscode.ChatResponseThinkingProgressPart(delta.delta));
 					return;
 				}
 				return;
@@ -645,6 +638,7 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).catch(reject);
 		void cancellation;
 	});
+	return answer;
 }
 
 /* ------------------------------------------------------------------ *
@@ -750,6 +744,40 @@ const EXTENSION_UI_TEXT_LIMIT = 600;
 
 function trimExtensionText(text: string): string {
 	return text.length <= EXTENSION_UI_TEXT_LIMIT ? text : `${text.slice(0, EXTENSION_UI_TEXT_LIMIT)}…`;
+}
+
+/**
+ * One extension notice, styled for the chat: a bold header line, the `name: detail`
+ * lines as a list, and a trailing hint with its slash command in code style (pi's
+ * "Run /mcp to fix." reads as the thing to type, not as decoration). Lines that match
+ * no shape pass through untouched — the notice stays the extension's words. The card
+ * itself (color, icon) comes from the stream's `warning()`, not from this string.
+ */
+function styledExtensionNotice(message: string): string {
+	const lines = message.split('\n').map(line => line.trim()).filter(line => line !== '');
+	if (lines.length <= 1) {
+		return `**${message}**`;
+	}
+	const [header, ...rest] = lines;
+	const bullets: string[] = [];
+	const hints: string[] = [];
+	for (const line of rest) {
+		if (/^run\s+\/\S+/i.test(line)) {
+			hints.push(line.replace(/\/\S+/, '`$&`'));
+		} else if (/^[^:]+:\s+.+$/.test(line)) {
+			bullets.push(`- ${line}`);
+		} else {
+			hints.push(line);
+		}
+	}
+	const parts = [`**${header.replace(/:$/, '')}**`];
+	if (bullets.length > 0) {
+		parts.push('', ...bullets);
+	}
+	if (hints.length > 0) {
+		parts.push('', ...hints);
+	}
+	return parts.join('\n');
 }
 
 /**
@@ -885,9 +913,16 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
 				return;
 			}
-			const mark = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+			const styled = styledExtensionNotice(message.trim());
 			try {
-				stream.markdown(`\n${mark} ${trimExtensionText(message.trim())}\n`);
+				if (type === 'info') {
+					stream.markdown(`\n${styled}\n`);
+				} else {
+					// A warning or an error reads as the chat's own alert card — the yellow box
+					// with its icon, not text imitating one. Codicons do not render in response
+					// markdown, so the card is the only honest styling there is.
+					stream.warning(`\n${styled}\n`);
+				}
 			} catch { /* a stream that already closed is not an error to report */ }
 		},
 		// Terminal surfaces the chat does not have; inert on purpose.
@@ -935,7 +970,7 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
  * External mode passes `undefined`, and then the variable is **removed**: the machine's own profile
  * is the point there, and a value left over from an internal session would silently override it.
  */
-function pinAgentDir(agentDir: string | undefined): void {
+export function pinAgentDir(agentDir: string | undefined): void {
 	if (agentDir === undefined) {
 		delete process.env.PI_CODING_AGENT_DIR;
 		return;
@@ -976,7 +1011,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * interactive confirmation". `onError` is bound so a broken extension is said and the turn
  * still runs.
  */
-async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+export async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
@@ -1351,6 +1386,11 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// conversation pointed at a different pi, and when the durable bridge the
 			// session should load does.
 			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
+			// The durable copy exists from the moment the request arrives, not when the turn
+			// ends: a brand-new chat opens its conversation here, so the sessions panel shows
+			// the row while the model is still answering — the TUI's own immediacy.
+			const sessionKey = request.sessionResource?.toString();
+			void ensureConversation(scopeKey, sessionKey, cwd, deps.log);
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
@@ -1480,7 +1520,16 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
-				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log, cwd);
+				const framed = withContext(request.prompt, context, readRuntimeMode());
+				const answer = await runTurn(session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				// The durable copy: the room saw this turn, so the daemon holds it (ADR-021
+				// corrected — pi thinks, durable remembers). Fire-and-forget: a recording
+				// failure is logged, never a failed answer; the daemon being down records
+				// nothing and the next turn tries again. The session resource rides along so
+				// the record follows the chat session: a "New Session" opens its own
+				// conversation (and the panel gets its row), a resumed one records into the
+				// conversation it resumed.
+				void recordChatTurn(scopeKey, cwd, { prompt: framed, answer }, deps.log, sessionKey);
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;

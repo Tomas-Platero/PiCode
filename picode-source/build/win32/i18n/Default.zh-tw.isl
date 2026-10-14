@@ -287,8 +287,10 @@ ExistingFileReadOnly2=無法取代現有檔案，因為檔案已標示為唯讀�
 ExistingFileReadOnlyRetry=移除唯讀屬性並重試 (&R)
 ExistingFileReadOnlyKeepExisting=保留現有檔案 (&K)
 ErrorReadingExistingDest=讀取一個已存在的檔案時發生錯誤:
-FileExists=檔案已經存在。%n%n 要讓安裝程式加以覆寫嗎?
-ExistingFileNewer=存在的檔案版本比較新，建議您保留目前已存在的檔案。%n%n您要保留目前已存在的檔案嗎?
+; FileExists and ExistingFileNewer are gone: this Inno Setup no longer recognizes them
+; and warned about them on every compile. The modern names carry the same meaning.
+FileExists2=檔案已經存在。%n%n 要讓安裝程式加以覆寫嗎?
+ExistingFileNewer2=存在的檔案版本比較新，建議您保留目前已存在的檔案。%n%n您要保留目前已存在的檔案嗎?
 ErrorChangingAttr=在變更檔案屬性時發生錯誤:
 ErrorCreatingTemp=在目的資料夾中建立檔案時發生錯誤:
 ErrorReadingSource=讀取原始檔案時發生錯誤:
@@ -357,3 +359,38 @@ AssocingFileExtension=正在將 %1 與檔案副檔名 %2 產生關聯...
 AutoStartProgramGroupDescription=開啟:
 AutoStartProgram=自動開啟 %1
 AddonHostProgramNotFound=%1 無法在您所選的資料夾中找到。%n%n您是否還要繼續？
+
+[Messages]
+; *** Downloading and extraction messages the old translation predates (Inno 6 additions)
+DownloadingLabel=正在下載其他檔案...
+ButtonStopDownload=停止下載(&S)
+StopDownload=確定要停止下載嗎？
+ErrorDownloadAborted=下載已中止
+ErrorDownloadFailed=下載失敗: %1 %2
+ErrorDownloadSizeFailed=取得檔案大小失敗: %1 %2
+ErrorFileHash1=檔案雜湊失敗: %1
+ErrorFileHash2=檔案雜湊無效: 應為 %1，實際為 %2
+ErrorProgress=進度無效: %1（共 %2）
+ErrorFileSize=檔案大小無效: 應為 %1，實際為 %2
+ExtractionLabel=正在解壓縮其他檔案...
+ButtonStopExtraction=停止解壓縮(&S)
+StopExtraction=確定要停止解壓縮嗎？
+ErrorExtractionAborted=解壓縮已中止
+ErrorExtractionFailed=解壓縮失敗: %1
+
+; *** Conflicting files
+FileExistsSelectAction=選擇動作
+FileExists2=該檔案已存在。
+FileExistsOverwriteExisting=覆蓋現有檔案(&O)
+FileExistsKeepExisting=保留現有檔案(&K)
+FileExistsOverwriteOrKeepAll=對後續衝突執行相同動作(&D)
+ExistingFileNewerSelectAction=選擇動作
+ExistingFileNewer2=現有檔案比安裝程式嘗試安裝的檔案新。
+ExistingFileNewerOverwriteExisting=覆蓋現有檔案(&O)
+ExistingFileNewerKeepExisting=保留現有檔案(建議)(&K)
+ExistingFileNewerOverwriteOrKeepAll=對後續衝突執行相同動作(&D)
+
+; *** Disk space and restart
+DiskSpaceGBLabel=至少需要 [gb] GB 的可用磁碟空間。
+ComponentsDiskSpaceGBLabel=目前選擇的項目至少需要 [gb] GB 的磁碟空間。
+PrepareToInstallNeedsRestart=安裝程式必須重新啟動電腦。重新啟動後，請再次執行安裝程式以完成 [name] 的安裝。%n%n要立即重新啟動嗎？

@@ -23,8 +23,8 @@
 // daemon. See README.md ("The daemon") for the full protocol.
 import net from "node:net";
 import path from "node:path";
-import { AgentDoc, watchEvents } from "@earendil-works/pi-durable";
-import { CTX, SHARED_DB, answerText, listConversations, openHarness } from "./common.js";
+import { AssistantEntry, UserEntry, watchEvents } from "@earendil-works/pi-durable";
+import { CTX, SHARED_DB, answerText, backfillConversationCwds, listConversations, openHarness } from "./common.js";
 import { allowCommand, makeGuardExtension } from "./guard.js";
 import { loadSkills, makeSkillsExtension } from "./skills.js";
 import { SubagentExtension } from "./extensions.js";
@@ -49,6 +49,35 @@ export function agentFor(resolved, agents, params) {
 		agent.cwd = params.cwd;
 	}
 	return agent;
+}
+
+/** One pi message from an unknown value, or `undefined` when it is not one. */
+function toPiMessage(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const role = value.role;
+	if (role !== "user" && role !== "assistant") return undefined;
+	const content = value.content;
+	let parts;
+	if (Array.isArray(content)) {
+		parts = content;
+	} else if (typeof content === "string") {
+		parts = [{ type: "text", text: content }];
+	} else {
+		return undefined;
+	}
+	if (parts.length === 0) return undefined;
+	// Pass-through beyond the two checked fields: the message is the caller's own pi message
+	// (usage, model, tool payloads included), and inventing or stripping fields here would
+	// make the recorded turn someone else's idea of what happened. The one field the daemon
+	// fills in when the caller left it out is the timestamp: the panel dates every
+	// conversation from its messages' own stamps, and a recorded turn without one would
+	// forever show the 1970 epoch ("57y ago").
+	return {
+		...value,
+		role,
+		content: parts,
+		...(typeof value.timestamp === "number" ? {} : { timestamp: Date.now() }),
+	};
 }
 
 async function requireConversation(harness, conversationId) {
@@ -99,6 +128,18 @@ async function serveStorage(resolved, agents, skills) {
 		// comes up anyway, serves ping/sessions/subscribe, and every run fails with the
 		// SAME sentence instead of a stack trace or a hang — see `run`/`fork` below.
 		console.error("[profile] the daemon stays up anyway: ping, sessions, open, subscribe and shutdown are served; every run/fork fails with the reason above until the profile is fixed.");
+	}
+
+	// The historical conversations carry the daemon's home directory as their cwd — they
+	// were opened before the daemon recorded each one's working directory, and the
+	// editor's per-project sessions panel shows them nowhere. Their project is on record
+	// in their own transcripts; this writes it back once, before the endpoint serves a
+	// listing, so the panel's first answer is already correct. A daemon whose every
+	// conversation has a project cwd walks out of this in one pass of agent reads.
+	try {
+		await backfillConversationCwds(harness, storage);
+	} catch (error) {
+		console.error(`[daemon] the working-directory backfill failed (the daemon starts anyway): ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	// The MCP bridge connects BEHIND the endpoint: it is started once `listen` has
@@ -203,9 +244,17 @@ async function serveStorage(resolved, agents, skills) {
 		},
 
 		/** Resolve (or create) a conversation without running anything. */
-		async open(params, line) {
+		async open(params, _line) {
 			if (params.conversationId != null) {
 				const conversation = await requireConversation(harness, params.conversationId);
+				// An existing conversation MAY be re-pointed at a directory: the import's repair
+				// pass re-homes conversations that were recorded before the daemon stored each
+				// one's working directory (they carry the daemon's home, and the per-project
+				// sessions panel shows them nowhere). Only an absolute directory is accepted,
+				// the same rule agentFor applies to new ones.
+				if (typeof params.cwd === "string" && params.cwd.length > 0 && path.isAbsolute(params.cwd)) {
+					await conversation.configure({ cwd: params.cwd }, CTX);
+				}
 				return { conversationId: conversation.id };
 			}
 			// A NEW conversation needs the deferral filter, so it waits for the bridge
@@ -216,6 +265,36 @@ async function serveStorage(resolved, agents, skills) {
 			if (settled.filter) agent.tools = settled.filter; // the MCP deferral, same as a direct `run`
 			const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent }, CTX);
 			return { conversationId: conversation.id };
+		},
+
+		/**
+		 * Record a FINISHED turn into a conversation without running anything.
+		 *
+		 * The editor's chat runs its own pi in the window and writes its turns here, so the
+		 * conversation lives in the daemon's storage — visible from any window, continuable
+		 * after any restart — while the brain stays pi's. Each message arrives as one pi
+		 * message (`{role, content, ...}`); it is stored as the conversation's own
+		 * `pi.user` / `pi.assistant` entry, the same shape a run writes, so listing and
+		 * replay cannot tell a recorded turn from an executed one. Nothing is generated and
+		 * no model is touched: a conversation recorded here never owes an answer.
+		 */
+		async record(params) {
+			const conversation = await requireConversation(harness, params.conversationId);
+			const messages = Array.isArray(params.messages) ? params.messages : [];
+			if (messages.length === 0) return { conversationId: conversation.id, recorded: 0 };
+			// The boundary where unknown JSON becomes durable entries: a message that does not
+			// read as a pi message is refused with a sentence, not stored half-shaped.
+			const clean = messages.map(toPiMessage);
+			if (clean.some((message) => message === undefined)) {
+				throw new Error("every recorded message must be {role: 'user' | 'assistant', content} — a pi message shape");
+			}
+			await conversation.commit(async (tx) => {
+				for (const message of clean) {
+					const token = message.role === "user" ? UserEntry : AssistantEntry;
+					await tx.appendEntry(token, conversation.id, { model: [message] });
+				}
+			}, CTX);
+			return { conversationId: conversation.id, recorded: clean.length };
 		},
 
 		/** Submit a prompt and settle. Subscribers receive the events live, whatever process they are in. */
@@ -385,7 +464,7 @@ async function serveStorage(resolved, agents, skills) {
 	}
 
 	console.error(`[daemon] owner of ${SHARED_DB} — listening on ${endpoint}`);
-	console.error("[daemon] methods: ping sessions open run fork allow cancel permissions.listen permissions.decide subscribe unsubscribe shutdown");
+	console.error("[daemon] methods: ping sessions open run record fork allow cancel permissions.listen permissions.decide subscribe unsubscribe shutdown");
 
 	// Graceful Ctrl+C: same path as the shutdown method.
 	process.on("SIGINT", () => {

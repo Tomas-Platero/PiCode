@@ -26,51 +26,21 @@ import {
 	PERMISSION_QUESTION_ID,
 } from '../src/permissions.ts';
 
-test('shouldAsk asks for the four mutating tools at the default level', () => {
-	assert.strictEqual(shouldAsk('default', 'bash'), true);
-	assert.strictEqual(shouldAsk('default', 'powershell'), true);
-	assert.strictEqual(shouldAsk('default', 'edit'), true);
-	assert.strictEqual(shouldAsk('default', 'write'), true);
-});
-
-test('shouldAsk asks for the four mutating tools at the assisted level', () => {
-	assert.strictEqual(shouldAsk('assisted', 'bash'), true);
-	assert.strictEqual(shouldAsk('assisted', 'powershell'), true);
-	assert.strictEqual(shouldAsk('assisted', 'edit'), true);
-	assert.strictEqual(shouldAsk('assisted', 'write'), true);
-});
-
-test('shouldAsk never asks at autoApprove or autopilot', () => {
-	for (const level of ['autoApprove', 'autopilot']) {
-		for (const tool of ['bash', 'powershell', 'edit', 'write']) {
-			assert.strictEqual(shouldAsk(level, tool), false, `${level}/${tool}`);
+test('shouldAsk never asks — the chat runs commands on their own, like the TUI', () => {
+	for (const level of ['default', 'assisted', 'autoApprove', 'autopilot', undefined, 'yolo']) {
+		for (const tool of ['bash', 'powershell', 'edit', 'write', 'read', 'grep', 'ls', 'mcp__supabase-mcp-server__execute_sql', 'mcp__sentry__list_issues']) {
+			assert.strictEqual(shouldAsk(level, tool), false, `${String(level)}/${tool}`);
 		}
-	}
-});
-
-test('shouldAsk treats an undefined level as default', () => {
-	assert.strictEqual(shouldAsk(undefined, 'bash'), true);
-	assert.strictEqual(shouldAsk(undefined, 'edit'), true);
-});
-
-test('shouldAsk fails open for an unknown level', () => {
-	assert.strictEqual(shouldAsk('yolo', 'bash'), false);
-});
-
-test('shouldAsk never asks for read-only tools', () => {
-	for (const tool of ['read', 'grep', 'find', 'ls', '', 'Bash']) {
-		assert.strictEqual(shouldAsk('default', tool), false, tool);
-		assert.strictEqual(shouldAsk('assisted', tool), false, tool);
 	}
 });
 
 // pi's own MCP tools are somebody else's: nothing in the name says whether a call reads or writes,
 // so they ask like the mutating built-ins do. The field that would let a name be classified is not
 // there, and guessing from it would let `delete_*` through the day a server names it differently.
-test("shouldAsk asks for pi's MCP tools at the levels that ask", () => {
-	assert.strictEqual(shouldAsk('default', 'mcp__supabase-mcp-server__execute_sql'), true);
-	assert.strictEqual(shouldAsk('assisted', 'mcp__sentry__list_issues'), true);
-	assert.strictEqual(shouldAsk(undefined, 'mcp__github__create_issue'), true);
+test("shouldAsk asks nothing for pi's MCP tools either — the chat never asks", () => {
+	assert.strictEqual(shouldAsk('default', 'mcp__supabase-mcp-server__execute_sql'), false);
+	assert.strictEqual(shouldAsk('assisted', 'mcp__sentry__list_issues'), false);
+	assert.strictEqual(shouldAsk(undefined, 'mcp__github__create_issue'), false);
 });
 
 test("shouldAsk asks nothing for pi's MCP tools at the approving levels", () => {

@@ -1023,7 +1023,20 @@ class AgentSessionAdapter implements ICopilotChatSession {
 		this._updatedAt = observableValue(this, new Date(updatedTime));
 		this.updatedAt = this._updatedAt;
 
+		// Initial status mapped from the provider
 		this._status = observableValue(this, toSessionStatus(session.status));
+		// Heuristic demotion: some restored summaries can carry a stale InputNeeded bit
+		// even though the last turn already ended (no active blockers). If we have a
+		// lastRequestEnded timestamp and it is not earlier than lastRequestStarted,
+		// consider the session completed instead of NeedsInput to avoid noisy badges
+		// on historical sessions right after extension load.
+		if (this._status.get() === SessionStatus.NeedsInput) {
+			const ended = session.timing.lastRequestEnded;
+			const started = session.timing.lastRequestStarted;
+			if (typeof ended === 'number' && (!started || ended >= started)) {
+				this._status.set(SessionStatus.Completed, undefined);
+			}
+		}
 		this.status = this._status;
 
 		this._changes = observableValueOpts<readonly ISessionFileChange[]>({ owner: this, equalsFn: sessionFileChangesEqual }, this._extractChanges(session));
@@ -1083,7 +1096,16 @@ class AgentSessionAdapter implements ICopilotChatSession {
 			changed = setIfChanged(this._workspace, this._buildWorkspace(session), tx, sessionWorkspaceEqual) || changed;
 			const updatedTime = session.timing.lastRequestEnded ?? session.timing.lastRequestStarted ?? session.timing.created;
 			changed = setIfChanged(this._updatedAt, new Date(updatedTime), tx, dateEquals) || changed;
-			changed = setIfChanged(this._status, toSessionStatus(session.status), tx) || changed;
+			// Update status with the same demotion heuristic used at construction time
+			let nextStatus = toSessionStatus(session.status);
+			if (nextStatus === SessionStatus.NeedsInput) {
+				const ended = session.timing.lastRequestEnded;
+				const started = session.timing.lastRequestStarted;
+				if (typeof ended === 'number' && (!started || ended >= started)) {
+					nextStatus = SessionStatus.Completed;
+				}
+			}
+			changed = setIfChanged(this._status, nextStatus, tx) || changed;
 			changed = setIfChanged(this._changes, this._extractChanges(session), tx, sessionFileChangesEqual) || changed;
 			changed = setIfChanged(this._checkpoints, this._extractCheckpoints(session), tx, structuralEquals) || changed;
 			changed = setIfChanged(this._isArchived, session.isArchived(), tx) || changed;

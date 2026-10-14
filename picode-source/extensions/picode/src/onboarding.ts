@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
+import * as os from 'node:os';
 import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
@@ -14,6 +15,7 @@ import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-pack
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
+import { importTranscriptsIntoDurable } from './sessions-import';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -122,11 +124,19 @@ export interface AboutVersions {
 /** The import's live state: the page polls it to draw its progress bar. */
 const importLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
 
+/** The import's own Output channel — what the pass brings, line by line, in one place. */
+let importChannel: vscode.OutputChannel | undefined;
+function importOutput(): vscode.OutputChannel {
+	importChannel ??= vscode.window.createOutputChannel('PiCode Import');
+	return importChannel;
+}
+
 function logImport(line: string): void {
 	importLog.lines.push(line);
 	if (importLog.lines.length > 12) {
 		importLog.lines.splice(0, importLog.lines.length - 12);
 	}
+	importOutput().appendLine(line);
 }
 
 /**
@@ -391,6 +401,15 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// still holds the pre-import pi. The next conversation loads what landed.
 				deps.resetChat();
 				deps.sessionsChanged();
+				// The one list is durable's: every transcript that just landed is recorded as a
+				// durable conversation, so it shows up and continues like any other. Fire-and-
+				// forget — the files are imported either way; a daemon that is down records
+				// nothing now and a later pass catches up.
+				void importTranscriptsIntoDurable(
+					path.join(deps.profileDir, 'sessions'),
+					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+					logImport,
+				);
 				importLog.step = importLog.total;
 				logImport('Done.');
 				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
@@ -416,6 +435,14 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				selection: { sessions: true },
 			});
 			const sessions = report.items.find(entry => entry.item === 'sessions');
+			// The one list is durable's: the transcripts that just landed are recorded as
+			// durable conversations (see the full-import path). Fire-and-forget for the same
+			// reason — the files are in; the daemon being down costs only a later pass.
+			void importTranscriptsIntoDurable(
+				path.join(deps.profileDir, 'sessions'),
+				vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+				logImport,
+			);
 			// The panel re-lists even when nothing came over: an import that finds nothing must not
 			// leave the owner wondering whether it ran.
 			deps.sessionsChanged();

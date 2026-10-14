@@ -5,7 +5,7 @@
 
 import type * as http from 'http';
 import type * as https from 'https';
-import { parse as parseUrl } from 'url';
+import { URL } from 'url';
 import { Promises, timeout } from '../../../base/common/async.js';
 import { streamToBufferReadableStream } from '../../../base/common/buffer.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
@@ -154,10 +154,24 @@ export class RequestService extends AbstractRequestService implements IRequestSe
 	}
 }
 
+/**
+ * The WHATWG URL, not the legacy `url.parse`: Node deprecates the latter (DEP0169) and the
+ * warning surfaced in the extension host on the first proxied request. One wrapper so every
+ * parse in this module fails the same way — a descriptive error into the request's rejection
+ * path, where a bad URL belongs.
+ */
+function parseRequestURL(raw: string): URL {
+	try {
+		return new URL(raw);
+	} catch (cause) {
+		throw new Error(`invalid URL passed to the request service: ${raw}`, { cause });
+	}
+}
+
 export async function lookupKerberosAuthorization(urlStr: string, spnConfig: string | undefined, logService: ILogService, logPrefix: string) {
 	const importKerberos = await import('kerberos');
 	const kerberos = importKerberos.default || importKerberos;
-	const url = new URL(urlStr);
+	const url = parseRequestURL(urlStr);
 	const spn = spnConfig
 		|| (process.platform === 'win32' ? `HTTP/${url.hostname}` : `HTTP@${url.hostname}`);
 	logService.debug(`${logPrefix} Kerberos authentication lookup`, `proxyURL:${url}`, `spn:${spn}`);
@@ -166,7 +180,7 @@ export async function lookupKerberosAuthorization(urlStr: string, spnConfig: str
 }
 
 async function getNodeRequest(options: IRequestOptions): Promise<IRawRequestFunction> {
-	const endpoint = parseUrl(options.url!);
+	const endpoint = parseRequestURL(options.url!);
 	const module = endpoint.protocol === 'https:' ? await import('https') : await import('http');
 
 	return module.request;
@@ -199,7 +213,7 @@ export async function nodeRequest(options: NodeRequestOptions, token: Cancellati
 
 async function nodeRequestAttempt(options: NodeRequestOptions, token: CancellationToken): Promise<IRequestContext> {
 	return Promises.withAsyncBody<IRequestContext>(async (resolve, reject) => {
-		const endpoint = parseUrl(options.url!);
+		const endpoint = parseRequestURL(options.url!);
 		const rawRequest = options.getRawRequest
 			? options.getRawRequest(options)
 			: await getNodeRequest(options);
@@ -208,7 +222,8 @@ async function nodeRequestAttempt(options: NodeRequestOptions, token: Cancellati
 			hostname: endpoint.hostname,
 			port: endpoint.port ? parseInt(endpoint.port) : (endpoint.protocol === 'https:' ? 443 : 80),
 			protocol: endpoint.protocol,
-			path: endpoint.path,
+			// url.parse's `path` was pathname + query; the WHATWG URL keeps them apart.
+			path: `${endpoint.pathname}${endpoint.search}`,
 			method: options.type || 'GET',
 			headers: options.headers,
 			agent: options.agent,

@@ -348,6 +348,18 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
     experimental) QUALITY_VALUE="experimental"; FEED_BRANCH="experimental" ;;
     *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
+  # The channel names the PACK FOLDER: an experimental build lands beside the tree as
+  # `PiCode-win32-x64-experimental` — never over a stable build's folder — and stable
+  # keeps the plain name it has always had. The installer's suffix already defaults from
+  # this one (see phase 5), so folder and installer carry the channel together. An
+  # explicit PICODE_PACK_SUFFIX still wins, for a different side-by-side name.
+  if [[ "${QUALITY_VALUE}" != "stable" && -z "${PICODE_PACK_SUFFIX:-}" ]]; then
+    PICODE_PACK_SUFFIX="-${PICODE_CHANNEL}"
+    export PICODE_PACK_SUFFIX
+    echo "  -- the channel names the pack folder: .${PACK_DIR}${PICODE_PACK_SUFFIX}"
+  fi
+  # The folder was computed before the channel check; recompute it with the suffix.
+  PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
   # A seal a hard-killed build left behind (the trap cannot run on a taskkill) is undone
   # first, so the source enters this build as the delta wrote it — a sealed tree fails the
   # identity check above, and this is the only recovery that cannot mistake the backup THIS
@@ -581,6 +593,11 @@ cd ..
 # with the tree's own typings, and before the pack because the pack is what collects it.
 echo ""
 echo "== phase 2/5 - compile the connector"
+
+# The vscode-languageserver patch must land before the extensions compile: the markdown
+# server's dist is regenerated from its node_modules here, and the patched uriToFilePath
+# is what keeps the DEP0169 warning out of the extension host's console (see the script).
+node dev/patch-vscode-languageserver.mjs
 
 bash dev/build-connector.sh
 

@@ -87,6 +87,20 @@ fi
 # ---------------------------------------------------------------------------
 echo "--- step 1/7 - product delta in resources/app/product.json"
 
+# The channel seal (build.sh, phase 1) already wrote the channel identity into the source
+# product.json before the pack copied it here: name, registry name, mutex, profile folder,
+# installer AppIds and the update feed's branch are the channel's, and `quality` is the
+# channel too. Re-applying the delta on top would unseal all of that — name, feed and
+# registry would go back to the delta's stable spellings while `quality` stayed the
+# channel's (the delta sets no quality), and the editor would ask a feed its channel does
+# not own. The delta ran on the source before the seal, so everything it carries is
+# already in this file; a sealed product is left alone. Detection is by `quality`: the
+# delta never sets it, so a beta/experimental value here can only be the seal's work.
+SEALED=$( node -e "const fs=require('fs');let q;try{q=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).quality}catch{}console.log(q==='beta'||q==='experimental'?'yes':'no')" "${PRODUCT_JSON}" )
+if [[ "${SEALED}" == "yes" ]]; then
+  echo "skipped: the product carries the channel seal (quality $( node -p "require(process.argv[1]).quality" "${PRODUCT_JSON}" )) — the delta was applied before it"
+else
+
 set +e
 node "${APPLIER}" --target "${PRODUCT_JSON}" --delta "${DELTA}" --check
 DELTA_CHECK=$?
@@ -109,6 +123,8 @@ else
   echo "error: unexpected applier exit code: ${DELTA_CHECK}" >&2
   exit 2
 fi
+
+fi  # end of the not-sealed branch
 
 # ---------------------------------------------------------------------------
 # Step 2 - the portable profile

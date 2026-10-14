@@ -65,7 +65,6 @@
 					"light": "media/picode-light.svg",
 					"dark": "media/picode.svg"
 				},
-				"when": "false",
 				"canDelegate": false,
 				"supportsAutoModel": true,
 				"welcomeTitle": "PiCode",

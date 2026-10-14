@@ -859,10 +859,14 @@ function chatSummaryStatus(state: ChatState): SessionStatus {
 	if ((status & SessionStatus.InputNeeded) !== SessionStatus.InputNeeded) {
 		return status;
 	}
-	// Only demote when we can positively attribute the InputNeeded to an
-	// auto-approved confirmation with no genuine blocker present; otherwise (e.g.
-	// a restored summary whose activeTurn is not loaded) preserve the status.
-	if (hasAutoApprovedPendingConfirmation(state) && !chatAwaitsUserInput(state)) {
+	// Demote stale InputNeeded when there is no genuine blocker waiting.
+	// This covers restored historical sessions whose transcript still contains
+	// a pending-looking part but the turn already ended.
+	if (!chatAwaitsUserInput(state)) {
+		return (status & ~STATUS_ACTIVITY_MASK) | SessionStatus.InProgress;
+	}
+	// Otherwise, keep InputNeeded unless it was auto-approved mid-turn.
+	if (hasAutoApprovedPendingConfirmation(state)) {
 		return (status & ~STATUS_ACTIVITY_MASK) | SessionStatus.InProgress;
 	}
 	return status;

@@ -292,8 +292,10 @@ ExistingFileReadOnly2=无法替换现有文件，因为它是只读的。
 ExistingFileReadOnlyRetry=移除只读属性并重试(&R)
 ExistingFileReadOnlyKeepExisting=保留现有文件(&K)
 ErrorReadingExistingDest=尝试读取现有文件时发生一个错误:
-FileExists=文件已经存在。%n%n您想要安装程序覆盖它吗？
-ExistingFileNewer=现有的文件新与安装程序要安装的文件。推荐您保留现有文件。%n%n您想要保留现有的文件吗？
+; FileExists and ExistingFileNewer are gone: this Inno Setup no longer recognizes them
+; and warned about them on every compile. The modern names carry the same meaning.
+FileExists2=该文件已经存在。%n%n您想要安装程序覆盖它吗？
+ExistingFileNewer2=现有的文件比安装程序要安装的文件新。推荐您保留现有文件。%n%n您想要保留现有的文件吗？
 ErrorChangingAttr=尝试改变下列现有的文件的属性时发生一个错误:
 ErrorCreatingTemp=尝试在目标目录创建文件时发生一个错误:
 ErrorReadingSource=尝试读取下列源文件时发生一个错误:
@@ -363,3 +365,33 @@ AutoStartProgramGroupDescription=启动组:
 AutoStartProgram=自动启动 %1
 AddonHostProgramNotFound=%1无法找到您所选择的文件夹。%n%n您想要继续吗？
 
+
+[Messages]
+; *** Downloading and extraction messages the old translation predates (Inno 6 additions)
+DownloadingLabel=正在下载其他文件...
+ButtonStopDownload=停止下载(&S)
+StopDownload=确定要停止下载吗？
+ErrorDownloadAborted=下载已中止
+ErrorDownloadFailed=下载失败: %1 %2
+ErrorDownloadSizeFailed=获取文件大小失败: %1 %2
+ErrorFileHash1=文件哈希失败: %1
+ErrorFileHash2=文件哈希无效: 应为 %1，实际为 %2
+ErrorProgress=进度无效: %1（共 %2）
+ErrorFileSize=文件大小无效: 应为 %1，实际为 %2
+ExtractionLabel=正在解压其他文件...
+ButtonStopExtraction=停止解压(&S)
+StopExtraction=确定要停止解压吗？
+ErrorExtractionAborted=解压已中止
+ErrorExtractionFailed=解压失败: %1
+
+; *** Conflicting files
+FileExistsSelectAction=选择操作
+FileExists2=该文件已存在。
+FileExistsOverwriteExisting=覆盖现有文件(&O)
+FileExistsKeepExisting=保留现有文件(&K)
+FileExistsOverwriteOrKeepAll=对后续冲突执行相同操作(&D)
+ExistingFileNewerSelectAction=选择操作
+ExistingFileNewer2=现有文件比安装程序试图安装的文件新。
+ExistingFileNewerOverwriteExisting=覆盖现有文件(&O)
+ExistingFileNewerKeepExisting=保留现有文件(推荐)(&K)
+ExistingFileNewerOverwriteOrKeepAll=对后续冲突执行相同操作(&D)

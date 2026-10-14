@@ -566,6 +566,17 @@ export class AgentSessionRenderer extends Disposable implements ICompressibleTre
 			template.description.textContent = localize('chat.session.status.inProgress', "Working...");
 			return true;
 		} else if (session.element.status === AgentSessionStatus.NeedsInput) {
+			// Suppress stale "Input needed" noise for historical sessions: when the
+			// last turn already ended and there is no approval row to render.
+			const ended = session.element.timing.lastRequestEnded;
+			const hasEnded = typeof ended === 'number' && ended > 0;
+			const hasApprovalModel = !!this._approvalModel;
+			const approvalNow = hasApprovalModel ? this._approvalModel!.getApproval(session.element.resource).get() : undefined;
+			if (hasEnded && !approvalNow) {
+				// Hide the label; the status icon still shows a subtle pulse until next refresh.
+				template.description.textContent = '';
+				return false;
+			}
 			template.description.textContent = localize('chat.session.status.needsInput', "Input needed.");
 			return true;
 		} else if (session.element.status === AgentSessionStatus.Failed) {
@@ -1571,6 +1582,12 @@ export function groupAgentSessionsByDate(sessions: IAgentSession[], sortBy?: Age
 }
 
 export function sessionDateFromNow(sessionTime: number, appendAgoLabel?: boolean): string {
+	// A session without a real date — the missing/epoch value a transcript recorded before
+	// the recorder stamped its messages degrades to — shows no age at all: "57y ago" is a
+	// lie the panel must not tell. The caller renders the empty string as no label.
+	if (!Number.isFinite(sessionTime) || sessionTime <= 0) {
+		return '';
+	}
 	const now = Date.now();
 	const startOfToday = new Date(now).setHours(0, 0, 0, 0);
 	const startOfYesterday = startOfToday - DAY_THRESHOLD;

@@ -60,7 +60,10 @@ const durableSend = defineTool({
 		"Hand a prompt to the durable agent daemon and return its answer. " +
 		"The prompt runs in a SEPARATE durable process that keeps working even if this pi session is killed. " +
 		"Use it for work that must survive a crash, or to delegate slow work (the durable side has a slow_step tool " +
-		"and every MCP server it was started with). Returns the durable conversation id and the final answer.",
+		"and every MCP server it was started with). Returns the durable conversation id and the final answer. " +
+		"DELEGATE ON TIME: this editor's window can close while you work — anything expected to run long " +
+		"(builds, long investigations, parallel tasks) belongs here BEFORE you start it, not after it was cut. " +
+		"A conversation only survives the window because its work does.",
 	parameters: Type.Object({
 		prompt: Type.String({ description: "The prompt to run in the durable conversation." }),
 		conversationId: Type.Optional(

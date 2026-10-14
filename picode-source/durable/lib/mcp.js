@@ -618,7 +618,8 @@ export async function armAllMcpFilters(harness, storage, bridge, context) {
 	for (;;) {
 		const page = await harness.readOnLine(() => storage.scanConversations({}, 1000, cursor, context));
 		for (const record of page.items) ids.push(record.id);
-		cursor = page.cursor;
+		// The continuation lives in `next` (see listConversations in common.js).
+		cursor = page.next;
 		if (!cursor) break;
 	}
 	let armed = 0;

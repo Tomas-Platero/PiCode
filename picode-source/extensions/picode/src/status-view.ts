@@ -401,7 +401,10 @@ export function registerStatusTreeViews(): vscode.Disposable {
 		// The counter on the right of the header: the one thing a folded block still says about what is
 		// inside it. It is written again on every reading, because it is a fact of that reading.
 		const updateBadge = (): void => {
-			view.badge = sectionBadge(section, store.current);
+			// The badge the ACTIVITY BAR icon wears is the owner's to define, and he did: the
+			// number of updates waiting (pi itself and the packages) — nothing when there are
+			// none. The other blocks' counters live in their rows, not on the icon.
+			view.badge = section === 'updates' ? sectionBadge(section, store.current) : undefined;
 		};
 		updateBadge();
 
