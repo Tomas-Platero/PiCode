@@ -1,5 +1,6 @@
 # Local Pi runtime state
 .atl/
+.pi/
 
 # ---------------------------------------------------------------------------
 # VSCodium runtime tree
