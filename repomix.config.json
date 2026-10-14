@@ -1,24 +1,46 @@
 {
-  "$schema": "https://repomix.com/schemas/latest/schema.json",
-  "include": [],
-  "ignore": {
-    "useGitignore": true,
-    "useDefaultPatterns": true,
-    "customPatterns": []
-  },
-  "output": {
-    "filePath": "repomix-output.xml",
-    "style": "xml",
-    "parsableStyle": false,
-    "compress": false,
-    "headerText": "",
-    "topFilesLength": 5,
-    "showLineNumbers": false,
-    "removeComments": false,
-    "removeEmptyLines": false,
-    "copyToClipboard": false
-  },
-  "security": {
-    "enableSecurityCheck": true
-  }
+	"$schema": "https://repomix.com/schemas/latest/schema.json",
+	"output": {
+		"filePath": "repomix-output.txt",
+		"style": "xml",
+		"showLineNumbers": false,
+		"topFilesLength": 10,
+		"headerText": "PiCode — capa de modificación sobre VSCodium.\nEste pack NO contiene el árbol de VSCodium (picode-source/src): para eso hay índice LSP y codegraph.\nContiene: scripts de build (dev/), distribución, documentación y tareas (docs/, odd/),\nla extensión pi (extensions/picode), el durable agent y sus puentes (durable*, ADR-020),\ny los trozos del sistema de build que PiCode toca (build/next, build/win32, gulpfiles vscode).\nRegenerar: repomix (lee este fichero)."
+	},
+	"include": [
+		"AGENTS.md",
+		"dev/**",
+		"distribution/**",
+		"docs/**",
+		"odd/**",
+		"picode-source/extensions/picode/src/**",
+		"picode-source/extensions/picode/test/**",
+		"picode-source/extensions/picode/package.json",
+		"picode-source/extensions/picode/media/**",
+		"picode-source/durable/lib/**",
+		"picode-source/durable/*.js",
+		"picode-source/durable/*.sh",
+		"picode-source/durable/package.json",
+		"picode-source/durable/README.md",
+		"picode-source/durable-bridge/**",
+		"picode-source/durable-acp-client/**",
+		"picode-source/build/gulpfile.vscode.ts",
+		"picode-source/build/gulpfile.vscode.win32.ts",
+		"picode-source/build/next/**",
+		"picode-source/build/win32/**"
+	],
+	"ignore": {
+		"useGitignore": true,
+		"useDefaultPatterns": true,
+		"customPatterns": [
+			"**/media/*.png",
+			"**/media/*.ico",
+			"**/media/*.icns",
+			"**/media/*.svg",
+			"**/*.lock"
+		]
+	},
+	"security": {
+		"enableSecurityCheck": true
+	}
 }

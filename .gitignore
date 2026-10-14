@@ -129,3 +129,9 @@ service-account*.json
 .vercel
 *.tsbuildinfo
 .eslintcache
+
+# Repomix output (generado, nunca versionado)
+repomix-output.txt
+repomix-output.*
+repomix*.xml
+repomix*.md
