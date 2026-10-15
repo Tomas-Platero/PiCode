@@ -7,7 +7,9 @@
 //      shows up in `sessions`, and its snapshot carries the same `pi.user` /
 //      `pi.assistant` shape a run writes (the panel maps it the same way).
 //   3. A second `record` on the same conversation appends — history grows in order.
-//   4. A bad message shape is refused with a sentence, not stored half-shaped.
+//   4. A bad message shape is refused with a sentence, not stored half-shaped — an
+//      empty ASSISTANT message is the exception: it is the interrupted-turn shape the
+//      import records so a transcript that ended mid-work does not read as "owes".
 //
 // Run from picode-source/durable/:  node proof-record.js
 // Isolated by construction: its own data dir and its own endpoint, set HERE before the
@@ -96,6 +98,9 @@ try {
 	const count = (again.snapshot?.entries ?? []).filter((entry) => entry.kind === "pi.user" || entry.kind === "pi.assistant").length;
 	if (count !== 3) fail(`the second record did not append (snapshot has ${count} turns)`);
 	console.log("history grew in order: 3 turns");
+	// Release the watch: while it is held, the next subscribe serves the stale snapshot
+	// (the new turn arrives as a live event instead) — and 5b needs a fresh one.
+	await client.request("unsubscribe", { conversationId: id });
 
 	step("5. a bad shape is refused with a sentence");
 	let refused = "";
@@ -107,6 +112,30 @@ try {
 	}
 	console.log(`refused: ${refused}`);
 	if (!refused.includes("pi message shape")) fail("the refusal does not say what is wrong");
+	let emptyUser = "";
+	try {
+		await client.request("record", { conversationId: id, messages: [{ role: "user", content: [] }] });
+		fail("an empty user message was accepted");
+	} catch (error) {
+		emptyUser = error.message;
+	}
+	if (!emptyUser.includes("pi message shape")) fail("an empty user message must be refused");
+	console.log(`empty user message refused: ${emptyUser}`);
+
+	step("5b. an assistant message with no parts is accepted — the interrupted turn");
+	const interrupted = await client.request("record", {
+		conversationId: id,
+		messages: [{ role: "assistant", content: [] }],
+	});
+	if (interrupted.recorded !== 1) fail(`the interrupted turn did not record (${JSON.stringify(interrupted)})`);
+	const after = await client.request("subscribe", { conversationId: id });
+	// The snapshot reads oldest-first (step 3 proved it); the interrupted turn is its tail.
+	const last = (after.snapshot?.entries ?? [])
+		.filter((entry) => entry.kind === "pi.user" || entry.kind === "pi.assistant")
+		.at(-1);
+	if (last?.kind !== "pi.assistant") fail(`the interrupted turn did not land as pi.assistant (${last?.kind})`);
+	console.log("the interrupted turn landed as the conversation's pi.assistant tail");
+	await client.request("unsubscribe", { conversationId: id });
 
 	step("6. shutdown");
 	await client.request("shutdown", {});

@@ -65,7 +65,12 @@ function toPiMessage(value) {
 	} else {
 		return undefined;
 	}
-	if (parts.length === 0) return undefined;
+	// An assistant message with no parts is a REAL shape, not junk: pi writes it when a turn
+	// was interrupted before it said anything (tool calls in flight, window closed). The
+	// import's tail turn rides on it — without it, a transcript that ended mid-work records
+	// as if it ended on the owner's own prompt, and the panel reads history as "Input Needed".
+	// A user message with nothing is still refused: silence from the owner is not a turn.
+	if (parts.length === 0 && role !== "assistant") return undefined;
 	// Pass-through beyond the two checked fields: the message is the caller's own pi message
 	// (usage, model, tool payloads included), and inventing or stripping fields here would
 	// make the recorded turn someone else's idea of what happened. The one field the daemon
