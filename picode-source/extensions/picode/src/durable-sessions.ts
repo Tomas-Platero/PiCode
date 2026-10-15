@@ -367,3 +367,39 @@ export function durableSessionTurns(snapshot: unknown): DurableSessionTurn[] {
 	}
 	return turns;
 }
+
+/** What a Markdown export states about the conversation beyond the transcript itself. */
+export interface DurableSessionMarkdownMeta {
+	readonly conversationId: number;
+	/** The panel's label (the first user prompt); falls back to `Conversation N`. */
+	readonly label?: string;
+	/** ISO stamp of the export; defaults to now. */
+	readonly exportedAt?: string;
+}
+
+/**
+ * One conversation as a standalone Markdown file: a header a human can read, then the
+ * user/assistant turns in transcript order. Pure like the rest of the module — the
+ * command that saves it owns dialogs, paths and the daemon; this owns only the text.
+ */
+export function durableSessionMarkdown(snapshot: unknown, meta: DurableSessionMarkdownMeta): string {
+	const turns = durableSessionTurns(snapshot);
+	const stamps = messageTimestamps(snapshot);
+	const started = stamps.length > 0 ? new Date(Math.min(...stamps)).toISOString() : undefined;
+	const lastActivity = stamps.length > 0 ? new Date(Math.max(...stamps)).toISOString() : undefined;
+	const title = meta.label && meta.label.length > 0 ? meta.label : `Conversation ${meta.conversationId}`;
+	const lines: string[] = [
+		`# ${title}`,
+		'',
+		`- Conversation: ${meta.conversationId}`,
+		`- Turns: ${turns.length}`,
+		...(started ? [`- Started: ${started}`] : []),
+		...(lastActivity ? [`- Last activity: ${lastActivity}`] : []),
+		`- Exported: ${meta.exportedAt ?? new Date().toISOString()}`,
+		'',
+	];
+	for (const turn of turns) {
+		lines.push('---', '', `### ${turn.role === 'user' ? '👤 User' : '🤖 Assistant'}`, '', turn.text, '');
+	}
+	return `${lines.join('\n')}\n`;
+}

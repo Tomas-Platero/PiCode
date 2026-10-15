@@ -24,7 +24,8 @@
 		"chatProvider",
 		"chatPromptFiles",
 		"chatParticipantAdditions",
-		"chatParticipantPrivate"
+		"chatParticipantPrivate",
+		"languageModelThinkingPart"
 	],
 	"activationEvents": [
 		"onLanguageModelChatProvider:picode",
@@ -171,6 +172,12 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.durable.exportConversation",
+				"title": "Export Durable Conversation...",
+				"category": "PiCode",
+				"icon": "$(export)"
+			},
+			{
 				"command": "picode.agents",
 				"title": "Show Launched Agents",
 				"category": "PiCode"
@@ -222,6 +229,13 @@
 			}
 		],
 		"menus": {
+			"chat/chatSessions": [
+				{
+					"command": "picode.durable.exportConversation",
+					"when": "chatSessionType == durable",
+					"group": "4_export"
+				}
+			],
 			"view/title": [
 				{
 					"command": "picode.status.openProviderSettings",
@@ -248,9 +262,9 @@
 			"title": "PiCode",
 			"properties": {
 				"picode.updates.check": {
-								"type": "boolean",
-								"default": true,
-								"description": "Check for updates in the background and offer to install them when there are any."
+					"type": "boolean",
+					"default": true,
+					"description": "Check for updates in the background and offer to install them when there are any."
 				}
 			}
 		},

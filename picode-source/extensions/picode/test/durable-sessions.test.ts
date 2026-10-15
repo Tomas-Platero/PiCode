@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
 	durableEntryText,
+	durableSessionMarkdown,
 	durableSessionRow,
 	durableSessionRows,
 	durableSessionTurns,
@@ -146,4 +147,33 @@ test('a message the editor did not frame is left whole, separator or not', () =>
 	assert.equal(durableSessionRow(conversation(7), { entries: [entry('pi.user', 'antes --- después')] }).label, 'antes --- después');
 	const bare = 'una nota escrita a mano\n\n---\n\ny su continuación';
 	assert.deepEqual(durableSessionTurns({ entries: [entry('pi.user', bare)] }), [{ role: 'user', text: bare }]);
+});
+
+test('the Markdown export is a standalone document: header, then the turns in transcript order', () => {
+	const snapshot = {
+		entries: [
+			entry('pi.system'),
+			entry('pi.user', 'Exporta esto', 1_700_000_000_000),
+			entry('pi.assistant', 'Hecho.', 1_700_000_060_000),
+		],
+	};
+	const md = durableSessionMarkdown(snapshot, { conversationId: 7, label: 'Exporta esto', exportedAt: '2026-10-15T00:00:00.000Z' });
+	assert.match(md, /^# Exporta esto\n/);
+	assert.match(md, /- Conversation: 7\n/);
+	assert.match(md, /- Turns: 2\n/);
+	assert.match(md, /- Started: 2023-11-14T22:13:20.000Z\n/);
+	assert.match(md, /- Last activity: 2023-11-14T22:14:20.000Z\n/);
+	assert.match(md, /- Exported: 2026-10-15T00:00:00.000Z\n/);
+	const turnHeaders = md.split('\n').filter(line => line.startsWith('### '));
+	assert.deepEqual(turnHeaders, ['### 👤 User', '### 🤖 Assistant']);
+	assert.ok(md.indexOf('Exporta esto', md.indexOf('### 👤 User')) > 0, 'the user turn text follows its header');
+	assert.ok(md.trimEnd().endsWith('Hecho.'), 'the assistant turn closes the file');
+});
+
+test('a conversation with no readable words exports with its own name and zero turns, not an invented transcript', () => {
+	const md = durableSessionMarkdown(undefined, { conversationId: 9, exportedAt: '2026-10-15T00:00:00.000Z' });
+	assert.match(md, /^# Conversation 9\n/);
+	assert.match(md, /- Turns: 0\n/);
+	assert.ok(!md.includes('- Started:'), 'no timestamps the daemon never sent');
+	assert.ok(!md.includes('###'), 'no turns where there are none');
 });
