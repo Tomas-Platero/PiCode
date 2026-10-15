@@ -52,7 +52,7 @@ import { registerDurableSessionsProvider } from './durable-sessions-register';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
-import { registerStatusDataCommand } from './status-data';
+import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
@@ -1635,11 +1635,21 @@ const provider: vscode.LanguageModelChatProvider = {
 
 		const configuredIds = new Set(fromConfigured.map(info => info.id));
 		const profileIds = new Set(fromProfile.map(info => info.id));
-		return [
+		const merged = [
 			...fromConfigured,
 			...fromProfile.filter(info => !configuredIds.has(info.id)),
 			...fromSubscriptions.filter(info => !configuredIds.has(info.id) && !profileIds.has(info.id)),
 		];
+		// The model **pi is configured with** is the picker's default, so the chat opens on the
+		// model a session actually runs instead of whichever name happens to sort first — the
+		// two disagreeing is the defect this closes. It is read live from pi's own
+		// `settings.json`, so changing pi's default moves the chat's default with it, and it is
+		// only the *seed*: a model the owner picked for a conversation still outranks it.
+		const piDefault = readDefaultModel(profile);
+		if (piDefault === undefined || !merged.some(info => info.id === piDefault)) {
+			return merged;
+		}
+		return merged.map(info => info.id === piDefault ? { ...info, isDefault: true } : info);
 	},
 
 	/**

@@ -160,7 +160,7 @@ function readProjectMcpServers(): readonly McpServerSwitch[] {
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
-function readDefaultModel(profileDir: string): string | undefined {
+export function readDefaultModel(profileDir: string): string | undefined {
 	const settings = readJsonObject(path.join(profileDir, 'settings.json'));
 	const value = settings?.['defaultModel'];
 	return typeof value === 'string' && value.length > 0 ? value : undefined;
