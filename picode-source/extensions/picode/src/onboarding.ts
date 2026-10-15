@@ -15,7 +15,7 @@ import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-pack
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
-import { importTranscriptsIntoDurable } from './sessions-import';
+import { importTranscriptsIntoDurable, importOutcomeMessage, type ImportPassOutcome } from './sessions-import';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -426,7 +426,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				selection: { credentials: true },
 			});
 		}),
-		vscode.commands.registerCommand(IMPORT_SESSIONS_COMMAND, () => {
+		vscode.commands.registerCommand(IMPORT_SESSIONS_COMMAND, async () => {
 			// Conversations only. `importProfile` merges and never deletes, so this cannot cost a
 			// conversation that exists here and not there.
 			const report = importProfile({
@@ -436,13 +436,20 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			});
 			const sessions = report.items.find(entry => entry.item === 'sessions');
 			// The one list is durable's: the transcripts that just landed are recorded as
-			// durable conversations (see the full-import path). Fire-and-forget for the same
-			// reason — the files are in; the daemon being down costs only a later pass.
-			void importTranscriptsIntoDurable(
-				path.join(deps.profileDir, 'sessions'),
-				vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
-				logImport,
-			);
+			// durable conversations (see the full-import path). AWAITED, not fire-and-forget:
+			// the popup must say what the panel now holds — or why it does not. "Nothing
+			// happened" is how a working pass and a dead one read exactly the same.
+			let outcome: ImportPassOutcome;
+			try {
+				outcome = await importTranscriptsIntoDurable(
+					path.join(deps.profileDir, 'sessions'),
+					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+					logImport,
+				);
+			} catch (error) {
+				outcome = { landed: 0, repaired: 0, completed: 0, daemonDown: true };
+				logImport(`sessions import: the pass itself failed — ${messageOf(error)}`);
+			}
 			// The panel re-lists even when nothing came over: an import that finds nothing must not
 			// leave the owner wondering whether it ran.
 			deps.sessionsChanged();
@@ -453,7 +460,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				void vscode.window.showInformationMessage('PiCode: your external pi has no conversations to bring in.');
 				return;
 			}
-			void vscode.window.showInformationMessage(`PiCode: your external pi's ${sessions.files} conversations are in this profile now. Nothing was moved or deleted.`);
+			void vscode.window.showInformationMessage(`${importOutcomeMessage(outcome)} Your external pi's ${sessions.files} conversation files are in this profile now. Nothing was moved or deleted.`);
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];
@@ -489,7 +496,8 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 	}
 	const shim = resolveOnPath('pi');
 	if (shim === undefined) {
-		return (externalProbe = { found: false });
+		externalProbe = { found: false };
+		return externalProbe;
 	}
 	// The version comes from running the machine's own pi once. The shim may be a `.cmd`, which
 	// `execFile` refuses to run without a shell, so the package's CLI is run in Node mode
@@ -505,7 +513,8 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 			}, (error, stdout) => resolve(error === null && typeof stdout === 'string' ? stdout.trim().split('\n')[0] : undefined));
 		});
 	}
-	return (externalProbe = { found: true, path: shim, version });
+	externalProbe = { found: true, path: shim, version };
+	return externalProbe;
 }
 
 /**

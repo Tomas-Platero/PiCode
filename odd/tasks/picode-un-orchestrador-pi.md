@@ -348,3 +348,26 @@ Dos causas, dos arreglos (durable-sessions-register.ts + sessions-import.ts):
 - **Si el parpadeo persiste**, debug pedido al dueño: (1) Ayuda → Alternar herramientas de
   desarrollo → Console, y decir si hay errores rojos repetidos mientras parpadea (buscar
   "durable listing"); (2) ¿el parpadeo es cada ~15 s (cadencia del poll) o continuo?
+
+### Arreglado — la historia importada leía "Input Needed" (2026-10-14)
+
+El dueño: *«Siguen al cargar las sesiones importadas algunas como "input needed"?»*. Causa
+encontrada con los datos reales: una sesión cerrada con el agente trabajando guarda su último
+turno de asistente como llamadas a herramientas sin texto; el importador (solo texto visible)
+lo descartaba y la copia acababa en la pregunta del dueño — la firma de «te toca». ~80 filas
+de historia marcadas como deuda.
+
+Tres piezas (detalle completo en `docs/DECISIONS.md`):
+1. `sessions-provider.ts`: nueva `sessionTail` — la última entrada user/assistant aunque no
+   tenga texto, con su contenido real (tool calls incluidos).
+2. `sessions-import-plan.ts` (nuevo, puro): compone los mensajes del fichero (turnos + cola),
+   empareja copia↔fichero por **prefijo exacto** de turnos y calcula lo que falta por entradas
+   de modelo (el único contador que ve el turno sin texto). Tests:
+   `test/sessions-import-plan.test.ts` (13).
+3. `durable/lib/daemon.js`: `record` acepta un asistente sin partes (el turno interrumpido);
+   un usuario vacío sigue rechazándose. `proof-record.js` ampliado (paso 5b) — PROOF OK.
+
+La re-importación **sana** las copias ya importadas (graba solo lo que falta; una copia
+continuada tras importarse recibe nada). "Input Needed" queda para lo real: una conversación
+viva cortada antes de respuesta. Verificado con daemon aislado + el transcript real de
+«Este pi tiene pi durable?»: antes `owes=true`, después `owes=false`.

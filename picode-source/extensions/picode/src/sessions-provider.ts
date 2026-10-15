@@ -188,16 +188,62 @@ export function sessionTurns(text: string): PiSessionTurn[] {
 		if (role === 'user') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'user', text, timestamp: entryTimestamp(entry) });
+				// The stamp rides only when the entry carries one: a turn without a date is
+				// honest undefined, never a key that pretends to hold a number.
+				const stamp = entryTimestamp(entry);
+				turns.push(stamp === undefined ? { role: 'user', text } : { role: 'user', text, timestamp: stamp });
 			}
 		} else if (role === 'assistant') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'assistant', text, timestamp: entryTimestamp(entry) });
+				const stamp = entryTimestamp(entry);
+				turns.push(stamp === undefined ? { role: 'assistant', text } : { role: 'assistant', text, timestamp: stamp });
 			}
 		}
 	}
 	return turns;
+}
+
+/**
+ * The transcript's own tail: the last message entry that is a turn's own role
+ * (`user` or `assistant`), whatever the session ended with.
+ *
+ * `sessionTurns` reads the conversation; the tail reads how it ENDED. A session closed
+ * while the agent was working carries its last assistant turn as tool calls (and the
+ * results that came back after it), with no visible text — the turns parser drops it,
+ * and a copy built from turns alone ends on the owner's own prompt, which the panel
+ * reads as an answer the owner is owed. The tail is what the import appends so the copy
+ * ends where the session actually ended.
+ */
+export interface PiSessionTail {
+	readonly role: 'user' | 'assistant';
+	/** The visible text — empty when the turn was interrupted before it said anything. */
+	readonly text: string;
+	/** The message's own content parts, as the transcript holds them (tool calls included). */
+	readonly content: readonly unknown[];
+	readonly timestamp?: number;
+}
+
+/** The last user/assistant message entry of a transcript, or `undefined` when it has none. */
+export function sessionTail(text: string): PiSessionTail | undefined {
+	let tail: PiSessionTail | undefined = undefined;
+	for (const entry of entries(text)) {
+		if (entry['type'] !== 'message') {
+			continue;
+		}
+		const message = entry['message'];
+		if (!isRecord(message)) {
+			continue;
+		}
+		const role = message['role'];
+		// Tool results are the plumbing BETWEEN turns: the tail is the last turn itself.
+		if (role !== 'user' && role !== 'assistant') {
+			continue;
+		}
+		const content = Array.isArray(message['content']) ? message['content'] as unknown[] : [];
+		tail = { role, text: textOfContent(content), content, timestamp: entryTimestamp(entry) };
+	}
+	return tail;
 }
 
 /** The file system the listing reads, injectable for tests. */

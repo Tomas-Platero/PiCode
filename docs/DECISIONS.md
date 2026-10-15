@@ -723,3 +723,36 @@ fichero (`sessions-resume` sobre JSONL como lista principal) pasa a ser el lecto
 y la conversión durable→fichero se deshizo antes de llegar a construirse.
 
 **Ficha viva:** `odd/tasks/picode-un-orchestrador-pi.md`.
+
+### Historia importada que no debe "deber" (2026-10-14): la cola del transcript viaja con la importación
+
+El dueño lo señaló con la pantalla delante: *«Siguen al cargar las sesiones importadas algunas
+como "input needed"?»*. Unos 80 tramos de historia llegaban al panel como si esperaran respuesta.
+
+**La causa** no era el estado sino la pérdida: una sesión que se cerró con el agente trabajando
+guarda su último turno de asistente como llamadas a herramientas **sin texto**. El parser de
+turnos (solo texto visible) lo descartaba, y la copia importada terminaba en la pregunta del
+dueño — la firma exacta de «te toca». La importación convertía trabajo a medias en deuda.
+
+**La regla nueva** (tres piezas):
+
+1. **La cola viaja.** La importación lee la cola del transcript (`sessionTail`,
+   `sessions-provider.ts`): la última entrada `user`/`assistant` aunque no tenga texto, y la
+   graba tal cual (llamadas a herramientas incluidas). La copia acaba donde acabó la sesión.
+2. **El daemon acepta el turno interrumpido.** `record` (`durable/lib/daemon.js`) admite un
+   mensaje de asistente sin partes — la forma real que pi escribe al cortar un turno. Un
+   mensaje de usuario vacío sigue rechazándose.
+3. **La reparación completa, no duplica.** Una re-importación ya no empareja por primera
+   pregunta a secas: elige la copia cuyos turnos son **prefijo exacto** del fichero
+   (`sessions-import-plan.ts`, puro y con tests) y le graba solo lo que le falta, contado
+   por entradas de modelo (`pi.user` + `pi.assistant`), que es el único contador que ve el
+   turno sin texto. Una copia que siguió adelante tras importarse recibe nada: su historia
+   está por delante del fichero, nunca detrás.
+
+Así, "Input Needed" queda reservado a lo que de verdad espera al dueño: una conversación viva
+cortada antes de respuesta. Las ~80 filas históricas se sanan solas en la siguiente pasada de
+importación (sin migración: la reparación añade, no reescribe). Verificado con un daemon
+aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`, después
+`owes=false`.
+
+**Ficha viva:** `odd/tasks/picode-un-orchestrador-pi.md`.

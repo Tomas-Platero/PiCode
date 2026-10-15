@@ -84,8 +84,11 @@ test('rows sort newest-first by what the transcript says, ties settled by conver
 	assert.deepEqual(rows.map(r => r.id), [2, 1, 3]);
 
 	// Two conversations with no dates at all: the higher id (created later, by the daemon's
-	// own assignment order) leads.
-	const undated = durableSessionRows([conversation(4), conversation(9)], () => undefined);
+	// own assignment order) leads. Each carries its own opening prompt — two conversations
+	// without turns AND without words are indistinguishable copies, and the dedup keeps one.
+	const undated = durableSessionRows([conversation(4), conversation(9)], conv => ({
+		entries: [entry('pi.user', conv.id === 4 ? 'cuatro' : 'nueve')],
+	}));
 	assert.deepEqual(undated.map(r => r.id), [9, 4]);
 });
 
