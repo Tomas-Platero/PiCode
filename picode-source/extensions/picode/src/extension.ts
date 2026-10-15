@@ -53,9 +53,12 @@ import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
+import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { launchedAgents, lastActivity, type AgentState } from './agents';
+import { listProjectSessionFiles } from './sessions-provider';
 import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
@@ -995,6 +998,42 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
 
+	// "Launched agents": the HOST panel's row opens this. The count the panel shows is the
+	// same listing read (`agents.ts`), so the picker answers what the number promises — the
+	// delegations the open projects launched, what each was asked, and what its own
+	// transcript says it is doing. A pick reveals the agent's transcript: the file is the
+	// record of what it did, and no richer surface exists for a conversation the panel
+	// cannot open as its own.
+	disposables.push(vscode.commands.registerCommand('picode.agents', async () => {
+		const sessionsDir = path.join(profileInForce(), 'sessions');
+		let agents: ReturnType<typeof launchedAgents>;
+		try {
+			agents = launchedAgents(listProjectSessionFiles(sessionsDir, projectSlugsOfWindow()));
+		} catch (error) {
+			void vscode.window.showErrorMessage(`PiCode: the agents' transcripts could not be read — ${error instanceof Error ? error.message : String(error)}.`);
+			return;
+		}
+		if (agents.length === 0) {
+			void vscode.window.showInformationMessage('PiCode: no agent has been launched from the open projects.');
+			return;
+		}
+		const stateIcon: Record<AgentState, string> = { working: 'loading~spin', answered: 'check', empty: 'circle-outline' };
+		const stateWord: Record<AgentState, string> = { working: 'working', answered: 'answered', empty: 'not started' };
+		const pick = await vscode.window.showQuickPick(
+			agents.map(agent => ({
+				label: agent.label,
+				description: `${stateWord[agent.state]} · last active ${lastActivity(agent.mtime, Date.now())}`,
+				detail: agent.parentLabel === undefined ? undefined : `launched by: ${agent.parentLabel}`,
+				iconPath: new vscode.ThemeIcon(stateIcon[agent.state]),
+				agent,
+			})),
+			{ placeHolder: 'Agents launched from the open projects', matchOnDescription: true, matchOnDetail: true },
+		);
+		if (pick !== undefined) {
+			void vscode.window.showTextDocument(vscode.Uri.file(pick.agent.file), { preview: true });
+		}
+	}));
+
 	// The background jobs the agent left running, as the pill above the chat input reads them.
 	// Pure reading of what the transcript already reported: the same starts and completions the
 	// chat cards draw, minus the cards. It answers even before the first turn — as "nothing
@@ -1728,7 +1767,7 @@ async function sendToEndpoint(
 	apiKey: string | undefined,
 	modelId: string,
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
-	progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+	progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 	token: vscode.CancellationToken,
 ): Promise<void> {
 	const body = buildRequestBody(api, modelId, messages);
@@ -1750,7 +1789,10 @@ async function sendToEndpoint(
 		throw new Error(`the provider answered ${response.status}`);
 	}
 
-	await streamInto(response.body, api, progress, token);
+	// The two dialects the editor's providers speak; anything else arrives as chat
+	// completions, which is what a compatible endpoint expects by default.
+	const dialect: ProviderApi = api === 'openai-responses' ? 'openai-responses' : 'openai-completions';
+	await streamInto(response.body, dialect, progress, token);
 }
 
 /** How a provider's key is found: the entry's own, or the profile's `auth.json`. */
@@ -1798,18 +1840,23 @@ function buildRequestBody(api: string | undefined, modelId: string, messages: re
 		: { model: modelId, messages: converted, stream: true };}
 
 /**
- * Reads the provider's stream and forwards the text as it arrives.
+ * Reads the provider's stream and forwards the answer AND the model's thinking as they
+ * arrive.
  *
- * Server-sent events: lines beginning `data:` carry a JSON object, and `[DONE]` ends it. The
- * two dialects differ only in which field holds the text, so they are handled together
- * instead of duplicating the whole loop.
+ * Server-sent events: lines beginning `data:` carry a JSON object, and `[DONE]` ends it.
+ * The dialect table (`parseProviderStreamEvent`) tells text from reasoning — the reasoning
+ * is what the owner reads as the thinking section, and dropping it was why the model
+ * thought on record and the chat showed nothing. Whether it is forwarded at all is the
+ * same switch the chat participant obeys (`picode.pi.reasoning`), read live so the
+ * Thinking row's flip lands on the next turn without a reload.
  */
 async function streamInto(
 	body: ReadableStream<Uint8Array>,
-	api: string | undefined,
-	progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+	api: 'openai-completions' | 'openai-responses',
+	progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 	token: vscode.CancellationToken,
 ): Promise<void> {
+	const showThinking = vscode.workspace.getConfiguration('picode').get<string>('pi.reasoning') !== 'hide';
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = '';
@@ -1830,35 +1877,18 @@ async function streamInto(
 			if (payload === '[DONE]') {
 				return;
 			}
-			const text = extractText(payload, api);
-			if (text !== undefined && text.length > 0) {
-				progress.report(new vscode.LanguageModelTextPart(text));
+			const parts = parseProviderStreamEvent(payload, api);
+			if (parts === undefined) {
+				continue;
+			}
+			if (parts.thinking !== undefined && parts.thinking.length > 0 && showThinking) {
+				progress.report(new vscode.LanguageModelThinkingPart(parts.thinking));
+			}
+			if (parts.text !== undefined && parts.text.length > 0) {
+				progress.report(new vscode.LanguageModelTextPart(parts.text));
 			}
 		}
 	}
-}
-
-/** Where each dialect puts the text of one streamed event. */
-function extractText(payload: string, api: string | undefined): string | undefined {
-	let event: Record<string, unknown> | undefined;
-	try {
-		// SAFETY: the payload is a streamed JSON event whose shape the dialect table below
-		// knows; parsing hands it over as an untyped record and the table narrows it.
-		event = JSON.parse(payload) as Record<string, unknown>;
-	} catch {
-		return undefined;
-	}
-	if (api === 'openai-responses') {
-		// `response.output_text.delta`; every other event type is ignored on purpose.
-		return event?.type === 'response.output_text.delta' && typeof event.delta === 'string'
-			? event.delta
-			: undefined;
-	}
-	// SAFETY: the dialect table above knows this payload's shape — an OpenAI-completions
-	// stream event carries `choices[0].delta.content`; the parsed JSON is untyped at the
-	// boundary, so the contract is recovered here after a runtime typeof check.
-	const choices = event?.choices as unknown as Array<{ delta?: { content?: string } }> | undefined;
-	return typeof choices?.[0]?.delta?.content === 'string' ? choices[0].delta.content : undefined;
 }
 
 /* ------------------------------------------------------------------ *

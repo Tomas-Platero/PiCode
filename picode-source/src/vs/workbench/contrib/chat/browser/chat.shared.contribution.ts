@@ -1509,13 +1509,13 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			description: nls.localize('chat.tools.todos.showWidget', "Controls whether to show the todo list widget above the chat input. When enabled, the widget displays todo items created by the agent and updates as progress is made."),
 		},
-		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how the
-		// editor renders *thinking parts* of its own chat, and PiCode's chat never has any: the agent's
-		// thinking is written into the answer as a quote (`picode.pi.reasoning`, off by default), and this
-		// setting does not touch it. It was an experimental control with nothing behind it, and the owner
-		// read it exactly so: «Revisa esta opción si es necesaria.» Both readers fall back on their own
-		// default when it is unset (`chatThinkingContentPart` to `Collapsed`, `chatWidget` to
-		// `FixedScrolling`), so removing it changes nothing that runs — it only takes a knob out of the
+		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how
+		// the editor renders *thinking parts* of its own chat. PiCode's chat does produce them —
+		// the chat participant pushes them when `picode.pi.reasoning` says so, and the model
+		// provider forwards the endpoint's reasoning deltas the same way — so the renderer's own
+		// default governs (`chatThinkingContentPart` falls back to `Collapsed` when it is unset).
+		// It was an experimental control with nothing behind it, and the owner read it exactly
+		// so: «Revisa esta opción si es necesaria.» Removing it only takes a knob out of the
 		// settings that cannot do anything here.
 		[ChatConfiguration.ThinkingGenerateTitles]: {
 			type: 'boolean',
