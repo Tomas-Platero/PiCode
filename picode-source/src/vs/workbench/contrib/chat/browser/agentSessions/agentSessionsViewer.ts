@@ -100,7 +100,6 @@ interface IAgentSessionItemTemplate {
 class AgentSessionStatusIcon extends Disposable {
 
 	private static readonly PIXEL_SPINNER_GRID_KEY = '__pixel_spinner_grid__';
-	private static readonly PIXEL_SPINNER_RING_KEY = '__pixel_spinner_ring__';
 
 	private _currentCacheKey: string | undefined;
 	private _lastSession: IAgentSession | undefined;
@@ -136,10 +135,9 @@ class AgentSessionStatusIcon extends Disposable {
 		this.container.className = `agent-session-icon${session.status === AgentSessionStatus.NeedsInput ? ' needs-input' : ''}`;
 		this.container.style.color = '';
 
-		if ((session.status === AgentSessionStatus.InProgress || session.status === AgentSessionStatus.NeedsInput) && !this.accessibilityService.isMotionReduced()) {
-			const isNeedsInput = session.status === AgentSessionStatus.NeedsInput;
-			const cacheKey = isNeedsInput ? AgentSessionStatusIcon.PIXEL_SPINNER_RING_KEY : AgentSessionStatusIcon.PIXEL_SPINNER_GRID_KEY;
-			const color = isNeedsInput ? asCssVariable('list.warningForeground') : asCssVariable('textLink.foreground');
+		if (session.status === AgentSessionStatus.InProgress && !this.accessibilityService.isMotionReduced()) {
+			const cacheKey = AgentSessionStatusIcon.PIXEL_SPINNER_GRID_KEY;
+			const color = asCssVariable('textLink.foreground');
 			if (this._currentCacheKey === cacheKey) {
 				this.updateActiveIconColor(color);
 				return;
@@ -148,7 +146,7 @@ class AgentSessionStatusIcon extends Disposable {
 			this._currentCacheKey = cacheKey;
 			this.spinner.clear();
 			clearNode(this.container);
-			const spinner = createPixelSpinner(undefined, { variant: isNeedsInput ? 'ring' : 'grid' });
+			const spinner = createPixelSpinner(undefined, { variant: 'grid' });
 			this.spinner.value = spinner;
 			spinner.element.style.color = color;
 			this.container.appendChild(spinner.element);
@@ -566,17 +564,6 @@ export class AgentSessionRenderer extends Disposable implements ICompressibleTre
 			template.description.textContent = localize('chat.session.status.inProgress', "Working...");
 			return true;
 		} else if (session.element.status === AgentSessionStatus.NeedsInput) {
-			// Suppress stale "Input needed" noise for historical sessions: when the
-			// last turn already ended and there is no approval row to render.
-			const ended = session.element.timing.lastRequestEnded;
-			const hasEnded = typeof ended === 'number' && ended > 0;
-			const hasApprovalModel = !!this._approvalModel;
-			const approvalNow = hasApprovalModel ? this._approvalModel!.getApproval(session.element.resource).get() : undefined;
-			if (hasEnded && !approvalNow) {
-				// Hide the label; the status icon still shows a subtle pulse until next refresh.
-				template.description.textContent = '';
-				return false;
-			}
 			template.description.textContent = localize('chat.session.status.needsInput', "Input needed.");
 			return true;
 		} else if (session.element.status === AgentSessionStatus.Failed) {
