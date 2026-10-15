@@ -72,3 +72,40 @@ Fecha: 2026-10-15
 - Drift detectado (fuera de alcance de esta tarea): el árbol del editor tiene otra generación del
   durable (`picode-source/durable` en JS + `durable-bridge/extension.ts`) que difiere del host vivo
   del perfil (`~/.pi/agent/durable` en TS). Reconciliar es trabajo aparte.
+
+## Mudanza de conversaciones entre durables (propuesta del dueño, misma sesión)
+
+> «estaría bueno que pudieran exportarla usando el comando /share no? (si mal no recuerdo) para que
+> puedan llevarlo a su pi durable externo»
+
+**Verificado primero**: `/share` NO sirve para esto. Compone un enlace de solo lectura (HTML en
+Radius o gist privado de GitHub) de la sesión del pi interactivo; no se puede importar de vuelta
+en ningún durable. Y el `prefix` de `SqliteStorage.open()` (pi-durable 1.3.0) es convivencia de
+varias instalaciones sobre UNA base, no portabilidad entre máquinas. Lo que el dueño quería —
+llevar conversaciones a otro durable — ya tenía una vía natural: cada proyecto vive en su propio
+`projects/project-<hash>.sqlite`.
+
+### Lo implementado (daemon 0.5.0, host 0.3.0)
+
+- rpc `export_project {project, out?}`: snapshot SQLite portátil de TODAS las conversaciones del
+  proyecto. `VACUUM INTO` desde conexión read-only → estado único y consistente sin parar el
+  daemon, fichero compacto autónomo (sin -wal). Dentro de la copia, tabla `_pidurable_export`
+  con `origin_project` / `exported_at` / `daemon_version` (pi-durable ignora tablas ajenas).
+  Por defecto en `durable/exports/durable-<proyecto>-<stamp>.sqlite`.
+- rpc `import_project {file, project}`: valida que sea una base del durable (tabla
+  `conversations`), cuenta conversaciones y coloca el fichero como
+  `projects/project-<hash(ruta-destino)>.sqlite`. RECHAZA si el proyecto destino está abierto en
+  el daemon o ya tiene base (no pisa nada). No hace falta que la ruta del proyecto coincida
+  entre máquinas: el hash se calcula con la ruta de ALLÍ.
+- Puente: `durable_project_export` / `durable_project_import` (mismos params que el resto).
+- Tests: ida y vuelta completo en `tests/tasks-integration.test.ts` (export → metadatos → import
+  en otra ruta → `list`/`read` en el destino → doble import rechazado). **18/18 en verde**,
+  tsc 0 errores.
+
+Fidelidad: las conversaciones viajan enteras y quedan CONTINUABLES en el destino (el daemon las
+reanuda al abrir la base; el cwd de las tools es la ruta del proyecto local). No viajan los
+ficheros que las conversaciones tocaron, claro — solo la conversación.
+
+Nota de despliegue: las herramientas nuevas del puente no aparecen en una sesión pi ya arrancada;
+hacen falta reiniciar pi (o nueva sesión) para verlas. Y el daemon en marcha sirvió código viejo
+hasta reiniciado — los tests lo verificaron con daemon fresco.
