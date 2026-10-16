@@ -366,16 +366,33 @@ jobs:
           # The changelog GitHub generated compares against the release before
           # this one. Repointed at this tag's own commits: a link that goes
           # nowhere is the one thing these notes must not carry.
+          # Above it sits the page's own summary: the release's commits, grouped
+          # by kind of change (dev/release-notes.mjs). With no previous tag to
+          # compare against, the script stays silent and the generated
+          # changelog carries the page alone.
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
           COMMITS_URL="${REPO_URL}/commits/v${PICODE_VERSION}"
           SED="s#https://github.com/[^ ]*/compare/[^ ]*#${COMMITS_URL}#"
           EXE="PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
           ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
+          WHAT_CHANGED="dev/release-notes/what-changed.md"
+          if [ -n "${PREV_TAG}" ]; then
+            node dev/release-notes.mjs --from "${PREV_TAG}" \
+              --to "v${PICODE_VERSION}" > "${WHAT_CHANGED}"
+          else
+            : > "${WHAT_CHANGED}"
+          fi
           {
             cat "${DESCRIPTION}"
             echo
             echo "---"
             echo
+            if [ -s "${WHAT_CHANGED}" ]; then
+              cat "${WHAT_CHANGED}"
+              echo
+              echo "---"
+              echo
+            fi
             gh release view "v${PICODE_VERSION}" \
               --json body --jq .body | sed -E "${SED}"
             echo
