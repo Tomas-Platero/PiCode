@@ -247,6 +247,11 @@ export class PiCodeSetup extends Disposable {
 
 	/** Fetches the state and paints the three cards; safe to call again after an action. */
 	async render(): Promise<void> {
+		// Something on screen the moment the container exists. The state command runs on
+		// the extension host, and a window whose host is still busy starting (the first
+		// run after an install can stall it for tens of seconds) would otherwise leave
+		// this area blank — which reads as a broken page rather than a busy one.
+		reset(this.container as HTMLElement, $('p.picode-note', {}, localize('picodeSetup.loading', "Preparing the setup…")));
 		const [state] = await Promise.all([this.resolveState(), this.resolveThemes()]);
 		if (this._store.isDisposed) { return; }
 		this.state = state;

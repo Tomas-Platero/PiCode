@@ -283,7 +283,14 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 
 	// Warm the listing shortly after activation, so the first `/` finds the files already
 	// written instead of waiting on a discovery session.
-	const warmup = setTimeout(refreshQuietly, 2_000);
+	// The warmup imports pi's whole SDK (thousands of modules), and an ESM import runs its
+	// module graph on this process's event loop: on the first start after an install (cold
+	// file cache) that has stalled the extension host for tens of seconds — long enough
+	// that the welcome page's own state command sat unanswered and its setup area painted
+	// blank. Two seconds after activation is exactly when the welcome asks; twenty is
+	// after the first paint has landed. The slash list fills in when the discovery ends
+	// either way.
+	const warmup = setTimeout(refreshQuietly, 20_000);
 	context.subscriptions.push(new vscode.Disposable(() => clearTimeout(warmup)));
 
 	return {
