@@ -99,6 +99,18 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
   * **Migrar** datos desde el Pi del PATH al interno es una opción explícita a petición del usuario, nunca un proceso automático.
 * **Credenciales:** Las claves de endpoints se guardan como variables de entorno o valores cifrados; nunca se muestran en pantalla.
 
+### El pi del PATH es del dueño: solo la app lo toca
+>
+> *"Esto no lo toques NUNCA, esto es mi pi que estamos corriendo ahora mismo."*
+>
+> *"Miento, cuidado, si se puede tocar, al actualizar y tal pero via app."*
+>
+> *"si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo"*
+
+* **Nunca a mano:** ni el agente ni ningún script del repo escriben, instalan ni actualizan el pi del PATH directamente. Es el pi con el que se está trabajando ahora mismo.
+* **Sí, vía la app (única excepción):** el producto puede tocarlo solo a través de sus propios flujos de actualización (Update Pi / Packages), nunca por escritura directa. Esto matiza la regla de aislamiento de escritura: seguir prohibido guardar ni leer a mano en esa carpeta.
+* **Requisito de producto:** cuando el HOST conectado es el externo (PATH), los botones de actualizar Pi y Packages deben actuar sobre ese externo, no sobre el interno.
+
 ### pi durable ya no es experimental
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
@@ -182,6 +194,10 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Comunicación interna:** La interacción con el dueño, los reportes y la documentación (`docs/`, `AGENTS.md`) se mantienen en **español**.
 * **Internacionalización:** Otros idiomas se añadirán mediante paquetes de lenguaje sobre la capa superior, sin mezclar cadenas en el código base.
 * **Excepciones técnicas:** Mensajes de commit, comentarios de código e identificadores permanecen en inglés.
+* **Siempre se escribe en inglés:** todo código nuevo, sus comentarios, las cadenas de código y los mensajes de las herramientas se redactan en inglés — **nada en español** en el código («añade en el agents.md que siempre se escribe en inglés» / «tradúcelo todo al inglés, nada en español», 2026-10-16).
+  * Si aparece español en el código (citas del dueño incluidas): se **borra** si el resto del comentario se entiende solo, o se **traduce** si hace falta para entenderlo.
+  * Única excepción: el texto con destino a documentación en español (`docs/`, `README.md`, `AGENTS.md`, como el generador de `docs/MAPA.md`).
+* **Datos que no son texto nuestro:** las pruebas de acentos/teclados upstream, los nombres de idioma de los paquetes (`"español"`) y los mensajes citados de terceros se quedan como están.
 
 ### Comunicación clara y funcional
 >
@@ -197,6 +213,26 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * La página **«Agent Customizations»** del chat debe listar los elementos reales del runtime pi (perfil en fuerza), no los de las convenciones de GitHub/Copilot.
 * **Agents**: los agentes de pi. **Skills**: las de pi y las del proyecto. **MCP Servers**: los servidores mcp de pi. **Plugins**: los paquetes instalados de pi.
 * **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejilla de la página.
+
+---
+
+### Cada carpeta se documenta al lado, y el mapa se genera
+>
+> *"deja avisado algo en el agents.md no? de usar esto"* — 2026-10-16
+
+* **Toda carpeta nueva lleva su `README.md`:** una frase de qué hace esa carpeta y qué hay
+  dentro, escrito al lado del código. Si no lo trae, CI lo avisa y el PR se detiene
+  (`dev/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
+* **El mapa se genera, no se escribe:** `docs/MAPA.md` sale de esos README con
+  `node dev/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
+  locales y salidas de build no entran.
+* **Nivel fichero solo cuando el nombre miente:** si el nombre ya explica el fichero, no se
+  documenta; si no, dos líneas de cabecera con el porqué.
+* **La zona upstream no se documenta fichero a fichero:** `picode-source/src`, `cli`, `build`,
+  `scripts`, `resources`, `remote` y las extensiones built-in llevan un solo aviso de que no
+  son nuestras (ahí está casi todo el código y detallarlo es trabajo que se pudre).
+* **Dónde mirar primero:** `docs/MAPA.md` (árbol con una frase por carpeta) y, para saber quién
+  llama a quién, el grafo de código (`.codegraph/`), no la documentación.
 
 ---
 
@@ -232,3 +268,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
 * **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
 * **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`picode-source/extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
+* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `dev/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`dev/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
+* **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).

@@ -14,6 +14,7 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
 | [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y durable | ES |
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
+| [MAPA.md](MAPA.md) | 🗺️ **Qué hace cada carpeta y cada fichero de la raíz** — generado a partir de los README de cada carpeta | ES |
 
 ## Cómo se lee esto sin perderse
 
@@ -41,3 +42,7 @@ AGENTS.md (dueño)  >  TAREAS.md (lista)  >  DECISIONS.md (porqués)  >  DISENO/
 - Un cambio de mecanismo exige tocar el papel de mecánica **y** el README/wiki si afecta a
   lo que ve quien colabora.
 - El detalle de cada feature **no** sube aquí: se queda en su papel dentro de `docs/`.
+- **Documentación por carpeta:** cada carpeta lleva su `README.md` al lado (una frase de qué
+  hace, qué hay dentro). De ahí sale el árbol de [`MAPA.md`](MAPA.md), que se regenera con
+  `node dev/map-docs.mjs`; las carpetas nuevas sin ficha las ve CI (`node dev/check-docs.mjs`,
+  con la lista de excepciones en `.docsignore`).

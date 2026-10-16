@@ -50,6 +50,27 @@ jobs:
           # never drift apart.
           node-version-file: .nvmrc
 
+      # Every folder says what it does in one paragraph (docs/MAPA.md is built
+      # from those paragraphs). Two rules: the documented folders keep their
+      # README, and a folder NEW since the base of the PR has to arrive with
+      # one. If the base cannot be fetched the static half still runs, so this
+      # step can only ever be stricter, never blind.
+      - name: Folder documentation
+        shell: bash
+        env:
+          # Through the environment: a ref name is not script text.
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            node dev/check-docs.mjs
+          elif git fetch --depth=1 origin "$BASE_REF"; then
+            node dev/check-docs.mjs --base FETCH_HEAD
+          else
+            # The base could not be fetched: the static half still runs.
+            node dev/check-docs.mjs
+          fi
+
       # node_modules is reused whenever the lockfile has not moved:
       # build.sh's deps-current check then skips npm ci entirely.
       # restore-keys keeps a stale tree usable — build.sh detects the
