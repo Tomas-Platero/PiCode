@@ -494,6 +494,10 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 			// `.asar` and treats it as an archive — the staged pack carries
 			// `node_modules.asar`, and writing it extracted needs the real
 			// filesystem, not an asar parse. This is the documented escape hatch.
+			// The zip reader itself is imported lazily from inside that same
+			// archive, so it loads BEFORE the hatch closes: with noAsar set, its
+			// own import cannot even read node_modules.asar.
+			await import('yauzl');
 			const noAsar = process.noAsar;
 			process.noAsar = true;
 			try {
