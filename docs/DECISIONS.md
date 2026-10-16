@@ -32,6 +32,7 @@ alternatives were seriously considered.
 | 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020 |
 | 019 | The editor's context travels with every chat turn, durable included | accepted |
 | 020 | The chat is pi; durable is the backend it reaches through tools | accepted |
+| 021 | One orchestrator (pi), one list, sessions always durable | accepted (refines 020) |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -381,7 +382,7 @@ inglés."*
 
 **Decision:** Every string the product shows is English. Spanish stays where it is the
 conversation rather than the product: what is said to the owner, and the records that are
-his (`AGENTS.md`, `odd/tasks/`). Other languages are reached later by **language packs**,
+his (`AGENTS.md` and the internal papers in `docs/`). Other languages are reached later by **language packs**,
 which is the editor's own mechanism: a separate layer keyed by localize key over the English
 source text, added without editing the sources.
 
@@ -696,8 +697,6 @@ list; the "engine question" disappears from both the chat and the panel. Old dur
 conversations remain in the daemon's storage with no UI path — recovering them, if ever asked,
 is a migration, never a filter.
 
-**Ficha:** `odd/tasks/picode-un-orchestrador-pi.md`.
-
 ### Corrección de ADR-021 (2026-10-13, noche): la sesión vive en durable, no en un fichero
 
 El dueño revisó el reparto la misma tarde: *«las sesiones no deberían llevarla siempre durable?
@@ -721,8 +720,6 @@ que él usa. El estado aceptado queda:
 Piezas de la primera versión de ADR-021 que quedaron **reemplazadas**: la continuación por
 fichero (`sessions-resume` sobre JSONL como lista principal) pasa a ser el lector de lo externo,
 y la conversión durable→fichero se deshizo antes de llegar a construirse.
-
-**Ficha viva:** `odd/tasks/picode-un-orchestrador-pi.md`.
 
 ### Historia importada que no debe "deber" (2026-10-14): la cola del transcript viaja con la importación
 
@@ -754,5 +751,3 @@ cortada antes de respuesta. Las ~80 filas históricas se sanan solas en la sigui
 importación (sin migración: la reparación añade, no reescribe). Verificado con un daemon
 aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`, después
 `owes=false`.
-
-**Ficha viva:** `odd/tasks/picode-un-orchestrador-pi.md`.

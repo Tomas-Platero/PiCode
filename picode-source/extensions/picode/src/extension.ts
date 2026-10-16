@@ -208,8 +208,7 @@ function mcpServersFile(profile: string): string {
  * the file already says exactly this, because activation and every settings change call it.
  *
  * Nothing is installed beside it: this is the file pi's own MCP reads, by name and shape. Whether
- * the editor's chat sessions reach it is a separate question, recorded in
- * `odd/tasks/picode-pi-0992.md`.
+ * the editor's chat sessions reach it is a separate question.
  */
 function writeMcpServers(profile: string, servers: readonly McpServerSetting[]): void {
 	const file = mcpServersFile(profile);

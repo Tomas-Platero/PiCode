@@ -309,8 +309,8 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		// in product.json's `version` (stamped below), which is what extension `engines.vscode`
 		// ranges match against — Open VSX declares plain versions, and a suffixed one fails
 		// every range — and what the updater compares. Upstream's 'insider' keeps its suffix:
-		// its own extension ecosystem pairs the suffixed versions. Measured 2026-10-08,
-		// odd/tasks/picode-canales.md (the channels design).
+		// its own extension ecosystem pairs the suffixed versions. Measured 2026-10-08
+		// (channels design: ADR-015 in docs/DECISIONS.md).
 		if (quality === 'insider') {
 			version += '-insider';
 		}

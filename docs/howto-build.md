@@ -9,17 +9,12 @@ quiere usar PiCode (montado por `dev/stage-distribution.sh`, descrito en
 [`DISTRIBUTION.md`](DISTRIBUTION.md)). Este es el camino de quien colabora en el núcleo y
 necesita recompilar.
 
-La diferencia que justifica el trabajo: en el ZIP el producto se parchea sobre un
-`resources/app` ya minificado y con un mapa `checksums` que impide tocar el bundle. Aquí
-el producto se aplica a `picode-source/product.json` **antes** de compilar, los `checksums` se
-calculan sobre el resultado, y un cambio de comportamiento se escribe en TypeScript, en el
-propio árbol.
+Construir desde la fuente permite que el producto se aplique a `picode-source/product.json` **antes** de compilar, que los `checksums` se calculen sobre el resultado y que un cambio de comportamiento se escriba en TypeScript, en el propio árbol: nada de parchear un bundle minificado.
 
 **Lo que cambió el 2026-09-27**, y es la razón de que este documento se lea distinto: el árbol
 dejó de ser el resultado desechable de aplicar parches en cada build y pasó a ser **la fuente de
 PiCode**, versionada en este repositorio. Ya no hay fase de descarga ni de
-parcheo, y las dependencias se instalan una vez. El detalle está en
-[`odd/tasks/picode-fuente-propia.md`](../odd/tasks/picode-fuente-propia.md).
+parcheo, y las dependencias se instalan una vez.
 
 ## 🗺️ Índice
 
@@ -224,7 +219,7 @@ público sin decisión del dueño.
 ### El bucle de desarrollo (ver un cambio en segundos, sin empaquetar)
 
 Para tocar código y verlo en el editor no hace falta pasar por las 5 fases. Con la ruta de
-fábrica reactivada (esbuild, ver `odd/tasks/build-veloz.md`):
+fábrica reactivada (esbuild):
 
 ```bash
 cd picode-source
@@ -314,8 +309,7 @@ directamente en el árbol y se commitea.
   **rematar 17 s**. Build completo en régimen normal: **≈ 6 minutos** con las dependencias ya
   instaladas. El registro en bruto queda en `.scratch/baseline-{prepack,pack,stage}.{log,time}`
   (fuera del árbol versionado).
-- **Actualizado el mismo día, con el interruptor de esbuild devuelto a su valor de fábrica**
-  (decisión registrada en `odd/tasks/build-veloz.md`): la cadena volvió a medirse de punta a
+- **Actualizado el mismo día, con el interruptor de esbuild devuelto a su valor de fábrica**: la cadena volvió a medirse de punta a
   punta y **aplastó sus propios números** — compilar pasó de 5 min 05 s a **41 s** (dentro van
   14 s de control de tipos, cero errores), empaquetar de 36 s a 2 min 23 s (agrupar desde la
   fuente cuesta ~100 s) y el **build completo, de ~6 min a 3 min 34 s**, con el editor

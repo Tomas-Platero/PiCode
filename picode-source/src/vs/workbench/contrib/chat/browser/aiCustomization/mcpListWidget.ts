@@ -1772,7 +1772,7 @@ export class McpListWidget extends Disposable {
 			// remove run the connector's commands — which ask, confirm, and write that file. Running the
 			// server, and signing in to it, are the **editor's** job and the editor's own actions, which this
 			// row already carries: the servers belong to the editor and pi uses them through it, so there is
-			// one path and one set of credentials (see `odd/tasks/picode-pi-0992.md`). Every other
+			// one path and one set of credentials. Every other
 			// extension-provided row is its extension's to manage.
 			if (isPiConnectorCollection(collectionId, this.mcpRegistry)) {
 				if (actions.length > 0) {

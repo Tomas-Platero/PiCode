@@ -963,7 +963,7 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
  * `agentDir` is a parameter of the SDK; pi's `getAgentDir()` reads `PI_CODING_AGENT_DIR`
  * (`dist/config.js`). An extension that resolves the profile by itself therefore ignored the
  * parameter: pi's MCP looked for `~/.pi/agent/mcp.json`, and the adapter loaded the servers of the
- * machine's own profile — measured, not assumed (see `odd/tasks/picode-pi-0992.md`). Pinning the
+ * machine's own profile — measured, not assumed. Pinning the
  * variable is what puts every extension inside PiCode's profile; the chat holds one session at a
  * time, and a profile change is exactly what rebuilds it.
  *
@@ -1409,7 +1409,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// is enabled stays pi's own default — every built-in unless the profile's `extensions` setting
 				// excludes it (`package-manager.js:738`) — so the owner's `pi config` choices, including
 				// `-builtin:mcp`, keep deciding, and this editor takes no position that would go stale. This
-				// reverses one half of `odd/tasks/picode-pi-0992.md`: pi's MCP extension is wanted again,
+				// reverses one half of the 0.9.9.2 measurement: pi's MCP extension is wanted again,
 				// because the profile's servers (the nan provider's) must connect. The editor's own MCP servers
 				// keep flowing as `customTools` below, so the chat's tools are untouched; a server declared both
 				// in the profile and bridged from the editor would run twice — the pre-0992 overlap — and is

@@ -33,7 +33,7 @@ import * as path from "node:path";
 
 // The channels a feed can be cut for. `stable` is the RC channel (versions 1.0.0+);
 // `beta` and `experimental` are the channels ahead of it (owner's decision, 2026-10-08,
-// `odd/tasks/picode-canales.md`): a build ships with its channel in product.json's
+// ADR-015 in `docs/DECISIONS.md`): a build ships with its channel in product.json's
 // `quality`, and reads its own feed — one channel is never offered another's build.
 // `insider` stays accepted because upstream tooling may still name it.
 // One channel per branch — the relation is the owner's, 2026-10-08:

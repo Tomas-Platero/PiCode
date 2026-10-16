@@ -43,9 +43,7 @@ of leaving it implied.
 
 ## Records
 
-- [ ] Feature record added/updated in `odd/tasks/` (expected for any
-      non-trivial change)
 - [ ] The decision log updated if a decision changed or an ADR was
       superseded
 - [ ] Product-facing strings are English (ADR-012); Spanish only in
-      `AGENTS.md` and `odd/tasks/`
+      `AGENTS.md` and the internal docs in `docs/`

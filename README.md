@@ -6,8 +6,8 @@
 <br />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
-[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fdistribution%2Fproduct-delta.json&query=%24.set.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./odd/tasks/picode-versionado.md)
-[![Status: beta](https://img.shields.io/badge/status-beta-FFB000?style=flat-square)](./CHANGELOG.md)
+[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fdistribution%2Fproduct-delta.json&query=%24.set.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./distribution/product-delta.json)
+[![Status: beta](https://img.shields.io/badge/status-beta-FFB000?style=flat-square)](https://github.com/Tomas-Platero/PiCode/releases)
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square)](#download)
 [![Website](https://img.shields.io/badge/website-getpicode.app-3B9BFF?style=flat-square)](https://www.getpicode.app)
@@ -34,9 +34,9 @@
 
 <br />
 
-**PiCode is free and complete.** No feature is held back. The editor is 100% open-source and works fully offline with your own provider keys.
+**The editor is free and complete.** No local feature is held back and it is 100% open source. It needs no account: bring your own provider keys or subscriptions. The only paid thing is the optional cloud sync of your setup (see *PiCode Account* below).
 
-**Version.** Three numbers, one file. The tree descends from a pinned VS Code **1.135.0** ([`upstream/stable.json`](./upstream/stable.json)); the number the editor *reports* — `1.141.1` today — is decoupled from it so extensions validating `engines.vscode: ^1.141.0` keep installing, and the bump is deliberate ([`odd/tasks/picode-rebase-141.md`](./odd/tasks/picode-rebase-141.md)). PiCode's own version — `0.2.1` on stable, `0.2.1-beta` and `0.2.1-experimental` on the pre-release channels — is the one you are offered. Both live in [`distribution/product-delta.json`](./distribution/product-delta.json), and the reasoning is recorded in [`odd/tasks/picode-versionado.md`](./odd/tasks/picode-versionado.md).
+**Versions.** PiCode's own version (the badge above; `-beta` and `-experimental` on the pre-release channels) is the one you are offered. The editor *reports* `1.141.x` so extensions that require `engines.vscode: ^1.141.0` keep installing, while the source tree descends from VS Code `1.135.0`. Both numbers live in [`distribution/product-delta.json`](./distribution/product-delta.json); the reasoning is in [ADR-016](./docs/DECISIONS.md).
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
@@ -76,7 +76,7 @@ feature**: the free plan stores nothing. See [plans](https://www.getpicode.app/p
 
 ## ⬇️ Download
 
-Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases) — the **installer** (`PiCode-win32-x64-…-setup.exe`) or a portable **zip**: unzip, run `PiCode.exe`. Windows today; Linux follows the same path.
+Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/PiCode/releases) — the **installer** (`PiCode-win32-x64-…-setup.exe`) or a portable **zip**: unzip, run `PiCode.exe`. Windows today; Linux follows the same path, and macOS is not supported yet.
 
 Three channels share the same code, each on its own branch of this repo: **stable** (recommended, no suffix), **beta** (`-beta`, early access to what is coming) and **experimental** (`-experimental`, built from the freshest work). Each has its own update feed, so switching channels is switching branches — [choose a channel](https://www.getpicode.app/#download).
 

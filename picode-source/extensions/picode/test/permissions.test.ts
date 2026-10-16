@@ -11,7 +11,7 @@
  * parts worth exercising, and none of them needs an editor.
  *
  * The MCP half of the rule is here because the gap was real: pi's MCP tools ran with no question
- * at all, however much they changed (see `odd/tasks/picode-pi-0992.md`).
+ * at all, however much they changed.
  */
 
 import assert from 'assert';

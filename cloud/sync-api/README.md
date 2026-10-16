@@ -5,7 +5,7 @@ Settings Sync engine expects, authenticates against Firebase Auth, and stores ea
 user's data in Firestore.
 
 - Firebase project: `picode-7f24f`
-- Client REST contract: see `odd/tasks/picode-cloud-sync.md` (section T1)
+- Client REST contract: `src/lib/contract.ts` (types) and the route table below
 
 ## 🔨 Development
 
@@ -135,5 +135,6 @@ exposes synced data in readable form.
 1. `vercel link` inside this folder.
 2. Set the environment variables above on the Vercel project.
 3. `vercel deploy --prod`.
-4. The resulting URL (e.g. `https://picode-sync-api.vercel.app/v1`) is the one that goes in
-   the editor's `product.json` `configurationSync.store` (task T6).
+4. The URL goes in the editor's `product.json` `configurationSync.store` **without** `/v1` —
+   the editor appends it itself (`userDataSyncStoreService` joins `v1`). The shipped value is
+   `https://www.getpicode.app/api`.

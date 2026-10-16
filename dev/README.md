@@ -182,9 +182,7 @@ None of them needs flags. With none, the build checks the source, installs what 
 compiles, packs and stages — and it is safe to repeat, because the source is never fetched and the
 dependencies are installed once.
 
-The editor's own task list carries the same entry points (`.vscode/tasks.json`, which VS Code
-reads with comments allowed — this explanation lives here so the file stays readable by every JSON
-tool). The default task is the live build, the one with the bar. Two builds in one tree fight over
+Two builds in one tree fight over
 `node_modules` and over the directory they pack into — one of those left a half-installed tree
 behind — so the lock is checked before starting, never after.
 

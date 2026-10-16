@@ -37,11 +37,13 @@ panel custom viejo se disuelve: las categorías pasan a las Settings nativas, y
 skills/paquetes/MCPs pasan al hub nativo "Agent Customizations" en vez de mantener una segunda
 superficie aparte.
 
+*(Estado de finales de septiembre; el estado vigente está en `TAREAS.md` y `HARNESS.md`.)*
+
 Estado real: el envío ya funciona en el CHAT nativo (dos bugs reales encontrados y arreglados
 con logs de ejecución), pero `@pi` responde con "Language model unavailable" porque todavía no
 está conectado a ningún proveedor de modelos.
 
-### 4. Sistema de proveedores de modelos (lo que falta ahora)
+### 4. Sistema de proveedores de modelos (situación original; estado actual en `TAREAS.md`)
 
 No quieres un modelo fijo — quieres poder conectar los proveedores que elijas tú (ChatGPT,
 Claude, tu proveedor actual con 163 modelos, OpenRouter, etc.), por OAuth (cuentas Pro/Max) o

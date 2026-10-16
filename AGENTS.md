@@ -179,7 +179,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"NOno a ver todo ha de estar en ingles, tu me hablas en español, ya costruiremos paquete sde lenguajes para todos los demás idiomas. Pero a priori en inglés."*
 
 * **Producto (Interfaz):** Todo lo que ve el usuario final va en **inglés** (ventanas, avisos, comandos, ajustes, respuestas del chat sobre herramientas).
-* **Comunicación interna:** La interacción con el dueño, los reportes y la documentación (`odd/tasks/`, `AGENTS.md`) se mantienen en **español**.
+* **Comunicación interna:** La interacción con el dueño, los reportes y la documentación (`docs/`, `AGENTS.md`) se mantienen en **español**.
 * **Internacionalización:** Otros idiomas se añadirán mediante paquetes de lenguaje sobre la capa superior, sin mezclar cadenas en el código base.
 * **Excepciones técnicas:** Mensajes de commit, comentarios de código e identificadores permanecen en inglés.
 
@@ -189,7 +189,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * Explicaciones centradas en **qué hace y qué cambia para el usuario**, sin tecnicismos ni nombres de código/ficheros.
 * Lenguaje directo y frases cortas.
-* El detalle técnico se documenta de forma completa en `odd/tasks/`.
+* El detalle técnico se documenta de forma completa en `docs/`.
 * Explicación funcional de errores: qué significa la falla (ej. "no se pudo conectar"), no la causa en el código.
 
 ### La ventana de gestión del chat habla de pi, no de Copilot
@@ -230,3 +230,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»). 
 * **2026-10-16** · Una sola release por canal: al publicar una release nueva, el pipeline borra la anterior del mismo canal («recuerda borrar la release anterior siempre»). 
 * **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
+* **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
+* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`picode-source/extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.

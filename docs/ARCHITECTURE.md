@@ -13,8 +13,10 @@ upstream merges cheap and the product layers replaceable:
 | `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
 | `upstream/` | The pin file: the VS Code version the tree descends from. |
 | `docs/` | Internal papers: this document, distribution, CI, decisions, the task board. |
-| `odd/tasks/` | The ODD feature records — one per non-trivial change, with decisions, checks and defects. |
 | `assets/` | Brand images of the repository itself. |
+| `updates/` | The static update feeds, one tree per channel (layout in `updates/README.md`). |
+| `cloud/` | The PiCode Account and cloud-sync API (ADR-017). |
+| `.github/workflows/` | CI and release pipelines ([`CI.md`](CI.md)). |
 
 Nothing of ours lives inside `picode-source/` except code the editor itself runs: the
 PiCode changes to the editor, and beside them the **durable agent**
@@ -25,6 +27,8 @@ it — that is why bringing a newer VS Code is a merge against `picode-source/` 
 else has to move.
 
 ## 🧱 The layered model
+
+> These are the *architecture* layers. The *build* layers in `DISTRIBUTION.md` §2 and the *design* layers in `DISENO.md` slice the same product differently.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -58,8 +62,7 @@ the version from `distribution/product-delta.json` before tagging.
 the product ships what an agent-driven code editor needs, nothing else. Ten extension
 folders were removed (the four test-only extensions, mermaid preview, the notebook
 pair, Microsoft/GitHub authentication and the GitHub extension), ESLint was removed from
-the toolchain, and regenerable artefacts stay out of the tree. The record, with the
-degradations accepted, is `odd/tasks/lightweight-picode-source.md`. Removing a folder
+the toolchain, and regenerable artefacts stay out of the tree. Removing a folder
 under `extensions/` removes it from the product — the packer has no exclusion list.
 
 Two properties of the layer shape everything above it:
@@ -81,13 +84,12 @@ Two properties of the layer shape everything above it:
 - **Anything else** the owner installs comes from Open VSX — the Microsoft marketplace
   is not licensed for third-party builds.
 
-### Layer 3 — Agent: in the core, not an extension
+### Layer 3 — Agent: the native chat in the core, pi driven by the built-in connector
 
 The first agent surface was a standalone extension (`extensions/picode-pi-chat`); it was
 retired on 2026-09-27 and its replacement is **the native chat modified in the core**
 (`src/vs/workbench/contrib/chat/**` carries the PiCode changes: the model selector, the
-removal of the Copilot paywall, sessions). The multi-harness service
-(`src/vs/platform/agentHost/`) provides the chat-addressed orchestration, and
+removal of the Copilot paywall, sessions). The editor's multi-agent host (`src/vs/platform/agentHost/`) exists in the tree, but PiCode's own bridge to it (`node/pi/`) is prepared and not wired yet (see `HARNESS.md`, Part 1 §5). Meanwhile
 `picode-source/extensions/picode` — the connector, compiled by phase 2 — contributes the
 providers and models surface.
 
@@ -96,7 +98,7 @@ the `@pi` chat participant, which owns the model, the agent profile and the tool
 the answer into the panel. `durable` is the **backend**, not a harness: pi reaches it through
 its own tools (the `durable_send` / `durable_list` / `durable_read` bridge in
 `picode-source/durable-bridge`, plus MCP), and durable keeps in its own SQLite the
-conversations it is handed. The durable `chatSessions` contribution stays declared but disabled
+conversations it is handed — every session, per ADR-021. The durable `chatSessions` contribution stays declared but disabled
 (`"when": "false"`): a `chatSessions` type is a session **provider**, and the CHAT panel runs
 **agents** — selecting it made the panel call `invokeAgent('durable')`, which has no
 implementation, and the chat answered `No activated agent with id "durable"`. The panel's
@@ -166,7 +168,7 @@ All user-facing copy is **English**: the editor, the chat, notifications, comman
 titles, setting descriptions and the labels shown for pi's tools. Code, comments, commit
 messages and diagnostic output stay English as well. The conversation with the owner is
 **Spanish**, and so are the records that are his — `AGENTS.md` (his own words) and the
-papers in `odd/tasks/`. Other languages are reached later through **language packs**, a
+papers in `docs/`. Other languages are reached later through **language packs**, a
 separate layer over the shipped text, never a translation of the sources in place
 (ADR-012).
 
