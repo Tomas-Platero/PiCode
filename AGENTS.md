@@ -155,6 +155,15 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * Al terminar: informe con qué está hecho y verificado, qué falta, por qué y dónde quedó registrado.
 
+### Una sola release por canal
+>
+> *"recuerda borrar la release anterior siempre"* — 2026-10-16
+
+* Cada canal (stable, beta, experimental) muestra **una única release en GitHub: la más nueva**.
+* Al publicar una release nueva, el pipeline borra automáticamente la anterior del mismo canal, con su tag.
+* El borrado va **después** de publicar la nueva: si un run falla a mitad, el canal nunca se queda sin release.
+* El guard de "versión estrictamente más nueva" no depende de la lista de releases: lee la versión anterior del feed del canal en el árbol, así que sigue funcionando tras borrar.
+
 ### Idioma del proyecto y del producto
 >
 > *"En español."*
@@ -210,4 +219,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
 * **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
 * **2026-10-13** · Regla de fases visibles: el trabajo por fases se muestra en el panel de pi (`set_plan`, widget de pi-plan-widget) («tengo una lista con fases y no se ven»). Confirmado funcionando por el dueño.
-* **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»).
+* **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»). 
+* **2026-10-16** · Una sola release por canal: al publicar una release nueva, el pipeline borra la anterior del mismo canal («recuerda borrar la release anterior siempre»).
