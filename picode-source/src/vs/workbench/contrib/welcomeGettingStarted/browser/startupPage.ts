@@ -9,6 +9,7 @@ import * as arrays from '../../../../base/common/arrays.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { IWorkspaceContextService, UNKNOWN_EMPTY_WINDOW_WORKSPACE, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -34,6 +35,7 @@ import { getActiveElement } from '../../../../base/browser/dom.js';
 import { timeout } from '../../../../base/common/async.js';
 import { IChatAgentService } from '../../chat/common/participants/chatAgents.js';
 import { ChatViewId } from '../../chat/browser/chat.js';
+import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEditorInput.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
@@ -97,6 +99,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 		@IViewsService private readonly viewsService: IViewsService,
+		@IEditorGroupsService private readonly editorGroupService: IEditorGroupsService,
 	) {
 		super();
 
@@ -168,6 +171,17 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 	 * says nothing. One attempt per startup, deduplicated across both paths.
 	 */
 	private openChatBesideWelcome(): void {
+		// Earlier builds opened the chat as an editor tab, and the workbench
+		// restores it on every start. The chat lives in the auxiliary bar —
+		// restored chat editors close on sight, before the view opens.
+		const chatTabs = this.editorGroupService.groups.flatMap(group =>
+			group.editors
+				.filter(e => e.typeId === ChatEditorInput.TypeID)
+				.map(editor => ({ groupId: group.id, editor })));
+		if (chatTabs.length > 0) {
+			void this.editorService.closeEditors(chatTabs);
+		}
+
 		const ready = (): boolean => this.chatAgentService.getAgents().length > 0;
 		let opened = false;
 		const openOnce = (): void => {
