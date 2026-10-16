@@ -327,6 +327,25 @@ jobs:
               --title "PiCode ${PICODE_VERSION}" --generate-notes \
               "${CREATE[@]}" "${TARGET[@]}"
           fi
+          # A channel shows exactly ONE release: the newest (the owner's
+          # rule, 2026-10-16). Once this one is up, take the previous
+          # release of the same channel down, release and tag. Deleted
+          # AFTER the new one is safe: a run that fails midway never
+          # leaves the channel with no release at all. The "strictly
+          # newer" guard above does not depend on this list — it reads
+          # the previous version from the channel's own feed in the tree.
+          if [ "${CHANNEL}" = "stable" ]; then
+            OLD_PATTERN='test("^v[0-9.]+$")'
+          else
+            OLD_PATTERN="endswith(\"-${CHANNEL}\")"
+          fi
+          for OLD_TAG in $(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --paginate --jq ".[].tag_name | select(${OLD_PATTERN})"); do
+            if [ "${OLD_TAG}" != "v${PICODE_VERSION}" ]; then
+              echo "deleting superseded release ${OLD_TAG}"
+              gh release delete "${OLD_TAG}" --cleanup-tag --yes
+            fi
+          done
 
       - name: Describe the channel above the changelog
         shell: bash
