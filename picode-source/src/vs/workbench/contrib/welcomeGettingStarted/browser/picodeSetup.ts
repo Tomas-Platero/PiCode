@@ -895,8 +895,8 @@ export class PiCodeSetup extends Disposable {
 					localize('picodeSetup.provider.oauthDetail', "ChatGPT, Claude, Copilot… — pi's own OAuth login, with the account you already pay for."), () => {
 					void this.services.commandService.executeCommand('picode.connectProvider');
 				}),
-				this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Add a provider by hand"),
-					localize('picodeSetup.provider.manualDetail', "An address, a dialect and a key — an OpenAI-compatible endpoint works."), () => {
+				this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Use an API key"),
+					localize('picodeSetup.provider.manualDetail', "Connect OpenRouter, DeepSeek, Groq or any OpenAI-compatible service with your API key."), () => {
 					form.hidden = !form.hidden;
 				}),
 			),
@@ -930,15 +930,23 @@ export class PiCodeSetup extends Disposable {
 
 	/** The hand-written provider's form, hidden until the owner picks that way in. */
 	private renderProviderForm(): HTMLElement {
+		// Fields carry real labels above them — placeholders alone are a riddle
+		// once something is typed — and the formats say what they mean in words,
+		// not in the dialect's own jargon.
 		const form = $('.picode-provider-form-inner', {});
 		const input = (placeholder: string, id: string, kind = 'text'): HTMLElement =>
 			$('input.picode-input', { 'type': kind, 'id': id, 'placeholder': placeholder });
-		const name = input('provider name (no spaces)', 'picode-prov-id');
-		const endpoint = input('endpoint, e.g. https://api.example.com/v1', 'picode-prov-endpoint');
-		const key = input('API key (empty if the endpoint needs none)', 'picode-prov-key', 'password');
+		const name = input('e.g. openrouter — no spaces', 'picode-prov-id');
+		const endpoint = input('https://api.example.com/v1', 'picode-prov-endpoint');
+		const key = input('Paste your API key — leave empty if the endpoint needs none', 'picode-prov-key', 'password');
 		const api = $('select.picode-select', { 'id': 'picode-prov-api' });
-		for (const dialect of ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai']) {
-			api.appendChild($('option', { 'value': dialect }, dialect));
+		for (const dialect of [
+			['openai-completions', localize('picodeSetup.provider.api.openai', "OpenAI-compatible — most providers")],
+			['openai-responses', localize('picodeSetup.provider.api.responses', "OpenAI Responses API")],
+			['anthropic-messages', localize('picodeSetup.provider.api.anthropic', "Anthropic — Claude")],
+			['google-generative-ai', localize('picodeSetup.provider.api.google', "Google — Gemini")],
+		] as const) {
+			api.appendChild($('option', { 'value': dialect[0] }, dialect[1]));
 		}
 		const add = this.button('picode-provider-add', localize('picodeSetup.provider.add', "Add provider"), async () => {
 			this.busy = true;
@@ -961,13 +969,16 @@ export class PiCodeSetup extends Disposable {
 			}
 		}, 'primary');
 		form.append(
-			$('.picode-form-row', {}, name),
-			$('.picode-form-row', {}, endpoint),
-			$('.picode-form-row', {}, api, key),
+			$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldName', "Provider name")), name),
+			$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldEndpoint', "Endpoint")), endpoint),
+			$('.picode-form-pair', {},
+				$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldApi', "API format")), api),
+				$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldKey', "API key")), key),
+			),
 			$('.picode-form-actions', {}, add),
 		);
-		for (const field of [name, endpoint, key, api]) {
-			this.disposables.add(addDisposableListener(field, 'keydown', event => event.stopPropagation()));
+		for (const field2 of [name, endpoint, key, api]) {
+			this.disposables.add(addDisposableListener(field2, 'keydown', event => event.stopPropagation()));
 		}
 		return form;
 	}

@@ -1834,6 +1834,41 @@
 	gap: 6px;
 }
 
+/* The hand-written provider's form: a framed inset with labelled fields, so the
+   owner knows what each box wants without guessing from placeholders. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form-inner {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 8px;
+	padding: 12px;
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+	border-radius: 6px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	flex: 1;
+	min-width: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-label {
+	font-size: .8em;
+	opacity: .75;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-pair {
+	display: flex;
+	gap: 10px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-row > * {
 	flex: 1;
 }
