@@ -31,6 +31,9 @@ import { IContextKeyService } from '../../../../platform/contextkey/common/conte
 import { AuxiliaryBarMaximizedContext } from '../../../common/contextkeys.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
+import { timeout } from '../../../../base/common/async.js';
+import { IChatAgentService } from '../../chat/common/participants/chatAgents.js';
+import { ACTION_ID_OPEN_CHAT } from '../../chat/browser/actions/chatActions.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
 export type RestoreWalkthroughsConfigurationValue = { folder: string; category?: string; step?: string };
@@ -91,6 +94,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		@IStorageService private readonly storageService: IStorageService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 	) {
 		super();
 
@@ -139,6 +143,9 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 					await this.openReadme();
 				} else if (startupEditorSetting.value === 'welcomePage' || startupEditorSetting.value === 'welcomePageInEmptyWorkbench') {
 					await this.openGettingStarted(true);
+					// The chat opens beside the welcome: the agent is built in, and this page
+					// is where the owner meets it. See `openChatBesideWelcome` for the wait.
+					this.openChatBesideWelcome();
 				} else if (startupEditorSetting.value === 'terminal') {
 					this.commandService.executeCommand(TerminalCommandId.CreateTerminalEditor);
 				}
@@ -146,14 +153,61 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		}
 	}
 
+	/** How long the agent's registration may take before the chat gives up on opening. */
+	private static readonly CHAT_OPEN_TIMEOUT = 20_000;
+
+	/**
+	 * Opens the editor's chat beside the welcome page.
+	 *
+	 * The agent registers as the connector activates, which can land after this
+	 * page opens — and the chat view's `when` hides it until then, so an eager open
+	 * would show an empty auxiliary bar. The open waits for the registration, with
+	 * a bounded patience: a start where no agent ever appears opens nothing and
+	 * says nothing. One attempt per startup, deduplicated across both paths.
+	 */
+	private openChatBesideWelcome(): void {
+		const ready = (): boolean => this.chatAgentService.getAgents().length > 0;
+		let opened = false;
+		const openOnce = (): void => {
+			if (opened) { return; }
+			opened = true;
+			this.commandService.executeCommand(ACTION_ID_OPEN_CHAT).then(() => { }, onUnexpectedError);
+		};
+		if (ready()) {
+			openOnce();
+			return;
+		}
+		const listener = this._register(this.chatAgentService.onDidChangeAgents(() => {
+			if (ready()) {
+				listener.dispose();
+				openOnce();
+			}
+		}));
+		timeout(StartupPageRunnerContribution.CHAT_OPEN_TIMEOUT).then(
+			() => {
+				listener.dispose();
+				if (ready()) { openOnce(); }
+			},
+			() => { /* cancelled — the window is on its way out */ },
+		);
+	}
+
 	private tryOpenWalkthroughForFolder(): boolean {
 		const toRestore = this.storageService.get(restoreWalkthroughsConfigurationKey, StorageScope.PROFILE);
 		if (!toRestore) {
 			return false;
 		}
-		else {
-			const restoreData: RestoreWalkthroughsConfigurationValue = JSON.parse(toRestore);
-			const currentWorkspace = this.contextService.getWorkspace();
+			else {
+				// A record a previous window half-wrote is ignored, not thrown over: the
+				// restore is a convenience, and a bad value costs nothing but itself.
+				let restoreData: RestoreWalkthroughsConfigurationValue;
+				try {
+					restoreData = JSON.parse(toRestore);
+				} catch {
+					this.storageService.remove(restoreWalkthroughsConfigurationKey, StorageScope.PROFILE);
+					return false;
+				}
+				const currentWorkspace = this.contextService.getWorkspace();
 			if (restoreData.folder === UNKNOWN_EMPTY_WINDOW_WORKSPACE.id || restoreData.folder === currentWorkspace.folders[0].uri.toString()) {
 				const options: GettingStartedEditorOptions = { selectedCategory: restoreData.category, selectedStep: restoreData.step, pinned: false, preserveFocus: this.shouldPreserveFocus() };
 				this.editorService.openEditor({
