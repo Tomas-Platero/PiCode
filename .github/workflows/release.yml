@@ -398,8 +398,8 @@ jobs:
             echo
             echo "| File | What it is for |"
             echo "| --- | --- |"
-            echo "| `\${EXE}` | install it |"
-            echo "| `\${ZIP}` | run it in place, without installing |"
+            echo "| \`${EXE}\` | install it |"
+            echo "| \`${ZIP}\` | run it in place, without installing |"
           } > release-notes.md
           gh release edit "v${PICODE_VERSION}" --notes-file release-notes.md
 
