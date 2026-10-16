@@ -196,20 +196,12 @@ async function syncImportedRowsToSettings(deps: SetupDeps, report: ImportReport)
 	}
 
 	if (landed('mcp')) {
-		try {
-			const rows = mcpRowsFromMcpFile(readCopiedFile('mcp.json'));
-			if (rows.length > 0) {
-				const current = configuration.get<unknown[]>('mcp.servers') ?? [];
-				const merged = mergeRowsById(
-					current,
-					rows,
-					raw => (typeof (raw as { name?: unknown })['name'] === 'string' ? ((raw as { name: string }).name.trim()) : ''),
-				);
-				await configuration.update('mcp.servers', merged, vscode.ConfigurationTarget.Global);
-				logImport(`Recorded ${rows.length} MCP ${rows.length === 1 ? 'server' : 'servers'} in Settings > PiCode > MCP.`);
-			}
-		} catch (error) {
-			logImport(`Your imported MCP servers could not be added to the settings (${messageOf(error)}). They still work; pi reads them from its own file.`);
+		// No settings mirror exists any more: the MCP section is driven from the
+		// profile's own mcp.json, which the copy above just brought over — the
+		// editor runs those servers from there, and the section lists them.
+		const rows = mcpRowsFromMcpFile(readCopiedFile('mcp.json'));
+		if (rows.length > 0) {
+			logImport(`Your ${rows.length === 1 ? 'MCP server is' : `${rows.length} MCP servers are`} already live in pi's own file — the editor runs them from there.`);
 		}
 	}
 }

@@ -199,6 +199,8 @@ export class PiCodeSetup extends Disposable {
 	private wizardModel: string | undefined;
 	/** The model list fetched from the provider(s), for the picker and the agents. */
 	private wizardModels: WizardModel[] | undefined;
+	/** The model filter the owner typed; kept across the repaints the typing causes. */
+	private modelQuery = '';
 	private modelsLoading = false;
 	private readonly disposables = this._register(new DisposableStore());
 	/** The grid's own store: repainting the grid must not unbind the rest of the cards. */
@@ -991,12 +993,66 @@ export class PiCodeSetup extends Disposable {
 			reset(area, $('.picode-gallery-loading', {}, localize('picodeSetup.provider.noModels', "No models yet — log in with a subscription or add a provider by hand, and the list fills from it.")));
 			return;
 		}
-		const rows = models.map(model => $('button.picode-model-row' + (this.wizardModel === model.ref ? '.checked' : ''),
-			{ 'type': 'button', 'data-ref': model.ref, 'tabindex': 0 },
-			$(`span.codicon.codicon-${this.wizardModel === model.ref ? 'check' : 'circle-large-outline'}`),
-			$('span.picode-model-ref', {}, model.ref),
-		));
-		reset(area, $('.picode-model-list', {}, ...rows));
+
+		// The providers' models grouped under their provider, with a filter above.
+		// A flat list of every model from every provider reads as noise: the
+		// provider is the question the owner answers first, and the search is what
+		// keeps a long list usable.
+		const query = this.modelQuery.trim().toLowerCase();
+		const matches = (model: WizardModel): boolean =>
+			query === ''
+				|| model.ref.toLowerCase().includes(query)
+				|| model.provider.toLowerCase().includes(query)
+				|| model.model.toLowerCase().includes(query);
+		const byProvider = new Map<string, WizardModel[]>();
+		for (const model of models) {
+			if (!matches(model)) { continue; }
+			const group = byProvider.get(model.provider) ?? [];
+			group.push(model);
+			byProvider.set(model.provider, group);
+		}
+
+		const search = $('input.picode-model-search', {
+			'type': 'text',
+			'placeholder': localize('picodeSetup.provider.filter', "Filter models…"),
+			'aria-label': localize('picodeSetup.provider.filterAria', "Filter the model list"),
+			'value': this.modelQuery,
+		});
+		this.disposables.add(addDisposableListener(search, 'input', () => {
+			this.modelQuery = (search as HTMLInputElement).value;
+			this.paintModels(area);
+		}));
+
+		const groups: HTMLElement[] = [];
+		for (const [provider, group] of byProvider) {
+			groups.push($('div.picode-model-group', {},
+				$('.picode-model-group-head', {},
+					$('span.picode-model-group-name', {}, provider),
+					$('span.picode-model-group-count', {}, localize('picodeSetup.provider.count', "{0} models", String(group.length))),
+				),
+				// The provider is the header; the row only names the model.
+				...group.map(model => $('button.picode-model-row' + (this.wizardModel === model.ref ? '.checked' : ''),
+					{ 'type': 'button', 'data-ref': model.ref, 'tabindex': 0 },
+					$(`span.codicon.codicon-${this.wizardModel === model.ref ? 'check' : 'circle-large-outline'}`),
+					$('span.picode-model-ref', {}, model.model)),
+				),
+			));
+		}
+
+		if (byProvider.size === 0) {
+			reset(area, search, $('.picode-gallery-loading', {}, localize('picodeSetup.provider.noMatches', "No model matches that filter.")));
+		} else {
+			reset(area, search, $('.picode-model-list', {}, ...groups));
+		}
+		// The repaint above replaces the search box: put the caret back where the
+		// owner's typing was, or the filter would drop every keystroke after the first.
+		if (this.modelQuery !== '') {
+			const fresh = area.querySelector<HTMLInputElement>('.picode-model-search');
+			if (fresh) {
+				fresh.focus();
+				fresh.setSelectionRange(fresh.value.length, fresh.value.length);
+			}
+		}
 		this.registerModelRows(area);
 	}
 

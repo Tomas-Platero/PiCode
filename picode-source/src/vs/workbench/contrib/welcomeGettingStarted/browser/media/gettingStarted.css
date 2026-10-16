@@ -1842,6 +1842,38 @@
 	margin-top: 10px;
 }
 
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-search {
+	width: 100%;
+	box-sizing: border-box;
+	margin-bottom: 8px;
+	padding: 4px 8px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+	border-radius: 4px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group {
+	margin-bottom: 10px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	padding: 2px 2px 4px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-name {
+	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
+	font-size: .92em;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-count {
+	font-size: .78em;
+	opacity: .6;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-list {
 	display: flex;
 	flex-direction: column;
