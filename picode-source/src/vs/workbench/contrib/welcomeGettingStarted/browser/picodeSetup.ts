@@ -148,6 +148,7 @@ interface ProfilePreview {
 	providers: number;
 	mcpServers: number;
 	skills: number;
+	memory: number;
 	sessions: number;
 	hasCredentials: boolean;
 	profile: string;
@@ -706,35 +707,86 @@ export class PiCodeSetup extends Disposable {
 	private renderImportCta(preview: ProfilePreview): HTMLElement {
 		this.importResult = undefined;
 		const progressArea = $('.picode-import-progress-area');
+
+		// What comes across is the owner's call: one toggle per thing the import can
+		// carry, each showing what the external profile actually holds. Logins stay
+		// unticked — the credentials file is the one item that asks. An unticked row
+		// is a decision the report will name, not an omission.
+		type ImportChoices = {
+			settings: boolean; models: boolean; mcp: boolean;
+			skills: boolean; memory: boolean; sessions: boolean; credentials: boolean;
+		};
+		const rows: ReadonlyArray<{ key: keyof Omit<ImportChoices, 'credentials'>; count: number; label: string }> = [
+			{ key: 'settings', count: preview.packages, label: localize('picodeSetup.import.packages', "Packages & settings") },
+			{ key: 'models', count: preview.providers, label: localize('picodeSetup.import.providers', "AI connections") },
+			{ key: 'mcp', count: preview.mcpServers, label: localize('picodeSetup.import.mcps', "MCP servers") },
+			{ key: 'skills', count: preview.skills, label: localize('picodeSetup.import.skills', "Skills") },
+			{ key: 'memory', count: preview.memory, label: localize('picodeSetup.import.memory', "Memory") },
+			{ key: 'sessions', count: preview.sessions, label: localize('picodeSetup.import.sessions', "Conversations") },
+		];
+		const inputs = new Map<keyof Omit<ImportChoices, 'credentials'>, HTMLInputElement>();
+		const cells = new Map<keyof Omit<ImportChoices, 'credentials'>, HTMLElement>();
+		const counts = $('.picode-import-counts', {});
+		for (const row of rows) {
+			// The whole cell is a label wrapping its box, so a click anywhere on the
+			// count toggles it — the numbers stay the first thing the eye finds.
+			const input = $('input.picode-checkbox', { 'type': 'checkbox', 'checked': 'checked', 'aria-label': row.label }) as HTMLInputElement;
+			inputs.set(row.key, input);
+			const cell = $('label.picode-import-choice.picode-import-count', {},
+				input,
+				$('span.picode-import-value', {}, String(row.count)),
+				$('span.picode-import-label', {}, row.label),
+			);
+			cells.set(row.key, cell);
+			counts.appendChild(cell);
+		}
 		const credentialsRow = $('.picode-import-credentials', {},
 			this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Sign me in with my saved logins")),
 		);
 		const previewBox = $('.picode-import-preview', {},
-			$('.picode-import-counts', {},
-				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
-				this.importCount(localize('picodeSetup.import.providers', "AI connections"), preview.providers),
-				this.importCount(localize('picodeSetup.import.mcps', "MCP servers"), preview.mcpServers),
-				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
-				this.importCount(localize('picodeSetup.import.sessions', "Conversations"), preview.sessions),
-			),
+			counts,
 			progressArea,
 			credentialsRow,
-			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Everything is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
+			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Only what you tick is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
 		);
 		const result = this.importResult = $('.picode-import-result');
 
+		const readSelection = (): ImportChoices => ({
+			settings: inputs.get('settings')?.checked === true,
+			models: inputs.get('models')?.checked === true,
+			mcp: inputs.get('mcp')?.checked === true,
+			skills: inputs.get('skills')?.checked === true,
+			memory: inputs.get('memory')?.checked === true,
+			sessions: inputs.get('sessions')?.checked === true,
+			credentials: credentialsRow.querySelector('input')?.checked === true,
+		});
+
 		// The import is a choice, not an event: it runs when the owner presses Import, and
-		// the bar below takes over from there.
-		const actions = $('.picode-import-actions', {},
-			this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => {
-				actions.style.display = 'none';
-				credentialsRow.style.display = 'none';
-				this.renderImportProgress(progressArea);
-				const box = credentialsRow.querySelector('input');
-				const withLogins = box instanceof HTMLInputElement && box.checked;
-				this.startImport(progressArea, withLogins);
-			}, 'primary'),
-		);
+		// the bar below takes over from there. With nothing ticked there is nothing the
+		// button could do, so it stands down until a tick comes back — the click it hears
+		// while down is ignored, exactly like the wizard's own disabled buttons.
+		let importReady = false;
+		const confirm = this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => {
+			if (!importReady) { return; }
+			actions.style.display = 'none';
+			credentialsRow.style.display = 'none';
+			this.renderImportProgress(progressArea);
+			this.startImport(progressArea, readSelection());
+		}, 'primary');
+		const refreshConfirm = (): void => {
+			importReady = Object.values(readSelection()).some(value => value);
+			for (const [key, cell] of cells) {
+				cell.classList.toggle('unticked', inputs.get(key)?.checked !== true);
+			}
+			confirm.classList.toggle('disabled', !importReady);
+			confirm.title = importReady
+				? ''
+				: localize('picodeSetup.import.nothing', "Tick at least one thing to import.");
+		};
+		const actions = $('.picode-import-actions', {}, confirm);
+		this.disposables.add(addDisposableListener(counts, 'change', refreshConfirm));
+		this.disposables.add(addDisposableListener(credentialsRow, 'change', refreshConfirm));
+		refreshConfirm();
 
 		if (this.importRunning) {
 			// A re-render while the import runs: the bar comes back, the buttons stay away.
@@ -748,13 +800,6 @@ export class PiCodeSetup extends Disposable {
 		return $('.picode-import-cta', {}, previewBox, actions, result);
 	}
 
-	private importCount(label: string, value: number): HTMLElement {
-		return $('.picode-import-count', {},
-			$('span.picode-import-value', {}, String(value)),
-			$('span.picode-import-label', {}, label),
-		);
-	}
-
 	private renderImportProgress(area: HTMLElement): void {
 		area.replaceChildren(
 			$('.picode-import-progress', {}, $('.picode-import-progress-fill')),
@@ -762,14 +807,17 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	private startImport(progressArea: HTMLElement, withLogins: boolean): void {
+	private startImport(progressArea: HTMLElement, selection: {
+		settings: boolean; models: boolean; mcp: boolean;
+		skills: boolean; memory: boolean; sessions: boolean; credentials: boolean;
+	}): void {
 		this.importRunning = true;
 		const fill = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-fill');
 		const line = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-line');
 
 		const importRun = this.services.commandService.executeCommand<ImportReport & { packagesInstalled?: number; packagesFailed?: number; packagesSkipped?: number }>(
 			'picode.setup.importFromExternal',
-			withLogins,
+			selection,
 		);
 
 		// The bar: the connector counts one step for the copy, one per package and one for

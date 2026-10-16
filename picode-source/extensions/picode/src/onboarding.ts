@@ -264,14 +264,41 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),
-		vscode.commands.registerCommand(IMPORT_COMMAND, async (credentials: unknown) => {
+		vscode.commands.registerCommand(IMPORT_COMMAND, async (selection: unknown) => {
 			// One import at a time: the page starts it and watches the log.
 			if (importLog.running) {
 				return undefined;
 			}
-			// Credentials are the one item whose copy is the owner's own decision: the page
-			// asks for them behind an unchecked box, and nothing here turns the import into
-			// a way of copying `auth.json` as a side effect.
+			// The page sends what its checkboxes hold: one flag per item, credentials among
+			// them. A bare boolean is the older caller's shape (logins only); no argument
+			// means everything but the logins — the offer the page made before the import
+			// became selectable. Credentials are the one item whose copy is the owner's own
+			// decision, and nothing here turns the import into a way of copying `auth.json`
+			// as a side effect.
+			const wanted = ((): Record<string, boolean> => {
+				if (typeof selection === 'object' && selection !== null && !Array.isArray(selection)) {
+					const value = selection as Record<string, unknown>;
+					const flag = (key: string): boolean => value[key] === true;
+					return {
+						settings: flag('settings'),
+						models: flag('models'),
+						mcp: flag('mcp'),
+						skills: flag('skills'),
+						memory: flag('memory'),
+						sessions: flag('sessions'),
+						credentials: flag('credentials'),
+					};
+				}
+				return {
+					settings: true,
+					models: true,
+					mcp: true,
+					skills: true,
+					memory: true,
+					sessions: true,
+					credentials: selection === true,
+				};
+			})();
 			importLog.running = true;
 			importLog.lines = [];
 			importLog.step = 0;
@@ -293,18 +320,26 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			const leftBehind = splitLeftBehindPackages(externalPackages).leftBehind;
 			importLog.total = externalPackages.length > 0 ? 3 : 2;
 			try {
-				logImport('Bringing your packages, connections, skills and conversations…');
+				const coming = ([
+					['your settings and packages', wanted.settings],
+					['your AI connections', wanted.models],
+					['your MCP servers', wanted.mcp],
+					['your skills', wanted.skills],
+					['your memory', wanted.memory],
+					['your conversations', wanted.sessions],
+				] as ReadonlyArray<readonly [string, boolean]>).flatMap(entry => entry[1] ? [entry[0]] : []);
+				logImport(coming.length > 0 ? `Bringing ${coming.join(', ')}…` : 'Nothing was selected to import.');
 				const report = importProfile({
 					from: externalProfileDir(),
 					to: deps.profileDir,
 					selection: {
-						settings: true,
-						models: true,
-						mcp: true,
-						skills: true,
-						memory: true,
-						sessions: true,
-						credentials: credentials === true,
+						settings: wanted.settings,
+						models: wanted.models,
+						mcp: wanted.mcp,
+						skills: wanted.skills,
+						memory: wanted.memory,
+						sessions: wanted.sessions,
+						credentials: wanted.credentials,
 					},
 				});
 				importLog.step = 1;
@@ -404,15 +439,19 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// The one list is durable's: every transcript that just landed is recorded as a
 				// durable conversation, so it shows up and continues like any other. Fire-and-
 				// forget — the files are imported either way; a daemon that is down records
-				// nothing now and a later pass catches up.
-				void importTranscriptsIntoDurable(
-					path.join(deps.profileDir, 'sessions'),
-					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
-					logImport,
-				);
+				// nothing now and a later pass catches up. Skipped when the owner declined the
+				// conversations: a pass over a directory nothing copied would only report an
+				// empty outcome as if it meant something.
+				if (wanted.sessions) {
+					void importTranscriptsIntoDurable(
+						path.join(deps.profileDir, 'sessions'),
+						vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+						logImport,
+					);
+				}
 				importLog.step = importLog.total;
 				logImport('Done.');
-				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
+				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: wanted.credentials };
 			} finally {
 				importLog.running = false;
 			}

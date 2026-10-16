@@ -449,6 +449,26 @@
 	min-width: 56px;
 }
 
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice {
+	cursor: pointer;
+	gap: 2px;
+	border-radius: 4px;
+	padding: 2px 4px;
+	user-select: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice input.picode-checkbox {
+	margin: 0;
+	accent-color: var(--vscode-button-background, var(--vscode-checkbox-selectBackground, #0078d4));
+}
+
+/* An unticked row keeps its place but lets its numbers recede: the choice reads at a
+   glance. The class is toggled from the page — a parser-safe stand-in for :has(). */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice.unticked .picode-import-value,
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice.unticked .picode-import-label {
+	opacity: .4;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-value {
 	font-size: 1.3em;
 	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
@@ -622,7 +642,8 @@
 	min-height: 160px;
 	overflow-y: auto;
 	scrollbar-width: thin;
-	scrollbar-color: var(--vscode-scrollbarSlider.background) transparent;
+	/* The theme variable is dashed, not dotted: the dotted spelling never resolves. */
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
 	padding-right: 6px;
 }
 
