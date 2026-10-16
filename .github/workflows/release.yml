@@ -236,7 +236,17 @@ jobs:
       - name: Read the built identity
         shell: bash
         run: |
-          PROD=PiCode-Win32-x64/resources/app/product.json
+          # build.sh names the pack folder after the channel: stable keeps
+          # the plain `PiCode-Win32-x64`, every other channel appends its
+          # own name (dev/build.sh, "the channel names the PACK FOLDER"),
+          # so an experimental tag never looks for a folder that build
+          # does not produce.
+          PACK="PiCode-Win32-x64"
+          if [ "${CHANNEL}" != "stable" ]; then
+            PACK="PiCode-Win32-x64-${CHANNEL}"
+          fi
+          echo "PACK=${PACK}" >> "$GITHUB_ENV"
+          PROD="${PACK}/resources/app/product.json"
           COMMIT=$(node -p "require('./$PROD').commit")
           BUILT=$(node -p "require('./$PROD').version")
           if ! [[ "${COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
@@ -257,8 +267,10 @@ jobs:
         run: |
           ZIP=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
           # data/ is the portable profile, never the product.
+          # $PACK is the channel-suffixed folder "Read the built identity"
+          # resolved against the built tree.
           (
-            cd PiCode-Win32-x64
+            cd "${PACK}"
             "$ZIP" a -tzip \
               "../PiCode-win32-x64-${PICODE_VERSION}.zip" . "-x!data"
           )
