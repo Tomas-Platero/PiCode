@@ -10,8 +10,8 @@ import { AgentSessionStatus } from '../../../browser/agentSessions/agentSessions
 import { DEFAULT_EXCLUDES, DURABLE_SESSION_PROVIDER, normalizedExcludes, PI_TRANSCRIPT_SESSION_PROVIDER, RETIRED_SESSION_PROVIDERS } from '../../../browser/agentSessions/agentSessionsFilter.js';
 
 /**
- * The owner retired the whole question of which list the panel shows:
- * «dejemos de filtrar por durable, pi o local». The panel shows **the one list** — the
+ * The owner retired the whole question of which list the panel shows.
+ * The panel shows **the one list** — the
  * conversations that live in durable (pi thinks, durable remembers) — and the retired providers
  * (`Local`, the editor's duplicate record; `pi`, the transcripts of the CLI and of imports)
  * never appear and are never offered as a filter.

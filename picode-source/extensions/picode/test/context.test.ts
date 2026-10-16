@@ -67,10 +67,10 @@ test('a huge selection is capped, because a whole file in every prompt is a bill
 });
 
 test('withContext puts the frame first and the request last', () => {
-	const prompt = withContext('arregla esto', contextBlock({ file: 'a.ts' }), 'internal');
+	const prompt = withContext('fix this', contextBlock({ file: 'a.ts' }), 'internal');
 	assert.match(prompt, /^You are pi, the coding agent that runs inside the PiCode editor\./);
 	assert.match(prompt, /Context from the editor, as it is right now:/);
-	assert.equal(prompt.endsWith('\n\n---\n\narregla esto'), true);
+	assert.equal(prompt.endsWith('\n\n---\n\nfix this'), true);
 });
 
 test('withContext without a context still frames the agent, and the frame names where it runs', () => {

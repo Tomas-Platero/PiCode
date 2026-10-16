@@ -33,7 +33,7 @@ const entry = (kind: string, text?: string, timestamp?: number): unknown => ({
 });
 
 test('the label is the conversation\'s first user prompt, capped at eighty characters', () => {
-	const snapshot = { entries: [entry('pi.system'), entry('pi.user', 'Arregla el panel de sesiones, por favor'), entry('pi.assistant', 'Hecho.')] };
+	const snapshot = { entries: [entry('pi.system'), entry('pi.user', 'Arregla el panel de sesiones, por favor'), entry('pi.assistant', 'Done.')] };
 	assert.equal(durableSessionRow(conversation(7), snapshot).label, 'Arregla el panel de sesiones, por favor');
 
 	const long = 'x'.repeat(120);
@@ -101,21 +101,21 @@ test('a conversation without a usable id is skipped, not guessed into a row', ()
 test('the replay is the two talking kinds only — plumbing and tool results stay out', () => {
 	const snapshot = { entries: [
 		entry('pi.system'),
-		entry('pi.user', '¿Qué hiciste?'),
-		entry('pi.assistant', 'Leí el panel y lo arreglé.'),
+		entry('pi.user', 'What did you do?'),
+		entry('pi.assistant', 'I read the panel and fixed it.'),
 		entry('pi.tool-result', 'noisy output'),
 		entry('pi.user', ''),
 		entry('pi.assistant', ''),
 	] };
 	assert.deepEqual(durableSessionTurns(snapshot), [
-		{ role: 'user', text: '¿Qué hiciste?' },
-		{ role: 'assistant', text: 'Leí el panel y lo arreglé.' },
+		{ role: 'user', text: 'What did you do?' },
+		{ role: 'assistant', text: 'I read the panel and fixed it.' },
 	]);
 	assert.deepEqual(durableSessionTurns(undefined), []);
 });
 
 test('entry text is the model messages\' own text, joined — nothing else is read', () => {
-	assert.equal(durableEntryText({ kind: 'pi.assistant', model: [{ content: 'parte uno' }, { content: 'parte dos' }] }), 'parte uno parte dos');
+	assert.equal(durableEntryText({ kind: 'pi.assistant', model: [{ content: 'part one' }, { content: 'part two' }] }), 'part one part two');
 	assert.equal(durableEntryText({ kind: 'pi.system' }), '');
 	assert.equal(durableEntryText(undefined), '');
 });
@@ -134,18 +134,18 @@ test('the poll\'s digest moves when a conversation is added, removed, or grown �
 
 test('the frame the editor adds is stripped from the label and from the replayed turn', () => {
 	const frame = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.\n\nContext from the editor, as it is right now:\n\n- Workspace: D:\\repos\\app\n\n---\n\n';
-	const framed = `${frame}arregla el panel`;
-	const snapshot = { entries: [entry('pi.user', framed), entry('pi.assistant', 'Hecho.')] };
-	assert.equal(durableSessionRow(conversation(7), snapshot).label, 'arregla el panel');
+	const framed = `${frame}fix the panel`;
+	const snapshot = { entries: [entry('pi.user', framed), entry('pi.assistant', 'Done.')] };
+	assert.equal(durableSessionRow(conversation(7), snapshot).label, 'fix the panel');
 	assert.deepEqual(durableSessionTurns(snapshot), [
-		{ role: 'user', text: 'arregla el panel' },
-		{ role: 'assistant', text: 'Hecho.' },
+		{ role: 'user', text: 'fix the panel' },
+		{ role: 'assistant', text: 'Done.' },
 	]);
 });
 
 test('a message the editor did not frame is left whole, separator or not', () => {
-	assert.equal(durableSessionRow(conversation(7), { entries: [entry('pi.user', 'antes --- después')] }).label, 'antes --- después');
-	const bare = 'una nota escrita a mano\n\n---\n\ny su continuación';
+	assert.equal(durableSessionRow(conversation(7), { entries: [entry('pi.user', 'before --- after')] }).label, 'before --- after');
+	const bare = 'a note written by hand\n\n---\n\nand its continuation';
 	assert.deepEqual(durableSessionTurns({ entries: [entry('pi.user', bare)] }), [{ role: 'user', text: bare }]);
 });
 

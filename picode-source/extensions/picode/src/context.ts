@@ -18,7 +18,7 @@ export const CONTEXT_MAX_DIAGNOSTIC_CHARS = 200;
 /**
  * What the owner is looking at, written for pi.
  *
- * The point is that *"arregla esto"* needs no explaining: the folder, the file and the selection
+ * The point is that *"fix this"* needs no explaining: the folder, the file and the selection
  * are the ones he sees. The selection is capped — in lines and in characters — because a whole
  * file pasted into every prompt is a bill rather than context, and pi can read the file itself
  * when it needs the rest.
@@ -107,8 +107,7 @@ export function contextBlock(context: EditorContext): string | undefined {
  *
  * Because it is not obvious from inside a session. pi is a general agent, and it is also the
  * tool the owner develops PiCode **with**: with this very repository open, its own `AGENTS.md`
- * is discovered as project context and says exactly that ("yo tengo otro pi aquí para desarrollar
- * esta app"). The model read it and answered as the *development* agent — which is a different
+ * is discovered as project context and says exactly that. The model read it and answered as the *development* agent — which is a different
  * pi, on a different machine, in a terminal. One sentence that it is the editor's agent is what
  * keeps the two apart, and it costs a line.
  *

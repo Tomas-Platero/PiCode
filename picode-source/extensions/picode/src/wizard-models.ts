@@ -21,7 +21,7 @@ import { projectDeclaration } from './declarations';
  *   registered as `picode.connectProvider`) or by hand (name, endpoint, dialect, key) —
  *   a hand-written provider is projected into PiCode's profile (`models.json` +
  *   `auth.json`) exactly like the settings row does, so pi can use it.
- * - **The model.** "Traerse los del proveedor": the list is fetched, not typed — from the
+ * - **The model.** "Fetch them from the provider": the list is fetched, not typed — from the
  *   provider's own `/models` endpoint for a hand-written one, from pi's catalogue for a
  *   subscription. The owner's pick becomes the profile's `default_model` (pi's own
  *   setting), which is what a session uses before anyone picks anything.
@@ -221,7 +221,7 @@ function editProfileSettings(deps: WizardModelDeps, edit: (settings: Record<stri
 		// A fresh profile has no file yet; the first write creates it.
 	}
 	edit(settings);
-	writeFileSync(file, JSON.stringify(settings, undefined, '\t') + '\n');
+	writeFileSync(file, `${JSON.stringify(settings, undefined, '\t')}\n`);
 }
 
 /** Registers the wizard's provider/model commands. */

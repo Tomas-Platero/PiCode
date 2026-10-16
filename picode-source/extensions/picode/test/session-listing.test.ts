@@ -5,7 +5,7 @@
 /**
  * The panel's listing: **one list, and it is the window's own**.
  *
- * The owner's instruction: «Yo solo quiero ver si estoy en un workspace las de workspace», and a
+ * The owner's instruction, and a
  * row label that read *«Artictempest (Workspace) (workspace area)»* said the same word twice. So
  * there are no groups and no per-folder split any more: the rows are the conversations filed under
  * the slugs the window covers (`runtime.ts` `projectSlugsOfWindow` — the area's, then each open
@@ -66,8 +66,7 @@ function delegation(id: string, cwd: string, slug: string, mtime: number, parent
 }
 
 test('a workspace lists the workspace\u2019s own sessions, and a folder window lists the folder\u2019s', () => {
-	// The owner's instruction, twice: «Yo solo quiero ver si estoy en un workspace las de
-	// workspace». A folder's history is that folder's, and a workspace does not gather it up.
+	// The owner's instruction, twice. A folder's history is that folder's, and a workspace does not gather it up.
 	assert.deepStrictEqual(listedSessionSlugs('workspace', AREA_SLUG, [WEB, BOT]), [AREA_SLUG]);
 	assert.deepStrictEqual(listedSessionSlugs('folder', undefined, [WEB]), [WEB_SLUG]);
 	// A workspace with no area identity falls back to the folders rather than to nothing.
@@ -158,7 +157,7 @@ test('one unreadable identity makes the whole area incomplete, even with rows to
 });
 
 test('an area lists its sessions whatever identity they were filed under', () => {
-	// The owner's report: «primero me salen 8 sesiones y luego 5». The area's identity is a hash of
+	// The owner's report. The area's identity is a hash of
 	// the folders it had open at that moment, and that list is not stable — a window reports one
 	// folder while the workspace is still being restored — so the identity computed a moment later
 	// named a folder with no sessions in it, and every row of his disappeared.

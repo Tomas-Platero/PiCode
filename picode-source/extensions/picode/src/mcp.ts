@@ -16,8 +16,7 @@ import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './m
  * *does* have MCP — its own servers, its own screen to add them, its own permissions — and it
  * exposes every MCP tool as a language model tool.
  *
- * So this module is the bridge the owner asked for: *"hay una que es 'MCP' necesito que esas
- * opciones puedan usarse para conectar los MCP con el PI interno de PiCode."* The editor keeps
+ * So this module is the bridge the owner asked for. The editor keeps
  * owning the servers (adding, enabling, authenticating, confirming), and pi gets their tools and
  * runs them through the editor with `lm.invokeTool` — which means the editor's confirmation and
  * permission rules apply, instead of a second set of ours.

@@ -8,7 +8,7 @@
  * pi reports every file mutation with a structured event — `edit` arrives with
  * `{ path, edits }`, `write` with `{ path, content }` — but the chat only shows a one-line
  * "edit src/app.ts" while it runs: the *what changed* has nowhere to land. The owner asked
- * for it as «quiero ver qué ha cambiado en el chat», meaning the card the editor already
+ * to see what changed in the chat, meaning the card the editor already
  * knows how to render: "Changed N files", one row per file with +N/−M, a click that opens
  * the diff.
  *

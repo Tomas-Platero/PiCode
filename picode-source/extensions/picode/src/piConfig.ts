@@ -69,7 +69,7 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 
 	return {
 		thinkingLevel: typeof thinking === 'string' && (THINKING_LEVELS as readonly string[]).includes(thinking) ? thinking : undefined,
-		// Default **shown** (the owner's call: «Esto siempre en show por defecto»); an explicit
+		// Default **shown** (the owner's call); an explicit
 		// `hide` is the only thing that turns it off.
 		showReasoning: reasoning !== 'hide',
 		// On unless it was turned off: a switch that only exists to be left alone is not a switch.

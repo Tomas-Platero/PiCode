@@ -7,10 +7,10 @@
 # has to be fetched. Until this script existed, nothing fetched it — it was the old
 # extension that installed pi on demand, and taking that extension out left every freshly
 # built editor without a pi to talk to. The connector could find it and could not say
-# anything but "no encuentro el pi de este editor".
+# anything but "cannot find this editor's pi".
 #
-# The owner's rule is what shapes it: *"quiero que esté funcional, no quiero tener yo que
-# configurar más cosas más allá del proveedor"*. So the runtime ships installed, at a pinned
+# The owner's rule is what shapes it: *"I want it to work out of the box; I don't want to have
+# to configure anything beyond the provider"*. So the runtime ships installed, at a pinned
 # version, and no human step is involved.
 #
 # The version is pinned in `distribution/runtime.json` and not taken from `latest`: an editor

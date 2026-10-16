@@ -100,8 +100,8 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 	private readonly standaloneCustomizations: IStandaloneCustomizationDescription[] = [
 		// Empty on purpose: the Voice Mode and Dictation cards this mechanism used
 		// to render are VS Code editor concepts with no pi equivalent, so they must
-		// not appear in this window (AGENTS.md, "La ventana de gestión del chat
-		// habla de pi, no de Copilot"). The rendering path stays so a future
+		// not appear in this window (AGENTS.md, "The chat management window
+		// talks about pi, not Copilot"). The rendering path stays so a future
 		// standalone customization has a home that already works.
 	];
 

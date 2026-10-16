@@ -539,7 +539,7 @@ fi
 # The step that staged `extensions/picode-pi-chat` as a built-in extension was **removed on
 # 2026-09-24 by the owner's decision**: pi lives in the core, and the extension is being
 # migrated into it. Nothing compiled the directory, and on 2026-09-27 the owner deleted it
-# («pues borrala»): the panel's code remains in git history and in
+# («just delete it»): the panel's code remains in git history and in
 # `.scratch/picode-pi-chat-ultima-copia.tar.gz`, and its two brand SVGs now live in
 # `picode-source/src/vs/workbench/contrib/picode/browser/media/`.
 echo ""
@@ -748,7 +748,7 @@ echo ""
 echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
 
 # pi first: it is what the connector looks for, and an editor built without it can only
-# answer "no encuentro el pi de este editor".
+# answer "cannot find this editor's pi".
 bash dev/pi-runtime.sh "${PACK_DIR}"
 
 # And the durable agent, which is PiCode's own program (picode-source/durable): an installed editor

@@ -179,17 +179,15 @@ export const tocData: ITOCEntry<string> = {
 		},
 		{
 			id: 'chat',
-			// PiCode, not "Chat": this product's own node, and the name the owner reads ("Primero
-			// Chat renombralo a PiCode"). The editor's own rows still live under it, which is
+			// PiCode, not "Chat": this product's own node, and the name the owner reads. The editor's own rows still live under it, which is
 			// where a person looks for anything the chat does.
 			label: localize('chat', "PiCode"),
 			children: [
-				// PiCode: the model providers are their **own node**, beside `pi` (owner, 2026-09-25:
-				// "la parte de proveedores en Settings > Chat > Providers (muevelo de pi)"). Two
+				// PiCode: the model providers are their **own node**, beside `pi` (owner, 2026-09-25). Two
 				// nodes and not one, because they answer two questions: this one is *which providers
 				// exist*, and `pi` is *how pi itself behaves*.
 				//
-				// Order (owner: "luego ordena las categorias"): PiCode's own two nodes first —
+				// Order (owner: "then sort the categories"): PiCode's own two nodes first —
 				// connecting a model is the first thing anyone does — and then the editor's, in
 				// the order it already had.
 				{

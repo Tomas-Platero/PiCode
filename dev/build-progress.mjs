@@ -346,7 +346,7 @@ const timer = setInterval(() => {
 	try {
 		ended = draw() || ended;
 	} catch (error) {
-		process.stdout.write(`\n  no se pudo leer el registro: ${error instanceof Error ? error.message : String(error)}\n`);
+		process.stdout.write(`\n  could not read the log: ${error instanceof Error ? error.message : String(error)}\n`);
 		ended = true;
 	}
 	if (ended) {

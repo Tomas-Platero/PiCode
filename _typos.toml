@@ -1,6 +1,6 @@
-# El linter de typos (pi-lens) solo usa diccionarios ingleses y flaggea
-# palabras españolas legítimas en los docs del proyecto (odd/tasks/*.md, etc.).
-# Aceptamos esas palabras SOLO en Markdown; el código sigue estricto.
+# The typos linter (pi-lens) only uses English dictionaries and flags legitimate
+# Spanish words in the project's docs (odd/tasks/*.md, etc.).
+# We accept those words ONLY in Markdown; the code stays strict.
 
 [type.md.extend-words]
 hace = "hace"

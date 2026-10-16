@@ -760,7 +760,7 @@ function hostSectionRows(d: StatusData): StatusItem[] {
  *
  * The settings page edits **declarations**; a provider whose models or sign-in live in the profile
  * has nothing there to edit, so without these rows the panel's count and that page disagreed in
- * silence — «El proveedor de nan no me sale en la lista de providers… en picode:status salen 2».
+ * silence.
  */
 function providerSectionRows(d: StatusData): StatusItem[] {
 	const providers = d.providers ?? [];

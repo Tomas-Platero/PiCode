@@ -1515,7 +1515,7 @@ configurationRegistry.registerConfiguration({
 		// provider forwards the endpoint's reasoning deltas the same way — so the renderer's own
 		// default governs (`chatThinkingContentPart` falls back to `Collapsed` when it is unset).
 		// It was an experimental control with nothing behind it, and the owner read it exactly
-		// so: «Revisa esta opción si es necesaria.» Removing it only takes a knob out of the
+		// so. Removing it only takes a knob out of the
 		// settings that cannot do anything here.
 		[ChatConfiguration.ThinkingGenerateTitles]: {
 			type: 'boolean',

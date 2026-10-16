@@ -138,8 +138,8 @@ test('the label is the owner\u2019s own words, not the frame the editor prepends
 	const external = "You are pi, the machine's own coding agent, answering through the PiCode editor. You answer about the project the person you are talking to has open in it.";
 	const separator = '\n\n---\n\n';
 
-	assert.strictEqual(ownerPrompt(`${internal}${separator}arregla esto`), 'arregla esto');
-	assert.strictEqual(ownerPrompt(`${external}\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n${separator}hola`), 'hola');
+	assert.strictEqual(ownerPrompt(`${internal}${separator}fix this`), 'fix this');
+	assert.strictEqual(ownerPrompt(`${external}\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n${separator}hello`), 'hello');
 
 	// A message the frame did not produce — a conversation the pi CLI wrote — is its own label.
 	assert.strictEqual(ownerPrompt('revisa las dependencias'), 'revisa las dependencias');

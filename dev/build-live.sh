@@ -29,12 +29,12 @@ STATUS=$?
 
 echo ""
 if [[ "${STATUS}" -eq 0 ]]; then
-  echo "== build terminada bien"
+  echo "== build finished successfully"
   echo "   editor: ./PiCode-Win32-x64/PiCode.exe"
-  echo "   registro: .scratch/build-live.log"
+  echo "   log: .scratch/build-live.log"
 else
-  echo "== la build falló (código ${STATUS})"
-  echo "   mira .scratch/build-live.log, y sus últimas líneas:"
+  echo "== build failed (exit code ${STATUS})"
+  echo "   see .scratch/build-live.log, and its last lines:"
   tail -20 .scratch/build-live.log
 fi
 

@@ -141,9 +141,15 @@ export function isThemeOnlyManifest(manifest: unknown): boolean {
   if (contributes === undefined) {
     return false;
   }
-  for (const key of ["debuggers", "languages", "notebooks", "notebookRenderer", "taskDefinitions", "problemMatchers"]) {
+    for (const key of ["debuggers", "languages", "notebooks", "notebookRenderer", "taskDefinitions", "problemMatchers"]) {
     const value = contributes[key];
-    if (Array.isArray(value) ? value.length > 0 : isRecord(value) ? Object.keys(value).length > 0 : value !== undefined) {
+    let hasEntries = value !== undefined;
+    if (Array.isArray(value)) {
+      hasEntries = value.length > 0;
+    } else if (isRecord(value)) {
+      hasEntries = Object.keys(value).length > 0;
+    }
+    if (hasEntries) {
       return false;
     }
   }
@@ -702,8 +708,8 @@ export async function loadVariant(options: LoadVariantOptions): Promise<ThemeVar
       }
     } catch {
       // A network that fails is the same answer as a file that is not there: the caller says
-      // "no se pudo leer" and the panel keeps working. Letting the rejection escape left the
-      // preview note on "Leyendo el tema…" for ever, because nobody above it catches.
+      // "could not read it" and the panel keeps working. Letting the rejection escape left the
+      // preview note on "Reading the theme…" for ever, because nobody above it catches.
       bytes = undefined;
     }
   }

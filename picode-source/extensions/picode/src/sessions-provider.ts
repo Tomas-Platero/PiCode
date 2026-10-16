@@ -369,9 +369,7 @@ export function piProjectSlug(cwd: string): string {
 /**
  * The slugs a window lists conversations from.
  *
- * The owner, twice, and the second time because the first fix read him loosely: «me salen sesiones
- * tanto de proyectos (carpetas) como del workspace. Yo solo quiero ver si estoy en un workspace las
- * de workspace» / «me siguen saliendo todas las sesiones en el workspace al cargar un workspace».
+ * The owner, twice, and the second time because the first fix read him loosely.
  *
  * So a window that **is** a workspace lists the workspace's own conversations and nothing else: the
  * sessions filed under the area's slug, which are the ones this window's chats wrote. The folders'
@@ -445,7 +443,7 @@ function areaFamily(sessionsDir: string, areaSlug: string, fs: SessionsFs): { na
  * window reports one folder while the workspace is still being restored, and the owner opens and
  * closes folders as he works. Every one of those moments renamed the area — `…-513d6f42--` became
  * `…-19976c25--` — and a listing that looked only for the name it had just computed found a folder
- * with no sessions in it and dropped every row («primero me salen 8 sesiones y luego 5»).
+ * with no sessions in it and dropped every row.
  *
  * The sessions do not move when the identity does: they are where they were written. So the listing
  * asks for **every** folder this workspace ever filed under — same area name, any identity — and
@@ -528,7 +526,7 @@ export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: Sessi
  * **One list, because a window is one thing.** The slugs are the window's own
  * (`runtime.ts` `projectSlugsOfWindow()`: the area's when there is one, then each open folder's),
  * so a conversation is listed once and no row has to say which project it belongs to — the
- * owner's own instruction: «Yo solo quiero ver si estoy en un workspace las de workspace», and
+ * owner's own instruction — and
  * the label that said *«Artictempest (Workspace) (workspace area)»* was repeating the same word
  * twice on every row. What tells two rows apart is the title and the date, which is what the
  * panel already puts on them.
@@ -540,8 +538,7 @@ export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: Sessi
  * `cap` is the caller's, and the panel passes none: the limit existed to stop **one busy project**
  * from turning a list of groups into an endless one, and a single list of the owner's own workspace
  * is what it asks to see, in a panel that scrolls and searches. A cap here would silently hide the
- * older rows with nothing to say they exist — the reading the owner already reported as «salen
- * menos».
+ * older rows with nothing to say they exist — the reading the owner already reported.
  *
  * With no projects to look at the listing is empty, and there is no fall-back to every project
  * in the profile: the panel shows the sessions of what is open, not somebody else's history.

@@ -345,7 +345,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const defaultModel = readDefaultModel(profileDir);
 	const sources = providerSources(profileDir);
 	// Whether the agent's thinking reaches the chat. `hide` is the shipped default, and the owner was
-	// looking for exactly this: «no consigo ver el thinking en el chat».
+	// looking for exactly this.
 	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
 	const profileMcpServers = readMcpServers(profileDir, runtime);

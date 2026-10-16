@@ -29,12 +29,12 @@ test('openai-responses: the answer and the reasoning summaries arrive per event 
 		{ text: 'texto' },
 	);
 	assert.deepStrictEqual(
-		parseProviderStreamEvent('{"type":"response.reasoning_summary_text.delta","delta":"resumen"}', 'openai-responses'),
-		{ thinking: 'resumen' },
+		parseProviderStreamEvent('{"type":"response.reasoning_summary_text.delta","delta":"summary"}', 'openai-responses'),
+		{ thinking: 'summary' },
 	);
 	assert.deepStrictEqual(
-		parseProviderStreamEvent('{"type":"response.reasoning_text.delta","delta":"razón"}', 'openai-responses'),
-		{ thinking: 'razón' },
+		parseProviderStreamEvent('{"type":"response.reasoning_text.delta","delta":"reason"}', 'openai-responses'),
+		{ thinking: 'reason' },
 	);
 });
 

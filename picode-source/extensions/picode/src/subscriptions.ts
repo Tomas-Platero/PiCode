@@ -10,7 +10,7 @@ import type * as vscode from 'vscode';
  *
  * ChatGPT Plus/Pro, Claude Pro/Max, GitHub Copilot, Grok, Kimi: these are accounts rather than
  * API keys, and the way in is pi's own login. That is why the surface for them is a **list** —
- * the owner's request was "una lista de proveedores a los cuales conectarme por oauth" — and why
+ * the owner's request was "a list of providers I can connect to via OAuth" — and why
  * nothing here asks for an endpoint or a dialect: those belong to the declared providers, which
  * have their own form in the settings row.
  *

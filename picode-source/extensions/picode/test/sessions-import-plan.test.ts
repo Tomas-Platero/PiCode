@@ -15,7 +15,7 @@ const assistant = (text: string, timestamp?: number): ImportPlanTurn => ({ role:
 
 test('importMessages appends the interrupted tail the turns parser leaves out', () => {
 	const messages = importMessages({
-		turns: [user('hola')],
+		turns: [user('hello')],
 		tail: { role: 'assistant', text: '', content: [{ type: 'toolCall', toolCallId: 't1' }] },
 	});
 	assert.deepStrictEqual(messages.map(message => message.role), ['user', 'assistant']);
@@ -26,7 +26,7 @@ test('importMessages appends the interrupted tail the turns parser leaves out', 
 test('importMessages skips a tail the turns already end with', () => {
 	const tail = { role: 'assistant' as const, text: 'hola, que tal', content: [{ type: 'text', text: 'hola, que tal' }] };
 	const messages = importMessages({
-		turns: [user('hola'), assistant('hola, que tal')],
+		turns: [user('hello'), assistant('hola, que tal')],
 		tail,
 	});
 	assert.deepStrictEqual(messages.map(message => message.role), ['user', 'assistant']);
@@ -38,7 +38,7 @@ test('importMessages appends an unanswered tail prompt the turns parser skipped'
 	// session's end: the copy must end on it, or the panel reads the conversation
 	// as answered when it was not.
 	const messages = importMessages({
-		turns: [user('hola'), assistant('hola, que tal')],
+		turns: [user('hello'), assistant('hola, que tal')],
 		tail: { role: 'user', text: '', content: [{ type: 'image', source: 'x' }] },
 	});
 	assert.deepStrictEqual(messages.map(message => message.role), ['user', 'assistant', 'user']);
@@ -56,13 +56,13 @@ test('importMessages keeps the turns\' stamps and the tail\'s own stamp', () => 
 
 test('completingCopy picks the copy whose turns are a prefix of the file', () => {
 	const file = [
-		{ role: 'user' as const, text: 'hola', content: [] },
+		{ role: 'user' as const, text: 'hello', content: [] },
 		{ role: 'assistant' as const, text: 'hola, que tal', content: [] },
 		{ role: 'assistant' as const, text: '', content: [] },
 	];
-	const older: ImportPlanCopy = { id: 10, turns: [user('hola')], modelEntries: 2 };
-	const other: ImportPlanCopy = { id: 5, turns: [user('otra cosa')], modelEntries: 2 };
-	const diverged: ImportPlanCopy = { id: 20, turns: [user('hola'), user('¿y esto?')], modelEntries: 3 };
+	const older: ImportPlanCopy = { id: 10, turns: [user('hello')], modelEntries: 2 };
+	const other: ImportPlanCopy = { id: 5, turns: [user('something else')], modelEntries: 2 };
+	const diverged: ImportPlanCopy = { id: 20, turns: [user('hello'), user('and this?')], modelEntries: 3 };
 	assert.strictEqual(completingCopy([other, diverged, older], file)?.id, 10);
 	assert.strictEqual(completingCopy(undefined, file), undefined);
 	assert.strictEqual(completingCopy([], file), undefined);
@@ -70,38 +70,38 @@ test('completingCopy picks the copy whose turns are a prefix of the file', () =>
 
 test('completingCopy picks the OLDEST among several prefixes', () => {
 	const file = [
-		{ role: 'user' as const, text: 'hola', content: [] },
+		{ role: 'user' as const, text: 'hello', content: [] },
 		{ role: 'assistant' as const, text: '', content: [] },
 	];
 	const copies: ImportPlanCopy[] = [
-		{ id: 30, turns: [user('hola')], modelEntries: 1 },
-		{ id: 12, turns: [user('hola')], modelEntries: 1 },
+		{ id: 30, turns: [user('hello')], modelEntries: 1 },
+		{ id: 12, turns: [user('hello')], modelEntries: 1 },
 	];
 	assert.strictEqual(completingCopy(copies, file)?.id, 12);
 });
 
 test('missingMessages gives what the raw entry count is short of — tail included', () => {
 	const messages: ImportPlanMessage[] = [
-		{ role: 'user', text: 'hola', content: [] },
+		{ role: 'user', text: 'hello', content: [] },
 		{ role: 'assistant', text: 'hola, que tal', content: [] },
 		{ role: 'assistant', text: '', content: [] },
 	];
-	const short: ImportPlanCopy = { id: 1, turns: [user('hola')], modelEntries: 2 };
+	const short: ImportPlanCopy = { id: 1, turns: [user('hello')], modelEntries: 2 };
 	assert.deepStrictEqual(missingMessages(short, messages), [messages[2]]);
 });
 
 test('missingMessages gives nothing to a copy that already carries the tail', () => {
 	const messages: ImportPlanMessage[] = [
-		{ role: 'user', text: 'hola', content: [] },
+		{ role: 'user', text: 'hello', content: [] },
 		{ role: 'assistant', text: '', content: [] },
 	];
-	const healed: ImportPlanCopy = { id: 1, turns: [user('hola')], modelEntries: 2 };
+	const healed: ImportPlanCopy = { id: 1, turns: [user('hello')], modelEntries: 2 };
 	assert.deepStrictEqual(missingMessages(healed, messages), []);
 });
 
 test('missingMessages gives nothing to a copy that continued past the file', () => {
-	const messages: ImportPlanMessage[] = [{ role: 'user', text: 'hola', content: [] }];
-	const continued: ImportPlanCopy = { id: 1, turns: [user('hola'), assistant('seguí yo')], modelEntries: 4 };
+	const messages: ImportPlanMessage[] = [{ role: 'user', text: 'hello', content: [] }];
+	const continued: ImportPlanCopy = { id: 1, turns: [user('hello'), assistant('I continued')], modelEntries: 4 };
 	assert.deepStrictEqual(missingMessages(continued, messages), []);
 });
 
@@ -129,7 +129,7 @@ test('sessionTail reads the empty interrupted assistant turn', () => {
 
 test('sessionTail reads an answered transcript as its last turn', () => {
 	const jsonl = [
-		line({ type: 'message', id: 'e1', message: { role: 'user', content: [{ type: 'text', text: 'hola' }] } }),
+		line({ type: 'message', id: 'e1', message: { role: 'user', content: [{ type: 'text', text: 'hello' }] } }),
 		line({ type: 'message', id: 'e2', message: { role: 'assistant', content: [{ type: 'text', text: 'hola, que tal' }] } }),
 	].join('\n');
 	assert.deepStrictEqual(sessionTail(jsonl), { role: 'assistant', text: 'hola, que tal', content: [{ type: 'text', text: 'hola, que tal' }], timestamp: undefined });

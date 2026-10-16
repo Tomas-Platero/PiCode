@@ -148,8 +148,7 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 			console.log(`[agentSessions.filter] providers changed — excluded: [${next.providers.join(', ')}]`);
 			// Fire ONLY when the normalization moved something: a fire with the same result
 			// makes the panel re-filter, and if that re-filter reaches back into provider
-			// events the loop re-renders the list at flash speed — the "quitar y poner el
-			// filtro" the owner saw.
+			// events the loop re-renders the list at flash speed — the "filter off and on again" the owner saw.
 			const changed = JSON.stringify(next) !== JSON.stringify(this.excludes);
 			this.excludes = next;
 			this.updateFilterActions();

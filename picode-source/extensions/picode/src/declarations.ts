@@ -10,8 +10,7 @@ import type { ProviderConfiguration } from './providers';
 /**
  * The providers the owner declares **in the editor's own settings**.
  *
- * This is the surface the request came from: *"no quiero la ventanita de arriba, quiero añadir
- * items abajo con sus campos necesarios"*. A settings row can hold a list of lines, and that is
+ * This is the surface the request came from. A settings row can hold a list of lines, and that is
  * what this is — one provider per line, with its own fields, added in place with the editor's
  * own list widget. Nothing is asked in a floating window, and there is no dialog of ours
  * anywhere in the flow.

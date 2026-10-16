@@ -63,8 +63,8 @@ try {
 	const recorded = await client.request("record", {
 		conversationId: id,
 		messages: [
-			{ role: "user", content: "Arregla el chat" },
-			{ role: "assistant", content: "Hecho: el chat vuelve a responder." },
+			{ role: "user", content: "Fix the chat" },
+			{ role: "assistant", content: "Done: the chat answers again." },
 		],
 	});
 	if (recorded.recorded !== 2) fail(`record reported ${JSON.stringify(recorded)}`);
@@ -92,7 +92,7 @@ try {
 	step("4. a second record appends in order");
 	await client.request("record", {
 		conversationId: id,
-		messages: [{ role: "user", content: "Ahora el panel" }],
+		messages: [{ role: "user", content: "Now the panel" }],
 	});
 	const again = await client.request("subscribe", { conversationId: id });
 	const count = (again.snapshot?.entries ?? []).filter((entry) => entry.kind === "pi.user" || entry.kind === "pi.assistant").length;

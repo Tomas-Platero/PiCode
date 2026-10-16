@@ -69,8 +69,8 @@ import { VENDOR } from './providers';
  * editor's agent**, not as a panel, a tab or a window of our own. Nothing is drawn by this
  * file; the conversation happens in Chat.
  *
- * The owner's requirement behind it is blunt and it is the shape of this module: *"quiero que
- * esté funcional, no quiero tener yo que configurar más cosas más allá del proveedor"*. So
+ * The owner's requirement behind it is blunt and it is the shape of this module: *"I want it
+ * to work, without me having to configure anything beyond the provider"*. So
  * nothing here asks the owner anything. It finds pi by itself, opens a session by itself, and
  * the only thing the owner ever fills in is which provider to talk to.
  *
@@ -83,7 +83,7 @@ import { VENDOR } from './providers';
  *   conversation switches pi's session too. A picker that did not reach pi would be a lie;
  * - **the thinking level**: `Settings > Chat > Pi`, left to pi's own default when unset;
  * - **the context**: the folder, the open file and the selection travel with the prompt when
- *   `picode.context.attach` is on, so "arregla esto" means the file he is looking at;
+ *   `picode.context.attach` is on, so "fix this" means the file he is looking at;
  * - **the thinking**: pi's reasoning is written into the chat only if `picode.pi.reasoning` says
  *   so, because it is long and most of the time he does not want it.
  */
@@ -163,7 +163,7 @@ export interface PiSession {
 	/**
 	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
 	 * prompt without it — «Agent is already processing. Specify streamingBehavior ('steer' or
-	 * 'followUp') to queue the message» — which is what the owner read when he asked «como van»
+	 * 'followUp') to queue the message» — which is what the owner read when he asked how it was going
 	 * while a background job's result was being processed.
 	 */
 	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
@@ -533,7 +533,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					}
 				}
 				// Work the agent left running: its card says so from the first moment, which is what the
-				// owner asked to be able to see («¿hay alguna forma de que yo vea ese background?»).
+				// owner asked to be able to see.
 				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
 					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
 				}
@@ -625,7 +625,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 
 		// pi refuses a prompt while it is streaming unless it is told how to queue it: «Agent is already
 		// processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message» — which is
-		// the error the owner hit by asking «como van» while a background job's result was being
+		// the error the owner hit by asking how it was going while a background job's result was being
 		// processed. Our own queue (`turnChain`) orders **our** requests, and that is all it can do: it
 		// cannot see what pi is doing for itself, and a background job delivers its result into the
 		// session as a steer, so pi can be busy when our next prompt arrives.
