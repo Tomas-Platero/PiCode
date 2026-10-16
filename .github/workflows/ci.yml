@@ -11,6 +11,8 @@ on:
   push:
     branches:
       - master
+      - beta
+      - experimental
       - 'feat/**'
     paths-ignore:
       - '**.md'
