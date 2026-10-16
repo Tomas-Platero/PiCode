@@ -1859,6 +1859,10 @@
 
 /* The hand-written provider's form: a framed inset with labelled fields, so the
    owner knows what each box wants without guessing from placeholders. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form-inner [hidden] {
+	display: none;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form-inner {
 	display: flex;
 	flex-direction: column;
