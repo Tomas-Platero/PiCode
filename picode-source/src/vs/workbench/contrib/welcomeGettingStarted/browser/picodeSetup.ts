@@ -184,6 +184,8 @@ export class PiCodeSetup extends Disposable {
 	private appliedThemeId: string | undefined;
 	/** True while an action runs, so a second click cannot start it twice. */
 	private busy = false;
+	/** The way in the owner picked on the provider step: the form belongs to the API key, and the picked card says so. */
+	private providerChoice: 'oauth' | 'manual' | undefined;
 
 	/* The wizard: which step is on screen, and what the owner has done in it. */
 	private step: 0 | 1 | 2 | 3 | 4 | 5 = 0;
@@ -881,7 +883,29 @@ export class PiCodeSetup extends Disposable {
 			*/
 	private renderProviderStep(): HTMLElement {
 		const form = this.renderProviderForm();
-		form.hidden = true;
+		// The form belongs to the API-key choice: it is on screen only while that
+		// option is the picked one, and the picked card carries the check. One
+		// choice never lingers under the other.
+		const oauthCard = this.providerOption('oauth', 'cloud', localize('picodeSetup.provider.oauth', "Log in with a subscription"),
+			localize('picodeSetup.provider.oauthDetail', "ChatGPT, Claude, Copilot… — pi's own OAuth login, with the account you already pay for."), () => {
+				this.providerChoice = 'oauth';
+				oauthCard.classList.add('checked');
+				manualCard.classList.remove('checked');
+				form.hidden = true;
+				void this.services.commandService.executeCommand('picode.connectProvider');
+			});
+		const manualCard = this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Use an API key"),
+			localize('picodeSetup.provider.manualDetail', "Connect OpenRouter, DeepSeek, Groq or any OpenAI-compatible service with your API key."), () => {
+				this.providerChoice = 'manual';
+				manualCard.classList.add('checked');
+				oauthCard.classList.remove('checked');
+				form.hidden = false;
+			});
+		// A choice made before a re-render (adding a provider repaints the step)
+		// keeps its card marked and its form where the owner left it.
+		if (this.providerChoice === 'oauth') { oauthCard.classList.add('checked'); }
+		if (this.providerChoice === 'manual') { manualCard.classList.add('checked'); }
+		form.hidden = this.providerChoice !== 'manual';
 		const modelArea = $('.picode-model-area', {});
 		this.currentModelArea = modelArea;
 
@@ -891,14 +915,8 @@ export class PiCodeSetup extends Disposable {
 				$('span.picode-hint', {}, localize('picodeSetup.provider.hint', "The provider your agent talks to, and the model it runs on.")),
 			),
 			$('.picode-pi-options', {},
-				this.providerOption('oauth', 'cloud', localize('picodeSetup.provider.oauth', "Log in with a subscription"),
-					localize('picodeSetup.provider.oauthDetail', "ChatGPT, Claude, Copilot… — pi's own OAuth login, with the account you already pay for."), () => {
-					void this.services.commandService.executeCommand('picode.connectProvider');
-				}),
-				this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Use an API key"),
-					localize('picodeSetup.provider.manualDetail', "Connect OpenRouter, DeepSeek, Groq or any OpenAI-compatible service with your API key."), () => {
-					form.hidden = !form.hidden;
-				}),
+				oauthCard,
+				manualCard,
 			),
 			form,
 			modelArea,
@@ -1452,15 +1470,18 @@ export class PiCodeSetup extends Disposable {
 				this.themeSearch(text => { query = text; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
 				this.themeFilters(kind => { filter = kind; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
 			);
-			more.append(
-				this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
-					shown += THEME_PAGE_SIZE;
-					this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
-				}),
-				this.button('picode-theme-browse', localize('picodeSetup.theme.browse', "Install more from the gallery…"), () => {
-					this.services.commandService.executeCommand('workbench.extensions.search', '@category:themes @sort:installs');
-				}),
-			);
+			// The installed tab's own "more": it exists only when the filter left
+			// themes unseen — a gallery browse button here would duplicate the tab
+			// sitting right next to it.
+			const visible = this.visibleThemes(query, filter);
+			if (visible.length > shown) {
+				more.append(
+					this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
+						shown += THEME_PAGE_SIZE;
+						this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
+					}),
+				);
+			}
 			this.paintCurrent(head, grid, this.visibleThemes(query, filter).slice(0, shown));
 			this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
 		};
@@ -1724,13 +1745,18 @@ export class PiCodeSetup extends Disposable {
 		const applied = this.appliedThemeId;
 
 		for (const theme of themes) {
-			const thumb = $('.picode-theme-thumb');
-			const card = $('button.picode-theme-card' + (theme.settingsId === applied ? '.checked' : ''),
+			const isApplied = theme.settingsId === applied;
+			const thumb = $('.picode-theme-thumb', {},
+				// The applied theme wears the check on its own thumbnail — the badge
+				// below names it, the corner says it from across the room.
+				...(isApplied ? [$('span.picode-theme-check', {}, $('span.codicon.codicon-check'))] : []),
+			);
+			const card = $('button.picode-theme-card' + (isApplied ? '.checked' : ''),
 				{ 'type': 'button', 'data-theme-id': theme.settingsId, 'tabindex': 0, 'title': theme.label },
 				thumb,
 				$('.picode-theme-meta', {},
 					$('span.picode-theme-label', {}, theme.label),
-					...(theme.settingsId === applied ? [$('span.picode-theme-badge', {}, localize('picodeSetup.theme.current', "Current"))] : []),
+					...(isApplied ? [$('span.picode-theme-badge', {}, localize('picodeSetup.theme.current', "Current"))] : []),
 				),
 			);
 

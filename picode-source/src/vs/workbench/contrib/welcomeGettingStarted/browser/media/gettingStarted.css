@@ -649,31 +649,51 @@
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card {
 	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
-	border-radius: 6px;
+	border-radius: 8px;
 	overflow: hidden;
 	cursor: pointer;
-	background: transparent;
+	background: var(--vscode-editorWidget-background, transparent);
 	text-align: left;
 	padding: 0;
-	transition: border-color 0.15s ease-out, transform 0.15s ease-out;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	transition: border-color 0.15s ease-out, transform 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card:hover {
-	transform: translateY(-1px);
+	transform: translateY(-2px);
 	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card.checked {
 	border-color: var(--vscode-focusBorder);
-	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder), 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-thumb {
-	height: 62px;
-	padding: 4px 6px;
+	position: relative;
+	height: 72px;
+	padding: 5px 7px;
 	overflow: hidden;
 	border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
 	background: var(--vscode-editorWidget-background);
+}
+
+/* The applied theme's corner mark: readable at any size, from across the room. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-check {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-thumb-line {
@@ -692,7 +712,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 5px 8px;
+	padding: 6px 10px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-label {
@@ -700,20 +720,23 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: .92em;
+	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-badge {
 	font-size: .78em;
-	padding: 0 6px;
+	padding: 1px 8px;
 	border-radius: 999px;
-	background: var(--vscode-list-activeSelectionBackground);
-	color: var(--vscode-list-activeSelectionForeground);
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
 	flex-shrink: 0;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-more {
 	display: flex;
-	gap: 14px;
+	justify-content: center;
+	gap: 10px;
+	margin-top: 4px;
 }
 
 /* narrow windows: the cards stack instead of squeezing */
