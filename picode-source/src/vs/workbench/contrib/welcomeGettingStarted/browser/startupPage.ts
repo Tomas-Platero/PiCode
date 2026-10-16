@@ -170,6 +170,17 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 	 * a bounded patience: a start where no agent ever appears opens nothing and
 	 * says nothing. One attempt per startup, deduplicated across both paths.
 	 */
+	/** Closes every chat editor tab the workbench holds, wherever it came from. */
+	private closeRestoredChatEditors(): void {
+		const chatTabs = this.editorGroupService.groups.flatMap(group =>
+			group.editors
+				.filter(e => e.typeId === ChatEditorInput.TypeID)
+				.map(editor => ({ groupId: group.id, editor })));
+		if (chatTabs.length > 0) {
+			void this.editorService.closeEditors(chatTabs);
+		}
+	}
+
 	private openChatBesideWelcome(): void {
 		// Earlier builds opened the chat as an editor tab, and the workbench
 		// restores it on every start. The chat lives in the auxiliary bar —
@@ -187,7 +198,17 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		const openOnce = (): void => {
 			if (opened) { return; }
 			opened = true;
+			this.closeRestoredChatEditors();
 			this.viewsService.openView(ChatViewId, false).then(() => { }, onUnexpectedError);
+			// And keep an eye out during the first minute: whatever materializes a
+			// 'New Chat' editor tab at startup loses the race with this sweeper —
+			// the chat has one home, and it is the auxiliary bar.
+			(async () => {
+				for (let i = 0; i < 12; i++) {
+					await timeout(5000);
+					this.closeRestoredChatEditors();
+				}
+			})().then(() => { }, onUnexpectedError);
 		};
 		if (ready()) {
 			openOnce();
