@@ -195,8 +195,6 @@ export class PiCodeSetup extends Disposable {
 	private piChosen = false;
 	/** The wizard ran to the end. */
 	private finished = false;
-	/** The owner chose "Not now": the whole setup steps aside until reopened. */
-	private skipped = false;
 	/** The default model the owner picked in the provider step (provider/model). */
 	private wizardModel: string | undefined;
 	/** The model list fetched from the provider(s), for the picker and the agents. */
@@ -297,14 +295,6 @@ export class PiCodeSetup extends Disposable {
 			reset(this.container as HTMLElement, note);
 			return;
 		}
-		if (this.skipped) {
-			reset(this.container as HTMLElement, $('.picode-card', {},
-				$('p', {}, localize('picodeSetup.skipped', "Setup skipped. Reopen it any time: run 'PiCode: Set up PiCode' from the command palette, or Help > Welcome.")),
-				$('.picode-setup-actions', {},
-					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
-			));
-			return;
-		}
 		if (this.finished) {
 			reset(this.container as HTMLElement, $('.picode-card', {},
 				$('p', {}, localize('picodeSetup.done', "You are all set. You can change any of this later from Settings > PiCode, or by running this setup again.")),
@@ -399,10 +389,10 @@ export class PiCodeSetup extends Disposable {
 		if (this.step < 4) {
 			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.advanceFrom(state, true)));
 		}
-		foot.append(
-			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
-			next,
-		);
+		// One exit per step: Skip moves on without choosing. Leaving the setup is
+		// closing the Welcome tab — a second button saying a different flavour of
+		// the same thing is noise.
+		foot.append(next);
 		return foot;
 	}
 
@@ -468,13 +458,6 @@ export class PiCodeSetup extends Disposable {
 	/** Reaching the end marks the setup as done, so the first-run nudge stays quiet. */
 	private finish(): void {
 		this.finished = true;
-		this.services.commandService.executeCommand('picode.setup.complete');
-		this.renderWizard(this.state);
-	}
-
-	/** "Not now" steps the whole wizard aside; it is reopenable from the same card. */
-	private skipAll(): void {
-		this.skipped = true;
 		this.services.commandService.executeCommand('picode.setup.complete');
 		this.renderWizard(this.state);
 	}
@@ -896,6 +879,14 @@ export class PiCodeSetup extends Disposable {
 			});
 		const manualCard = this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Use an API key"),
 			localize('picodeSetup.provider.manualDetail', "Connect OpenRouter, DeepSeek, Groq or any OpenAI-compatible service with your API key."), () => {
+				if (this.providerChoice === 'manual') {
+					// A second click stands the choice down: the form closes and the
+					// step goes back to no way in picked.
+					this.providerChoice = undefined;
+					manualCard.classList.remove('checked');
+					form.hidden = true;
+					return;
+				}
 				this.providerChoice = 'manual';
 				manualCard.classList.add('checked');
 				oauthCard.classList.remove('checked');
