@@ -33,7 +33,8 @@ import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
 import { timeout } from '../../../../base/common/async.js';
 import { IChatAgentService } from '../../chat/common/participants/chatAgents.js';
-import { ACTION_ID_OPEN_CHAT } from '../../chat/browser/actions/chatActions.js';
+import { ChatViewId } from '../../chat/browser/chat.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
 export type RestoreWalkthroughsConfigurationValue = { folder: string; category?: string; step?: string };
@@ -95,6 +96,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		@INotificationService private readonly notificationService: INotificationService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IChatAgentService private readonly chatAgentService: IChatAgentService,
+		@IViewsService private readonly viewsService: IViewsService,
 	) {
 		super();
 
@@ -171,7 +173,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		const openOnce = (): void => {
 			if (opened) { return; }
 			opened = true;
-			this.commandService.executeCommand(ACTION_ID_OPEN_CHAT).then(() => { }, onUnexpectedError);
+			this.viewsService.openView(ChatViewId, false).then(() => { }, onUnexpectedError);
 		};
 		if (ready()) {
 			openOnce();
