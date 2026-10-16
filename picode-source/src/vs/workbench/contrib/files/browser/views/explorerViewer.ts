@@ -2067,6 +2067,7 @@ export class FileDragAndDrop implements ITreeDragAndDrop<ExplorerItem> {
 
 	dispose(): void {
 		this.compressedDropTargetDisposable.dispose();
+		this.disposables.dispose();
 	}
 }
 
