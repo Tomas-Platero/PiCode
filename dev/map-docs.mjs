@@ -82,20 +82,21 @@ const ZONES = {
 	'picode-source/extensions': { kind: 'only', keep: ['picode'] },
 };
 
-// Root-level files: one line each, in Spanish, stable names.
+// Root-level files: one line each, stable names.
 const ROOT_FILES = {
-	'.gitattributes': 'Reglas de Git por tipo de fichero (binarios, fin de línea).',
-	'.gitignore': 'Lo que no se versiona: dependencias, salidas de build, claves, perfiles.',
-	'.gitleaks.toml': 'Configuración del escáner de secretos (Gitleaks) que corre en CI.',
-	'.nvmrc': 'Versión de Node fija para todo el proyecto (la lee CI y la build).',
-	'AGENTS.md': '📋 Las frases del dueño: reglas de producto, UI, arquitectura y forma de trabajar.',
-	'CODE_OF_CONDUCT.md': '🤝 Código de conducta del repositorio.',
-	'CONTRIBUTING.md': '🤝 Cómo se contribuye y cómo se publica el árbol propio.',
-	'LICENSE': 'Licencia MIT del producto.',
-	'README.md': '🌍 Cara pública: qué es PiCode, descargas y cómo compilarlo.',
-	'SECURITY.md': '🛡️ Cómo se reporta una vulnerabilidad.',
-	'_typos.toml': 'Falsos positivos del corrector ortográfico `typos`.',
-	'repomix.config.json': 'Configuración del volcado del repositorio para LLMs.',
+	'.gitattributes': 'Git rules per file type (binaries, line endings).',
+	'.gitignore': 'What is never versioned: dependencies, build output, keys, profiles.',
+	'.gitleaks.toml': 'Settings for the secret scanner (Gitleaks) that runs in CI.',
+	'.nvmrc': 'Node version pinned for the whole project (CI and the build read it).',
+	'.pi-lens.json': 'What pi-lens does not lint: the upstream zones and the generated output.',
+	'AGENTS.md': '📋 The owner\'s phrases: product, UI, architecture and working rules.',
+	'CODE_OF_CONDUCT.md': '🤝 The repository\'s code of conduct.',
+	'CONTRIBUTING.md': '🤝 How to contribute and how the tree of our own is published.',
+	'LICENSE': 'The product\'s MIT license.',
+	'README.md': '🌍 Public face: what PiCode is, downloads and how to build it.',
+	'SECURITY.md': '🛡️ How to report a vulnerability.',
+	'_typos.toml': 'False positives of the `typos` spell checker.',
+	'repomix.config.json': 'Settings for the repository dump for LLMs.',
 };
 
 const strip = (md) => md
@@ -191,7 +192,7 @@ function main() {
 		if (zone?.kind === 'only') {
 			shownDirs = dirs.filter((d) => zone.keep.includes(d));
 			const other = dirs.length - shownDirs.length;
-			if (other > 0) zoneNote = `… y ${other} extensiones built-in de upstream (solo picode/ es nuestra)`;
+			if (other > 0) zoneNote = `… and ${other} upstream built-in extensions (only picode/ is ours)`;
 		}
 
 		const items = [
@@ -206,7 +207,7 @@ function main() {
 
 			if (item.isDir) {
 				const desc = dirDesc(childRel);
-				const note = ZONES[childRel]?.kind === 'opaque' ? ' · ⬆️ upstream, sin desglose' : '';
+				const note = ZONES[childRel]?.kind === 'opaque' ? ' · ⬆️ upstream, no breakdown' : '';
 				// Only depth 1-2 carries the warning: deeper folders inherit their parent's README.
 				const shallow = rel.split('/').length <= 1;
 				if (desc) {
@@ -215,7 +216,7 @@ function main() {
 				} else {
 					const gap = isGap(rel, item.name);
 					if (gap) gaps.push(childRel);
-					tree.push(`${prefix}${branch}${item.name}/${gap && shallow ? ' — ⚠️ sin README' : note}`);
+					tree.push(`${prefix}${branch}${item.name}/${gap && shallow ? ' — ⚠️ no README' : note}`);
 				}
 				if (ZONES[childRel]?.kind !== 'opaque' && depth + 1 <= MAX_DEPTH) {
 					walk(childRel, prefix + (last ? '    ' : '│   '), depth + 1);
@@ -228,7 +229,7 @@ function main() {
 
 		if (zoneNote) tree.push(`${prefix}└── ${zoneNote}`);
 		if (files.length > FILES_PER_DIR) {
-			tree.push(`${prefix}└── … ${files.length} ficheros en total`);
+			tree.push(`${prefix}└── … ${files.length} files in total`);
 		}
 	};
 
@@ -240,35 +241,35 @@ function main() {
 		.sort((a, b) => a.localeCompare(b));
 
 	const md = [
-		'# 🗺️ Mapa del repositorio',
+		'# 🗺️ Repository map',
 		'',
-		'> **Generado** con `node dev/map-docs.mjs` — no editar a mano.',
-		'> Cada carpeta se describe con **la primera línea de su propio `README.md`**:',
-		'> si aquí pone «sin README», el hueco está en la lista de abajo.',
+		'> **Generated** with `node dev/map-docs.mjs` — do not edit by hand.',
+		'> Each folder is described by **the first line of its own `README.md`**:',
+		'> if it says "no README" here, the gap is listed below.',
 		'',
-		'## 📊 Estado',
+		'## 📊 Status',
 		'',
-		`- **${documented.length}** carpetas documentadas · **${gaps.length}** sin README.`,
-		'- Ficheros de la raíz descritos: ' + rootFiles.length + '.',
+		`- **${documented.length}** folders documented · **${gaps.length}** without a README.`,
+		'- Root files described: ' + rootFiles.length + '.',
 		'',
-		'## 🌳 Árbol',
+		'## 🌳 Tree',
 		'',
 		'```text',
 		...tree,
 		'```',
 		'',
-		'## ⚠️ Carpetas sin README',
+		'## ⚠️ Folders without a README',
 		'',
 		...(gaps.length
 			? gaps.map((g) => `- \`${g}/\``)
-			: ['Ninguna: todas las carpetas del mapa tienen su ficha.']),
+			: ['None: every folder in the map has its card.']),
 		'',
-		'## 📖 Cómo está organizada la documentación',
+		'## 📖 How the documentation is organized',
 		'',
-		'- `docs/` — los papeles internos (visión, diseño, decisiones, tareas): índice en [`docs/README.md`](README.md).',
-		'- `README.md` de cada carpeta — qué hace esa carpeta y qué hay dentro.',
-		'- Nivel fichero: solo cuando el nombre no explica el fichero, una cabecera de dos líneas.',
-		'- El «quién llama a quién» está en el grafo de código (`.codegraph/`), no aquí.',
+		'- `docs/` — the internal papers (vision, design, decisions, tasks): index in [`docs/README.md`](README.md).',
+		'- `README.md` of each folder — what that folder does and what is inside it.',
+		'- File level: only when the name does not explain the file, a two-line header.',
+		'- The "who calls whom" lives in the code graph (`.codegraph/`), not here.',
 		'',
 	].join('\n');
 
@@ -277,7 +278,7 @@ function main() {
 		return;
 	}
 	fs.writeFileSync(path.join(ROOT, OUT_REL), md);
-	console.log(`docs/MAPA.md — ${documented.length} carpetas documentadas, ${gaps.length} sin README.`);
+	console.log(`docs/MAPA.md — ${documented.length} folders documented, ${gaps.length} without a README.`);
 }
 
 main();

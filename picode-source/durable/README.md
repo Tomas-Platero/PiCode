@@ -1,6 +1,6 @@
 # PiCode × pi-durable — the durable agent
 
-A self-contained program that runs `@earendil-works/pi-durable` (1.2.0) against the
+A self-contained program that runs `@earendil-works/pi-durable` (1.3.0) against the
 owner's LAN gateway **OmniRoute** and proves, with real runs, the three promises that
 justify replacing what came before it:
 

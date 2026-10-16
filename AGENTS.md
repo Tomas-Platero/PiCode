@@ -196,7 +196,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Excepciones técnicas:** Mensajes de commit, comentarios de código e identificadores permanecen en inglés.
 * **Siempre se escribe en inglés:** todo código nuevo, sus comentarios, las cadenas de código y los mensajes de las herramientas se redactan en inglés — **nada en español** en el código («añade en el agents.md que siempre se escribe en inglés» / «tradúcelo todo al inglés, nada en español», 2026-10-16).
   * Si aparece español en el código (citas del dueño incluidas): se **borra** si el resto del comentario se entiende solo, o se **traduce** si hace falta para entenderlo.
-  * Única excepción: el texto con destino a documentación en español (`docs/`, `README.md`, `AGENTS.md`, como el generador de `docs/MAPA.md`).
+  * Única excepción: el texto con destino a documentación en español (`docs/`, `README.md`, `AGENTS.md`).
 * **Datos que no son texto nuestro:** las pruebas de acentos/teclados upstream, los nombres de idioma de los paquetes (`"español"`) y los mensajes citados de terceros se quedan como están.
 
 ### Comunicación clara y funcional

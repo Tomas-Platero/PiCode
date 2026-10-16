@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
 import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
@@ -55,33 +55,11 @@ interface NamedChatResource extends vscode.ChatResource {
 	readonly description?: string;
 }
 
-/** pi's runtime services, opaque here: handed back to pi to build a session from. */
-interface DiscoveryServices {
-	readonly [key: string]: unknown;
-}
-
-/** pi's session store, opaque here: created once and handed back to pi. */
-interface DiscoverySessionManager {
-	readonly [key: string]: unknown;
-}
-
-/** A throwaway discovery session, opaque here: only its command registry and `dispose` are read. */
-interface DiscoverySession {
-	readonly [key: string]: unknown;
-}
-
-/** pi's SDK, reduced to what opening a throwaway session for its command registry needs. */
+/** pi's SDK, reduced to what opening a throwaway session for its command registry needs: pi's own three members, so the services and manager this creates hand straight back to pi. */
 interface DiscoverySdk {
-	createAgentSessionServices(options: {
-		cwd: string;
-		agentDir?: string;
-		/** pi's built-in extension factories, so the registry holds `/mcp` and friends. */
-		resourceLoaderOptions?: {
-			extensionFactories?: unknown[];
-		};
-	}): Promise<DiscoveryServices>;
-	createAgentSessionFromServices(options: { services: DiscoveryServices; sessionManager: DiscoverySessionManager }): Promise<{ session: DiscoverySession }>;
-	SessionManager: { create(cwd: string, sessionDir?: string): DiscoverySessionManager };
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
+	createAgentSessionFromServices: OfficialSdk['createAgentSessionFromServices'];
+	SessionManager: OfficialSdk['SessionManager'];
 }
 
 export interface PiCommandDeps {

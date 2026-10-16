@@ -14,7 +14,6 @@ import {
 	type PiSdk,
 	type PiServices,
 	type PiSession,
-	type PiSessionStore,
 } from './agent';
 import { contextBlockFor } from './editor-context';
 import { withContext } from './context';
@@ -62,7 +61,7 @@ interface ResumedSession {
 	readonly session: PiSession;
 	readonly sdk: PiSdk;
 	readonly services: PiServices;
-	readonly sessionManager: PiSessionStore;
+	readonly sessionManager: ReturnType<PiSdk['SessionManager']['create']>;
 	/** The pieces the session was built against: a change rebuilds, exactly as the live chat does. */
 	readonly agentDir: string | undefined;
 	readonly bridgePath: string | undefined;
@@ -284,9 +283,10 @@ async function durableResumedSessionOf(conversationId: number, cwd: string, deps
 	// The seed: the conversation's own turns as the session's first messages, written with
 	// pi's own session manager so the context reads like any other conversation's.
 	const sessionManager = loaded.sdk.SessionManager.create(cwd);
-	// SAFETY: `SessionManager.create` returns pi's own store; the connector types it opaquely,
-	// and the only member this uses is `appendMessage`, which the SDK guarantees.
-	const store = sessionManager as PiSessionStore & { appendMessage(message: unknown): string };
+	// SAFETY: `SessionManager.create` returns pi's own store, and the only member this uses is
+	// `appendMessage`, which the session manager guarantees — a local view of that one member,
+	// not a type for the store at large.
+	const store = sessionManager as unknown as { appendMessage(message: unknown): string };
 	for (const turn of await durableConversationTurns(conversationId, deps.log)) {
 		store.appendMessage({ role: turn.role, content: [{ type: 'text', text: turn.text }] });
 	}

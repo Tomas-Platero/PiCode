@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
 import * as os from 'node:os';
-import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
+import { externalSdkEntry, resolveOnPath, sdkEntryOfShim } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
 import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
@@ -526,7 +526,13 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 		return externalProbe;
 	}
 	const shim = resolveOnPath('pi');
-	if (shim === undefined) {
+	// "Found" means **usable** — the package behind the shim, not merely the shim — because
+	// the onboarding card's availability and this line read the same function. Two different
+	// answers is what left the card greyed and unclickable while its own meta already said
+	// "ready to use": the shim existed, and the package behind it was looked for in a layout
+	// this machine does not have.
+	const entry = shim === undefined ? undefined : sdkEntryOfShim(shim);
+	if (shim === undefined || entry === undefined) {
 		externalProbe = { found: false };
 		return externalProbe;
 	}
@@ -534,8 +540,8 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 	// `execFile` refuses to run without a shell, so the package's CLI is run in Node mode
 	// directly — the same entry the SDK loads.
 	let version: string | undefined;
-	const cli = findSdkEntry(path.dirname(shim))?.replace(/index\.js$/, 'cli.js');
-	if (cli !== undefined && existsSync(cli)) {
+	const cli = entry.replace(/index\.js$/, 'cli.js');
+	if (existsSync(cli)) {
 		version = await new Promise<string | undefined>(resolve => {
 			execFile(process.execPath, [cli, '--version'], {
 				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },

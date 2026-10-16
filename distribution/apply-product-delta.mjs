@@ -235,11 +235,10 @@ function serialize(product, formatting, originalText) {
   const withLineEnding = formatting.lineEnding === '\n'
     ? body
     : body.split('\n').join(formatting.lineEnding);
-  const trailing = formatting.compact
-    ? ''
-    : originalText.endsWith(`${formatting.lineEnding}`)
-      ? formatting.lineEnding
-      : '';
+  let trailing = '';
+  if (!formatting.compact && originalText.endsWith(`${formatting.lineEnding}`)) {
+    trailing = formatting.lineEnding;
+  }
   return withLineEnding + trailing;
 }
 

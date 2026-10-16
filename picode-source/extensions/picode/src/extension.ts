@@ -33,7 +33,7 @@ import {
 	type PiPackageRow,
 } from './packages-manage';
 import { packageSkillDirs, parsePackageSource, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
-import { loadPiSdk, mcpOauthModuleOf, importPiModule, sdkCandidates } from './piSdk';
+import { loadPiSdk, mcpOauthModuleOf, importPiModule, sdkCandidates, type OfficialSdk } from './piSdk';
 import { offlineAccessScope } from './mcp-scopes';
 import { externalProfileDir } from './profile-import';
 import {
@@ -1393,7 +1393,7 @@ interface PiRuntimeServices {
 }
 
 interface PiRuntimeSdk {
-	createAgentSessionServices(options: { cwd: string; agentDir?: string }): Promise<PiRuntimeServices>;
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
 /**

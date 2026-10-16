@@ -112,7 +112,6 @@ desktop.ini
 /builder/dist*/
 /builder/PiCodeBuilder.zip
 /builder/obj*/
-/odd/assets
 /.vscode
 
 # Local environment and credential files (defense in depth; cloud/sync-api has its own).

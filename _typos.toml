@@ -1,5 +1,5 @@
 # The typos linter (pi-lens) only uses English dictionaries and flags legitimate
-# Spanish words in the project's docs (odd/tasks/*.md, etc.).
+# Spanish words in the project's docs (docs/*.md, etc.).
 # We accept those words ONLY in Markdown; the code stays strict.
 
 [type.md.extend-words]

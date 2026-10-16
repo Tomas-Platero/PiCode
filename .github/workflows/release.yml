@@ -513,9 +513,11 @@ jobs:
               # raw.githubusercontent caches ~5 min, hence the bust query.
               curl -fsSL "${RAW}/${ref}?bust=${bust}"
             else
-              # The contents API reads the exact bytes master serves.
+              # The contents API reads the exact bytes the channel's own
+              # branch serves — the branch this feed was just landed on,
+              # which is master only for the stable channel.
               gh api \
-                "repos/${GITHUB_REPOSITORY}/contents/${ref}?ref=master" \
+                "repos/${GITHUB_REPOSITORY}/contents/${ref}?ref=${FEED_BRANCH}" \
                 --jq .content | base64 -d
             fi
           }

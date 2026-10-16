@@ -5,7 +5,7 @@
 #
 # The editor's source is PiCode's own and it lives in ./picode-source: it already carries
 # the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity,
-# recorded in that tree's history. See odd/tasks/picode-fuente-propia.md.
+# recorded in that tree's history.
 #
 #   ./dev/build.sh        install what is missing, compile, pack, stage
 #   ./dev/build.sh -o     check the source and stop (seconds; nothing installed or compiled)

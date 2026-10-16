@@ -1,7 +1,7 @@
 # El harness de agentes en PiCode: cómo está integrado
 
 > Documento de arquitectura. Revisado el 2026-10-16 en la rama experimental (pack
-> **0.2.6-experimental**, número declarado 1.141.6, árbol de VS Code 1.135.0, pi 1.2.0).
+> **0.2.6-experimental**, número declarado 1.141.6, árbol de VS Code 1.135.0, pi 1.3.0).
 > Fechas y commits citados. Si este papel y el código discrepan, gana el código — y este
 > papel se corrige.
 
@@ -23,9 +23,11 @@ Este documento describe cómo está montado.
 
 - **Dónde**: `resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent`, dentro
   de la instalación. El pin vive en **un solo sitio**: `distribution/runtime.json`
-  (hoy **1.2.0**). El SDK no es dependencia de compilación: se carga por `dynamicImport`
-  en runtime, y los pocos miembros que se usan se tipan **estructuralmente**
-  (`picode-source/extensions/picode/src/piSdk.ts`). Si el `createAgentSession` no está, se dice
+  (hoy **1.3.0**). El SDK no es dependencia de **ejecución**: se carga por `dynamicImport`
+  en runtime desde ese pack. Sí es dependencia de **desarrollo** (`picode-source/package.json`,
+  a la versión exacta del pin): los miembros que se usan se tipan desde **las propias
+  declaraciones de pi** (`OfficialSdk` en `picode-source/extensions/picode/src/piSdk.ts`),
+  con `pin-sync.test.ts` vigilando que pin y dependencia digan el mismo pi. Si el `createAgentSession` no está, se dice
   `no-sdk`; si la ruta no se puede leer, `unreadable` — dos frases distintas para dos
   problemas distintos.
 - **Se usa como SDK**, no como CLI ni por RPC: el conector importa

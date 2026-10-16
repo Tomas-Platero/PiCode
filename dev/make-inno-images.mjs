@@ -104,7 +104,13 @@ function readPng(file) {
 					const pa = Math.abs(p - left);
 					const pb = Math.abs(p - above);
 					const pc = Math.abs(p - corner);
-					value += pa <= pb && pa <= pc ? left : pb <= pc ? above : corner;
+					let nearest = corner;
+					if (pa <= pb && pa <= pc) {
+						nearest = left;
+					} else if (pb <= pc) {
+						nearest = above;
+					}
+					value += nearest;
 					break;
 				}
 				default:

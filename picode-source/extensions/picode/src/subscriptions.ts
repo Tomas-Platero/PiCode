@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import type { OfficialSdk } from './piSdk';
 
 /**
  * The providers a person can connect **with the subscription they already pay for**.
@@ -90,7 +91,7 @@ export interface PiModelRuntime {
 
 /** The SDK slice: the one step that builds a runtime over PiCode's own profile. */
 export interface PiLoginSdk {
-	createAgentSessionServices(options: { cwd: string; agentDir: string }): Promise<{ modelRuntime: PiModelRuntime }>;
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
 /* ------------------------------------------------------------------ *

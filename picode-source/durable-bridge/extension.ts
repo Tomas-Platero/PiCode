@@ -16,9 +16,14 @@
 // path. This extension never opens sessions.sqlite — the daemon is the single
 // owner — and it never writes anywhere: no installs, no ~/.pi, no settings.
 //
-// One honest note on imports: the bridge directory has no node_modules of its
-// own (nothing may be installed), so the one bare specifier the extension needs
-// (`Type`, for the tool parameter schemas) is imported deep from the durable
+// One honest note on imports: `@earendil-works/pi-coding-agent` is pi's own documented
+// specifier for extensions (pi's `docs/extensions.md` imports `ExtensionAPI` exactly this
+// way), so the running pi answers it wherever pi lives; and the package is a declared
+// devDependency of `picode-source`, pinned to the same version the editor ships
+// (`distribution/runtime.json`), so inside this tree the same specifier also resolves from
+// the tree itself — not from whatever pi happens to be running. The bridge directory has no
+// node_modules of its own (nothing may be installed), so the other bare specifier the
+// extension needs (`Type`, for the tool parameter schemas) is imported deep from the durable
 // checkout's own node_modules — `../durable/node_modules/@earendil-works/pi-ai`
 // — which is the exact same copy the daemon uses. lib/client.js and lib/protocol.js
 // themselves pull in lib/common.js (they share its DATA_DIR), so importing them

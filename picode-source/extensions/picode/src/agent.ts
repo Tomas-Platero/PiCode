@@ -52,7 +52,7 @@ import {
 } from './background-cards';
 import { durableBridgeExtensionPath } from './durable';
 import { ensureConversation, recordChatTurn } from './chat-record';
-import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
@@ -109,10 +109,14 @@ interface PiEvent {
 	readonly isError?: boolean;
 }
 
-/** pi's `Model`, opaque here: it is handed back to pi and never inspected. */
-export interface PiModel {
-	readonly [key: string]: unknown;
-}
+/**
+ * pi's `Model`, opaque here: it is handed back to pi and never inspected.
+ *
+ * pi's own type, named from pi's own signature (`createAgentSessionFromServices`' `model`) —
+ * the model a session runs on is pi's object from `modelRuntime.getModel`, so this is the
+ * exact type, not a copy of its fields that the next pin could contradict.
+ */
+export type PiModel = NonNullable<Parameters<OfficialSdk['createAgentSessionFromServices']>[0]['model']>;
 
 /** The `tool_call` event pi hands an extension, reduced to what a permission asks: which tool, with what. */
 interface PiToolCallEvent {
@@ -150,10 +154,13 @@ export interface PiInlineExtension {
 	replaceable?: boolean;
 }
 
-/** pi's session store, created once and handed back to pi across a session's rebuilds. */
-export interface PiSessionStore {
-	readonly [key: string]: unknown;
-}
+/** pi's session manager instance, created once and handed back to pi across a session's rebuilds. */
+
+/** pi's own session: exactly what `createAgentSessionFromServices` answers with. */
+type OfficialSession = Awaited<ReturnType<OfficialSdk['createAgentSessionFromServices']>>['session'];
+
+/** pi's own UI context: what `bindExtensions` declares its `uiContext` to be. */
+type OfficialUiContext = NonNullable<Parameters<NonNullable<OfficialSession['bindExtensions']>>[0]['uiContext']>;
 
 export interface PiSession {
 	readonly sessionId: string;
@@ -174,18 +181,11 @@ export interface PiSession {
 	/**
 	 * Starts the session's extensions, and **that** is what emits `session_start`. Absent in a pi
 	 * old enough not to have it, so the caller checks — see `bindSessionExtensions`.
+	 *
+	 * The bindings parameter is pi's own (`ExtensionBindings`, named from pi's method): what the
+	 * chat's question carousel stands in for is documented where it is built.
 	 */
-	bindExtensions?(bindings: {
-		/**
-		 * pi's interactive UI for extensions. The chat's question carousel stands in for the
-		 * terminal: `confirm`/`select`/`input` become questions, `notify` a chat line, and the
-		 * terminal-only methods are inert. Set, this is what makes `ctx.hasUI` true.
-		 */
-		uiContext?: unknown;
-		/** `"rpc"`: dialogs available, no terminal. Extensions gate TUI components on `"tui"`. */
-		mode?: string;
-		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
-	}): Promise<void>;
+	bindExtensions?(bindings: Parameters<NonNullable<OfficialSession['bindExtensions']>>[0]): Promise<void>;
 	/**
 	 * The tools the running session exposes, by name. Present in pi 1.1.0; read defensively
 	 * (optional call) because the SDK is loaded at runtime and older pins may lack it. The
@@ -196,45 +196,25 @@ export interface PiSession {
 	dispose(): void;
 }
 
-/** pi's runtime services for one working directory, reduced to what a session needs. */
-export interface PiServices {
-	readonly modelRuntime: { getModel(providerId: string, modelId: string): PiModel | undefined };
-	/** Non-fatal issues pi collected while loading its resources — a bridge that failed to load is said here. */
-	readonly diagnostics?: ReadonlyArray<{ readonly type: string; readonly message: string }>;
-}
+/**
+ * pi's runtime services for one working directory: **pi's own type**.
+ *
+ * What is created here and what is handed back to pi (`createAgentSessionFromServices`)
+ * therefore round-trips exactly, and the reads this editor makes of it — `modelRuntime.getModel`,
+ * `diagnostics` — are pi's own members rather than a copy of them written down here.
+ */
+export type PiServices = Awaited<ReturnType<OfficialSdk['createAgentSessionServices']>>;
 
 export interface PiSdk {
-	createAgentSessionServices(options: {
-		cwd: string;
-		agentDir?: string;
-		/** Inline extensions of this embedded session — here, the permission gate and pi's MCP. */
-		resourceLoaderOptions?: {
-			extensionFactories?: PiInlineExtension[];
-			/** pi extension files loaded from disk — here, the durable bridge. */
-			additionalExtensionPaths?: string[];
-		};
-	}): Promise<PiServices>;
-	createAgentSessionFromServices(options: {
-		services: PiServices;
-		sessionManager: unknown;
-		model?: PiModel;
-		thinkingLevel?: string;
-		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
-		customTools?: unknown[];
-		/** The agent tools that stay off, by name (pi's own `excludeTools`). See `piConfig.ts`. */
-		excludeTools?: string[];
-	}): Promise<{ session: PiSession }>;
-	SessionManager: {
-		// `sessionDir` is pi's optional override; without it pi resolves the machine's
-		// default, which is right for the external pi and a leak for the internal one.
-		// The internal mode passes pi's own default **shape**: the per-project folder
-		// under this profile's `sessions/` (see the sessionManager creation below).
-		create(cwd: string, sessionDir?: string): PiSessionStore;
-		// An **existing** transcript, opened to go on being written: the Sessions panel's
-		// continued conversations bind to their file this way (`sessions-resume.ts`).
-		// `cwdOverride` moves the conversation to the directory the window runs in.
-		open(path: string, sessionDir?: string, cwdOverride?: string): PiSessionStore;
-	};
+	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP), and here the durable bridge as a pi extension file (`resourceLoaderOptions`, see `mcp.ts`). */
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
+	/** What this editor passes: `customTools` are the editor's MCP tools given to pi as its own (see `mcp.ts`), `excludeTools` the agent tools that stay off (see `piConfig.ts`). */
+	createAgentSessionFromServices: OfficialSdk['createAgentSessionFromServices'];
+	// `sessionDir` is pi's optional override; without it pi resolves the machine's
+	// default, which is right for the external pi and a leak for the internal one.
+	// The internal mode passes pi's own default **shape**: the per-project folder
+	// under this profile's `sessions/` (see the sessionManager creation below).
+	SessionManager: OfficialSdk['SessionManager'];
 }
 
 /**
@@ -1022,7 +1002,13 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
 		// work that arrives late is still applied; the registry refreshes when tools appear.
 		await Promise.race([
 			session.bindExtensions({
-				uiContext: extensionUiContext(log),
+				// SAFETY: the chat's question carousel answers the UI calls this product's extensions
+				// make — confirm/select/input/notify become chat questions, the terminal surfaces are
+				// inert, and `custom()`/`editor()` resolve with no widget result, which is what every
+				// extension here observes. pi's published type is generic (`custom<T>(): Promise<T>`);
+				// the carousel has no typed widget results beyond that, so this assertion states the
+				// contract it actually honours, not pi's generic.
+				uiContext: extensionUiContext(log) as unknown as OfficialUiContext,
 				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
@@ -1202,7 +1188,9 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			return undefined;
 		}
 		try {
-			const entries = (sessionManager as {
+			// SAFETY: pi's own store — only `getEntries` is read, and its rows are walked by the
+			// `type === 'message'` check below; the record view is this walk's shape, not the store's.
+			const entries = (sessionManager as unknown as {
 				getEntries?: () => ReadonlyArray<Record<string, unknown>>;
 			}).getEntries?.() ?? [];
 			let input = 0;
@@ -1310,7 +1298,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	 * when a session is created and cannot add one later. Reusing the manager is what makes that
 	 * rebuild invisible: the transcript is in the manager, not in the session.
 	 */
-	let sessionManager: unknown;
+	let sessionManager: ReturnType<OfficialSdk['SessionManager']['create']> | undefined;
 	/** The MCP tool set the running session was built with. */
 	let mcpSignature = '';
 	/** The disabled tools the running session was built with, so a change rebuilds it. */

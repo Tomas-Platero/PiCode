@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { fetchModelIds } from './endpoint';
-import { loadPiSdk } from './piSdk';
+import { loadPiSdk, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { projectDeclaration } from './declarations';
@@ -109,7 +109,7 @@ interface CatalogShape {
 }
 
 interface RuntimeSdk {
-	createAgentSessionServices(options: { cwd: string; agentDir?: string }): Promise<CatalogShape>;
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
 /** The models of the setup: the profile's providers and pi's logged-in catalogue. */
@@ -145,7 +145,9 @@ export async function listModels(deps: WizardModelDeps): Promise<{ models: Wizar
 				cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
 				agentDir: deps.profileDir,
 			});
-			const runtime = services.modelRuntime;
+			// The view keeps the reads defensive: every member is optional here, so a pi without
+			// one of them is "no catalogue for that part", not a compile error against pi's own type.
+			const runtime: CatalogShape['modelRuntime'] = services.modelRuntime;
 			for (const provider of runtime.getProviders?.() ?? []) {
 				if (runtime.hasConfiguredAuth !== undefined && !runtime.hasConfiguredAuth(provider.id)) { continue; }
 				for (const model of runtime.getModels?.(provider.id) ?? []) {
