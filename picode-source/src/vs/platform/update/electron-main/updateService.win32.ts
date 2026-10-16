@@ -490,7 +490,17 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 			// A staging left behind by a cancelled or failed update is the stale
 			// version's contents; the new extraction must start from nothing.
 			await pfs.Promises.rm(stagingDir);
-			await extract(packagePath, stagingDir, {}, CancellationToken.None);
+			// Electron's fs intercepts every path whose last segment ends in
+			// `.asar` and treats it as an archive — the staged pack carries
+			// `node_modules.asar`, and writing it extracted needs the real
+			// filesystem, not an asar parse. This is the documented escape hatch.
+			const noAsar = process.noAsar;
+			process.noAsar = true;
+			try {
+				await extract(packagePath, stagingDir, {}, CancellationToken.None);
+			} finally {
+				process.noAsar = noAsar;
+			}
 			const exeName = path.basename(process.execPath);
 			if (!await pfs.Promises.exists(path.join(stagingDir, exeName))) {
 				throw new Error(`the update archive does not carry ${exeName}`);
