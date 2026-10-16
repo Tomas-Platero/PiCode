@@ -41,6 +41,7 @@
 | **Tus modelos, en la ventana del editor** | El conector registra su provider en la API nativa (`registerLanguageModelChatProvider` en `extension.ts`): el picker pide y el conector contesta con el catálogo de pi — «Language model unavailable» dejó de ser el camino |
 | **El asistente de primer arranque** | `onboarding.ts` + wizard: las tres vías (pi de dentro · conectar uno externo · traerse la configuración) en el arranque del editor |
 | **Conectar a un pi externo / migrar su configuración** | `picode.pi.runtime` en modo externo (se lee, nunca se escribe) y migración por importación explícita (`profile-import.ts`) — nada se escribe fuera |
+| **La 1.142 en el árbol: seguridad, fugas y Markdown** (2026-10-17) | Cherry-picks de 1.142 sobre el árbol 1.135 **sin rebase** (ADR-016): hardening de webview y enlaces de comando (`d0482949`), las 60 fugas de 1.136–1.142 (`ee22339e`, `eb84f7bc`), el editor Markdown rico con la propuesta `customTextEditorNavigation` (`5e9faf9e`) y `set.version` → **1.142.0**. Verificado: typecheck a 0, suite 474, build completo en verde |
 
 ## 🚧 Lo que está a medias
 

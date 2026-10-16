@@ -1,6 +1,6 @@
 {
 	"set": {
-		"version": "1.141.6",
+		"version": "1.142.0",
 		"picodeVersion": "0.2.6-experimental",
 		"nameShort": "PiCode",
 		"nameLong": "PiCode — Agentic Code Editor",

@@ -36,7 +36,7 @@
 
 **The editor is free and complete.** No local feature is held back and it is 100% open source. It needs no account: bring your own provider keys or subscriptions. The only paid thing is the optional cloud sync of your setup (see *PiCode Account* below).
 
-**Versions.** PiCode's own version (the badge above; `-beta` and `-experimental` on the pre-release channels) is the one you are offered. The editor *reports* `1.141.x` so extensions that require `engines.vscode: ^1.141.0` keep installing, while the source tree descends from VS Code `1.135.0`. Both numbers live in [`distribution/product-delta.json`](./distribution/product-delta.json); the reasoning is in [ADR-016](./docs/DECISIONS.md).
+**Versions.** PiCode's own version (the badge above; `-beta` and `-experimental` on the pre-release channels) is the one you are offered. The editor *reports* `1.142.x` so extensions that require `engines.vscode: ^1.142.0` keep installing, while the source tree descends from VS Code `1.135.0`. Both numbers live in [`distribution/product-delta.json`](./distribution/product-delta.json); the reasoning is in [ADR-016](./docs/DECISIONS.md).
 
 | 👤 Just want to use it | 👨‍💻 Want to build or contribute |
 | --- | --- |
