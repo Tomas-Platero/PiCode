@@ -1168,13 +1168,30 @@ export class PiCodeSetup extends Disposable {
 		return undefined;
 	}
 
-	/** The detail line one row shows: the description when there is one, the version after it. */
-	private packageDetail(description: string | undefined, version: string | undefined): HTMLElement[] {
-		if (description === undefined && version === undefined) { return []; }
-		const text = [description, version !== undefined ? `v${version}` : undefined]
-			.filter((part): part is string => part !== undefined)
-			.join(' · ');
-		return [$('span.picode-theme-publisher', {}, text)];
+	/**
+	 * One package row, the shape both tabs share: the package icon, a title line
+	 * (name, version, whatever state it carries), the description wrapped below —
+	 * never glued after the name — and the row's actions on the right.
+	 */
+	private packageRow(options: {
+		name: string;
+		description?: string;
+		version?: string;
+		badge?: string;
+	}): HTMLElement {
+		return $('.picode-package-row', {},
+			$('span.codicon.codicon-package.picode-package-icon'),
+			$('.picode-package-body', {},
+				$('.picode-package-title', {},
+					$('span.picode-package-name', {}, options.name),
+					...(options.version !== undefined ? [$('span.picode-package-version', {}, `v${options.version}`)] : []),
+					...(options.badge !== undefined ? [$('span.picode-theme-badge', {}, options.badge)] : []),
+				),
+				...(options.description !== undefined && options.description !== ''
+					? [$('span.picode-package-desc', {}, options.description)]
+					: []),
+			),
+		);
 	}
 
 	private renderInstalledPackagesInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, repaint: () => void): void {
@@ -1202,16 +1219,14 @@ export class PiCodeSetup extends Disposable {
 				localize('picodeSetup.packages.noneInstalled', "No pi packages installed yet — the Gallery tab has some.")));
 			return;
 		}
-		const list = $('.picode-model-list', {});
+		const list = $('.picode-model-list.picode-package-grid-list', {});
 		for (const pkg of rows) {
-			list.appendChild($('.picode-agent-row', {},
-				$('.picode-package-meta', {},
-					$('span.picode-package-name', {}, pkg.name),
-					...this.packageDetail(pkg.description, pkg.version)),
-				...(pkg.state === 'disabled'
-					? [$('span.picode-theme-badge', {}, localize('picodeSetup.packages.disabled', "Disabled"))]
-					: []),
-			));
+			list.appendChild(this.packageRow({
+				name: pkg.name,
+				description: pkg.description,
+				version: pkg.version,
+				badge: pkg.state === 'disabled' ? localize('picodeSetup.packages.disabled', "Disabled") : undefined,
+			}));
 		}
 		grid.appendChild(list);
 	}
@@ -1261,7 +1276,7 @@ export class PiCodeSetup extends Disposable {
 				localize('picodeSetup.packages.noneFound', "Nothing in the catalog for that search.")));
 			return;
 		}
-		const list = $('.picode-model-list', {});
+		const list = $('.picode-model-list.picode-package-grid-list', {});
 		for (const row of rows) {
 			const installed = this.isPackageInstalled(row.name);
 			const install = installed
@@ -1275,12 +1290,9 @@ export class PiCodeSetup extends Disposable {
 			if (installed || this.installingPackage !== undefined) {
 				install.classList.add('disabled');
 			}
-			list.appendChild($('.picode-agent-row', {},
-				$('.picode-package-meta', {},
-					$('span.picode-package-name', {}, row.name),
-					...this.packageDetail(row.description, row.version)),
-				install,
-			));
+			const card = this.packageRow({ name: row.name, description: row.description, version: row.version });
+			card.appendChild(install);
+			list.appendChild(card);
 		}
 		grid.appendChild(list);
 	}
