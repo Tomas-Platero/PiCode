@@ -156,14 +156,12 @@ jobs:
       - name: Resolve the packed folder
         shell: bash
         run: |
-          # build.sh names the pack folder after the channel it sealed (stable keeps
-          # the plain name; beta/experimental append their own). Mirror that here so
-          # the upload follows whatever the build actually produced.
-          PACK=$(ls -d PiCode-Win32-x64*/ 2>/dev/null | head -n1 | sed 's#/$##')
-          if [ -z "${PACK}" ]; then
-            echo "error: no packed folder found after the build." >&2
-            exit 1
-          fi
+          # The packer names the folder after the channel it sealed (PiCode-win32-x64,
+          # plus -beta or -experimental for the other channels). dev/pack-dir.mjs resolves
+          # it the same way the checks do, so the upload follows whatever the build
+          # actually produced. A glob could not: Git Bash matches case-sensitively and the
+          # platform segment on disk is lower case, so `PiCode-Win32-x64*` found nothing.
+          PACK=$(node dev/pack-dir.mjs)
           echo "PACK=${PACK}" >> "$GITHUB_ENV"
           echo "packed folder: ${PACK}"
 
@@ -171,8 +169,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: PiCode-win32-x64
-          # The output directory is EXACTLY 'PiCode-Win32-x64' (capital W,
-          # as build.sh creates it); a wrong case silently uploads nothing.
+          # Resolved above, from what the build actually wrote; a wrong name silently
+          # uploads nothing, which is how the channel suffix once went unnoticed.
           path: ${{ env.PACK }}/
           if-no-files-found: error
 

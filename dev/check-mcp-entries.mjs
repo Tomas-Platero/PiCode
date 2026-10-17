@@ -15,7 +15,7 @@
  *
  * Usage: node dev/check-mcp-entries.mjs [--pack <dir>]
  *
- * Needs the pack (the pinned pi lives inside it, `PiCode-Win32-x64/resources/pi-runtime`) and Node's
+ * Needs the pack (the pinned pi lives inside it, `PiCode-win32-x64[-<channel>]/resources/pi-runtime`) and Node's
  * type stripping for the `.ts` imports, which is why `dev/build.sh` runs before it in CI.
  */
 
@@ -23,10 +23,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { resolvePack } from './pack-dir.mjs';
+
 const REPO = path.resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
 const packFlag = args.indexOf('--pack');
-const PACK = path.resolve(packFlag === -1 ? path.join(REPO, 'PiCode-Win32-x64') : args[packFlag + 1]);
+const PACK = path.resolve(packFlag === -1 ? resolvePack(REPO) : args[packFlag + 1]);
 
 const PI_PACKAGE = '@earendil-works/pi-coding-agent';
 const VALIDATOR = path.join(PACK, 'resources', 'pi-runtime', 'node_modules', ...PI_PACKAGE.split('/'), 'dist', 'core', 'mcp-servers.js');
