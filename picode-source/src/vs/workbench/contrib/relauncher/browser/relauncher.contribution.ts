@@ -28,7 +28,6 @@ interface IConfiguration extends IWindowsConfiguration {
 	editor?: { accessibilitySupport?: 'on' | 'off' | 'auto' };
 	security?: { workspace?: { trust?: { enabled?: boolean } }; restrictUNCAccess?: boolean };
 	window: IWindowSettings;
-	workbench?: { enableExperiments?: boolean };
 	telemetry?: { feedback?: { enabled?: boolean } };
 	chat?: {
 		extensionUnification?: { enabled?: boolean };
@@ -47,7 +46,6 @@ interface IConfiguration extends IWindowsConfiguration {
 		};
 		editor?: { codex?: { preferAgentHost?: boolean } };
 	};
-	_extensionsGallery?: { enablePPE?: boolean };
 	accessibility?: { verbosity?: { debug?: boolean } };
 }
 
@@ -62,8 +60,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 		'window.controlsStyle',
 		'editor.accessibilitySupport',
 		'security.workspace.trust.enabled',
-		'workbench.enableExperiments',
-		'_extensionsGallery.enablePPE',
 		'security.restrictUNCAccess',
 		'accessibility.verbosity.debug',
 		'telemetry.feedback.enabled',
@@ -85,8 +81,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 	private readonly controlsStyle = new ChangeObserver('string');
 	private accessibilitySupport: 'on' | 'off' | 'auto' | undefined;
 	private readonly workspaceTrustEnabled = new ChangeObserver('boolean');
-	private readonly experimentsEnabled = new ChangeObserver('boolean');
-	private readonly enablePPEExtensionsGallery = new ChangeObserver('boolean');
 	private readonly restrictUNCAccess = new ChangeObserver('boolean');
 	private readonly accessibilityVerbosityDebug = new ChangeObserver('boolean');
 	private readonly telemetryFeedbackEnabled = new ChangeObserver('boolean');
@@ -177,12 +171,6 @@ export class SettingsChangeRelauncher extends Disposable implements IWorkbenchCo
 			// Debug accessibility verbosity
 			processChanged(this.accessibilityVerbosityDebug.handleChange(config?.accessibility?.verbosity?.debug));
 		}
-
-		// Experiments
-		processChanged(this.experimentsEnabled.handleChange(config.workbench?.enableExperiments));
-
-		// Profiles
-		processChanged(this.productService.quality !== 'stable' && this.enablePPEExtensionsGallery.handleChange(config._extensionsGallery?.enablePPE));
 
 		// Enable Feedback
 		processChanged(this.telemetryFeedbackEnabled.handleChange(config.telemetry?.feedback?.enabled));

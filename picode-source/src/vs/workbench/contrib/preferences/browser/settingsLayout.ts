@@ -32,7 +32,6 @@ const COMMONLY_USED_SETTINGS: readonly string[] = [
 	'editor.fontSize',
 	'editor.formatOnSave',
 	'files.autoSave',
-	'GitHub.copilot-chat.manageExtension',
 	'editor.defaultFormatter',
 	'editor.fontFamily',
 	'editor.wordWrap',
@@ -239,7 +238,6 @@ export const tocData: ITOCEntry<string> = {
 						'chat.fontFamily',
 						'chat.fontSize',
 						'chat.math.*',
-						'chat.agentsControl.*',
 						'chat.alternativeToolAction.*',
 						'chat.codeBlock.*',
 						'chat.editing.explainChanges.enabled',
@@ -248,7 +246,6 @@ export const tocData: ITOCEntry<string> = {
 						'chat.notifyWindow*',
 						'chat.statusWidget.*',
 						'chat.tips.*',
-						'chat.unifiedAgentsBar.*',
 						'accessibility.signals.chatUserActionRequired',
 						'accessibility.signals.chatResponseReceived'
 					]
@@ -257,7 +254,6 @@ export const tocData: ITOCEntry<string> = {
 					id: 'chat/sessions',
 					label: localize('chatSessions', "Sessions"),
 					settings: [
-						'chat.agentSessionProjection.*',
 						'chat.sessions.*',
 						'chat.viewProgressBadge.*',
 						'chat.viewSessions.*',
