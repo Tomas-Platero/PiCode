@@ -231,6 +231,9 @@ jobs:
           # the branch in its updateUrl. Without it the build would ship
           # the tree's default, which is the stable channel.
           PICODE_CHANNEL: ${{ env.CHANNEL }}
+          # A local build is portable-only; the release is the one caller
+          # that also ships the Inno Setup installer, so it asks for it.
+          PICODE_SKIP_INSTALLER: "no"
         run: ./dev/build.sh
 
       - name: Read the built identity

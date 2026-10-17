@@ -153,13 +153,27 @@ jobs:
         shell: bash
         run: node dev/check-mcp-entries.mjs
 
+      - name: Resolve the packed folder
+        shell: bash
+        run: |
+          # build.sh names the pack folder after the channel it sealed (stable keeps
+          # the plain name; beta/experimental append their own). Mirror that here so
+          # the upload follows whatever the build actually produced.
+          PACK=$(ls -d PiCode-Win32-x64*/ 2>/dev/null | head -n1 | sed 's#/$##')
+          if [ -z "${PACK}" ]; then
+            echo "error: no packed folder found after the build." >&2
+            exit 1
+          fi
+          echo "PACK=${PACK}" >> "$GITHUB_ENV"
+          echo "packed folder: ${PACK}"
+
       - name: Upload the packed editor
         uses: actions/upload-artifact@v7
         with:
           name: PiCode-win32-x64
           # The output directory is EXACTLY 'PiCode-Win32-x64' (capital W,
           # as build.sh creates it); a wrong case silently uploads nothing.
-          path: PiCode-Win32-x64/
+          path: ${{ env.PACK }}/
           if-no-files-found: error
 
       - name: Job summary
@@ -173,7 +187,7 @@ jobs:
             echo "## CI: ${JOB_STATUS}"
             echo
             # Guard: a failed build must not break the summary step.
-            PROD=PiCode-Win32-x64/resources/app/product.json
+            PROD=${PACK}/resources/app/product.json
             if [ -f "$PROD" ]; then
               VER=$(node -p "require('./$PROD').version")
               COMMIT=$(node -p "require('./$PROD').commit")
