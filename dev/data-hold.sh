@@ -75,12 +75,10 @@ picode_data_locked_files() {
 # (nothing lost yet).
 picode_editor_running() {
   local count
-  # The channel exes are named after their channel ("PiCode Experimental.exe" — the seal
-  # renames the binary), so the filter is a PREFIX match: any PiCode* process is an editor,
-  # whatever channel built it. The plain `PiCode.exe` filter watched only stable's, and an
-  # experimental editor open during a build failed the profile move with a bare
-  # "Permission denied" instead of this sentence.
-  count=$( tasklist //FI "IMAGENAME eq PiCode*" 2>/dev/null | grep -c "PiCode" || true )
+  # The channel exes are named after their channel ("PiCode Experimental.exe"), so the filter is a
+  # PREFIX match: any PiCode* process is an editor, whatever channel built it. The builder itself
+  # (PiCode.Builder.exe) must NOT count, or a build can never be started from the builder window.
+  count=$( tasklist //FI "IMAGENAME eq PiCode*" 2>/dev/null | grep -i "PiCode" | grep -iv "Builder" | wc -l )
   [[ "${count}" -gt 0 ]]
 }
 

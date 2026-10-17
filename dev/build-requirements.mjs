@@ -23,6 +23,28 @@ import { execFileSync } from 'node:child_process';
 
 const bs = String.fromCharCode(92);
 
+// On Windows, the builder is often launched from Explorer, whose PATH does not include Git's
+// directories even when Git for Windows is installed. Augment PATH with the common locations
+// so the checks below can actually find git and bash instead of reporting them missing.
+if (process.platform === 'win32') {
+	const candidates = [
+		path.join(process.env['ProgramFiles'] ?? `C:${bs}Program Files`, 'Git', 'cmd'),
+		path.join(process.env['ProgramFiles'] ?? `C:${bs}Program Files`, 'Git', 'bin'),
+		path.join(process.env['ProgramFiles'] ?? `C:${bs}Program Files`, 'Git', 'usr', 'bin'),
+		path.join(process.env['ProgramFiles(x86)'] ?? `C:${bs}Program Files (x86)`, 'Git', 'cmd'),
+		path.join(process.env['ProgramFiles(x86)'] ?? `C:${bs}Program Files (x86)`, 'Git', 'bin'),
+		path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Git', 'cmd'),
+		path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Git', 'bin'),
+	];
+	const current = (process.env.PATH ?? '').split(path.delimiter);
+	for (const dir of candidates) {
+		if (dir && fs.existsSync(dir) && !current.includes(dir)) {
+			current.unshift(dir);
+		}
+	}
+	process.env.PATH = current.join(path.delimiter);
+}
+
 const REPO = path.resolve(import.meta.dirname, '..');
 const json = process.argv.includes('--json');
 
@@ -58,7 +80,7 @@ function roomOnDisk() {
 const checks = [];
 
 // Node runs the build's own tasks. The major version is what matters: any 24.x will do.
-const nodeVersion = run('node', ['--version']).replace(/^v/, '');
+const nodeVersion = run(process.execPath, ['--version']).replace(/^v/, '');
 const wanted = wantedNode();
 // What to say when node is not the one the build wants. Linux installs it with nvm, and the pin in
 // .nvmrc is what matters there.
@@ -80,8 +102,45 @@ checks.push({
 });
 
 // Git and Git Bash are one install on Windows, so they are one check: the Bash is what runs the build.
-const git = run('git', ['--version']);
-const hasBash = run(isWindows ? 'bash' : 'sh', ['-c', 'echo yes']) === 'yes';
+function findGit() {
+	if (run('git', ['--version']) !== '') return 'git';
+	// Search common install locations when PATH does not include them.
+	const roots = [
+		process.env['ProgramFiles'] ?? `C:${bs}Program Files`,
+		process.env['ProgramFiles(x86)'] ?? `C:${bs}Program Files (x86)`,
+		process.env['LOCALAPPDATA'] ?? '',
+	];
+	for (const root of roots) {
+		if (!root) continue;
+		for (const sub of ['Git\\cmd\\git.exe', 'Git\\bin\\git.exe', 'Programs\\Git\\cmd\\git.exe']) {
+			const p = path.join(root, sub);
+			if (fs.existsSync(p)) return p;
+		}
+	}
+	return '';
+}
+
+const gitCmd = findGit();
+const git = gitCmd === '' ? '' : run(gitCmd, ['--version']);
+function findBash() {
+	if (run('bash', ['-c', 'echo yes']) === 'yes') return 'bash';
+	const roots = [
+		process.env['ProgramFiles'] ?? `C:${bs}Program Files`,
+		process.env['ProgramFiles(x86)'] ?? `C:${bs}Program Files (x86)`,
+		process.env['LOCALAPPDATA'] ?? '',
+	];
+	for (const root of roots) {
+		if (!root) continue;
+		for (const sub of ['Git\\bin\\bash.exe', 'Git\\usr\\bin\\bash.exe', 'Programs\\Git\\bin\\bash.exe']) {
+			const p = path.join(root, sub);
+			if (fs.existsSync(p)) return p;
+		}
+	}
+	return '';
+}
+
+const bashCmd = findBash();
+const hasBash = bashCmd !== '' && run(bashCmd, ['-c', 'echo yes']) === 'yes';
 let shellNote = ', with no shell';
 if (hasBash) {
 	shellNote = isWindows ? ', with Git Bash' : ', with a shell';
@@ -223,8 +282,9 @@ checks.push({
 if (isWindows) {
 	let running = false;
 	try {
-		const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq PiCode.exe', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-		running = /PiCode\.exe/i.test(out);
+		const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq PiCode*', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+		// Count PiCode processes that are NOT the builder itself.
+		running = out.split(/\r?\n/).some(line => /PiCode/i.test(line) && !/Builder/i.test(line));
 	} catch {
 		running = false;
 	}
