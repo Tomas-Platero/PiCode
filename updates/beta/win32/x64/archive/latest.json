@@ -1,7 +1,7 @@
 {
   "version": "c86445e45078c62d865996ad722defb2f1383cc3",
-  "productVersion": "1.141.0",
-  "picodeVersion": "0.2.7-beta",
+  "productVersion": "1.141.2",
+  "picodeVersion": "0.2.2-beta",
   "timestamp": 1791626031238,
   "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.2.2-beta/PiCode-win32-x64-0.2.2-beta.zip",
   "sha256hash": "7f47d5394abbfe626a8bc4ec39f8ae05c15798867409e2b7852627261cdb3c34"
