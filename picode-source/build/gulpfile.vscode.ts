@@ -150,8 +150,15 @@ const bootstrapEntryPoints = [
 	'out-build/bootstrap-fork.js'
 ];
 
+// Incremental mode: when PICODE_INCREMENTAL=1 the rimraf steps are skipped so a previous build's
+// output is reused. Faster, but stale files can linger; clean first if anything looks wrong.
+const PICODE_INCREMENTAL = process.env['PICODE_INCREMENTAL'] === '1';
+const maybeRimraf = (dir: string) => PICODE_INCREMENTAL
+	? (() => Promise.resolve())
+	: util.rimraf(dir);
+
 const bundleVSCodeTask = task.define('bundle-vscode', task.series(
-	util.rimraf('out-vscode'),
+	maybeRimraf('out-vscode'),
 	// Optimize: bundles source files automatically based on
 	// import statements based on the passed in entry points.
 	// In addition, concat window related bootstrap files into
@@ -179,7 +186,7 @@ const useCdnSourceMapsForPackagingTasks = isCI;
 const stripSourceMapsInPackagingTasks = isCI;
 const minifyVSCodeTask = task.define('minify-vscode', task.series(
 	bundleVSCodeTask,
-	util.rimraf('out-vscode-min'),
+	maybeRimraf('out-vscode-min'),
 	optimize.minifyTask('out-vscode', `${sourceMappingURLBase}/core`)
 ));
 task.task(minifyVSCodeTask);
