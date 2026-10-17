@@ -12,8 +12,8 @@
  * hand-named tree may not be, and a folder that carries the pinned pi runtime is preferred over
  * one that does not (there can be more than one pack beside the repository).
  *
- * Run directly (`node dev/pack-dir.mjs`) and it prints the folder, which is how the CI workflow
- * resolves it without repeating this rule in YAML.
+ * Run directly (`node dev/pack-dir.mjs`) and it prints the folder relative to the repository,
+ * which is how the CI workflow resolves it without repeating this rule in YAML.
  */
 
 import * as fs from 'node:fs';
@@ -49,5 +49,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 		process.stderr.write('error: no packed folder found (build the editor first, ./dev/build.sh).\n');
 		process.exit(1);
 	}
-	process.stdout.write(`${pack}\n`);
+	// Relative to the repository, which is where the workflow runs it from. It exports the result
+	// as `PACK`, and the job summary concatenates it onto `./` to read the built product.json, so
+	// an absolute path would break there: a Windows drive path loses its separators in that string.
+	process.stdout.write(`${path.relative(REPO, pack)}\n`);
 }
