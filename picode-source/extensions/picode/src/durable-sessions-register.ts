@@ -3,14 +3,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as os from 'node:os';
 import { DaemonClient, daemonEndpoint } from './durable-client';
 import { durableFolder } from './durable';
 import { listingForPanel, reuseRows } from './sessions-provider';
-import { resolveSessionCwd } from './session-cwd';
+import { onConversationTouched } from './chat-record';
 import type { DurableConversationRow } from './durable-tasks';
-import { DurableRunStreamMapper } from './durable-run-stream';
+import { piDurableResumeHandler } from './sessions-resume';
 import {
+	conversationInWorkspace,
 	durableSessionRows,
 	durableSessionTurns,
 	sessionsDigest,
@@ -37,8 +37,16 @@ import {
 /** How long one daemon conversation may take to answer, said in milliseconds. */
 const DAEMON_TIMEOUT_MS = 4000;
 
+/**
+ * While an import is converting transcripts, the poll stands down: the conversion adds
+ * conversations one by one, and re-listing between each is what made the panel flash —
+ * rows appearing for one refresh and gone the next, a hundred times over. One fire when
+ * the pass ends is the only announcement it needs.
+ */
+export const DURABLE_IMPORT_PAUSE: { active: boolean } = { active: false };
+
 /** How often the panel is told to look again, when the daemon's answer moved. */
-const POLL_MS = 15_000;
+const POLL_MS = 5_000;
 
 /** One bounded conversation with the daemon; the client is closed either way. */
 async function withDurableDaemon<T>(body: (client: DaemonClient) => Promise<T>): Promise<T> {
@@ -70,12 +78,6 @@ async function daemonSnapshot(client: DaemonClient, conversationId: number): Pro
 	return subscribed?.snapshot;
 }
 
-/** A JSON object from an unknown value, or `undefined` when it is not one. */
-function jsonRecord(value: unknown): Record<string, unknown> | undefined {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-		? value as Record<string, unknown>
-		: undefined;
-}
 
 /**
  * Whether the resource names a chat that has no conversation yet — the shape
@@ -104,6 +106,8 @@ export interface DurableSessionsHandle {
 export interface DurableSessionsOptions {
 	/** The chat participant the content provider registers under (the connector's own). */
 	readonly participant: vscode.ChatParticipant;
+	/** Where pi lives and where its logs go: the continuation runs pi in this window. */
+	readonly deps: { readonly distributionRoot: string; readonly log: (line: string) => void };
 	/** The poll cadence, in milliseconds; the real panel never passes this — tests do. */
 	readonly pollMs?: number;
 	/** The clock-owning timer factory; `setInterval` unless a test hands another one in. */
@@ -120,16 +124,17 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 	// The last listing the panel accepted — the same bridge rule the pi provider keeps:
 	// a refresh that cannot be stood behind returns what the panel already has, never [].
 	let lastItems: vscode.ChatSessionItem[] | undefined = undefined;
+	// The listing chain: `provideChatSessionItems` runs on it so two asks never interleave
+	// (see the provider below).
+	let listingChain: Promise<unknown> = Promise.resolve();
 	// Per-conversation transcripts, keyed by id and the entry count they were read at: the
 	// transcript is read once per *change*, not once per refresh. The daemon is the sole
 	// writer and its ids are never reused, so a cached snapshot cannot go stale silently.
 	const cache = new Map<number, { entriesCount: number; snapshot: unknown }>();
 	// What the last poll saw: `up` plus the digest, or `down` — the daemon answered nothing.
 	let lastPoll: { up: boolean; digest: string } | undefined = undefined;
-	// The untitled → real rebind: when the first prompt of a new durable chat creates the
-	// conversation, the editor migrates the open chat (editor tab or sidebar) onto the real
-	// resource — history re-resolves from the daemon, editing state transfers, queued sends
-	// follow. Only the two URIs cross the wire (`mainThreadChatSessions`).
+	// The commit event the content-provider interface carries; no untitled durable chats
+	// exist any more (durable is not a chat engine), so nothing fires it today.
 	const committed = new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>();
 
 	/** The cached transcript for one conversation, or `undefined` when none was ever read. */
@@ -161,27 +166,55 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 		}
 	}
 
+	/** One panel row from one mapped conversation — the thrower `buildListing` skips. */
+	function buildRow(row: ReturnType<typeof durableSessionRows>[number]): vscode.ChatSessionItem {
+		// The timing is optional at this boundary, and an honest undefined beats a
+		// 1970: a conversation with no timestamps shows no date, not "57y ago".
+		const timing = row.created === undefined
+			? undefined
+			: { created: row.created, lastRequestStarted: undefined, lastRequestEnded: row.lastActivity };
+		// A conversation whose last turn is an unanswered prompt is the owner's
+		// to pick up ("te toca") — the chat was closed mid-work, and the row
+		// must not dress that up as "completed".
+		const status = row.inFlight === undefined
+			? undefined
+			: row.inFlight ? vscode.ChatSessionStatus.InProgress
+				: row.owes ? vscode.ChatSessionStatus.NeedsInput : vscode.ChatSessionStatus.Completed;
+		return {
+			resource: vscode.Uri.from({ scheme: DURABLE_SESSION_SCHEME, path: `/${row.id}` }),
+			label: row.label,
+			iconPath: new vscode.ThemeIcon('server-process'),
+			...(row.note.length > 0 ? { description: row.note } : {}),
+			...(status === undefined ? {} : { status }),
+			...(timing === undefined ? {} : { timing }),
+		};
+	}
+
 	/** The listing, built for the panel from whatever the daemon answered — one connection. */
+	/** The window's folders, as the paths a conversation's cwd is matched against. */
+	function workspacePaths(): readonly string[] {
+		return (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath);
+	}
+
 	async function buildListing(): Promise<vscode.ChatSessionItem[]> {
 		return withDurableDaemon(async client => {
-			const conversations = await daemonConversations(client);
-			await refreshCache(client, conversations);
-			const built = durableSessionRows(conversations, snapshotOf).map(row => {
-				// The timing is optional at this boundary, and an honest undefined beats a
-				// 1970: a conversation with no timestamps shows no date, not "57y ago".
-				const timing = row.created === undefined
-					? undefined
-					: { created: row.created, lastRequestStarted: undefined, lastRequestEnded: row.lastActivity };
-				return {
-					resource: vscode.Uri.from({ scheme: DURABLE_SESSION_SCHEME, path: `/${row.id}` }),
-					label: row.label,
-					iconPath: new vscode.ThemeIcon('server-process'),
-					...(row.note.length > 0 ? { description: row.note } : {}),
-					...(row.inFlight === undefined
-						? {}
-						: { status: row.inFlight ? vscode.ChatSessionStatus.InProgress : vscode.ChatSessionStatus.Completed }),
-					...(timing === undefined ? {} : { timing }),
-				};
+			// The window lists its own project's conversations: the daemon answers with every
+			// conversation it holds, and the cwd each one runs in decides what belongs here.
+			// Filtering BEFORE the cache refresh also keeps the other projects' transcripts
+			// out of the per-conversation reads a listing does.
+			const paths = workspacePaths();
+			const inScope = (await daemonConversations(client)).filter((conversation: DurableConversationRow) => conversationInWorkspace(conversation, paths));
+			await refreshCache(client, inScope);
+			// One conversation that cannot be mapped must not empty the list: a throw here
+			// published nothing — the panel flashed to empty and back on the next poll, the
+			// owner's "aparecen y desaparecen". The row is skipped and the reason is logged.
+			const built = durableSessionRows(inScope, snapshotOf).flatMap(row => {
+				try {
+					return [buildRow(row)];
+				} catch (error) {
+					options.deps.log(`durable listing: conversation ${row.id} did not map — ${error instanceof Error ? error.message : String(error)}`);
+					return [];
+				}
 			});
 			// The rows nobody touched come back as the objects the panel already has: the
 			// bridge compares them by reference, and rebuilding one per refresh is what
@@ -202,24 +235,51 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 	const provider: vscode.ChatSessionItemProvider & vscode.ChatSessionContentProvider = {
 		onDidChangeChatSessionItems: changedEmitter.event,
 		onDidCommitChatSessionItem: committed.event,
-		provideChatSessionItems: async (token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> => {
-			if (token.isCancellationRequested) {
-				return lastItems ?? [];
-			}
+		provideChatSessionItems: (token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> => {
+			// One listing at a time, on a chain: two concurrent calls (a poll and a refresh)
+			// would each build from a different moment and publish interleaved arrays — the
+			// bridge diffs by reference, so the churn reads as rows appearing and vanishing.
+			const run = listingChain.then(async () => {
+				if (token.isCancellationRequested) {
+					return lastItems ?? [];
+				}
 			try {
 				lastItems = listingForPanel(await buildListing(), lastItems, true);
 			} catch {
-				// The daemon did not answer: the last real listing stands. An empty publish
-				// here would read as "every durable conversation is gone", which a stopped
-				// daemon is not — the storage outlives the process.
-			}
-			return lastItems ?? [];
+					// The daemon did not answer. When a listing has NEVER succeeded (the
+					// window's first moments, the spawn still booting or walking its storage
+					// cold), an empty publish here is what emptied the panel at startup —
+					// the owner read it as the sessions vanishing. A few bounded retries
+					// wait it out; once a real listing stands, the poll's next tick is
+					// soon enough and the last real listing keeps standing meanwhile.
+					if (lastItems === undefined) {
+						for (let attempt = 0; attempt < 5 && !token.isCancellationRequested; attempt++) {
+							await new Promise(resolve => setTimeout(resolve, 1000));
+							if (token.isCancellationRequested) {
+								break;
+							}
+							try {
+								lastItems = listingForPanel(await buildListing(), lastItems, true);
+								break;
+							} catch {
+								// Still coming up; one more bounded wait.
+							}
+						}
+					}
+				}
+				return lastItems ?? [];
+			});
+			listingChain = run.catch(() => undefined);
+			return run;
 		},
 		provideChatSessionContent: async (resource: vscode.Uri, token: vscode.CancellationToken) => {
 			const untitled = isUntitledSession(resource);
 			const id = untitled ? undefined : Number(resource.path.split('/').pop());
-			const requestHandler: vscode.ChatRequestHandler | undefined = untitled || (id !== undefined && Number.isFinite(id))
-				? (request, _context, response, requestToken) => runDurableTurn(resource, untitled, request, response, requestToken)
+			// The continuation runs **pi** in this window over the conversation's own history
+			// (`piDurableResumeHandler`) and records each turn back into durable. The daemon
+			// never converses — that was the two-heads defect this file used to carry.
+			const requestHandler: vscode.ChatRequestHandler | undefined = id !== undefined && Number.isFinite(id)
+				? piDurableResumeHandler(id, options.deps)
 				: undefined;
 			const readSession: vscode.ChatSession = { history: [], requestHandler };
 			if (token.isCancellationRequested || untitled || id === undefined || !Number.isFinite(id)) {
@@ -247,93 +307,11 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 		},
 	};
 
-	/**
-	 * One turn of a durable chat: the prompt to the daemon, the daemon's live events into
-	 * the chat.
-	 *
-	 * A NEW chat's resource carries no conversation yet (`untitled-…`): the daemon creates
-	 * one on the first turn, and once its run settles the chat migrates onto the real
-	 * resource. An existing conversation is run as it is. Every prompt runs in the session
-	 * directory — the first workspace folder that exists on disk, the home one otherwise —
-	 * so the agent's tools work on the owner's project, not wherever the daemon was started.
-	 */
-	async function runDurableTurn(
-		resource: vscode.Uri,
-		untitled: boolean,
-		request: vscode.ChatRequest,
-		response: vscode.ChatResponseStream,
-		token: vscode.CancellationToken,
-	): Promise<void> {
-		const prompt = typeof request.prompt === 'string' && request.prompt.trim().length > 0 ? request.prompt : undefined;
-		if (prompt === undefined) {
-			return;
-		}
-		const cwd = resolveSessionCwd((vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath), os.homedir()).cwd;
-		let conversationId: number | undefined = untitled ? undefined : Number(resource.path.split('/').pop());
-		const mapper = new DurableRunStreamMapper();
-		try {
-			await withDurableDaemon(async client => {
-				if (conversationId === undefined) {
-					const opened = await client.request('open', { cwd }) as { conversationId?: number } | undefined;
-					conversationId = typeof opened?.conversationId === 'number' ? opened.conversationId : undefined;
-				}
-				if (conversationId === undefined) {
-					throw new Error('the daemon created no conversation for the prompt');
-				}
-				// Subscribed BEFORE the run is submitted, so no delta of the answer can be missed;
-				// the events ride the same connection, matched by id like any response.
-				await client.request('subscribe', { conversationId });
-				const offEvent = client.onEvent(message => {
-					const events = jsonRecord(message)?.['events'];
-					if (!Array.isArray(events)) {
-						return;
-					}
-					for (const event of events) {
-						const out = mapper.consume(event);
-						if (out.markdown !== undefined) {
-							response.markdown(out.markdown);
-						} else if (out.progress !== undefined) {
-							response.progress(out.progress);
-						} else if (out.warning !== undefined) {
-							response.warning(out.warning);
-						}
-					}
-				});
-				const cancel = token.onCancellationRequested(() => {
-					void client.request('cancel', { conversationId }).catch(() => { /* the run settling is the answer */ });
-				});
-				try {
-					const run = await client.request('run', { conversationId, prompt, cwd }) as { status?: string; reason?: string } | undefined;
-					if (run?.status !== undefined && run.status !== 'done') {
-						response.warning(run.reason !== undefined
-							? `The run ended without an answer (${run.reason}).`
-							: 'The run ended without an answer.');
-					}
-				} finally {
-					offEvent();
-					cancel.dispose();
-					try {
-						await client.request('unsubscribe', { conversationId });
-					} catch {
-						// The next turn unsubscribes again; a stale watch is the daemon's to reap.
-					}
-				}
-			});
-		} catch (error) {
-			response.warning(`${error instanceof Error ? error.message : String(error)}`);
-		}
-		// The rebind happens AFTER the run settles, never mid-response: the editor migrates
-		// the open chat onto the real resource, and the history re-resolves from the daemon.
-		if (untitled && conversationId !== undefined) {
-			committed.fire({
-				original: { resource, label: '' },
-				modified: { resource: vscode.Uri.from({ scheme: DURABLE_SESSION_SCHEME, path: `/${conversationId}` }), label: '' },
-			});
-		}
-	}
-
 	/** One poll: read the list, compare with what was known, fire only on a move. */
 	const poll = async (): Promise<void> => {
+		if (DURABLE_IMPORT_PAUSE.active) {
+			return; // the import announces itself when it is done; polling mid-pass is the flash
+		}
 		let next: { up: boolean; digest: string };
 		try {
 			next = await withDurableDaemon(async client => ({ up: true, digest: sessionsDigest(await daemonConversations(client)) }));
@@ -357,10 +335,15 @@ export function registerDurableSessionsProvider(options: DurableSessionsOptions)
 
 	const registration = vscode.chat.registerChatSessionItemProvider(DURABLE_SESSION_SCHEME, provider);
 	const contentRegistration = vscode.chat.registerChatSessionContentProvider(DURABLE_SESSION_SCHEME, provider, options.participant);
+	// The recorder's own pulse: a conversation opened for a new chat, or a turn recorded
+	// into one, refreshes the panel AT ONCE — the poll below is only the safety net for
+		// changes that happen outside this window (the TUI, a continuation elsewhere).
+	const recorderListener = onConversationTouched(() => changedEmitter.fire());
 	void poll(); // the first answer, so the panel does not wait for the first tick
 	return {
 		fireChanged: () => changedEmitter.fire(),
 		dispose: () => {
+			recorderListener.dispose();
 			clearIntervalFn(timer);
 			contentRegistration.dispose();
 			registration.dispose();

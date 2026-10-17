@@ -8,7 +8,6 @@ import '../../chat/browser/voiceClient/micCaptureService.js';
 import '../../chat/browser/voiceClient/ttsPlaybackService.js';
 import '../../chat/browser/voiceClient/voiceClientService.js';
 import { IVoiceSessionController, isVoiceEntitled } from '../../chat/browser/voiceClient/voiceSessionController.js';
-import { normalizeAgentsVoiceId } from '../../chat/common/voiceClient/voiceClientService.js';
 import '../../chat/browser/voiceClient/voiceToolDispatchService.js';
 import '../../chat/common/voicePlaybackService.js';
 
@@ -24,15 +23,12 @@ import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { URI } from '../../../../base/common/uri.js';
 import * as nls from '../../../../nls.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { Extensions as ConfigurationExtensions, ConfigurationScope, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { SegmentedVoiceInputModePillInactive } from '../../chat/browser/voiceInputMode/voiceInputModeContextKeys.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
-import { ConfigurationKeyValuePairs, IConfigurationMigrationRegistry, Extensions as WorkbenchConfigurationExtensions } from '../../../common/configuration.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 
 import { AgentsVoiceSettingId, AgentsVoiceStorageKeys, AGENTS_VOICE_CONNECTED, AGENTS_VOICE_CONNECTING, AGENTS_VOICE_ENABLED, AGENTS_VOICE_ENTITLED, AGENTS_VOICE_LISTENING, AGENTS_VOICE_RECONNECTING } from '../common/agentsVoice.js';
@@ -50,7 +46,6 @@ import { EditorContextKeys } from '../../../../editor/common/editorContextKeys.j
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { CONFIGURE_VOICE_INSTRUCTIONS_ACTION_ID } from '../../chat/browser/actions/configureVoiceInstructionsAction.js';
 import { IVoiceModeOnboardingService } from './voiceModeOnboarding.js';
 import { SHOW_VOICE_MODE_ONBOARDING_COMMAND } from '../../chat/browser/speechToText/micButtonMenuActions.js';
 import { IsSessionsWindowContext } from '../../../common/contextkeys.js';
@@ -578,130 +573,3 @@ registerAction2(class extends Action2 {
 // Microphone selection is shared with dictation via the single
 // `workbench.action.chat.selectSpeechToTextMicrophone` command (see
 // chatSpeechToTextActions.ts), so Voice Mode no longer registers its own.
-
-// --- Settings ---
-
-const configurationRegistry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration);
-configurationRegistry.registerConfiguration({
-	id: 'agentsVoice',
-	title: nls.localize('agentsVoiceConfigurationTitle', "Voice Mode"),
-	type: 'object',
-	properties: {
-		'agents.voice.backendUrl': {
-			type: 'string',
-			description: nls.localize('agents.voice.backendUrl', "Voice backend WebSocket URL. Leave empty to use the default hosted backend. Set to e.g. `ws://localhost:8000/api/v1/realtime/voice` to point at a backend running on your machine."),
-			default: '',
-			scope: ConfigurationScope.APPLICATION,
-			included: false,
-		},
-		'agents.voice.speakResponses': {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.speakResponses', "When enabled, the assistant reads responses aloud. When disabled, responses are not spoken; enable `#agents.voice.showTranscript#` to read them as a text transcript instead."),
-			default: true,
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.voice': {
-			type: 'string',
-			enum: ['harper_neutral', 'birch_neutral', 'junho_neutral', 'oak_neutral'],
-			enumItemLabels: ['Harper', 'Birch', 'Junho', 'Oak'],
-			enumDescriptions: [
-				nls.localize('agents.voice.voice.harper', "Harper."),
-				nls.localize('agents.voice.voice.birch', "Birch."),
-				nls.localize('agents.voice.voice.junho', "Junho."),
-				nls.localize('agents.voice.voice.oak', "Oak."),
-			],
-			markdownDescription: nls.localize('agents.voice.voice', "The voice used when the assistant reads responses aloud. Changing this while voice mode is connected takes effect immediately. Use [Voice Mode instructions](command:{0}) to customize Voice Mode behavior and terminology.", CONFIGURE_VOICE_INSTRUCTIONS_ACTION_ID),
-			default: 'birch_neutral',
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.language': {
-			type: 'string',
-			enum: ['auto', 'en', 'de', 'es', 'fr', 'it', 'pt', 'ja', 'ko', 'zh'],
-			enumItemLabels: [
-				nls.localize('agents.voice.language.auto', "Automatic"),
-				nls.localize('agents.voice.language.en', "English"),
-				nls.localize('agents.voice.language.de', "German"),
-				nls.localize('agents.voice.language.es', "Spanish"),
-				nls.localize('agents.voice.language.fr', "French"),
-				nls.localize('agents.voice.language.it', "Italian"),
-				nls.localize('agents.voice.language.pt', "Portuguese"),
-				nls.localize('agents.voice.language.ja', "Japanese"),
-				nls.localize('agents.voice.language.ko', "Korean"),
-				nls.localize('agents.voice.language.zh', "Chinese"),
-			],
-			markdownDescription: nls.localize('agents.voice.language', "The language used for speech recognition, dictation, and spoken responses. The selectable languages support native voice output. Automatic uses the configured display language for speech recognition and dictation when supported; otherwise, it follows the system or browser locale. English voice output is used when the detected language does not support native voice output. Changing this while voice mode is connected takes effect immediately."),
-			default: 'auto',
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.showTranscript': {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.showTranscript', "Show the voice transcript overlay in the chat input area while voice mode is active. Enable this to read responses as text when `#agents.voice.speakResponses#` is disabled."),
-			default: false,
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.liveTranscript': {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.liveTranscript', "Show your speech as a live, word-by-word transcript while you are speaking. When disabled, your transcript appears only once you finish speaking. Requires `#agents.voice.showTranscript#` to be enabled to be visible."),
-			default: false,
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.handsFree': {
-			type: 'boolean',
-			markdownDescription: nls.localize('agents.voice.handsFree', "When enabled, voice mode automatically re-enters listening after the assistant finishes speaking, so you can hold a hands-free back-and-forth conversation. When disabled, you start and end each turn manually, and ending the turn sends it. Turns are not ended automatically on trailing silence or a stop phrase unless {0} or {1} is explicitly configured.", '`#agents.voice.turn.silenceMs#`', '`#agents.voice.turn.stopPhrases#`'),
-			default: true,
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.turn.silenceMs': {
-			type: 'number',
-			markdownDescription: nls.localize('agents.voice.turn.silenceMs', "Trailing silence in milliseconds before the backend ends the turn automatically. Set to `-1` to disable ending the turn on silence, in which case the turn ends only via a stop phrase ({0}) or manually. When enabled, the backend clamps this to its supported range (currently 200-5000 ms) and is the source of truth. When hands-free mode ({1}) is disabled, the turn is not ended on silence by default unless this setting is explicitly configured, so you keep manual control over when a turn is sent.", '`#agents.voice.turn.stopPhrases#`', '`#agents.voice.handsFree#`'),
-			default: 800,
-			anyOf: [
-				{
-					const: -1,
-					description: nls.localize('agents.voice.turn.silenceMs.disabled', "Do not end the turn on trailing silence."),
-				},
-				{
-					type: 'number',
-					minimum: 200,
-					maximum: 5000,
-				},
-			],
-			scope: ConfigurationScope.APPLICATION,
-		},
-		'agents.voice.turn.stopPhrases': {
-			type: 'array',
-			items: { type: 'string' },
-			markdownDescription: nls.localize('agents.voice.turn.stopPhrases', "Phrases that end the turn when spoken at the end of an utterance. Leave empty to disable ending the turn on a stop phrase, in which case the turn ends only on trailing silence ({0}) or manually. The backend strips the matched phrase from the transcript before it reaches the agent. When hands-free mode ({1}) is disabled, stop phrases do not end the turn by default unless this setting is explicitly configured, so you keep manual control over when a turn is sent.", '`#agents.voice.turn.silenceMs#`', '`#agents.voice.handsFree#`'),
-			default: ['send it'],
-			scope: ConfigurationScope.APPLICATION,
-		},
-	}
-});
-
-// Migrate the removed `agents.voice.turn.autoEndMode` setting onto the two
-// settings that now govern turn-ending, preserving the previous behavior:
-// silence ending is disabled (`silenceMs: -1`) unless the old mode was `vad`
-// or `both`, and stop-phrase ending is disabled (`stopPhrases: []`) unless the
-// old mode was `phrase` or `both`.
-Registry.as<IConfigurationMigrationRegistry>(WorkbenchConfigurationExtensions.ConfigurationMigration)
-	.registerConfigurationMigrations([{
-		key: 'agents.voice.voice',
-		includeApplication: true,
-		migrateFn: (value: unknown) => ({ value: normalizeAgentsVoiceId(value) }),
-	}, {
-		key: 'agents.voice.turn.autoEndMode',
-		migrateFn: (value: unknown) => {
-			const result: ConfigurationKeyValuePairs = [['agents.voice.turn.autoEndMode', { value: undefined }]];
-			if (value === 'off' || value === 'vad' || value === 'phrase' || value === 'both') {
-				const silenceEnabled = value === 'vad' || value === 'both';
-				const phraseEnabled = value === 'phrase' || value === 'both';
-				if (!silenceEnabled) {
-					result.push(['agents.voice.turn.silenceMs', { value: -1 }]);
-				}
-				if (!phraseEnabled) {
-					result.push(['agents.voice.turn.stopPhrases', { value: [] }]);
-				}
-			}
-			return result;
-		}
-	}]);

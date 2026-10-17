@@ -38,6 +38,18 @@ import { pathToFileURL } from 'node:url';
 export type PiSdkLoad<T> = { readonly sdk: T; readonly entry: string } | { readonly problem: string };
 
 /**
+ * pi's SDK, exactly as pi's own declarations state it.
+ *
+ * The one source the connector's member shapes are derived from: every member this editor
+ * loads is typed from here, so bumping the pin (`distribution/runtime.json`) is checked by
+ * the compiler against what pi actually publishes — a hand-written copy of a signature could
+ * only drift. It is a TYPE only (`typeof import(...)` is erased at compile time), so the
+ * build still depends on pi's package in no way, and the runtime load stays the URL load
+ * described above.
+ */
+export type OfficialSdk = typeof import('@earendil-works/pi-coding-agent');
+
+/**
  * The candidate places pi can live, most-PiCode-first. The **internal** pi's candidates;
  * the external one is resolved by `runtime.ts` (and `piLocate.ts`) and passed directly.
  */

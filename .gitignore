@@ -1,5 +1,6 @@
 # Local Pi runtime state
 .atl/
+.pi/
 
 # ---------------------------------------------------------------------------
 # VSCodium runtime tree
@@ -21,9 +22,9 @@
 
 # Portable profile: user settings, installed extensions, session state, cache.
 # Disposable by design - deleting it yields a clean PiCode.
-# El perfil portable del editor instalado EN LA RAIZ de este repositorio. Anclado: sin la
-# barra inicial también se habría comido los `.vscode` de la fuente, que son parte del
-# producto y sí se versionan.
+# The editor's portable profile installed AT THE ROOT of this repository. Anchored: without the
+# leading slash it would also have swallowed the source's `.vscode`, which is part of the
+# product and is versioned.
 /.vscode
 /data/
 # Electron / Chromium runtime artifacts at the distribution root.
@@ -91,10 +92,10 @@ desktop.ini
 # never part of the repository. Everything temporary belongs here.
 /.scratch/
 
-# Material en migración al núcleo: el código de la extensión vieja, conservado solo para
-# copiar de él lo que sirve. No es producto, no se compila y se borra cuando la migración
-# termine — por eso tampoco se revisa. Anclado: sin la barra inicial también se habría
-# comido cualquier carpeta `legacy/` de la fuente.
+# Material being migrated into the core: the old extension's code, kept only to copy from it
+# what is useful. It is not product, it is not built, and it is deleted when the migration
+# ends — which is why it is never reviewed either. Anchored: without the leading slash it would
+# also have swallowed any `legacy/` folder of the source.
 /legacy/
 
 # Local AI-tooling caches: the codegraph index and the repomix pack of the whole
@@ -111,11 +112,10 @@ desktop.ini
 /builder/dist*/
 /builder/PiCodeBuilder.zip
 /builder/obj*/
-/odd/assets
 /.vscode
 
-# Ficheros de entorno y credenciales locales (defensa en profundidad; cloud/sync-api
-# tiene las suyas). Ninguno debe llegar al repositorio, ni por descuido.
+# Local environment and credential files (defense in depth; cloud/sync-api has its own).
+# None of them may ever reach the repository, not even by accident.
 /.env
 /.env.*
 *.env.local
@@ -128,3 +128,9 @@ service-account*.json
 .vercel
 *.tsbuildinfo
 .eslintcache
+
+# Repomix output (generated, never versioned)
+repomix-output.txt
+repomix-output.*
+repomix*.xml
+repomix*.md

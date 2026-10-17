@@ -63,8 +63,7 @@ export function areaSessionSlug(folders: readonly string[], areaName: string | u
  * Whether the window in force is a workspace.
  *
  * `auto` follows how the window is open, and the owner's report says the folder count alone is not a
- * stable way to ask: «la lista de sesiones en un area de trabajo sigue fallando, es que parpadea, es
- * como si intentase coger las de una de las carpetas… Ejemplo las de artictempest-web». A window opened
+ * stable way to ask. A window opened
  * from a saved workspace file reports **one** folder while the workspace is still being restored, so a
  * rule that counted folders answered "folder" for an instant and the panel listed that folder's
  * sessions — then the second folder arrived, the answer became "workspace", and the list changed under
@@ -112,7 +111,7 @@ export function areaContextBlock(roots: readonly AreaRoot[], sessionCwd: string)
 	const commandRule = example === undefined
 		? `- A shell has one working directory at a time, and this session's is ${sessionCwd}. To run a command for another root, make that root the command's own target, and say which root each command ran in.`
 		: `- A shell has one working directory at a time, and this session's is ${sessionCwd}. To run a command for another root, make that root the command's own target — for example: ${example} — and say which root each command ran in.`;
-	return [
+	const area = [
 		'Workspace area: this session covers every folder open in the editor, not a single project.',
 		'',
 		'The area\'s roots:',
@@ -122,5 +121,6 @@ export function areaContextBlock(roots: readonly AreaRoot[], sessionCwd: string)
 		'- When the owner names a project (a folder name, or a short name like "the web" or "the bot"), match it to one of the roots above and work in that root. Do not assume every request is about the folder this session runs in.',
 		'- Address a file by its absolute path under the right root.',
 		commandRule,
-	].join('\n') + '\n';
+	].join('\n');
+	return `${area}\n`;
 }

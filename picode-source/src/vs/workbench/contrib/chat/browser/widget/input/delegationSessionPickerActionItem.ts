@@ -6,7 +6,6 @@
 import { IAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { Iterable } from '../../../../../../base/common/iterator.js';
-import { URI } from '../../../../../../base/common/uri.js';
 import { localize } from '../../../../../../nls.js';
 import { IActionWidgetService } from '../../../../../../platform/actionWidget/browser/actionWidget.js';
 import { IActionWidgetDropdownAction } from '../../../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
@@ -147,18 +146,10 @@ export class DelegationSessionPickerActionItem extends SessionTypePickerActionIt
 		return undefined;
 	}
 
-	protected override _getLearnMore(): IAction {
-		const learnMoreUrl = 'https://aka.ms/vscode-agent-handoff';
-		return {
-			id: 'workbench.action.chat.agentOverview.learnMoreHandOff',
-			label: localize('chat.learnMoreAgentHandOff', "Learn about agent handoff..."),
-			tooltip: learnMoreUrl,
-			class: undefined,
-			enabled: true,
-			run: async () => {
-				await this.openerService.open(URI.parse(learnMoreUrl));
-			}
-		};
+	protected override _getLearnMore(): IAction | undefined {
+		// PiCode: no "Learn about agent handoff..." — the link opens upstream VS Code docs
+		// (aka.ms/vscode-agent-handoff) this product does not ship.
+		return undefined;
 	}
 
 	protected override _getAdditionalActions(): IActionWidgetDropdownAction[] {

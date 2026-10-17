@@ -1,39 +1,39 @@
 # Índice de documentación interna
 
 Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven en
-[`AGENTS.md`](../AGENTS.md); el registro de cada feature, en [`odd/tasks/`](../odd/tasks/);
-la cara pública (README, wiki) se escribe desde aquí, no al revés.
+[`AGENTS.md`](../AGENTS.md); la cara pública (README, wiki) se escribe desde aquí, no al revés.
 
 | Documento | De qué habla | Idioma |
 | --- | --- | --- |
 | [VISION.md](VISION.md) | 🌱 La visión del dueño: qué quiere que PiCode llegue a ser | ES |
 | [DISENO.md](DISENO.md) | 🧱 Cómo se junta todo hoy: capas, núcleo, perfil, reglas de diseño | ES |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 🏗️ El modelo de 4 capas, la capa de agente, el SDK de pi, testing | EN |
-| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–016): qué se decidió, por qué, y qué lo revertiría | EN |
+| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–021): qué se decidió, por qué, y qué lo revertiría | EN |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
 | [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
 | [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y durable | ES |
-| [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si un papel de `odd/tasks/` dice otra cosa, gana este | ES |
+| [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
+| [MAPA.md](MAPA.md) | 🗺️ **Qué hace cada carpeta y cada fichero de la raíz** — generado a partir de los README de cada carpeta | ES |
 
 ## Cómo se lee esto sin perderse
 
-0. ¿**Qué está pasando ahora mismo**? → `TAREAS.md` (qué queda) y `odd/tasks/` (cómo se llegó).
+0. ¿**Qué está pasando ahora mismo**? → `TAREAS.md` (qué queda); el historial de git y las páginas de release cuentan cómo se llegó.
 
 1. ¿**Qué es PiCode** y por qué existe? → `VISION.md`, luego el README.
 2. ¿**Cómo está montado** hoy? → `DISENO.md` (capas) y `ARCHITECTURE.md` (mecánica).
 3. ¿**Por qué así y no de otra forma**? → `DECISIONS.md`. Cada ADR lleva su estado (qué lo
    sustituye) y su condición de reversión: cuándo deja de pagar la decisión.
 4. ¿**Cómo lo compilo yo**? → `howto-build.md`. ¿Por qué falla CI? → `CI.md`.
-5. ¿**Qué queda por hacer**? → `TAREAS.md`. Nada más. Los `odd/tasks/*.md` son el *cómo se
-   llegó aquí*, con sus errores incluidos; útiles antes de re-decidir algo que ya se
-   decidió, no para saber el estado.
+5. ¿**Qué queda por hacer**? → `TAREAS.md`. Nada más. El historial de git y las páginas de
+   release son el *cómo se llegó aquí*, con sus errores incluidos; útiles antes de re-decidir
+   algo que ya se decidió, no para saber el estado.
 
 ## Orden de precedencia (por si dos papeles discuten)
 
 ```text
 AGENTS.md (dueño)  >  TAREAS.md (lista)  >  DECISIONS.md (porqués)  >  DISENO/ARCHITECTURE
-(dónde va cada cosa)  >  DISTRIBUTION / howto-build / CI (mecánica)  >  odd/tasks/* (historia)
+(dónde va cada cosa)  >  DISTRIBUTION / howto-build / CI (mecánica)  >  git / release notes (historia)
 ```
 
 ## Mantenimiento
@@ -41,4 +41,8 @@ AGENTS.md (dueño)  >  TAREAS.md (lista)  >  DECISIONS.md (porqués)  >  DISENO/
 - Un cambio de decisión **exige** ADR nuevo o enmienda, con la frase del dueño si la hay.
 - Un cambio de mecanismo exige tocar el papel de mecánica **y** el README/wiki si afecta a
   lo que ve quien colabora.
-- El detalle de cada feature **no** sube aquí: se queda en su papel de `odd/tasks/`.
+- El detalle de cada feature **no** sube aquí: se queda en su papel dentro de `docs/`.
+- **Documentación por carpeta:** cada carpeta lleva su `README.md` al lado (una frase de qué
+  hace, qué hay dentro). De ahí sale el árbol de [`MAPA.md`](MAPA.md), que se regenera con
+  `node dev/map-docs.mjs`; las carpetas nuevas sin ficha las ve CI (`node dev/check-docs.mjs`,
+  con la lista de excepciones en `.docsignore`).

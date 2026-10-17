@@ -31,7 +31,42 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$PackDir = Join-Path $RepoRoot 'PiCode-Win32-x64'
+
+# The pack folder and the editor's file both carry the channel when one is sealed (dev/build.sh):
+# stable is `PiCode-Win32-x64/PiCode.exe`, beta `PiCode-Win32-x64-beta/PiCode Beta.exe` and
+# experimental `PiCode-Win32-x64-experimental/PiCode Experimental.exe`. The channel is taken from the
+# environment when a build set it, and otherwise from whichever pack already sits beside the tree, so
+# the window opens (and looks for) the editor that is really there instead of the stable one only.
+function Get-ChannelSuffix {
+    if ($env:PICODE_CHANNEL -eq 'beta' -or $env:PICODE_CHANNEL -eq 'experimental') {
+        return "-$($env:PICODE_CHANNEL)"
+    }
+    foreach ($suffix in @('-beta', '-experimental')) {
+        if (Test-Path (Join-Path $RepoRoot "PiCode-Win32-x64$suffix/resources/app/product.json")) {
+            return $suffix
+        }
+    }
+    return ''
+}
+
+function Get-PackDir {
+    return (Join-Path $RepoRoot "PiCode-Win32-x64$(Get-ChannelSuffix)")
+}
+
+# The editor's file name is the product's short name, which the channel seal sets ("PiCode",
+# "PiCode Beta", "PiCode Experimental"). Read it back from the packed product.json so the window
+# names the file the packer produced, not a guess.
+function Get-EditorExe([string]$dir) {
+    $name = 'PiCode'
+    $productPath = Join-Path $dir 'resources/app/product.json'
+    if (Test-Path $productPath) {
+        try { $name = (Get-Content $productPath -Raw | ConvertFrom-Json).nameShort } catch { $name = 'PiCode' }
+    }
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = 'PiCode' }
+    return (Join-Path $dir "$name.exe")
+}
+
+$PackDir = Get-PackDir
 $Scratch = Join-Path $RepoRoot '.scratch'
 $LockFile = Join-Path $Scratch 'build.lock'
 $StatusFile = Join-Path $Scratch 'build.status'
@@ -562,7 +597,7 @@ function Set-Log([bool]$open) {
 }
 
 function Open-Editor {
-    $exe = Join-Path $PackDir 'PiCode.exe'
+    $exe = Get-EditorExe (Get-PackDir)
     if (Test-Path $exe) {
         Start-Process -FilePath $exe | Out-Null
         return
@@ -647,7 +682,7 @@ function Update-View {
     $state = Get-BuildState
     Show-Log
 
-    $built = Test-Path (Join-Path $PackDir 'PiCode.exe')
+    $built = Test-Path (Get-EditorExe (Get-PackDir))
     $lastCode = if (Test-Path $StatusFile) { (Get-Content $StatusFile -Raw).Trim() } else { $null }
     $lastFailed = (-not $state.Running) -and $lastCode -and ($lastCode -ne '0')
 

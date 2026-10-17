@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import type { OfficialSdk } from './piSdk';
 
 /**
  * The providers a person can connect **with the subscription they already pay for**.
  *
  * ChatGPT Plus/Pro, Claude Pro/Max, GitHub Copilot, Grok, Kimi: these are accounts rather than
  * API keys, and the way in is pi's own login. That is why the surface for them is a **list** —
- * the owner's request was "una lista de proveedores a los cuales conectarme por oauth" — and why
+ * the owner's request was "a list of providers I can connect to via OAuth" — and why
  * nothing here asks for an endpoint or a dialect: those belong to the declared providers, which
  * have their own form in the settings row.
  *
@@ -90,7 +91,7 @@ export interface PiModelRuntime {
 
 /** The SDK slice: the one step that builds a runtime over PiCode's own profile. */
 export interface PiLoginSdk {
-	createAgentSessionServices(options: { cwd: string; agentDir: string }): Promise<{ modelRuntime: PiModelRuntime }>;
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
 /* ------------------------------------------------------------------ *

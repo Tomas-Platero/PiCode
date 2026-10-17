@@ -420,7 +420,7 @@ const EMPTY_DESCRIPTOR: IHarnessDescriptor = {
 export function createVSCodeHarnessDescriptor(): IHarnessDescriptor {
 	return {
 		id: SessionType.Local,
-		label: localize('harness.local', "Local"),
+		label: localize('harness.local', "PiCode (Pi)"),
 		icon: ThemeIcon.fromId(Codicon.vm.id),
 		supportsTroubleshoot: true,
 		hiddenSections: [AICustomizationManagementSection.Tools],

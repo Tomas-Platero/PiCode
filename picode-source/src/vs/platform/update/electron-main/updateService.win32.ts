@@ -10,7 +10,8 @@ import { mkdir, readFile, unlink } from 'fs/promises';
 import { release, tmpdir } from 'os';
 import { Delayer, ProcessTimeRunOnceScheduler, timeout } from '../../../base/common/async.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
-import { CancellationTokenSource } from '../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../base/common/cancellation.js';
+import { extract } from '../../../base/node/zip.js';
 import { memoize } from '../../../base/common/decorators.js';
 import { isCancellationError } from '../../../base/common/errors.js';
 import * as path from '../../../base/common/path.js';
@@ -44,6 +45,8 @@ interface IAvailableUpdate {
 	cancelFilePath?: string;
 	/** The Inno Setup process that is applying the update in the background */
 	updateProcess?: ChildProcess;
+	/** For a portable (archive) update: the folder the new build was extracted to, swapped into place on relaunch. */
+	stagingDir?: string;
 }
 
 const RELAUNCH_ARGUMENTS_FILE_PREFIX = 'relaunch-args-';
@@ -61,6 +64,73 @@ function getUpdateType(): UpdateType {
 	}
 
 	return _updateType;
+}
+
+/**
+ * The batch script that swaps a staged portable build into place once the
+ * running one has quit. Everything is baked in: the folder being replaced, the
+ * staged copy beside it, the executable's name and the process to wait for.
+ *
+ * The portable profile (`data/`) moves across, so nothing the owner keeps is
+ * still in the old folder when it is deleted. The script leaves itself in the
+ * new folder — the next update's staging removes it with the rest.
+ */
+function archiveSwapScript(appDir: string, stagingDir: string, exeName: string, pid: number): string {
+	return [
+		'@echo off',
+		'rem PiCode portable self-update: waits for the editor to quit, moves the',
+		'rem staged build into place (the portable profile moves across) and starts it.',
+		'setlocal enabledelayedexpansion',
+		`set "OLD=${appDir}"`,
+		`set "NEW=${stagingDir}"`,
+		`set "PID=${pid}"`,
+		`set "EXE=${exeName}"`,
+		':wait',
+		'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul',
+		'if not errorlevel 1 (',
+		'  ping -n 2 127.0.0.1 >nul',
+		'  goto wait',
+		')',
+		'set /a TRIES=0',
+		':swap',
+		'move /y "%OLD%" "%OLD%.old" >nul 2>&1',
+		'if errorlevel 1 (',
+		'  set /a TRIES+=1',
+		'  if !TRIES! lss 30 (',
+		'    ping -n 2 127.0.0.1 >nul',
+		'    goto swap',
+		'  )',
+		'  goto fail',
+		')',
+		'move /y "%NEW%" "%OLD%" >nul 2>&1',
+		'if errorlevel 1 (',
+		'  move /y "%OLD%.old" "%OLD%" >nul 2>&1',
+		'  goto fail',
+		')',
+		// The profile is the one thing that must arrive: a child process outliving
+		// the editor (a crashpad, a GPU helper killed with it) holds a file inside
+		// data/ for a while, so this move retries as patiently as the swap does.
+		'set /a DTRIES=0',
+		':data',
+		'if exist "%OLD%.old\\data" (',
+		'  move /y "%OLD%.old\\data" "%OLD%\\data" >nul 2>&1',
+		'  if errorlevel 1 (',
+		'    set /a DTRIES+=1',
+		'    if !DTRIES! lss 30 (',
+		'      ping -n 2 127.0.0.1 >nul',
+		'      goto data',
+		'    )',
+		'  )',
+		')',
+		'start "" "%OLD%\\%EXE%"',
+		'rd /s /q "%OLD%.old" >nul 2>&1',
+		'exit /b 0',
+		':fail',
+		'rem Everything stays as it was: the old build is back where it was.',
+		'if not exist "%OLD%\\%EXE%" move /y "%OLD%.old" "%OLD%" >nul 2>&1',
+		'exit /b 1',
+		'',
+	].join('\r\n');
 }
 
 export class Win32UpdateService extends AbstractUpdateService implements IRelaunchHandler {
@@ -296,11 +366,10 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 				}
 
 				if (updateType === UpdateType.Archive) {
-					this.setState(State.AvailableForDownload(update));
-					return Promise.resolve(null);
-				}
-
-				if (this.deferAutomaticDownload(update, explicit)) {
+					// The portable build updates itself like the installed one: the zip is
+					// downloaded, verified and extracted here, and "Restart to update"
+					// swaps the folders (see doQuitAndInstall). No browser detour.
+				} else if (this.deferAutomaticDownload(update, explicit)) {
 					return Promise.resolve(null);
 				}
 
@@ -351,13 +420,23 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 								.then(() => pfs.Promises.rename(downloadPath, updatePackagePath, false /* no retry */))
 								.then(() => updatePackagePath);
 						});
-					}).then(packagePath => {
+					}).then(async packagePath => {
 						if (!packagePath || token.isCancellationRequested) {
 							return;
 						}
 
 						this.availableUpdate = { packagePath };
 						this.saveUpdateMetadata(update);
+
+						if (updateType === UpdateType.Archive) {
+							// The portable build cannot run an installer over itself: the
+							// extracted copy is staged beside the running folder and the
+							// swap happens once this process has quit.
+							await this.prepareArchiveUpdate(packagePath);
+							this.setState(State.Ready(update, explicit, this._overwrite));
+							return;
+						}
+
 						this.setState(State.Downloaded(update, explicit, this._overwrite));
 
 						const fastUpdatesEnabled = this.configurationService.getValue('update.enableWindowsBackgroundUpdates');
@@ -410,6 +489,51 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		this.setState(State.Idle(getUpdateType()));
 	}
 
+	/**
+	 * Stages a portable (archive) update: the verified zip is extracted into a
+	 * folder beside the running one, and a swap script is written next to it. On
+	 * relaunch the script waits for this process to exit, renames the running
+	 * folder aside, moves the staged copy in its place, carries the portable
+	 * profile (`data/`) across, starts the new build and cleans up after itself.
+	 */
+	private async prepareArchiveUpdate(packagePath: string): Promise<void> {
+		const appDir = path.dirname(process.execPath);
+		const stagingDir = `${appDir}.update`;
+		const scriptPath = path.join(stagingDir, 'update.cmd');
+		try {
+			// A staging left behind by a cancelled or failed update is the stale
+			// version's contents; the new extraction must start from nothing.
+			await pfs.Promises.rm(stagingDir);
+			// Electron's fs intercepts every path whose last segment ends in
+			// `.asar` and treats it as an archive — the staged pack carries
+			// `node_modules.asar`, and writing it extracted needs the real
+			// filesystem, not an asar parse. This is the documented escape hatch.
+			// The zip reader itself is imported lazily from inside that same
+			// archive, so it loads BEFORE the hatch closes: with noAsar set, its
+			// own import cannot even read node_modules.asar.
+			await import('yauzl');
+			const noAsar = process.noAsar;
+			process.noAsar = true;
+			try {
+				await extract(packagePath, stagingDir, {}, CancellationToken.None);
+			} finally {
+				process.noAsar = noAsar;
+			}
+			const exeName = path.basename(process.execPath);
+			if (!await pfs.Promises.exists(path.join(stagingDir, exeName))) {
+				throw new Error(`the update archive does not carry ${exeName}`);
+			}
+			await pfs.Promises.writeFile(scriptPath, archiveSwapScript(appDir, stagingDir, exeName, process.pid));
+			this.availableUpdate = { packagePath, updateFilePath: scriptPath, stagingDir };
+			this.logService.info(`update#prepareArchiveUpdate: the portable update is staged in ${stagingDir}`);
+		} catch (error) {
+			this.logService.error('update#prepareArchiveUpdate: failed to stage the portable update', error);
+			this.availableUpdate = undefined;
+			await pfs.Promises.rm(stagingDir).catch(() => { });
+			throw error; // the caller's error path reports it and falls back to Idle
+		}
+	}
+
 	protected override resumeDeferredDownload(): void {
 		this.setState(State.Idle(getUpdateType()));
 		void this.checkForUpdates(false);
@@ -417,7 +541,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 	private async getUpdatePackagePath(version: string, type: UpdateType): Promise<string> {
 		const cachePath = await this.cachePath;
-		const extension = type === UpdateType.WindowsInstaller ? 'msi' : 'exe';
+		const extension = type === UpdateType.WindowsInstaller ? 'msi' : type === UpdateType.Archive ? 'zip' : 'exe';
 
 		return path.join(cachePath, `${this.productService.nameShort.replaceAll(/\s/g, '')}-${this.productService.quality}-${version}.${extension}`);
 	}
@@ -425,7 +549,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	private async cleanup(exceptVersion: string | null = null): Promise<void> {
 		const relaunchArgumentsFileName = exceptVersion ? `${RELAUNCH_ARGUMENTS_FILE_PREFIX}${exceptVersion}` : undefined;
 		const filter = exceptVersion
-			? (one: string) => one !== relaunchArgumentsFileName && !(new RegExp(`${this.productService.quality}-${exceptVersion}\\.(exe|msi)$`).test(one))
+			? (one: string) => one !== relaunchArgumentsFileName && !(new RegExp(`${this.productService.quality}-${exceptVersion}\\.(exe|msi|zip)$`).test(one))
 			: () => true;
 
 		const cachePath = await this.cachePath;
@@ -661,6 +785,14 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		// Clean up the cancel file
 		await this.unlink(cancelFilePath);
 
+		// A staged portable update goes away with its folder; the zip stays in the
+		// cache, where the next update's cleanup finds it.
+		if (this.availableUpdate.stagingDir) {
+			await pfs.Promises.rm(this.availableUpdate.stagingDir).catch(err => {
+				this.logService.warn('update#cancelPendingUpdate: failed to remove the staged folder', err);
+			});
+		}
+
 		this.availableUpdate = undefined;
 	}
 
@@ -670,6 +802,19 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		}
 
 		this.logService.trace('update#quitAndInstall(): running raw#quitAndInstall()');
+
+		// The portable build has no installer to run: the staged copy is swapped in
+		// by its script once this process quits, and the new build starts itself.
+		// The swap script carries the relaunch; quitting is all this side does.
+		if (getUpdateType() === UpdateType.Archive && this.availableUpdate.stagingDir && this.availableUpdate.updateFilePath) {
+			this.logService.info(`update#doQuitAndInstall - swapping the portable build from ${this.availableUpdate.stagingDir}`);
+			spawn('cmd.exe', ['/c', this.availableUpdate.updateFilePath], {
+				detached: true,
+				windowsHide: true,
+				stdio: ['ignore', 'ignore', 'ignore'],
+			}).unref();
+			return;
+		}
 
 		if (this.availableUpdate.updateFilePath) {
 			this.writeRelaunchArgumentsFile(this.cachePathSync, this.state.update.version);

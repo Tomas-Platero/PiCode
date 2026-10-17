@@ -5,8 +5,7 @@
 /**
  * The providers the host has, and where each one came from.
  *
- * The owner's report is the test: «El proveedor de nan no me sale en la lista de providers, revisa
- * esto. Si te das cuenta en picode:status salen 2 proveedores.» One provider was declared in PiCode's
+ * The owner's report is the test. One provider was declared in PiCode's
  * settings and the other existed only as a sign-in in pi's profile, and the panel's count merged them
  * while the settings page could only show the declared one.
  */

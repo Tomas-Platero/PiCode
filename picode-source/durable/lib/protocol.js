@@ -17,8 +17,15 @@ import { DATA_DIR } from "./common.js";
 
 export const PROTOCOL_VERSION = 1;
 
-/** The local-only endpoint the daemon listens on. */
+/**
+ * The local-only endpoint the daemon listens on.
+ *
+ * `PICODE_DURABLE_ENDPOINT` moves the whole pair (daemon + clients) aside: proofs and tests
+ * run against their own pipe while a real daemon owns the default one. Same rule as
+ * `PICODE_DURABLE_DATA` for the storage — an isolated run is an isolated run, endpoint included.
+ */
 export function daemonEndpoint() {
+	if (process.env.PICODE_DURABLE_ENDPOINT) return process.env.PICODE_DURABLE_ENDPOINT;
 	return process.platform === "win32"
 		? "\\\\.\\pipe\\picode-durable-agent" // Windows named pipe
 		: path.join(DATA_DIR, "durable.sock"); // Unix domain socket (under the gitignored .data/)

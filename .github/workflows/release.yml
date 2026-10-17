@@ -1,5 +1,5 @@
 # Release pipeline: build, publish the GitHub release, land the update
-# feed on master, and verify it live.
+# feed on the release's own channel branch, and verify it live.
 #
 # Hard rules this workflow enforces:
 # - The release version lives ONLY in distribution/product-delta.json
@@ -19,16 +19,14 @@ name: Release
 on:
   push:
     tags:
-      # An experimental build ships *beside* the release, never
-      # through it. Its tag (`v*-experimental`) must not enter this
-      # pipeline: this job lands the update feed on master, and a
-      # feed naming an experimental build offers it to every stable
-      # user -- the opposite of what the `experimental` branch is
-      # for (odd/tasks/picode-rama-experimental.md). Experimental
-      # releases are cut by hand from a local `PICODE_PACK_SUFFIX`
-      # build.
+      # Every channel releases through this pipeline, and each release lands
+      # on its own channel: the tag's suffix names the channel (v0.2.2,
+      # v0.2.2-beta, v0.2.2-experimental), the build seals that channel, and
+      # the update feed lands on the channel's own branch through a pull
+      # request — so an experimental tag can never offer anything to a stable
+      # user: the feeds never share a branch (see the CHANNEL derivation
+      # below, and docs/DISTRIBUTION.md's one-channel-per-branch rule).
       - 'v*'
-      - '!v*-experimental'
   workflow_dispatch:
 
 permissions:
@@ -233,12 +231,25 @@ jobs:
           # the branch in its updateUrl. Without it the build would ship
           # the tree's default, which is the stable channel.
           PICODE_CHANNEL: ${{ env.CHANNEL }}
+          # A local build is portable-only; the release is the one caller
+          # that also ships the Inno Setup installer, so it asks for it.
+          PICODE_SKIP_INSTALLER: "no"
         run: ./dev/build.sh
 
       - name: Read the built identity
         shell: bash
         run: |
-          PROD=PiCode-Win32-x64/resources/app/product.json
+          # build.sh names the pack folder after the channel: stable keeps
+          # the plain `PiCode-Win32-x64`, every other channel appends its
+          # own name (dev/build.sh, "the channel names the PACK FOLDER"),
+          # so an experimental tag never looks for a folder that build
+          # does not produce.
+          PACK="PiCode-Win32-x64"
+          if [ "${CHANNEL}" != "stable" ]; then
+            PACK="PiCode-Win32-x64-${CHANNEL}"
+          fi
+          echo "PACK=${PACK}" >> "$GITHUB_ENV"
+          PROD="${PACK}/resources/app/product.json"
           COMMIT=$(node -p "require('./$PROD').commit")
           BUILT=$(node -p "require('./$PROD').version")
           if ! [[ "${COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
@@ -259,8 +270,10 @@ jobs:
         run: |
           ZIP=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
           # data/ is the portable profile, never the product.
+          # $PACK is the channel-suffixed folder "Read the built identity"
+          # resolved against the built tree.
           (
-            cd PiCode-Win32-x64
+            cd "${PACK}"
             "$ZIP" a -tzip \
               "../PiCode-win32-x64-${PICODE_VERSION}.zip" . "-x!data"
           )
@@ -317,6 +330,81 @@ jobs:
               --title "PiCode ${PICODE_VERSION}" --generate-notes \
               "${CREATE[@]}" "${TARGET[@]}"
           fi
+          # A channel shows exactly ONE release: the newest (the owner's
+          # rule, 2026-10-16). Once this one is up, take the previous
+          # release of the same channel down, release and tag. Deleted
+          # AFTER the new one is safe: a run that fails midway never
+          # leaves the channel with no release at all. The "strictly
+          # newer" guard above does not depend on this list — it reads
+          # the previous version from the channel's own feed in the tree.
+          if [ "${CHANNEL}" = "stable" ]; then
+            OLD_PATTERN='test("^v[0-9.]+$")'
+          else
+            OLD_PATTERN="endswith(\"-${CHANNEL}\")"
+          fi
+          for OLD_TAG in $(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --paginate --jq ".[].tag_name | select(${OLD_PATTERN})"); do
+            if [ "${OLD_TAG}" != "v${PICODE_VERSION}" ]; then
+              echo "deleting superseded release ${OLD_TAG}"
+              gh release delete "${OLD_TAG}" --cleanup-tag --yes
+            fi
+          done
+
+      - name: Describe the channel above the changelog
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The page opens by saying what this channel IS, and only then what
+          # changed. The description lives in the repository, one fragment per
+          # channel, so it is edited like any other text instead of hiding in
+          # this file. The release's own title already carries the version, and
+          # the project's rule is that a datum appears once.
+          DESCRIPTION="dev/release-notes/${CHANNEL}.md"
+          if [ ! -f "${DESCRIPTION}" ]; then
+            echo "error: channel ${CHANNEL} has no description at" >&2
+            echo "${DESCRIPTION}" >&2
+            exit 1
+          fi
+          # The changelog GitHub generated compares against the release before
+          # this one. Repointed at this tag's own commits: a link that goes
+          # nowhere is the one thing these notes must not carry.
+          # Above it sits the page's own summary: the release's commits, grouped
+          # by kind of change (dev/release-notes.mjs). With no previous tag to
+          # compare against, the script stays silent and the generated
+          # changelog carries the page alone.
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          COMMITS_URL="${REPO_URL}/commits/v${PICODE_VERSION}"
+          SED="s#https://github.com/[^ ]*/compare/[^ ]*#${COMMITS_URL}#"
+          EXE="PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
+          ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
+          WHAT_CHANGED="dev/release-notes/what-changed.md"
+          if [ -n "${PREV_TAG}" ]; then
+            node dev/release-notes.mjs --from "${PREV_TAG}" \
+              --to "v${PICODE_VERSION}" > "${WHAT_CHANGED}"
+          else
+            : > "${WHAT_CHANGED}"
+          fi
+          {
+            cat "${DESCRIPTION}"
+            echo
+            echo "---"
+            echo
+            if [ -s "${WHAT_CHANGED}" ]; then
+              cat "${WHAT_CHANGED}"
+              echo
+              echo "---"
+              echo
+            fi
+            gh release view "v${PICODE_VERSION}" \
+              --json body --jq .body | sed -E "${SED}"
+            echo
+            echo "| File | What it is for |"
+            echo "| --- | --- |"
+            echo "| \`${EXE}\` | install it |"
+            echo "| \`${ZIP}\` | run it in place, without installing |"
+          } > release-notes.md
+          gh release edit "v${PICODE_VERSION}" --notes-file release-notes.md
 
       - name: Describe the channel above the changelog
         shell: bash
@@ -467,9 +555,11 @@ jobs:
               # raw.githubusercontent caches ~5 min, hence the bust query.
               curl -fsSL "${RAW}/${ref}?bust=${bust}"
             else
-              # The contents API reads the exact bytes master serves.
+              # The contents API reads the exact bytes the channel's own
+              # branch serves — the branch this feed was just landed on,
+              # which is master only for the stable channel.
               gh api \
-                "repos/${GITHUB_REPOSITORY}/contents/${ref}?ref=master" \
+                "repos/${GITHUB_REPOSITORY}/contents/${ref}?ref=${FEED_BRANCH}" \
                 --jq .content | base64 -d
             fi
           }

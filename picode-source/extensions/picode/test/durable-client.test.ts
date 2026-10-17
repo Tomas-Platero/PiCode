@@ -106,7 +106,9 @@ test('DaemonClient rejects pending requests when the daemon closes the connectio
 
 test('daemonEndpoint is the local named pipe on Windows and a socket under the folder elsewhere', () => {
 	if (process.platform === 'win32') {
-		assert.strictEqual(daemonEndpoint('somewhere/durable'), '\\\\.\\pipe\\picode-durable-agent');
+		// The EDITOR's own pipe — not the external pi's default (`picode-durable-agent`):
+		// two pi, two endpoints, no silent sharing.
+		assert.strictEqual(daemonEndpoint('somewhere/durable'), '\\\\.\\pipe\\picode-durable-editor');
 	} else {
 		assert.strictEqual(daemonEndpoint('somewhere/durable').endsWith('.data/durable.sock'), true);
 	}

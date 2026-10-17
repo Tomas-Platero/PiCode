@@ -11,6 +11,7 @@ import { promisify } from 'util';
 import glob from 'glob';
 import gulpWatch from '../lib/watch/index.ts';
 import { nlsPlugin, createNLSCollector, finalizeNLS, postProcessNLS } from './nls-plugin.ts';
+import type { RawSourceMap } from 'source-map';
 import { convertPrivateFields, adjustSourceMap, type ConvertPrivateFieldsResult } from './private-to-property.ts';
 import { getVersion } from '../lib/getVersion.ts';
 import { getGitCommitDate } from '../lib/date.ts';
@@ -251,7 +252,12 @@ const commonResourcePatterns = [
 	'vs/workbench/browser/parts/editor/media/letterpress*.svg',
 	'vs/workbench/contrib/chat/browser/widget/media/chatPet/**/*.{gif,png}',
 	'vs/sessions/contrib/chat/browser/media/*.svg',
-	'vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg'
+	'vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg',
+
+	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts).
+	// Without this entry the build ships no file there and the renderer logs
+	// `picode.svg ... net::ERR_FILE_NOT_FOUND` on every window.
+	'vs/workbench/contrib/picode/browser/media/*.svg'
 ];
 
 // Resources for desktop target
@@ -451,7 +457,7 @@ function scanBuiltinExtensions(extensionsRoot: string): Array<IScannedBuiltinExt
 				readmePath: readme ? path.join(extensionFolder, readme) : undefined,
 				changelogPath: changelog ? path.join(extensionFolder, changelog) : undefined,
 			});
-		} catch (e) {
+		} catch {
 			// Skip invalid extensions
 		}
 	}
@@ -497,7 +503,7 @@ async function compileStandaloneFiles(outDir: string, doMinify: boolean, target:
 		const entryPath = path.join(REPO_ROOT, SRC_DIR, file);
 		const outPath = path.join(REPO_ROOT, outDir, file.replace(/\.ts$/, '.js'));
 
-		await esbuild.build({
+		return esbuild.build({
 			entryPoints: [entryPath],
 			outfile: outPath,
 			bundle: false, // Don't bundle - these are standalone scripts
@@ -825,6 +831,7 @@ ${tslib}`,
 		const result = await esbuild.build(buildOptions);
 
 		buildResults.push({ outPath, result });
+		return result;
 	}));
 
 	// Bundle bootstrap files (with minimist inlined) directly from TypeScript source
@@ -963,7 +970,14 @@ ${tslib}`,
 		const nls = nlsEdits.get(jsPath);
 
 		if (mangle || nls) {
-			let mapJson = JSON.parse(mapFile.text);
+			// A malformed map must stop the build loudly, the way a broken sourcemap in the
+			// output would be, not slip through as silently-truncated debugging data.
+			let mapJson: RawSourceMap;
+			try {
+				mapJson = JSON.parse(mapFile.text);
+			} catch (error) {
+				throw new Error(`malformed source map: ${mapFile.path}`, { cause: error });
+			}
 			if (mangle) {
 				mapJson = adjustSourceMap(mapJson, mangle.preMangleCode, mangle.edits);
 			}

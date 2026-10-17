@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -80,6 +80,60 @@ export function findSdkEntry(start: string): string | undefined {
 }
 
 /**
+ * The pi package's entry, found from the shim that launches it.
+ *
+ * One function for the three places that must agree on the answer — the onboarding card's
+ * availability, its probe, and the external runtime — because two layouts put the package
+ * behind a `pi` on the PATH:
+ *
+ * - an **npm install**, where the shim sits beside its `node_modules`: the walk-up above;
+ * - pi's **managed install**, where the shim runs `pi-launcher.js`, which reads
+ *   `install/current-version` and launches the package from
+ *   `install/releases/<version>/node_modules/…` (the launcher's own arithmetic, with the
+ *   launcher's own validation of the version file).
+ *
+ * Only the first was ever looked for, so a machine with the managed install had no external
+ * pi as far as this editor was concerned: the onboarding card stayed greyed — and
+ * unclickable, since the click was bound only when the option was available — while the
+ * probe beside it already said "found on your computer — ready to use".
+ */
+export function sdkEntryOfShim(shim: string): string | undefined {
+	const start = path.dirname(shim);
+	return findSdkEntry(start) ?? findManagedSdkEntry(start);
+}
+
+/**
+ * The managed install's entry, for the two roots a shim can sit in: `<root>/bin/pi` (the
+ * shape pi installs) or `<root>/pi`. Absent or unreadable is "there is no pi here" — the
+ * same answer the caller gives for a missing shim, never a path built from a version file
+ * that does not name one.
+ */
+function findManagedSdkEntry(shimDir: string): string | undefined {
+	const nested = path.join('node_modules', ...PI_PACKAGE.split('/'), 'dist', 'index.js');
+	for (const root of [path.dirname(shimDir), shimDir]) {
+		const versionFile = path.join(root, 'install', 'current-version');
+		if (!existsSync(versionFile)) {
+			continue;
+		}
+		try {
+			const version = readFileSync(versionFile, 'utf8').trim();
+			// The version names one segment of a path, so the launcher's rule applies verbatim:
+			// nothing empty, nothing that could climb out of `releases/`, one path segment only.
+			if (!version || version === '.' || version === '..' || !/^[0-9A-Za-z._+-]+$/.test(version)) {
+				continue;
+			}
+			const entry = path.join(root, 'install', 'releases', version, nested);
+			if (existsSync(entry)) {
+				return entry;
+			}
+		} catch {
+			// An unreadable version file is "not found", which the caller says in its own words.
+		}
+	}
+	return undefined;
+}
+
+/**
  * The external pi's SDK entry: the entry of the package behind the `pi` on the PATH.
  *
  * `undefined` means the machine has no `pi` on the PATH, or the one it names does not carry
@@ -88,5 +142,5 @@ export function findSdkEntry(start: string): string | undefined {
  */
 export function externalSdkEntry(): string | undefined {
 	const executable = resolveOnPath('pi');
-	return executable === undefined ? undefined : findSdkEntry(path.dirname(executable));
+	return executable === undefined ? undefined : sdkEntryOfShim(executable);
 }

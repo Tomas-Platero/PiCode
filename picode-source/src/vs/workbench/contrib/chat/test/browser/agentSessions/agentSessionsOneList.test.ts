@@ -6,42 +6,57 @@
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
 import { AgentSessionProviders } from '../../../browser/agentSessions/agentSessions.js';
-import { DEFAULT_EXCLUDES, excludesAfterToggle, ONE_LIST_SESSION_PROVIDERS, PI_TRANSCRIPT_SESSION_PROVIDER } from '../../../browser/agentSessions/agentSessionsFilter.js';
+import { AgentSessionStatus } from '../../../browser/agentSessions/agentSessionsModel.js';
+import { DEFAULT_EXCLUDES, DURABLE_SESSION_PROVIDER, normalizedExcludes, PI_TRANSCRIPT_SESSION_PROVIDER, RETIRED_SESSION_PROVIDERS } from '../../../browser/agentSessions/agentSessionsFilter.js';
 
 /**
- * PiCode records its own conversations twice — the editor's `Local` sessions and pi's transcripts —
- * and the owner asked for one list at a time: «Me gustaría que siempre filtrara por defecto por las
- * "local" y luego yo si quiero poner las externas, nunca ambas juntas».
+ * The owner retired the whole question of which list the panel shows.
+ * The panel shows **the one list** — the
+ * conversations that live in durable (pi thinks, durable remembers) — and the retired providers
+ * (`Local`, the editor's duplicate record; `pi`, the transcripts of the CLI and of imports)
+ * never appear and are never offered as a filter.
  */
-suite('Agent Sessions Filter — one list at a time', () => {
+suite('Agent Sessions Filter — one list, no filter', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
 
-	test('the panel opens on the editor\u2019s list', () => {
-		// pi's transcripts are the same conversations recorded a second time, so they start hidden
-		// and the editor's own sessions are what the panel shows.
-		assert.deepStrictEqual([...DEFAULT_EXCLUDES.providers], [PI_TRANSCRIPT_SESSION_PROVIDER]);
-		assert.ok(!DEFAULT_EXCLUDES.providers.includes(AgentSessionProviders.Local));
+	test('the one list is pi\u2019s transcripts, and only pi\u2019s', () => {
+		// The retired providers start excluded and pi starts visible; nothing else starts hidden.
+		assert.deepStrictEqual([...DEFAULT_EXCLUDES.providers].sort(), [...RETIRED_SESSION_PROVIDERS].sort());
+		assert.ok(!DEFAULT_EXCLUDES.providers.includes(DURABLE_SESSION_PROVIDER));
 	});
 
-	test('showing one half of the list hides the other', () => {
-		// `excludes` holds what is hidden. Turning pi on must hide Local, and the other way round:
-		// that is the "never both" the owner asked for.
-		assert.deepStrictEqual(excludesAfterToggle([PI_TRANSCRIPT_SESSION_PROVIDER], PI_TRANSCRIPT_SESSION_PROVIDER), [AgentSessionProviders.Local]);
-		assert.deepStrictEqual(excludesAfterToggle([AgentSessionProviders.Local], AgentSessionProviders.Local), [PI_TRANSCRIPT_SESSION_PROVIDER]);
+	test('durable can never be hidden, however the filter was stored', () => {
+		// An install that still offered the provider toggles may have stored `pi` hidden and a
+		// retired provider visible; normalization must undo both, not trust the stored state.
+		const stored = normalizedExcludes({
+			providers: [DURABLE_SESSION_PROVIDER, AgentSessionProviders.AgentHostCopilot],
+			states: [],
+			archived: true,
+			read: false,
+			repositoryGroupCapped: true,
+		});
+		assert.ok(!stored.providers.includes(DURABLE_SESSION_PROVIDER));
+		for (const retired of RETIRED_SESSION_PROVIDERS) {
+			assert.ok(stored.providers.includes(retired));
+		}
+		// A provider the one-list rule says nothing about keeps its own stored state, and the
+		// retired `pi` transcripts keep their stored exclusion.
+		assert.ok(stored.providers.includes(AgentSessionProviders.AgentHostCopilot));
+		assert.ok(stored.providers.includes(PI_TRANSCRIPT_SESSION_PROVIDER));
 	});
 
-	test('hiding one does not reveal the other', () => {
-		// Turning a provider *off* keeps the other half exactly as it was; the group only moves when
-		// one of them is turned back on.
-		assert.deepStrictEqual(excludesAfterToggle([], PI_TRANSCRIPT_SESSION_PROVIDER), [PI_TRANSCRIPT_SESSION_PROVIDER]);
-		assert.deepStrictEqual(excludesAfterToggle([PI_TRANSCRIPT_SESSION_PROVIDER], AgentSessionProviders.Local), [PI_TRANSCRIPT_SESSION_PROVIDER, AgentSessionProviders.Local]);
-	});
-
-	test('a provider outside the group is untouched', () => {
-		// The rule is about the two views of PiCode's own conversations, not about every provider a
-		// user might have: another agent's list keeps its own state.
-		const other = AgentSessionProviders.AgentHostCopilot;
-		assert.ok(!ONE_LIST_SESSION_PROVIDERS.includes(other));
-		assert.deepStrictEqual(excludesAfterToggle([PI_TRANSCRIPT_SESSION_PROVIDER], other), [PI_TRANSCRIPT_SESSION_PROVIDER, other]);
+	test('the stored state is carried through, not replaced', () => {
+		// Normalization only fixes the providers; the state toggles are the owner's own choices.
+		const stored = normalizedExcludes({
+			providers: [],
+			states: [AgentSessionStatus.Failed],
+			archived: false,
+			read: true,
+			repositoryGroupCapped: false,
+		});
+		assert.deepStrictEqual(stored.states, [AgentSessionStatus.Failed]);
+		assert.strictEqual(stored.archived, false);
+		assert.strictEqual(stored.read, true);
+		assert.strictEqual(stored.repositoryGroupCapped, false);
 	});
 });

@@ -96,8 +96,7 @@ test('no roots at all is no block', () => {
 });
 
 test('a saved workspace file decides the window is a workspace, before its folders finish loading', () => {
-	// The owner's report: «la lista de sesiones en un area de trabajo sigue fallando, es que parpadea,
-	// es como si intentase coger las de una de las carpetas… Ejemplo las de artictempest-web». A window
+	// The owner's report. A window
 	// opened from a workspace file reports one folder while it is still being restored, so counting
 	// folders answered "folder" for an instant and the panel listed that folder's sessions.
 	assert.strictEqual(isWorkspaceWindow('auto', 1, true), true);

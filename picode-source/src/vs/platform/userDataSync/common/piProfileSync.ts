@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { VSBuffer } from '../../../base/common/buffer.js';
+import { execPath } from '../../../base/common/process.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { IStringDictionary } from '../../../base/common/collections.js';
 import { Event } from '../../../base/common/event.js';
@@ -82,9 +83,9 @@ export function parsePiProfileSyncContent(syncData: ISyncData): IStringDictionar
  * which is the same layout the portable distribution uses.
  */
 function resolvePiProfileFolder(environmentService: INativeEnvironmentService): string {
-	if (/picode/i.test(process.execPath)) {
+	if (execPath && /picode/i.test(execPath)) {
 		// Packaged PiCode: dirname(PiCode.exe) is the distribution root.
-		return join(dirname(process.execPath), ...PI_PROFILE_DISTRIBUTION_SUBPATH);
+		return join(dirname(execPath), ...PI_PROFILE_DISTRIBUTION_SUBPATH);
 	}
 	return join(dirname(environmentService.userDataPath), PI_PROFILE_DISTRIBUTION_SUBPATH[1]);
 }

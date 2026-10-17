@@ -7,13 +7,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
-import { externalSdkEntry, findSdkEntry, resolveOnPath } from './piLocate';
+import * as os from 'node:os';
+import { externalSdkEntry, resolveOnPath, sdkEntryOfShim } from './piLocate';
 import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
 import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
+import { importTranscriptsIntoDurable, importOutcomeMessage, type ImportPassOutcome } from './sessions-import';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -122,11 +124,19 @@ export interface AboutVersions {
 /** The import's live state: the page polls it to draw its progress bar. */
 const importLog: { running: boolean; lines: string[]; step: number; total: number } = { running: false, lines: [], step: 0, total: 0 };
 
+/** The import's own Output channel — what the pass brings, line by line, in one place. */
+let importChannel: vscode.OutputChannel | undefined;
+function importOutput(): vscode.OutputChannel {
+	importChannel ??= vscode.window.createOutputChannel('PiCode Import');
+	return importChannel;
+}
+
 function logImport(line: string): void {
 	importLog.lines.push(line);
 	if (importLog.lines.length > 12) {
 		importLog.lines.splice(0, importLog.lines.length - 12);
 	}
+	importOutput().appendLine(line);
 }
 
 /**
@@ -186,20 +196,12 @@ async function syncImportedRowsToSettings(deps: SetupDeps, report: ImportReport)
 	}
 
 	if (landed('mcp')) {
-		try {
-			const rows = mcpRowsFromMcpFile(readCopiedFile('mcp.json'));
-			if (rows.length > 0) {
-				const current = configuration.get<unknown[]>('mcp.servers') ?? [];
-				const merged = mergeRowsById(
-					current,
-					rows,
-					raw => (typeof (raw as { name?: unknown })['name'] === 'string' ? ((raw as { name: string }).name.trim()) : ''),
-				);
-				await configuration.update('mcp.servers', merged, vscode.ConfigurationTarget.Global);
-				logImport(`Recorded ${rows.length} MCP ${rows.length === 1 ? 'server' : 'servers'} in Settings > PiCode > MCP.`);
-			}
-		} catch (error) {
-			logImport(`Your imported MCP servers could not be added to the settings (${messageOf(error)}). They still work; pi reads them from its own file.`);
+		// No settings mirror exists any more: the MCP section is driven from the
+		// profile's own mcp.json, which the copy above just brought over — the
+		// editor runs those servers from there, and the section lists them.
+		const rows = mcpRowsFromMcpFile(readCopiedFile('mcp.json'));
+		if (rows.length > 0) {
+			logImport(`Your ${rows.length === 1 ? 'MCP server is' : `${rows.length} MCP servers are`} already live in pi's own file — the editor runs them from there.`);
 		}
 	}
 }
@@ -254,14 +256,41 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		vscode.commands.registerCommand(PROBE_EXTERNAL_COMMAND, (): Promise<ExternalPiInfo> => probeExternalPi()),
 		vscode.commands.registerCommand(IMPORT_PREVIEW_COMMAND, (): ProfilePreview & { profile: string } =>
 			({ ...scanExternalProfile(), profile: externalProfileDir() })),
-		vscode.commands.registerCommand(IMPORT_COMMAND, async (credentials: unknown) => {
+		vscode.commands.registerCommand(IMPORT_COMMAND, async (selection: unknown) => {
 			// One import at a time: the page starts it and watches the log.
 			if (importLog.running) {
 				return undefined;
 			}
-			// Credentials are the one item whose copy is the owner's own decision: the page
-			// asks for them behind an unchecked box, and nothing here turns the import into
-			// a way of copying `auth.json` as a side effect.
+			// The page sends what its checkboxes hold: one flag per item, credentials among
+			// them. A bare boolean is the older caller's shape (logins only); no argument
+			// means everything but the logins — the offer the page made before the import
+			// became selectable. Credentials are the one item whose copy is the owner's own
+			// decision, and nothing here turns the import into a way of copying `auth.json`
+			// as a side effect.
+			const wanted = ((): Record<string, boolean> => {
+				if (typeof selection === 'object' && selection !== null && !Array.isArray(selection)) {
+					const value = selection as Record<string, unknown>;
+					const flag = (key: string): boolean => value[key] === true;
+					return {
+						settings: flag('settings'),
+						models: flag('models'),
+						mcp: flag('mcp'),
+						skills: flag('skills'),
+						memory: flag('memory'),
+						sessions: flag('sessions'),
+						credentials: flag('credentials'),
+					};
+				}
+				return {
+					settings: true,
+					models: true,
+					mcp: true,
+					skills: true,
+					memory: true,
+					sessions: true,
+					credentials: selection === true,
+				};
+			})();
 			importLog.running = true;
 			importLog.lines = [];
 			importLog.step = 0;
@@ -283,18 +312,26 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 			const leftBehind = splitLeftBehindPackages(externalPackages).leftBehind;
 			importLog.total = externalPackages.length > 0 ? 3 : 2;
 			try {
-				logImport('Bringing your packages, connections, skills and conversations…');
+				const coming = ([
+					['your settings and packages', wanted.settings],
+					['your AI connections', wanted.models],
+					['your MCP servers', wanted.mcp],
+					['your skills', wanted.skills],
+					['your memory', wanted.memory],
+					['your conversations', wanted.sessions],
+				] as ReadonlyArray<readonly [string, boolean]>).flatMap(entry => entry[1] ? [entry[0]] : []);
+				logImport(coming.length > 0 ? `Bringing ${coming.join(', ')}…` : 'Nothing was selected to import.');
 				const report = importProfile({
 					from: externalProfileDir(),
 					to: deps.profileDir,
 					selection: {
-						settings: true,
-						models: true,
-						mcp: true,
-						skills: true,
-						memory: true,
-						sessions: true,
-						credentials: credentials === true,
+						settings: wanted.settings,
+						models: wanted.models,
+						mcp: wanted.mcp,
+						skills: wanted.skills,
+						memory: wanted.memory,
+						sessions: wanted.sessions,
+						credentials: wanted.credentials,
 					},
 				});
 				importLog.step = 1;
@@ -391,9 +428,22 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// still holds the pre-import pi. The next conversation loads what landed.
 				deps.resetChat();
 				deps.sessionsChanged();
+				// The one list is durable's: every transcript that just landed is recorded as a
+				// durable conversation, so it shows up and continues like any other. Fire-and-
+				// forget — the files are imported either way; a daemon that is down records
+				// nothing now and a later pass catches up. Skipped when the owner declined the
+				// conversations: a pass over a directory nothing copied would only report an
+				// empty outcome as if it meant something.
+				if (wanted.sessions) {
+					void importTranscriptsIntoDurable(
+						path.join(deps.profileDir, 'sessions'),
+						vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+						logImport,
+					);
+				}
 				importLog.step = importLog.total;
 				logImport('Done.');
-				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: credentials === true };
+				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: wanted.credentials };
 			} finally {
 				importLog.running = false;
 			}
@@ -407,7 +457,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				selection: { credentials: true },
 			});
 		}),
-		vscode.commands.registerCommand(IMPORT_SESSIONS_COMMAND, () => {
+		vscode.commands.registerCommand(IMPORT_SESSIONS_COMMAND, async () => {
 			// Conversations only. `importProfile` merges and never deletes, so this cannot cost a
 			// conversation that exists here and not there.
 			const report = importProfile({
@@ -416,6 +466,21 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				selection: { sessions: true },
 			});
 			const sessions = report.items.find(entry => entry.item === 'sessions');
+			// The one list is durable's: the transcripts that just landed are recorded as
+			// durable conversations (see the full-import path). AWAITED, not fire-and-forget:
+			// the popup must say what the panel now holds — or why it does not. "Nothing
+			// happened" is how a working pass and a dead one read exactly the same.
+			let outcome: ImportPassOutcome;
+			try {
+				outcome = await importTranscriptsIntoDurable(
+					path.join(deps.profileDir, 'sessions'),
+					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+					logImport,
+				);
+			} catch (error) {
+				outcome = { landed: 0, repaired: 0, completed: 0, daemonDown: true };
+				logImport(`sessions import: the pass itself failed — ${messageOf(error)}`);
+			}
 			// The panel re-lists even when nothing came over: an import that finds nothing must not
 			// leave the owner wondering whether it ran.
 			deps.sessionsChanged();
@@ -426,7 +491,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				void vscode.window.showInformationMessage('PiCode: your external pi has no conversations to bring in.');
 				return;
 			}
-			void vscode.window.showInformationMessage(`PiCode: your external pi's ${sessions.files} conversations are in this profile now. Nothing was moved or deleted.`);
+			void vscode.window.showInformationMessage(`${importOutcomeMessage(outcome)} Your external pi's ${sessions.files} conversation files are in this profile now. Nothing was moved or deleted.`);
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];
@@ -461,15 +526,22 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 		return externalProbe;
 	}
 	const shim = resolveOnPath('pi');
-	if (shim === undefined) {
-		return (externalProbe = { found: false });
+	// "Found" means **usable** — the package behind the shim, not merely the shim — because
+	// the onboarding card's availability and this line read the same function. Two different
+	// answers is what left the card greyed and unclickable while its own meta already said
+	// "ready to use": the shim existed, and the package behind it was looked for in a layout
+	// this machine does not have.
+	const entry = shim === undefined ? undefined : sdkEntryOfShim(shim);
+	if (shim === undefined || entry === undefined) {
+		externalProbe = { found: false };
+		return externalProbe;
 	}
 	// The version comes from running the machine's own pi once. The shim may be a `.cmd`, which
 	// `execFile` refuses to run without a shell, so the package's CLI is run in Node mode
 	// directly — the same entry the SDK loads.
 	let version: string | undefined;
-	const cli = findSdkEntry(path.dirname(shim))?.replace(/index\.js$/, 'cli.js');
-	if (cli !== undefined && existsSync(cli)) {
+	const cli = entry.replace(/index\.js$/, 'cli.js');
+	if (existsSync(cli)) {
 		version = await new Promise<string | undefined>(resolve => {
 			execFile(process.execPath, [cli, '--version'], {
 				env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
@@ -478,7 +550,8 @@ export async function probeExternalPi(): Promise<ExternalPiInfo> {
 			}, (error, stdout) => resolve(error === null && typeof stdout === 'string' ? stdout.trim().split('\n')[0] : undefined));
 		});
 	}
-	return (externalProbe = { found: true, path: shim, version });
+	externalProbe = { found: true, path: shim, version };
+	return externalProbe;
 }
 
 /**

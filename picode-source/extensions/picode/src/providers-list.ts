@@ -15,8 +15,7 @@
  *   the owner connected, which is nobody's to declare in a settings row.
  *
  * The status panel counted the union and said «Providers 2» while the settings page listed one row,
- * and the owner read the disagreement as a missing provider: «El proveedor de nan no me sale en la
- * lista de providers, revisa esto. Si te das cuenta en picode:status salen 2 proveedores.» Both were
+ * and the owner read the disagreement as a missing provider. Both were
  * right about their own question. Keeping the three apart is what lets the panel answer the one he
  * actually asked — *which two?* — and say why one of them cannot be edited where the other is.
  *

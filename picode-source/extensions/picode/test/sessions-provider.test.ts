@@ -138,11 +138,11 @@ test('the label is the owner\u2019s own words, not the frame the editor prepends
 	const external = "You are pi, the machine's own coding agent, answering through the PiCode editor. You answer about the project the person you are talking to has open in it.";
 	const separator = '\n\n---\n\n';
 
-	assert.strictEqual(ownerPrompt(`${internal}${separator}arregla esto`), 'arregla esto');
-	assert.strictEqual(ownerPrompt(`${external}\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n${separator}hola`), 'hola');
+	assert.strictEqual(ownerPrompt(`${internal}${separator}fix this`), 'fix this');
+	assert.strictEqual(ownerPrompt(`${external}\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n${separator}hello`), 'hello');
 
 	// A message the frame did not produce — a conversation the pi CLI wrote — is its own label.
-	assert.strictEqual(ownerPrompt('revisa las dependencias'), 'revisa las dependencias');
+	assert.strictEqual(ownerPrompt('check the dependencies'), 'check the dependencies');
 	// And a horizontal rule the owner typed is not a frame: his text is left alone.
 	assert.strictEqual(ownerPrompt('uno\n\n---\n\ndos'), 'uno\n\n---\n\ndos');
 	// A frame with nothing after it stays as it is, rather than becoming an empty label.
@@ -201,7 +201,7 @@ test('the panel lists conversations, never the agents they launched', () => {
 	const parentFile = `${dir}/55555555-5555-5555-5555-555555555555.jsonl`;
 	const childFile = `${dir}/66666666-6666-6666-6666-666666666666.jsonl`;
 	const contents: Record<string, string> = {
-		[parentFile]: transcriptFor('55555555-5555-5555-5555-555555555555', 'una conversacion'),
+		[parentFile]: transcriptFor('55555555-5555-5555-5555-555555555555', 'a conversation'),
 		[childFile]: [
 			JSON.stringify({ type: 'session', version: 3, id: '66666666-6666-6666-6666-666666666666', cwd: 'C:\\list', parentSession: parentFile }),
 			JSON.stringify({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'un agente' }] } }),
@@ -215,7 +215,7 @@ test('the panel lists conversations, never the agents they launched', () => {
 
 	// The conversations list leaves the agent out...
 	const conversations = listProjectConversations('/list', [slug], 100, fs);
-	assert.deepStrictEqual(conversations.map(file => file.label), ['una conversacion']);
+	assert.deepStrictEqual(conversations.map(file => file.label), ['a conversation']);
 
 	// ...and the walk the content provider opens by id with still finds it, so the agents view
 	// can open a transcript the panel deliberately does not list.

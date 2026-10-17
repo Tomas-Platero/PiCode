@@ -8,6 +8,7 @@ import type { Socket } from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DaemonClient, daemonEndpoint } from './durable-client';
+import { DURABLE_SESSION_SCHEME, durableSessionMarkdown } from './durable-sessions';
 import { daemonSpawnPlan } from './durable-spawn';
 import { DEFAULT_DURABLE_FOLDER, durableFolderCandidates, SHIPPED_DURABLE_FOLDER } from './durable-folder';
 import { durableWorkRows, snapshotInFlight, type DurableWorkRow } from './durable-tasks';
@@ -330,6 +331,10 @@ async function startDurableAgent(paths: DurableAgentPaths, { quiet = false } = {
 		PI_AGENT_PROFILE: paths.agentProfile,
 		PICODE_DURABLE_DATA: paths.agentDataDir,
 		PICODE_USER_SETTINGS: paths.userSettingsFile,
+		// The daemon listens on the EDITOR's own endpoint (the same name the clients here
+		// dial). Its default is the external pi's pipe, and whoever started first would
+		// serve the other's chats.
+		PICODE_DURABLE_ENDPOINT: daemonEndpoint(folder),
 	}, logFd);
 	const child = spawn(plan.command, [...plan.args], {
 		cwd: folder,
@@ -445,7 +450,7 @@ function modelAndAgentParams(): Record<string, unknown> {
  * The setting is a `provider/model` string because that is what the agent's own `--model` flag takes,
  * but nothing about it belongs in a text box. It was worse than a text box: its **default** was one
  * developer's own provider, a name no other machine has, so a fresh install pointed at a model that
- * does not exist there — «esto son mis modelos no los de otras personas».
+ * does not exist there.
  *
  * So the list comes from the editor's model registry, filtered to the vendor the connector publishes:
  * those **are** the models the host's profile in force knows, which is exactly what the setting asks
@@ -539,6 +544,76 @@ async function sendDurablePrompt(): Promise<void> {
 	}
 }
 
+/**
+ * "PiCode: Export Durable Conversation": one conversation as a standalone Markdown file.
+ *
+ * Reached two ways: the Sessions panel's right-click menu passes the session item (its
+ * resource is the `durable:/<id>` the panel lists), and the Command Palette arrives empty
+ * and quick-picks instead. Either way the transcript is read the only way the protocol
+ * offers — a watched snapshot on its own connection — and the owner chooses where the
+ * file lands; nothing is written behind their back.
+ */
+async function exportDurableConversation(item?: unknown): Promise<void> {
+	// The menu's marshalled context carries the session; the palette carries nothing.
+	// Anything that does not parse as a durable conversation id falls through to the pick.
+	const resource = (item as { session?: { resource?: vscode.Uri } } | undefined)?.session?.resource;
+	let conversationId: number | undefined;
+	if (resource?.scheme === DURABLE_SESSION_SCHEME && /^\/[0-9]+$/.test(resource.path)) {
+		conversationId = Number(resource.path.slice(1));
+	}
+
+	try {
+		const md = await withDaemon(2500, async client => {
+			let label: string | undefined;
+			if (conversationId === undefined) {
+				const sessions = await client.request('sessions') as { conversations?: readonly DurableConversationRow[] };
+				const rows = sessions.conversations ?? [];
+				if (rows.length === 0) {
+					void vscode.window.showInformationMessage('PiCode: the durable agent holds no conversations yet — send it a prompt first.');
+					return undefined;
+				}
+				const picked = await pickConversation(rows, 'Which durable conversation to export', false);
+				if (picked === undefined || picked === 'new') {
+					return undefined;
+				}
+				conversationId = picked;
+			}
+			const subscribed = await client.request('subscribe', { conversationId }) as { snapshot?: unknown };
+			try {
+				await client.request('unsubscribe', { conversationId });
+			} catch {
+				// The next read unsubscribes again; a stale watch is the daemon's to reap.
+			}
+			return durableSessionMarkdown(subscribed.snapshot, { conversationId, label });
+		});
+		if (md === undefined) {
+			return;
+		}
+
+		const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+		const workspace = vscode.workspace.workspaceFolders?.[0]?.uri;
+		const target = await vscode.window.showSaveDialog({
+			title: 'Export Durable Conversation',
+			defaultUri: workspace
+				? vscode.Uri.joinPath(workspace, `durable-conversation-${conversationId}-${stamp}.md`)
+				: undefined,
+			filters: { 'Markdown': ['md'] },
+		});
+		if (!target) {
+			return;
+		}
+		await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(md));
+		void vscode.window.showInformationMessage(`PiCode: conversation ${conversationId} exported.`, 'Reveal File')
+			.then(reveal => {
+				if (reveal === 'Reveal File') {
+					void vscode.commands.executeCommand('revealInExplorer', target);
+				}
+			});
+	} catch (error) {
+		void vscode.window.showWarningMessage(`PiCode: the conversation could not be exported (${daemonUnavailableSentence(error)}).`);
+	}
+}
+
 /** Whether the editor starts the agent by itself. Absent means yes: it is the useful default. */
 function autoStartEnabled(): boolean {
 	return vscode.workspace.getConfiguration('picode').get<boolean>(PICODE_DURABLE_AUTOSTART_SETTING) !== false;
@@ -571,5 +646,6 @@ export function registerDurableCommands(paths: DurableAgentPaths): vscode.Dispos
 		vscode.commands.registerCommand('picode.durable.list', showDurableConversations),
 		vscode.commands.registerCommand('picode.durable.send', sendDurablePrompt),
 		vscode.commands.registerCommand('picode.durable.chooseModel', chooseDurableModel),
+		vscode.commands.registerCommand('picode.durable.exportConversation', exportDurableConversation),
 	];
 }

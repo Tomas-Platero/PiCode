@@ -75,7 +75,10 @@ picode_data_locked_files() {
 # (nothing lost yet).
 picode_editor_running() {
   local count
-  count=$( tasklist //FI "IMAGENAME eq PiCode.exe" 2>/dev/null | grep -c "PiCode.exe" || true )
+  # The channel exes are named after their channel ("PiCode Experimental.exe"), so the filter is a
+  # PREFIX match: any PiCode* process is an editor, whatever channel built it. The builder itself
+  # (PiCode.Builder.exe) must NOT count, or a build can never be started from the builder window.
+  count=$( tasklist //FI "IMAGENAME eq PiCode*" 2>/dev/null | grep -i "PiCode" | grep -iv "Builder" | wc -l )
   [[ "${count}" -gt 0 ]]
 }
 

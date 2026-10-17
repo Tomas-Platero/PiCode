@@ -66,6 +66,33 @@
                                 </Grid>
                             </Border>
 
+                            <Border Name="SourceCard" Visibility="Collapsed"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="20">
+                                <StackPanel Spacing="12">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE896;" FontSize="14"/>
+                                        <TextBlock Text="PiCode source" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    </StackPanel>
+                                    <TextBlock Name="SourceLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Name="DownloadSourceButton" Click="OnDownloadSource">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE896;" FontSize="14"/>
+                                                <TextBlock Text="Download source"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Name="BrowseSourceButton" Click="OnBrowseSource">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="14"/>
+                                                <TextBlock Text="I already have it"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <Border Name="BuildingCard" Visibility="Collapsed"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -141,13 +168,32 @@
                                     BorderThickness="1" CornerRadius="8" Padding="20">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Settings" Style="{StaticResource SubtitleTextBlockStyle}"/>
-                                    <TextBlock Text="Where the build runs" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                    <TextBlock Name="TargetLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Name="ChannelLine" Style="{StaticResource BodyStrongTextBlockStyle}"/>
-                                    <TextBlock Name="ArchitectureLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
-                                    <TextBlock Name="WslLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
-                                    <Button Name="InstallWslButton" Content="Install WSL and Ubuntu" Click="OnInstallWsl"
-                                            Visibility="Collapsed" HorizontalAlignment="Left"/>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE838;" FontSize="14"/>
+                                        <TextBlock Text="Source folder" Style="{StaticResource BodyStrongTextBlockStyle}"/>
+                                    </StackPanel>
+                                    <TextBlock Name="SettingsRoot" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                                    <TextBlock Name="SettingsSourceNote" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Name="ChangeSourceButton" Click="OnBrowseSource">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="14"/>
+                                                <TextBlock Text="Change folder"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Name="OpenSourceButton" Click="OnOpenSource">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE838;" FontSize="14"/>
+                                                <TextBlock Text="Open in Explorer"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <TextBlock Text="Build options" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0"/>
+                                    <ToggleSwitch Name="SkipInstallerToggle" Header="Skip the installer" OffContent="Build it" OnContent="Skip it"/>
+                                    <ToggleSwitch Name="IncrementalToggle" Header="Incremental build" OffContent="Clean" OnContent="Reuse output"/>
+                                    <ToggleSwitch Name="BuildCliToggle" Header="Build the Rust CLI" OffContent="Skip" OnContent="Build" IsOn="True"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -171,31 +217,17 @@
                                 <FontIcon Glyph="&#xE7F4;" FontSize="14"/>
                                     <TextBlock Text="Build target" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             </StackPanel>
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <!-- Windows' icon font has a desktop and a server; it has no Windows logo
-                                     and no Tux. The four panes are drawn, which is unmistakable, and the
-                                     server is the closest the font comes for the other side. -->
-                                <Button Grid.Column="0" Name="TargetWindowsButton" Tag="windows"
-                                        HorizontalAlignment="Stretch" Click="OnTargetClicked">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Path Width="13" Height="13" Fill="{ThemeResource TextFillColorPrimaryBrush}"
-                                              Data="M0,0 H6 V6 H0 Z M7,0 H13 V6 H7 Z M0,7 H6 V13 H0 Z M7,7 H13 V13 H7 Z"/>
-                                        <TextBlock Text="Windows"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button Grid.Column="1" Name="TargetLinuxButton" Tag="linux"
-                                        HorizontalAlignment="Stretch" Click="OnTargetClicked">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Image Name="LinuxMark" Width="14" Height="14"/>
-                                        <TextBlock Text="Linux (WSL)"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
+                            <TextBlock Text="Windows (win-x64)" Style="{StaticResource BodyStrongTextBlockStyle}"/>
                             <TextBlock Name="RailArchitecture" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+                            <TextBlock Text="Channel" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,4,0,0"/>
+                            <ComboBox Name="ChannelCombo" SelectedIndex="0" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnChannelChanged">
+                                <ComboBoxItem Content="Auto (from branch)"/>
+                                <ComboBoxItem Content="stable"/>
+                                <ComboBoxItem Content="beta"/>
+                                <ComboBoxItem Content="experimental"/>
+                            </ComboBox>
+                            <TextBlock Name="ChannelLine" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
@@ -214,7 +246,6 @@
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Name="RailCheckCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </Grid>
-                            <StackPanel Name="RailChecks" Spacing="8"/>
 
                         </StackPanel>
                     </Border>

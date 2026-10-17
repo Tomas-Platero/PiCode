@@ -28,6 +28,8 @@ import * as path from 'node:path';
 export interface PiSessionTurn {
 	readonly role: 'user' | 'assistant';
 	readonly text: string;
+	/** The transcript entry's own timestamp, in epoch ms — when it actually happened. */
+	readonly timestamp?: number;
 }
 
 /** One session file as the panel lists it. */
@@ -78,6 +80,20 @@ export function conversationFiles(files: readonly PiSessionFile[]): PiSessionFil
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * One transcript entry's own timestamp, in epoch ms — pi stamps every entry in ISO, and
+ * the panel dates conversations from these. `undefined` when the entry carries no
+ * readable stamp, never a guessed clock.
+ */
+function entryTimestamp(entry: unknown): number | undefined {
+	const stamp = isRecord(entry) ? entry['timestamp'] : undefined;
+	if (typeof stamp !== 'string' && typeof stamp !== 'number') {
+		return undefined;
+	}
+	const ms = Date.parse(String(stamp));
+	return Number.isFinite(ms) ? ms : undefined;
 }
 
 /** The text of one content part list: only `text` parts, `thinking` stays out. */
@@ -172,16 +188,62 @@ export function sessionTurns(text: string): PiSessionTurn[] {
 		if (role === 'user') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'user', text });
+				// The stamp rides only when the entry carries one: a turn without a date is
+				// honest undefined, never a key that pretends to hold a number.
+				const stamp = entryTimestamp(entry);
+				turns.push(stamp === undefined ? { role: 'user', text } : { role: 'user', text, timestamp: stamp });
 			}
 		} else if (role === 'assistant') {
 			const text = textOfContent(message['content']);
 			if (text.length > 0) {
-				turns.push({ role: 'assistant', text });
+				const stamp = entryTimestamp(entry);
+				turns.push(stamp === undefined ? { role: 'assistant', text } : { role: 'assistant', text, timestamp: stamp });
 			}
 		}
 	}
 	return turns;
+}
+
+/**
+ * The transcript's own tail: the last message entry that is a turn's own role
+ * (`user` or `assistant`), whatever the session ended with.
+ *
+ * `sessionTurns` reads the conversation; the tail reads how it ENDED. A session closed
+ * while the agent was working carries its last assistant turn as tool calls (and the
+ * results that came back after it), with no visible text — the turns parser drops it,
+ * and a copy built from turns alone ends on the owner's own prompt, which the panel
+ * reads as an answer the owner is owed. The tail is what the import appends so the copy
+ * ends where the session actually ended.
+ */
+export interface PiSessionTail {
+	readonly role: 'user' | 'assistant';
+	/** The visible text — empty when the turn was interrupted before it said anything. */
+	readonly text: string;
+	/** The message's own content parts, as the transcript holds them (tool calls included). */
+	readonly content: readonly unknown[];
+	readonly timestamp?: number;
+}
+
+/** The last user/assistant message entry of a transcript, or `undefined` when it has none. */
+export function sessionTail(text: string): PiSessionTail | undefined {
+	let tail: PiSessionTail | undefined = undefined;
+	for (const entry of entries(text)) {
+		if (entry['type'] !== 'message') {
+			continue;
+		}
+		const message = entry['message'];
+		if (!isRecord(message)) {
+			continue;
+		}
+		const role = message['role'];
+		// Tool results are the plumbing BETWEEN turns: the tail is the last turn itself.
+		if (role !== 'user' && role !== 'assistant') {
+			continue;
+		}
+		const content = Array.isArray(message['content']) ? message['content'] as unknown[] : [];
+		tail = { role, text: textOfContent(content), content, timestamp: entryTimestamp(entry) };
+	}
+	return tail;
 }
 
 /** The file system the listing reads, injectable for tests. */
@@ -307,9 +369,7 @@ export function piProjectSlug(cwd: string): string {
 /**
  * The slugs a window lists conversations from.
  *
- * The owner, twice, and the second time because the first fix read him loosely: «me salen sesiones
- * tanto de proyectos (carpetas) como del workspace. Yo solo quiero ver si estoy en un workspace las
- * de workspace» / «me siguen saliendo todas las sesiones en el workspace al cargar un workspace».
+ * The owner, twice, and the second time because the first fix read him loosely.
  *
  * So a window that **is** a workspace lists the workspace's own conversations and nothing else: the
  * sessions filed under the area's slug, which are the ones this window's chats wrote. The folders'
@@ -383,7 +443,7 @@ function areaFamily(sessionsDir: string, areaSlug: string, fs: SessionsFs): { na
  * window reports one folder while the workspace is still being restored, and the owner opens and
  * closes folders as he works. Every one of those moments renamed the area — `…-513d6f42--` became
  * `…-19976c25--` — and a listing that looked only for the name it had just computed found a folder
- * with no sessions in it and dropped every row («primero me salen 8 sesiones y luego 5»).
+ * with no sessions in it and dropped every row.
  *
  * The sessions do not move when the identity does: they are where they were written. So the listing
  * asks for **every** folder this workspace ever filed under — same area name, any identity — and
@@ -466,7 +526,7 @@ export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: Sessi
  * **One list, because a window is one thing.** The slugs are the window's own
  * (`runtime.ts` `projectSlugsOfWindow()`: the area's when there is one, then each open folder's),
  * so a conversation is listed once and no row has to say which project it belongs to — the
- * owner's own instruction: «Yo solo quiero ver si estoy en un workspace las de workspace», and
+ * owner's own instruction — and
  * the label that said *«Artictempest (Workspace) (workspace area)»* was repeating the same word
  * twice on every row. What tells two rows apart is the title and the date, which is what the
  * panel already puts on them.
@@ -478,8 +538,7 @@ export function areaFamilySlugs(sessionsDir: string, areaSlug: string, fs: Sessi
  * `cap` is the caller's, and the panel passes none: the limit existed to stop **one busy project**
  * from turning a list of groups into an endless one, and a single list of the owner's own workspace
  * is what it asks to see, in a panel that scrolls and searches. A cap here would silently hide the
- * older rows with nothing to say they exist — the reading the owner already reported as «salen
- * menos».
+ * older rows with nothing to say they exist — the reading the owner already reported.
  *
  * With no projects to look at the listing is empty, and there is no fall-back to every project
  * in the profile: the panel shows the sessions of what is open, not somebody else's history.
@@ -861,7 +920,7 @@ export function listSessionBackupFiles(sessionsDir: string, backupFs: BackupFs =
 }
 
 /** The transcript's first record as an object, or `undefined` when the file is not a session transcript. */
-function sessionHeader(text: string): Record<string, unknown> | undefined {
+export function sessionHeader(text: string): Record<string, unknown> | undefined {
 	const firstLineEnd = text.indexOf('\n') === -1 ? text.length : text.indexOf('\n');
 	try {
 		const value: unknown = JSON.parse(text.slice(0, firstLineEnd).trim());

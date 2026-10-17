@@ -25,7 +25,6 @@ import { Schemas } from '../../../../../base/common/network.js';
 import { URI, UriComponents } from '../../../../../base/common/uri.js';
 import { IWorkspaceContextService, WorkbenchState } from '../../../../../platform/workspace/common/workspace.js';
 import { IsSessionsWindowContext } from '../../../../common/contextkeys.js';
-import { ToggleTitleBarConfigAction } from '../../../../browser/parts/titlebar/titlebarActions.js';
 import { IWorkbenchContribution } from '../../../../common/contributions.js';
 import { CHAT_CATEGORY } from '../../browser/actions/chatActions.js';
 import { IChatWidgetService } from '../../browser/chat.js';
@@ -104,28 +103,13 @@ export class OpenWorkspaceInAgentsWindowTitleBarAction extends Action2 {
 			menu: {
 				id: MenuId.TitleBarAdjacentCenter,
 				order: -1000,
-				when: ContextKeyExpr.and(
-					OPEN_AGENTS_WINDOW_PRECONDITION,
-					ContextKeyExpr.notEquals(`config.${ChatConfiguration.TitleBarOpenInAgentsWindowEnabled}`, false),
-				),
+				when: OPEN_AGENTS_WINDOW_PRECONDITION,
 			},
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		await accessor.get(ICommandService).executeCommand(OPEN_WORKSPACE_IN_AGENTS_WINDOW_COMMAND_ID, { source: AgentsWindowOpenSource.TitleBar });
-	}
-}
-
-export class ToggleOpenInAgentsWindowTitleBarAction extends ToggleTitleBarConfigAction {
-	constructor() {
-		super(
-			ChatConfiguration.TitleBarOpenInAgentsWindowEnabled,
-			localize('toggle.openInAgentsWindow', 'Open in Agents Window'),
-			localize('toggle.openInAgentsWindowDescription', "Toggle visibility of the Open in Agents Window button in title bar"),
-			6,
-			OPEN_AGENTS_WINDOW_PRECONDITION,
-		);
 	}
 }
 

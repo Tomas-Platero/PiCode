@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { agentStatusOf, elapsedLabel, pillFace, pillRowsOf, pillTooltipLine } from '../picodeAgentStatusData.ts';
+import { agentStatusOf, elapsedLabel, pillFace, pillRowsOf, pillTooltipLine } from '../picodeAgentStatusData.js';
 
 const T0 = 1_000_000_000;
 

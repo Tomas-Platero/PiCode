@@ -1473,9 +1473,16 @@ export class ChatResponseModel extends Disposable implements IChatResponseModel 
 		this.confirmationAdjustedTimestamp = derived(reader => {
 			const pending = this.isPendingConfirmation.read(reader);
 			if (pending) {
-				this._modelState.set({ value: ResponseModelState.NeedsInput }, undefined);
-				if (!lastStartedWaitingAt) {
-					lastStartedWaitingAt = pending.startedWaitingAt;
+				// Only transition to NeedsInput while the response is genuinely in-flight.
+				// Persisted (reloaded) sessions normalize Pending/NeedsInput to a terminal
+				// state (Completed/Cancelled). Do not flip those back to NeedsInput just
+				// because an old transcript contains a lingering confirmation/tool gate.
+				const current = this._modelState.read(reader).value;
+				if (current === ResponseModelState.Pending || current === ResponseModelState.NeedsInput) {
+					this._modelState.set({ value: ResponseModelState.NeedsInput }, undefined);
+					if (!lastStartedWaitingAt) {
+						lastStartedWaitingAt = pending.startedWaitingAt;
+					}
 				}
 			} else if (lastStartedWaitingAt) {
 				// Restore state to Pending if it was set to NeedsInput by this observable

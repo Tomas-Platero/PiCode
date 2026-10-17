@@ -100,7 +100,6 @@ interface IAgentSessionItemTemplate {
 class AgentSessionStatusIcon extends Disposable {
 
 	private static readonly PIXEL_SPINNER_GRID_KEY = '__pixel_spinner_grid__';
-	private static readonly PIXEL_SPINNER_RING_KEY = '__pixel_spinner_ring__';
 
 	private _currentCacheKey: string | undefined;
 	private _lastSession: IAgentSession | undefined;
@@ -136,10 +135,9 @@ class AgentSessionStatusIcon extends Disposable {
 		this.container.className = `agent-session-icon${session.status === AgentSessionStatus.NeedsInput ? ' needs-input' : ''}`;
 		this.container.style.color = '';
 
-		if ((session.status === AgentSessionStatus.InProgress || session.status === AgentSessionStatus.NeedsInput) && !this.accessibilityService.isMotionReduced()) {
-			const isNeedsInput = session.status === AgentSessionStatus.NeedsInput;
-			const cacheKey = isNeedsInput ? AgentSessionStatusIcon.PIXEL_SPINNER_RING_KEY : AgentSessionStatusIcon.PIXEL_SPINNER_GRID_KEY;
-			const color = isNeedsInput ? asCssVariable('list.warningForeground') : asCssVariable('textLink.foreground');
+		if (session.status === AgentSessionStatus.InProgress && !this.accessibilityService.isMotionReduced()) {
+			const cacheKey = AgentSessionStatusIcon.PIXEL_SPINNER_GRID_KEY;
+			const color = asCssVariable('textLink.foreground');
 			if (this._currentCacheKey === cacheKey) {
 				this.updateActiveIconColor(color);
 				return;
@@ -148,7 +146,7 @@ class AgentSessionStatusIcon extends Disposable {
 			this._currentCacheKey = cacheKey;
 			this.spinner.clear();
 			clearNode(this.container);
-			const spinner = createPixelSpinner(undefined, { variant: isNeedsInput ? 'ring' : 'grid' });
+			const spinner = createPixelSpinner(undefined, { variant: 'grid' });
 			this.spinner.value = spinner;
 			spinner.element.style.color = color;
 			this.container.appendChild(spinner.element);
@@ -1571,6 +1569,12 @@ export function groupAgentSessionsByDate(sessions: IAgentSession[], sortBy?: Age
 }
 
 export function sessionDateFromNow(sessionTime: number, appendAgoLabel?: boolean): string {
+	// A session without a real date — the missing/epoch value a transcript recorded before
+	// the recorder stamped its messages degrades to — shows no age at all: "57y ago" is a
+	// lie the panel must not tell. The caller renders the empty string as no label.
+	if (!Number.isFinite(sessionTime) || sessionTime <= 0) {
+		return '';
+	}
 	const now = Date.now();
 	const startOfToday = new Date(now).setHours(0, 0, 0, 0);
 	const startOfYesterday = startOfToday - DAY_THRESHOLD;

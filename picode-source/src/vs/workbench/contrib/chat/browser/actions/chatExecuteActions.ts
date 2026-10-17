@@ -391,7 +391,8 @@ export class OpenModelPickerAction extends Action2 {
 						ChatContextKeys.hasPendingDelegationTarget.negate(),
 						ContextKeyExpr.or(
 							ChatContextKeys.lockedToCodingAgent.negate(),
-							ChatContextKeys.chatSessionHasTargetedModels),
+							ChatContextKeys.chatSessionHasTargetedModels,
+							ContextKeyExpr.has('picode.chatActive')),
 						ContextKeyExpr.or(
 							ContextKeyExpr.equals(ChatContextKeys.location.key, ChatAgentLocation.Chat),
 							ContextKeyExpr.equals(ChatContextKeys.location.key, ChatAgentLocation.EditorInline),
@@ -401,6 +402,7 @@ export class OpenModelPickerAction extends Action2 {
 						ContextKeyExpr.or(
 							ChatContextKeys.inAgentSessionsWelcome.negate(),
 							ChatContextKeys.chatSessionHasTargetedModels,
+							ContextKeyExpr.has('picode.chatActive'),
 							ChatContextKeys.agentSessionType.isEqualTo(AgentSessionProviders.Local),
 							ContextKeyExpr.and(
 								IsSessionsWindowContext,

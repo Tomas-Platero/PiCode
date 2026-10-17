@@ -146,7 +146,7 @@ export class DefaultAccountService extends Disposable implements IDefaultAccount
 
 	get managedSettingsFetchStatus(): ManagedSettingsFetchStatus { return this.defaultAccountProvider?.managedSettingsFetchStatus ?? null; }
 	get managedSettingsFetchedAt(): number | null { return this.defaultAccountProvider?.managedSettingsFetchedAt ?? null; }
-	get managedSettingsRawResponse(): unknown { return this.defaultAccountProvider?.managedSettingsRawResponse ?? null; }
+	get managedSettingsRawResponse(): IManagedSettingsResponse | null { return (this.defaultAccountProvider?.managedSettingsRawResponse ?? null) as IManagedSettingsResponse | null; }
 	get managedSettingsCompatibilityError(): IManagedSettingsCompatibilityError | null { return this.defaultAccountProvider?.managedSettingsCompatibilityError ?? null; }
 
 	private readonly initBarrier = new Barrier();
@@ -313,8 +313,8 @@ export class DefaultAccountProvider extends Disposable implements IDefaultAccoun
 	get managedSettingsFetchStatus(): ManagedSettingsFetchStatus { return this._managedSettingsFetchStatus; }
 	get managedSettingsFetchedAt(): number | null { return this._policyData?.managedSettingsFetchedAt ?? null; }
 
-	private _managedSettingsRawResponse: unknown = null;
-	get managedSettingsRawResponse(): unknown { return this._managedSettingsRawResponse; }
+	private _managedSettingsRawResponse: IManagedSettingsResponse | null = null;
+	get managedSettingsRawResponse(): IManagedSettingsResponse | null { return this._managedSettingsRawResponse; }
 
 	private _managedSettingsCompatibilityError: IManagedSettingsCompatibilityError | null = null;
 	get managedSettingsCompatibilityError(): IManagedSettingsCompatibilityError | null { return this._managedSettingsCompatibilityError; }
@@ -560,6 +560,13 @@ export class DefaultAccountProvider extends Disposable implements IDefaultAccoun
 		this.logService.debug('[DefaultAccount] Default account provider ID:', defaultAccountProvider.id);
 
 		if (!this.isAccountProviderAvailable(defaultAccountProvider)) {
+			if (defaultAccountProvider.id === '') {
+				// PiCode: this product ships no default account provider by design — the empty
+				// provider shape is what an absent `defaultChatAgent` produces. The absence is
+				// not news worth an INFO line on every window: keep it at debug level.
+				this.logService.debug('[DefaultAccount] No default account provider configured for this product.');
+				return null;
+			}
 			this.logService.info(`[DefaultAccount] Authentication provider is not available.`, defaultAccountProvider);
 			return null;
 		}
@@ -1084,8 +1091,8 @@ export class DefaultAccountProvider extends Disposable implements IDefaultAccoun
 	private _rateLimitBackoffUntil = 0;
 
 	private async request(url: string, type: 'GET', body: undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string, requestTimeoutMs?: number): Promise<IRequestContext | undefined>;
-	private async request(url: string, type: 'POST', body: object, sessions: AuthenticationSession[], token: CancellationToken, callSite: string, requestTimeoutMs?: number): Promise<IRequestContext | undefined>;
-	private async request(url: string, type: 'GET' | 'POST', body: object | undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string, requestTimeoutMs?: number): Promise<IRequestContext | undefined> {
+	private async request(url: string, type: 'POST', body: Record<string, unknown>, sessions: AuthenticationSession[], token: CancellationToken, callSite: string, requestTimeoutMs?: number): Promise<IRequestContext | undefined>;
+	private async request(url: string, type: 'GET' | 'POST', body: Record<string, unknown> | undefined, sessions: AuthenticationSession[], token: CancellationToken, callSite: string, requestTimeoutMs?: number): Promise<IRequestContext | undefined> {
 		// Rate-limit backoff: when any prior `/copilot_internal/*` request was
 		// throttled (429 or 403 + `X-RateLimit-Remaining: 0`), every subsequent
 		// request is short-circuited until the parsed `Retry-After` elapses.
@@ -1249,7 +1256,12 @@ export class DefaultAccountProvider extends Disposable implements IDefaultAccoun
 		if (!isString(value)) {
 			return undefined;
 		}
-		return new URL(value);
+		try {
+			return new URL(value);
+		} catch {
+			// A misconfigured enterprise URI is not a crash: no URL, no lookup.
+			return undefined;
+		}
 	}
 
 	async signIn(options?: { additionalScopes?: readonly string[];[key: string]: unknown }): Promise<IDefaultAccount | null> {

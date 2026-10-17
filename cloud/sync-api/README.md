@@ -5,7 +5,7 @@ Settings Sync engine expects, authenticates against Firebase Auth, and stores ea
 user's data in Firestore.
 
 - Firebase project: `picode-7f24f`
-- Client REST contract: see `odd/tasks/picode-cloud-sync.md` (section T1)
+- Client REST contract: `src/lib/contract.ts` (types) and the route table below
 
 ## 🔨 Development
 
@@ -35,11 +35,40 @@ On Vercel they are set as project environment variables (never in the repository
 
 ```text
 src/
-  lib/firebase-admin.ts   # single Firebase Admin SDK init
-  lib/auth.ts             # editor token verification (sync headers)
-  lib/contract.ts         # REST contract types for the sync engine
+  lib/                    # shared rules (no route logic here)
   app/api/                # contract routes (manifest, collection, resource, ...)
+test/                     # pure rules: plans, retention
 ```
+
+### `src/lib/` — las reglas compartidas
+
+| Fichero | Qué hace |
+| --- | --- |
+| `firebase-admin.ts` | La única inicialización del SDK de Firebase Admin (una app, no una por request). |
+| `auth.ts` | Verifica el token de Firebase de cada petición (cabeceras de sincronización). |
+| `contract.ts` | Los tipos del contrato REST que el cliente de sincronización espera (extraídos del editor). |
+| `http.ts` | Helpers de respuesta: el `x-operation-id` (UUID) que lleva toda respuesta. |
+| `store.ts` | El modelo de datos en Firestore (rutas alternando colección/documento) y sus transacciones. |
+| `crypto.ts` | Cifrado en reposo: AES-256-GCM + gzip del contenido antes de escribir. |
+| `plans.ts` | Qué plan declara el perfil (lo no reconocido es `free`). Sin Firestore. |
+| `quota.ts` | Lee el plan del usuario y lo memoriza un momento (la política vive en `plans.ts`). |
+| `retention.ts` | Cuántas revisiones por recurso se conservan (20). |
+
+### `src/app/api/` — las rutas
+
+| Ruta | Qué hace |
+| --- | --- |
+| `health/route.ts` | Liveness: no toca Firebase, sirve para validar el despliegue. |
+| `v1/manifest/route.ts` | Devuelve el manifiesto con `ETag` y responde `304` si no cambió. |
+| `v1/resource/[r]/route.ts` | Lista las revisiones de un recurso / añade una / las borra. |
+| `v1/resource/[r]/latest/route.ts` | La última revisión de un recurso (`ETag`, `304`). |
+| `v1/resource/[r]/[ref]/route.ts` | Una revisión concreta por su ref. |
+| `v1/resource/route.ts` | Borra todos los datos del usuario + manifiesto. |
+| `v1/collection/` · `v1/collection/[id]/` | Lista, crea y borra colecciones (idempotente). |
+| `v1/account/route.ts` | La cuenta, con CORS (la llama el renderer del editor). |
+| `v1/download/` · `v1/download/latest/` | `404` en v1 (no se usa), pero autenticado y con control de plan. |
+
+La tabla completa de métodos y códigos de respuesta está más abajo, en *API endpoints*.
 
 ## 🔌 API endpoints
 
@@ -135,5 +164,6 @@ exposes synced data in readable form.
 1. `vercel link` inside this folder.
 2. Set the environment variables above on the Vercel project.
 3. `vercel deploy --prod`.
-4. The resulting URL (e.g. `https://picode-sync-api.vercel.app/v1`) is the one that goes in
-   the editor's `product.json` `configurationSync.store` (task T6).
+4. The URL goes in the editor's `product.json` `configurationSync.store` **without** `/v1` —
+   the editor appends it itself (`userDataSyncStoreService` joins `v1`). The shipped value is
+   `https://www.getpicode.app/api`.

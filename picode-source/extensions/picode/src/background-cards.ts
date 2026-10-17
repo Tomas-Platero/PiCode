@@ -8,9 +8,8 @@
  * The agent's own `background` tool starts a long command and returns at once; its result says
  * which job it became, and when the command ends the result arrives as a **message** into the
  * conversation. So a job has two ends, both of them in the transcript, and a person watching the
- * chat should be able to see the first one **as work** — «¿hay alguna forma de que yo vea ese
- * background?» — instead of a collapsed tool row, and see the second one as the same work
- * finishing.
+ * chat should be able to see the first one **as work** — instead of a collapsed tool row, and
+ * see the second one as the same work finishing.
  *
  * The card is the shape the chat already draws for a delegation (`vscode.ChatSubagentToolInvocationData`,
  * the one `durable-cards.ts` uses), with the job's own identity on it: the label the agent gave it,

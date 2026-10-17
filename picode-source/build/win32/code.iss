@@ -39,7 +39,7 @@ SetupIconFile={#RepoDir}\resources\win32\code.ico
 UninstallDisplayIcon={app}\{#ExeBasename}.exe
 ChangesEnvironment=true
 ChangesAssociations=true
-MinVersion=6.1.7600
+MinVersion=6.1sp1
 SourceDir={#SourceDir}
 AppVersion={#Version}
 VersionInfoVersion={#RawVersion}
@@ -72,11 +72,11 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl,{#RepoDir}\build\wi
 Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl,{#RepoDir}\build\win32\i18n\messages.it.isl" {#LocalizedLanguageFile("ita")}
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl,{#RepoDir}\build\win32\i18n\messages.ja.isl" {#LocalizedLanguageFile("jpn")}
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl,{#RepoDir}\build\win32\i18n\messages.ru.isl" {#LocalizedLanguageFile("rus")}
-Name: "korean"; MessagesFile: "{#RepoDir}\build\win32\i18n\Default.ko.isl,{#RepoDir}\build\win32\i18n\messages.ko.isl" {#LocalizedLanguageFile("kor")}
+Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl,{#RepoDir}\build\win32\i18n\messages.ko.isl" {#LocalizedLanguageFile("kor")}
 Name: "simplifiedChinese"; MessagesFile: "{#RepoDir}\build\win32\i18n\Default.zh-cn.isl,{#RepoDir}\build\win32\i18n\messages.zh-cn.isl" {#LocalizedLanguageFile("chs")}
 Name: "traditionalChinese"; MessagesFile: "{#RepoDir}\build\win32\i18n\Default.zh-tw.isl,{#RepoDir}\build\win32\i18n\messages.zh-tw.isl" {#LocalizedLanguageFile("cht")}
 Name: "brazilianPortuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl,{#RepoDir}\build\win32\i18n\messages.pt-br.isl" {#LocalizedLanguageFile("ptb")}
-Name: "hungarian"; MessagesFile: "{#RepoDir}\build\win32\i18n\Default.hu.isl,{#RepoDir}\build\win32\i18n\messages.hu.isl" {#LocalizedLanguageFile("hun")}
+Name: "hungarian"; MessagesFile: "compiler:Languages\Hungarian.isl,{#RepoDir}\build\win32\i18n\messages.hu.isl" {#LocalizedLanguageFile("hun")}
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl,{#RepoDir}\build\win32\i18n\messages.tr.isl" {#LocalizedLanguageFile("trk")}
 
 [InstallDelete]
@@ -97,7 +97,8 @@ Type: files; Name: "{app}\updating_version"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 0,6.1
+// The quick-launch task is gone with its OnlyBelowVersion line: Windows XP/ Vista was the only
+// place it could ever run, and no Windows this installer supports (6.1 and up) ever processed it.
 Name: "addcontextmenufiles"; Description: "{cm:AddContextMenuFiles,{#NameShort}}"; GroupDescription: "{cm:Other}"; Flags: unchecked
 Name: "addcontextmenufolders"; Description: "{cm:AddContextMenuFolders,{#NameShort}}"; GroupDescription: "{cm:Other}"; Flags: unchecked
 Name: "associatewithfiles"; Description: "{cm:AssociateWithFiles,{#NameShort}}"; GroupDescription: "{cm:Other}"
@@ -129,7 +130,6 @@ Source: "appx\{#AppxPackageDll}"; DestDir: "{code:GetDestDir}\{#VersionedResourc
 [Icons]
 Name: "{group}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; AppUserModelID: "{#AppUserId}"; Check: ShouldUpdateShortcut(ExpandConstant('{group}\{#NameLong}.lnk'))
 Name: "{autodesktop}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; Tasks: desktopicon; AppUserModelID: "{#AppUserId}"; Check: ShouldUpdateShortcut(ExpandConstant('{autodesktop}\{#NameLong}.lnk'))
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; Tasks: quicklaunchicon; AppUserModelID: "{#AppUserId}"; Check: ShouldUpdateShortcut(ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#NameLong}.lnk'))
 
 [Run]
 Filename: "{app}\{#ExeBasename}.exe"; Parameters: "{code:GetRelaunchArgs}"; Description: "{cm:LaunchProgram,{#NameLong}}"; Tasks: runcode; Flags: nowait postinstall; Check: ShouldRunAfterUpdate; AfterInstall: DeleteRelaunchArgsFile
@@ -1392,8 +1392,6 @@ end;
 function InitializeSetup(): Boolean;
 var
   RegKey: String;
-  ThisArch: String;
-  AltArch: String;
 begin
   Result := True;
 
@@ -1726,10 +1724,15 @@ end;
 // Unblock inno_updater --gc when our context-menu COM surrogate keeps a
 // handle on the orphan commit folder. See https://github.com/microsoft/vscode/issues/294546.
 // No-op when FileExplorerContextMenuCLSID is not defined (e.g. OSS builds).
+// The variables live under the define: with no context-menu COM surrogate to kill (the define
+// is not set on builds that ship no context-menu DLL), an unconditional `var` block made Inno
+// report the two names as never used.
 procedure KillContextMenuComSurrogate();
+#ifdef FileExplorerContextMenuCLSID
 var
   KillErrorCode: Integer;
   Command: String;
+#endif
 begin
 #ifdef FileExplorerContextMenuCLSID
   Log('KillContextMenuComSurrogate: stopping COM surrogate(s) hosting context-menu DLL ({#FileExplorerContextMenuCLSID})');

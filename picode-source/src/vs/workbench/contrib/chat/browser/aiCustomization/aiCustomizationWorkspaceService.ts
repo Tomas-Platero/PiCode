@@ -49,7 +49,7 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 	/**
 	 * The sections of the Agent Customizations window. Instructions, Prompts and
 	 * Hooks are deliberately absent: this product's agent is pi, which has none of
-	 * them (see AGENTS.md, "La ventana de gestión del chat habla de pi, no de
+	 * them (see AGENTS.md, "The chat management window talks about pi, not
 	 * Copilot"). Harness descriptors can only hide sections, never re-show them.
 	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [

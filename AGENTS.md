@@ -99,6 +99,18 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
   * **Migrar** datos desde el Pi del PATH al interno es una opción explícita a petición del usuario, nunca un proceso automático.
 * **Credenciales:** Las claves de endpoints se guardan como variables de entorno o valores cifrados; nunca se muestran en pantalla.
 
+### El pi del PATH es del dueño: solo la app lo toca
+>
+> *"Esto no lo toques NUNCA, esto es mi pi que estamos corriendo ahora mismo."*
+>
+> *"Miento, cuidado, si se puede tocar, al actualizar y tal pero via app."*
+>
+> *"si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo"*
+
+* **Nunca a mano:** ni el agente ni ningún script del repo escriben, instalan ni actualizan el pi del PATH directamente. Es el pi con el que se está trabajando ahora mismo.
+* **Sí, vía la app (única excepción):** el producto puede tocarlo solo a través de sus propios flujos de actualización (Update Pi / Packages), nunca por escritura directa. Esto matiza la regla de aislamiento de escritura: seguir prohibido guardar ni leer a mano en esa carpeta.
+* **Requisito de producto:** cuando el HOST conectado es el externo (PATH), los botones de actualizar Pi y Packages deben actuar sobre ese externo, no sobre el interno.
+
 ### pi durable ya no es experimental
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
@@ -142,11 +154,35 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Una vez autorizado un trabajo, se ejecuta hasta el final sin interrupciones. Las decisiones de producto no cerradas se toman, se registran y se explican al terminar.
 * Transparencia total: lo que no se pueda completar se informa con la misma claridad que lo terminado.
 
+### Builds sin instalador por defecto
+>
+> *"Generame solo la build portable luego y no el instalador, el instalador dejalo a partir de ahora si no te lo pido explicitamente."* — 2026-10-14
+
+* Toda build local produce **solo el pack portable** (`PICODE_SKIP_INSTALLER=yes`).
+* El instalador se construye **solo a petición explícita** del dueño.
+
 ### Reportes de cierre
 >
 > *"Una vez finalices dame un reporte."*
 
 * Al terminar: informe con qué está hecho y verificado, qué falta, por qué y dónde quedó registrado.
+
+### Una sola release por canal
+>
+> *"recuerda borrar la release anterior siempre"* — 2026-10-16
+
+* Cada canal (stable, beta, experimental) muestra **una única release en GitHub: la más nueva**.
+* Al publicar una release nueva, el pipeline borra automáticamente la anterior del mismo canal, con su tag.
+* El borrado va **después** de publicar la nueva: si un run falla a mitad, el canal nunca se queda sin release.
+* El guard de "versión estrictamente más nueva" no depende de la lista de releases: lee la versión anterior del feed del canal en el árbol, así que sigue funcionando tras borrar.
+
+### La página de la release cuenta lo que cambió
+>
+> *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
+
+* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `dev/release-notes.mjs` a partir de los commits del rango y el pipeline lo inserta solo.
+* Los commits de feed y housekeeping no aparecen: no le dicen nada a quien lee la página.
+* Siempre conserva: la descripción del canal encima (`dev/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
 
 ### Idioma del proyecto y del producto
 >
@@ -155,9 +191,13 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"NOno a ver todo ha de estar en ingles, tu me hablas en español, ya costruiremos paquete sde lenguajes para todos los demás idiomas. Pero a priori en inglés."*
 
 * **Producto (Interfaz):** Todo lo que ve el usuario final va en **inglés** (ventanas, avisos, comandos, ajustes, respuestas del chat sobre herramientas).
-* **Comunicación interna:** La interacción con el dueño, los reportes y la documentación (`odd/tasks/`, `AGENTS.md`) se mantienen en **español**.
+* **Comunicación interna:** La interacción con el dueño, los reportes y la documentación (`docs/`, `AGENTS.md`) se mantienen en **español**.
 * **Internacionalización:** Otros idiomas se añadirán mediante paquetes de lenguaje sobre la capa superior, sin mezclar cadenas en el código base.
 * **Excepciones técnicas:** Mensajes de commit, comentarios de código e identificadores permanecen en inglés.
+* **Siempre se escribe en inglés:** todo código nuevo, sus comentarios, las cadenas de código y los mensajes de las herramientas se redactan en inglés — **nada en español** en el código («añade en el agents.md que siempre se escribe en inglés» / «tradúcelo todo al inglés, nada en español», 2026-10-16).
+  * Si aparece español en el código (citas del dueño incluidas): se **borra** si el resto del comentario se entiende solo, o se **traduce** si hace falta para entenderlo.
+  * Única excepción: el texto con destino a documentación en español (`docs/`, `README.md`, `AGENTS.md`).
+* **Datos que no son texto nuestro:** las pruebas de acentos/teclados upstream, los nombres de idioma de los paquetes (`"español"`) y los mensajes citados de terceros se quedan como están.
 
 ### Comunicación clara y funcional
 >
@@ -165,7 +205,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * Explicaciones centradas en **qué hace y qué cambia para el usuario**, sin tecnicismos ni nombres de código/ficheros.
 * Lenguaje directo y frases cortas.
-* El detalle técnico se documenta de forma completa en `odd/tasks/`.
+* El detalle técnico se documenta de forma completa en `docs/`.
 * Explicación funcional de errores: qué significa la falla (ej. "no se pudo conectar"), no la causa en el código.
 
 ### La ventana de gestión del chat habla de pi, no de Copilot
@@ -175,6 +215,37 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **No existen** en este producto: **Instructions**, **Prompts** y **Hooks** (pi no tiene hooks) → fuera de la navegación y de la rejilla de la página.
 
 ---
+
+### Cada carpeta se documenta al lado, y el mapa se genera
+>
+> *"deja avisado algo en el agents.md no? de usar esto"* — 2026-10-16
+
+* **Toda carpeta nueva lleva su `README.md`:** una frase de qué hace esa carpeta y qué hay
+  dentro, escrito al lado del código. Si no lo trae, CI lo avisa y el PR se detiene
+  (`dev/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
+* **El mapa se genera, no se escribe:** `docs/MAPA.md` sale de esos README con
+  `node dev/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
+  locales y salidas de build no entran.
+* **Nivel fichero solo cuando el nombre miente:** si el nombre ya explica el fichero, no se
+  documenta; si no, dos líneas de cabecera con el porqué.
+* **La zona upstream no se documenta fichero a fichero:** `picode-source/src`, `cli`, `build`,
+  `scripts`, `resources`, `remote` y las extensiones built-in llevan un solo aviso de que no
+  son nuestras (ahí está casi todo el código y detallarlo es trabajo que se pudre).
+* **Dónde mirar primero:** `docs/MAPA.md` (árbol con una frase por carpeta) y, para saber quién
+  llama a quién, el grafo de código (`.codegraph/`), no la documentación.
+
+---
+
+## 8. Trabajo por Fases
+
+### Quiero ver las fases del trabajo mientras avanza
+>
+> *"Cuando lanzo fases de tareas no las veo… Tengo una lista con fases y no se ven."*
+> *"gentle-ai siempre lo muestra ¿no deberíamos hacer lo mismo?"*
+
+* **Panel de fases siempre visible:** al empezar cualquier trabajo con varias fases o pasos, el agente registra la lista completa con la herramienta `set_plan` (extensión pi-plan-widget de pi) y la mantiene actualizada: `in_progress` en la fase en marcha, `done` al cerrar cada una.
+* **El panel es estado real, no decoración:** no se eliminan las fases ya hechas y cada cambio de fase se refleja en el panel en el mismo turno.
+* **Sin ruido:** trabajos triviales de un solo paso no llevan plan.
 
 ## Registro de Cambios
 
@@ -191,3 +262,11 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
 * **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
+* **2026-10-13** · Regla de fases visibles: el trabajo por fases se muestra en el panel de pi (`set_plan`, widget de pi-plan-widget) («tengo una lista con fases y no se ven»). Confirmado funcionando por el dueño.
+* **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»). 
+* **2026-10-16** · Una sola release por canal: al publicar una release nueva, el pipeline borra la anterior del mismo canal («recuerda borrar la release anterior siempre»). 
+* **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
+* **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
+* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`picode-source/extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
+* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `dev/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`dev/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
+* **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).

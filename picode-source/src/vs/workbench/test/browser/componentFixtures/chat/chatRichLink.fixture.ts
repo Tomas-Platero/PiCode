@@ -35,7 +35,7 @@ function renderRichLinks(context: ComponentFixtureContext, presentations: readon
 function createLinkPresentationService(presentation: ILinkPresentation): ILinkPresentationService {
 	return new class extends mock<ILinkPresentationService>() {
 		override getLinkPresentationRule(): ILinkPresentationRule {
-			return { id: 'fixture', uriPattern: /.*/, initialKind: 'resource' };
+			return { id: 'fixture', uriPattern: /.*/, kind: 'resource' };
 		}
 		override createLinkPresentationWatcher(): ILinkPresentationWatcher {
 			return {

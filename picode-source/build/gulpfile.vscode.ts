@@ -109,6 +109,11 @@ const vscodeResourceIncludes = [
 	'out-build/vs/sessions/prompts/*.prompt.md',
 	'out-build/vs/sessions/skills/**/SKILL.md',
 
+	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts).
+	// Without this entry the build ships no file there and the renderer logs
+	// `picode.svg ... net::ERR_FILE_NOT_FOUND` on every window.
+	'out-build/vs/workbench/contrib/picode/browser/media/*.svg',
+
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
 	'out-build/vs/workbench/services/extensionManagement/common/media/*.{svg,png}',
@@ -145,8 +150,15 @@ const bootstrapEntryPoints = [
 	'out-build/bootstrap-fork.js'
 ];
 
+// Incremental mode: when PICODE_INCREMENTAL=1 the rimraf steps are skipped so a previous build's
+// output is reused. Faster, but stale files can linger; clean first if anything looks wrong.
+const PICODE_INCREMENTAL = process.env['PICODE_INCREMENTAL'] === '1';
+const maybeRimraf = (dir: string) => PICODE_INCREMENTAL
+	? (() => Promise.resolve())
+	: util.rimraf(dir);
+
 const bundleVSCodeTask = task.define('bundle-vscode', task.series(
-	util.rimraf('out-vscode'),
+	maybeRimraf('out-vscode'),
 	// Optimize: bundles source files automatically based on
 	// import statements based on the passed in entry points.
 	// In addition, concat window related bootstrap files into
@@ -174,7 +186,7 @@ const useCdnSourceMapsForPackagingTasks = isCI;
 const stripSourceMapsInPackagingTasks = isCI;
 const minifyVSCodeTask = task.define('minify-vscode', task.series(
 	bundleVSCodeTask,
-	util.rimraf('out-vscode-min'),
+	maybeRimraf('out-vscode-min'),
 	optimize.minifyTask('out-vscode', `${sourceMappingURLBase}/core`)
 ));
 task.task(minifyVSCodeTask);
@@ -304,8 +316,8 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		// in product.json's `version` (stamped below), which is what extension `engines.vscode`
 		// ranges match against — Open VSX declares plain versions, and a suffixed one fails
 		// every range — and what the updater compares. Upstream's 'insider' keeps its suffix:
-		// its own extension ecosystem pairs the suffixed versions. Measured 2026-10-08,
-		// odd/tasks/picode-canales.md (the channels design).
+		// its own extension ecosystem pairs the suffixed versions. Measured 2026-10-08
+		// (channels design: ADR-015 in docs/DECISIONS.md).
 		if (quality === 'insider') {
 			version += '-insider';
 		}

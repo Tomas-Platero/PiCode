@@ -96,7 +96,7 @@ test('a completion message becomes the job\u2019s ending', () => {
 		customType: 'specpi-background',
 		display: true,
 		content: [
-			'Background job 1 (build experimental (carpeta del dueño)) finished with exit code 0 after 8m 22s.',
+			'Background job 1 (build experimental (owner\'s folder)) finished with exit code 0 after 8m 22s.',
 			'Command: cd /d/repositorios/PiCode && PICODE_PACK_SUFFIX=" - experimental" ./dev/build-run.sh',
 			'It printed nothing.',
 			'Last lines of output:',
@@ -112,12 +112,12 @@ test('a completion message becomes the job\u2019s ending', () => {
 		assert.fail('the completion message was not read as a job ending');
 	}
 	assert.strictEqual(completion.id, '1');
-	assert.strictEqual(completion.label, 'build experimental (carpeta del dueño)');
+	assert.strictEqual(completion.label, 'build experimental (owner\'s folder)');
 	assert.strictEqual(completion.state, 'exited');
 	assert.strictEqual(completion.exitCode, 0);
 	assert.ok(completion.command?.includes('dev/build-run.sh'));
 	assert.ok(completion.tail?.includes('== done'));
-	assert.strictEqual(completion.summary, 'Background job 1 (build experimental (carpeta del dueño)) finished with exit code 0 after 8m 22s.');
+	assert.strictEqual(completion.summary, 'Background job 1 (build experimental (owner\'s folder)) finished with exit code 0 after 8m 22s.');
 });
 
 test('anything that is not a completion message stays out of the chat\u2019s cards', () => {

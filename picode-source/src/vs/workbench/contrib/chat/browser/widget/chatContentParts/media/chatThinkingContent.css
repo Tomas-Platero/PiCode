@@ -106,11 +106,11 @@
 		}
 	}
 
+	/* The accordion affordance: the chevron top-right is always visible on the thinking
+	   card, not hover-only — an explicit expand/collapse control, it rotates with the
+	   expanded state (`.expanded` flips it down, the shared rule in chat.css). */
 	> .chat-used-context-label > .chat-collapsible-hover-chevron {
 		vertical-align: middle;
-	}
-
-	> .chat-used-context-label:hover > .chat-collapsible-hover-chevron {
 		opacity: 1;
 	}
 

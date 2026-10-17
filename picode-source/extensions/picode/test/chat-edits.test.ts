@@ -29,9 +29,9 @@ import {
 
 test('a snapshot URI path round-trips any absolute path', () => {
 	// Windows drives and backslashes included: the URI carries the whole path, encoded.
-	const windows = 'D:\\repos\\mi carpeta\\app.ts';
+	const windows = 'D:\\repos\\my folder\\app.ts';
 	assert.strictEqual(absolutePathOfBeforeUriPath(beforeUriPathOf(windows)), windows);
-	const posix = '/home/owner/mi carpeta/app.ts';
+	const posix = '/home/owner/my folder/app.ts';
 	assert.strictEqual(absolutePathOfBeforeUriPath(beforeUriPathOf(posix)), posix);
 });
 

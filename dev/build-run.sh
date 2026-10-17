@@ -97,7 +97,13 @@ if [[ "${FLAGS[0]}" == "-DepsOnly" ]]; then
   ) >> "${LOG}" 2>&1
   BUILD_STATUS=$?
 else
-  bash dev/build.sh "${FLAGS[@]}" >> "${LOG}" 2>&1
+  # stdbuf forces line buffering even when output is redirected to a file, so the builder (and any
+  # watcher) sees progress live instead of in multi-kilobyte chunks.
+  if command -v stdbuf > /dev/null 2>&1; then
+    stdbuf -oL -eL bash dev/build.sh "${FLAGS[@]}" >> "${LOG}" 2>&1
+  else
+    bash dev/build.sh "${FLAGS[@]}" >> "${LOG}" 2>&1
+  fi
   BUILD_STATUS=$?
 fi
 set -e

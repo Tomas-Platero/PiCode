@@ -24,7 +24,7 @@ hubiera sido así.
         │                                                  │
         │  EL NÚCLEO                                       │  LA CONFIGURACIÓN
         │  · Chat y Agente (las superficies)               │  · El perfil propio
-        │  · Ajustes, bajo Chat                            │    (nada fuera)
+        │  · Ajustes, nodo PiCode                          │    (nada fuera)
         │  · El host de agentes (proceso con Node)         │  · Proveedores y claves
         │                                                  │  · Habilidades y paquetes
         │  EL CONECTOR  (picode-source/extensions/picode)  ┤  · Sesiones
@@ -45,9 +45,9 @@ El delta es data (`product-delta.json`) y se aplica a `picode-source/product.jso
 fase 1.
 
 **Procedencia y número no son lo mismo.** El pin `upstream/stable.json` registra de qué VS
-Code desciende el árbol (1.135.0); el número declarado (`set.version`, hoy 1.141.1) se sube
-para que las extensiones que piden `engines.vscode: ^1.141.0` sigan instalándose. Es una
-decisión medida, no un rebase: ver `odd/tasks/picode-rebase-141.md` y ADR-016.
+Code desciende el árbol (1.135.0); el número declarado (`set.version`, por delante del pin) se sube
+para que las extensiones que piden `engines.vscode: ^1.142.0` sigan instalándose. Es una
+decisión medida, no un rebase: ver ADR-016.
 
 **Por qué así y no un binario ajeno:** cualquiera puede auditar y recompilar. El instalador
 sigue siendo el camino para quien solo quiere *usarlo*.
@@ -55,7 +55,7 @@ sigue siendo el camino para quien solo quiere *usarlo*.
 ### 2. El núcleo: las superficies son del editor
 
 Lo que el usuario ve es **Chat y Agente**, y **sus ajustes**. No hay panel de PiCode, ni
-pestaña, ni página de ajustes propia. Los ajustes de pi viven **dentro del nodo Chat**.
+pestaña, ni página de ajustes propia. Los ajustes de pi viven en el nodo **PiCode** de Ajustes (antes «Chat»).
 
 ### 3. El Host: pi
 
@@ -68,6 +68,8 @@ Vive **dentro del núcleo**, partido en dos por una razón técnica que conviene
 | --- | --- | --- |
 | `src/vs/platform/agentHost/node/pi/` | El host de agentes: abrir una sesión de pi y traducir lo que dice y hace a lo que el editor entiende | Es el **proceso del núcleo que sí tiene Node**, y es el mismo sitio donde VS Code pone sus otros agentes |
 | `picode-source/extensions/picode/` | El **conector**: catálogo de proveedores, modelos, claves, perfil | Es una **extensión del núcleo** — se compila con el editor y viaja en el binario. Aquí está Node, y aquí van los puentes |
+
+> **Estado (2026-10-16):** hoy el pilotaje de pi corre en el conector (`agent.ts`, en proceso); el host de `agentHost/node/pi/` está preparado pero sin enchufar (`HARNESS.md`, Parte 1 §5; `TAREAS.md` #3). Lo que describe esta sección es el destino.
 
 **Esto no es una extensión al lado del editor.** Todo lo que hay bajo `picode-source/extensions/`
 *es* el editor: son `git`, `github-authentication`, `markdown-language-features`… y el
