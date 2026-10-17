@@ -1,0 +1,25 @@
+{
+	"$schema": "https://raw.githubusercontent.com/apmantza/pi-lens/master/docs/schema/pi-lens-config-v1.json",
+	"ignore": [
+		"picode-source/src/**",
+		"picode-source/cli/**",
+		"picode-source/build/**",
+		"picode-source/resources/**",
+		"picode-source/scripts/**",
+		"picode-source/remote/**",
+		"picode-source/extensions/**",
+		"!picode-source/extensions/picode/**",
+		"cloud/sync-api/**",
+		"experimental/**",
+		"PiCode-*/**",
+		"**/out/**"
+	],
+	"rules": {
+		"no-console-except-error-js": {
+			"ignorePaths": ["dev/**", "distribution/**"]
+		},
+		"no-console-except-error": {
+			"ignorePaths": ["dev/**", "distribution/**"]
+		}
+	}
+}
