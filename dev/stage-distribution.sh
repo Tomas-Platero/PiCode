@@ -95,8 +95,8 @@ echo "--- step 1/7 - product delta in resources/app/product.json"
 # channel's (the delta sets no quality), and the editor would ask a feed its channel does
 # not own. The delta ran on the source before the seal, so everything it carries is
 # already in this file; a sealed product is left alone. Detection is by `quality`: the
-# delta never sets it, so a beta/experimental value here can only be the seal's work.
-SEALED=$( node -e "const fs=require('fs');let q;try{q=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).quality}catch{}console.log(q==='beta'||q==='experimental'?'yes':'no')" "${PRODUCT_JSON}" )
+# delta never sets it, so any channel value here can only be the seal's work.
+SEALED=$( node -e "const fs=require('fs');let q;try{q=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).quality}catch{}console.log(q==='stable'||q==='beta'||q==='experimental'?'yes':'no')" "${PRODUCT_JSON}" )
 if [[ "${SEALED}" == "yes" ]]; then
   echo "skipped: the product carries the channel seal (quality $( node -p "require(process.argv[1]).quality" "${PRODUCT_JSON}" )) — the delta was applied before it"
 else
@@ -183,15 +183,28 @@ rename_if_needed() {
   fi
 }
 
-for candidate in "VSCodium.exe" "VSCode.exe" "code.exe" "Code.exe"; do
-  if [[ -e "${PACK_DIR}/${candidate}" ]]; then
-    rename_if_needed "${PACK_DIR}/${candidate}" "${PACK_DIR}/PiCode.exe"
-    break
-  fi
-done
+# The packer already names the editor after the product's short name, and a channel build carries
+# the channel in it: stable ships `PiCode.exe`, beta `PiCode Beta.exe`, experimental
+# `PiCode Experimental.exe` (the seal sets `nameShort`; see dev/build.sh). When that file is already
+# in place there is nothing to rename; the legacy upstream names below are only for a pack that
+# still came out as VSCodium/VSCode/code. The path goes in as an argument, not inside the `require`
+# string: only an argument is a path git-bash rewrites for node (an interpolated `/d/...` is not).
+EDITOR_NAME=$( node -p "require(process.argv[1]).nameShort" "${PRODUCT_JSON}" 2> /dev/null || echo "" )
+if [[ -z "${EDITOR_NAME}" || "${EDITOR_NAME}" == "undefined" ]]; then
+  EDITOR_NAME="PiCode"
+fi
 
-if [[ ! -e "${PACK_DIR}/PiCode.exe" ]]; then
-  echo "warning: no editor executable was renamed; expected one of VSCodium/VSCode/code.exe" >&2
+if [[ ! -e "${PACK_DIR}/${EDITOR_NAME}.exe" ]]; then
+  for candidate in "VSCodium.exe" "VSCode.exe" "code.exe" "Code.exe"; do
+    if [[ -e "${PACK_DIR}/${candidate}" ]]; then
+      rename_if_needed "${PACK_DIR}/${candidate}" "${PACK_DIR}/PiCode.exe"
+      break
+    fi
+  done
+fi
+
+if [[ ! -e "${PACK_DIR}/PiCode.exe" && ! -e "${PACK_DIR}/${EDITOR_NAME}.exe" ]]; then
+  echo "warning: no editor executable found; expected ${EDITOR_NAME}.exe or one of VSCodium/VSCode/code.exe" >&2
 fi
 
 for candidate in "codium.cmd" "code.cmd"; do
