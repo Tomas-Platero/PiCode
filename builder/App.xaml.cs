@@ -1,5 +1,8 @@
+#nullable enable
+
 using System;
 using System.IO;
+
 using Microsoft.UI.Xaml;
 
 namespace PiCode.Builder;
