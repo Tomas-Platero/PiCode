@@ -97,7 +97,7 @@ export class SessionsAICustomizationWorkspaceService implements IAICustomization
 	/**
 	 * The sections of the Agent Customizations window. Instructions and Hooks are
 	 * deliberately absent: this product's agent is pi, which has none of them (see
-	 * AGENTS.md, "La ventana de gestión del chat habla de pi, no de Copilot").
+	 * AGENTS.md, "The chat management window talks about pi, not Copilot").
 	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
 		AICustomizationManagementSection.Agents,

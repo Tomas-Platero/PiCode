@@ -5,7 +5,7 @@
 #
 # The editor's source is PiCode's own and it lives in ./picode-source: it already carries
 # the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity,
-# recorded in that tree's history. See odd/tasks/picode-fuente-propia.md.
+# recorded in that tree's history.
 #
 #   ./dev/build.sh        install what is missing, compile, pack, stage
 #   ./dev/build.sh -o     check the source and stop (seconds; nothing installed or compiled)
@@ -249,7 +249,53 @@ if [[ -z "${APP_VERSION}" || "${APP_VERSION}" == "undefined" ]]; then
   exit 2
 fi
 
-# The tree is PiCode's, and this is where that is checked instead of assumed. Each of these is
+# Recover a seal a hard-killed build left behind BEFORE the identity check runs: a sealed
+# tree fails the nameShort comparison below, and the recovery must not mistake the backup
+# THIS build is about to make for a leftover — so it runs before that save exists.
+if [[ -f .scratch/product.json.pre-seal ]]; then
+  cp .scratch/product.json.pre-seal picode-source/product.json
+  rm -f .scratch/product.json.pre-seal
+  echo "  -- the last build died between the seal and the restore: the source product.json is the delta's again"
+fi
+
+# Auto-detect the channel from the branch when the caller does not name one, so a build
+# on master/beta/experimental seals the channel that branch owns instead of shipping an
+# unsealed editor (one channel per branch, the owner's rule). An explicit PICODE_CHANNEL
+# always wins, and CI's detached HEAD falls back to the env vars naming the branch.
+if [[ -z "${PICODE_CHANNEL:-}" ]]; then
+  _branch=""
+  if [[ -n "${GITHUB_HEAD_REF:-}" ]]; then
+    _branch="${GITHUB_HEAD_REF}"
+  elif [[ -n "${GITHUB_REF_NAME:-}" ]]; then
+    _branch="${GITHUB_REF_NAME}"
+  else
+    _branch="$( git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '' )"
+  fi
+  _branch="${_branch#refs/heads/}"
+  case "${_branch}" in
+    master)         PICODE_CHANNEL="stable" ;;
+    beta)           PICODE_CHANNEL="beta" ;;
+    experimental)   PICODE_CHANNEL="experimental" ;;
+    *)              PICODE_CHANNEL="" ;;
+  esac
+  if [[ -n "${PICODE_CHANNEL}" ]]; then
+    export PICODE_CHANNEL
+    echo "  -- PICODE_CHANNEL not set; auto-detected '${PICODE_CHANNEL}' from branch '${_branch}'"
+  else
+    echo "  -- PICODE_CHANNEL not set and branch '${_branch}' is not a release branch; building unsealed"
+  fi
+fi
+
+# Keep the packed icon in sync with the canonical one in distribution/: rcedit stamps the executable
+# during the pack, so a stale code.ico would ship the wrong icon with no warning. The source check
+# below still refuses a tree whose icon is missing.
+if [[ -f distribution/picode.ico ]]; then
+  if [[ ! -f picode-source/resources/win32/code.ico ]] || ! cmp -s distribution/picode.ico picode-source/resources/win32/code.ico; then
+    mkdir -p picode-source/resources/win32
+    cp distribution/picode.ico picode-source/resources/win32/code.ico
+    echo "  -- synced resources/win32/code.ico from distribution/picode.ico"
+  fi
+fi
 # something a phase further down depends on, and each of them failing quietly would ship a
 # broken or mislabelled editor: a product that is not PiCode's, a company name left as
 # Microsoft's, an icon the packer cannot find, or no connector to reach pi.
@@ -348,15 +394,18 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
     experimental) QUALITY_VALUE="experimental"; FEED_BRANCH="experimental" ;;
     *) echo "error: PICODE_CHANNEL must be one of stable, beta, experimental (got '${PICODE_CHANNEL}')." >&2; exit 2 ;;
   esac
-  # A seal a hard-killed build left behind (the trap cannot run on a taskkill) is undone
-  # first, so the source enters this build as the delta wrote it — a sealed tree fails the
-  # identity check above, and this is the only recovery that cannot mistake the backup THIS
-  # build is about to make for a leftover: it runs before that save exists.
-  if [[ -f .scratch/product.json.pre-seal ]]; then
-    cp .scratch/product.json.pre-seal picode-source/product.json
-    rm -f .scratch/product.json.pre-seal
-    echo "  -- the last build died between the seal and the restore: the source product.json is the delta's again"
+  # The channel names the PACK FOLDER: an experimental build lands beside the tree as
+  # `PiCode-win32-x64-experimental` — never over a stable build's folder — and stable
+  # keeps the plain name it has always had. The installer's suffix already defaults from
+  # this one (see phase 5), so folder and installer carry the channel together. An
+  # explicit PICODE_PACK_SUFFIX still wins, for a different side-by-side name.
+  if [[ "${QUALITY_VALUE}" != "stable" && -z "${PICODE_PACK_SUFFIX:-}" ]]; then
+    PICODE_PACK_SUFFIX="-${PICODE_CHANNEL}"
+    export PICODE_PACK_SUFFIX
+    echo "  -- the channel names the pack folder: .${PACK_DIR}${PICODE_PACK_SUFFIX}"
   fi
+  # The folder was computed before the channel check; recompute it with the suffix.
+  PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
   # The seal rewrites the SOURCE product.json, and the identity check above reads it back
   # against the delta — a tree left sealed fails its own next build. So the source copy is
   # saved before the seal and put back when the pack is done (the trap restores it on any
@@ -527,7 +576,7 @@ fi
 # The step that staged `extensions/picode-pi-chat` as a built-in extension was **removed on
 # 2026-09-24 by the owner's decision**: pi lives in the core, and the extension is being
 # migrated into it. Nothing compiled the directory, and on 2026-09-27 the owner deleted it
-# («pues borrala»): the panel's code remains in git history and in
+# («just delete it»): the panel's code remains in git history and in
 # `.scratch/picode-pi-chat-ultima-copia.tar.gz`, and its two brand SVGs now live in
 # `picode-source/src/vs/workbench/contrib/picode/browser/media/`.
 echo ""
@@ -581,6 +630,11 @@ cd ..
 # with the tree's own typings, and before the pack because the pack is what collects it.
 echo ""
 echo "== phase 2/5 - compile the connector"
+
+# The vscode-languageserver patch must land before the extensions compile: the markdown
+# server's dist is regenerated from its node_modules here, and the patched uriToFilePath
+# is what keeps the DEP0169 warning out of the extension host's console (see the script).
+node dev/patch-vscode-languageserver.mjs
 
 bash dev/build-connector.sh
 
@@ -727,19 +781,32 @@ cd ..
 # ---------------------------------------------------------------------------
 # pi, and the distribution layer
 # ---------------------------------------------------------------------------
+# pi and the durable agent are independent: neither reads the other's output, and both only
+# write into the pack. Running them in parallel shaves the longer of the two off the build
+# instead of adding them.
 echo ""
-echo "== phase 5/5 - pi, and the distribution layer, onto ${PACK_DIR}"
+echo "== phase 5/5 - pi, the durable agent, and the distribution layer, onto ${PACK_DIR}"
 
-# pi first: it is what the connector looks for, and an editor built without it can only
-# answer "no encuentro el pi de este editor".
-bash dev/pi-runtime.sh "${PACK_DIR}"
+bash dev/pi-runtime.sh "${PACK_DIR}" &
+PI_PID=$!
+bash dev/durable-runtime.sh "${PACK_DIR}" &
+DURABLE_PID=$!
 
-# And the durable agent, which is PiCode's own program (picode-source/durable): an installed editor
-# has no repository above it to find it in, so a pack that does not carry it can only answer
-# "the durable agent folder was not found" wherever it is installed.
-bash dev/durable-runtime.sh "${PACK_DIR}"
+PI_OK=0
+DURABLE_OK=0
+wait "${PI_PID}" && PI_OK=1 || PI_OK=0
+wait "${DURABLE_PID}" && DURABLE_OK=1 || DURABLE_OK=0
 
+if [[ "${PI_OK}" -ne 1 || "${DURABLE_OK}" -ne 1 ]]; then
+  echo "error: pi or durable runtime failed to stage (pi=${PI_OK}, durable=${DURABLE_OK})." >&2
+  exit 1
+fi
+
+# And the distribution layer, which needs both of the above in place.
 bash dev/stage-distribution.sh "${PACK_DIR}"
+
+# The Rust CLI (optional): gives the pack a real binary beside the shell shim. Never blocks the build.
+bash dev/build-cli.sh "${PACK_DIR}"
 
 # The pack and the staging seeded a fresh data/ inside the folder; the real profile -- held aside
 # since before the pack -- goes back over it now, so everything after this point (the installer
@@ -747,16 +814,74 @@ bash dev/stage-distribution.sh "${PACK_DIR}"
 picode_data_hold_put_back "${PACK_DIR}" || exit 1
 
 # ---------------------------------------------------------------------------
-# The Windows installer
+# Verify the pack before publishing it: a build that produced an editor without pi, or a
+# product.json whose channel does not match, is worse than no build at all.
 # ---------------------------------------------------------------------------
-# Built here, from the tree that was just packed and staged, so that `dev/build.sh` - which is
-# what a person runs and what a release runs - produces every artifact a release has. On anything
-# but Windows the script says so and stops, and the build carries on.
 echo ""
-if [[ "${PICODE_SKIP_INSTALLER:-no}" == "yes" ]]; then
-  echo "== phase 5/5 - the Windows installer: skipped (PICODE_SKIP_INSTALLER=yes)"
-  echo "   A side-by-side build does not want one: running it would land on top of the PiCode"
-  echo "   already installed, which is the opposite of what building beside it is for."
+echo "== verify - the pack is complete"
+VERIFY_OK="yes"
+# The editor's file name is the product's short name, and a channel build carries the channel in it:
+# stable ships `PiCode.exe`, beta `PiCode Beta.exe`, experimental `PiCode Experimental.exe`. The seal
+# sets `nameShort` to exactly that and the packer names the executable from it, so rather than repeat
+# the mapping here (and risk it drifting from the seal), the name is read back from the packed
+# product.json the packer itself wrote. A plain build with no channel still lands on `PiCode.exe`.
+EDITOR_EXE="PiCode.exe"
+PACKED_NAME=$( node -p "require(process.argv[1]).nameShort" "${PACK_DIR}/resources/app/product.json" 2> /dev/null || echo "" )
+if [[ -n "${PACKED_NAME}" && "${PACKED_NAME}" != "undefined" ]]; then
+  EDITOR_EXE="${PACKED_NAME}.exe"
+fi
+if [[ ! -f "${PACK_DIR}/${EDITOR_EXE}" ]]; then
+  echo "  !! ${EDITOR_EXE} is missing" >&2; VERIFY_OK="no"
+fi
+PI_ENTRY="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./distribution/runtime.json').package" )/dist/index.js"
+if [[ ! -f "${PI_ENTRY}" ]]; then
+  echo "  !! pi runtime entry is missing: ${PI_ENTRY}" >&2; VERIFY_OK="no"
+fi
+if [[ -n "${PICODE_CHANNEL:-}" ]]; then
+  BUILT_QUALITY=$( node -p "require(process.argv[1]).quality" "${PACK_DIR}/resources/app/product.json" 2> /dev/null || echo "" )
+  if [[ "${BUILT_QUALITY}" != "${PICODE_CHANNEL}" ]]; then
+    echo "  !! product.json quality is '${BUILT_QUALITY}', expected '${PICODE_CHANNEL}'" >&2; VERIFY_OK="no"
+  fi
+fi
+if [[ "${VERIFY_OK}" == "yes" ]]; then
+  # Smoke test: the editor must actually run. `--version` is a CLI query, not a GUI one -- the GUI
+  # executable ignores it and opens a window, which stays open and hangs the build until the timeout
+  # fires. The query goes through the CLI exactly the way `bin/picode.cmd` runs it: the exe as node
+  # (ELECTRON_RUN_AS_NODE=1) over the packaged `out/cli.js`. A binary that crashes on launch would
+  # otherwise be discovered only after publishing.
+  CLI_ENTRY="${PACK_DIR}/resources/app/out/cli.js"
+  if [[ "${OS_NAME}" == "windows" && -f "${PACK_DIR}/${EDITOR_EXE}" && -f "${CLI_ENTRY}" ]]; then
+    if ELECTRON_RUN_AS_NODE=1 timeout 30 "${PACK_DIR}/${EDITOR_EXE}" "${CLI_ENTRY}" --version > "${ROOT_DIR}/.scratch/smoke.out" 2>&1; then
+      echo "  ok: cli --version -> $( head -n1 "${ROOT_DIR}/.scratch/smoke.out" )"
+    else
+      echo "  !! the editor's cli --version failed (see .scratch/smoke.out)" >&2
+      VERIFY_OK="no"
+    fi
+  fi
+  # product.json commit must be a full 40-hex sha (matches the release workflow's check).
+  BUILT_COMMIT=$( node -p "require(process.argv[1]).commit" "${PACK_DIR}/resources/app/product.json" 2> /dev/null || echo "" )
+  if [[ ! "${BUILT_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "  !! product.json commit is not a 40-hex sha: ${BUILT_COMMIT}" >&2
+    VERIFY_OK="no"
+  fi
+  if [[ "${VERIFY_OK}" == "yes" ]]; then
+    echo "  ok: ${EDITOR_EXE}, pi runtime and channel are in place"
+  fi
+else
+  echo "error: the pack did not pass verification; see above." >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# The Windows installer (off unless asked for)
+# ---------------------------------------------------------------------------
+# A local build leaves the portable pack only: running the installer would land on top of the PiCode
+# already installed, which is the opposite of what building beside it is for. The release is the one
+# place that wants both, and it says so with PICODE_SKIP_INSTALLER=no. On anything but Windows the
+# installer script says so and stops, and the build carries on.
+echo ""
+if [[ "${PICODE_SKIP_INSTALLER:-yes}" == "yes" ]]; then
+  echo "== the Windows installer: skipped (portable build; set PICODE_SKIP_INSTALLER=no to build it)"
 else
   # A build that packs beside the tree installs beside the editor, unless it is told otherwise.
   # `PICODE_PACK_SUFFIX` already says "do not overwrite the release's folder"; the installer's
@@ -765,10 +890,10 @@ else
   # installer quietly replaces the PiCode already on the machine. A release build sets neither.
   if [[ -z "${PICODE_INSTALLER_SUFFIX:-}" && -n "${PICODE_PACK_SUFFIX:-}" ]]; then
     export PICODE_INSTALLER_SUFFIX="${PICODE_PACK_SUFFIX}"
-    echo "== phase 5/5 - the Windows installer installs beside the editor, as '${PICODE_INSTALLER_SUFFIX}'"
+    echo "== the Windows installer installs beside the editor, as '${PICODE_INSTALLER_SUFFIX}'"
     echo "   (PICODE_INSTALLER_SUFFIX defaulted from PICODE_PACK_SUFFIX; set it to override)"
   fi
-  echo "== phase 5/5 - the Windows installer (Inno Setup, user install)"
+  echo "== the Windows installer (Inno Setup, user install)"
 
   bash dev/build-installer.sh "${PACK_DIR}"
 fi
@@ -782,4 +907,4 @@ echo "source:    ./picode-source (PiCode's own tree, versioned in this repositor
 # upstream/stable.json and in the history of this repository.
 echo "product:   PiCode ${APP_VERSION}"
 echo "output:    ${PACK_DIR}"
-echo "run it:    ${PACK_DIR}/PiCode.exe"
+echo "run it:    ${PACK_DIR}/${EDITOR_EXE}"

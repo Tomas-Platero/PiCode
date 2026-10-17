@@ -20,8 +20,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { resolvePack } from './pack-dir.mjs';
+
 const REPO = path.resolve(import.meta.dirname, '..');
-const PACK = path.join(REPO, 'PiCode-Win32-x64');
+
+// The channel names the pack folder (PiCode-win32-x64, plus -beta or -experimental), and it may
+// not exist yet when the watching starts, so it is resolved the first time the bar needs it.
+let PACK = null;
+const packDir = () => (PACK ??= resolvePack(REPO));
 const NODE_MODULES = path.join(REPO, 'picode-source', 'node_modules');
 
 /** The newest build log, which is the run the owner is watching. */
@@ -140,7 +146,7 @@ function dependencyFraction() {
 /** How far the pack got, read from the directory it is writing. */
 function packFraction() {
 	try {
-		const out = path.join(PACK, 'resources', 'app', 'out');
+		const out = path.join(packDir(), 'resources', 'app', 'out');
 		const megabytes = directoryMegabytes(out);
 		// A packed editor's `out` is around eighty megabytes; anything above counts as done.
 		return Math.min(1, megabytes / 80);
@@ -250,7 +256,7 @@ function draw() {
 	const verdict = readVerdict();
 	if (verdict !== undefined && logIsStale()) {
 		if (verdict === 'ok') {
-			process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in PiCode-Win32-x64          \n`);
+			process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in ${path.basename(packDir())}          \n`);
 		} else {
 			process.stdout.write(`\r  failed ${bar(100)} ???  -  the last build failed: see its own log          \n`);
 		}
@@ -264,7 +270,7 @@ function draw() {
 	const now = Date.now();
 
 	if (state.done === 'ok') {
-		process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in PiCode-Win32-x64          \n`);
+		process.stdout.write(`\r  done   ${bar(100)} 100%  -  the build finished, in ${path.basename(packDir())}          \n`);
 		return true;
 	}
 	if (state.done === 'failed') {
@@ -346,7 +352,7 @@ const timer = setInterval(() => {
 	try {
 		ended = draw() || ended;
 	} catch (error) {
-		process.stdout.write(`\n  no se pudo leer el registro: ${error instanceof Error ? error.message : String(error)}\n`);
+		process.stdout.write(`\n  could not read the log: ${error instanceof Error ? error.message : String(error)}\n`);
 		ended = true;
 	}
 	if (ended) {

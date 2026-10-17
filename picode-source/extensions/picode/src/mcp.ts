@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './mcpTools';
+import type { OfficialSdk } from './piSdk';
 
 /**
  * The MCP servers of the editor, given to pi as tools of its own.
@@ -16,8 +17,7 @@ import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './m
  * *does* have MCP — its own servers, its own screen to add them, its own permissions — and it
  * exposes every MCP tool as a language model tool.
  *
- * So this module is the bridge the owner asked for: *"hay una que es 'MCP' necesito que esas
- * opciones puedan usarse para conectar los MCP con el PI interno de PiCode."* The editor keeps
+ * So this module is the bridge the owner asked for. The editor keeps
  * owning the servers (adding, enabling, authenticating, confirming), and pi gets their tools and
  * runs them through the editor with `lm.invokeTool` — which means the editor's confirmation and
  * permission rules apply, instead of a second set of ours.
@@ -43,14 +43,27 @@ export interface ToolTokenHolder {
 	current?: vscode.ChatParticipantToolToken;
 }
 
-/** The MCP tools of the editor, as pi tool definitions. */
-export function piToolsFromEditor(token: ToolTokenHolder): PiToolDefinition[] {
-	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token));
+/** pi's `customTools`, exactly as pi's own signature names them. */
+type PiCustomTools = NonNullable<Parameters<OfficialSdk['createAgentSessionFromServices']>[0]['customTools']>;
+
+/**
+ * The MCP tools of the editor, as pi's `customTools`.
+ *
+ * The cast at the end is the one honest gap of the SDK boundary: pi's published `ToolDefinition`
+ * requires a `details` field on every result, and these tools answer with the text only — which
+ * is all pi reads at runtime. The SDK's own members are typed from pi's declarations; this is the
+ * value side (the editor's own tools), where pi's runtime contract is looser than its types.
+ */
+export function piToolsFromEditor(token: ToolTokenHolder): PiCustomTools {
+	// SAFETY: pi's runtime reads `content` from a tool result and nothing else; its published
+	// `ToolDefinition` requires `details` on every result, which these editor tools do not set.
+	// The mismatch is pi's types being stricter than the contract its own runner honours.
+	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token)) as unknown as PiCustomTools;
 }
 
-/** What a pi tool answers with: the text the model reads, and nothing else. */
+/** What a pi tool answers with: the text the model reads, and nothing else. The array is mutable because pi's own result type declares it mutable — the element shape is pi's `TextContent`. */
 export interface PiToolResult {
-	readonly content: readonly { readonly type: 'text'; readonly text: string }[];
+	content: { readonly type: 'text'; readonly text: string }[];
 	readonly details?: undefined;
 }
 

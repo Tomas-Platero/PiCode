@@ -221,6 +221,14 @@ export function describeTargets(targets: readonly UpdateTarget[]): string {
  * The snapshot globalState carries across restarts
  * ------------------------------------------------------------------ */
 
+/**
+ * Where one check's answer is stored in the editor, so it survives a restart.
+ *
+ * It lives here, beside the shape it holds, and not in `extension.ts` where it is written: the status
+ * panel reads the same answer, and two spellings of the key would be one too many.
+ */
+export const UPDATES_STATE_KEY = 'picode.updates.lastCheck';
+
 /** What the editor stores after one check: when it ran, and what it found. */
 export interface UpdatesSnapshot {
 	readonly checkedAt: number;

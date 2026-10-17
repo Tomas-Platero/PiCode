@@ -12,10 +12,13 @@ Or from a terminal:
 
 ```bash
 cd builder
-build.cmd                       # same thing
-dotnet build                     # compile only
-dotnet run                       # compile and open
-dotnet run -c Release            # the smaller, faster one
+build.cmd                       # build in Release and run it
+build.cmd debug                 # build in Debug and run it
+build.cmd build                 # build only, do not run
+build.cmd publish               # publish one self-contained .exe to builder\dist
+dotnet build                    # compile only
+dotnet run                      # compile and open (Debug)
+dotnet run -c Release           # compile and open (Release)
 ```
 
 The executable, if you want a shortcut to it:
@@ -28,18 +31,28 @@ Both are also in the editor's task list: **PiCode: build the builder** and **PiC
 
 ## 📍 Where it has to live
 
-**Inside the repository.** It drives the scripts in `dev/`, so it finds the tree by looking upwards from
-where the executable is: keep it anywhere under the repository and everything it needs is found from
-there. `publish.cmd` writes it to `builder/dist`, which is inside, so the published file works where it
-lands.
+**Inside the repository, ideally.** It drives the scripts in `dev/`, and by default it finds the tree by
+looking upwards from where the executable is: keep it anywhere under the repository and everything it
+needs is found from there. `publish.cmd` writes it to `builder/dist`, which is inside, so the published
+file works where it lands.
 
-Copied somewhere outside, it opens window and says the repository was not found. It does not guess, and
-it does not build the wrong thing.
+Copied somewhere outside, it opens and says the source was not found — and then offers the way back,
+because a window that can only say "no" is a dead end:
 
-Being able to point it at a repository from outside was tried and abandoned: with a repository
-remembered, the window opened and then died while drawing, before a single line of its own refresh code
-ran. It is not offered, because a door that crashes is worse than no door. The state that works is the
-one that is shipped.
+- **Download source** clones `Tomas-Platero/PiCode` into a folder you pick, and the same window adopts
+  the new tree on the spot. No restart.
+- **I already have it** points the window at a copy already on the machine. The folder has to be a real
+  source tree (the one with `dev/` and `picode-source/`); anything else is refused with the reason.
+
+## 🎚️ Which channel it builds
+
+The channel is what the product is sealed as: **stable**, **beta** or **experimental**.
+
+- **Auto (from branch)** is the default and the owner's rule: `master` builds stable, `beta` builds
+  beta, `experimental` builds experimental, and any other branch builds plain PiCode.
+- The picker in the rail overrides it. It is the way back when there is no branch to read — a builder
+  carried out of the repository on its own, or a source that arrived as a download. Only stable is left
+  without a suffix; beta and experimental carry theirs through the folder, the version and the product.
 
 ## 🧰 What it needs on the machine
 
@@ -55,8 +68,8 @@ It is a **front-end**: it starts the same `dev/build.sh` pipeline and reads the 
 `dev/build-progress.mjs` and `dev/build-requirements.mjs` that the terminal and the old window read.
 Nothing about the build lives here.
 
-- **Windows** is built natively, and **Linux through WSL** — the pipeline is the same either way, so
-  only the door differs. The Linux side needs WSL with a distribution installed.
+- **Windows** is built natively, `win-x64`, packaged as a portable folder. There is no Linux side: the
+  product is Windows-only.
 - **No timings per step.** The progress module does not measure them. A number invented on a screen
   that exists to tell the truth is a lie; the total elapsed is real and is shown.
 - **No architecture dropdown.** The pipeline builds `win-x64` and nothing else, so it is a fact on the

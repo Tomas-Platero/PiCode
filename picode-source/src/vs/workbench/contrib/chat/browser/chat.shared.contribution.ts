@@ -287,30 +287,6 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('interactiveSession.editor.lineHeight', "Controls the line height in pixels in chat codeblocks. Use 0 to compute the line height from the font size."),
 			default: 0
 		},
-		[ChatConfiguration.AgentStatusEnabled]: {
-			type: 'string',
-			enum: ['hidden', 'badge', 'compact'],
-			enumDescriptions: [
-				nls.localize('chat.agentsControl.hidden', "The agent status indicator is hidden from the title bar."),
-				nls.localize('chat.agentsControl.badge', "Shows the agent status as a badge next to the command center."),
-				nls.localize('chat.agentsControl.compact', "Replaces the command center search box with a compact agent status indicator and unified chat widget."),
-			],
-			markdownDescription: nls.localize('chat.agentsControl.enabled', "Controls how the 'Agent Status' indicator appears in the title bar command center. When set to `hidden`, the indicator is not shown. Other values show the indicator and automatically enable {0}. The unread and in-progress session indicators require {1} to be enabled.", '`#window.commandCenter#`', '`#chat.viewSessions.enabled#`'),
-			default: 'compact',
-			tags: ['experimental']
-		},
-		[ChatConfiguration.UnifiedAgentsBar]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('chat.unifiedAgentsBar.enabled', "Replaces the command center search box with a unified chat and search widget."),
-			default: false,
-			tags: ['experimental']
-		},
-		[ChatConfiguration.AgentSessionProjectionEnabled]: {
-			type: 'boolean',
-			markdownDescription: nls.localize('chat.agentSessionProjection.enabled', "Controls whether Agent Session Projection mode is enabled for reviewing agent sessions in a focused workspace."),
-			default: false,
-			tags: ['experimental'],
-		},
 		[ChatConfiguration.SaveBeforeSend]: {
 			type: 'boolean',
 			description: nls.localize('chat.saveBeforeSend', "Controls whether all dirty editors except untitled editors are saved before sending a chat message."),
@@ -1509,13 +1485,13 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			description: nls.localize('chat.tools.todos.showWidget', "Controls whether to show the todo list widget above the chat input. When enabled, the widget displays todo items created by the agent and updates as progress is made."),
 		},
-		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how the
-		// editor renders *thinking parts* of its own chat, and PiCode's chat never has any: the agent's
-		// thinking is written into the answer as a quote (`picode.pi.reasoning`, off by default), and this
-		// setting does not touch it. It was an experimental control with nothing behind it, and the owner
-		// read it exactly so: «Revisa esta opción si es necesaria.» Both readers fall back on their own
-		// default when it is unset (`chatThinkingContentPart` to `Collapsed`, `chatWidget` to
-		// `FixedScrolling`), so removing it changes nothing that runs — it only takes a knob out of the
+		// `ChatConfiguration.ThinkingStyle` is deliberately **not** registered here. It controls how
+		// the editor renders *thinking parts* of its own chat. PiCode's chat does produce them —
+		// the chat participant pushes them when `picode.pi.reasoning` says so, and the model
+		// provider forwards the endpoint's reasoning deltas the same way — so the renderer's own
+		// default governs (`chatThinkingContentPart` falls back to `Collapsed` when it is unset).
+		// It was an experimental control with nothing behind it, and the owner read it exactly
+		// so. Removing it only takes a knob out of the
 		// settings that cannot do anything here.
 		[ChatConfiguration.ThinkingGenerateTitles]: {
 			type: 'boolean',
@@ -1590,11 +1566,6 @@ configurationRegistry.registerConfiguration({
 			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
 			default: true,
 			scope: ConfigurationScope.WINDOW,
-		},
-		[ChatConfiguration.TitleBarOpenInAgentsWindowEnabled]: {
-			type: 'boolean',
-			description: nls.localize('chat.titleBar.openInAgentsWindow.enabled', "Controls whether the Open in Agents Window button is shown in the title bar."),
-			default: true,
 		},
 		[ChatConfiguration.RestoreLastPanelSession]: {
 			type: 'boolean',

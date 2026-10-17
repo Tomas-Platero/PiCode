@@ -19,8 +19,7 @@ import { fetchModelIds } from './endpoint';
  * ## The two ways in, and why the dialogs are gone
  *
  * The first version of this flow asked four questions in four floating boxes (name, address,
- * dialect, key). The owner's answer was blunt: *"no quiero la ventanita de arriba, quiero
- * añadir items abajo con sus campos necesarios"*. So:
+ * dialect, key). The owner's answer was blunt. So:
  *
  * - the **settings row** under Chat is a form: one row per provider, with its four fields, added
  *   in place (`declarations.ts` reads what it holds), and

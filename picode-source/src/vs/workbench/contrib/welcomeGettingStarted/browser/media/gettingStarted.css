@@ -449,6 +449,26 @@
 	min-width: 56px;
 }
 
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice {
+	cursor: pointer;
+	gap: 2px;
+	border-radius: 4px;
+	padding: 2px 4px;
+	user-select: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice input.picode-checkbox {
+	margin: 0;
+	accent-color: var(--vscode-button-background, var(--vscode-checkbox-selectBackground, #0078d4));
+}
+
+/* An unticked row keeps its place but lets its numbers recede: the choice reads at a
+   glance. The class is toggled from the page — a parser-safe stand-in for :has(). */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice.unticked .picode-import-value,
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left label.picode-import-choice.unticked .picode-import-label {
+	opacity: .4;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-import-value {
 	font-size: 1.3em;
 	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
@@ -622,37 +642,58 @@
 	min-height: 160px;
 	overflow-y: auto;
 	scrollbar-width: thin;
-	scrollbar-color: var(--vscode-scrollbarSlider.background) transparent;
+	/* The theme variable is dashed, not dotted: the dotted spelling never resolves. */
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
 	padding-right: 6px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card {
 	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
-	border-radius: 6px;
+	border-radius: 8px;
 	overflow: hidden;
 	cursor: pointer;
-	background: transparent;
+	background: var(--vscode-editorWidget-background, transparent);
 	text-align: left;
 	padding: 0;
-	transition: border-color 0.15s ease-out, transform 0.15s ease-out;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+	transition: border-color 0.15s ease-out, transform 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card:hover {
-	transform: translateY(-1px);
+	transform: translateY(-2px);
 	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-card.checked {
 	border-color: var(--vscode-focusBorder);
-	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder), 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-thumb {
-	height: 62px;
-	padding: 4px 6px;
+	position: relative;
+	height: 72px;
+	padding: 5px 7px;
 	overflow: hidden;
 	border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
 	background: var(--vscode-editorWidget-background);
+}
+
+/* The applied theme's corner mark: readable at any size, from across the room. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-check {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-thumb-line {
@@ -671,7 +712,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 5px 8px;
+	padding: 6px 10px;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-label {
@@ -679,20 +720,23 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: .92em;
+	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-badge {
 	font-size: .78em;
-	padding: 0 6px;
+	padding: 1px 8px;
 	border-radius: 999px;
-	background: var(--vscode-list-activeSelectionBackground);
-	color: var(--vscode-list-activeSelectionForeground);
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
 	flex-shrink: 0;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-theme-more {
 	display: flex;
-	gap: 14px;
+	justify-content: center;
+	gap: 10px;
+	margin-top: 4px;
 }
 
 /* narrow windows: the cards stack instead of squeezing */
@@ -1813,12 +1857,154 @@
 	gap: 6px;
 }
 
+/* The hand-written provider's form: a framed inset with labelled fields, so the
+   owner knows what each box wants without guessing from placeholders. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form-inner[hidden] {
+	display: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-provider-form-inner {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 8px;
+	padding: 12px;
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+	border-radius: 6px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	flex: 1;
+	min-width: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-label {
+	font-size: .8em;
+	opacity: .75;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-pair {
+	display: flex;
+	gap: 10px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-form-row > * {
 	flex: 1;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-area {
 	margin-top: 10px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-search {
+	width: 100%;
+	box-sizing: border-box;
+	margin-bottom: 8px;
+	padding: 4px 8px;
+	border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+	border-radius: 4px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group {
+	margin-bottom: 10px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	padding: 2px 2px 4px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-name {
+	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
+	font-size: .92em;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-group-count {
+	font-size: .78em;
+	opacity: .6;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-grid-list {
+	overflow-x: hidden;
+}
+
+/* One package, both tabs: icon, title line, description wrapped below — the
+   description never runs glued after the name, and nothing forces a
+   horizontal scrollbar. */
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 8px;
+	border-radius: 5px;
+	margin-bottom: 2px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-row:hover {
+	background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.08));
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-icon {
+	font-size: 1.25em;
+	opacity: .65;
+	flex: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-name {
+	font-weight: var(--vscode-agents-fontWeight-semiBold, 600);
+	font-size: .95em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-version {
+	font-size: .78em;
+	opacity: .6;
+	flex: none;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-desc {
+	font-size: .82em;
+	opacity: .68;
+	line-height: 1.35;
+	/* Two lines, then an ellipsis: the whole point of the row is the name. */
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-package-row .picode-button {
+	flex: none;
 }
 
 .monaco-workbench .part.editor > .content .gettingStartedContainer .gettingStartedSlideCategories > .gettingStartedCategoriesContainer > .categories-column-left .picode-model-list {

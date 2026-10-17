@@ -1047,6 +1047,7 @@ export interface IWebviewPanelOptions {
 
 export interface CustomEditorProviderCapabilities {
 	readonly supportsMove?: boolean;
+	readonly supportsNavigation?: boolean;
 	readonly supportsInlineDiff?: boolean;
 	readonly supportsSideBySideDiff?: boolean;
 }
@@ -1133,6 +1134,7 @@ export interface MainThreadWebviewPanelsShape extends IDisposable {
 }
 
 export interface MainThreadCustomEditorsShape extends IDisposable {
+	$onDidChangeCustomTextEditorSelection(handle: WebviewHandle, selection: ISelection | undefined): void;
 	$registerTextEditorProvider(extension: WebviewExtensionDescription, viewType: string, options: IWebviewPanelOptions, capabilities: CustomEditorProviderCapabilities, serializeBuffersForPostMessage: boolean): void;
 	$registerCustomEditorProvider(extension: WebviewExtensionDescription, viewType: string, options: IWebviewPanelOptions, capabilities: CustomEditorProviderCapabilities, supportsMultipleEditorsPerDocument: boolean, serializeBuffersForPostMessage: boolean): void;
 	$unregisterEditorProvider(viewType: string): void;
@@ -1183,6 +1185,12 @@ export interface ExtHostWebviewPanelsShape {
 }
 
 export interface ExtHostCustomEditorsShape {
+	$resolveCustomTextEditorNavigation(handle: WebviewHandle, viewType: string, resource: UriComponents, token: CancellationToken): Promise<{ selection: ISelection | undefined } | undefined>;
+	$disposeCustomTextEditorNavigation(handle: WebviewHandle): void;
+	$revealCustomTextEditorRange(handle: WebviewHandle, range: IRange, selection: ISelection | undefined, preserveFocus: boolean, token: CancellationToken): Promise<void>;
+	$captureCustomTextEditorViewState(handle: WebviewHandle, stateId: number): Promise<void>;
+	$restoreCustomTextEditorViewState(handle: WebviewHandle, stateId: number, token: CancellationToken): Promise<void>;
+	$releaseCustomTextEditorViewState(handle: WebviewHandle, stateId: number): void;
 	$resolveCustomEditor(
 		resource: UriComponents,
 		newWebviewHandle: WebviewHandle,
@@ -3738,7 +3746,7 @@ export interface MainThreadMcpShape {
 }
 
 export interface MainThreadDataChannelsShape extends IDisposable {
-	$createLinkPresentationWatcher(handle: number, providerId: string, resource: UriComponents): void;
+	$createLinkPresentationWatcher(handle: number, providerId: string, kind: LinkPresentationKind, resource: UriComponents): void;
 	$disposeLinkPresentationWatcher(handle: number): void;
 	$registerLinkPresentationProvider(handle: number, extensionId: string, providerId: string): void;
 	$unregisterLinkPresentationProvider(handle: number): void;
@@ -3747,7 +3755,7 @@ export interface MainThreadDataChannelsShape extends IDisposable {
 
 export interface ExtHostDataChannelsShape {
 	$onDidReceiveData(channelId: string, data: unknown): void;
-	$acceptLinkPresentationRules(rules: readonly { id: string; source: string; flags: string; initialKind: LinkPresentationKind }[]): void;
+	$acceptLinkPresentationRules(rules: readonly { id: string; source: string; flags: string; kind: LinkPresentationKind }[]): void;
 	$acceptLinkPresentation(handle: number, data: unknown): void;
 	$createLinkPresentationWatcher(handle: number, providerHandle: number, resource: UriComponents): Promise<unknown>;
 	$disposeLinkPresentationWatcher(handle: number): void;

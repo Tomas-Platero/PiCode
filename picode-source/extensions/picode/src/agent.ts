@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { contextBlock, withContext, type EditorContext } from './context';
+import { withContext } from './context';
+import { contextBlockFor } from './editor-context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates, type PiProjectScope } from './runtime';
+import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
-import { missingDirectories, resolveSessionCwd, type SessionCwd } from './session-cwd';
-import { areaContextBlock } from './workspace-area';
+import { resolveSessionCwd } from './session-cwd';
 import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import {
 	decisionFromAnswer,
@@ -51,8 +51,8 @@ import {
 	type BackgroundCall,
 } from './background-cards';
 import { durableBridgeExtensionPath } from './durable';
-import { THINKING_HEADER, quotedThinking } from './thinking';
-import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions } from './piSdk';
+import { ensureConversation, recordChatTurn } from './chat-record';
+import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
@@ -69,8 +69,8 @@ import { VENDOR } from './providers';
  * editor's agent**, not as a panel, a tab or a window of our own. Nothing is drawn by this
  * file; the conversation happens in Chat.
  *
- * The owner's requirement behind it is blunt and it is the shape of this module: *"quiero que
- * esté funcional, no quiero tener yo que configurar más cosas más allá del proveedor"*. So
+ * The owner's requirement behind it is blunt and it is the shape of this module: *"I want it
+ * to work, without me having to configure anything beyond the provider"*. So
  * nothing here asks the owner anything. It finds pi by itself, opens a session by itself, and
  * the only thing the owner ever fills in is which provider to talk to.
  *
@@ -83,7 +83,7 @@ import { VENDOR } from './providers';
  *   conversation switches pi's session too. A picker that did not reach pi would be a lie;
  * - **the thinking level**: `Settings > Chat > Pi`, left to pi's own default when unset;
  * - **the context**: the folder, the open file and the selection travel with the prompt when
- *   `picode.context.attach` is on, so "arregla esto" means the file he is looking at;
+ *   `picode.context.attach` is on, so "fix this" means the file he is looking at;
  * - **the thinking**: pi's reasoning is written into the chat only if `picode.pi.reasoning` says
  *   so, because it is long and most of the time he does not want it.
  */
@@ -109,10 +109,14 @@ interface PiEvent {
 	readonly isError?: boolean;
 }
 
-/** pi's `Model`, opaque here: it is handed back to pi and never inspected. */
-interface PiModel {
-	readonly [key: string]: unknown;
-}
+/**
+ * pi's `Model`, opaque here: it is handed back to pi and never inspected.
+ *
+ * pi's own type, named from pi's own signature (`createAgentSessionFromServices`' `model`) —
+ * the model a session runs on is pi's object from `modelRuntime.getModel`, so this is the
+ * exact type, not a copy of its fields that the next pin could contradict.
+ */
+export type PiModel = NonNullable<Parameters<OfficialSdk['createAgentSessionFromServices']>[0]['model']>;
 
 /** The `tool_call` event pi hands an extension, reduced to what a permission asks: which tool, with what. */
 interface PiToolCallEvent {
@@ -140,7 +144,7 @@ interface PiExtensionApi {
 type PiExtensionFactory = (pi: PiExtensionApi) => void | Promise<void>;
 
 /** pi's inline extension shape (`resourceLoaderOptions.extensionFactories`). */
-interface PiInlineExtension {
+export interface PiInlineExtension {
 	name: string;
 	factory: PiExtensionFactory;
 	hidden?: boolean;
@@ -150,12 +154,15 @@ interface PiInlineExtension {
 	replaceable?: boolean;
 }
 
-/** pi's session store, created once and handed back to pi across a session's rebuilds. */
-interface PiSessionStore {
-	readonly [key: string]: unknown;
-}
+/** pi's session manager instance, created once and handed back to pi across a session's rebuilds. */
 
-interface PiSession {
+/** pi's own session: exactly what `createAgentSessionFromServices` answers with. */
+type OfficialSession = Awaited<ReturnType<OfficialSdk['createAgentSessionFromServices']>>['session'];
+
+/** pi's own UI context: what `bindExtensions` declares its `uiContext` to be. */
+type OfficialUiContext = NonNullable<Parameters<NonNullable<OfficialSession['bindExtensions']>>[0]['uiContext']>;
+
+export interface PiSession {
 	readonly sessionId: string;
 	readonly isStreaming: boolean;
 	readonly model?: PiModel;
@@ -163,7 +170,7 @@ interface PiSession {
 	/**
 	 * Send a prompt. While {@link isStreaming}, pi **requires** the queueing choice and refuses the
 	 * prompt without it — «Agent is already processing. Specify streamingBehavior ('steer' or
-	 * 'followUp') to queue the message» — which is what the owner read when he asked «como van»
+	 * 'followUp') to queue the message» — which is what the owner read when he asked how it was going
 	 * while a background job's result was being processed.
 	 */
 	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
@@ -174,18 +181,11 @@ interface PiSession {
 	/**
 	 * Starts the session's extensions, and **that** is what emits `session_start`. Absent in a pi
 	 * old enough not to have it, so the caller checks — see `bindSessionExtensions`.
+	 *
+	 * The bindings parameter is pi's own (`ExtensionBindings`, named from pi's method): what the
+	 * chat's question carousel stands in for is documented where it is built.
 	 */
-	bindExtensions?(bindings: {
-		/**
-		 * pi's interactive UI for extensions. The chat's question carousel stands in for the
-		 * terminal: `confirm`/`select`/`input` become questions, `notify` a chat line, and the
-		 * terminal-only methods are inert. Set, this is what makes `ctx.hasUI` true.
-		 */
-		uiContext?: unknown;
-		/** `"rpc"`: dialogs available, no terminal. Extensions gate TUI components on `"tui"`. */
-		mode?: string;
-		onError?: (error: { extensionPath?: string; event?: string; error?: string }) => void;
-	}): Promise<void>;
+	bindExtensions?(bindings: Parameters<NonNullable<OfficialSession['bindExtensions']>>[0]): Promise<void>;
 	/**
 	 * The tools the running session exposes, by name. Present in pi 1.1.0; read defensively
 	 * (optional call) because the SDK is loaded at runtime and older pins may lack it. The
@@ -196,41 +196,25 @@ interface PiSession {
 	dispose(): void;
 }
 
-/** pi's runtime services for one working directory, reduced to what a session needs. */
-interface PiServices {
-	readonly modelRuntime: { getModel(providerId: string, modelId: string): PiModel | undefined };
-	/** Non-fatal issues pi collected while loading its resources — a bridge that failed to load is said here. */
-	readonly diagnostics?: ReadonlyArray<{ readonly type: string; readonly message: string }>;
-}
+/**
+ * pi's runtime services for one working directory: **pi's own type**.
+ *
+ * What is created here and what is handed back to pi (`createAgentSessionFromServices`)
+ * therefore round-trips exactly, and the reads this editor makes of it — `modelRuntime.getModel`,
+ * `diagnostics` — are pi's own members rather than a copy of them written down here.
+ */
+export type PiServices = Awaited<ReturnType<OfficialSdk['createAgentSessionServices']>>;
 
-interface PiSdk {
-	createAgentSessionServices(options: {
-		cwd: string;
-		agentDir?: string;
-		/** Inline extensions of this embedded session — here, the permission gate and pi's MCP. */
-		resourceLoaderOptions?: {
-			extensionFactories?: PiInlineExtension[];
-			/** pi extension files loaded from disk — here, the durable bridge. */
-			additionalExtensionPaths?: string[];
-		};
-	}): Promise<PiServices>;
-	createAgentSessionFromServices(options: {
-		services: PiServices;
-		sessionManager: unknown;
-		model?: PiModel;
-		thinkingLevel?: string;
-		/** The MCP tools of the editor, given to pi as tools of its own. See `mcp.ts`. */
-		customTools?: unknown[];
-		/** The agent tools that stay off, by name (pi's own `excludeTools`). See `piConfig.ts`. */
-		excludeTools?: string[];
-	}): Promise<{ session: PiSession }>;
-	SessionManager: {
-		// `sessionDir` is pi's optional override; without it pi resolves the machine's
-		// default, which is right for the external pi and a leak for the internal one.
-		// The internal mode passes pi's own default **shape**: the per-project folder
-		// under this profile's `sessions/` (see the sessionManager creation below).
-		create(cwd: string, sessionDir?: string): PiSessionStore;
-	};
+export interface PiSdk {
+	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP), and here the durable bridge as a pi extension file (`resourceLoaderOptions`, see `mcp.ts`). */
+	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
+	/** What this editor passes: `customTools` are the editor's MCP tools given to pi as its own (see `mcp.ts`), `excludeTools` the agent tools that stay off (see `piConfig.ts`). */
+	createAgentSessionFromServices: OfficialSdk['createAgentSessionFromServices'];
+	// `sessionDir` is pi's optional override; without it pi resolves the machine's
+	// default, which is right for the external pi and a leak for the internal one.
+	// The internal mode passes pi's own default **shape**: the per-project folder
+	// under this profile's `sessions/` (see the sessionManager creation below).
+	SessionManager: OfficialSdk['SessionManager'];
 }
 
 /**
@@ -256,7 +240,7 @@ interface PiSdkWithBuiltins {
 	builtins: readonly PiInlineExtension[];
 }
 
-async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
+export async function loadSdk(distributionRoot: string, log: (line: string) => void): Promise<PiSdkWithBuiltins | undefined> {
 	const loaded = await loadPiSdk<Partial<PiSdk>>(sdkEntryCandidates(distributionRoot));
 	if ('problem' in loaded) {
 		log(loaded.problem);
@@ -287,65 +271,6 @@ async function loadSdk(distributionRoot: string, log: (line: string) => void): P
 	const mcp = await mcpBuiltinWithExistingCwd(loaded.entry, log);
 	const builtins = mcp === undefined ? read.builtins : read.builtins.map(entry => (entry.name === 'mcp' ? mcp : entry));
 	return { sdk: loaded.sdk as PiSdk, builtins };
-}
-
-/**
- * The editor as the context block wants it: the folder, the file and the selection.
- *
- * Read here rather than passed around, because this is the only place that knows about the
- * editor's own objects; what is written from them is decided in `context.ts`, where it can be
- * exercised.
- */
-function editorContext(folder: string | undefined): EditorContext {
-	const editor = vscode.window.activeTextEditor;
-	if (editor === undefined || editor.document.uri.scheme !== 'file') {
-		return { ...(folder === undefined ? {} : { folder }) };
-	}
-	const selection = editor.selection.isEmpty
-		? undefined
-		: {
-			text: editor.document.getText(editor.selection),
-			lines: editor.selection.end.line - editor.selection.start.line + 1,
-		};
-	return {
-		...(folder === undefined ? {} : { folder }),
-		file: editor.document.uri.fsPath,
-		...(selection === undefined ? {} : { selection }),
-	};
-}
-
-/**
- * The context block the project scope asks for.
- *
- * One folder is the block `context.ts` already writes, and folder mode is exactly that.
- * In workspace mode the session is a session of the **area**, so the folder line is
- * replaced by the area block (`workspace-area.ts`): every root named the way the owner
- * names it, with the rule for matching a named project to its root, addressing a file
- * under the right root, and the honest limit — one working directory per shell. The
- * file and selection still travel through `context.ts`; only the folder line yields,
- * because the roots list says more and says it about every folder at once. A folder
- * that is not on disk is named as such — the session must know `guildboard` is not
- * there rather than discover it with a failed command.
- */
-function contextBlockFor(scope: PiProjectScope, picked: SessionCwd): string | undefined {
-	if (scope.mode !== 'workspace' || scope.area === undefined) {
-		return contextBlock(editorContext(picked.cwd));
-	}
-	// Every root's on-disk state is checked on its own (see `missingDirectories`): a folder
-	// the editor keeps after a move or delete sits wherever it sits in the order, and the
-	// context must say it is gone rather than let a command discover it.
-	const missing = missingDirectories(scope.folders);
-	const roots = scope.roots.map(root => ({
-		name: root.name,
-		path: root.path,
-		onDisk: !missing.includes(root.path),
-	}));
-	const base = contextBlock(editorContext(undefined));
-	const area = areaContextBlock(roots, picked.cwd);
-	if (area === undefined) {
-		return base;
-	}
-	return base === undefined ? area : `${base}\n${area}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -544,39 +469,28 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
-async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<void> {
+export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<string> {
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
 	clearTurnEdits();
+	// The answer's own text, as it streamed: what the durable copy of this conversation
+	// records (`chat-record.ts`) — the room saw it, so the file holds the same words.
+	let answer = '';
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
-		let thinking = false;
-		// The chat appends what is streamed, token by token, so the quote marker belongs where a
-		// line *starts*: prefixing every token renders "The> user> asks". See `thinking.ts`.
-		let atLineStart = true;
 		const subscription = session.subscribe(event => {
 			if (event.type === 'message_update') {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === 'text_delta' && typeof delta.delta === 'string') {
-					if (thinking) {
-						// The answer starts: the thinking block is closed so the two are not one wall of
-						// text. A blockquote is what the chat renders as thinking, and it needs no API the
-						// editor does not have.
-						thinking = false;
-						stream.markdown('\n\n');
-					}
+					answer += delta.delta;
 					stream.markdown(delta.delta);
 					return;
 				}
 				if (delta?.type === 'thinking_delta' && typeof delta.delta === 'string' && showReasoning) {
-					if (!thinking) {
-						thinking = true;
-						stream.markdown(THINKING_HEADER);
-						atLineStart = true;
-					}
-					const quoted = quotedThinking(delta.delta, atLineStart);
-					atLineStart = quoted.atLineStart;
-					stream.markdown(quoted.text);
+					// Real thinking parts, not a quoted wall of text: the editor builds its own
+					// collapsible card from them — the accordion, the chevron, the auto-collapse
+					// — and the chat model merges consecutive parts into that one card.
+					stream.push(new vscode.ChatResponseThinkingProgressPart(delta.delta));
 					return;
 				}
 				return;
@@ -599,7 +513,7 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 					}
 				}
 				// Work the agent left running: its card says so from the first moment, which is what the
-				// owner asked to be able to see («¿hay alguna forma de que yo vea ese background?»).
+				// owner asked to be able to see.
 				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
 					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
 				}
@@ -691,7 +605,7 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 
 		// pi refuses a prompt while it is streaming unless it is told how to queue it: «Agent is already
 		// processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message» — which is
-		// the error the owner hit by asking «como van» while a background job's result was being
+		// the error the owner hit by asking how it was going while a background job's result was being
 		// processed. Our own queue (`turnChain`) orders **our** requests, and that is all it can do: it
 		// cannot see what pi is doing for itself, and a background job delivers its result into the
 		// session as a steer, so pi can be busy when our next prompt arrives.
@@ -704,6 +618,7 @@ async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatRe
 		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).catch(reject);
 		void cancellation;
 	});
+	return answer;
 }
 
 /* ------------------------------------------------------------------ *
@@ -809,6 +724,40 @@ const EXTENSION_UI_TEXT_LIMIT = 600;
 
 function trimExtensionText(text: string): string {
 	return text.length <= EXTENSION_UI_TEXT_LIMIT ? text : `${text.slice(0, EXTENSION_UI_TEXT_LIMIT)}…`;
+}
+
+/**
+ * One extension notice, styled for the chat: a bold header line, the `name: detail`
+ * lines as a list, and a trailing hint with its slash command in code style (pi's
+ * "Run /mcp to fix." reads as the thing to type, not as decoration). Lines that match
+ * no shape pass through untouched — the notice stays the extension's words. The card
+ * itself (color, icon) comes from the stream's `warning()`, not from this string.
+ */
+function styledExtensionNotice(message: string): string {
+	const lines = message.split('\n').map(line => line.trim()).filter(line => line !== '');
+	if (lines.length <= 1) {
+		return `**${message}**`;
+	}
+	const [header, ...rest] = lines;
+	const bullets: string[] = [];
+	const hints: string[] = [];
+	for (const line of rest) {
+		if (/^run\s+\/\S+/i.test(line)) {
+			hints.push(line.replace(/\/\S+/, '`$&`'));
+		} else if (/^[^:]+:\s+.+$/.test(line)) {
+			bullets.push(`- ${line}`);
+		} else {
+			hints.push(line);
+		}
+	}
+	const parts = [`**${header.replace(/:$/, '')}**`];
+	if (bullets.length > 0) {
+		parts.push('', ...bullets);
+	}
+	if (hints.length > 0) {
+		parts.push('', ...hints);
+	}
+	return parts.join('\n');
 }
 
 /**
@@ -944,9 +893,16 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
 				return;
 			}
-			const mark = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+			const styled = styledExtensionNotice(message.trim());
 			try {
-				stream.markdown(`\n${mark} ${trimExtensionText(message.trim())}\n`);
+				if (type === 'info') {
+					stream.markdown(`\n${styled}\n`);
+				} else {
+					// A warning or an error reads as the chat's own alert card — the yellow box
+					// with its icon, not text imitating one. Codicons do not render in response
+					// markdown, so the card is the only honest styling there is.
+					stream.warning(`\n${styled}\n`);
+				}
 			} catch { /* a stream that already closed is not an error to report */ }
 		},
 		// Terminal surfaces the chat does not have; inert on purpose.
@@ -987,14 +943,14 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
  * `agentDir` is a parameter of the SDK; pi's `getAgentDir()` reads `PI_CODING_AGENT_DIR`
  * (`dist/config.js`). An extension that resolves the profile by itself therefore ignored the
  * parameter: pi's MCP looked for `~/.pi/agent/mcp.json`, and the adapter loaded the servers of the
- * machine's own profile — measured, not assumed (see `odd/tasks/picode-pi-0992.md`). Pinning the
+ * machine's own profile — measured, not assumed. Pinning the
  * variable is what puts every extension inside PiCode's profile; the chat holds one session at a
  * time, and a profile change is exactly what rebuilds it.
  *
  * External mode passes `undefined`, and then the variable is **removed**: the machine's own profile
  * is the point there, and a value left over from an internal session would silently override it.
  */
-function pinAgentDir(agentDir: string | undefined): void {
+export function pinAgentDir(agentDir: string | undefined): void {
 	if (agentDir === undefined) {
 		delete process.env.PI_CODING_AGENT_DIR;
 		return;
@@ -1035,7 +991,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * interactive confirmation". `onError` is bound so a broken extension is said and the turn
  * still runs.
  */
-async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+export async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
@@ -1046,7 +1002,13 @@ async function bindSessionExtensions(session: PiSession, log: (line: string) => 
 		// work that arrives late is still applied; the registry refreshes when tools appear.
 		await Promise.race([
 			session.bindExtensions({
-				uiContext: extensionUiContext(log),
+				// SAFETY: the chat's question carousel answers the UI calls this product's extensions
+				// make — confirm/select/input/notify become chat questions, the terminal surfaces are
+				// inert, and `custom()`/`editor()` resolve with no widget result, which is what every
+				// extension here observes. pi's published type is generic (`custom<T>(): Promise<T>`);
+				// the carousel has no typed widget results beyond that, so this assertion states the
+				// contract it actually honours, not pi's generic.
+				uiContext: extensionUiContext(log) as unknown as OfficialUiContext,
 				mode: 'rpc',
 				onError: error => log(`extension error (${error.extensionPath ?? 'unknown'}) on ${error.event ?? 'unknown'}: ${error.error ?? 'no message'}`),
 			}),
@@ -1226,7 +1188,9 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			return undefined;
 		}
 		try {
-			const entries = (sessionManager as {
+			// SAFETY: pi's own store — only `getEntries` is read, and its rows are walked by the
+			// `type === 'message'` check below; the record view is this walk's shape, not the store's.
+			const entries = (sessionManager as unknown as {
 				getEntries?: () => ReadonlyArray<Record<string, unknown>>;
 			}).getEntries?.() ?? [];
 			let input = 0;
@@ -1334,7 +1298,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	 * when a session is created and cannot add one later. Reusing the manager is what makes that
 	 * rebuild invisible: the transcript is in the manager, not in the session.
 	 */
-	let sessionManager: unknown;
+	let sessionManager: ReturnType<OfficialSdk['SessionManager']['create']> | undefined;
 	/** The MCP tool set the running session was built with. */
 	let mcpSignature = '';
 	/** The disabled tools the running session was built with, so a change rebuilds it. */
@@ -1410,6 +1374,11 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// conversation pointed at a different pi, and when the durable bridge the
 			// session should load does.
 			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
+			// The durable copy exists from the moment the request arrives, not when the turn
+			// ends: a brand-new chat opens its conversation here, so the sessions panel shows
+			// the row while the model is still answering — the TUI's own immediacy.
+			const sessionKey = request.sessionResource?.toString();
+			void ensureConversation(scopeKey, sessionKey, cwd, deps.log);
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
@@ -1428,7 +1397,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// is enabled stays pi's own default — every built-in unless the profile's `extensions` setting
 				// excludes it (`package-manager.js:738`) — so the owner's `pi config` choices, including
 				// `-builtin:mcp`, keep deciding, and this editor takes no position that would go stale. This
-				// reverses one half of `odd/tasks/picode-pi-0992.md`: pi's MCP extension is wanted again,
+				// reverses one half of the 0.9.9.2 measurement: pi's MCP extension is wanted again,
 				// because the profile's servers (the nan provider's) must connect. The editor's own MCP servers
 				// keep flowing as `customTools` below, so the chat's tools are untouched; a server declared both
 				// in the profile and bridged from the editor would run twice — the pre-0992 overlap — and is
@@ -1515,7 +1484,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor(scope, picked) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
 			// One turn at a time in this window: the next one waits for the turn in flight to end, so
 			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
 			const previousTurn = turnChain;
@@ -1539,7 +1508,16 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
-				await runTurn(session, withContext(request.prompt, context, readRuntimeMode()), stream, token, settings.showReasoning, deps.log, cwd);
+				const framed = withContext(request.prompt, context, readRuntimeMode());
+				const answer = await runTurn(session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				// The durable copy: the room saw this turn, so the daemon holds it (ADR-021
+				// corrected — pi thinks, durable remembers). Fire-and-forget: a recording
+				// failure is logged, never a failed answer; the daemon being down records
+				// nothing and the next turn tries again. The session resource rides along so
+				// the record follows the chat session: a "New Session" opens its own
+				// conversation (and the panel gets its row), a resumed one records into the
+				// conversation it resumed.
+				void recordChatTurn(scopeKey, cwd, { prompt: framed, answer }, deps.log, sessionKey);
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;

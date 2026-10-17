@@ -46,7 +46,7 @@ export class OpenSessionLinkOpenerContribution extends Disposable implements IWo
 		this._register(linkPresentationService.registerLinkPresentationProvider({
 			id: 'sessions.agentSessionLinkPresentation',
 			uriPattern: AGENT_HOST_SESSION_LINK_PATTERN,
-			initialKind: 'session',
+			kind: 'session',
 		}, {
 			createLinkPresentationWatcher: resource => new AgentSessionLinkPresentationWatcher(resource, this._sessionsManagementService, this._connectionsService),
 		}));

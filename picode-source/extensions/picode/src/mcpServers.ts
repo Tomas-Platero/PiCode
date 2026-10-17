@@ -21,7 +21,7 @@
  * definitions, the editor runs them (`mcp-provider.ts`), and their tools reach pi through the bridge
  * (`mcp.ts`). pi's own MCP reads the same file — the terminal does, and `pi mcp` does — but the editor's
  * chat does **not** run pi's own MCP: that made every server run twice, and the owner decided the editor
- * owns them. The measurement and the decision are in `odd/tasks/picode-pi-0992.md`.
+ * owns them. The measurement and the decision date from pi 0.9.9.2.
  *
  * No `vscode` import: the translation can be exercised by running it.
  */

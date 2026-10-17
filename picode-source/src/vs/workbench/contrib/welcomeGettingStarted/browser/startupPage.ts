@@ -9,6 +9,7 @@ import * as arrays from '../../../../base/common/arrays.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { IWorkspaceContextService, UNKNOWN_EMPTY_WINDOW_WORKSPACE, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -31,6 +32,11 @@ import { IContextKeyService } from '../../../../platform/contextkey/common/conte
 import { AuxiliaryBarMaximizedContext } from '../../../common/contextkeys.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
+import { timeout } from '../../../../base/common/async.js';
+import { IChatAgentService } from '../../chat/common/participants/chatAgents.js';
+import { ChatViewId } from '../../chat/browser/chat.js';
+import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEditorInput.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
 export type RestoreWalkthroughsConfigurationValue = { folder: string; category?: string; step?: string };
@@ -91,6 +97,9 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		@IStorageService private readonly storageService: IStorageService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IChatAgentService private readonly chatAgentService: IChatAgentService,
+		@IViewsService private readonly viewsService: IViewsService,
+		@IEditorGroupsService private readonly editorGroupService: IEditorGroupsService,
 	) {
 		super();
 
@@ -139,6 +148,9 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 					await this.openReadme();
 				} else if (startupEditorSetting.value === 'welcomePage' || startupEditorSetting.value === 'welcomePageInEmptyWorkbench') {
 					await this.openGettingStarted(true);
+					// The chat opens beside the welcome: the agent is built in, and this page
+					// is where the owner meets it. See `openChatBesideWelcome` for the wait.
+					this.openChatBesideWelcome();
 				} else if (startupEditorSetting.value === 'terminal') {
 					this.commandService.executeCommand(TerminalCommandId.CreateTerminalEditor);
 				}
@@ -146,14 +158,93 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		}
 	}
 
+	/** How long the agent's registration may take before the chat gives up on opening. */
+	private static readonly CHAT_OPEN_TIMEOUT = 20_000;
+
+	/**
+	 * Opens the editor's chat beside the welcome page.
+	 *
+	 * The agent registers as the connector activates, which can land after this
+	 * page opens — and the chat view's `when` hides it until then, so an eager open
+	 * would show an empty auxiliary bar. The open waits for the registration, with
+	 * a bounded patience: a start where no agent ever appears opens nothing and
+	 * says nothing. One attempt per startup, deduplicated across both paths.
+	 */
+	/** Closes every chat editor tab the workbench holds, wherever it came from. */
+	private closeRestoredChatEditors(): void {
+		const chatTabs = this.editorGroupService.groups.flatMap(group =>
+			group.editors
+				.filter(e => e.typeId === ChatEditorInput.TypeID)
+				.map(editor => ({ groupId: group.id, editor })));
+		if (chatTabs.length > 0) {
+			void this.editorService.closeEditors(chatTabs);
+		}
+	}
+
+	private openChatBesideWelcome(): void {
+		// Earlier builds opened the chat as an editor tab, and the workbench
+		// restores it on every start. The chat lives in the auxiliary bar —
+		// restored chat editors close on sight, before the view opens.
+		const chatTabs = this.editorGroupService.groups.flatMap(group =>
+			group.editors
+				.filter(e => e.typeId === ChatEditorInput.TypeID)
+				.map(editor => ({ groupId: group.id, editor })));
+		if (chatTabs.length > 0) {
+			void this.editorService.closeEditors(chatTabs);
+		}
+
+		const ready = (): boolean => this.chatAgentService.getAgents().length > 0;
+		let opened = false;
+		const openOnce = (): void => {
+			if (opened) { return; }
+			opened = true;
+			this.closeRestoredChatEditors();
+			this.viewsService.openView(ChatViewId, false).then(() => { }, onUnexpectedError);
+			// And keep an eye out during the first minute: whatever materializes a
+			// 'New Chat' editor tab at startup loses the race with this sweeper —
+			// the chat has one home, and it is the auxiliary bar.
+			(async () => {
+				for (let i = 0; i < 12; i++) {
+					await timeout(5000);
+					this.closeRestoredChatEditors();
+				}
+			})().then(() => { }, onUnexpectedError);
+		};
+		if (ready()) {
+			openOnce();
+			return;
+		}
+		const listener = this._register(this.chatAgentService.onDidChangeAgents(() => {
+			if (ready()) {
+				listener.dispose();
+				openOnce();
+			}
+		}));
+		timeout(StartupPageRunnerContribution.CHAT_OPEN_TIMEOUT).then(
+			() => {
+				listener.dispose();
+				if (ready()) { openOnce(); }
+			},
+			() => { /* cancelled — the window is on its way out */ },
+		);
+	}
+
 	private tryOpenWalkthroughForFolder(): boolean {
 		const toRestore = this.storageService.get(restoreWalkthroughsConfigurationKey, StorageScope.PROFILE);
 		if (!toRestore) {
 			return false;
 		}
-		else {
-			const restoreData: RestoreWalkthroughsConfigurationValue = JSON.parse(toRestore);
-			const currentWorkspace = this.contextService.getWorkspace();
+			else {
+				// A record a previous window half-wrote is ignored, not thrown over: the
+				// restore is a convenience, and a bad value costs nothing but itself.
+				let restoreData: RestoreWalkthroughsConfigurationValue;
+				try {
+					restoreData = JSON.parse(toRestore);
+				} catch {
+					this.storageService.remove(restoreWalkthroughsConfigurationKey, StorageScope.PROFILE);
+					return false;
+				}
+				const currentWorkspace = this.contextService.getWorkspace();
 			if (restoreData.folder === UNKNOWN_EMPTY_WINDOW_WORKSPACE.id || restoreData.folder === currentWorkspace.folders[0].uri.toString()) {
 				const options: GettingStartedEditorOptions = { selectedCategory: restoreData.category, selectedStep: restoreData.step, pinned: false, preserveFocus: this.shouldPreserveFocus() };
 				this.editorService.openEditor({

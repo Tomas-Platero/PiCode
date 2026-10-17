@@ -148,6 +148,7 @@ interface ProfilePreview {
 	providers: number;
 	mcpServers: number;
 	skills: number;
+	memory: number;
 	sessions: number;
 	hasCredentials: boolean;
 	profile: string;
@@ -183,6 +184,8 @@ export class PiCodeSetup extends Disposable {
 	private appliedThemeId: string | undefined;
 	/** True while an action runs, so a second click cannot start it twice. */
 	private busy = false;
+	/** The way in the owner picked on the provider step: the form belongs to the API key, and the picked card says so. */
+	private providerChoice: 'oauth' | 'manual' | undefined;
 
 	/* The wizard: which step is on screen, and what the owner has done in it. */
 	private step: 0 | 1 | 2 | 3 | 4 | 5 = 0;
@@ -192,12 +195,12 @@ export class PiCodeSetup extends Disposable {
 	private piChosen = false;
 	/** The wizard ran to the end. */
 	private finished = false;
-	/** The owner chose "Not now": the whole setup steps aside until reopened. */
-	private skipped = false;
 	/** The default model the owner picked in the provider step (provider/model). */
 	private wizardModel: string | undefined;
 	/** The model list fetched from the provider(s), for the picker and the agents. */
 	private wizardModels: WizardModel[] | undefined;
+	/** The model filter the owner typed; kept across the repaints the typing causes. */
+	private modelQuery = '';
 	private modelsLoading = false;
 	private readonly disposables = this._register(new DisposableStore());
 	/** The grid's own store: repainting the grid must not unbind the rest of the cards. */
@@ -247,6 +250,11 @@ export class PiCodeSetup extends Disposable {
 
 	/** Fetches the state and paints the three cards; safe to call again after an action. */
 	async render(): Promise<void> {
+		// Something on screen the moment the container exists. The state command runs on
+		// the extension host, and a window whose host is still busy starting (the first
+		// run after an install can stall it for tens of seconds) would otherwise leave
+		// this area blank — which reads as a broken page rather than a busy one.
+		reset(this.container as HTMLElement, $('p.picode-note', {}, localize('picodeSetup.loading', "Preparing the setup…")));
 		const [state] = await Promise.all([this.resolveState(), this.resolveThemes()]);
 		if (this._store.isDisposed) { return; }
 		this.state = state;
@@ -285,14 +293,6 @@ export class PiCodeSetup extends Disposable {
 		if (state === undefined) {
 			const note = $('p.picode-note', {}, localize('picodeSetup.unavailable', "The setup is not available yet — it will appear in a moment."));
 			reset(this.container as HTMLElement, note);
-			return;
-		}
-		if (this.skipped) {
-			reset(this.container as HTMLElement, $('.picode-card', {},
-				$('p', {}, localize('picodeSetup.skipped', "Setup skipped. Reopen it any time: run 'PiCode: Set up PiCode' from the command palette, or Help > Welcome.")),
-				$('.picode-setup-actions', {},
-					this.button('picode-setup-reopen', localize('picodeSetup.reopen', "Set it up now"), () => { this.skipped = false; this.step = 0; this.renderWizard(this.state); }, 'primary')),
-			));
 			return;
 		}
 		if (this.finished) {
@@ -389,10 +389,10 @@ export class PiCodeSetup extends Disposable {
 		if (this.step < 4) {
 			foot.append(this.navButton('picode-wizard-skip', localize('picodeSetup.nav.skip', "Skip"), true, () => this.advanceFrom(state, true)));
 		}
-		foot.append(
-			this.button('picode-not-now', localize('picodeSetup.nav.notNow', "Not now"), () => this.skipAll(), 'quiet'),
-			next,
-		);
+		// One exit per step: Skip moves on without choosing. Leaving the setup is
+		// closing the Welcome tab — a second button saying a different flavour of
+		// the same thing is noise.
+		foot.append(next);
 		return foot;
 	}
 
@@ -458,13 +458,6 @@ export class PiCodeSetup extends Disposable {
 	/** Reaching the end marks the setup as done, so the first-run nudge stays quiet. */
 	private finish(): void {
 		this.finished = true;
-		this.services.commandService.executeCommand('picode.setup.complete');
-		this.renderWizard(this.state);
-	}
-
-	/** "Not now" steps the whole wizard aside; it is reopenable from the same card. */
-	private skipAll(): void {
-		this.skipped = true;
 		this.services.commandService.executeCommand('picode.setup.complete');
 		this.renderWizard(this.state);
 	}
@@ -701,35 +694,86 @@ export class PiCodeSetup extends Disposable {
 	private renderImportCta(preview: ProfilePreview): HTMLElement {
 		this.importResult = undefined;
 		const progressArea = $('.picode-import-progress-area');
+
+		// What comes across is the owner's call: one toggle per thing the import can
+		// carry, each showing what the external profile actually holds. Logins stay
+		// unticked — the credentials file is the one item that asks. An unticked row
+		// is a decision the report will name, not an omission.
+		type ImportChoices = {
+			settings: boolean; models: boolean; mcp: boolean;
+			skills: boolean; memory: boolean; sessions: boolean; credentials: boolean;
+		};
+		const rows: ReadonlyArray<{ key: keyof Omit<ImportChoices, 'credentials'>; count: number; label: string }> = [
+			{ key: 'settings', count: preview.packages, label: localize('picodeSetup.import.packages', "Packages & settings") },
+			{ key: 'models', count: preview.providers, label: localize('picodeSetup.import.providers', "AI connections") },
+			{ key: 'mcp', count: preview.mcpServers, label: localize('picodeSetup.import.mcps', "MCP servers") },
+			{ key: 'skills', count: preview.skills, label: localize('picodeSetup.import.skills', "Skills") },
+			{ key: 'memory', count: preview.memory, label: localize('picodeSetup.import.memory', "Memory") },
+			{ key: 'sessions', count: preview.sessions, label: localize('picodeSetup.import.sessions', "Conversations") },
+		];
+		const inputs = new Map<keyof Omit<ImportChoices, 'credentials'>, HTMLInputElement>();
+		const cells = new Map<keyof Omit<ImportChoices, 'credentials'>, HTMLElement>();
+		const counts = $('.picode-import-counts', {});
+		for (const row of rows) {
+			// The whole cell is a label wrapping its box, so a click anywhere on the
+			// count toggles it — the numbers stay the first thing the eye finds.
+			const input = $('input.picode-checkbox', { 'type': 'checkbox', 'checked': 'checked', 'aria-label': row.label }) as HTMLInputElement;
+			inputs.set(row.key, input);
+			const cell = $('label.picode-import-choice.picode-import-count', {},
+				input,
+				$('span.picode-import-value', {}, String(row.count)),
+				$('span.picode-import-label', {}, row.label),
+			);
+			cells.set(row.key, cell);
+			counts.appendChild(cell);
+		}
 		const credentialsRow = $('.picode-import-credentials', {},
 			this.checkbox('picode-import-credentials-box', localize('picodeSetup.import.credentials', "Sign me in with my saved logins")),
 		);
 		const previewBox = $('.picode-import-preview', {},
-			$('.picode-import-counts', {},
-				this.importCount(localize('picodeSetup.import.packages', "Packages"), preview.packages),
-				this.importCount(localize('picodeSetup.import.providers', "AI connections"), preview.providers),
-				this.importCount(localize('picodeSetup.import.mcps', "MCP servers"), preview.mcpServers),
-				this.importCount(localize('picodeSetup.import.skills', "Skills"), preview.skills),
-				this.importCount(localize('picodeSetup.import.sessions', "Conversations"), preview.sessions),
-			),
+			counts,
 			progressArea,
 			credentialsRow,
-			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Everything is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
+			$('.picode-import-note', {}, localize('picodeSetup.import.note', "Only what you tick is copied into PiCode. Nothing is deleted — your external pi keeps working exactly as it is.")),
 		);
 		const result = this.importResult = $('.picode-import-result');
 
+		const readSelection = (): ImportChoices => ({
+			settings: inputs.get('settings')?.checked === true,
+			models: inputs.get('models')?.checked === true,
+			mcp: inputs.get('mcp')?.checked === true,
+			skills: inputs.get('skills')?.checked === true,
+			memory: inputs.get('memory')?.checked === true,
+			sessions: inputs.get('sessions')?.checked === true,
+			credentials: credentialsRow.querySelector('input')?.checked === true,
+		});
+
 		// The import is a choice, not an event: it runs when the owner presses Import, and
-		// the bar below takes over from there.
-		const actions = $('.picode-import-actions', {},
-			this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => {
-				actions.style.display = 'none';
-				credentialsRow.style.display = 'none';
-				this.renderImportProgress(progressArea);
-				const box = credentialsRow.querySelector('input');
-				const withLogins = box instanceof HTMLInputElement && box.checked;
-				this.startImport(progressArea, withLogins);
-			}, 'primary'),
-		);
+		// the bar below takes over from there. With nothing ticked there is nothing the
+		// button could do, so it stands down until a tick comes back — the click it hears
+		// while down is ignored, exactly like the wizard's own disabled buttons.
+		let importReady = false;
+		const confirm = this.button('picode-import-confirm', localize('picodeSetup.import.confirm', "Import"), () => {
+			if (!importReady) { return; }
+			actions.style.display = 'none';
+			credentialsRow.style.display = 'none';
+			this.renderImportProgress(progressArea);
+			this.startImport(progressArea, readSelection());
+		}, 'primary');
+		const refreshConfirm = (): void => {
+			importReady = Object.values(readSelection()).some(value => value);
+			for (const [key, cell] of cells) {
+				cell.classList.toggle('unticked', inputs.get(key)?.checked !== true);
+			}
+			confirm.classList.toggle('disabled', !importReady);
+			confirm.title = importReady
+				? ''
+				: localize('picodeSetup.import.nothing', "Tick at least one thing to import.");
+		};
+		const actions = $('.picode-import-actions', {}, confirm);
+		this.disposables.add(addDisposableListener(counts, 'change', refreshConfirm));
+		this.disposables.add(addDisposableListener(credentialsRow, 'change', refreshConfirm));
+		refreshConfirm();
 
 		if (this.importRunning) {
 			// A re-render while the import runs: the bar comes back, the buttons stay away.
@@ -743,13 +787,6 @@ export class PiCodeSetup extends Disposable {
 		return $('.picode-import-cta', {}, previewBox, actions, result);
 	}
 
-	private importCount(label: string, value: number): HTMLElement {
-		return $('.picode-import-count', {},
-			$('span.picode-import-value', {}, String(value)),
-			$('span.picode-import-label', {}, label),
-		);
-	}
-
 	private renderImportProgress(area: HTMLElement): void {
 		area.replaceChildren(
 			$('.picode-import-progress', {}, $('.picode-import-progress-fill')),
@@ -757,14 +794,17 @@ export class PiCodeSetup extends Disposable {
 		);
 	}
 
-	private startImport(progressArea: HTMLElement, withLogins: boolean): void {
+	private startImport(progressArea: HTMLElement, selection: {
+		settings: boolean; models: boolean; mcp: boolean;
+		skills: boolean; memory: boolean; sessions: boolean; credentials: boolean;
+	}): void {
 		this.importRunning = true;
 		const fill = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-fill');
 		const line = (): HTMLElement | null => this.container.querySelector('.picode-import-progress-line');
 
 		const importRun = this.services.commandService.executeCommand<ImportReport & { packagesInstalled?: number; packagesFailed?: number; packagesSkipped?: number }>(
 			'picode.setup.importFromExternal',
-			withLogins,
+			selection,
 		);
 
 		// The bar: the connector counts one step for the copy, one per package and one for
@@ -826,7 +866,37 @@ export class PiCodeSetup extends Disposable {
 			*/
 	private renderProviderStep(): HTMLElement {
 		const form = this.renderProviderForm();
-		form.hidden = true;
+		// The form belongs to the API-key choice: it is on screen only while that
+		// option is the picked one, and the picked card carries the check. One
+		// choice never lingers under the other.
+		const oauthCard = this.providerOption('oauth', 'cloud', localize('picodeSetup.provider.oauth', "Log in with a subscription"),
+			localize('picodeSetup.provider.oauthDetail', "ChatGPT, Claude, Copilot… — pi's own OAuth login, with the account you already pay for."), () => {
+				this.providerChoice = 'oauth';
+				oauthCard.classList.add('checked');
+				manualCard.classList.remove('checked');
+				form.hidden = true;
+				void this.services.commandService.executeCommand('picode.connectProvider');
+			});
+		const manualCard = this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Use an API key"),
+			localize('picodeSetup.provider.manualDetail', "Connect OpenRouter, DeepSeek, Groq or any OpenAI-compatible service with your API key."), () => {
+				if (this.providerChoice === 'manual') {
+					// A second click stands the choice down: the form closes and the
+					// step goes back to no way in picked.
+					this.providerChoice = undefined;
+					manualCard.classList.remove('checked');
+					form.hidden = true;
+					return;
+				}
+				this.providerChoice = 'manual';
+				manualCard.classList.add('checked');
+				oauthCard.classList.remove('checked');
+				form.hidden = false;
+			});
+		// A choice made before a re-render (adding a provider repaints the step)
+		// keeps its card marked and its form where the owner left it.
+		if (this.providerChoice === 'oauth') { oauthCard.classList.add('checked'); }
+		if (this.providerChoice === 'manual') { manualCard.classList.add('checked'); }
+		form.hidden = this.providerChoice !== 'manual';
 		const modelArea = $('.picode-model-area', {});
 		this.currentModelArea = modelArea;
 
@@ -836,14 +906,8 @@ export class PiCodeSetup extends Disposable {
 				$('span.picode-hint', {}, localize('picodeSetup.provider.hint', "The provider your agent talks to, and the model it runs on.")),
 			),
 			$('.picode-pi-options', {},
-				this.providerOption('oauth', 'cloud', localize('picodeSetup.provider.oauth', "Log in with a subscription"),
-					localize('picodeSetup.provider.oauthDetail', "ChatGPT, Claude, Copilot… — pi's own OAuth login, with the account you already pay for."), () => {
-					void this.services.commandService.executeCommand('picode.connectProvider');
-				}),
-				this.providerOption('manual', 'edit', localize('picodeSetup.provider.manual', "Add a provider by hand"),
-					localize('picodeSetup.provider.manualDetail', "An address, a dialect and a key — an OpenAI-compatible endpoint works."), () => {
-					form.hidden = !form.hidden;
-				}),
+				oauthCard,
+				manualCard,
 			),
 			form,
 			modelArea,
@@ -875,15 +939,23 @@ export class PiCodeSetup extends Disposable {
 
 	/** The hand-written provider's form, hidden until the owner picks that way in. */
 	private renderProviderForm(): HTMLElement {
+		// Fields carry real labels above them — placeholders alone are a riddle
+		// once something is typed — and the formats say what they mean in words,
+		// not in the dialect's own jargon.
 		const form = $('.picode-provider-form-inner', {});
 		const input = (placeholder: string, id: string, kind = 'text'): HTMLElement =>
 			$('input.picode-input', { 'type': kind, 'id': id, 'placeholder': placeholder });
-		const name = input('provider name (no spaces)', 'picode-prov-id');
-		const endpoint = input('endpoint, e.g. https://api.example.com/v1', 'picode-prov-endpoint');
-		const key = input('API key (empty if the endpoint needs none)', 'picode-prov-key', 'password');
+		const name = input('e.g. openrouter — no spaces', 'picode-prov-id');
+		const endpoint = input('https://api.example.com/v1', 'picode-prov-endpoint');
+		const key = input('Paste your API key — leave empty if the endpoint needs none', 'picode-prov-key', 'password');
 		const api = $('select.picode-select', { 'id': 'picode-prov-api' });
-		for (const dialect of ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai']) {
-			api.appendChild($('option', { 'value': dialect }, dialect));
+		for (const dialect of [
+			['openai-completions', localize('picodeSetup.provider.api.openai', "OpenAI-compatible — most providers")],
+			['openai-responses', localize('picodeSetup.provider.api.responses', "OpenAI Responses API")],
+			['anthropic-messages', localize('picodeSetup.provider.api.anthropic', "Anthropic — Claude")],
+			['google-generative-ai', localize('picodeSetup.provider.api.google', "Google — Gemini")],
+		] as const) {
+			api.appendChild($('option', { 'value': dialect[0] }, dialect[1]));
 		}
 		const add = this.button('picode-provider-add', localize('picodeSetup.provider.add', "Add provider"), async () => {
 			this.busy = true;
@@ -906,13 +978,16 @@ export class PiCodeSetup extends Disposable {
 			}
 		}, 'primary');
 		form.append(
-			$('.picode-form-row', {}, name),
-			$('.picode-form-row', {}, endpoint),
-			$('.picode-form-row', {}, api, key),
+			$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldName', "Provider name")), name),
+			$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldEndpoint', "Endpoint")), endpoint),
+			$('.picode-form-pair', {},
+				$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldApi', "API format")), api),
+				$('.picode-form-field', {}, $('label.picode-form-label', {}, localize('picodeSetup.provider.fieldKey', "API key")), key),
+			),
 			$('.picode-form-actions', {}, add),
 		);
-		for (const field of [name, endpoint, key, api]) {
-			this.disposables.add(addDisposableListener(field, 'keydown', event => event.stopPropagation()));
+		for (const field2 of [name, endpoint, key, api]) {
+			this.disposables.add(addDisposableListener(field2, 'keydown', event => event.stopPropagation()));
 		}
 		return form;
 	}
@@ -938,12 +1013,66 @@ export class PiCodeSetup extends Disposable {
 			reset(area, $('.picode-gallery-loading', {}, localize('picodeSetup.provider.noModels', "No models yet — log in with a subscription or add a provider by hand, and the list fills from it.")));
 			return;
 		}
-		const rows = models.map(model => $('button.picode-model-row' + (this.wizardModel === model.ref ? '.checked' : ''),
-			{ 'type': 'button', 'data-ref': model.ref, 'tabindex': 0 },
-			$(`span.codicon.codicon-${this.wizardModel === model.ref ? 'check' : 'circle-large-outline'}`),
-			$('span.picode-model-ref', {}, model.ref),
-		));
-		reset(area, $('.picode-model-list', {}, ...rows));
+
+		// The providers' models grouped under their provider, with a filter above.
+		// A flat list of every model from every provider reads as noise: the
+		// provider is the question the owner answers first, and the search is what
+		// keeps a long list usable.
+		const query = this.modelQuery.trim().toLowerCase();
+		const matches = (model: WizardModel): boolean =>
+			query === ''
+				|| model.ref.toLowerCase().includes(query)
+				|| model.provider.toLowerCase().includes(query)
+				|| model.model.toLowerCase().includes(query);
+		const byProvider = new Map<string, WizardModel[]>();
+		for (const model of models) {
+			if (!matches(model)) { continue; }
+			const group = byProvider.get(model.provider) ?? [];
+			group.push(model);
+			byProvider.set(model.provider, group);
+		}
+
+		const search = $('input.picode-model-search', {
+			'type': 'text',
+			'placeholder': localize('picodeSetup.provider.filter', "Filter models…"),
+			'aria-label': localize('picodeSetup.provider.filterAria', "Filter the model list"),
+			'value': this.modelQuery,
+		});
+		this.disposables.add(addDisposableListener(search, 'input', () => {
+			this.modelQuery = (search as HTMLInputElement).value;
+			this.paintModels(area);
+		}));
+
+		const groups: HTMLElement[] = [];
+		for (const [provider, group] of byProvider) {
+			groups.push($('div.picode-model-group', {},
+				$('.picode-model-group-head', {},
+					$('span.picode-model-group-name', {}, provider),
+					$('span.picode-model-group-count', {}, localize('picodeSetup.provider.count', "{0} models", String(group.length))),
+				),
+				// The provider is the header; the row only names the model.
+				...group.map(model => $('button.picode-model-row' + (this.wizardModel === model.ref ? '.checked' : ''),
+					{ 'type': 'button', 'data-ref': model.ref, 'tabindex': 0 },
+					$(`span.codicon.codicon-${this.wizardModel === model.ref ? 'check' : 'circle-large-outline'}`),
+					$('span.picode-model-ref', {}, model.model)),
+				),
+			));
+		}
+
+		if (byProvider.size === 0) {
+			reset(area, search, $('.picode-gallery-loading', {}, localize('picodeSetup.provider.noMatches', "No model matches that filter.")));
+		} else {
+			reset(area, search, $('.picode-model-list', {}, ...groups));
+		}
+		// The repaint above replaces the search box: put the caret back where the
+		// owner's typing was, or the filter would drop every keystroke after the first.
+		if (this.modelQuery !== '') {
+			const fresh = area.querySelector<HTMLInputElement>('.picode-model-search');
+			if (fresh) {
+				fresh.focus();
+				fresh.setSelectionRange(fresh.value.length, fresh.value.length);
+			}
+		}
 		this.registerModelRows(area);
 	}
 
@@ -1059,13 +1188,30 @@ export class PiCodeSetup extends Disposable {
 		return undefined;
 	}
 
-	/** The detail line one row shows: the description when there is one, the version after it. */
-	private packageDetail(description: string | undefined, version: string | undefined): HTMLElement[] {
-		if (description === undefined && version === undefined) { return []; }
-		const text = [description, version !== undefined ? `v${version}` : undefined]
-			.filter((part): part is string => part !== undefined)
-			.join(' · ');
-		return [$('span.picode-theme-publisher', {}, text)];
+	/**
+	 * One package row, the shape both tabs share: the package icon, a title line
+	 * (name, version, whatever state it carries), the description wrapped below —
+	 * never glued after the name — and the row's actions on the right.
+	 */
+	private packageRow(options: {
+		name: string;
+		description?: string;
+		version?: string;
+		badge?: string;
+	}): HTMLElement {
+		return $('.picode-package-row', {},
+			$('span.codicon.codicon-package.picode-package-icon'),
+			$('.picode-package-body', {},
+				$('.picode-package-title', {},
+					$('span.picode-package-name', {}, options.name),
+					...(options.version !== undefined ? [$('span.picode-package-version', {}, `v${options.version}`)] : []),
+					...(options.badge !== undefined ? [$('span.picode-theme-badge', {}, options.badge)] : []),
+				),
+				...(options.description !== undefined && options.description !== ''
+					? [$('span.picode-package-desc', {}, options.description)]
+					: []),
+			),
+		);
 	}
 
 	private renderInstalledPackagesInto(toolbar: HTMLElement, grid: HTMLElement, more: HTMLElement, repaint: () => void): void {
@@ -1093,16 +1239,14 @@ export class PiCodeSetup extends Disposable {
 				localize('picodeSetup.packages.noneInstalled', "No pi packages installed yet — the Gallery tab has some.")));
 			return;
 		}
-		const list = $('.picode-model-list', {});
+		const list = $('.picode-model-list.picode-package-grid-list', {});
 		for (const pkg of rows) {
-			list.appendChild($('.picode-agent-row', {},
-				$('.picode-package-meta', {},
-					$('span.picode-package-name', {}, pkg.name),
-					...this.packageDetail(pkg.description, pkg.version)),
-				...(pkg.state === 'disabled'
-					? [$('span.picode-theme-badge', {}, localize('picodeSetup.packages.disabled', "Disabled"))]
-					: []),
-			));
+			list.appendChild(this.packageRow({
+				name: pkg.name,
+				description: pkg.description,
+				version: pkg.version,
+				badge: pkg.state === 'disabled' ? localize('picodeSetup.packages.disabled', "Disabled") : undefined,
+			}));
 		}
 		grid.appendChild(list);
 	}
@@ -1152,7 +1296,7 @@ export class PiCodeSetup extends Disposable {
 				localize('picodeSetup.packages.noneFound', "Nothing in the catalog for that search.")));
 			return;
 		}
-		const list = $('.picode-model-list', {});
+		const list = $('.picode-model-list.picode-package-grid-list', {});
 		for (const row of rows) {
 			const installed = this.isPackageInstalled(row.name);
 			const install = installed
@@ -1166,12 +1310,9 @@ export class PiCodeSetup extends Disposable {
 			if (installed || this.installingPackage !== undefined) {
 				install.classList.add('disabled');
 			}
-			list.appendChild($('.picode-agent-row', {},
-				$('.picode-package-meta', {},
-					$('span.picode-package-name', {}, row.name),
-					...this.packageDetail(row.description, row.version)),
-				install,
-			));
+			const card = this.packageRow({ name: row.name, description: row.description, version: row.version });
+			card.appendChild(install);
+			list.appendChild(card);
 		}
 		grid.appendChild(list);
 	}
@@ -1320,15 +1461,18 @@ export class PiCodeSetup extends Disposable {
 				this.themeSearch(text => { query = text; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
 				this.themeFilters(kind => { filter = kind; shown = THEME_PAGE_SIZE; this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme); }),
 			);
-			more.append(
-				this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
-					shown += THEME_PAGE_SIZE;
-					this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
-				}),
-				this.button('picode-theme-browse', localize('picodeSetup.theme.browse', "Install more from the gallery…"), () => {
-					this.services.commandService.executeCommand('workbench.extensions.search', '@category:themes @sort:installs');
-				}),
-			);
+			// The installed tab's own "more": it exists only when the filter left
+			// themes unseen — a gallery browse button here would duplicate the tab
+			// sitting right next to it.
+			const visible = this.visibleThemes(query, filter);
+			if (visible.length > shown) {
+				more.append(
+					this.button('picode-theme-show-more', localize('picodeSetup.theme.showMore', "Show more themes"), () => {
+						shown += THEME_PAGE_SIZE;
+						this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
+					}),
+				);
+			}
 			this.paintCurrent(head, grid, this.visibleThemes(query, filter).slice(0, shown));
 			this.paintGrid(grid, this.visibleThemes(query, filter).slice(0, shown), applyTheme);
 		};
@@ -1592,13 +1736,18 @@ export class PiCodeSetup extends Disposable {
 		const applied = this.appliedThemeId;
 
 		for (const theme of themes) {
-			const thumb = $('.picode-theme-thumb');
-			const card = $('button.picode-theme-card' + (theme.settingsId === applied ? '.checked' : ''),
+			const isApplied = theme.settingsId === applied;
+			const thumb = $('.picode-theme-thumb', {},
+				// The applied theme wears the check on its own thumbnail — the badge
+				// below names it, the corner says it from across the room.
+				...(isApplied ? [$('span.picode-theme-check', {}, $('span.codicon.codicon-check'))] : []),
+			);
+			const card = $('button.picode-theme-card' + (isApplied ? '.checked' : ''),
 				{ 'type': 'button', 'data-theme-id': theme.settingsId, 'tabindex': 0, 'title': theme.label },
 				thumb,
 				$('.picode-theme-meta', {},
 					$('span.picode-theme-label', {}, theme.label),
-					...(theme.settingsId === applied ? [$('span.picode-theme-badge', {}, localize('picodeSetup.theme.current', "Current"))] : []),
+					...(isApplied ? [$('span.picode-theme-badge', {}, localize('picodeSetup.theme.current', "Current"))] : []),
 				),
 			);
 

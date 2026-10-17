@@ -45,6 +45,7 @@ export interface INodeProcess {
 	};
 	type?: string;
 	cwd: () => string;
+	execPath?: string;
 }
 
 declare const process: INodeProcess;
@@ -89,6 +90,7 @@ if (typeof nodeProcess === 'object') {
 			_language = nlsConfig.resolvedLanguage || LANGUAGE_DEFAULT;
 			_translationsConfigFile = nlsConfig.languagePack?.translationsConfigFile;
 		} catch (e) {
+			// Invalid NLS configuration in the environment — intentionally ignored, defaults stay in effect.
 		}
 	}
 	_isNative = true;

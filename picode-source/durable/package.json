@@ -1,6 +1,6 @@
 {
   "name": "picode-durable",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "PiCode's durable agent: a headless daemon that runs @earendil-works/pi-durable to deliver (1) crash-resilient conversations, (2) subagents as background tasks, (3) several clients on one live conversation.",
@@ -12,10 +12,10 @@
     "proof3": "node proof3-two-clients.js"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^1.7.0",
-    "@earendil-works/chord": "^1.0.2",
-    "@earendil-works/pi-ai": "^1.0.2",
-    "@earendil-works/pi-durable": "^1.0.2",
-    "@earendil-works/pi-mcp": "1.0.2"
+    "@agentclientprotocol/sdk": "^1.9.0",
+    "@earendil-works/chord": "^1.3.0",
+    "@earendil-works/pi-ai": "^1.3.0",
+    "@earendil-works/pi-durable": "^1.3.0",
+    "@earendil-works/pi-mcp": "1.3.0"
   }
 }

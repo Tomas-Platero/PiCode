@@ -1,14 +1,16 @@
 # Tareas de PiCode — la lista
 
-> **Esta es la única lista.** Los papeles sueltos de `odd/tasks/` son el registro de cómo se
-> llegó hasta aquí, con sus aciertos y sus errores; para saber *qué queda*, manda este
-> documento. Si algo de allí dice otra cosa, gana esto.
+> **Esta es la única lista.** El historial de git y las páginas de release son el registro de
+> cómo se llegó hasta aquí, con sus aciertos y sus errores; para saber *qué queda*, manda
+> este documento. Si algo de allí dice otra cosa, gana esto.
+
+> ✅ **Contrastado con el código (2026-10-16).** Hechas y verificadas: filas 1, 5 y 6 — el conector registra su provider de modelos en la API nativa (`extension.ts`), y el asistente de arranque con las tres vías (interno · externo · migración) vive en `onboarding.ts` y el wizard. Siguen abiertas: 3 y 4 — en `agentHost/node/pi/` solo están `piSession.ts` y `piActionMapping.ts`, aún sin la clase que une sesión y traducción.
 
 ## ✅ Lo que ya está hecho, y con qué se prueba
 
 | Hecho | Cómo se sabe |
 | --- | --- |
-| **El número que leen las extensiones, en 1.141** | Un solo valor, `distribution/product-delta.json`; el build lo escribe en `product.json` y `package.json`. Comprobado: 1.135.7 no cumple `engines.vscode: ^1.141.0` y 1.141.0 sí. **Nuestro código no cambió** — se decidió NO traer el refactor de upstream (ver `odd/tasks/picode-rebase-141.md`) |
+| **El número que leen las extensiones, en 1.141** | Un solo valor, `distribution/product-delta.json`; el build lo escribe en `product.json` y `package.json`. Comprobado: 1.135.7 no cumple `engines.vscode: ^1.141.0` y 1.141.0 sí. **Nuestro código no cambió** — se decidió NO traer el refactor de upstream |
 | **Se compila desde su propia fuente**, sin parches | `picode-source/` es el árbol propio, versionado aquí; `dev/build.sh` produce `PiCode.exe` en cinco fases |
 | **Copilot fuera del Chat** | El aviso que bloqueaba el chat desapareció; su causa se encontró en los registros reales, y eran **dos** |
 | **El selector de modelos sin marca de Copilot** | Las cadenas comprobadas a cero en el editor construido |
@@ -28,20 +30,25 @@
 | **Los MCP del editor, conectados al pi interno** | pi no trae MCP (lo dice su README) pero deja añadirle herramientas: las herramientas de los servidores MCP del editor se le dan a pi, y las llama a través del editor, con sus permisos y confirmaciones. Trece comprobaciones ejecutadas |
 | **Los ajustes, con los nombres y el orden del producto** | Nodo `PiCode` (antes Chat) y nodo `Settings` (antes pi), con `Providers` y `Settings` delante de las categorías del editor |
 | **Fuera la ventana de agentes de VS Code** | Sus seis acciones no se registran: se acaban el botón «Open in Agents» de la barra, la entrada del menú del chat, el atajo `Ctrl+Shift+A`, los comandos de la paleta y el cartel de bienvenida. Sus dos consejos también fuera |
-| **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`), papel en `odd/tasks/picode-management-round.md`: causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
-| **Adopción de 1.141 + release 0.1.5-experimental** (2026-10-08) | Píldora de estado del agente sobre el chat (actividad, cola con cancelación, trabajos en background, empujada sin sondeos), MCP con origen por fila (perfil/proyecto/descubiertos), cancelación inmediata de turnos en cola, `picode.pi.disabledTools`, thinking en show por defecto, nan visible en Providers, ajustes muertos de la sección Agent fuera, corte del borde inferior del chat arreglado. Ficha `odd/tasks/picode-vscode-141.md`; release publicada y verificada en GitHub |
-| **El número declarado, subido a 1.141** (2026-10-08) | **Sin rebase**: el código es nuestro, solo se subió `set.version` a 1.141.0 (hoy 1.141.1) para que las extensiones que piden `^1.141.0` sigan instalándose. Riesgo medido contra un clon (la API estable no cambió). Ficha `odd/tasks/picode-rebase-141.md`; ADR-016 |
-| **Pi interno 1.1.0** (2026-10-08) | `distribution/runtime.json` y `dev/pi-runtime.sh`: 1.0.4 → 1.1.0, medido antes de fijarlo (las 7 entradas del SDK que usa el conector resuelven, el validador MCP de pi acepta los 12 escritores). Ficha `odd/tasks/picode-pi-110.md` |
-| **Tres canales: Stable / Beta / Experimental** (2026-10-08) | Una rama por canal (`master`/`beta`/`experimental`), el feed en su propia rama, y el canal sellado en el build (`PICODE_CHANNEL` escribe `quality` y la rama del `updateUrl`). Hechas C1–C5; C6/C7 en marcha. Ficha `odd/tasks/picode-canales.md`; ADR-015 |
-| **Fuera el menú Help de VS Code, y el aviso de actualización fallida** (2026-10-09) | El menú se queda con las ocho entradas del producto (Welcome, Show All Commands, Documentation, Show Release Notes, Report Issue, View License, Check for Updates, About) y salen Editor Playground, Open Walkthrough, Get Started with Accessibility Features, Ask @vscode, Search Feature Requests, Toggle Developer Tools y Open Process Explorer; los comandos siguen en la paleta, `Ask @vscode` se retira entero y `requestFeatureUrl` pasa a `unset` del delta. `dev/patch-inno-updater.mjs` marca ahora también las cadenas propias del binario (la caja de error, su título, el prefijo `vscode-inno-updater-`), las nueve lenguas del instalador dicen PiCode y la guarda de la fase 1 mira las dos formas. Ficha `odd/tasks/picode-menu-help-y-updater.md` |
-| **pi durable deja de ser experimental y vive en el source** (2026-10-09) | `experimental/durable` → `picode-source/durable`, el puente → `picode-source/durable-bridge`, el cliente ACP → `picode-source/durable-acp-client` (`git mv`, historia intacta). El editor lo busca en `picode-source/durable` y `resources/durable` (antes `pi-durable`), la sección de ajustes se llama **Durable agent** y el agente ya no se presenta como experimento en su `package.json` ni sus papeles. 7/7 tests de rutas y spawn, tsc del conector en 0, `cli.js --help` desde su casa nueva. Ficha `odd/tasks/picode-durable-al-source.md` |
+| **La ronda de gestión (10 puntos, 2026-09-28)** | Ocho commits (`c7a5dcc5`…`32ddb840`): causa raíz del ByteString (la raya del `nameLong` en la cabecera user-agent), modelos al arrancar con reloj de 5 min, página MCP con «Servers» + editar/quitar + mcp.directory + deep link `vscode:mcp/install`, Packages como tabla con disable/enable/uninstall, Skills con «Browse Skill» → skills.sh y textos, Agents sin categorías y sin banner en Overview, chat sin modo «Agente» y MCP siempre activos, y notificaciones de actualización con botón Update (elemento de barra de estado abajo-izquierda, `pi update --all` tras parar sesiones). 158 pruebas del conector en verde, typecheck del núcleo en 0 |
+| **Adopción de 1.141 + release 0.1.5-experimental** (2026-10-08) | Píldora de estado del agente sobre el chat (actividad, cola con cancelación, trabajos en background, empujada sin sondeos), MCP con origen por fila (perfil/proyecto/descubiertos), cancelación inmediata de turnos en cola, `picode.pi.disabledTools`, thinking en show por defecto, nan visible en Providers, ajustes muertos de la sección Agent fuera, corte del borde inferior del chat arreglado. Release publicada y verificada en GitHub |
+| **El número declarado, subido a 1.141** (2026-10-08) | **Sin rebase**: el código es nuestro, solo se subió `set.version` a 1.141.0 (entonces quedó en 1.141.1) para que las extensiones que piden `^1.141.0` sigan instalándose. Riesgo medido contra un clon (la API estable no cambió). ADR-016 |
+| **Pi interno 1.1.0** (2026-10-08; hoy 1.3.0 — la fuente de verdad es `distribution/runtime.json`) | `distribution/runtime.json` y `dev/pi-runtime.sh`: 1.0.4 → 1.1.0, medido antes de fijarlo (las 7 entradas del SDK que usa el conector resuelven, el validador MCP de pi acepta los 12 escritores) |
+| **Tres canales: Stable / Beta / Experimental** (2026-10-08) | Una rama por canal (`master`/`beta`/`experimental`), el feed en su propia rama, y el canal sellado en el build (`PICODE_CHANNEL` escribe `quality` y la rama del `updateUrl`). Hechas C1–C5; C6/C7 en marcha. ADR-015 |
+| **Fuera el menú Help de VS Code, y el aviso de actualización fallida** (2026-10-09) | El menú se queda con las ocho entradas del producto (Welcome, Show All Commands, Documentation, Show Release Notes, Report Issue, View License, Check for Updates, About) y salen Editor Playground, Open Walkthrough, Get Started with Accessibility Features, Ask @vscode, Search Feature Requests, Toggle Developer Tools y Open Process Explorer; los comandos siguen en la paleta, `Ask @vscode` se retira entero y `requestFeatureUrl` pasa a `unset` del delta. `dev/patch-inno-updater.mjs` marca ahora también las cadenas propias del binario (la caja de error, su título, el prefijo `vscode-inno-updater-`), las nueve lenguas del instalador dicen PiCode y la guarda de la fase 1 mira las dos formas |
+| **pi durable deja de ser experimental y vive en el source** (2026-10-09) | `experimental/durable` → `picode-source/durable`, el puente → `picode-source/durable-bridge`, el cliente ACP → `picode-source/durable-acp-client` (`git mv`, historia intacta). El editor lo busca en `picode-source/durable` y `resources/durable` (antes `pi-durable`), la sección de ajustes se llama **Durable agent** y el agente ya no se presenta como experimento en su `package.json` ni sus papeles. 7/7 tests de rutas y spawn, tsc del conector en 0, `cli.js --help` desde su casa nueva |
+| **Limpieza** (2026-09-29) | Fuera `apply-picode.ps1` (la vía del ZIP que lo usaba ya no existe), fuera ESLint y `.vscode/` del árbol, y el recorte lightweight de `picode-source/` |
+| **Tus modelos, en la ventana del editor** | El conector registra su provider en la API nativa (`registerLanguageModelChatProvider` en `extension.ts`): el picker pide y el conector contesta con el catálogo de pi — «Language model unavailable» dejó de ser el camino |
+| **El asistente de primer arranque** | `onboarding.ts` + wizard: las tres vías (pi de dentro · conectar uno externo · traerse la configuración) en el arranque del editor |
+| **Conectar a un pi externo / migrar su configuración** | `picode.pi.runtime` en modo externo (se lee, nunca se escribe) y migración por importación explícita (`profile-import.ts`) — nada se escribe fuera |
+| **La 1.142 en el árbol: seguridad, fugas y Markdown** (2026-10-17) | Cherry-picks de 1.142 sobre el árbol 1.135 **sin rebase** (ADR-016): hardening de webview y enlaces de comando (`d0482949`), las 60 fugas de 1.136–1.142 (`ee22339e`, `eb84f7bc`), el editor Markdown rico con la propuesta `customTextEditorNavigation` (`5e9faf9e`) y `set.version` → **1.142.0**. Verificado: typecheck a 0, suite 474, build completo en verde |
 
 ## 🚧 Lo que está a medias
 
 | A medias | Qué falta |
 | --- | --- |
 | **El conector** (`picode-source/extensions/picode`) | **Ya no es un cascarón**: ~18.600 líneas en 59 ficheros, embarcado en el pack. Aporta al chat nativo el proveedor de modelos de pi, el participante `@pi`, herramientas MCP, asistente, importación de perfil y temas. Pendiente: comprobación en vivo (abrir el chat del editor empaquetado y hablar) |
-| **El host de pi** | Lo que la ficha afirmaba («la sesión y la traducción están; falta la clase que las une») estaba **anclado al panel viejo**; en el modelo actual el pilotaje vive en el conector. Qué falta exactamente solo se sabrá abriendo el chat publicado y probándolo |
+| **El host de pi** | El pilotaje vive hoy en el conector (`agent.ts`); del puente al host (`agentHost/node/pi/`) falta la clase que une sesión y traducción (filas 3 y 4). Pendiente: probar el chat publicado |
 | **Los ajustes de pi en Chat** | Existe la fila de **Proveedores** en el núcleo (`picodeConfiguration.ts`, 172 líneas) además del proveedor de modelos del conector; el resto volverá cuando sus funciones existan |
 | **El material viejo** | ~~Archivado en `legacy/`~~. El 2026-09-27 el dueño borró `legacy/` y la carpeta `extensions/` del panel («pues borrala»): la reconstrucción se apoya en el historial de git y en `.scratch/picode-pi-chat-ultima-copia.tar.gz`; los dos SVG de marca viven en el núcleo |
 
@@ -51,16 +58,12 @@
 
 | # | Tarea | Tamaño | Qué desbloquea |
 | --- | --- | --- | --- |
-| 12 | **Tres canales: Stable / Beta / Experimental** (`odd/tasks/picode-canales.md`) | 🟡 | Una rama por canal: `stable`↔`master`, `beta`↔`beta`, `experimental`↔`experimental`, y **el feed vive en la rama de su canal** (una beta no puede recibir una release de stable ni equivocándose el pipeline). Hechas **C1, C2, C3, C4 y C5**: sellado del canal, trampa de versión, identidad de instalador y perfil por canal, y **un** workflow consciente de canal. C6 en marcha (primera release de beta disparando el pipeline) y queda C7 (verificación end to end, con tres instalaciones). El canal se llama `stable` — `rc` se retiró |
-| 1 | **Que tus modelos salgan en la ventana del editor** | 🟡 | Es lo que hoy hace que `@pi` diga «Language model unavailable». La puerta del editor para registrar modelos es **estable**, y el catálogo de pi ya se lee |
+| 12 | **Tres canales: Stable / Beta / Experimental** | 🟡 | Una rama por canal: `stable`↔`master`, `beta`↔`beta`, `experimental`↔`experimental`, y **el feed vive en la rama de su canal** (una beta no puede recibir una release de stable ni equivocándose el pipeline). Hechas **C1, C2, C3, C4 y C5**: sellado del canal, trampa de versión, identidad de instalador y perfil por canal, y **un** workflow consciente de canal. C6 en marcha (primera release de beta disparando el pipeline) y queda C7 (verificación end to end, con tres instalaciones). El canal se llama `stable` — `rc` se retiró |
 | 3 | **La clase del host que une sesión y traducción** | 🔴 | Es la pieza más grande. Con ella, pi responde **con su propio bucle** y sus herramientas |
 | 4 | **Registrar el host y apagar los otros agentes** | 🟢 | Que pi sea **el único** agente del editor. Va **después** del 3: apagarlos antes deja el selector vacío |
-| 5 | **El asistente de primer arranque** | 🟡 | Preguntar qué hacer, con las tres opciones: pi de dentro · conectar uno externo · traerse la configuración |
-| 6 | **Conectar a un pi externo / migrar su configuración** | 🟡 | Lo que el usuario puede elegir; nada se escribe fuera |
 | 7 | **Las habilidades de los paquetes de pi** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus habilidades |
 | 8 | **Recuperar lo que valía del panel viejo** | 🟡 | Estadísticas de pi, sus comandos y las sesiones — dentro del Chat. El contexto del editor ya viaja con cada mensaje |
 | 9 | **La nube** | 🔴 | Subir y bajar **el perfil como una unidad** |
-| 10 | **Limpiar** | 🟢 | Hecho el 2026-09-29: fuera `apply-picode.ps1` (la vía del ZIP que lo usaba ya no existe), fuera ESLint y `.vscode/` del árbol, y el recorte lightweight de `picode-source/` (`odd/tasks/lightweight-picode-source.md`) |
 
 ## 🚫 Lo que NO hay que hacer
 
@@ -77,7 +80,6 @@ Estas cosas están **decididas en contra**, y si alguien las propone, aquí est�
 
 ## 🧭 El orden que propongo
 
-**Primero el 1 y el 2**: son los que te desbloquean lo que estás intentando usar — conectar
-tus modelos y verlos. **Después el 3 y el 4**, que es hacer que pi sea el agente de verdad.
-Luego el 5 y el 6 (las opciones del usuario), el 7, el 8 (recuperar el panel), y al final el
-9 y el 10.
+**Ya hechos**: 1, 5, 6 y 10. **Ahora tocan** el 3 y el 4 — hacer que pi sea el agente de verdad —,
+después el 7 y el 8 (las habilidades de los paquetes y lo recuperable del panel), y al final el 9
+(la nube).

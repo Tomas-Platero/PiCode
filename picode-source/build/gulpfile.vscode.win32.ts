@@ -146,8 +146,10 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
 				: { 'x64': x64AppId, 'arm64': arm64AppId }[arch],
 			IncompatibleTargetAppId: { 'x64': product.win32x64AppId, 'arm64': product.win32arm64AppId }[arch],
 			AppUserId: product.win32AppUserModelId,
-			ArchitecturesAllowed: { 'x64': 'x64', 'arm64': 'arm64' }[arch],
-			ArchitecturesInstallIn64BitMode: { 'x64': 'x64', 'arm64': 'arm64' }[arch],
+			// "x64" as an architecture identifier is deprecated by Inno Setup: "x64compatible"
+			// is what the warning recommends, and it covers x64 plus ARM64 running x64 code.
+			ArchitecturesAllowed: { 'x64': 'x64compatible', 'arm64': 'arm64' }[arch],
+			ArchitecturesInstallIn64BitMode: { 'x64': 'x64compatible', 'arm64': 'arm64' }[arch],
 			SourceDir: sourcePath,
 			RepoDir: repoPath,
 			OutputDir: outputPath,

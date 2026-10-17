@@ -7,8 +7,8 @@ security updates.
 
 | Version | Supported |
 | --- | --- |
-| Latest release tag (`v*`) | ✅ |
-| Anything older | ❌ — rebuild from the current pin |
+| Latest release of each channel (stable, beta, experimental) | ✅ — stable is the recommended one |
+| Anything older | ❌ — update through the in-product updater, or rebuild from the current source |
 
 ## 🔒 Reporting a vulnerability
 
@@ -34,8 +34,8 @@ The VS Code pin (`upstream/stable.json`) is reviewed **by hand**: the automated 
 workflow was removed with the earlier CI, and [`docs/CI.md`](docs/CI.md) records that. When an
 advisory is published for `microsoft/vscode` after the pinned version:
 
-- If a fixed VS Code release exists, a `fix(security)` PR is opened, labelled `security`, and
-  merged **within days** — security updates are treated as urgent.
+- If upstream has published a fix, it is brought into `picode-source/` (merge or backport) in a
+  `fix(security)` PR, labelled `security`, and merged **within days** — security updates are treated as urgent.
 - If Microsoft has not yet published a fix, a tracked issue labelled `security` is opened
   until the correction ships.
 
@@ -50,9 +50,7 @@ See [docs/CI.md](docs/CI.md) for the full policy of when the pin moves.
   (`dev/update-feed.mjs`) and served from this repository's own channel branch. Updates arrive
   only through GitHub Releases; each channel reads only its own feed, so a stable install is
   never handed a beta or experimental build (ADR-015).
-- **Credentials stay in the local PiCode profile** (`data/` in portable builds). Cloud sync of
-  the profile is in development (`cloud/sync-api/`); when it lands, credential upload will
-  require explicit consent and encryption. Until then, nothing leaves your machine unless you
-  send it.
+- **Credentials stay in the local PiCode profile** (`data/` in portable builds). Cloud sync is an optional Pro feature (`cloud/sync-api/`, ADR-017): the free plan stores nothing, and credentials (`auth.json`, tokens) are uploaded only encrypted and with your explicit consent. Without a Pro account, nothing leaves your machine unless you send it.
+- **The agent asks before it acts.** `bash`, `edit`, `write` and every MCP tool call require your confirmation (`permissions.ts`); approving one is running code on your machine, so read what it asks.
 - PiCode bundles third-party runtimes ([Pi](https://pi.dev)); vulnerabilities in those
   should be reported upstream as well as here, since PiCode pins their versions.

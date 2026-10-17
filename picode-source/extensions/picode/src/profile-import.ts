@@ -105,6 +105,7 @@ export interface ProfilePreview {
 	readonly providers: number;
 	readonly mcpServers: number;
 	readonly skills: number;
+	readonly memory: number;
 	readonly sessions: number;
 	readonly hasCredentials: boolean;
 }
@@ -160,6 +161,7 @@ export function scanExternalProfile(profile: string = externalProfileDir()): Pro
 		providers,
 		mcpServers,
 		skills: exists ? countDirectories(path.join(profile, 'skills')) : 0,
+		memory: exists ? countFiles(path.join(profile, 'memory')) : 0,
 		sessions: exists ? countFiles(path.join(profile, 'sessions')) : 0,
 		hasCredentials: exists ? existsSync(path.join(profile, 'auth.json')) : false,
 	};

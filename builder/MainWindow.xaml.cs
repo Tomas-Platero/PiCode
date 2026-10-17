@@ -1,5 +1,8 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.UI.Text;
@@ -9,6 +12,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace PiCode.Builder;
 
@@ -18,11 +22,10 @@ namespace PiCode.Builder;
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-	private const string BuilderVersion = "1.0.0";
+	private const string BuilderVersion = "1.0.1";
 
 	private readonly DispatcherTimer _timer = new();
 	private readonly List<string> _notes = new();
-
 	private BuildTarget _target = BuildTarget.Windows;
 	private Requirements _requirements = new();
 	private List<Requirement> _blockers = new();
@@ -31,8 +34,6 @@ public sealed partial class MainWindow : Window
 	private int _ticks;
 	private bool _failedSeen;
 	private bool _missingSeen;
-	private bool _linuxAvailable;
-	private string _linuxReason = "";
 
 	public MainWindow()
 	{
@@ -66,12 +67,9 @@ public sealed partial class MainWindow : Window
 		}
 		FooterVersion.Text = $"PiCode Builder v{BuilderVersion}";
 		FooterPath.Text = Pipeline.RepoRoot;
-		HeroLine.Text = Pipeline.Found
-			? "Build PiCode for Windows, or for Linux through WSL. Same pipeline either way."
-			: $"The PiCode repository was not found from here ({Pipeline.RepoRoot}). Put this executable inside the repository, under builder/bin.";
-		BuildButton.IsEnabled = Pipeline.Found;
-		ArchitectureLine.Text = $"Architecture: Win32 x64 (the pipeline builds win-x64 and nothing else)";
-		RailArchitecture.Text = "Win32 x64";
+		RailArchitecture.Text = "Packaged as a portable folder for Windows.";
+		ApplySourceState();
+		UpdateSettings();
 
 		try
 		{
@@ -86,12 +84,6 @@ public sealed partial class MainWindow : Window
 			if (File.Exists(logo))
 			{
 				Logo.Source = new SvgImageSource(new Uri(logo));
-			}
-
-			var tux = Pipeline.BrandIcon("linux");
-			if (tux is not null)
-			{
-				LinuxMark.Source = new SvgImageSource(new Uri(tux));
 			}
 
 			// The background is the owner's drawing, and it is optional on purpose: whoever clones the
@@ -111,14 +103,9 @@ public sealed partial class MainWindow : Window
 			// The window is here to run a build, not to fail over its own decoration.
 		}
 
-		PaintTargets();
-		App.WriteCrashLog("bash: " + Pipeline.BashDescription);
-		_linuxAvailable = Pipeline.LinuxAvailable(out _linuxReason);
-		WslLine.Text = _linuxAvailable ? "WSL: a distribution is ready." : "WSL: " + _linuxReason;
-		InstallWslButton.Visibility = _linuxAvailable ? Visibility.Collapsed : Visibility.Visible;
-
 		Nav.SelectedItem = Nav.MenuItems[0];
 		GripArea.PointerPressed += OnGripPressed;
+		PaintChannel();
 
 		_timer.Interval = TimeSpan.FromSeconds(1);
 		_timer.Tick += (_, _) => Refresh();
@@ -163,67 +150,219 @@ public sealed partial class MainWindow : Window
 		PageSettings.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
 	}
 
-	private void OnTargetClicked(object sender, RoutedEventArgs e)
-	{
-		var tag = (sender as FrameworkElement)?.Tag as string;
-		_target = tag == "linux" ? BuildTarget.Linux : BuildTarget.Windows;
-		PaintTargets();
-		_ticks = 0;
-		RefreshFacts();
-		Refresh();
-	}
-
 	/// <summary>
-	/// The two buttons say which machine the build runs on, and the chosen one is the filled one. The
-	/// setting lives here and nowhere else: a second control for the same thing is two things to keep
-	/// in step, and one of them always ends up out of step.
+	/// Puts the window in step with where the source is: the hero says what will happen, the source card
+	/// is only there when the tree is missing, and the Build button is only live when there is something
+	/// to build.
 	/// </summary>
-	private void PaintTargets()
+	private void ApplySourceState()
 	{
-		var windows = _target == BuildTarget.Windows;
-		TargetWindowsButton.Style = (Style)Application.Current.Resources[windows ? "AccentButtonStyle" : "DefaultButtonStyle"];
-		TargetLinuxButton.Style = (Style)Application.Current.Resources[windows ? "DefaultButtonStyle" : "AccentButtonStyle"];
-		TargetLine.Text = windows ? "Windows" : "Linux through WSL";
-		RailArchitecture.Text = windows ? "Win32 x64" : "the same pipeline, in WSL";
-		FooterTarget.Text = windows ? "Windows" : "Linux (WSL)";
-		PaintChannel();
+		var found = Pipeline.Found;
+		HeroLine.Text = found
+			? "Build PiCode for Windows: it compiles the editor, packs it and leaves it ready to run."
+			: "PiCode is built from its source. None was found beside this program, so download it or point to a copy you already have.";
+		SourceCard.Visibility = found ? Visibility.Collapsed : Visibility.Visible;
+		SourceLine.Text = found
+			? ""
+			: "The builder needs the PiCode source tree. Without it there is nothing to compile.";
+		BuildButton.IsEnabled = found;
+	}
+
+	/// <summary>The Settings page's own facts: where the source is, so it can be seen and changed.</summary>
+	private void UpdateSettings()
+	{
+		if (SettingsRoot is null)
+		{
+			return;
+		}
+		SettingsRoot.Text = Pipeline.Found
+			? Pipeline.RepoRoot
+			: "No source folder yet. Download the source or point the window at a copy.";
 	}
 
 	/// <summary>
-	/// The channel the build will seal, read from the branch the repository is on. One channel per
-	/// branch is the owner's rule, and the window only reports it: the branch decides, and there is
-	/// no control for it because a control would promise a choice the pipeline does not offer.
+	/// The channel the build will seal: the branch the repository is on by default, or the one chose in
+	/// the window. The branch is the owner's rule; the choice is the way back when there is no branch to
+	/// read - a builder copied out of the repository on its own, or a download without history.
 	/// </summary>
 	private void PaintChannel()
 	{
-		var (channel, branch) = Pipeline.ChannelForBranch();
+		var (_, branch) = Pipeline.ChannelForBranch();
+		var chosen = Pipeline.ChannelSelection;
+		var effective = Pipeline.Channel;
 		var version = Pipeline.ProductVersion;
-		if (branch.Length == 0)
+		if (chosen is null && branch.Length == 0)
 		{
-			ChannelLine.Text = "Channel: unknown (not a git repository)";
+			ChannelLine.Text = "No branch to read. Pick the channel to build.";
 			ChannelLine.Opacity = 0.6;
+			FooterTarget.Text = "";
 			return;
 		}
 		ChannelLine.Opacity = 1;
-		ChannelLine.Text = channel is null
-			? $"Channel: none — branch '{branch}' is not a release branch (builds plain PiCode)"
-			: $"Channel: {channel} — branch '{branch}'";
+		ChannelLine.Text = chosen is not null
+			? (branch.Length > 0 ? $"Building {chosen} (chosen here) · branch '{branch}'" : $"Building {chosen} (chosen here)")
+			: effective is null
+				? $"No channel · branch '{branch}' is not a release branch (builds plain PiCode)"
+				: $"Building {effective} · branch '{branch}'";
 		if (version.Length > 0)
 		{
 			ChannelLine.Text += $" · version {version}";
 		}
-		FooterTarget.Text = FooterTarget.Text + (channel is null ? " · no channel" : $" · {channel}");
+		FooterTarget.Text = effective is null ? "No channel" : effective;
+	}
+
+	/// <summary>The channel picker changed: remember it and repaint everything that depends on it.</summary>
+	private void OnChannelChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (ChannelLine is null)
+		{
+			return;
+		}
+		var choice = (ChannelCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Auto (from branch)";
+		Pipeline.ChannelSelection = choice == "Auto (from branch)" ? null : choice;
+		PaintChannel();
+		BuildButtonText.Text = BuildLabel("");
+		Refresh();
 	}
 
 	/// <summary>What the build button says, with the channel it is about to build.</summary>
 	private string BuildLabel(string suffix)
 	{
-		var (channel, branch) = Pipeline.ChannelForBranch();
+		var (_, branch) = Pipeline.ChannelForBranch();
+		if (Pipeline.ChannelSelection is { } chosen)
+		{
+			return chosen == "stable" ? $"Build PiCode{suffix}" : $"Build PiCode {chosen}{suffix}";
+		}
 		if (branch.Length == 0)
 		{
 			return "Build PiCode" + suffix;
 		}
-		return channel is null ? $"Build PiCode ({branch}){suffix}" : $"Build PiCode {channel}{suffix}";
+		return Pipeline.Channel is null
+			? $"Build PiCode ({branch}){suffix}"
+			: (Pipeline.Channel == "stable" ? $"Build PiCode{suffix}" : $"Build PiCode {Pipeline.Channel}{suffix}");
+	}
+
+	/// <summary>
+	/// A folder of its own for a fresh copy. Offered where the source is missing, so a builder carried
+	/// out of the repository can still get to a build without anyone hunting for the URL.
+	/// </summary>
+	private async void OnDownloadSource(object sender, RoutedEventArgs e)
+	{
+		var folder = await PickFolderAsync("Choose an empty folder for the PiCode source");
+		if (folder is null)
+		{
+			return;
+		}
+		SourceLine.Text = "Downloading PiCode source. This can take a few minutes…";
+		DownloadSourceButton.IsEnabled = false;
+		BrowseSourceButton.IsEnabled = false;
+		var (ok, message) = await Task.Run(() => Pipeline.CloneSource(folder));
+		DownloadSourceButton.IsEnabled = true;
+		BrowseSourceButton.IsEnabled = true;
+		if (ok && Pipeline.UseRoot(folder))
+		{
+			AppendNote("source downloaded: " + folder);
+			Reinitialize();
+			return;
+		}
+		SourceLine.Text = message;
+	}
+
+	/// <summary>Points the window at a copy of the source that is already on the machine.</summary>
+	private async void OnBrowseSource(object sender, RoutedEventArgs e)
+	{
+		var folder = await PickFolderAsync("Choose the PiCode source folder (the one with dev and picode-source)");
+		if (folder is null)
+		{
+			return;
+		}
+		if (Pipeline.UseRoot(folder))
+		{
+			if (SettingsSourceNote is not null)
+			{
+				SettingsSourceNote.Visibility = Visibility.Collapsed;
+			}
+			AppendNote("source folder set: " + folder);
+			Reinitialize();
+			return;
+		}
+		var message = "That folder is not a PiCode source tree (no dev/build.sh inside).";
+		SourceLine.Text = message;
+		if (SettingsSourceNote is not null)
+		{
+			SettingsSourceNote.Text = message;
+			SettingsSourceNote.Visibility = Visibility.Visible;
+		}
+	}
+
+	/// <summary>Opens the source in Explorer, so a folder named on the page can be looked at.</summary>
+	private void OnOpenSource(object sender, RoutedEventArgs e)
+	{
+		if (!Pipeline.Found)
+		{
+			AppendNote("no source folder to open");
+			return;
+		}
+		try
+		{
+			Process.Start(new ProcessStartInfo("explorer.exe", Pipeline.RepoRoot) { UseShellExecute = true });
+		}
+		catch (Exception error)
+		{
+			AppendNote("could not open the source folder: " + error.Message);
+		}
+	}
+
+	/// <summary>
+	/// Adopts a newly found tree: every part of the window that was read from the old one is read again,
+	/// so nothing keeps saying "not here" over a source that is now right there.
+	/// </summary>
+	private void Reinitialize()
+	{
+		FooterPath.Text = Pipeline.RepoRoot;
+		ApplySourceState();
+		UpdateSettings();
+		SelectChannelInCombo();
+		PaintChannel();
+		RefreshFacts();
+		Refresh();
+	}
+
+	/// <summary>Puts the picker in step with the channel already in force, without firing the handler.</summary>
+	private void SelectChannelInCombo()
+	{
+		var wanted = Pipeline.ChannelSelection is { } chosen ? chosen : "Auto (from branch)";
+		foreach (var item in ChannelCombo.Items.OfType<ComboBoxItem>())
+		{
+			if ((item.Content?.ToString() ?? "") == wanted)
+			{
+				ChannelCombo.SelectedItem = item;
+				return;
+			}
+		}
+	}
+
+	/// <summary>A folder picker, wired to this window so it appears in front of it and not behind.</summary>
+	private async Task<string?> PickFolderAsync(string commitButtonText)
+	{
+		try
+		{
+			var picker = new Windows.Storage.Pickers.FolderPicker
+			{
+				SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder,
+				CommitButtonText = commitButtonText,
+			};
+			picker.FileTypeFilter.Add("*");
+			var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+			WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
+			var folder = await picker.PickSingleFolderAsync();
+			return folder?.Path;
+		}
+		catch (Exception error)
+		{
+			App.WriteCrashLog("PickFolderAsync: " + error);
+			return null;
+		}
 	}
 
 	/// <summary>
@@ -243,33 +382,62 @@ public sealed partial class MainWindow : Window
 
 	private void StartBuild()
 	{
-		if (_blockers.Count > 0 || Pipeline.IsBuildRunning(_target))
+		App.WriteCrashLog($"StartBuild: blockers={_blockers.Count}, running={Pipeline.IsBuildRunning(_target)}");
+		try
 		{
-			return;
+			if (_blockers.Count > 0)
+			{
+				AppendNote($"cannot build: {_blockers.Count} blocker(s) - see System Check");
+				Nav.SelectedItem = Nav.MenuItems[1];
+				return;
+			}
+			if (Pipeline.IsBuildRunning(_target))
+			{
+				AppendNote("a build is already running");
+				Nav.SelectedItem = Nav.MenuItems[2];
+				return;
+			}
+			AppendNote("starting the build");
+			BuildingCard.Visibility = Visibility.Visible;
+			BusyRing.IsActive = true;
+			Bar.Value = 0;
+			Percent.Text = "0%";
+			App.WriteCrashLog("StartBuild: calling Pipeline.StartBuild");
+			// The channel is not here: Pipeline reads the picker's own choice and passes it, so a
+			// channel set in one place is a channel in the build. Only the switches travel as pairs.
+			var extraEnv = new Dictionary<string, string>();
+			// The installer switch travels set both ways, never left to the script's default: on says
+			// skip it, off says build it. The pipeline's own default is "skip" (a local build is
+			// portable-only; only the release asks for the installer), so an off toggle that set
+			// nothing would silently drop the installer the user asked for.
+			if (SkipInstallerToggle is not null)
+			{
+				extraEnv["PICODE_SKIP_INSTALLER"] = SkipInstallerToggle.IsOn ? "yes" : "no";
+			}
+			if (IncrementalToggle is not null && IncrementalToggle.IsOn)
+			{
+				extraEnv["PICODE_INCREMENTAL"] = "1";
+			}
+			if (BuildCliToggle is not null && !BuildCliToggle.IsOn)
+			{
+				extraEnv["PICODE_BUILD_CLI"] = "no";
+			}
+			var started = Pipeline.StartBuild(_target, extraEnv);
+			App.WriteCrashLog($"StartBuild: Pipeline.StartBuild returned {started}");
+			if (!started)
+			{
+				AppendNote("the build could not be started (see the crash log)");
+				BuildingCard.Visibility = Visibility.Collapsed;
+				BusyRing.IsActive = false;
+				Refresh();
+				return;
+			}
+			Refresh();
 		}
-		if (_target == BuildTarget.Linux && !_linuxAvailable)
+		catch (Exception ex)
 		{
-			AppendNote("Linux builds need WSL with a distribution: " + _linuxReason);
-			return;
-		}
-		AppendNote("starting the build");
-		BuildingCard.Visibility = Visibility.Visible;
-		BusyRing.IsActive = true;
-		Bar.Value = 0;
-		Percent.Text = "0%";
-		Pipeline.StartBuild(_target);
-		Refresh();
-	}
-
-	private void OnInstallWsl(object sender, RoutedEventArgs e)
-	{
-		if (Pipeline.InstallWsl())
-		{
-			AppendNote("WSL is installing in its own window. Reboot when it asks, then press Check again.");
-		}
-		else
-		{
-			AppendNote("WSL could not be started for install. Run \"wsl --install -d Ubuntu\" from a terminal.");
+			App.WriteCrashLog("StartBuild EXCEPTION: " + ex);
+			AppendNote("build failed to start: " + ex.Message);
 		}
 	}
 
@@ -278,7 +446,7 @@ public sealed partial class MainWindow : Window
 		var answer = new ContentDialog
 		{
 			Title = "Clean the built files?",
-			Content = "Removes the built editor (PiCode-Win32-x64) and the last build's verdict. The source tree is kept, so the next build reuses it and does not download again.",
+			Content = $"Removes the built editor ({Path.GetFileName(Pipeline.PackDirectory(_target))}) and the last build's verdict. The source tree is kept, so the next build reuses it and does not download again.",
 			PrimaryButtonText = "Clean",
 			CloseButtonText = "Cancel",
 			XamlRoot = Content.XamlRoot,
@@ -287,7 +455,7 @@ public sealed partial class MainWindow : Window
 		{
 			return;
 		}
-		var (ok, message) = Pipeline.CleanBuild();
+		var (ok, message) = Pipeline.CleanBuild(_target);
 		AppendNote(message);
 		Refresh();
 	}
@@ -312,37 +480,7 @@ public sealed partial class MainWindow : Window
 		_blockers = _requirements.Checks.Where(check => !check.Ok && !check.Optional).ToList();
 
 		Checks.Children.Clear();
-		RailChecks.Children.Clear();
 
-		// The Linux list is asked for inside Linux, which is the machine that would do the work. With no
-		// distribution there is nothing to ask, and an empty list explains nothing: this says what is
-		// missing and what to do about it.
-		if (_target == BuildTarget.Linux && !_linuxAvailable)
-		{
-			// The one thing that fixes it, offered where the problem is: install WSL and its distribution
-			// from here, reboot when the installer asks, and this panel fills with the Linux checks.
-			var installRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-			installRow.Children.Add(Note("The Linux checks are asked inside WSL, and there is no distribution yet. " + _linuxReason));
-			var install = new Button { Content = "Install WSL and Ubuntu" };
-			install.Click += OnInstallWsl;
-			installRow.Children.Add(install);
-			Checks.Children.Add(installRow);
-			Checks.Children.Add(Note("After installing, reboot, then come back here."));
-			RailChecks.Children.Add(Note("WSL is not ready"));
-			RailCheckCount.Text = "";
-			BuildButton.IsEnabled = false;
-			BuildButtonText.Text = "Build PiCode (Linux needs WSL)";
-			return;
-		}
-
-		foreach (var check in _requirements.Checks)
-		{
-			Checks.Children.Add(CheckRow(check, withButton: true));
-		}
-		foreach (var check in _requirements.Checks)
-		{
-			RailChecks.Children.Add(CheckRow(check, withButton: false));
-		}
 		var required = _requirements.Required > 0 ? _requirements.Required : _requirements.Checks.Length;
 		// No checks at all is not "everything is satisfied": it means the list could not be read, and
 		// saying otherwise offered a Build button that could not do anything.
@@ -350,13 +488,17 @@ public sealed partial class MainWindow : Window
 		{
 			RailCheckCount.Text = "";
 			Checks.Children.Add(Note("The checks could not be read: the repository was not found from where this program is running."));
-			RailChecks.Children.Add(Note("The checks could not be read"));
 			BuildButton.IsEnabled = false;
 			BuildButtonText.Text = "Build PiCode (no repository)";
 			return;
 		}
 
 		RailCheckCount.Text = $"{required - _blockers.Count} / {required} ready";
+
+		foreach (var check in _requirements.Checks)
+		{
+			Checks.Children.Add(CheckRow(check, withButton: true));
+		}
 
 
 		if (_blockers.Count > 0 && !_missingSeen)
@@ -366,7 +508,7 @@ public sealed partial class MainWindow : Window
 		}
 
 		// A build that cannot work is not offered, and the reason is on the page that lists it.
-		BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
+		BuildButton.IsEnabled = _blockers.Count == 0;
 		BuildButtonText.Text = _blockers.Count > 0 ? BuildLabel(" (something is missing)") : BuildLabel("");
 	}
 
@@ -609,12 +751,12 @@ public sealed partial class MainWindow : Window
 		// report.
 		if (exit is null && progress is null)
 		{
-			if (Pipeline.EditorExists)
+			if (Pipeline.EditorExists(_target))
 			{
 				LastBuild.Children.Add(VerdictLine(true, "Built"));
 				LastBuild.Children.Add(new TextBlock
 				{
-					Text = "PiCode.exe is in PiCode-Win32-x64",
+					Text = Path.GetFileName(Pipeline.EditorExecutable(_target)) + " is in " + Path.GetFileName(Pipeline.PackDirectory(_target)),
 					Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
 				});
 			}
@@ -629,7 +771,7 @@ public sealed partial class MainWindow : Window
 			return;
 		}
 
-		var ok = exit == "0" || (exit is null && Pipeline.EditorExists);
+		var ok = exit == "0" || (exit is null && Pipeline.EditorExists(_target));
 		LastBuild.Children.Add(VerdictLine(ok, ok ? "Successful" : "Did not finish"));
 
 		try
@@ -654,7 +796,7 @@ public sealed partial class MainWindow : Window
 
 		LastBuild.Children.Add(new TextBlock
 		{
-			Text = Pipeline.EditorExists ? "PiCode.exe is in PiCode-Win32-x64" : "No editor in place yet",
+			Text = Pipeline.EditorExists(_target) ? Path.GetFileName(Pipeline.EditorExecutable(_target)) + " is in " + Path.GetFileName(Pipeline.PackDirectory(_target)) : "No editor in place yet",
 			TextWrapping = TextWrapping.Wrap,
 			Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
 		});
@@ -725,7 +867,30 @@ public sealed partial class MainWindow : Window
 		else
 		{
 			BuildButtonText.Text = _blockers.Count == 0 ? BuildLabel("") : BuildLabel(" (something is missing)");
-			BuildButton.IsEnabled = _blockers.Count == 0 && (_target == BuildTarget.Windows || _linuxAvailable);
+			BuildButton.IsEnabled = _blockers.Count == 0;
+
+			// The steps of the last build, shown the same way the Last build card reports it: a build
+			// that ran - this session or an earlier one, started here or from a terminal - still left
+			// its log and, when it succeeded, its editor. Hiding its steps while the card reports the
+			// build is the contradiction this removes. What is still refused is a finished bar over a
+			// folder with no editor: a verdict that says "built" with nothing there is stale, and only
+			// a failure (where the steps show where it stopped) is worth drawing without an editor.
+			var hasEditor = Pipeline.EditorExists(_target);
+			if (!hasEditor && exit is null or "0")
+			{
+				BuildingCard.Visibility = Visibility.Collapsed;
+				BusyRing.IsActive = false;
+				Bar.Value = 0;
+				Percent.Text = "";
+				StageLine.Text = "";
+				Timing.Text = "";
+				BuildHeadline.Text = "";
+				ShowSteps(null, false);
+				// No editor and no failure: both cards agree here. Passing the verdict through would
+				// let a status that says "built" claim success over a folder that no longer has it.
+				ShowLastBuild(null, null);
+				return;
+			}
 
 			_progress = Pipeline.ReadProgress(_target);
 			if (_progress is not null)
@@ -743,7 +908,7 @@ public sealed partial class MainWindow : Window
 				};
 				StageLine.Text = _progress.Done switch
 				{
-					"ok" => "The editor is in PiCode-Win32-x64.",
+					"ok" => "The editor is in " + Path.GetFileName(Pipeline.PackDirectory(_target)) + ".",
 					"failed" => "It stopped at the step marked below. What it said is in Build Logs.",
 					_ => _progress.Stage,
 				};
@@ -764,6 +929,13 @@ public sealed partial class MainWindow : Window
 		if (failed && !_failedSeen)
 		{
 			_failedSeen = true;
+			var reason = exit switch
+			{
+				"3" => "a build is already running (stale lock?)",
+				"4" => "PiCode is running — close it first, the pack cannot delete its folder",
+				_ => $"exit code {exit}",
+			};
+			AppendNote($"build did not finish: {reason}");
 			Nav.SelectedItem = Nav.MenuItems[2];
 		}
 	}

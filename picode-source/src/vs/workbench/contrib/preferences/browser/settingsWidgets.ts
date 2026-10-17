@@ -1752,8 +1752,7 @@ export class ProviderListSettingWidget extends AbstractListSettingWidget<IProvid
 	 * The providers the **profile** knows that the form does not declare — nan behind an
 	 * installed package, a subscription whose sign-in lives in `auth.json` — as read-only
 	 * rows after the editable ones. The form edits declarations; a provider pi knows by
-	 * itself has no row here to edit, and the owner said the missing one read as broken:
-	 * «Los proveedores no me sale nan».
+	 * itself has no row here to edit, and the owner said the missing one read as broken.
 	 */
 	private async renderProfileRows(): Promise<void> {
 		const sequence = ++this.profileRowsSequence;

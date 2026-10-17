@@ -21,23 +21,39 @@
  * What is left is what this architecture can actually do.
  *
  * No `vscode` import: the reader takes a getter, so the mapping can be exercised by running it.
+ * The one import is pi's own SDK, and it is a type — erased at compile time, so nothing here
+ * loads at runtime either.
  */
 
+import type { OfficialSdk } from './piSdk';
+
+/** pi's own thinking level, named from pi's own signature — the list below is checked against it member by member. */
+type PiThinkingLevel = NonNullable<Parameters<OfficialSdk['createAgentSessionFromServices']>[0]['thinkingLevel']>;
+
 /** The thinking levels pi accepts, in the order it accepts them. */
-export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export const THINKING_LEVELS: readonly PiThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/** Reads a value as one of the levels pi accepts: a hand-typed `settings.json` value is checked, never trusted. */
+const isThinkingLevel = (value: unknown): value is PiThinkingLevel =>
+	typeof value === 'string' && (THINKING_LEVELS as readonly string[]).includes(value);
 
 /** How the model's thinking is shown in the chat. */
 export const REASONING_MODES = ['hide', 'show'] as const;
 
-/** The most of the editor's own text that travels with the prompt, in characters. */
-export const CONTEXT_MAX_CHARS = 8000;
-
-/** The most of a selection that travels with it, in lines. */
-export const CONTEXT_MAX_LINES = 120;
+/**
+ * The setting the modes are stored under, and the command that flips it.
+ *
+ * The status panel's Thinking row is the button: a click flips `picode.pi.reasoning` between
+ * `show` and `hide`, and the row's own description repaints on the next refresh to say which it
+ * now is. The chat then stops writing the thinking from the next turn on — turns already on
+ * screen keep what they showed.
+ */
+export const REASONING_SETTING = 'pi.reasoning';
+export const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
 
 export interface PiChatSettings {
-	/** The thinking level to run pi at, or `undefined` to leave pi's own default alone. */
-	readonly thinkingLevel: string | undefined;
+	/** The thinking level to run pi at, or `undefined` to leave pi's own default alone. pi's own union, validated when read. */
+	readonly thinkingLevel: PiThinkingLevel | undefined;
 	/** Whether the model's thinking is written into the chat. */
 	readonly showReasoning: boolean;
 	/** Whether the editor's context (folder, file, selection) travels with the prompt. */
@@ -63,8 +79,8 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 	const disabledTools = get('pi.disabledTools');
 
 	return {
-		thinkingLevel: typeof thinking === 'string' && (THINKING_LEVELS as readonly string[]).includes(thinking) ? thinking : undefined,
-		// Default **shown** (the owner's call: «Esto siempre en show por defecto»); an explicit
+		thinkingLevel: isThinkingLevel(thinking) ? thinking : undefined,
+		// Default **shown** (the owner's call); an explicit
 		// `hide` is the only thing that turns it off.
 		showReasoning: reasoning !== 'hide',
 		// On unless it was turned off: a switch that only exists to be left alone is not a switch.

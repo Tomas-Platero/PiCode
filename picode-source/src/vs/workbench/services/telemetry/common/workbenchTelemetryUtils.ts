@@ -22,6 +22,5 @@ export function experimentsEnabled(
 		!!productService.tasConfig &&
 		!environmentService.disableExperiments &&
 		!environmentService.extensionTestsLocationURI &&
-		!environmentService.enableSmokeTestDriver &&
-		configurationService.getValue('workbench.enableExperiments') === true;
+		!environmentService.enableSmokeTestDriver;
 }

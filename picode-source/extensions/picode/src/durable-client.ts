@@ -27,8 +27,11 @@ import * as path from 'node:path';
 
 export const PROTOCOL_VERSION = 1;
 
-/** The named pipe the daemon listens on, matching the agent's choice exactly. */
-const WINDOWS_PIPE = '\\\\.\\pipe\\picode-durable-agent';
+/** The named pipe the EDITOR's daemon listens on — deliberately NOT the agent's default
+ * (`picode-durable-agent`), which is the external pi's pipe: a name shared by both would let
+ * whichever daemon started first serve the other's chats. The spawn pins its daemon to this
+ * same name (`PICODE_DURABLE_ENDPOINT`, durable.ts), so the pair is the editor's alone. */
+const WINDOWS_PIPE = '\\\\.\\pipe\\picode-durable-editor';
 
 /**
  * The endpoint the daemon listens on. On Windows it is the fixed named pipe; on POSIX it is

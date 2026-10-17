@@ -1020,7 +1020,7 @@ export class CopilotCliAgentPluginDiscovery extends AbstractAgentPluginDiscovery
 
 /**
  * Command the PiCode connector answers with the packages installed in the pi
- * profile (see AGENTS.md, "La ventana de gestión del chat habla de pi, no de
+ * profile (see AGENTS.md, "The chat management window talks about pi, not
  * Copilot"). The connector owns the profile layout, so this discovery never
  * guesses pi's own paths.
  */

@@ -56,7 +56,7 @@ export class AgentHostOpenSessionLinkOpenerContribution extends Disposable imple
 		this._register(linkPresentationService.registerLinkPresentationProvider({
 			id: 'workbench.agentSessionLinkPresentation',
 			uriPattern: AGENT_HOST_SESSION_LINK_PATTERN,
-			initialKind: 'session',
+			kind: 'session',
 		}, {
 			createLinkPresentationWatcher: resource => {
 				const clientResource = toClientSessionResource(resource);

@@ -1,12 +1,10 @@
 # Contributing to PiCode
 
-PiCode is a VSCodium distribution built from source, with the [Pi](https://pi.dev) coding
-agent integrated into the
-editor core — not as side extensions.
+PiCode is an agentic code editor compiled from its own source tree (descended from VS Code and carrying the VSCodium change set), with the [Pi](https://pi.dev) coding agent integrated into the editor — not bolted on afterwards.
 
 Three things to read before anything else:
 
-- [README.md](README.md) — what the repository holds and the two build paths.
+- [README.md](README.md) — what PiCode is, what you get and how to build it.
 - [docs/DECISIONS.md](docs/DECISIONS.md) — the ADRs. Several look counter-intuitive (no fork,
   pinned upstreams, deleted product keys) and each has its reason written down.
 - [AGENTS.md](AGENTS.md) — the owner's own words. It is Spanish on purpose; it is the product
@@ -77,7 +75,6 @@ plan (unexercised so far).
   extension IDs, the Open VSX API URL, or the legal notices.** "VSCodium" legitimately
   remains in some binary names (`@vscodium/native-keymap`, ripgrep) — it is the upstream base
   and pretending otherwise would be false.
-- **Reverse-applying a patch does not prove it applies forward.** Test against a clean copy.
 - **Never edit a running bash script** — `dev/build.sh` will be re-read mid-flight.
 
 ## 🌐 Language
@@ -85,29 +82,22 @@ plan (unexercised so far).
 Every string the product shows is **English** (ADR-012): dialogs, notifications, command
 titles, settings descriptions. Code, comments, commit messages and docs aimed at GitHub are
 English too. Spanish stays where it is the conversation rather than the product: `AGENTS.md`
-and the feature records in `odd/tasks/`. Other languages come later through language packs —
+and the internal docs in `docs/`. Other languages come later through language packs —
 do not translate sources in place.
 
 ## 🧱 Style of work
 
 - One reviewable unit per commit and per PR. The project's rule: a human should be able to
   hold the change in their head.
+- Branches do not accept direct pushes (Admin excepted): open a pull request. See [docs/CI.md](docs/CI.md).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) with
-  plain-prose subjects (`fix(build): the heap is sized per system`).
 - Do not mark something as done because it compiles. Say how it was **observed working** —
-  the log line, the command output, the screen. Every "it compiled but did not work" case in
-  this repository is written down in `odd/tasks/`; the list of decisions against shortcuts is
-  there too.
-- Features leave a record in `odd/tasks/<feature>.md`: what was asked, what was verified,
-  what was deliberately not built, and the defects found along the way.
+  the log line, the command output, the screen. The list of decisions against shortcuts
+  is `docs/DECISIONS.md`.
 
 ## 🧪 Tests
 
-The core is verified today by building and running — a fresh-clone build is the first thing
-a maintainer will look at in a PR that touches `dev/` or `distribution/`. (The agent-layer
-suites used to live inside `extensions/picode-pi-chat/`, hermetic `npm test` plus
-`test:live` against a real pi; that folder was deleted on 2026-09-27 by the owner's
-decision, and the panel returns as core code, with its tests, when the migration is done.)
+The connector keeps hermetic suites that need no editor (`node --test picode-source/extensions/picode/test/*.test.ts`); CI runs them on every push. The editor's own behaviour is verified by building and running it: a fresh-clone build is the first thing a maintainer will look at in a PR that touches `dev/` or `distribution/`. The full checklist is [DISTRIBUTION.md §8](docs/DISTRIBUTION.md).
 
 ## 🐞 Reporting
 

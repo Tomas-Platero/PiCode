@@ -34,7 +34,6 @@
 		"./vscode-dts/vscode.d.ts"
 	],
 	"exclude": [
-		"vs/workbench/contrib/webview/browser/pre/service-worker.js",
-		"vs/workbench/contrib/picode/browser/test/**"
+		"vs/workbench/contrib/webview/browser/pre/service-worker.js"
 	]
 }

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,16 +11,12 @@ using System.Text.Json;
 namespace PiCode.Builder;
 
 /// <summary>
-/// The machine the build runs on.
-///
-/// The pipeline is the same either way — the same twelve scripts in `dev/`, in bash, and they already
-/// speak both systems — so what changes between these two is only the door: on Windows bash is called
-/// directly, and on Linux it is reached through WSL.
+/// The machine the build runs on. There is one: Windows, `win-x64`. The pipeline in `dev/` is the same
+/// twelve bash scripts whether it is driven from here or from a terminal; this only names the door.
 /// </summary>
 public enum BuildTarget
 {
 	Windows,
-	Linux,
 }
 
 /// <summary>One check of what the build needs, as `dev/build-requirements.mjs` reports it.</summary>
@@ -80,7 +78,7 @@ public sealed class Pipeline
 {
 	private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
-	private static readonly Lazy<string> LazyRoot = new(FindRepoRoot);
+	private static string? _root;
 
 	private static string FindRepoRoot()
 	{
@@ -99,7 +97,6 @@ public sealed class Pipeline
 		{
 			if (File.Exists(Path.Combine(directory.FullName, "dev", "build.sh")))
 			{
-				Found = true;
 				return directory.FullName;
 			}
 			directory = directory.Parent;
@@ -108,21 +105,47 @@ public sealed class Pipeline
 		// Not found: the executable was copied somewhere on its own. The window still opens, says so,
 		// and offers nothing it cannot do - which is better than closing without a word, which is what
 		// this did before, and what made a crash look like a problem with the theme.
-		Found = false;
 		return AppContext.BaseDirectory;
 	}
 
-	/// <summary>Whether the repository was found. A window that says "not here" beats one that vanishes.</summary>
-	public static bool Found { get; private set; }
+	/// <summary>
+	/// Whether the repository was found. A window that says "not here" beats one that vanishes. It is
+	/// asked of the tree rather than remembered, so pointing the window at a folder - a fresh download,
+	/// say - makes every part of it tell the truth again.
+	/// </summary>
+	public static bool Found => File.Exists(Path.Combine(RepoRoot, "dev", "build.sh"));
 
-	public static string RepoRoot => LazyRoot.Value;
+	public static string RepoRoot => _root ??= FindRepoRoot();
+
+	/// <summary>
+	/// Points the window at a tree. It is how the source is adopted after a download or a folder is
+	/// picked: from here the same window reads the checks, the branch and the version of the new tree,
+	/// with no restart and no second copy of the program.
+	/// </summary>
+	public static bool UseRoot(string path)
+	{
+		if (string.IsNullOrWhiteSpace(path) || !File.Exists(Path.Combine(path, "dev", "build.sh")))
+		{
+			return false;
+		}
+		_root = path;
+		return true;
+	}
 
 	/// <summary>
 	/// The branch the repository is on, as git answers it. The channel the build seals comes from
 	/// this: one channel per branch is the owner's rule (2026-10-08), so building from `beta` has
 	/// to produce the beta product and building from `experimental` the experimental one — the
 	/// same relation the release workflow reads from the tag.
+	///
+	/// Read once and kept: the label that shows it is repainted every second, and asking git on each
+	/// of those seconds was a process spawned where an answer would do. Picking a different tree
+	/// throws the answer away, because that is the one thing that makes it wrong.
 	/// </summary>
+	private static string? _branch;
+	private static bool _branchRead;
+	private static string? _branchOf;
+
 	public static string? CurrentBranch
 	{
 		get
@@ -131,9 +154,17 @@ public sealed class Pipeline
 			{
 				return null;
 			}
-			var result = Run("git", "rev-parse --abbrev-ref HEAD", RepoRoot, 15000);
-			var branch = result.Ok ? result.Output.Trim() : "";
-			return branch.Length > 0 && branch != "HEAD" ? branch : null;
+			var root = RepoRoot;
+			if (_branchRead && _branchOf == root)
+			{
+				return _branch;
+			}
+			var result = Run("git", "rev-parse --abbrev-ref HEAD", root, 15000);
+			var line = result.Ok ? result.Output.Trim() : "";
+			_branch = line.Length > 0 && line != "HEAD" ? line : null;
+			_branchRead = true;
+			_branchOf = root;
+			return _branch;
 		}
 	}
 
@@ -158,7 +189,19 @@ public sealed class Pipeline
 		return (channel, branch ?? "");
 	}
 
-	/// <summary>The product version the delta carries, as `dev/build.sh` reads it. Shown, not decided.</summary>
+	/// <summary>
+	/// The channel a person picked in the window, or null for "follow the branch". The branch is the
+	/// owner's rule and stays the default, but a builder carried out of the repository has no branch to
+	/// read - a download has no history to speak of - and then the only honest answer is to be asked.
+	/// </summary>
+	public static string? ChannelSelection { get; set; }
+
+	/// <summary>What the build will really seal: the picked channel, or the branch's own.</summary>
+	public static string? Channel => ChannelSelection ?? ChannelForBranch().Channel;
+
+	/// <summary>
+	/// The product version the delta carries, as `dev/build.sh` reads it. Shown, not decided.
+	/// </summary>
 	public static string ProductVersion
 	{
 		get
@@ -176,9 +219,76 @@ public sealed class Pipeline
 		}
 	}
 
-	public static string PackDirectory => Path.Combine(RepoRoot, "PiCode-Win32-x64");
+	public static string PackDirectory(BuildTarget target)
+	{
+		var suffix = Channel switch
+		{
+			"beta" => "-beta",
+			"experimental" => "-experimental",
+			_ => "",
+		};
+		return Path.Combine(RepoRoot, $"PiCode-Win32-x64{suffix}");
+	}
 
-	public static string EditorExecutable => Path.Combine(PackDirectory, "PiCode.exe");
+	public static string EditorExecutable(BuildTarget target)
+	{
+		// The editor's file carries the channel in its name: stable is `PiCode.exe`, beta
+		// `PiCode Beta.exe` and experimental `PiCode Experimental.exe`. The seal sets `nameShort`
+		// to exactly that and the packer names the executable from it, so the window has to ask for
+		// the same name it produced - asking for `PiCode.exe` under a channel found nothing, which
+		// showed up as a build that "never produced an editor".
+		var label = Channel switch
+		{
+			"beta" => " Beta",
+			"experimental" => " Experimental",
+			_ => "",
+		};
+		return Path.Combine(PackDirectory(target), $"PiCode{label}.exe");
+	}
+
+	public static bool EditorExists(BuildTarget target) => File.Exists(EditorExecutable(target));
+
+	/// <summary>
+	/// Downloads the PiCode source into a folder the person chooses, so a builder copied out of the
+	/// repository on its own can still get to a build. Without the source there is nothing to build,
+	/// and saying that is not enough - this is the way back.
+	/// </summary>
+	public static (bool Ok, string Message) CloneSource(string targetDir)
+	{
+		if (string.IsNullOrWhiteSpace(targetDir))
+		{
+			return (false, "No folder chosen.");
+		}
+		if (Directory.Exists(Path.Combine(targetDir, "dev", "build.sh")))
+		{
+			return (true, "The source is already there.");
+		}
+		if (Directory.Exists(targetDir) && Directory.EnumerateFileSystemEntries(targetDir).Any())
+		{
+			return (false, "The chosen folder is not empty. Pick an empty or new folder.");
+		}
+		try
+		{
+			Directory.CreateDirectory(targetDir);
+		}
+		catch (Exception error)
+		{
+			return (false, "Could not create the folder: " + error.Message);
+		}
+		var (exe, args) = (BashPath.Value, "-c " + Quote($"git clone https://github.com/Tomas-Platero/PiCode.git {Quote(targetDir)}"));
+		// Fall back to git directly if bash is missing.
+		if (!File.Exists(BashPath.Value) || BashPath.Value == "bash")
+		{
+			(exe, args) = ("git", $"clone https://github.com/Tomas-Platero/PiCode.git \"{targetDir}\"");
+		}
+		var result = Run(exe, args, null, 600000);
+		if (!result.Ok)
+		{
+			try { Directory.Delete(targetDir, true); } catch { }
+			return (false, "Clone failed: " + (string.IsNullOrWhiteSpace(result.Errors) ? result.Output : result.Errors));
+		}
+		return (true, "Source downloaded. Restart the builder from inside the new folder.");
+	}
 
 	/// <summary>
 	/// The brand marks, in the folder beside this program. Where one is missing the window falls back to
@@ -196,45 +306,11 @@ public sealed class Pipeline
 		return File.Exists(path) ? path : null;
 	}
 
-	public static bool EditorExists => File.Exists(EditorExecutable);
-
 	private static string LockFile => Path.Combine(RepoRoot, ".scratch", "build.lock");
 
 	private static string StatusFile => Path.Combine(RepoRoot, ".scratch", "build.status");
 
 	private static string LogFile => Path.Combine(RepoRoot, ".scratch", "build-live.log");
-
-	/// <summary>
-	/// The Linux path reaches the same directory from the other side. WSL mounts Windows drives under
-	/// /mnt, so D:\repositorios\PiCode is /mnt/d/repositorios/PiCode.
-	/// </summary>
-	private static string LinuxRepoRoot()
-	{
-		var root = RepoRoot.Replace('\\', '/');
-		if (root.Length > 1 && root[1] == ':')
-		{
-			return "/mnt/" + char.ToLowerInvariant(root[0]) + root[2..];
-		}
-		return root;
-	}
-
-	/// <summary>Whether there is a Linux to build in at all: WSL with a distribution, not just WSL.</summary>
-	public static bool LinuxAvailable(out string reason)
-	{
-		var list = Run("wsl.exe", "-l -q", null, 20000);
-		if (!list.Ok)
-		{
-			reason = "WSL is not installed, or is not ready. It needs a reboot after installing.";
-			return false;
-		}
-		if (string.IsNullOrWhiteSpace(list.Output))
-		{
-			reason = "WSL has no distribution yet. Install one (wsl --install -d Ubuntu) and reboot.";
-			return false;
-		}
-		reason = "";
-		return true;
-	}
 
 	/// <summary>
 	/// Which bash, found once. Asking the PATH is how a running build went unseen: from a terminal the
@@ -269,9 +345,7 @@ public sealed class Pipeline
 	/// </summary>
 	private static (string Exe, string Args) BashCommand(BuildTarget target, string command)
 	{
-		return target == BuildTarget.Windows
-			? (BashPath.Value, "-c " + Quote(command))
-			: ("wsl.exe", $"-d Ubuntu -- bash -lc {Quote(command)}");
+		return (BashPath.Value, "-c " + Quote(command));
 	}
 
 	private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
@@ -279,16 +353,12 @@ public sealed class Pipeline
 	/// <summary>The command and arguments that reach bash on the chosen side.</summary>
 	private static (string Exe, string Args) Shell(BuildTarget target, string script)
 	{
-		return target == BuildTarget.Windows
-			? (BashPath.Value, script)
-			: ("wsl.exe", $"-d Ubuntu -- bash -lc \"cd {LinuxRepoRoot()} && {script}\"");
+		return (BashPath.Value, script);
 	}
 
 	private static (string Exe, string Args) Node(BuildTarget target, string arguments)
 	{
-		return target == BuildTarget.Windows
-			? ("node", arguments)
-			: ("wsl.exe", $"-d Ubuntu -- bash -lc \"cd {LinuxRepoRoot()} && node {arguments}\"");
+		return ("node", arguments);
 	}
 
 	public sealed record CommandResult(bool Ok, string Output, string Errors, int ExitCode);
@@ -427,7 +497,7 @@ public sealed class Pipeline
 	/// the window only has to watch those files: it does not own the build, and closing it does not
 	/// stop one.
 	/// </summary>
-	public static bool StartBuild(BuildTarget target)
+	public static bool StartBuild(BuildTarget target, Dictionary<string, string>? extraEnv = null)
 	{
 		try
 		{
@@ -444,13 +514,21 @@ public sealed class Pipeline
 				},
 			};
 			// The channel is not a flag of the scripts: it arrives as an environment variable,
-			// the same door the release workflow uses. Building from `beta` must seal the beta
-			// product, so the window asks the branch once and passes the answer through. An
-			// unmapped branch passes nothing, and the build keeps its own plain behaviour.
-			var (channel, _) = ChannelForBranch();
-			if (channel is not null)
+			// the same door the release workflow uses. It is the channel picked in the window, or
+			// the branch's own when the window leaves it on "auto"; with no channel nothing is
+			// passed, and the build keeps its own plain behaviour.
+			if (Channel is { } channel)
 			{
 				process.StartInfo.EnvironmentVariables["PICODE_CHANNEL"] = channel;
+			}
+			// The window's own switches (installer, incremental, CLI) come in pairs and are applied
+			// after the channel, so a blunt pair always wins over the going concern above.
+			if (extraEnv is not null)
+			{
+				foreach (var (key, value) in extraEnv)
+				{
+					process.StartInfo.EnvironmentVariables[key] = value;
+				}
 			}
 			process.Start();
 			return true;
@@ -492,7 +570,10 @@ public sealed class Pipeline
 				{
 					return "";
 				}
-				var all = File.ReadAllLines(LogFile);
+				// Read with sharing so a log being actively written by the build is not locked out.
+				using var stream = new FileStream(LogFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+				using var reader = new StreamReader(stream);
+				var all = reader.ReadToEnd().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 				return string.Join(Environment.NewLine, all.TakeLast(lines));
 			}
 			catch (IOException)
@@ -527,7 +608,7 @@ public sealed class Pipeline
 	/// one this should not make silently. Refuses while a build is running, because deleting the folder
 	/// a build is writing into is how half of it disappears.
 	/// </summary>
-	public static (bool Ok, string Message) CleanBuild()
+	public static (bool Ok, string Message) CleanBuild(BuildTarget target)
 	{
 		if (File.Exists(LockFile))
 		{
@@ -537,10 +618,11 @@ public sealed class Pipeline
 		long removed = 0;
 		try
 		{
-			if (Directory.Exists(PackDirectory))
+			var packDir = PackDirectory(target);
+			if (Directory.Exists(packDir))
 			{
-				removed += DirectorySize(PackDirectory);
-				Directory.Delete(PackDirectory, true);
+				removed += DirectorySize(packDir);
+				Directory.Delete(packDir, true);
 			}
 			foreach (var file in new[] { StatusFile, LogFile })
 			{
@@ -577,35 +659,13 @@ public sealed class Pipeline
 		return total;
 	}
 
-	/// <summary>
-	/// Starts installing WSL and its distribution, in a terminal of its own: the installer asks
-	/// questions and asks for a reboot, and those have to be seen to be answered.
-	/// </summary>
-	public static bool InstallWsl()
+	public static void OpenEditor(BuildTarget target)
 	{
-		try
-		{
-			Process.Start(new ProcessStartInfo
-			{
-				FileName = "cmd.exe",
-				Arguments = "/k wsl --install -d Ubuntu",
-				UseShellExecute = true,
-			});
-			return true;
-		}
-		catch
-		{
-			return false;
-		}
-	}
-
-	public static void OpenEditor()
-	{
-		if (!EditorExists)
+		if (!EditorExists(target))
 		{
 			return;
 		}
-		Process.Start(new ProcessStartInfo { FileName = EditorExecutable, UseShellExecute = true });
+		Process.Start(new ProcessStartInfo { FileName = EditorExecutable(target), UseShellExecute = true });
 	}
 
 	/// <summary>

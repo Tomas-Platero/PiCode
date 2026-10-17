@@ -210,9 +210,8 @@ class ChatLifecycleHandler extends Disposable {
 	}
 }
 
-// PiCode: VS Code's own Agents window is **not part of this product** (owner, 2026-09-25:
-// "quita la ventana de agente, esto no lo quiero. Es al parecer un sistema de agente propio de
-// vscode"). Its six actions are not registered and its two contributions are not started, which
+// PiCode: VS Code's own Agents window is **not part of this product** (owner, 2026-09-25).
+// Its six actions are not registered and its two contributions are not started, which
 // takes away the title bar button, the chat menu entry, the shortcut, the palette commands and
 // the welcome banner — the banner appears when the command exists, and it no longer does. What
 // this product's agent is, is pi, and the chat is where it answers.

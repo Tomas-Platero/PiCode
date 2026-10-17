@@ -32,6 +32,8 @@ TypeScript in the tree, compiled.
 
 ## 🧱 2. The layers
 
+> These are the *build* layers: what is applied, and in which order. They are not the architecture layers of `ARCHITECTURE.md`.
+
 | # | Layer | Artifact | Applied by |
 | --- | --- | --- | --- |
 | 1 | Editor | `picode-source/`, compiled by `dev/build.sh` | the build |
@@ -95,7 +97,7 @@ per-setting copy.
 
 ## 🤖 5. The agent runtime
 
-pi is **pinned in one place**, `distribution/runtime.json` (pi **1.1.0** today), and
+pi is **pinned in one place**, `distribution/runtime.json` (pi **1.3.0** today), and
 `dev/pi-runtime.sh` installs it into the pack during the build, so a freshly built editor is
 born working and nobody has to install or configure it.
 
@@ -150,7 +152,7 @@ Machine-checkable, in the order that catches the most:
 | Connector logic | `node --test picode-source/extensions/picode/test/*.test.ts` — the connector's hermetic suites, no editor needed |
 | MCP entries pi accepts | `node dev/check-mcp-entries.mjs` — through pi's own validator |
 | Update feed | the release workflow fetches it from `raw.githubusercontent.com` until it is live |
-| Protocol and CLI | nothing automated: a login or an MCP sign-in is exercised by hand and recorded in `odd/tasks/` |
+| Protocol and CLI | nothing automated: a login or an MCP sign-in is exercised by hand |
 
 A view cannot be opened from the command line, and `onView:` activation is invisible until one
 is shown, so an end-to-end check of a view needs a **temporary built-in extension** that focuses
@@ -214,7 +216,6 @@ bitmap, so both compare "different" against a correct icon.
 - Patching a minified core: changes are made in the source tree and compiled.
 - A custom language server for pi.
 - Shipping weight without a user-facing reason: a folder under `picode-source/extensions/`
-  needs a justification to exist (the lightweight cut is doctrine — see
-  `odd/tasks/lightweight-picode-source.md`).
+  needs a justification to exist (the lightweight cut is doctrine).
 - Reimplementing what pi already brings: providers, OAuth, skills and the orchestrator are
   pi's, and PiCode teaches them to the editor.

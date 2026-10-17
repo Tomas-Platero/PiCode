@@ -11,7 +11,7 @@ import { AbstractIdleValue, IntervalTimer, TimeoutTimer, _runWhenIdle, IdleDeadl
 import { BugIndicatingError, onUnexpectedError } from '../common/errors.js';
 import * as event from '../common/event.js';
 import { KeyCode } from '../common/keyCodes.js';
-import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../common/lifecycle.js';
+import { Disposable, DisposableStore, IDisposable, markAsSingleton, MutableDisposable, toDisposable } from '../common/lifecycle.js';
 import { RemoteAuthorities } from '../common/network.js';
 import * as platform from '../common/platform.js';
 import { URI } from '../common/uri.js';
@@ -445,7 +445,22 @@ class AnimationFrameQueueItem implements IDisposable {
 	 */
 	const inAnimationFrameRunner = new Map<number /* window ID */, boolean>();
 
+	markAsSingleton(onDidUnregisterWindow(({ vscodeWindowId }) => {
+		// A callback can close its window while the current queue is being processed.
+		const currentQueue = CURRENT_QUEUE.get(vscodeWindowId);
+		if (currentQueue) {
+			currentQueue.length = 0;
+		}
+		NEXT_QUEUE.delete(vscodeWindowId);
+		CURRENT_QUEUE.delete(vscodeWindowId);
+		animFrameRequested.delete(vscodeWindowId);
+		inAnimationFrameRunner.delete(vscodeWindowId);
+	}));
+
 	const animationFrameRunner = (targetWindowId: number) => {
+		if (!animFrameRequested.has(targetWindowId)) {
+			return;
+		}
 		animFrameRequested.set(targetWindowId, false);
 
 		const currentQueue = NEXT_QUEUE.get(targetWindowId) ?? [];
@@ -458,7 +473,9 @@ class AnimationFrameQueueItem implements IDisposable {
 			const top = currentQueue.shift()!;
 			top.execute();
 		}
-		inAnimationFrameRunner.set(targetWindowId, false);
+		if (inAnimationFrameRunner.has(targetWindowId)) {
+			inAnimationFrameRunner.set(targetWindowId, false);
+		}
 	};
 
 	scheduleAtNextAnimationFrame = (targetWindow: Window, runner: () => void, priority: number = 0) => {

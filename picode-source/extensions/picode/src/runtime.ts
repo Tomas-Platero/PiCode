@@ -107,7 +107,7 @@ export function resolveProjectScope(): PiProjectScope {
 	// area's identity every time it does. That is what emptied the Sessions panel under him: the slug
 	// his sessions were filed under was `…-513d6f42--`, the slug computed a moment later was
 	// `…-19976c25--`, so the listing looked in a folder that has no sessions and the panel dropped
-	// every row («primero me salen 8 sesiones y luego 5»). A workspace file is what a window uses to
+	// every row. A workspace file is what a window uses to
 	// say *which workspace it is*, and it does not change.
 	const identity = vscode.workspace.workspaceFile === undefined ? folders : [vscode.workspace.workspaceFile.fsPath];
 	const name = vscode.workspace.name ?? (folders[0] === undefined ? 'area' : path.basename(folders[0]));

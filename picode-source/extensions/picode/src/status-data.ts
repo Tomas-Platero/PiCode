@@ -18,8 +18,9 @@ import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFil
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
 import { listProjectSessionFiles } from './sessions-provider';
-import { STATUS_DATA_COMMAND, type McpServerSwitch, type StatusData } from './status-view';
-import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKey } from './usage-data';
+import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-view';
+import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
+import { getCachedNanUsage, matchedNanProvider, nanModelUsage, resolveNanApiKey, spokenWindowLabel } from './usage-data';
 
 /**
  * The data behind the PiCode status view.
@@ -53,6 +54,17 @@ import { getCachedNanUsage, matchedNanProvider, nanUsageSummary, resolveNanApiKe
 export interface StatusDeps {
 	/** The distribution root: where PiCode's own pi runtime and its profile live. */
 	readonly distributionRoot: string;
+	/**
+	 * The editor's own storage, which is where the update check leaves its last answer
+	 * (`updates-check.ts`). The panel reads that answer; it never runs the lookup itself.
+	 */
+	readonly globalState: vscode.Memento;
+	/**
+	 * The chat's background jobs still running (`background-jobs.ts`, the pill's own source): what
+	 * the Tasks block lists as the work the chat itself launched. Read live per refresh — the
+	 * tracker is the one holder of the truth, and the panel only draws it.
+	 */
+	readonly runningJobs: () => readonly BackgroundJobStatus[];
 }
 
 /** Reads a JSON object from a file, treating "missing or malformed" as "nothing there". */
@@ -148,7 +160,7 @@ function readProjectMcpServers(): readonly McpServerSwitch[] {
 }
 
 /** The profile's default model, from pi's own `settings.json`. */
-function readDefaultModel(profileDir: string): string | undefined {
+export function readDefaultModel(profileDir: string): string | undefined {
 	const settings = readJsonObject(path.join(profileDir, 'settings.json'));
 	const value = settings?.['defaultModel'];
 	return typeof value === 'string' && value.length > 0 ? value : undefined;
@@ -282,12 +294,12 @@ function storedApiKey(profileDir: string, providerId: string): string | undefine
  * that declaration must be NaN's, and a credential must be resolvable. Showing another
  * provider's meter under the session's model would be a number the owner cannot act on.
  *
- * Once those hold, the row is worth drawing even when the read fails: `unavailable` says the
- * provider is the one with a quota route and the number is not in hand. Codex and Claude
- * Pro/Max report their windows in SSE response headers this connector never sees, so they get
- * no row at all — not a dash, which would promise a number that cannot arrive.
+ * Once those hold, the block is worth showing even before the first turn: the meter is live
+ * provider data, not session data. Codex and Claude Pro/Max report their windows in SSE response
+ * headers this connector never sees, so they get no block at all — the Model Subscription section
+ * hides itself, which is the honest form of "this model has no window we can read".
  */
-async function readUsageRow(profileDir: string, model: string | undefined): Promise<string | undefined> {
+async function readSubscription(profileDir: string, model: string | undefined): Promise<SubscriptionStatus | undefined> {
 	const current = currentModelRef(model);
 	if (current === undefined) {
 		return undefined;
@@ -306,9 +318,24 @@ async function readUsageRow(profileDir: string, model: string | undefined): Prom
 		return undefined;
 	}
 	const cached = await getCachedNanUsage(apiKey, Date.now());
-	return cached.value === undefined
-		? 'unavailable'
-		: nanUsageSummary(cached.value, current.model) ?? 'unavailable';
+	const limit = cached.value === undefined ? undefined : nanModelUsage(cached.value, current.model);
+	if (limit === undefined || limit.windows.length === 0) {
+		// A read that names no meter for this model says nothing: no section, not an empty one.
+		return undefined;
+	}
+	// Tightest window first — the one that runs out first leads.
+	const labelled = limit.windows.filter(window => window.label.length > 0).sort((left, right) => left.windowSeconds - right.windowSeconds);
+	const unlabelled = limit.windows.filter(window => window.label.length === 0);
+	return {
+		meter: limit.name,
+		windows: [...labelled, ...unlabelled].map(window => ({
+			label: window.label.length > 0 ? `${spokenWindowLabel(window.label)} window` : 'billing period',
+			usedPercent: window.usedPercent,
+			resetAt: window.resetAt,
+		})),
+		limitReached: limit.limitReached,
+		fresh: cached.fresh,
+	};
 }
 
 /** Builds the one answer the status tree renders, from the profile in force. */
@@ -318,7 +345,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const defaultModel = readDefaultModel(profileDir);
 	const sources = providerSources(profileDir);
 	// Whether the agent's thinking reaches the chat. `hide` is the shipped default, and the owner was
-	// looking for exactly this: «no consigo ver el thinking en el chat».
+	// looking for exactly this.
 	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
 	const profileMcpServers = readMcpServers(profileDir, runtime);
@@ -360,7 +387,9 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		thinkingLevel: usage?.thinkingLevel,
 		reasoning,
 		// The provider's own quota for the model in use, never the session's totals above.
-		usage: await readUsageRow(profileDir, usage?.model),
+		// The model's subscription meter, read the way the Session Usage row used to be: the lookup
+		// and its one-minute cache belong to `usage-data.ts`, and the block draws what it answered.
+		subscription: await readSubscription(profileDir, usage?.model),
 		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
 		durable: await readDurableStatus(),
 		// The agents launched from the folders open in this window, counted off their own
@@ -368,6 +397,12 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// conversations panel uses. A listing that throws leaves the row out rather than
 		// reporting zero agents, which would read as "nothing was ever launched".
 		agents: tryAgents(sessionsDirOf(profileDir)),
+		// What the update check last found, read from where the check stored it: the lookup and its
+		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
+		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),
+		// The chat's own background jobs, straight from the tracker the pill reads — the same rows,
+		// so the Tasks block and the pill can never disagree about what is still out.
+		jobs: deps.runningJobs(),
 	};
 }
 

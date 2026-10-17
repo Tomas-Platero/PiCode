@@ -56,7 +56,11 @@ export function getAgentSessionProvider(sessionResource: URI | string): AgentSes
 export function getAgentSessionProviderName(provider: AgentSessionTarget): string {
 	switch (provider) {
 		case AgentSessionProviders.Local:
-			return localize('chat.session.providerLabel.local', "Local");
+			// PiCode: the "local" harness is pi running in the window's process — the editor's own
+			// agent (`agent.ts`). Naming it "Local" named the plumbing; the owner asked for what it
+			// is. Same rule everywhere the provider name surfaces (list badges, pickers, the
+			// sessions window, whose `Background` → `Local` override resolves through this case).
+			return 'Pi';
 		case AgentSessionProviders.Background:
 			return localize('chat.session.providerLabel.background', "Copilot CLI");
 		case AgentSessionProviders.Cloud:

@@ -11,6 +11,8 @@ on:
   push:
     branches:
       - master
+      - beta
+      - experimental
       - 'feat/**'
     paths-ignore:
       - '**.md'
@@ -47,6 +49,27 @@ jobs:
           # Pin to the repo's .nvmrc instead of a float so CI and local dev
           # never drift apart.
           node-version-file: .nvmrc
+
+      # Every folder says what it does in one paragraph (docs/MAPA.md is built
+      # from those paragraphs). Two rules: the documented folders keep their
+      # README, and a folder NEW since the base of the PR has to arrive with
+      # one. If the base cannot be fetched the static half still runs, so this
+      # step can only ever be stricter, never blind.
+      - name: Folder documentation
+        shell: bash
+        env:
+          # Through the environment: a ref name is not script text.
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            node dev/check-docs.mjs
+          elif git fetch --depth=1 origin "$BASE_REF"; then
+            node dev/check-docs.mjs --base FETCH_HEAD
+          else
+            # The base could not be fetched: the static half still runs.
+            node dev/check-docs.mjs
+          fi
 
       # node_modules is reused whenever the lockfile has not moved:
       # build.sh's deps-current check then skips npm ci entirely.
@@ -130,13 +153,25 @@ jobs:
         shell: bash
         run: node dev/check-mcp-entries.mjs
 
+      - name: Resolve the packed folder
+        shell: bash
+        run: |
+          # The packer names the folder after the channel it sealed (PiCode-win32-x64,
+          # plus -beta or -experimental for the other channels). dev/pack-dir.mjs resolves
+          # it the same way the checks do, so the upload follows whatever the build
+          # actually produced. A glob could not: Git Bash matches case-sensitively and the
+          # platform segment on disk is lower case, so `PiCode-Win32-x64*` found nothing.
+          PACK=$(node dev/pack-dir.mjs)
+          echo "PACK=${PACK}" >> "$GITHUB_ENV"
+          echo "packed folder: ${PACK}"
+
       - name: Upload the packed editor
         uses: actions/upload-artifact@v7
         with:
           name: PiCode-win32-x64
-          # The output directory is EXACTLY 'PiCode-Win32-x64' (capital W,
-          # as build.sh creates it); a wrong case silently uploads nothing.
-          path: PiCode-Win32-x64/
+          # Resolved above, from what the build actually wrote; a wrong name silently
+          # uploads nothing, which is how the channel suffix once went unnoticed.
+          path: ${{ env.PACK }}/
           if-no-files-found: error
 
       - name: Job summary
@@ -150,7 +185,7 @@ jobs:
             echo "## CI: ${JOB_STATUS}"
             echo
             # Guard: a failed build must not break the summary step.
-            PROD=PiCode-Win32-x64/resources/app/product.json
+            PROD=${PACK}/resources/app/product.json
             if [ -f "$PROD" ]; then
               VER=$(node -p "require('./$PROD').version")
               COMMIT=$(node -p "require('./$PROD').commit")

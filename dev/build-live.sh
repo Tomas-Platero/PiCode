@@ -29,12 +29,24 @@ STATUS=$?
 
 echo ""
 if [[ "${STATUS}" -eq 0 ]]; then
-  echo "== build terminada bien"
-  echo "   editor: ./PiCode-Win32-x64/PiCode.exe"
-  echo "   registro: .scratch/build-live.log"
+  echo "== build finished successfully"
+  # The pack folder and the editor's name both carry the channel (dev/build.sh seals them). Reading
+  # the packed product.json back, the way the verification does, keeps this line from naming a file
+  # that is not there - `PiCode.exe` under a channel build does not exist.
+  PACK_DIR="./PiCode-Win32-x64"
+  case "${PICODE_CHANNEL:-}" in
+    beta | experimental) PACK_DIR="./PiCode-Win32-x64-${PICODE_CHANNEL}" ;;
+  esac
+  EDITOR="PiCode.exe"
+  NAME=$( node -p "require('${PACK_DIR}/resources/app/product.json').nameShort" 2> /dev/null || echo "" )
+  if [[ -n "${NAME}" && "${NAME}" != "undefined" ]]; then
+    EDITOR="${NAME}.exe"
+  fi
+  echo "   editor: ${PACK_DIR}/${EDITOR}"
+  echo "   log: .scratch/build-live.log"
 else
-  echo "== la build falló (código ${STATUS})"
-  echo "   mira .scratch/build-live.log, y sus últimas líneas:"
+  echo "== build failed (exit code ${STATUS})"
+  echo "   see .scratch/build-live.log, and its last lines:"
   tail -20 .scratch/build-live.log
 fi
 

@@ -27,22 +27,6 @@ export type PermissionLevel = 'default' | 'assisted' | 'autoApprove' | 'autopilo
 /** pi's native tools that change the machine when they run; everything else only looks. */
 export const MUTATING_TOOLS = ['bash', 'powershell', 'edit', 'write'] as const;
 
-/**
- * pi's own MCP tools, named `mcp__<server>__<tool>` (`dist/extensions/mcp/index.js`).
- *
- * Every one of them is treated as mutating, because this bridge cannot know which of them only
- * reads: they are servers somebody else wrote, and a call can delete a row or send a message. The
- * editor's own MCP tools are a different shape — the editor's prefix is one underscore
- * (`mcp_<server>_<tool>`, `mcpTypes.ts`) — and are deliberately left out: the editor already asks
- * before it runs one, and a second question here would be the same question twice.
- */
-const MCP_TOOL_PREFIX = 'mcp__';
-
-/** Whether `toolName` can change something outside this conversation. */
-function changesSomething(toolName: string): boolean {
-	return (MUTATING_TOOLS as readonly string[]).includes(toolName) || toolName.startsWith(MCP_TOOL_PREFIX);
-}
-
 /** The question carousel's single question id; the answer record is keyed by it. */
 export const PERMISSION_QUESTION_ID = 'picode-tool-permission';
 
@@ -56,17 +40,14 @@ const ASKING_LEVELS: ReadonlySet<string> = new Set(['default', 'assisted']);
 const KNOWN_LEVELS: ReadonlySet<string> = new Set([...ASKING_LEVELS, 'autoApprove', 'autopilot']);
 
 /**
- * Whether pi must ask in the chat before `toolName` runs at this level.
+ * Whether pi must ask in the chat before `toolName` runs.
  *
- * `undefined` means no level reached us — the host always sends one for a real request, so
- * the honest reading is the picker's default: ask. A level the code does not know means a
- * host writing newer names than this bridge reads: do not gate on what we cannot name.
+ * The owner's rule: the chat NEVER asks — commands run on their own, exactly the way
+ * pi's own TUI runs them. The level machinery above stays on record (the request still
+ * names its level and the setting still reads), but nothing gates on it any more.
  */
-export function shouldAsk(level: string | undefined, toolName: string): boolean {
-	if (!changesSomething(toolName)) {
-		return false;
-	}
-	return level === undefined || ASKING_LEVELS.has(level);
+export function shouldAsk(_level: string | undefined, _toolName: string): boolean {
+	return false;
 }
 
 /* ------------------------------------------------------------------ *

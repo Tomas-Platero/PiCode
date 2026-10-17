@@ -29,6 +29,10 @@ alternatives were seriously considered.
 | 015 | Three release channels, one branch each | accepted |
 | 016 | The declared product version may lead the tree's base | accepted |
 | 017 | Cloud sync is a Pro feature; the free plan is an account, not storage | accepted |
+| 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020 |
+| 019 | The editor's context travels with every chat turn, durable included | accepted |
+| 020 | The chat is pi; durable is the backend it reaches through tools | accepted |
+| 021 | One orchestrator (pi), one list, sessions always durable | accepted (refines 020) |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -274,7 +278,7 @@ from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
 PiCode therefore pins the runtime it is verified against. The pin lives in one place,
-`distribution/runtime.json` — pi `1.1.0` today — and `dev/pi-runtime.sh` installs it into the
+`distribution/runtime.json` — pi `1.3.0` today — and `dev/pi-runtime.sh` installs it into the
 pack during the build, so a freshly built editor is born working.
 
 **Decision:** PiCode pins and ships its own pi inside the build, instead of resolving it from
@@ -378,7 +382,7 @@ inglés."*
 
 **Decision:** Every string the product shows is English. Spanish stays where it is the
 conversation rather than the product: what is said to the owner, and the records that are
-his (`AGENTS.md`, `odd/tasks/`). Other languages are reached later by **language packs**,
+his (`AGENTS.md` and the internal papers in `docs/`). Other languages are reached later by **language packs**,
 which is the editor's own mechanism: a separate layer keyed by localize key over the English
 source text, added without editing the sources.
 
@@ -542,3 +546,208 @@ to advertise can never be turned back on without deciding, again, that free gets
 happens, the retention cap must become plan-aware first: the byte ceiling is compared against all
 retained revisions, so a 1 MB free tier with a 20-revision retention cannot hold even one real
 profile beyond the third upload.
+
+## ADR-018 — Durable is the chat; Local retires from the pickers (the harness reads "PiCode")
+
+**Status:** superseded by ADR-020.
+
+**Context:** A chat could run in the editor's Local harness or in the durable agent's daemon.
+The owner had already made durable the preferred default, but Local was still offered as a
+destination and a window without a folder on disk fell straight back to it — so "always
+durable" was not literal. And the durable harness presented itself as *"Durable"*, a name that
+belongs to the feature, not to the product the owner sees in the chat. Owner, 2026-10-11:
+*«En el chat no quiero usar el harness de local más, quiero usar el de durable como default,
+siempre será durable. … Aunque no pongas durable ni nada así en el harness porque
+estéticamente será PiCode.»*
+
+**Decision:**
+
+- **Durable is the chat, not the preferred default.** While its contribution is registered,
+  every new-chat door resolves to it — `getComputedDefaultSessionType`,
+  `getDefaultNewChatSessionType` and `resolveDefaultNewChatSessionType` — and a **virtual
+  window** keeps durable too (its tools resolve the directory themselves: the first existing
+  workspace folder, the home one otherwise). `isVisibleEditorChatSessionType(local)` retires
+  Local from the pickers, and a remembered Local pick stops being usable. Local survives only
+  as the fallback for a window where no non-local type exists, because something must answer.
+- **The harness reads "PiCode".** The `chatSessions` contribution's `displayName` and
+  `welcomeTitle` are `PiCode`; the internal `type`/`name` stay `durable`, because they are the
+  registration key and the `@` participant.
+- **The Sessions panel keeps its filters.** `durable`, `pi` and `local` remain as history,
+  next to the conversations that already exist. Retiring the filter would erase the past, not
+  change the future.
+- **The feature is still the "Durable agent".** Settings and the Status page keep that name;
+  what changed is the harness's presentation inside the chat, not the piece.
+
+**Consequences:** One chat, durable, from the button and from every door. The fallback keeps an
+editor with no connector working. The accepted cost: an owner who genuinely wants a local chat
+in a window where durable is registered can no longer pick one.
+
+**Reversal trigger:** durable stops being the product's chat — the connector is removed from
+the shipped build, or the product decides again that Local is an offered destination.
+
+## ADR-019 — The editor's context travels with every chat turn, durable included
+
+**Status:** accepted.
+
+**Context:** ADR-018 made durable the chat. Durable runs as a separate process in a working
+directory, and its turn only carried `request.prompt` to the daemon — not the file the owner
+had open, not the selection, not the Problems panel, not the references attached to the
+message. The in-process chat did send that block (`context.ts`), so making durable the chat
+silently removed a capability the owner had: asking "can you see the file I have open?" got a
+folder-blind answer. Owner, 2026-10-11: *«¿no sería mejor que fuera pi el que gestione el
+chat?»* — the question behind it was not *which engine* (pi answers in both cases: durable runs
+`@earendil-works/pi-durable`), but that the chat no longer saw the editor.
+
+**Decision:**
+
+- **The editor's context is part of every prompt, whoever runs the turn.** `editor-context.ts`
+  reads the folder (or the area), the open file, the selection, the file's errors and warnings,
+  and the request's own references; `context.ts` writes them into the frame `withContext`
+  prepends. Both the durable turn (`durable-sessions-register.ts`) and the in-process chat
+  (`agent.ts`) go through it.
+- **The frame is stripped on replay.** The daemon stores the framed prompt as the user entry,
+  so `durable-sessions.ts` shows the owner's own words in the transcript and the session label
+  (`ownerTextOf`), exactly as `sessions-provider.ts` already did for pi's transcripts.
+- **The gate stays the owner's:** `picode.context.attach` (off means none of it travels).
+
+**Consequences:** The durable agent answers about the screen the owner is looking at. The cost
+is paid every turn: the context block is prepended again, capped on purpose (selection in lines
+and characters, problems in count). Attachments whose editor gives no text still travel by name.
+
+**Reversal trigger:** a context block that costs more than it explains — an owner turning
+`picode.context.attach` off for good, or a model measurably worse with it than without.
+
+## ADR-020 — The chat is pi; durable is the backend it reaches through tools
+
+**Status:** accepted. Supersedes ADR-018.
+
+**Context:** ADR-018 made durable the chat by declaring it the default `chatSessions` type and
+retiring Local. In a real run, sending "Hola" answered **`No activated agent with id "durable"`**.
+The cause is structural, not a missing handler: the CHAT panel executes **agents**
+(`chatAgentService.invokeAgent(agent.id)`), and a `chatSessions` contribution is a session
+**provider** — it registers agent *data* (`_registerAgent`) with no *implementation*, because
+the implementation of a session type is expected to be an agent-host or a chat participant.
+Durable has neither: its content provider exposes a `requestHandler`, and nothing in the CHAT
+panel's send path turns a session content provider into an agent implementation. Selecting the
+durable harness therefore prefixes the request with `@durable`, `invokeAgent('durable')` finds
+no impl, and the turn dies. Owner, 2026-10-11: *«El chat habla con pi y pi lanza lo que
+necesite de durable (tasks, sesiones, memoria, etc)»*.
+
+**Decision:**
+
+- **The chat's agent is pi, in process.** `agent.ts`'s `@pi` participant owns the model, the
+  agent profile and the tools, and streams into the panel. Local is its session; the durable
+  default and the Local retirement of ADR-018 are reverted in the core
+  (`getComputedDefaultSessionType`, `getDefaultNewChatSessionType`,
+  `resolveDefaultNewChatSessionType`, `isNewChatSessionTypeUsable`,
+  `isVisibleEditorChatSessionType`, and the empty-Local switch in `chatViewPane.ts`).
+- **durable is the backend, reached by pi's tools.** The `durable_send` / `durable_list` /
+  `durable_read` bridge (`picode-source/durable-bridge`) is loaded into the chat's pi session,
+  and MCP stays pi's. A prompt pi delegates runs in the daemon and survives pi dying; memory
+  and MCP are pi's own tools.
+- **The durable `chatSessions` contribution stays declared but disabled** (`"when": "false"`,
+  `canDelegate: false`): it is not a chat harness, and leaving it selectable is what produced
+  the error. Re-enabling it requires giving the session type a real agent implementation, which
+  is the separate work (below), not a flag.
+
+**Consequences:** The chat answers again, about the file the owner has open (ADR-019), and the
+panel harness is pi's. The accepted cost: a durable conversation is no longer a chat one can
+open and continue in the panel — durable conversations are pi's to list and read through the
+bridge tools, and appear in the panel only through pi's own transcript listing.
+
+**Known follow-up (not this ADR):** if durable conversations must be *opened and continued*
+in the panel, the session type needs an agent implementation that runs pi and writes into
+durable; that is a project, and ADR-018's mechanism alone never provided it.
+
+**Reversal trigger:** the CHAT panel gains a supported path that runs a `chatSessions` content
+provider's `requestHandler` as the turn (then durable can be a harness again), or the product
+decides conversations must live in durable and pays for the agent implementation.
+
+## ADR-021 — One orchestrator (pi), one list, sessions always durable
+
+**Status:** accepted. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
+in 0.2.3-experimental.
+
+**Context:** The 0.2.3 build shipped three coexisting engines (the in-window harness "Local",
+the durable chat destination, the `pi` transcript reader) and a sessions panel that filtered
+between them with a one-at-a-time toggle. The owner, 2026-10-13: *«Quiero que elijas al que sea
+el mejor orquestador del chat, en este caso creo que es Pi. Siempre. Ni local, ni durable. Luego
+que las sesiones las lleve siempre durable ¿No?, y que dejemos de filtrar por durable, pi o
+local.»* — the shape his own pi lives by: one orchestrator, conversations that survive, one list.
+
+**Decision:**
+
+- **The chat's engine is pi, always.** The core blocks that made `durable` the default session
+  type (`DURABLE_CHAT_SESSION_TYPE` in `constants.ts` and its readers) are removed; ADR-020's
+  shape stands with nothing to re-ship. durable is the backend pi reaches through tools.
+- **The sessions panel shows one list: pi's durable transcripts.** The provider filter menu
+  loses its provider toggles (they remain as an opt-in for a consumer with genuinely several
+  providers). `Local` — the editor's duplicate record — and `durable` — no longer an engine —
+  are excluded unconditionally, normalized against any stored filter state
+  (`normalizedExcludes`). The local harness's provider name reads **"Pi"**, not "Local": it
+  names the engine, not the plumbing.
+- **A listed conversation continues.** Opening a pi transcript binds it to an in-process pi
+  session (`sessions-resume.ts`, `SessionManager.open`): the next prompt appends to the same
+  file, with its own permission gate, editor MCP tools and turn queue per resumed session. This
+  is ADR-020's known follow-up resolved for pi's own transcripts — the property durable had,
+  without a second engine.
+
+**Consequences:** New chats run pi; old chats are reachable, continuable and durable in one
+list; the "engine question" disappears from both the chat and the panel. Old durable
+conversations remain in the daemon's storage with no UI path — recovering them, if ever asked,
+is a migration, never a filter.
+
+### Corrección de ADR-021 (2026-10-13, noche): la sesión vive en durable, no en un fichero
+
+El dueño revisó el reparto la misma tarde: *«las sesiones no deberían llevarla siempre durable?
+O sea el chat habla con pi y pi crea una sesión durable»* — y es la forma exacta del propio pi
+que él usa. El estado aceptado queda:
+
+- **pi piensa, durable recuerda, el editor es la sala.** Cada turno lo ejecuta pi en la ventana
+  (modelo, permisos, pantalla) y al terminar **apunta la ronda en durable** (`record`): la
+  conversación vive en el almacén del daemon, sobrevive a todo y continúa desde cualquier
+  ventana. La lista del panel es **durable**, no los transcríptos JSONL.
+- **Los transcríptos de fichero quedan como registro de referencia** para lo que llega de
+  fuera (importaciones, CLI) — y **una importación los convierte a durable al entrar**
+  (`sessions-import.ts`), así que lo importado aparece y continúa como una conversación más.
+- **Continuar = pi, nunca el daemon.** Abrir una conversación del panel siembra una sesión pi
+  en proceso con su historia y graba de vuelta en la misma conversación (`sessions-resume.ts`,
+  `piDurableResumeHandler`). El camino viejo de "mandar el turno al daemon" quedó eliminado.
+- **Delegar a tiempo**: `durable_send` lleva la regla DELEGATE ON TIME — lo largo va a durable
+  antes de empezar — y el panel marca "Input Needed" una conversación cortada a medias
+  (`lastModelEntryIsUser`).
+
+Piezas de la primera versión de ADR-021 que quedaron **reemplazadas**: la continuación por
+fichero (`sessions-resume` sobre JSONL como lista principal) pasa a ser el lector de lo externo,
+y la conversión durable→fichero se deshizo antes de llegar a construirse.
+
+### Historia importada que no debe "deber" (2026-10-14): la cola del transcript viaja con la importación
+
+El dueño lo señaló con la pantalla delante: *«Siguen al cargar las sesiones importadas algunas
+como "input needed"?»*. Unos 80 tramos de historia llegaban al panel como si esperaran respuesta.
+
+**La causa** no era el estado sino la pérdida: una sesión que se cerró con el agente trabajando
+guarda su último turno de asistente como llamadas a herramientas **sin texto**. El parser de
+turnos (solo texto visible) lo descartaba, y la copia importada terminaba en la pregunta del
+dueño — la firma exacta de «te toca». La importación convertía trabajo a medias en deuda.
+
+**La regla nueva** (tres piezas):
+
+1. **La cola viaja.** La importación lee la cola del transcript (`sessionTail`,
+   `sessions-provider.ts`): la última entrada `user`/`assistant` aunque no tenga texto, y la
+   graba tal cual (llamadas a herramientas incluidas). La copia acaba donde acabó la sesión.
+2. **El daemon acepta el turno interrumpido.** `record` (`durable/lib/daemon.js`) admite un
+   mensaje de asistente sin partes — la forma real que pi escribe al cortar un turno. Un
+   mensaje de usuario vacío sigue rechazándose.
+3. **La reparación completa, no duplica.** Una re-importación ya no empareja por primera
+   pregunta a secas: elige la copia cuyos turnos son **prefijo exacto** del fichero
+   (`sessions-import-plan.ts`, puro y con tests) y le graba solo lo que le falta, contado
+   por entradas de modelo (`pi.user` + `pi.assistant`), que es el único contador que ve el
+   turno sin texto. Una copia que siguió adelante tras importarse recibe nada: su historia
+   está por delante del fichero, nunca detrás.
+
+Así, "Input Needed" queda reservado a lo que de verdad espera al dueño: una conversación viva
+cortada antes de respuesta. Las ~80 filas históricas se sanan solas en la siguiente pasada de
+importación (sin migración: la reparación añade, no reescribe). Verificado con un daemon
+aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`, después
+`owes=false`.

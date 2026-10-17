@@ -64,10 +64,10 @@ export function makeSkillsExtension(skills) {
 			const skill = skills.find((s) => s.name === args.name);
 			if (!skill) {
 				return {
-					content: [{ type: "text", text: `Unknown skill "${args.name}". Available: ${skills.map((s) => s.name).join(", ") || "(none)"}.` }],
+					output: [{ type: "text", text: `Unknown skill "${args.name}". Available: ${skills.map((s) => s.name).join(", ") || "(none)"}.` }],
 				};
 			}
-			return { content: [{ type: "text", text: skill.body || "(empty skill file)" }] };
+			return { output: [{ type: "text", text: skill.body || "(empty skill file)" }] };
 		},
 	});
 

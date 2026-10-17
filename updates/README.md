@@ -50,20 +50,20 @@ After `gh release create` has uploaded both assets:
 ```bash
 # 1. The portable feed (zip)
 node dev/update-feed.mjs \
-  --version 1.141.1 \
-  --picode-version 0.2.1 \
+  --version <set.version> \
+  --picode-version <picodeVersion> \
   --commit <the commit the build was made from> \
-  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.2.1/PiCode-win32-x64-0.2.1.zip \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v<picodeVersion>/PiCode-win32-x64-<picodeVersion>.zip \
   --sha256 <sha256 of the zip> \
   --platform win32 --arch x64 --target archive \
   --installed <the editor version the previous release shipped>
 
 # 2. The installed feed (setup exe)
 node dev/update-feed.mjs \
-  --version 1.141.1 \
-  --picode-version 0.2.1 \
+  --version <set.version> \
+  --picode-version <picodeVersion> \
   --commit <the same commit> \
-  --url https://github.com/Tomas-Platero/PiCode/releases/download/v0.2.1/PiCode-win32-x64-0.2.1-setup.exe \
+  --url https://github.com/Tomas-Platero/PiCode/releases/download/v<picodeVersion>/PiCode-win32-x64-<picodeVersion>-setup.exe \
   --sha256 <sha256 of the setup exe> \
   --platform win32 --arch x64 --target user \
   --installed <the editor version the previous release shipped>
@@ -90,8 +90,8 @@ Two numbers, because they do two jobs:
 
 The major.minor of `productVersion` stay VS Code's on purpose: every extension's
 `engines.vscode` is matched against the product version, so an independent
-`0.x` numbering would make every extension look incompatible. Today it reads `1.141.1`,
-while the tree still descends from VS Code 1.135.0 — the gap is deliberate and recorded in
+`0.x` numbering would make every extension look incompatible. It reads `set.version`, which
+runs ahead of the tree's VS Code 1.135.0 base — the gap is deliberate and recorded in
 ADR-016.
 
 ### What is still not unified
