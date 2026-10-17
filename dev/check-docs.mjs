@@ -27,6 +27,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // The folders whose README is part of the contract. Losing one fails the check.
+// updates/<channel> is deliberately absent: each branch carries a different one
+// (updates/stable, updates/beta, updates/experimental), so a name pinned here
+// would fail the moment this file runs on another channel's branch. The DIFF
+// half below still asks for a README the first time a channel's folder appears.
 const REQUIRED = [
 	'.github',
 	'assets',
@@ -39,7 +43,6 @@ const REQUIRED = [
 	'docs',
 	'upstream',
 	'updates',
-	'updates/experimental',
 	'picode-source',
 	'picode-source/src',
 	'picode-source/cli',
