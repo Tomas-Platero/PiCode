@@ -22,7 +22,7 @@ import * as extensions from './lib/extensions.ts';
 import buildfile from './buildfile.ts';
 
 const REPO_ROOT = path.dirname(import.meta.dirname);
-const BUILD_ROOT = path.dirname(REPO_ROOT);
+const BUILD_ROOT = REPO_ROOT;
 const WEB_FOLDER = path.join(REPO_ROOT, 'remote', 'web');
 
 const commit = getVersion(REPO_ROOT);

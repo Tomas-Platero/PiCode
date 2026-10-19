@@ -28,7 +28,7 @@
 import { join, resolve } from 'path';
 
 /** The folder the default setting names, resolved against the roots below when relative. */
-export const DEFAULT_DURABLE_FOLDER = 'picode-source/durable';
+export const DEFAULT_DURABLE_FOLDER = 'durable';
 
 /** Where a build puts the agent inside its own installation, under `resources/`. */
 export const SHIPPED_DURABLE_FOLDER = 'durable';

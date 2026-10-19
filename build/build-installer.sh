@@ -52,7 +52,7 @@ case "$( uname -m )" in
   *)               ARCH="x64" ;;
 esac
 
-# The gulp task names the pack path itself (`path.dirname(repoPath)/PiCode-Win32-<arch>`), so the
+# The gulp task names the pack path itself (`repoPath/PiCode-Win32-<arch>`), so the
 # argument is what the check below reads, not something the installer is told.
 if [[ ! -d "${ROOT_DIR}/${PACK_DIR}" ]]; then
   echo "error: the pack directory '${PACK_DIR}' was not found under the repository root." >&2

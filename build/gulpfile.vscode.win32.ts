@@ -45,7 +45,7 @@ const SIDE_BY_SIDE_APP_IDS = {
 // human name the wizard, the Start menu shortcut and "Apps & features" show.
 const sideBySideLabel = (suffix: string) =>
 	suffix.replace(/^[^A-Za-z0-9]+/, '').replace(/[-_]+/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
-const buildPath = (arch: string) => path.join(path.dirname(repoPath), `PiCode-Win32-${arch}${PACK_SUFFIX}`);
+const buildPath = (arch: string) => path.join(repoPath, `PiCode-Win32-${arch}${PACK_SUFFIX}`);
 const setupDir = (arch: string, target: string) => path.join(repoPath, '.build', `win32-${arch}`, `${target}-setup`);
 const innoSetupPath = path.join(path.dirname(path.dirname(require.resolve('innosetup'))), 'bin', 'ISCC.exe');
 // The Azure Pipelines machinery (build/azure-pipelines/) was removed with the

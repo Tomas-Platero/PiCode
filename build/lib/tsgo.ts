@@ -25,58 +25,75 @@ const timestampRegex = /^\[\d{2}:\d{2}:\d{2}\]\s*/;
 const ts7TscPath = path.join(path.dirname(createRequire(import.meta.url).resolve('@typescript/native/package.json')), 'bin', 'tsc');
 
 export function spawnTsgo(projectPath: string, config: { taskName: string; noEmit?: boolean }, onComplete?: () => Promise<void> | void): Promise<void> {
-	function runReporter(output: string) {
-		const lines = (output || '').split('\n');
-		const errorLines = lines.filter(line => /error \w+:/.test(line));
-		fancyLog(`Finished ${ansiColors.green(config.taskName)} ${projectPath} with ${errorLines.length} errors.`);
-		for (const line of errorLines) {
-			fancyLog(line);
-		}
-	}
-
-	const args = [ts7TscPath, '--project', projectPath, '--pretty', 'false', '--incremental'];
-	if (config.noEmit) {
-		args.push('--noEmit');
-	} else {
-		args.push('--sourceMap', '--inlineSources');
-	}
-	const child = cp.spawn(process.execPath, args, {
-		cwd: root,
-		stdio: ['ignore', 'pipe', 'pipe']
-	});
-
-	let stdoutData = '';
-	let stderrData = '';
-
-	child.stdout?.on('data', (data: Buffer) => {
-		stdoutData += data.toString();
-	});
-	child.stderr?.on('data', (data: Buffer) => {
-		stderrData += data.toString();
-	});
-
 	return new Promise<void>((resolve, reject) => {
-		child.on('exit', code => {
-			const allOutput = stdoutData + '\n' + stderrData;
-			const lines = allOutput
-				.split(/\r?\n/)
-				.map(line => line.replace(ansiRegex, '').trim())
-				.map(line => line.replace(timestampRegex, ''))
-				.filter(line => line.length > 0)
-				.filter(line => !/Starting compilation|File change detected|Compilation complete/i.test(line));
+		const args = [ts7TscPath, '--project', projectPath, '--pretty', 'false', '--incremental'];
+		if (config.noEmit) {
+			args.push('--noEmit');
+		} else {
+			args.push('--sourceMap', '--inlineSources');
+		}
 
-			runReporter(lines.join('\n'));
+		const maxAttempts = 3;
+		let attempt = 0;
 
-			if (code === 0) {
-				Promise.resolve(onComplete?.()).then(() => resolve(), reject);
-			} else {
+		function runAttempt() {
+			attempt++;
+			const child = cp.spawn(process.execPath, args, {
+				cwd: root,
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+
+			let stdoutData = '';
+			let stderrData = '';
+
+			child.stdout?.on('data', (data: Buffer) => {
+				stdoutData += data.toString();
+			});
+			child.stderr?.on('data', (data: Buffer) => {
+				stderrData += data.toString();
+			});
+
+			child.on('exit', code => {
+				const allOutput = stdoutData + '\n' + stderrData;
+				const lines = allOutput
+					.split(/\r?\n/)
+					.map(line => line.replace(ansiRegex, '').trim())
+					.map(line => line.replace(timestampRegex, ''))
+					.filter(line => line.length > 0)
+					.filter(line => !/Starting compilation|File change detected|Compilation complete/i.test(line));
+
+				const errorLines = lines.filter(line => /error \w+:/.test(line));
+				fancyLog(`Finished ${ansiColors.green(config.taskName)} ${projectPath} with ${errorLines.length} errors (attempt ${attempt}).`);
+				for (const line of errorLines) {
+					fancyLog(line);
+				}
+
+				if (code === 0) {
+					Promise.resolve(onComplete?.()).then(() => resolve(), reject);
+					return;
+				}
+
+				// Retry on transient native failures (0xC0000142 = STATUS_DLL_INIT_FAILED)
+				if (attempt < maxAttempts && (code === 3221225794 || code === null)) {
+					fancyLog(`tsgo exited with code ${code}; retrying (attempt ${attempt + 1}/${maxAttempts})...`);
+					setTimeout(runAttempt, 2000 * attempt);
+					return;
+				}
+
 				reject(new Error(`tsgo exited with code ${code ?? 'unknown'}`));
-			}
-		});
+			});
 
-		child.on('error', err => {
-			reject(err);
-		});
+			child.on('error', err => {
+				if (attempt < maxAttempts) {
+					fancyLog(`tsgo spawn error: ${err.message}; retrying...`);
+					setTimeout(runAttempt, 2000 * attempt);
+					return;
+				}
+				reject(err);
+			});
+		}
+
+		runAttempt();
 	});
 }
 

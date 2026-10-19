@@ -41,7 +41,7 @@ const WINDOWS_PIPE = '\\\\.\\pipe\\picode-durable-editor';
 export function daemonEndpoint(durableFolder?: string): string {
 	return process.platform === 'win32'
 		? WINDOWS_PIPE
-		: path.join(durableFolder ?? 'picode-source/durable', '.data', 'durable.sock');
+		: path.join(durableFolder ?? 'durable', '.data', 'durable.sock');
 }
 
 /** Thrown when the daemon is not running (or does not answer in time). */

@@ -268,7 +268,7 @@ function getFoundryLocalExcludeFilter(): string[] {
 }
 
 function packageTask(platform: string, arch: string, sourceFolderName: string, destinationFolderName: string, _opts?: { stats?: boolean }) {
-	const destination = path.join(path.dirname(root), destinationFolderName);
+	const destination = path.join(root, destinationFolderName);
 	platform = platform || process.platform;
 
 	const task = () => {
@@ -593,7 +593,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 }
 
 function patchWin32DependenciesTask(destinationFolderName: string) {
-	const cwd = path.join(path.dirname(root), destinationFolderName);
+	const cwd = path.join(root, destinationFolderName);
 
 	return async () => {
 		const versionedResourcesFolder = util.getVersionedResourcesFolder('win32', commit!);
@@ -673,7 +673,7 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 	};
 }
 
-const buildRoot = path.dirname(root);
+const buildRoot = root;
 
 const BUILD_TARGETS = [
 	{ platform: 'win32', arch: 'x64' },

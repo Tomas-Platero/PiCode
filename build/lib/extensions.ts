@@ -168,22 +168,33 @@ function fromLocalEsbuild(extensionPath: string, esbuildConfigFileName: string):
 
 	// Run esbuild, then collect the files
 	new Promise<void>((resolve, reject) => {
-		const proc = cp.execFile(process.argv[0], [esbuildScript], { cwd: extensionPath }, (error, _stdout, stderr) => {
-			if (error) {
-				return reject(error);
-			}
+		let attempt = 0;
+		const maxAttempts = 3;
+		const runEsbuild = () => {
+			attempt++;
+			const proc = cp.execFile(process.argv[0], [esbuildScript], { cwd: extensionPath }, (error, _stdout, stderr) => {
+				if (error) {
+					if (attempt < maxAttempts) {
+						fancyLog(`esbuild failed for ${extensionName} (attempt ${attempt}); retrying...`);
+						setTimeout(runEsbuild, 2000 * attempt);
+						return;
+					}
+					return reject(error);
+				}
 
-			const matches = (stderr || '').match(/\> (.+): error: (.+)?/g);
-			fancyLog(`Bundled extension: ${ansiColors.yellow(path.join(path.basename(extensionPath), esbuildConfigFileName))} with ${matches ? matches.length : 0} errors.`);
-			for (const match of matches || []) {
-				fancyLog.error(match);
-			}
-			return resolve();
-		});
+				const matches = (stderr || '').match(/\> (.+): error: (.+)?/g);
+				fancyLog(`Bundled extension: ${ansiColors.yellow(path.join(path.basename(extensionPath), esbuildConfigFileName))} with ${matches ? matches.length : 0} errors.`);
+				for (const match of matches || []) {
+					fancyLog.error(match);
+				}
+				return resolve();
+			});
 
-		proc.stdout!.on('data', (data) => {
-			fancyLog(`${ansiColors.green('esbuilding')}: ${data.toString('utf8')}`);
-		});
+			proc.stdout!.on('data', (data) => {
+				fancyLog(`${ansiColors.green('esbuilding')}: ${data.toString('utf8')}`);
+			});
+		};
+		runEsbuild();
 	}).then(() => {
 		// After esbuild completes, collect all files using vsce
 		return vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.None });

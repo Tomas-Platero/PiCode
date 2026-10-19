@@ -2,7 +2,7 @@
 #
 # Puts the durable agent inside the editor that was just built.
 #
-# Why this step exists: the agent is the repository's `picode-source/durable` program — a headless
+# Why this step exists: the agent is the repository's `durable` program — a headless
 # daemon that owns its conversations in SQLite and serves local clients over a named pipe — and the
 # editor finds it by walking a short list of folders (`extensions/picode/src/durable-folder.ts`).
 # Two of those folders are the source tree's. The third is this one, `<pack>/resources/durable`,
@@ -31,14 +31,14 @@ set -eo pipefail
 
 PACK_DIR="${1:?usage: build/durable-runtime.sh <pack dir>}"
 
-SOURCE="./picode-source/durable"
-BRIDGE="./picode-source/durable-bridge"
+SOURCE="./durable"
+BRIDGE="./durable-bridge"
 TARGET="${PACK_DIR}/resources/durable"
 BRIDGE_TARGET="${PACK_DIR}/resources/durable-bridge"
 
 if [[ ! -f "${SOURCE}/cli.js" ]]; then
   echo "error: ${SOURCE}/cli.js is missing, so there is no durable agent to ship." >&2
-  echo "       The editor looks for it at \"picode-source/durable\" and in resources/durable;" >&2
+  echo "       The editor looks for it at \"durable\" and in resources/durable;" >&2
   echo "       without the file the installed editor can only say it was not found." >&2
   exit 2
 fi

@@ -220,8 +220,8 @@ fix_text "${PACK_DIR}/PiCode.VisualElementsManifest.xml" 'ShortDisplayName="VSCo
 # ---------------------------------------------------------------------------
 echo "--- step 5/7 - icons inside the application"
 
-MARK_SOURCE="./distribution/picode-icon.svg"
-WATERMARK_SOURCE="./distribution/picode.svg"
+MARK_SOURCE="./build/distribution/picode-icon.svg"
+WATERMARK_SOURCE="./build/distribution/picode.svg"
 
 if [[ ! -f "${MARK_SOURCE}" ]]; then
   echo "warning: no mark at ${MARK_SOURCE}; the icons inside the application were left alone." >&2
@@ -311,7 +311,7 @@ else
   done
 
   ICO_TARGET="${PACK_DIR}/resources/app/resources/win32/code.ico"
-  ICO_SOURCE="./distribution/picode.ico"
+  ICO_SOURCE="./build/distribution/picode.ico"
   if [[ -f "${ICO_TARGET}" && -f "${ICO_SOURCE}" ]]; then
     cp -f "${ICO_SOURCE}" "${ICO_TARGET}"
     echo "replaced resources/win32/code.ico (in-app copy)"

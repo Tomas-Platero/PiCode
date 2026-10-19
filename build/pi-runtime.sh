@@ -21,7 +21,7 @@
 set -eo pipefail
 
 PACK_DIR="${1:?usage: build/pi-runtime.sh <pack dir>}"
-PIN="./distribution/runtime.json"
+PIN="./build/distribution/runtime.json"
 
 if [[ ! -f "${PIN}" ]]; then
   echo "error: ${PIN} is missing; it carries the pinned pi version." >&2
@@ -30,8 +30,8 @@ fi
 
 # Read with node rather than jq. This was the last place in the build that wanted jq, and the
 # build should not ask a collaborator to install a tool for two lines of JSON.
-PACKAGE=$( node -p "require('./distribution/runtime.json').package" )
-VERSION=$( node -p "require('./distribution/runtime.json').version" )
+PACKAGE=$( node -p "require('./build/distribution/runtime.json').package" )
+VERSION=$( node -p "require('./build/distribution/runtime.json').version" )
 
 if [[ -z "${PACKAGE}" || "${PACKAGE}" == "null" || "${PACKAGE}" == "undefined" || -z "${VERSION}" || "${VERSION}" == "null" || "${VERSION}" == "undefined" ]]; then
   echo "error: ${PIN} must declare a package and a version." >&2
