@@ -42,7 +42,8 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
-    timeout-minutes: 40
+    # A cold Rust CLI build (OpenSSL included) is ~13 minutes on top of the rest.
+    timeout-minutes: 60
     steps:
       # fetch-depth 0 because the feed branch is rebuilt from the channel
       # branch below (and the pull request merge walks that history);
@@ -221,6 +222,18 @@ jobs:
           echo "vs2022_install=${VS_PATH}" >> "$GITHUB_ENV"
           echo "C++ toolchain: ${VS_PATH}"
 
+      # Same reason as in CI: the released editor must carry the Rust CLI. The vendored OpenSSL in
+      # `cli/Cargo.toml` means the runner needs no SDK, only the toolchain.
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache the Rust CLI build
+        uses: actions/cache@v6
+        with:
+          path: cli/target
+          key: picode-cli-${{ runner.os }}-${{ hashFiles('cli/Cargo.lock', 'cli/Cargo.toml') }}
+          restore-keys: picode-cli-${{ runner.os }}-
+
       - name: Build
         shell: bash
         env:
@@ -234,6 +247,8 @@ jobs:
           # A local build is portable-only; the release is the one caller
           # that also ships the Inno Setup installer, so it asks for it.
           PICODE_SKIP_INSTALLER: "no"
+          # A published editor without the CLI is a promise the product does not keep.
+          PICODE_REQUIRE_CLI: 1
         run: ./build/build.sh
 
       - name: Read the built identity

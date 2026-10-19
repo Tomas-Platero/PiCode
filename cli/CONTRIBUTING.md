@@ -6,14 +6,21 @@
 
 ## Building the CLI on Windows
 
-For the moment, we require OpenSSL on Windows, where it is not usually installed by default. To install it:
+OpenSSL is needed for the key exchange the tunnel client does. This tree does not ask you to install
+it: `Cargo.toml` enables `vendored-openssl` on `tunnels`, so `openssl-sys` compiles and links a
+private copy. The one thing that must be installed is **Perl**, which OpenSSL's own `Configure`
+script is written in:
 
-1. Follow steps 1 and 2 of [Set up vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started-msbuild?pivots=shell-powershell#1---set-up-vcpkg) to obtain the executable.
-1. Add the location of the `vcpkg` directory to your system or user PATH.
-1. Run`vcpkg install openssl:x64-windows-static-md` (after restarting your terminal for PATH changes to apply)
-1. You should be able to then `cargo build` successfully
+1. Install [Strawberry Perl](https://strawberryperl.com/) (the portable ZIP works: extract it
+   anywhere and point `PICODE_PERL` at its `bin` directory, or put it on `PATH`).
+2. `cargo build --release` then works without a system OpenSSL.
 
-OpenSSL is needed for the key exchange we do when forwarding Basis tunnels. When all interested Basis clients support ED25519, we would be able to solely use libsodium. At the time of writing however, there is [no active development](https://chromestatus.com/feature/4913922408710144) on this in Chromium.
+Git for Windows also ships a Perl, but it is a stripped build that cannot load
+`Locale::Maketext::Simple`, and OpenSSL's configure stops on exactly that; `build/build-cli.sh`
+checks for the module before using a Perl it finds.
+
+For reference, OpenSSL is needed for the key exchange done when forwarding Basis tunnels. When all
+interested Basis clients support ED25519, it would be possible to use libsodium only.
 
 # Debug
 

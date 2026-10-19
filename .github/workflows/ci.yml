@@ -35,7 +35,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 40
+    # The Rust CLI is built here too: a cold `cli/target` is ~13 minutes, and the
+    # 40-minute ceiling was sized when the job was only npm ci + build.
+    timeout-minutes: 60
     steps:
       # Nothing here pushes, so the token stays out of the git config: the
       # artifact this job uploads is built from this checkout, and a persisted
@@ -148,12 +150,29 @@ jobs:
         shell: bash
         run: node build/docs.mjs map
 
+      # The Rust CLI travels in the pack, and a published editor must carry it: a source build keeps it
+      # optional (a machine without rustup still produces an editor), CI does not. `cli/Cargo.toml`
+      # asks for the vendored OpenSSL, so no SDK has to be installed here -- only the toolchain,
+      # whose build of OpenSSL is what the `cli/target` cache makes cheap on later runs.
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache the Rust CLI build
+        uses: actions/cache@v6
+        with:
+          path: cli/target
+          key: picode-cli-${{ runner.os }}-${{ hashFiles('cli/Cargo.lock', 'cli/Cargo.toml') }}
+          restore-keys: picode-cli-${{ runner.os }}-
+
       - name: Build
         shell: bash
         env:
           # Authenticates @vscode/ripgrep's GitHub download; a cold
           # npm ci without it hits the unauthenticated rate limit (403).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The toolchain above is installed on purpose: the pack must carry the
+          # CLI, and the build's own verification fails without it.
+          PICODE_REQUIRE_CLI: 1
         run: ./build/build.sh
 
       - name: Connector tests

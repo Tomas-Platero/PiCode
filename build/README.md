@@ -121,6 +121,9 @@ profile of its own; the portable profile stays with the portable pack.
 - **`jq` is not needed by anything any more.** The build reads and writes the
   JSON it touches with node; `build/pi-runtime.sh` joined on 2026-09-27, and the
   last script that used `jq` died with the patch machinery on the same day.
+- The **Rust CLI is optional**, and needs `cargo` plus a complete **Perl**
+  (Strawberry; Git's is stripped) when you want `bin/picode-cli` in the pack.
+  Nothing else in the build asks for Perl.
 - `shellcheck` is not installed here, so the scripts are validated with `bash -n`.
 
 ## 📜 The deleted path
@@ -173,12 +176,12 @@ Nothing is lost that a repository should hold:
   and in the product, but the endpoint strings themselves still point at
   Microsoft's URLs. Nobody calls them; a future pass should clean them in the
   source.
-- **The Rust CLI is optional, and blocked on OpenSSL.** `build/build-cli.sh` builds `cli/` into
-  the pack, and skips with one clear line when cargo or an OpenSSL development install is
-  missing, so a source build always produces an editor. The binary links OpenSSL through
-  `russh` (pulled in by `tunnels`), and no machine or runner here has it yet;
-  `PICODE_REQUIRE_CLI=1` turns every skip into an error for the day CI can carry it. Until then
-  the pack keeps `bin/picode.cmd`, which runs the same CLI through the editor.
+- **The Rust CLI is built with a private copy of OpenSSL.** `build/build-cli.sh` builds `cli/` into
+  the pack. `cli/Cargo.toml` enables `vendored-openssl` on `tunnels`, so the binary links its own
+  OpenSSL and no SDK has to be installed; the one external tool is Perl, which OpenSSL's configure
+  needs. Locally the step stays optional (a machine without Rust or Perl still produces an editor);
+  CI and the release install the toolchain, set `PICODE_REQUIRE_CLI=1`, and the build's own
+  verification fails if the pack carries no binary.
 - **The announcement injection is not wired.** PiCode ships no announcements, so
   there is nothing to splice.
 - **The staging step is the single implementation of the layer staging.** The

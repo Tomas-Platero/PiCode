@@ -884,6 +884,10 @@ PI_ENTRY="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./b
 if [[ ! -f "${PI_ENTRY}" ]]; then
   echo "  !! pi runtime entry is missing: ${PI_ENTRY}" >&2; VERIFY_OK="no"
 fi
+# Where the binary is part of what is being published, the pack is not complete without it.
+if [[ "${PICODE_REQUIRE_CLI:-0}" == "1" && ! -f "${PACK_DIR}/bin/picode-cli.exe" && ! -f "${PACK_DIR}/bin/picode-cli" ]]; then
+  echo "  !! the Rust CLI is missing from ${PACK_DIR}/bin (PICODE_REQUIRE_CLI=1)" >&2; VERIFY_OK="no"
+fi
 if [[ -n "${PICODE_CHANNEL:-}" ]]; then
   BUILT_QUALITY=$( node -p "require(process.argv[1]).quality" "${PACK_DIR}/resources/app/product.json" 2> /dev/null || echo "" )
   if [[ "${BUILT_QUALITY}" != "${PICODE_CHANNEL}" ]]; then

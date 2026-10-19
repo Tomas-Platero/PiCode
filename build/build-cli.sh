@@ -4,11 +4,15 @@
 # Builds PiCode's Rust CLI (`cli/`) and drops the binary into the pack's `bin/`,
 # so a source build ships the CLI instead of only the shell shim.
 #
-# Optional by default: if cargo is missing, OpenSSL is absent, or the build fails, this prints one
-# clear line and exits 0, so the editor build is never blocked by it. Set PICODE_BUILD_CLI=no to skip
-# it entirely, =yes to force the native build even without a discoverable OpenSSL, or
-# PICODE_REQUIRE_CLI=1 to turn every skip and failure into an error. CI and the release set the last
-# one: an editor published without the binary is a promise the product does not keep.
+# Optional by default: if cargo is missing, or the build fails, this prints one clear line and
+# exits 0, so the editor build is never blocked by it. Set PICODE_BUILD_CLI=no to skip it entirely,
+# or PICODE_REQUIRE_CLI=1 to turn every skip and failure into an error. CI and the release set the
+# last one: an editor published without the binary is a promise the product does not keep.
+#
+# OpenSSL is not something this script looks for. The CLI needs it (through `russh`, which
+# `tunnels` pulls in), and `cli/Cargo.toml` asks for the vendored build, so openssl-sys compiles a
+# private copy and links it statically. That costs a few minutes the first time and nothing after
+# that, and it means the only external tool is Perl, which OpenSSL's own configure needs.
 #
 # Usage: build/build-cli.sh <pack dir>
 
@@ -40,16 +44,40 @@ if [[ ! -f "${CLI_DIR}/Cargo.toml" ]]; then
   give_up "${CLI_DIR}/Cargo.toml missing; skipping."
 fi
 
-# The CLI's dependency tree pulls `openssl-sys` on Windows (through the keyring/secret-service
-# features), so cargo refuses to build it without an OpenSSL development install - and a source build
-# should not demand one: the pack already carries `bin/picode.cmd`, which runs the same CLI through
-# the editor. Outside CI, when no OpenSSL is discoverable, skip with one clear line instead of a
-# failed compile and a cargo error dump. CI keeps trying (its runners have OpenSSL), and
-# PICODE_BUILD_CLI=yes forces the attempt anywhere.
-if [[ "${PICODE_BUILD_CLI:-auto}" != "yes" && "${CI:-}" != "true" && "${GITHUB_ACTIONS:-}" != "true" ]]; then
-  if [[ -z "${OPENSSL_DIR:-}" && -z "${X86_64_PC_WINDOWS_MSVC_OPENSSL_DIR:-}" && -z "${VCPKG_ROOT:-}" ]]; then
-    give_up "skipped (no OpenSSL development install; the pack keeps the shell shim, which runs the CLI). Set OPENSSL_DIR or PICODE_BUILD_CLI=yes to build the native binary anyway."
+# OpenSSL's configure script is Perl. The CLI needs OpenSSL (through `russh`, which `tunnels` pulls
+# in) and `cli/Cargo.toml` asks for the vendored build, so openssl-sys compiles a private copy: no
+# SDK to install, no version to match, and the binary carries it. The price is Perl, which OpenSSL's
+# own configure needs and which a Windows machine does not usually have in PATH even when it is
+# installed.
+ensure_perl() {
+  if command -v perl > /dev/null 2>&1 && perl -MLocale::Maketext::Simple -e '1' 2> /dev/null; then
+    return 0
   fi
+  local candidate
+  for candidate in \
+    "${PICODE_PERL:-}" \
+    "${HOME:-}/perl/bin" \
+    "/c/Strawberry/perl/bin" \
+    "/c/Program Files/Git/usr/bin" \
+    "/c/Program Files (x86)/Git/usr/bin" \
+    "/c/Perl64/bin"; do
+    [[ -n "${candidate}" && -d "${candidate}" ]] || continue
+    if [[ -x "${candidate}/perl.exe" || -x "${candidate}/perl" ]]; then
+      # Git's Perl is a stripped build that cannot load Locale::Maketext, and OpenSSL's configure
+      # dies on exactly that; a full distribution such as Strawberry's is what the vendored build
+      # expects. Saying so here beats a configure dump the reader has to decode.
+      if PATH="${candidate}:${PATH}" perl -MLocale::Maketext::Simple -e '1' 2> /dev/null; then
+        export PATH="${candidate}:${PATH}"
+        echo "cli: Perl from ${candidate} (OpenSSL's configure needs it)"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+if ! ensure_perl; then
+  give_up "no complete Perl found, and OpenSSL's configure needs one (install Strawberry Perl, or set PICODE_PERL to its bin directory)."
 fi
 
 echo "cli: building the Rust CLI (release)..."
