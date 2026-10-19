@@ -25,6 +25,7 @@
         "build-fast-extensions": "npm run gulp copy-codicons compile-extensions compile-extension-media",
         "build:pack": "bash build/build.sh",
         "build:fast": "bash build/build-fast.sh",
+        "dev": "node build/dev.mjs",
         "typecheck-client": "tsc --project ./src/tsconfig.json --noEmit --skipLibCheck",
         "codex:gen-protocol": "node build/codex/generate-protocol.mjs",
         "codex:check-protocol": "node build/codex/check-protocol-sync.ts",

@@ -41,6 +41,20 @@ be PiCode.
 It is not a shipping build: the release pipeline always runs `./build/build.sh`.
 Both are also reachable as `npm run build:pack` and `npm run build:fast`.
 
+## 👀 Seeing a change while you work
+
+```bash
+npm run dev
+```
+
+Starts the watcher and opens the editor from `out/`. Saving a file recompiles **that file**; `Ctrl+R`
+in the window shows it. The first run downloads Electron into `.build/electron` (~100 MB) and the
+built-in extensions, once. `build/dev.mjs` is the launcher — it is not one of the five build scripts,
+it does not build anything.
+
+That editor runs the source tree, not the pack: it does not carry the pi runtime, the durable agent
+or the channel seal. To see those, use `./build/build.sh` (or `npm run build:fast`) and run the pack.
+
 ## ♻️ What a build reuses
 
 A build is not all-or-nothing. Three fingerprints are taken at the start, each covering the
