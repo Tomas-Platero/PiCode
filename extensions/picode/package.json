@@ -273,7 +273,7 @@
 				{
 					"id": "picode-status",
 					"title": "PiCode",
-					"icon": "media/picode-status.svg"
+					"icon": "media/picode-activity.svg"
 				}
 			]
 		},

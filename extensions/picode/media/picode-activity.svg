@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="118 116 788 788" width="788" height="788">
+  <title>PiCode</title>
+  <!--
+    The activity bar paints this file as a mask at 24 px, so only the silhouette survives and
+    every line is a fraction of a pixel. This is the brand mark simplified for that size: the
+    same head, eyes and code chevrons, with the horizontal bar removed (it turned into "a line
+    of text") and the remaining strokes made bolder. The full mark lives in picode-status.svg.
+  -->
+  <g transform="translate(0,92)" fill="none" stroke="#9AA4AE" stroke-width="104" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 236 V168" stroke-width="88"/>
+    <circle cx="512" cy="140" r="46" fill="#3B9BFF" stroke="none"/>
+    <path d="M356 700 V300 Q356 236 420 236 H604 Q668 236 668 300 V700"/>
+    <circle cx="416" cy="392" r="62" fill="#3B9BFF" stroke="none"/>
+    <circle cx="610" cy="392" r="62" fill="#3B9BFF" stroke="none"/>
+    <path d="M440 520 L368 604 L440 688"/>
+    <path d="M584 520 L656 604 L584 688"/>
+  </g>
+</svg>

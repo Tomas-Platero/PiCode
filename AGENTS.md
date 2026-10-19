@@ -49,6 +49,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"lo de la rosa cambialo por el de picode"* — 2026-10-01
 
 * **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor).
+* **Variante para 24 px (2026-10-19):** la barra de actividad usa `media/picode-activity.svg`, derivada de esa misma marca (cabeza, ojos y chevrones; sin la barra horizontal y con trazos más gruesos), porque a 24 px y en máscara la marca completa se leía como una hoja de papel. La marca completa sigue en `picode-status.svg` para el título de la vista de estado, que la pinta a su tamaño.
 * **La marca vive en el conector** (`extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
