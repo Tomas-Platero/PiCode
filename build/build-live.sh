@@ -18,11 +18,11 @@ FLAGS=("$@")
 
 mkdir -p .scratch
 
-bash dev/build-run.sh "${FLAGS[@]}" &
+bash build/build-run.sh "${FLAGS[@]}" &
 BUILD_PID=$!
 
 # The viewer in the foreground, until the build ends and the log says so.
-node dev/build-progress.mjs .scratch/build-live.log || true
+node build/build-progress.mjs .scratch/build-live.log || true
 
 wait "${BUILD_PID}"
 STATUS=$?

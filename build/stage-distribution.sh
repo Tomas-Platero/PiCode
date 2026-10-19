@@ -66,11 +66,10 @@ fi
 PACK_DIR="$( cd "${PACK_DIR}" && pwd )"
 
 PRODUCT_JSON="${PACK_DIR}/resources/app/product.json"
-DELTA="./distribution/product-delta.json"
-APPLIER="./distribution/apply-product-delta.mjs"
-SETTINGS_SOURCE="./distribution/settings.json"
+SETTINGS_SOURCE="./build/distribution/settings.json"
+RUNTIME_SOURCE="./build/distribution/runtime.json"
 
-for required in "${PRODUCT_JSON}" "${DELTA}" "${APPLIER}" "${SETTINGS_SOURCE}"; do
+for required in "${PRODUCT_JSON}" "${SETTINGS_SOURCE}" "${RUNTIME_SOURCE}"; do
   if [[ ! -e "${required}" ]]; then
     echo "error: a required file is missing: ${required}" >&2
     exit 2
@@ -78,53 +77,15 @@ for required in "${PRODUCT_JSON}" "${DELTA}" "${APPLIER}" "${SETTINGS_SOURCE}"; 
 done
 
 if ! command -v node > /dev/null 2>&1; then
-  echo "error: node was not found on PATH; the product delta is applied by a node program." >&2
+  echo "error: node was not found on PATH." >&2
   exit 2
 fi
 
 # ---------------------------------------------------------------------------
-# Step 1 - the product delta
+# Step 1 - product.json (already PiCode identity; channel seal applied in build.sh)
 # ---------------------------------------------------------------------------
-echo "--- step 1/7 - product delta in resources/app/product.json"
-
-# The channel seal (build.sh, phase 1) already wrote the channel identity into the source
-# product.json before the pack copied it here: name, registry name, mutex, profile folder,
-# installer AppIds and the update feed's branch are the channel's, and `quality` is the
-# channel too. Re-applying the delta on top would unseal all of that — name, feed and
-# registry would go back to the delta's stable spellings while `quality` stayed the
-# channel's (the delta sets no quality), and the editor would ask a feed its channel does
-# not own. The delta ran on the source before the seal, so everything it carries is
-# already in this file; a sealed product is left alone. Detection is by `quality`: the
-# delta never sets it, so any channel value here can only be the seal's work.
-SEALED=$( node -e "const fs=require('fs');let q;try{q=JSON.parse(fs.readFileSync(process.argv[1],'utf8')).quality}catch{}console.log(q==='stable'||q==='beta'||q==='experimental'?'yes':'no')" "${PRODUCT_JSON}" )
-if [[ "${SEALED}" == "yes" ]]; then
-  echo "skipped: the product carries the channel seal (quality $( node -p "require(process.argv[1]).quality" "${PRODUCT_JSON}" )) — the delta was applied before it"
-else
-
-set +e
-node "${APPLIER}" --target "${PRODUCT_JSON}" --delta "${DELTA}" --check
-DELTA_CHECK=$?
-set -e
-
-if [[ "${DELTA_CHECK}" -eq 2 ]]; then
-  echo "error: the product delta could not be evaluated (applier exit code 2). Nothing was written." >&2
-  exit 2
-fi
-
-if [[ "${DELTA_CHECK}" -eq 0 ]]; then
-  echo "skipped: the product already matches the delta"
-elif [[ "${DELTA_CHECK}" -eq 1 ]]; then
-  BACKUP="${PRODUCT_JSON}.picode-backup-$( date +%Y%m%d-%H%M%S )"
-  cp "${PRODUCT_JSON}" "${BACKUP}"
-  echo "backup: ${BACKUP}"
-
-  node "${APPLIER}" --target "${PRODUCT_JSON}" --delta "${DELTA}" --write
-else
-  echo "error: unexpected applier exit code: ${DELTA_CHECK}" >&2
-  exit 2
-fi
-
-fi  # end of the not-sealed branch
+echo "--- step 1/7 - product identity in resources/app/product.json"
+echo "skipped: product.json already carries the PiCode identity"
 
 # ---------------------------------------------------------------------------
 # Step 2 - the portable profile

@@ -65,18 +65,18 @@ cd "${ROOT_DIR}" || exit 2
 # PiCode's own version, not set.version: the editor's number tracks VS Code, and a release is
 # named after this one. Both live in the same file, so it is read here rather than passed in.
 PICODE_VERSION=$( node -p \
-  "require('./distribution/product-delta.json').set.picodeVersion" 2> /dev/null ) || {
-  echo "error: distribution/product-delta.json could not be read." >&2
+  "require('./product.json').picodeVersion" 2> /dev/null ) || {
+  echo "error: product.json could not be read." >&2
   exit 1
 }
 if [[ -z "${PICODE_VERSION}" || "${PICODE_VERSION}" == "undefined" ]]; then
-  echo "error: distribution/product-delta.json does not set a 'picodeVersion'." >&2
+  echo "error: product.json does not set a 'picodeVersion'." >&2
   exit 1
 fi
 
 EDITOR_VERSION=$( node -p \
-  "require('./distribution/product-delta.json').set.version" 2> /dev/null ) || {
-  echo "error: distribution/product-delta.json could not be read." >&2
+  "require('./product.json').version" 2> /dev/null ) || {
+  echo "error: product.json could not be read." >&2
   exit 1
 }
 
