@@ -198,9 +198,10 @@ Nothing is lost that a repository should hold:
   `locales/*.pak` except `en-US` and `es`.
 - **A version bump costs one dependency install.** `build/build-helpers.mjs
   deps-current` compares VS Code's recorded state by content hash over
-  `package.json`, so writing a new version into it makes the install look stale.
-  Installing once too often is preferred to trusting a tree that has not been
-  checked.
+  `package.json`, `package-lock.json`, `.npmrc` and `.nvmrc`, so writing a new
+  version into any of them makes the install look stale. Installing once too
+  often is preferred to trusting a tree that has not been checked — and it is
+  what re-applies the `gulp-electron` patch on the build after an install.
 - **The compile and the pack always run in full.** Neither reuses anything from
   the previous build: `compile-build-without-mangling` starts with
   `util.rimraf('out-build')`, and `bundle-vscode` and `minify-vscode` wipe

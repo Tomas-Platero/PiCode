@@ -110,7 +110,8 @@ La **vía manual** de la skill `picode-release` sigue válida como reserva
 - **El CLI de Rust pide Perl, no OpenSSL instalado**: `cli/Cargo.toml` enciende
   `vendored-openssl`, así que OpenSSL se compila dentro del build y el binario lo
   lleva dentro. Lo único que hace falta es un Perl completo (Strawberry); el que
-  trae Git está recortado y no sirve. CI lo tiene de serie, y
+  trae Git está recortado y no sirve, pero los runners de Windows ya lo traen.
+  CI cachea `cli/target` (en frío son ~13 min, en caliente ~4) y
   `PICODE_REQUIRE_CLI=1` impide publicar una release sin el binario.
 
 ## 📌 El pin, sin vigilancia automática
