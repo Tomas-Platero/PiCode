@@ -52,6 +52,11 @@ in the window shows it. The first run downloads Electron into `.build/electron` 
 built-in extensions, once. `build/dev.mjs` is the launcher — it is not one of the five build scripts,
 it does not build anything.
 
+The terminal shows one line per thing that happened — compiled, watching, failed — and drops what
+the tools narrate in between (npm's config warnings, every extension being cleaned, every
+`INFO:CONSOLE` from Chromium). Errors and warnings always survive the filter.
+`npm run dev -- --verbose` shows the raw stream instead.
+
 That editor runs the source tree, not the pack. When a pack exists, `dev` links its pi runtime and
 durable agent into `resources/` (gitignored) so the chat and the agent work while you edit; the
 channel seal and anything else the pack rewrites around the editor are still absent. With no pack
