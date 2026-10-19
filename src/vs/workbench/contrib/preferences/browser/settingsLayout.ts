@@ -209,7 +209,7 @@ export const tocData: ITOCEntry<string> = {
 					label: localize('chatPicode', "Settings"),
 					settings: ['picode.pi.*', 'picode.context.*']
 				},
-				// PiCode: the durable agent's own settings (`picode-source/durable` in the
+				// PiCode: the durable agent's own settings (`durable` in the
 				// repository, run by the editor under its own settings node). Its own
 				// node, so nobody reads its rows as behaviour of the chat's pi.
 				{

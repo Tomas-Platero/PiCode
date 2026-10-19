@@ -10,7 +10,7 @@
 #      `session/request_permission`; reject_once blocks the call, allow_once
 #      executes it — before the tool ever runs.
 #
-# Run from picode-source/durable/:  bash proof-acp.sh
+# Run from durable/:  bash proof-acp.sh
 # All output lands in .data/acp-proof/ (gitignored) and is printed at the end.
 set -uo pipefail
 cd "$(dirname "$0")"

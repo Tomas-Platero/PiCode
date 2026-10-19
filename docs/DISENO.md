@@ -3,7 +3,7 @@
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
 > `AGENTS.md`; su visión completa, en `docs/VISION.md`. Este documento dice **cómo se junta
 > todo**. Los `patch` que aparecen en documentos históricos ya no existen: el árbol vive en
-> `picode-source/`.
+> `the tree`.
 
 ## 💡 Qué es PiCode, en una frase
 
@@ -16,9 +16,9 @@ hubiera sido así.
 ```text
   Fuente de VS Code 1.135.0   (upstream/stable.json — el pin de procedencia)
         │
-        │  el árbol propio: picode-source/  ← los cambios de VSCodium y los nuestros, ya dentro
+        │  el árbol propio:   ← los cambios de VSCodium y los nuestros, ya dentro
         │
-        │  + distribution/product-delta.json ← el producto (nombre, icono, galería, ajustes, versión)
+        │  + product.json ← el producto (nombre, icono, galería, ajustes, versión)
         ▼
   PiCode  ────────────────────────────────────────────────┐
         │                                                  │
@@ -27,7 +27,7 @@ hubiera sido así.
         │  · Ajustes, nodo PiCode                          │    (nada fuera)
         │  · El host de agentes (proceso con Node)         │  · Proveedores y claves
         │                                                  │  · Habilidades y paquetes
-        │  EL CONECTOR  (picode-source/extensions/picode)  ┤  · Sesiones
+        │  EL CONECTOR  (extensions/picode)  ┤  · Sesiones
         │  · Puente a pi: proveedores, SDK, modelos        │
         └──────────────────────────────────────────────────┘
 ```
@@ -35,14 +35,13 @@ hubiera sido así.
 ### 1. La fuente propia y el delta de producto
 
 El árbol de VS Code **ya no se clona ni se parchea en cada build**: desde el 2026-09-27
-`picode-source/` **es la fuente de PiCode**, versionada en este repositorio, con los cambios
+`the tree` **es la fuente de PiCode**, versionada en este repositorio, con los cambios
 de VSCodium y los propios ya dentro. El build no descarga ni aplica parches; compila ese
 árbol.
 
-La capa `distribution/` pone el producto **antes** de compilar: nombre, icono, carpeta de
-datos propia, galería, ajustes de primer arranque y el **número** que leen las extensiones.
-El delta es data (`product-delta.json`) y se aplica a `picode-source/product.json` en la
-fase 1.
+El producto vive en `product.json`, en la raíz del repositorio: nombre, icono, carpeta de
+datos propia, galería y el **número** que leen las extensiones, todo versionado.
+`build/distribution/` aporta los ajustes de primer arranque, el pi fijado y la marca.
 
 **Procedencia y número no son lo mismo.** El pin `upstream/stable.json` registra de qué VS
 Code desciende el árbol (1.135.0); el número declarado (`set.version`, por delante del pin) se sube
@@ -67,11 +66,11 @@ Vive **dentro del núcleo**, partido en dos por una razón técnica que conviene
 | Dónde | Qué hace | Por qué ahí |
 | --- | --- | --- |
 | `src/vs/platform/agentHost/node/pi/` | El host de agentes: abrir una sesión de pi y traducir lo que dice y hace a lo que el editor entiende | Es el **proceso del núcleo que sí tiene Node**, y es el mismo sitio donde VS Code pone sus otros agentes |
-| `picode-source/extensions/picode/` | El **conector**: catálogo de proveedores, modelos, claves, perfil | Es una **extensión del núcleo** — se compila con el editor y viaja en el binario. Aquí está Node, y aquí van los puentes |
+| `extensions/picode/` | El **conector**: catálogo de proveedores, modelos, claves, perfil | Es una **extensión del núcleo** — se compila con el editor y viaja en el binario. Aquí está Node, y aquí van los puentes |
 
 > **Estado (2026-10-16):** hoy el pilotaje de pi corre en el conector (`agent.ts`, en proceso); el host de `agentHost/node/pi/` está preparado pero sin enchufar (`HARNESS.md`, Parte 1 §5; `TAREAS.md` #3). Lo que describe esta sección es el destino.
 
-**Esto no es una extensión al lado del editor.** Todo lo que hay bajo `picode-source/extensions/`
+**Esto no es una extensión al lado del editor.** Todo lo que hay bajo `extensions/`
 *es* el editor: son `git`, `github-authentication`, `markdown-language-features`… y el
 conector es uno más. **No dibuja nada**: ni chat, ni modales, ni ajustes propios. Si algo
 necesita superficie, la superficie va al núcleo.

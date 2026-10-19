@@ -7,7 +7,7 @@
  *
  * `durable-sessions.ts` is pure (no `vscode`), so `node --test` runs it directly: the shapes
  * below are the daemon's own `sessions` rows and the `subscribe` snapshot's entries, exactly
- * as `picode-source/durable` sends them over the local pipe.
+ * as `durable` sends them over the local pipe.
  */
 
 import assert from 'node:assert/strict';
@@ -26,7 +26,7 @@ import {
 const conversation = (id: number, entries = 3, note = ''): DurableConversationRow =>
 	({ id, entries, newest: `entry ${entries} (pi.assistant)`, note });
 
-/** A snapshot entry, as `picode-source/durable/lib/render.js` reads their kinds. */
+/** A snapshot entry, as `durable/lib/render.js` reads their kinds. */
 const entry = (kind: string, text?: string, timestamp?: number): unknown => ({
 	kind,
 	...(text === undefined ? {} : { model: [{ role: kind === 'pi.user' ? 'user' : 'assistant', content: text, ...(timestamp === undefined ? {} : { timestamp }) }] }),

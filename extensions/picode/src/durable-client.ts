@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 /**
  * The wire client of the durable daemon, **copied** from the agent that owns the
- * protocol (`picode-source/durable/lib/protocol.js` and `lib/client.js`). The connector is a
+ * protocol (`durable/lib/protocol.js` and `lib/client.js`). The connector is a
  * different process from that agent and cannot import from its directory at runtime,
  * so the small framing is duplicated here instead — a duplication the owner accepted, and
  * one that stays honest by naming its source: if the protocol there changes, this file is

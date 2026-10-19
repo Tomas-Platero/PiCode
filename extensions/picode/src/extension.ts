@@ -604,7 +604,7 @@ export const PACKAGES_COMMAND = 'picode.setup.packages';
 
 /**
  * The Packages section's catalog: what npm says about packages tagged with pi's keywords —
- * the very list `pi.dev/packages` renders, asked straight from npm's search endpoint (pi.dev
+ * the very list `pi.build/packages` renders, asked straight from npm's search endpoint (pi.dev
  * has no public API of its own). A **contract**, like `PACKAGES_COMMAND` above: the page
  * calls it programmatically, with the owner's query as an optional string argument.
  */
@@ -2356,6 +2356,6 @@ export function deactivate(): void {
 	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
 	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
 	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
-	// it stops itself (picode-source/durable/lib/daemon.js).
+	// it stops itself (durable/lib/daemon.js).
 	stopDurableAgentOnShutdown();
 }

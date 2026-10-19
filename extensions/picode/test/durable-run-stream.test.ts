@@ -7,7 +7,7 @@
  *
  * `durable-run-stream.ts` is pure (no `vscode`), so `node --test` runs it directly: the
  * shapes below are the daemon's subscribe-stream events, exactly as
- * `picode-source/durable`'s harness delivers them (`pi-durable`'s events.js `translate`).
+ * `durable`'s harness delivers them (`pi-durable`'s events.js `translate`).
  * The rules pinned here are the agent's own CLI renderer's (`durable/lib/render.js`'s
  * `makeRunRenderer`), so the chat reads a run the same way the terminal does.
  */

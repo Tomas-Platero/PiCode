@@ -201,7 +201,7 @@ function inTranscriptOrder(entries: readonly unknown[]): readonly unknown[] {
 
 /**
  * Concatenated text of a pi-ai message (content may be a string, an array of blocks, or
- * missing) — copied from `picode-source/durable/lib/common.js`'s `textOf`, for the same
+ * missing) — copied from `durable/lib/common.js`'s `textOf`, for the same
  * reason the wire client is copied: this module cannot import from the daemon's directory
  * at runtime, and the mapping has to move with that file if its shape ever does.
  */

@@ -4,7 +4,7 @@
 #
 # The Inno Setup task is VS Code's own (build/gulpfile.vscode.win32.ts). It takes the packed
 # `PiCode-Win32-<arch>` directory and writes `PiCodeSetup.exe` under
-# `picode-source/.build/win32-<arch>/user-setup`. `user` is the per-user flavour
+# `.build/win32-<arch>/user-setup`. `user` is the per-user flavour
 # (PrivilegesRequired=lowest in build/win32/code.iss): installing needs no administrator and
 # nothing is written outside the user's own profile.
 #
@@ -81,8 +81,8 @@ EDITOR_VERSION=$( node -p \
 }
 
 # build/gulpfile.vscode.win32.ts asserts that every Inno define is a string, and its Commit comes
-# from getVersion(): the environment, or the tree's own .git/HEAD - which picode-source does not
-# have, because it is not a repository of its own. build/build.sh exports the value, but a direct run
+# from getVersion(): the environment, or the tree's own .git/HEAD. The tree is the repository since
+# 2026-09-27, so that HEAD is there; build/build.sh exports the value, but a direct run
 # of this script has neither, so it is derived here exactly the way build/build.sh derives it: the
 # sha1 of the version without its pre-release suffix, newline included. That is also the stamp the
 # packer writes into product.json's `commit`, and the .iss records it in updating_version.
@@ -103,8 +103,8 @@ NODE_HEAP_MB="${NODE_HEAP_MB:-12288}"
 
 echo "installer: Inno Setup, win32-${ARCH}, user install (no administrator needed)"
 
-cd "${ROOT_DIR}/picode-source" || {
-  echo "error: ./picode-source is missing." >&2
+cd "${ROOT_DIR}" || {
+  echo "error: the repository root is missing." >&2
   exit 2
 }
 

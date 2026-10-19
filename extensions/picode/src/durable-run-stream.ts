@@ -6,7 +6,7 @@
  * The durable run's live event stream, mapped for the chat.
  *
  * A `subscribe` on the daemon's pipe delivers the same events the agent's own CLI renders
- * (`picode-source/durable/lib/render.js`'s `makeRunRenderer`): partial generation messages
+ * (`durable/lib/render.js`'s `makeRunRenderer`): partial generation messages
  * with text deltas, tool executions, and the run's end. This module is that renderer's text
  * and progress rules, as a state machine a chat `requestHandler` can drive — the mapping
  * must move with `render.js` if its shapes ever do.

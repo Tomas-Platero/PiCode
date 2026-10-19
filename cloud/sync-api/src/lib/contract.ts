@@ -1,7 +1,7 @@
 /**
  * Types and constants for the Settings Sync store REST contract consumed by
  * the PiCode (VS Code) client. Extracted from
- * picode-source/src/vs/platform/userDataSync/common/userDataSyncStoreService.ts
+ * src/vs/platform/userDataSync/common/userDataSyncStoreService.ts
  */
 
 /** Manifest JSON body returned by GET /v1/manifest. */

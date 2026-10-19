@@ -1,5 +1,5 @@
 // Types for the durable daemon's module surface, as far as the connector's
-// tests use it. The daemon is plain JavaScript (picode-source/durable), so
+// tests use it. The daemon is plain JavaScript (durable), so
 // this is the declaration the test typecheck reads — keep it in step with
 // lib/daemon.js's exports.
 export interface ResolvedDaemonOptions {

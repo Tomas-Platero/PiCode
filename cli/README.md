@@ -1,4 +1,4 @@
-# picode-source/cli/ — ⬆️ El CLI `code`, en Rust (zona upstream)
+# cli/ — ⬆️ El CLI `code`, en Rust (zona upstream)
 
 **Carpeta upstream: aquí no se documenta fichero a fichero.** Es el código fuente del comando `code` (VS Code CLI) tal como desciende de `upstream/stable.json`. PiCode lo compila como parte de la build y no lo modifica.
 

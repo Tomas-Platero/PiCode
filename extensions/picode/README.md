@@ -1,8 +1,8 @@
-# picode-source/extensions/picode/ — 🔌 El conector de PiCode
+# extensions/picode/ — 🔌 El conector de PiCode
 
 **La pieza que hace que el chat exista.** Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP, gestiona paquetes, manda trabajo al agente durable y pinta el panel de estado.
 
-> Regla de producto: PiCode **no tiene extensión propia instalable**. Este conector es código del núcleo: viaja dentro del árbol (`picode-source/`), se empaqueta con el editor y no se instala de ningún sitio. La capa de superficie vive en el chat y en la barra de actividad, no en una ventana aparte.
+> Regla de producto: PiCode **no tiene extensión propia instalable**. Este conector es código del núcleo: viaja dentro del árbol (`the tree`), se empaqueta con el editor y no se instala de ningún sitio. La capa de superficie vive en el chat y en la barra de actividad, no en una ventana aparte.
 
 ## 🗂️ Dentro
 
@@ -11,15 +11,15 @@
 | `src/` | El código del conector — **fichero a fichero más abajo**. |
 | `test/` | Los tests (`node --experimental-strip-types --test test/*.test.ts`; también corren en CI). |
 | `media/` | La marca de PiCode para la barra de actividad, con su pareja claro/oscuro. |
-| `out/` | El JavaScript compilado (generado por `dev/build-connector.sh`, fase 2 de la build). |
+| `out/` | El JavaScript compilado (generado por `build/build-connector.sh`, fase 2 de la build). |
 | `package.json` | Contribuciones al editor: 20 comandos, la vista `picode-status`, participantes de chat, proveedores de modelos y de MCP. |
 | `tsconfig.json` / `tsconfig.test.json` | Compilación del código y de los tests (los tests se tipan en CI). |
 
 ## 🚀 Cómo se compila y se prueba
 
 ```bash
-./dev/build-connector.sh                      # tsc del conector (fase 2 de dev/build.sh)
-cd picode-source/extensions/picode
+build/build-connector.sh                      # tsc del conector (fase 2 de build/build.sh)
+cd extensions/picode
 for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 ```
 
@@ -143,4 +143,4 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 
 - El mapa de todo el repositorio: [`docs/MAPA.md`](../../../docs/MAPA.md).
 - La capa de agente y el SDK de pi: [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
-- El agente al que se conecta: [`picode-source/durable/README.md`](../../durable/README.md).
+- El agente al que se conecta: [`durable/README.md`](../../durable/README.md).

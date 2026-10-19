@@ -278,7 +278,7 @@ from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
 PiCode therefore pins the runtime it is verified against. The pin lives in one place,
-`distribution/runtime.json` — pi `1.3.0` today — and `dev/pi-runtime.sh` installs it into the
+`build/distribution/runtime.json` — pi `1.3.0` today — and `build/pi-runtime.sh` installs it into the
 pack during the build, so a freshly built editor is born working.
 
 **Decision:** PiCode pins and ships its own pi inside the build, instead of resolving it from
@@ -317,7 +317,7 @@ built-in extension scan path, and a `data/` folder beside the executable switche
 the build to portable mode.
 
 **Decision:** PiCode owns its editor tree. The product is modified in place
-through a data delta (`distribution/product-delta.json`) applied by a Node
+through a data delta (`product.json`) applied by a Node
 program, and the agent panel ships as a built-in extension. The distribution
 remains uncompiled: no fork, no yarn and Electron build, no patch rebasing
 against upstream.
@@ -328,7 +328,7 @@ against upstream.
   removal real rather than cosmetic.
 - The tree was a build artefact and was not versioned; what was versioned was the
 delta, the applier, the defaults and the extension, and `.gitignore` fenced the
-700 MB payload. **Superseded by ADR-013**: the tree is now `picode-source/`, versioned.
+700 MB payload. **Superseded by ADR-013**: the tree is now the repository root, versioned.
 - Upgrading was "extract a new archive, re-run the apply script" rather than
   an in-place update, and `updateUrl` was emptied for that reason. **Superseded by
   ADR-013/ADR-015**: the build compiles the tree, and the updater reads the channel's own
@@ -416,15 +416,15 @@ artefact. On 2026-09-27 the owner reversed the frame: *"lo que si OLVIDATE de un
 todo ha de vivir en el núcleo"* and the prepared tree stopped being an artefact. It is now
 PiCode's source.
 
-**Decision:** `picode-source/` is PiCode's own, versioned source tree — the VSCodium changes,
+**Decision:** `the tree` is PiCode's own, versioned source tree — the VSCodium changes,
 PiCode's work and the product identity already baked in. Nothing is fetched or patched per
-build; `dev/build.sh` compiles it in five phases, and the product delta is applied to
-`picode-source/product.json` **before** packing.
+build; `build/build.sh` compiles it in five phases, and the product delta is applied to
+`product.json` **before** packing.
 
 **Consequences:** A core behaviour change is TypeScript in the tree, compiled, with the
 checksums computed over the finished product — the `checksums` map that made the minified
 bundle untouchable (ADR-011) no longer bounds us. A newer VS Code becomes a **merge against
-`picode-source/`** instead of an archive swap. The trade-off accepted: the repository carries
+`the tree`** instead of an archive swap. The trade-off accepted: the repository carries
 Microsoft's MIT-licensed source and must keep its attribution, and the tree is large, so the
 first build installs its dependencies once.
 
@@ -445,7 +445,7 @@ handling. The connector now loads pi's SDK at runtime (`piSdk.ts`) and opens the
 is no RPC client, no hand-rolled framing and no payload forwarding left to govern.
 
 **Decision:** The session runs through pi's in-process SDK. The runtime is still the pinned,
-in-tree one (`distribution/runtime.json`), and the CLI is used only for what the SDK does not
+in-tree one (`build/distribution/runtime.json`), and the CLI is used only for what the SDK does not
 expose (package management).
 
 **Consequences:** Events arrive as typed SDK objects instead of JSONL, so ADR-005's framing
@@ -467,7 +467,7 @@ installable beside the others, with no channel able to receive another's release
 
 **Decision:** `master` is **stable**, `beta` and **experimental** are the other two. Each
 channel's update feed lives on **its own branch**, under
-`updates/<channel>/win32/x64/<target>/`, and `dev/build.sh` seals the channel into
+`updates/<channel>/win32/x64/<target>/`, and `build/build.sh` seals the channel into
 `product.json` (`quality`) and rewrites the `updateUrl` branch from `/HEAD/` to the channel's
 branch (`PICODE_CHANNEL=stable|beta|experimental`).
 
@@ -490,8 +490,8 @@ install extensions that ask for `^1.141.0`, and the plan was to rebase the tree 
 The owner refused: *"NO estamos trabajando en un fork ya, es nuestro código"* and *"QUIERO QUE
 NUESTRO PRODUCTO NO CAMBIE SOLO QUERIA CAMBIAR UN NUMERO"*.
 
-**Decision:** Keep the tree as it is and raise only `distribution/product-delta.json →
-set.version` (1.135.0 → 1.141.1). The pin `upstream/stable.json` keeps telling the truth about
+**Decision:** Keep the tree as it is and raise only `product.json`'s
+`version` (1.135.0 → 1.141.1). The pin `upstream/stable.json` keeps telling the truth about
 where the tree descends from; the declared number is free to lead it.
 
 **Consequences:** Extensions install, and not a line of PiCode's product changes. The measured
@@ -642,7 +642,7 @@ necesite de durable (tasks, sesiones, memoria, etc)»*.
   `resolveDefaultNewChatSessionType`, `isNewChatSessionTypeUsable`,
   `isVisibleEditorChatSessionType`, and the empty-Local switch in `chatViewPane.ts`).
 - **durable is the backend, reached by pi's tools.** The `durable_send` / `durable_list` /
-  `durable_read` bridge (`picode-source/durable-bridge`) is loaded into the chat's pi session,
+  `durable_read` bridge (`durable-bridge`) is loaded into the chat's pi session,
   and MCP stays pi's. A prompt pi delegates runs in the daemon and survives pi dying; memory
   and MCP are pi's own tools.
 - **The durable `chatSessions` contribution stays declared but disabled** (`"when": "false"`,

@@ -1,7 +1,7 @@
 # Cómo compilar PiCode desde la fuente
 
 Este documento describe cómo se compila PiCode desde su propia fuente: qué es
-`./picode-source`, qué hace cada fase del build y qué se hace el día que toca traer una
+`./the tree`, qué hace cada fase del build y qué se hace el día que toca traer una
 versión nueva de VS Code.
 
 No sustituye a la release. El **ZIP precompilado** sigue siendo el camino de quien solo
@@ -18,7 +18,7 @@ parcheo, y las dependencias se instalan una vez.
 
 ## 🗺️ Índice
 
-- [Qué es ./picode-source](#qué-es-picode-source)
+- [Qué es ./the tree](#qué-es-the tree)
 - [La cadena, por capas](#la-cadena-por-capas)
 - [Dependencias en Windows](#dependencias-en-windows)
 - [Cómo compilar](#cómo-compilar)
@@ -26,7 +26,7 @@ parcheo, y las dependencias se instalan una vez.
 - [El camino retirado: los parches (borrados)](#el-camino-retirado-los-parches-borrados)
 - [Estado de verificación](#estado-de-verificación)
 
-## Qué es `./picode-source`
+## Qué es `./the tree`
 
 El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
 
@@ -38,9 +38,9 @@ El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
         │
         │  los cambios propios            patches/picode/**
         │
-        │  la capa de producto            build/distribution/product-delta.json
+        │  la capa de producto            product.json
         ▼
-  ./picode-source   ←  esto es PiCode, y aquí se trabaja
+  la raíz del repositorio   ←  esto es PiCode, y aquí se trabaja
 ```
 
 Ese trabajo se hizo **una vez**: primero quedó registrado como un commit en el git que había
@@ -56,7 +56,7 @@ Lo que trajo ese paso, y conviene no confundir: como la fuente de Microsoft vive
 de este repositorio**, la prohibición de `CONTRIBUTING.md` subió de nivel — lo que no puede
 hacerse es **empujar este repositorio a un origen público**. Publicarlo es decisión exclusiva
 del dueño. El historial anterior a la importación se guardó en un bundle fuera del repositorio
-(`.scratch/picode-source-history.bundle`, 54 MB).
+(`.scratch/the tree-history.bundle`, 54 MB).
 
 ## La cadena, por capas
 
@@ -66,10 +66,10 @@ primeras no es negociable —así se construyó el árbol— pero **el build ya 
 | Capa | Fuente de verdad | Qué aportó | ¿La ejecuta el build? |
 | --- | --- | --- | --- |
 | Fuente | `upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
-| Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro de ``**. | No |
-| Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro de ``**. | No |
-| Producto | `build/distribution/product-delta.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
-| El árbol | `./picode-source` | Todo lo anterior ya aplicado, y es donde se edita. | Es la entrada |
+| Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro del árbol**. | No |
+| Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro del árbol**. | No |
+| Producto | `product.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
+| El árbol | la raíz del repositorio | Todo lo anterior ya aplicado, y es donde se edita. | Es la entrada |
 | Empaquetado | `build/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. | **Sí** — fase 5 |
 
 ## Dependencias en Windows
@@ -149,7 +149,7 @@ Los dos pines ya **no dirigen el build**: son la procedencia del árbol.
 
 | Pin | Qué registra |
 | --- | --- |
-| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./picode-source`: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `build/vscodium-product.json` se borraron con el aparato de parches. |
+| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./the tree`: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `build/vscodium-product.json` se borraron con el aparato de parches. |
 
 El día que toque una versión nueva, el trabajo **no** es reaplicar parches: es **juntar las dos
 versiones**. Este repositorio recibió el árbol como una importación aplastada (sin el historial
@@ -163,18 +163,18 @@ ejecutado todavía**: se lee como un plan, no como una receta comprobada.
    nunca se versionó; un clon completo cumple la misma función y no depende de esta máquina.
 2. Juntar allí: `git -C .merge-work merge <commit-nuevo>`. Los conflictos salen uno a uno y con
    contexto, en vez de un `git apply` que se para sin decir dónde.
-3. Traer el resultado a casa: copiar el árbol fusionado sobre `` (sin tocar
+3. Traer el resultado a casa: copiar el árbol fusionado sobre la raíz del repositorio (sin tocar
    `node_modules` ni los `out*`) y commitear aquí —el commit de la juntanza es la nueva
    procedencia—. `git status` en el padre es el control: si solo cambió lo que cambió el merge,
    entró limpio.
 4. Actualizar `tag` y `commit` en `upstream/stable.json`, y —si el delta de producto necesita
-   ajustes para la versión nueva— aplicarlos en `build/distribution/product-delta.json`. No hay
+   ajustes para la versión nueva— aplicarlos en `product.json`. No hay
    parches que re-vendorizar: se retiraron el 2026-09-27.
 5. Comprobar que el árbol sigue siendo el que el build espera: `./build/build.sh -o`. Y volver a
    guardar el historial fusionado como bundle, para la próxima versión.
 6. Compilar y confirmar que arranca.
 
-`RELEASE_VERSION` sale de `build/distribution/product-delta.json` (`set.version`), que es la **única**
+`RELEASE_VERSION` sale de `product.json` (`version`), que es la **única**
 casa de la versión desde que las fases 1-5 se retiraron. `upstream/stable.json` ya no la fija.
 
 El pin se mueve **a mano**: el vigilante semanal de CI que abría la PR con el pin nuevo se
@@ -190,12 +190,12 @@ eliminó, y [`docs/CI.md`](CI.md) lo explica.
 
 - **`./build/build.sh`** ejecuta las 5 fases. Necesita las dependencias completas de la sección
   anterior, pero solo la **primera vez**: `npm ci` se repite únicamente cuando el estado que
-  VS Code registró deja de cuadrar, que es lo que responde `build/deps-current.mjs`.
+  VS Code registró deja de cuadrar, que es lo que responde `build/build-helpers.mjs deps-current`.
 - **`./build/build.sh -o`** para **dentro de la fase 1**, después de comprobar la fuente y la
   identidad y antes de instalar nada; sale con código 0 y **no compila nada**. En la
   práctica son segundos, y es la forma de saber que el árbol es el correcto antes de pagar un
   build largo.
-- **`-f` no existe**, y a propósito: borraba `./picode-source`. Ese árbol es la fuente y el único
+- **`-f` no existe**, y a propósito: borraba `./the tree`. Ese árbol es la fuente y el único
   sitio donde existe; el flag da error y lo explica.
 - **`-s`** se acepta con un aviso: significaba "reutiliza el árbol en vez de descargarlo", y desde
   el 2026-09-27 eso es lo único que puede pasar.
@@ -207,11 +207,11 @@ no se pueda derivar `windows`, `osx` o `linux` es un error duro.
 
 | Ruta | Qué es |
 | --- | --- |
-| `./picode-source` | **La fuente de PiCode.** Se edita, se commitea y vive en **este** repositorio. |
+| `./the tree` | **La fuente de PiCode.** Se edita, se commitea y vive en **este** repositorio. |
 | `./PiCode-Win32-x64` | La salida del empaquetado (fases 4 y 5). |
 | `./PiCode-Win32-x64/PiCode.exe` | El ejecutable construido desde fuente. |
 
-`./picode-source` **se versiona en este repositorio** desde el 2026-09-27; `./PiCode-Win32-*` es
+`./the tree` **se versiona en este repositorio** desde el 2026-09-27; `./PiCode-Win32-*` es
 salida del empaquetado y sigue ignorado. La fuente de Microsoft vive aquí dentro, así que la
 regla de publicación es la de `CONTRIBUTING.md`: este repositorio no se empuja a un origen
 público sin decisión del dueño.
@@ -222,7 +222,7 @@ Para tocar código y verlo en el editor no hace falta pasar por las 5 fases. Con
 fábrica reactivada (esbuild):
 
 ```bash
-cd picode-source
+cd the tree
 npm run transpile-client      # src/ → out/ : 7.559 ficheros en ~7 segundos
 npm run watch                 # y a partir de ahí, re-transpilación al guardar
 scripts\code.bat              # arranca el editor DESDE out/ (la primera vez baja Electron)
@@ -273,7 +273,7 @@ retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y 
   `resources/win32/` y se commitean; para cambiarlos, se cambian allí antes de
   empaquetar (el `build/prepare_vscode.sh` que hacía esta marca murió con el aparato de parches).
 - **Verificado después del arreglo, y sin lugar a dudas:** parseando el directorio de
-  recursos del PE, los **7 frames** de `distribution/picode.ico` (16, 24, 32, 48, 64, 128 y
+  recursos del PE, los **7 frames** de `build/distribution/picode.ico` (16, 24, 32, 48, 64, 128 y
   256) están presentes en `PiCode.exe` **byte a byte**. Ojo con la forma de medirlo:
   `System.Drawing.Icon` no puede leer `picode.ico` (sus frames van comprimidos en PNG) y
   `ExtractAssociatedIcon` devuelve un bitmap reescalado, no el frame nativo — comparar así
@@ -288,11 +288,11 @@ aparato: `patches/**` (los propios y los heredados de VSCodium), `build/get_repo
 
 Lo que merecía la pena guardar de ese camino está en otras manos:
 
-- **Los cambios son la fuente**: ``, versionada en este repositorio.
+- **Los cambios son la fuente**: el árbol, versionado en este repositorio.
 - **La procedencia es un único pin**: `upstream/stable.json` (commit `08d4889f`, VS Code
   1.135.0) y el plan para la siguiente versión está más arriba, en *Traer una versión nueva*.
 - La historia completa antes/después del parcheo existe además en el bundle local
-  `.scratch/picode-source-history.bundle` (fuera del versionado: respaldo de esta máquina).
+  `.scratch/the tree-history.bundle` (fuera del versionado: respaldo de esta máquina).
 
 Los placeholders `!!APP_NAME!!` y las reglas de sufijos `.patch.no` / `.patch.yet` murieron con
 la maquinaria: nada los expande ni los aplica. Lo que alguna vez hizo un parche, hoy se escribe
@@ -316,13 +316,13 @@ directamente en el árbol y se commitea.
   arrancando después. El `rimraf` de `out-build/` sigue costando ~3 s: no es palanca, y ahora
   menos.
 
-- El árbol preparado se registró como commit en el git de `./picode-source` (`5945775f`, sobre
+- El árbol preparado se registró como commit en el git de `./the tree` (`5945775f`, sobre
   el commit virgen `08d4889f`). Después de eso `git status` queda **limpio**: las 5.053 rutas
   borradas, las 327 modificadas y las 40 añadidas pasan a ser historial.
 - La comprobación de fuente y de identidad de la fase 1 se ejecutó contra el árbol real y pasa:
   nombre de producto, nombre de compañía en `electron.ts`, icono de Windows que lee el
   empaquetador, manifiesto del servidor y conector, todo presente.
-- `build/deps-current.mjs` se ejecutó contra el estado real y respondió que **cuadra** (node
+- `build/build-helpers.mjs deps-current` se ejecutó contra el estado real y respondió que **cuadra** (node
   24.19.0). Eso es lo que permite que `npm ci` no vuelva a correr.
 - `bash -n` y el análisis estático de los scripts tocados salen limpios. En esa fecha CI estaba
   apagado; volvió el 2026-09-28 (`.github/workflows/ci.yml` y `release.yml`), y
@@ -351,9 +351,10 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 - El patch de `patches/picode/` aplica **encima** del juego VSCodium (dos hunks con
   *offset*, que es justo lo que demuestra que compone) y también aplica sobre la fuente
   sin parchear; `git apply --check` y `git apply -R --check` salen limpios.
-- La fase 5 es idempotente: `apply-product-delta.mjs --check` sobre el `product.json` de la
-  cadena completa declara todas las claves presentes y, tras `--write`, un segundo
-  `--check` responde «already current» (`exit 0`).
+- La fase 5 era idempotente (el applier ya no existe): `apply-product-delta.mjs --check` sobre
+  el `product.json` de la cadena completa declaraba todas las claves presentes y, tras
+  `--write`, un segundo `--check` respondía «already current» (`exit 0`). Hoy ese papel lo
+  cumple `product.json`, versionado en el árbol.
 - El `product.json` producido por las fases 2–5 es **idéntico** al
   `resources/app/product.json` del PiCode enviado, excluyendo solo los sellos de build
   (`commit`, `date`, `version`, `checksums`, `serverDownloadUrlTemplate`): el camino desde
@@ -388,7 +389,7 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
   envío, pero la reescritura de URLs es un hueco declarado en `build/README.md`. Sigue siendo
   hueco hoy: el cambio nunca llegó a hacerse en el árbol.
 - Las teselas PNG del menú Inicio (`code_150x150.png`, `code_70x70.png`) **sí se
-  redibujan** desde `distribution/picode.ico`, en la preparación: el empaquetado las copia
+  redibujan** desde `build/distribution/picode.ico`, en la preparación: el empaquetado las copia
   antes de que la fase 8 pueda tocarlas. `build/README.md` explica por qué es ahí y no en el
   *stage*.
 - **La configuración de producto se lee en tiempo de ejecución**, desde
@@ -409,12 +410,12 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 **Sobre `defaultChatAgent` y el límite del núcleo minificado:** este camino elimina el
 límite del camino binario, porque el cambio de fuente se escribe en TypeScript antes de
 compilar y los `checksums` se calculan sobre el producto final. Dicho eso, con el
-`build/distribution/product-delta.json` **congelado actual** el objeto `defaultChatAgent` sigue
-en `product.json` (el delta poda sus subclaves de URL con `unsetNested`, pero conserva
+`product.json` **actual** el objeto `defaultChatAgent` sigue
+declarado (sus subclaves de URL están podadas una a una, conservando
 `extensionId`, `chatExtensionId`, `provider` y `providerScopes`), así que hoy las guardas
-que escribió `patches/picode/` —ahora código en el árbol— son **defensivas**: protegen el workbench el día que el delta deje de
+que escribió `patches/picode/` —ahora código en el árbol— son **defensivas**: protegen el workbench el día que el árbol deje de
 declarar la clave, pero no cambian el comportamiento del binario construido. Que PiCode no
-declare Copilot por defecto exige además un cambio en `distribution/`, que está congelado.
+declare Copilot por defecto exige además un cambio en `build/distribution/`, que está congelado.
 
 ## ⚖️ Licencia
 

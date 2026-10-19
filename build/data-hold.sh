@@ -6,7 +6,7 @@
 # `data/` inside the pack folder (PiCode-win32-x64*/data) is the app's portable profile: user
 # data, providers, skills, sessions, logs. The pack task that produces the folder deletes it
 # wholesale before writing (util.rimraf(path.join(buildRoot, destinationFolderName)) in
-# picode-source/build/gulpfile.vscode.ts), so every build used to wipe the owner's profile, and
+# build/gulpfile.vscode.ts), so every build used to wipe the owner's profile, and
 # a file locked inside data/ (a log held open by the running editor) used to fail that delete
 # halfway through, leaving the folder with no PiCode.exe and no resources/app.
 #

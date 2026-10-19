@@ -1,4 +1,4 @@
-# picode-source/extensions/ — 🧩 Extensiones built-in (upstream) + la nuestra
+# extensions/ — 🧩 Extensiones built-in (upstream) + la nuestra
 
 **Casi todo lo que hay aquí es upstream**: las extensiones que VS Code trae de serie (`git`, `json`, `markdown`, `typescript-language-features`…), tal como descienden de `upstream/stable.json`. El empaquetador las recoge tal cual.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1091
 #
-# Builds PiCode's Rust CLI (`picode-source/cli`) and drops the binary into the pack's `bin/`,
+# Builds PiCode's Rust CLI (`cli/`) and drops the binary into the pack's `bin/`,
 # so a source build ships the CLI instead of only the shell shim.
 #
 # Optional: if cargo is missing, OpenSSL is absent outside CI, or the build fails, this prints one
@@ -24,7 +24,7 @@ if ! command -v cargo > /dev/null 2>&1; then
   exit 0
 fi
 
-CLI_DIR="./picode-source/cli"
+CLI_DIR="./cli"
 if [[ ! -f "${CLI_DIR}/Cargo.toml" ]]; then
   echo "cli: ${CLI_DIR}/Cargo.toml missing; skipping."
   exit 0

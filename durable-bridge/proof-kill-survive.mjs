@@ -19,9 +19,9 @@
 //      durable_read and shows the finished conversation with the answer.
 //
 // Run it:
-//     node picode-source/durable-bridge/proof-kill-survive.mjs
+//     node durable-bridge/proof-kill-survive.mjs
 //
-// Scratch (pi logs, sessions, daemon log) goes to picode-source/durable-bridge/.data/
+// Scratch (pi logs, sessions, daemon log) goes to durable-bridge/.data/
 // (gitignored). The durable conversations go to the daemon's own database —
 // this script never touches SQLite: the daemon is the single owner.
 import { spawn } from "node:child_process";

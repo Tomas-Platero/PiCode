@@ -18,7 +18,7 @@ export { DEFAULT_DURABLE_FOLDER };
 /**
  * The durable agent, seen from the editor.
  *
- * The agent is the repository's `picode-source/durable` program: a headless daemon that owns
+ * The agent is the repository's `durable` program: a headless daemon that owns
  * its conversations in SQLite and serves local clients over a named pipe. This module is
  * the editor's client for it — nothing more. It starts and stops the daemon, asks it what
  * it holds (`ping` / `sessions`), lets the owner open a conversation's transcript and send
@@ -192,7 +192,7 @@ export async function readDurableStatus(): Promise<DurableStatus> {
 
 /**
  * Concatenated text of a pi-ai assistant message (content may be a string, an array of
- * blocks, or missing) — copied from `picode-source/durable/lib/common.js`'s `textOf`, for
+ * blocks, or missing) — copied from `durable/lib/common.js`'s `textOf`, for
  * the same reason the wire client is copied: the connector cannot import from there.
  */
 function textOf(message: unknown): string {
@@ -209,7 +209,7 @@ function textOf(message: unknown): string {
 		.join('');
 }
 
-/** Text of one transcript entry — copied from `picode-source/durable/lib/common.js`'s `entryText`. */
+/** Text of one transcript entry — copied from `durable/lib/common.js`'s `entryText`. */
 function entryText(entry: unknown): string {
 	const record = entry as { model?: unknown; data?: unknown } | null | undefined;
 	const messages = Array.isArray(record?.model) ? record.model : Array.isArray(record?.data) ? record.data : [];

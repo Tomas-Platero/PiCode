@@ -10,7 +10,7 @@
 
 ## 🧱 Cómo se relaciona con el editor
 
-- El editor apunta a la API con `configurationSync.store` (el valor sale de `distribution/product-delta.json`).
+- El editor apunta a la API con `configurationSync.store` (el valor sale de `product.json`).
 - Todo el contenido se cifra en el servidor (AES-256-GCM) antes de tocar Firestore; el editor sube y baja texto plano y no se entera.
 - La sincronización es **Pro**: cualquier ruta responde `402` si la cuenta no es `pro`.
 
