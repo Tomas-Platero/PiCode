@@ -669,6 +669,12 @@ else
   done
 fi
 
+# The packer strips the signatures of every Electron binary before it rewrites them, by spawning one
+# `signtool remove` per file; those copies of signtool fail to launch on this machine and the pack
+# died with 0xC0000142 minutes in. The fix is one line inside a package the dependency tree owns, so
+# an install puts the original back and the build patches it again every time (idempotent).
+node build/checks.mjs patch-gulp-electron
+
 
 # ---------------------------------------------------------------------------
 # The connector

@@ -220,6 +220,72 @@ import { pathToFileURL } from 'node:url';
 	console.log(`  vscode-languageserver DEP0169 patch: ${patched} patched, ${already} already current`);
 	}
 
+	// patch-gulp-electron
+	/*
+	 * Stops `@vscode/gulp-electron` from stripping the signatures of every Electron binary.
+	 *
+	 * Its `patch` pipeline runs `removeSignatures()` before it rewrites the executables. That step
+	 * spawns `signtool remove` once per file, and on this machine those copies of signtool fail to
+	 * launch at all: the packed build died with 0xC0000142 (the Windows status code for "the DLL
+	 * could not be initialised") dozens of times in a row, minutes after the compile had finished.
+	 * The step is pointless here as well: Electron's signatures describe Microsoft's files, the
+	 * packer rewrites them into PiCode's, and PiCode is not code-signed, so there is nothing for a
+	 * later signing step to need removed.
+	 *
+	 * The fix is one line, in a file the dependency tree owns: `npm install` puts the original
+	 * back, so the build applies this before the pack, every time. Idempotent by construction —
+	 * already patched is a no-op — and if the package ever ships something else at that spot, this
+	 * says so instead of silently packing with the old behaviour.
+	 *
+	 * Usage: node build/checks.mjs patch-gulp-electron [<node_modules>]
+	 */
+	async function cmdPatchGulpElectron(cli) {
+	const fs = await import('node:fs');
+	const path = await import('node:path');
+	const { fileURLToPath } = await import('node:url');
+	const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+	const nodeModules = cli[0] ?? path.join(root, 'node_modules');
+
+	const file = path.join(nodeModules, '@vscode', 'gulp-electron', 'src', 'win32.js');
+	if (!fs.existsSync(file)) {
+		// The packer itself is missing, which is the install's problem, not this patch's.
+		console.log('  gulp-electron signature patch: the package is not installed; nothing to patch');
+		return;
+	}
+
+	const original = '    .pipe(removeSignatures())';
+	const patched = '    .pipe(es.through()) // removeSignatures() removed: see build/checks.mjs patch-gulp-electron';
+	// The pipeline line this patch is about. The file has other `es.through()` calls, so the one that
+	// matters is the one that follows the `keepDefaultApp` pass; finding it by that neighbour keeps a
+	// bare "does the file contain the word" from deciding the answer.
+	const marker = '.pipe(opts.keepDefaultApp ? es.through() : removeDefaultApp())';
+	const text = fs.readFileSync(file, 'utf8');
+
+	const at = text.indexOf(marker);
+	if (at === -1) {
+		process.stderr.write('error: @vscode/gulp-electron no longer has the pipeline this patch knows.\n');
+		process.stderr.write(`       Look at ${file} and update build/checks.mjs patch-gulp-electron.\n`);
+		process.exit(1);
+	}
+	const after = text.slice(at, at + 400);
+	// The next `.pipe(...)` line after the marker is the one this patch is about.
+	const line = after.split('\n').slice(1).find(candidate => candidate.includes('.pipe(')) ?? '';
+
+	if (line.includes('.pipe(es.through())')) {
+		// Patched already, whether by an earlier run of this command or by hand.
+		console.log('  gulp-electron signature patch: already applied');
+		return;
+	}
+	if (!line.includes('.pipe(removeSignatures())')) {
+		process.stderr.write('error: @vscode/gulp-electron no longer pipes through removeSignatures() where this patch knows.\n');
+		process.stderr.write(`       Look at ${file} and update build/checks.mjs patch-gulp-electron.\n`);
+		process.exit(1);
+	}
+
+	fs.writeFileSync(file, text.replace(original, patched));
+	console.log('  gulp-electron signature patch: applied (signtool is no longer spawned during the pack)');
+	}
+
 	// prune-binaries -- was build/prune-platform-binaries.mjs
 	/*
 	 * Throws away the binaries of the platforms this build is not for.
@@ -358,7 +424,7 @@ import { pathToFileURL } from 'node:url';
 	}
 
 
-const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|prune-binaries>\n`;
+const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|patch-gulp-electron|prune-binaries>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -367,6 +433,8 @@ async function dispatch() {
 			return cmdCheckMcp(cli.slice(1));
 		case 'patch-languageserver':
 			return cmdPatchLanguageserver(cli.slice(1));
+		case 'patch-gulp-electron':
+			return cmdPatchGulpElectron(cli.slice(1));
 		case 'prune-binaries':
 			return cmdPruneBinaries(cli.slice(1));
 		default:

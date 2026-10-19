@@ -66,10 +66,16 @@ files, grouped by what it is for, each command keeping the name it always had:
 | `docs.mjs` | `check`, `map` |
 | `release.mjs` | `release-notes`, `update-feed` |
 | `branding.mjs` | `brand-copy`, `ico-to-png`, `make-inno-images`, `patch-inno-updater` |
-| `checks.mjs` | `check-mcp`, `patch-languageserver`, `prune-binaries` |
+| `checks.mjs` | `check-mcp`, `patch-languageserver`, `patch-gulp-electron`, `prune-binaries` |
 
 Run one with `node build/<file>.mjs <command>`; run the file with no command (or
 an unknown one) and it prints the commands it accepts.
+
+`patch-gulp-electron` is the one the build calls on its own, in phase 1 right after the
+install: the packer strips the signature of every Electron binary by spawning one `signtool`
+per file, those copies of signtool failed to launch here and the pack died with
+`0xC0000142` minutes in, and the step is pointless for a product that is not code-signed.
+An install puts the package back as shipped, so the patch is re-applied on every build.
 
 ## 🧪 A build beside the editor
 
