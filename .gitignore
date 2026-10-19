@@ -27,6 +27,12 @@
 # product and is versioned.
 /.vscode
 /data/
+# What `npm run dev` links into the tree from the pack: the built pi runtime and the durable
+# agent. They are outputs, they belong to a build, and linking is how the editor finds them
+# where a source tree expects them (`<root>/resources/...`).
+/resources/pi-runtime
+/resources/durable
+/resources/durable-bridge
 # Electron / Chromium runtime artifacts at the distribution root.
 # Matched by extension, not by name: Step 5 renames the executable and its Start Menu
 # manifest, and an ignore rule written with the VSCodium names left 222 MB exposed after

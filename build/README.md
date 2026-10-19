@@ -52,8 +52,10 @@ in the window shows it. The first run downloads Electron into `.build/electron` 
 built-in extensions, once. `build/dev.mjs` is the launcher — it is not one of the five build scripts,
 it does not build anything.
 
-That editor runs the source tree, not the pack: it does not carry the pi runtime, the durable agent
-or the channel seal. To see those, use `./build/build.sh` (or `npm run build:fast`) and run the pack.
+That editor runs the source tree, not the pack. When a pack exists, `dev` links its pi runtime and
+durable agent into `resources/` (gitignored) so the chat and the agent work while you edit; the
+channel seal and anything else the pack rewrites around the editor are still absent. With no pack
+yet, it says so and the chat has nothing to run.
 
 ## ♻️ What a build reuses
 
