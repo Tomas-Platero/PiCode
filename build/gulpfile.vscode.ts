@@ -727,7 +727,17 @@ BUILD_TARGETS.forEach(buildTarget => {
 				// PiCode: esbuild strips types without checking them, and this route has no
 				// compile-build step. Run the compiler headless (as core-ci does) so the
 				// shipped artifact is type-checked like the classic path's was.
-				task.define(`picode-typecheck${dashed(minified)}`, () => spawnTsgo(path.join(root, 'src', 'tsconfig.json'), { taskName: 'picode-typecheck', noEmit: true })),
+				//
+				// A fast build turns the check off (build/build-fast.sh): the artifact is the same
+				// either way, because esbuild never consumed the check's output. It exists for the
+				// loop that edits, compiles and looks, and the release always runs it.
+				task.define(`picode-typecheck${dashed(minified)}`, async () => {
+					if (process.env.PICODE_SKIP_TYPECHECK === '1') {
+						console.log('[picode-typecheck] skipped: this is a fast build');
+						return;
+					}
+					await spawnTsgo(path.join(root, 'src', 'tsconfig.json'), { taskName: 'picode-typecheck', noEmit: true });
+				}),
 				copyCodiconsTask,
 				cleanExtensionsBuildTask,
 				compileNonNativeExtensionsBuildTask,

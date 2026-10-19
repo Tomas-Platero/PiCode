@@ -49,6 +49,13 @@ export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
 
+# A fast build (build/build-fast.sh) asks for the same artifact without the whole-tree type check:
+# esbuild never consumed the check's output, so what it leaves out is the report, not the compile.
+# The release never sets this.
+if [[ "${PICODE_FAST:-0}" == "1" ]]; then
+  export PICODE_SKIP_TYPECHECK=1
+fi
+
 # The gulp tasks need a heap that fits the machine. Two measurements drove this:
 # - Windows overflowed an 8192 MB heap with SIGABRT ("Ineffective mark-compacts
 #   near heap limit") at ~7.4 GB, right after the TypeScript compile finished
@@ -841,7 +848,12 @@ fi
 bash build/stage-distribution.sh "${PACK_DIR}"
 
 # The Rust CLI (optional): gives the pack a real binary beside the shell shim. Never blocks the build.
-bash build/build-cli.sh "${PACK_DIR}"
+# A fast build leaves it alone: the shell shim already runs the CLI, and cargo is another minute.
+if [[ "${PICODE_FAST:-0}" == "1" ]]; then
+  echo "  -- the Rust CLI: skipped in a fast build"
+else
+  bash build/build-cli.sh "${PACK_DIR}"
+fi
 
 # The pack and the staging seeded a fresh data/ inside the folder; the real profile -- held aside
 # since before the pack -- goes back over it now, so everything after this point (the installer

@@ -24,13 +24,30 @@ it. `-s` used to mean "reuse the tree instead of fetching it", which is now the
 only thing that can happen; it is accepted with a note so that old commands keep
 working.
 
+## ⚡ A fast build
+
+```bash
+./build/build-fast.sh      # the whole build, without the whole-tree type check
+```
+
+The type check is what the release relies on, and it is the one step a change
+under the cursor is least likely to break: esbuild never consumed its output, so
+a fast build leaves out the report, not the compile. It also leaves the optional
+Rust CLI alone (the pack already carries a working shell shim). Everything else
+is the ordinary build's — dependency check, connector, compile, profile hold,
+pack, staging, verification — because a fast build that skipped those would not
+be PiCode.
+
+It is not a shipping build: the release pipeline always runs `./build/build.sh`.
+Both are also reachable as `npm run build:pack` and `npm run build:fast`.
+
 ## 🧱 Phases
 
 | # | Phase | What runs |
 | --- | --- | --- |
 | 1 | prepare | The three things that leave the tree ready to compile, in one phase because they are one job. **The source**: verifies the tree is the PiCode source — `product.json`'s name is a PiCode name, `build/lib/electron.ts` carries the PiCode company name, the Windows icon the packer reads is there, the server manifest is PiCode's, and the connector is present. Any of these failing quietly would ship a broken or mislabelled editor. **The identity**: `product.json` is its single home; the build seals the channel into it for the pack (and puts it back afterwards) and writes `product.json`'s version into `package.json`, so the packer's two sources agree. **The dependencies**: `npm ci`, **only** when `build/build-helpers.mjs deps-current` says the state VS Code recorded does not match the tree; anything else — no record, a different node, an unreadable state — is a no, and the install runs. Only the install can be long, and only the first time. |
 | 2 | connector | `build/build-connector.sh`: `tsc` over `extensions/picode`. The packer collects extensions but does not compile them, so this has to happen first. |
-| 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
+| 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s; skipped by `build-fast.sh`), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
 | 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-vscode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
 | 5 | stage | `build/pi-runtime.sh` (installs the pinned pi into the pack), `build/durable-runtime.sh` (the durable agent, `durable/`, and the chat's bridge into `resources/durable` — its own dependencies travel with it, ~116 MB, and nothing else does: no proofs, no `.data/`, no credentials) and `build/stage-distribution.sh` (portable profile, settings, icons, names). |
 
