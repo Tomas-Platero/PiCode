@@ -16,13 +16,12 @@
  * Usage: npm run dev [-- arguments for the editor]
  */
 import { spawn } from 'node:child_process';
-import { existsSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const isWindows = process.platform === 'win32';
-const npm = isWindows ? 'npm.cmd' : 'npm';
 
 // What the pack adds around the editor, and where the editor looks for it in a source tree:
 // `distributionRoot` is the repository root here, so `resources/pi-runtime` and
@@ -114,6 +113,34 @@ function waitForTranspile(child, timeoutMs = 10 * 60 * 1000) {
 
 let watch;
 let launched;
+let lockFile;
+
+/**
+ * One dev session at a time.
+ *
+ * Two watchers both delete and rewrite `out/` (the transpiler cleans it on start), so the second
+ * one pulls the floor out from the editor the first one opened. The lock is a pid file, the same
+ * shape `build-run.sh` uses for the build: a stale pid is removed, a live one refuses to start.
+ */
+function takeLock() {
+	lockFile = path.join(REPO, '.scratch', 'dev.lock');
+	try {
+		const pid = Number(readFileSync(lockFile, 'utf8').trim());
+		if (Number.isInteger(pid) && pid > 0) {
+			try {
+				process.kill(pid, 0);
+				return pid;
+			} catch {
+				// The process is gone: the lock is from a session that was killed.
+			}
+		}
+	} catch {
+		// No lock yet.
+	}
+	mkdirSync(path.dirname(lockFile), { recursive: true });
+	writeFileSync(lockFile, `${process.pid}\n`);
+	return undefined;
+}
 
 function stop(code) {
 	if (launched !== undefined) {
@@ -122,17 +149,31 @@ function stop(code) {
 	if (watch !== undefined) {
 		watch.kill();
 	}
+	if (lockFile !== undefined) {
+		try {
+			unlinkSync(lockFile);
+		} catch {
+			// Already gone.
+		}
+	}
 	process.exit(code);
 }
 
 // Only when run as a command: importing this file (a check, a test) must not start a watcher.
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	const running = takeLock();
+	if (running !== undefined) {
+		console.error(`dev: another dev session is already running (pid ${running}).`);
+		console.error('dev: close that editor (its terminal then exits), or stop that terminal, and try again.');
+		process.exit(3);
+	}
+
 	process.on('SIGINT', () => stop(0));
 	process.on('SIGTERM', () => stop(0));
 
 	linkPackedRuntime();
 
-	watch = spawn(npm, ['run', 'watch'], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], shell: isWindows, env: process.env });
+	watch = spawn(isWindows ? 'cmd.exe' : 'bash', isWindows ? ['/d', '/s', '/c', 'npm run watch'] : ['-c', 'npm run watch'], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
 	console.log('dev: compiling and watching -- the editor opens when out/ is complete');
 
 	if (!(await waitForTranspile(watch))) {
