@@ -107,6 +107,12 @@ La **vía manual** de la skill `picode-release` sigue válida como reserva
 - **`zip` no existe en los runners de Windows**: el zip del release se hace
   con 7-Zip (`7z a -tzip`), preinstalado ahí; el binario de la release local
   sigue la misma regla de excluir `data/`.
+- **El CLI de Rust no enlaza sin OpenSSL en Windows**: `tunnels` arrastra
+  `russh`, que depende de `openssl-sys`. No es `keyring`: su variante de
+  criptografía en Rust puro no lo quita (comprobado). Por eso
+  `build/build-cli.sh` se salta el binario cuando no hay OpenSSL, y CI todavía
+  no lo exige: `PICODE_REQUIRE_CLI=1` está listo para cuando el runner lo
+  tenga, y entonces sí podrá afirmarse sin mentir.
 
 ## 📌 El pin, sin vigilancia automática
 

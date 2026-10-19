@@ -173,10 +173,12 @@ Nothing is lost that a repository should hold:
   and in the product, but the endpoint strings themselves still point at
   Microsoft's URLs. Nobody calls them; a future pass should clean them in the
   source.
-- **A source build ships no TUNNEL binary.** `bin/picode` and `bin/picode.cmd` do
-  exist (the pack produces the CLI shim with the renamed binary), but there is
-  no `picode-tunnel.exe` until something builds the Rust CLI (`cli/`) into the
-  pack.
+- **The Rust CLI is optional, and blocked on OpenSSL.** `build/build-cli.sh` builds `cli/` into
+  the pack, and skips with one clear line when cargo or an OpenSSL development install is
+  missing, so a source build always produces an editor. The binary links OpenSSL through
+  `russh` (pulled in by `tunnels`), and no machine or runner here has it yet;
+  `PICODE_REQUIRE_CLI=1` turns every skip into an error for the day CI can carry it. Until then
+  the pack keeps `bin/picode.cmd`, which runs the same CLI through the editor.
 - **The announcement injection is not wired.** PiCode ships no announcements, so
   there is nothing to splice.
 - **The staging step is the single implementation of the layer staging.** The
