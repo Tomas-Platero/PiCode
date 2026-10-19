@@ -71,6 +71,16 @@ $Scratch = Join-Path $RepoRoot '.scratch'
 $LockFile = Join-Path $Scratch 'build.lock'
 $StatusFile = Join-Path $Scratch 'build.status'
 $LogFile = Join-Path $Scratch 'build-live.log'
+
+# The verdict, whatever shape it is in: `build.status` is JSON since 2026-10-19 and was a bare
+# exit code before that, so a status left by an older build still reads.
+function Get-LastExitCode {
+    if (-not (Test-Path $StatusFile)) { return $null }
+    $raw = (Get-Content $StatusFile -Raw).Trim()
+    if ($raw -eq '') { return $null }
+    if ($raw -match '^\d+$') { return $raw }
+    try { return [string](ConvertFrom-Json $raw).exitCode } catch { return $null }
+}
 $NodeModules = Join-Path $RepoRoot 'vscode\node_modules'
 
 # ---------------------------------------------------------------------------
@@ -236,7 +246,7 @@ if ($Check) {
     $line = if ($state.Running) { "a build is running (pid $($state.Pid))" } else { 'no build is running' }
     if ($state.Progress) { $line += " - $([math]::Round($state.Progress.percentage))% - $($state.Progress.stage)" }
     Write-Output $line
-    if (Test-Path $StatusFile) { Write-Output "last build exit code: $((Get-Content $StatusFile -Raw).Trim())" }
+    if (Test-Path $StatusFile) { Write-Output "last build exit code: $(Get-LastExitCode)" }
     exit 0
 }
 
@@ -683,7 +693,7 @@ function Update-View {
     Show-Log
 
     $built = Test-Path (Get-EditorExe (Get-PackDir))
-    $lastCode = if (Test-Path $StatusFile) { (Get-Content $StatusFile -Raw).Trim() } else { $null }
+    $lastCode = Get-LastExitCode
     $lastFailed = (-not $state.Running) -and $lastCode -and ($lastCode -ne '0')
 
     if ($state.Running) {

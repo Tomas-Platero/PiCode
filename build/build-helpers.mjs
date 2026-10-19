@@ -175,6 +175,52 @@ export function resolvePack(repoRoot) {
 		return { index, done: undefined, lastLine };
 	}
 
+	/**
+	 * The build's own event stream (`.scratch/build.jsonl`), when there is one.
+	 *
+	 * The log says where the build is; the events say **when** it got there. Without them the bar
+	 * had to guess a stage's start from the log file's birth time and ramp from the beginning of
+	 * the build, which made a late stage run its ramp too fast. The event file is appended by
+	 * `build.sh` as each phase starts and ends, so it survives a crash and needs no parsing.
+	 *
+	 * Absent (a build from before the events existed, or one that died before writing) is normal:
+	 * every caller falls back to the log.
+	 */
+	function readEvents() {
+		try {
+			const file = path.join(REPO, '.scratch', 'build.jsonl');
+			const events = fs.readFileSync(file, 'utf8')
+				.split('\n')
+				.filter(line => line.trim().length > 0)
+				.map(line => {
+					try { return JSON.parse(line); } catch { return undefined; }
+				})
+				.filter(event => event !== undefined);
+			if (events.length === 0) { return undefined; }
+			const starts = new Map();
+			let current;
+			let end;
+			for (const event of events) {
+				if (event.event === 'phase-start') {
+					starts.set(event.phase, Date.parse(event.at));
+					current = event;
+				} else if (event.event === 'phase-end') {
+					// The phase has finished: the next start moves `current` on, and the bar can sit
+					// at this phase's top until then.
+					starts.set(event.phase, starts.get(event.phase) ?? Date.parse(event.at));
+				} else if (event.event === 'end') {
+					end = event;
+				}
+			}
+			return { events, starts, current, end, startedAt: Date.parse(events[0].at) };
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The build phase each bar stage belongs to. The dependencies stage is inside phase 1. */
+	const PHASE_FOR_STAGE = [1, 1, 2, 3, 4, 5];
+
 	/** How far the dependencies got, read from the tree: the install is what fills it. */
 	function dependencyFraction() {
 		try {
@@ -225,8 +271,13 @@ export function resolvePack(repoRoot) {
 		return total / (1024 * 1024);
 	}
 
-	/** The percentage of the whole, from the stage and how far inside it the build is. */
-	function percentageFor(index, startedAt, now) {
+	/**
+	 * The percentage of the whole, from the stage and how far inside it the build is.
+	 *
+	 * `stageStartedAt` is when **this stage** started (from the event stream) and not when the build
+	 * started: the ramp is "how long this has been going", not "how long the build has".
+	 */
+	function percentageFor(index, stageStartedAt, now) {
 		const before = stageStarts[index];
 		if (index === 1) {
 			const fraction = dependencyFraction();
@@ -240,7 +291,7 @@ export function resolvePack(repoRoot) {
 		}
 		// No signal of its own: a ramp over how long this stage usually takes, capped so the bar never
 		// claims to have finished something it has not.
-		const elapsed = (now - startedAt) / 1000;
+		const elapsed = (now - stageStartedAt) / 1000;
 		const fraction = Math.min(0.97, elapsed / STAGES[index].expectedSeconds);
 		return before + STAGES[index].weight * fraction;
 	}
@@ -283,9 +334,24 @@ export function resolvePack(repoRoot) {
 
 	function readVerdict() {
 		try {
-			const code = fs.readFileSync(path.join(REPO, '.scratch', 'build.status'), 'utf8').trim();
-			if (code === '') { return undefined; }
-			return code === '0' ? 'ok' : 'failed';
+			const raw = fs.readFileSync(path.join(REPO, '.scratch', 'build.status'), 'utf8').trim();
+			if (raw === '') { return undefined; }
+			// A bare exit code, from a build that ran before the status became JSON. A status left on
+			// disk by an older build must not read as a corrupt one.
+			if (/^\d+$/.test(raw)) { return raw === '0' ? 'ok' : 'failed'; }
+			const status = JSON.parse(raw);
+			return status.outcome === 'ok' ? 'ok' : 'failed';
+		} catch {
+			return undefined;
+		}
+	}
+
+	/** The whole status object, when it is one: the phase it died in, how long it ran, its channel. */
+	function readStatus() {
+		try {
+			const raw = fs.readFileSync(path.join(REPO, '.scratch', 'build.status'), 'utf8').trim();
+			if (raw === '' || /^\d+$/.test(raw)) { return undefined; }
+			return JSON.parse(raw);
 		} catch {
 			return undefined;
 		}
@@ -324,8 +390,13 @@ export function resolvePack(repoRoot) {
 			return true;
 		}
 
-		const percentage = percentageFor(index, startedAt, now);
-		const elapsed = (now - startedAt) / 1000;
+		// When the build and this stage actually started, from its own events; the log's age when
+		// there is no event stream to ask.
+		const events = readEvents();
+		const buildStartedAt = events?.startedAt ?? startedAt;
+		const stageStartedAt = events?.starts?.get(PHASE_FOR_STAGE[index]) ?? buildStartedAt;
+		const percentage = percentageFor(index, stageStartedAt, now);
+		const elapsed = (now - buildStartedAt) / 1000;
 		const remaining = percentage > 2 ? (elapsed / percentage) * (100 - percentage) : undefined;
 		const line = `\r  ${bar(percentage)} ${String(Math.round(percentage)).padStart(3)}%  -  ${STAGES[index].label}  -  ${clock(elapsed)}` +
 			(remaining === undefined ? '' : `, about ${clock(remaining)}`) + '   ';
@@ -359,6 +430,8 @@ export function resolvePack(repoRoot) {
 				elapsedSeconds: 0,
 				remainingSeconds: 0,
 				done: verdict,
+				phaseName: readStatus()?.phaseName ?? '',
+				exitCode: readStatus()?.exitCode ?? (verdict === 'ok' ? 0 : null),
 				lastLine: '',
 			}) + '\n');
 			process.exit(0);
@@ -369,8 +442,11 @@ export function resolvePack(repoRoot) {
 		if (state.done === undefined && verdict !== undefined) { state.done = verdict; }
 		const now = Date.now();
 		const index = state.index ?? 1;
-		const percentage = state.done === 'ok' ? 100 : percentageFor(index, startedAt, now);
-		const elapsed = (now - startedAt) / 1000;
+		const events = readEvents();
+		const buildStartedAt = events?.startedAt ?? startedAt;
+		const stageStartedAt = events?.starts?.get(PHASE_FOR_STAGE[index]) ?? buildStartedAt;
+		const percentage = state.done === 'ok' ? 100 : percentageFor(index, stageStartedAt, now);
+		const elapsed = (now - buildStartedAt) / 1000;
 		process.stdout.write(JSON.stringify({
 			percentage: Math.round(percentage * 10) / 10,
 			stage: STAGES[index].label,
@@ -380,6 +456,9 @@ export function resolvePack(repoRoot) {
 			elapsedSeconds: Math.round(elapsed),
 			remainingSeconds: state.done === undefined && percentage > 2 ? Math.round((elapsed / percentage) * (100 - percentage)) : 0,
 			done: state.done ?? null,
+			// Which phase it died in, and its exact exit code, when the build left a JSON status.
+			phaseName: readStatus()?.phaseName ?? '',
+			exitCode: readStatus()?.exitCode ?? (state.done === 'ok' ? 0 : null),
 			lastLine: state.lastLine.replace(/\u001b\[[0-9;]*m/g, '').trim(),
 		}) + '\n');
 		process.exit(0);

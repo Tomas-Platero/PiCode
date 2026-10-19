@@ -178,10 +178,97 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 mkdir -p "${ROOT_DIR}/.scratch"
+
+# ---------------------------------------------------------------------------
+# The build's own record
+# ---------------------------------------------------------------------------
+# Two files, for a caller that wants the facts instead of the prose:
+#
+#   .scratch/build.jsonl    one JSON object per event, appended as it happens: the build starting,
+#                           a phase starting, a phase ending, the build ending. Append-only, so a
+#                           watcher can tail it and a crash keeps everything before the crash.
+#   .scratch/build.status   one JSON object, written once, when the build ends: the verdict.
+#
+# Both are written by the build itself, so a build run by hand and one run through
+# `build/build-run.sh` leave the same record. The runner adds only what the build cannot know
+# about itself: its own pid, the flags it was given, the log it teed.
+#
+# `build.status` used to be a bare exit code, which said that the build had ended and nothing
+# else: not the phase it died in, not how long it ran. It is JSON now, and its readers still
+# accept a bare number, so a status left by an older build is not misread as a corrupt one.
+PICODE_BUILD_STARTED_AT=$( date +%s )
+EVENTS="${ROOT_DIR}/.scratch/build.jsonl"
+STATUS="${ROOT_DIR}/.scratch/build.status"
+
+# One event. The caller passes the object body; the timestamp is the record's to add.
+picode_event() {  # picode_event <json body without the leading at field>
+  printf '{"at":"%s",%s}\n' "$( date -u +%Y-%m-%dT%H:%M:%SZ )" "$1" >> "${EVENTS}" 2> /dev/null || true
+}
+
+# The phase in progress, so the status can name the one that failed.
+PICODE_PHASE_NUMBER=0
+PICODE_PHASE_NAME=""
+PICODE_PHASE_AT=${PICODE_BUILD_STARTED_AT}
+
+# The phase's end. The outcome is the build's to decide; the seconds are measured, not estimated.
+picode_phase_end() {  # picode_phase_end <ok|stopped>
+  local seconds=$(( $( date +%s ) - PICODE_PHASE_AT ))
+  picode_event "\"event\":\"phase-end\",\"phase\":${PICODE_PHASE_NUMBER},\"name\":\"${PICODE_PHASE_NAME}\",\"outcome\":\"$1\",\"seconds\":${seconds}"
+}
+
+# A phase, announced to a person and recorded for a machine at the same time: the human line is
+# printed exactly as it always was, and the event is what a caller reads. Opening a phase closes
+# the previous one as `ok`, because a phase that failed never reaches the next one.
+picode_phase() {  # picode_phase <number> <machine-name> <what a person reads>
+  if [[ "${PICODE_PHASE_NUMBER}" != "0" ]]; then
+    picode_phase_end "ok"
+  fi
+  PICODE_PHASE_NUMBER="$1"
+  PICODE_PHASE_NAME="$2"
+  PICODE_PHASE_AT=$( date +%s )
+  picode_event "\"event\":\"phase-start\",\"phase\":${1},\"name\":\"${2}\""
+  echo ""
+  echo "== phase $1/5 - $3"
+}
+
+# The verdict, as one object.
+picode_write_status() {  # picode_write_status <exit code>
+  local rc="$1"
+  local outcome="ok"
+  if [[ "${rc}" != "0" ]]; then outcome="failed"; fi
+  local ended duration
+  ended=$( date +%s )
+  duration=$(( ended - PICODE_BUILD_STARTED_AT ))
+  # `date -d @` is GNU; Git Bash has it, and the empty fallback keeps a build on a date without it
+  # from going out with no status at all.
+  printf '{"exitCode":%s,"outcome":"%s","channel":"%s","phase":%s,"phaseName":"%s","packDir":"%s","version":"%s","startedAt":"%s","endedAt":"%s","durationSeconds":%s}\n' \
+    "${rc}" \
+    "${outcome}" \
+    "${PICODE_CHANNEL:-}" \
+    "${PICODE_PHASE_NUMBER}" \
+    "${PICODE_PHASE_NAME}" \
+    "$( basename "${PACK_DIR:-}" )" \
+    "${APP_VERSION:-}" \
+    "$( date -u -d "@${PICODE_BUILD_STARTED_AT}" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo '' )" \
+    "$( date -u -d "@${ended}" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo '' )" \
+    "${duration}" > "${STATUS}" 2> /dev/null || true
+}
+
+# The build's last event. A function rather than an inline call so the exit trap can stay
+# single-quoted and pass a plain argument, with no escaping to get wrong.
+picode_end_event() {  # picode_end_event <exit code>
+  picode_event "\"event\":\"end\",\"exitCode\":$1"
+}
+
+# A build's events are its own: the file is emptied at the start, so a watcher never reads the
+# previous run's phases as this one's.
+: > "${EVENTS}" 2> /dev/null || true
+picode_event '"event":"start","pid":'"$$"
+
 # The channel seal's undo: a no-op until the seal replaces it with the real saver. Defined
 # here so the exit trap below can call it on any path, even one that exits before phase 1
 # reaches the channel block.
-trap 'rc=$?; printf "%s" "$rc" > "${ROOT_DIR}/.scratch/build.status"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+trap 'rc=$?; picode_write_status "${rc}"; picode_end_event "${rc}"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
 
 # The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
 # The functions and their rationale live in build/data-hold.sh; build.sh calls recover + move-aside
@@ -197,8 +284,7 @@ PICODE_DATA_HOLD_DIR="$(picode_data_hold_dir "${PACK_DIR}")"
 # The three things that leave the tree ready to compile, in one phase because they are one job:
 # confirm the tree is PiCode's, put the product identity on it, and install what it needs. Of the
 # three, only the install can be long, and only the first time it runs.
-echo ""
-echo "== phase 1/5 - prepare (the source, the identity, the dependencies)"
+picode_phase 1 "prepare" "prepare (the source, the identity, the dependencies)"
 
 if [[ ! -f ./product.json ]]; then
   echo "error: product.json is missing." >&2
@@ -528,6 +614,7 @@ if [[ "${CHECK_ONLY}" == "yes" ]]; then
   echo "== phase 1/5 reached. -o was given: nothing was installed or compiled."
   echo "source:  . (the PiCode source, identity checked)"
   echo "next:    ./build/build.sh    to install, compile and pack"
+  picode_phase_end "ok"
   exit 0
 fi
 
@@ -584,8 +671,7 @@ fi
 # connector gets inside the binary — but it does not run `tsc` for it, and an extension
 # packaged without its `out/` never activates. It runs after the dependencies because it compiles
 # with the tree's own typings, and before the pack because the pack is what collects it.
-echo ""
-echo "== phase 2/5 - compile the connector"
+picode_phase 2 "connector" "compile the connector"
 
 # The vscode-languageserver patch must land before the extensions compile: the markdown
 # server's dist is regenerated from its node_modules here, and the patched uriToFilePath
@@ -597,8 +683,7 @@ bash build/build-connector.sh
 # ---------------------------------------------------------------------------
 # Compile
 # ---------------------------------------------------------------------------
-echo ""
-echo "== phase 3/5 - compile the editor (vscode-min-prepack)"
+picode_phase 3 "compile" "compile the editor (vscode-min-prepack)"
 
 export VSCODE_PUBLISH_COUNTER=1
 
@@ -634,8 +719,7 @@ node build/lib/policies/policyGenerator.ts build/lib/policies/policyData.jsonc "
 # ---------------------------------------------------------------------------
 # Pack
 # ---------------------------------------------------------------------------
-echo ""
-echo "== phase 4/5 - pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
+picode_phase 4 "pack" "pack (vscode-${PACK_PLATFORM}-${VSCODE_ARCH}-min-packing)"
 
 # The pack task deletes the whole pack folder before writing it (util.rimraf in
 # build/gulpfile.vscode.ts), and data/ -- the portable profile -- lives inside it.
@@ -736,8 +820,7 @@ node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_mo
 # pi and the durable agent are independent: neither reads the other's output, and both only
 # write into the pack. Running them in parallel shaves the longer of the two off the build
 # instead of adding them.
-echo ""
-echo "== phase 5/5 - pi, the durable agent, and the distribution layer, onto ${PACK_DIR}"
+picode_phase 5 "stage" "pi, the durable agent, and the distribution layer, onto ${PACK_DIR}"
 
 bash build/pi-runtime.sh "${PACK_DIR}" &
 PI_PID=$!
@@ -823,6 +906,9 @@ else
   echo "error: the pack did not pass verification; see above." >&2
   exit 1
 fi
+
+# Phase 5 covers the staging and this verification; the installer below is an optional extra.
+picode_phase_end "ok"
 
 # ---------------------------------------------------------------------------
 # The Windows installer (off unless asked for)

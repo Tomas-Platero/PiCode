@@ -2,21 +2,22 @@
 #
 # Runs a build, and leaves behind everything a watcher needs to follow it.
 #
-# `dev/build.sh` alone prints its phases and nothing else: a caller cannot tell whether a build is
+# `build/build.sh` alone prints its phases and nothing else: a caller cannot tell whether a build is
 # running, how far it got, or how it ended. This wraps it for the callers that need that — the
-# terminal viewer and the little window — and writes three things:
+# terminal viewer and the little window — and writes four things:
 #
-#   .scratch/build.lock     the pid of the build in flight; its absence means nothing is running
+#   .scratch/build.lock      the pid of the build in flight; its absence means nothing is running
 #   .scratch/build-live.log  the build's own output, as it arrives
-#   .scratch/build.status    the exit code, once it ends
+#   .scratch/build.jsonl     the build's events, one JSON object per line, as they happen
+#   .scratch/build.status    the verdict, as one JSON object, once it ends
 #
 # It also takes care of the owner's profile, which the pack deletes when it rewrites the platform
 # directory: copied aside before the build, put back after. A collaborator with nothing there loses
 # nothing; somebody building over the editor they use every day would lose everything.
 #
-# Usage: dev/build-run.sh [build.sh flags...]        (default: the whole build)
+# Usage: build/build-run.sh [build.sh flags...]        (default: the whole build)
 #
-# With no flags it runs `dev/build.sh` with no flags: check the source, install what is missing,
+# With no flags it runs `build/build.sh` with no flags: check the source, install what is missing,
 # compile, pack and stage. That is what "build" means to a person, and it is safe to repeat —
 # the source is never fetched and the dependencies are installed once, so a repeat build is
 # compile and pack and nothing else.
@@ -27,8 +28,8 @@
 set -eo pipefail
 
 # The one definition of "is an editor running?" lives beside the profile it protects
-# (`dev/data-hold.sh`), because the build asks the same question again before the pack.
-# shellcheck source=dev/data-hold.sh
+# (`build/data-hold.sh`), because the build asks the same question again before the pack.
+# shellcheck source=build/data-hold.sh
 source "$( dirname "$0" )/data-hold.sh"
 
 FLAGS=("$@")
@@ -39,6 +40,7 @@ find .scratch -name '*.log' -mtime +7 -delete 2>/dev/null || true
 LOCK=".scratch/build.lock"
 LOG=".scratch/build-live.log"
 STATUS=".scratch/build.status"
+EVENTS=".scratch/build.jsonl"
 
 if [[ -f "${LOCK}" ]]; then
   RUNNING=$( cat "${LOCK}" )
@@ -65,7 +67,7 @@ if [[ "${FLAGS[0]}" != "-DepsOnly" ]] && picode_editor_running; then
 fi
 
 echo $$ > "${LOCK}"
-rm -f "${STATUS}"
+rm -f "${STATUS}" "${EVENTS}"
 : > "${LOG}"
 
 cleanup() {
@@ -74,8 +76,8 @@ cleanup() {
 trap cleanup EXIT
 
 # The owner's profile is **not** copied here. It lives at <pack>/data, and the pack's own delete would
-# eat it -- which is what `dev/data-hold.sh` exists for: a rename aside (atomic, no 1+ GB duplicate) and
-# back, done by `dev/build.sh` around the pack phase, with its own recovery at the start of the next
+# eat it -- which is what `build/data-hold.sh` exists for: a rename aside (atomic, no 1+ GB duplicate) and
+# back, done by `build/build.sh` around the pack phase, with its own recovery at the start of the next
 # run. The copy-and-restore that used to sit on these two lines was a second mechanism for the same
 # folder, and it named it without the suffix this runner builds with (PiCode-Win32-x64 instead of
 # "PiCode-win32-x64 - experimental"), so all it ever produced was an empty skeleton profile beside the
@@ -110,5 +112,36 @@ fi
 set -e
 
 
-echo "${BUILD_STATUS}" > "${STATUS}"
+# The runner's own facts go into the same record: its pid, the flags it was given, the log it teed.
+# `build.sh` wrote the verdict already; this adds to it instead of replacing it, and fills in the
+# shape when there was no status to add to (a dependencies-only run never reaches `build.sh`, and a
+# build killed outright never reaches its own trap).
+node -e '
+	const fs = require("node:fs");
+	const [file, code, pid, log, flags, first] = process.argv.slice(1);
+	const exitCode = Number(code);
+	let status;
+	try {
+		const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+		if (parsed !== null && typeof parsed === "object") { status = parsed; }
+	} catch {
+		// No status from the build: the runner facts below are all there is.
+	}
+	status ??= {};
+	status.exitCode = exitCode;
+	status.outcome = exitCode === 0 ? "ok" : "failed";
+	status.channel ??= "";
+	status.phase ??= 0;
+	status.phaseName ??= first === "-DepsOnly" ? "dependencies" : "";
+	status.packDir ??= "";
+	status.version ??= "";
+	status.startedAt ??= "";
+	status.endedAt ??= "";
+	status.durationSeconds ??= 0;
+	status.runnerPid = Number(pid);
+	status.flags = flags.split(" ").filter(flag => flag.length > 0);
+	status.logFile = log;
+	fs.writeFileSync(file, JSON.stringify(status) + "\n");
+' "${STATUS}" "${BUILD_STATUS}" "$$" "${LOG}" "${FLAGS[*]}" "${FLAGS[0]:-}"
+
 exit "${BUILD_STATUS}"
