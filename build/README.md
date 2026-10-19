@@ -41,6 +41,31 @@ be PiCode.
 It is not a shipping build: the release pipeline always runs `./build/build.sh`.
 Both are also reachable as `npm run build:pack` and `npm run build:fast`.
 
+## ♻️ What a build reuses
+
+A build is not all-or-nothing. Three fingerprints are taken at the start, each covering the
+inputs of one step, and a step whose inputs are byte-identical to the last **successful** build is
+skipped:
+
+| Fingerprint | Covers | Skips |
+| --- | --- | --- |
+| `app` | `src/`, the build's own logic, `product.json` | the esbuild bundle (~2 min) |
+| `extensions` | `extensions/` | compiling and bundling the built-in extensions (~25 s) |
+| `pack` | everything that ends up inside the pack | the whole build (~4 min) |
+
+The outputs are checked as well as the fingerprint, so a folder somebody deleted is rebuilt
+instead of trusted. Change only `extensions/` and the bundle is reused; change nothing and the
+build says so in seconds. Change `src/` and the bundle is rebuilt, which is the honest answer:
+esbuild bundles everything in one pass and has no per-file incremental mode here.
+
+`PICODE_FULL_BUILD=1` ignores the cache, for the day something smells stale and the answer needs to
+be "rebuild it all" without hunting for what to delete. The fingerprints live in
+`.scratch/cache/`; deleting that folder forgets what was built, it never keeps a stale pack.
+
+What the fingerprints do **not** cover: the state of a running editor, files the build creates
+outside the tree, and the installer. A build that reused a step still stages and verifies the pack
+in full.
+
 ## 🧱 Phases
 
 | # | Phase | What runs |
@@ -62,7 +87,7 @@ files, grouped by what it is for, each command keeping the name it always had:
 
 | File | Commands |
 | --- | --- |
-| `build-helpers.mjs` | `deps-current`, `requirements`, `pack-dir`, `progress`, `restore-profile` |
+| `build-helpers.mjs` | `deps-current`, `requirements`, `pack-dir`, `progress`, `restore-profile`, `cache` |
 | `docs.mjs` | `check`, `map` |
 | `release.mjs` | `release-notes`, `update-feed` |
 | `branding.mjs` | `brand-copy`, `ico-to-png`, `make-inno-images`, `patch-inno-updater` |
@@ -202,12 +227,9 @@ Nothing is lost that a repository should hold:
   version into any of them makes the install look stale. Installing once too
   often is preferred to trusting a tree that has not been checked — and it is
   what re-applies the `gulp-electron` patch on the build after an install.
-- **The compile and the pack always run in full.** Neither reuses anything from
-  the previous build: `compile-build-without-mangling` starts with
-  `util.rimraf('out-build')`, and `bundle-vscode` and `minify-vscode` wipe
-  `out-vscode` and `out-vscode-min`. `npm run build-fast` (`build/next/`) is the
-  incremental lane, but it feeds the dev host's `out/`, not the pack; making the
-  pack incremental is the next real win and is not done.
+- **The whole-tree fingerprint costs ~1.5 s.** It reads every tracked file under the roots (144 MB
+  here), which is far less than the bundle it can save, but it is not free: on a tree on a slow
+  disk or a network share it will be the second thing a build does after the dependency check.
 - **CI is on.** Two workflows: `.github/workflows/ci.yml` (compile, connector
   tests, artifact, on pushes and PRs, doc-only changes ignored) and
   `.github/workflows/release.yml` (tag-driven release: build, publish, feed,

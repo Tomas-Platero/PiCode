@@ -675,6 +675,61 @@ fi
 # an install puts the original back and the build patches it again every time (idempotent).
 node build/checks.mjs patch-gulp-electron
 
+# ---------------------------------------------------------------------------
+# What this build can reuse
+# ---------------------------------------------------------------------------
+# Three fingerprints, each covering the inputs of one step: the bundle reads src/, the extension
+# build reads extensions/, and the pack reads both plus everything staged into it. A step whose
+# inputs are byte-identical to the last successful build is skipped; its outputs are checked too, so
+# a folder somebody deleted is rebuilt instead of trusted.
+#
+# `PICODE_FULL_BUILD=1` ignores all of it, for the day something looks stale and the answer needs to
+# be "rebuild everything" without hunting for what to delete.
+PICODE_CACHE_ENV=(
+  "channel=${PICODE_CHANNEL:-}"
+  "arch=${VSCODE_ARCH}"
+  "pack=$( basename "${PACK_DIR}" )"
+  "fast=${PICODE_FAST:-0}"
+  "cli=${PICODE_REQUIRE_CLI:-0}"
+)
+KEY_APP=$( node build/build-helpers.mjs cache fingerprint app "${PICODE_CACHE_ENV[@]}" )
+KEY_EXT=$( node build/build-helpers.mjs cache fingerprint extensions "${PICODE_CACHE_ENV[@]}" )
+KEY_PACK=$( node build/build-helpers.mjs cache fingerprint pack "${PICODE_CACHE_ENV[@]}" )
+
+# What the early exit trusts is exactly what the verification at the end trusts: an editor
+# executable, the packaged out/, the durable agent and pi.
+pack_intact() {
+  [[ -d "${PACK_DIR}" ]] || return 1
+  compgen -G "${PACK_DIR}/PiCode*.exe" > /dev/null || return 1
+  [[ -f "${PACK_DIR}/resources/app/out/cli.js" ]] || return 1
+  [[ -f "${PACK_DIR}/resources/durable/cli.js" ]] || return 1
+  local pi_entry
+  pi_entry="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./build/distribution/runtime.json').package" )/dist/index.js"
+  [[ -f "${pi_entry}" ]] || return 1
+}
+
+if [[ "${PICODE_FULL_BUILD:-0}" != "1" ]] && pack_intact \
+  && node build/build-helpers.mjs cache matches pack "${KEY_PACK}"; then
+  echo ""
+  echo "== nothing changed since the last successful build: $( basename "${PACK_DIR}" ) already is that build"
+  echo "   PICODE_FULL_BUILD=1 rebuilds everything anyway."
+  picode_phase_end "ok"
+  exit 0
+fi
+
+export PICODE_SKIP_BUNDLE=0
+export PICODE_SKIP_EXTENSIONS=0
+if [[ "${PICODE_FULL_BUILD:-0}" != "1" ]]; then
+  if node build/build-helpers.mjs cache matches app "${KEY_APP}" out-vscode-min/vs; then
+    export PICODE_SKIP_BUNDLE=1
+    echo "  -- src/ is unchanged: the last build's bundle is reused"
+  fi
+  if node build/build-helpers.mjs cache matches extensions "${KEY_EXT}" extensions/git/out extensions/markdown-language-features/out; then
+    export PICODE_SKIP_EXTENSIONS=1
+    echo "  -- extensions/ is unchanged: their compiled output is reused"
+  fi
+fi
+
 
 # ---------------------------------------------------------------------------
 # The connector
@@ -931,6 +986,11 @@ fi
 
 # Phase 5 covers the staging and this verification; the installer below is an optional extra.
 picode_phase_end "ok"
+
+# These inputs produced this pack. The next build may reuse the parts it did not change.
+node build/build-helpers.mjs cache record app "${KEY_APP}"
+node build/build-helpers.mjs cache record extensions "${KEY_EXT}"
+node build/build-helpers.mjs cache record pack "${KEY_PACK}"
 
 # ---------------------------------------------------------------------------
 # The Windows installer (off unless asked for)

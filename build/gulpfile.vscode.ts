@@ -711,16 +711,35 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 		let vscodeTask: task.Task;
 
+		// One decision, in one place, for the whole extension trio. When the caller says
+		// `extensions/` has not changed since the last build, cleaning and rebuilding it is 25
+		// seconds spent to produce the bytes already on disk; skipping is what turns an
+		// extension-only change into a ~90-second build. `build.sh` only says so when the
+		// fingerprint of `extensions/` matches the last successful build and the outputs are there.
+		const extensionsBuildTask = process.env.PICODE_SKIP_EXTENSIONS === '1'
+			? task.define(`picode-extensions${dashed(minified)}-skipped`, async () => {
+				console.log('[extensions] skipped: extensions/ is unchanged since the last build');
+			})
+			: task.series(cleanExtensionsBuildTask, compileNonNativeExtensionsBuildTask, compileExtensionMediaBuildTask);
+
 		if (useEsbuildTranspile) {
 			const esbuildBundleTask = task.define(
 				`esbuild-bundle${dashed(platform)}${dashed(arch)}${dashed(minified)}`,
-				() => runEsbuildBundle(
-					sourceFolderName,
-					!!minified,
-					true,
-					'desktop',
-					minified && useCdnSourceMapsForPackagingTasks ? `${sourceMappingURLBase}/core` : undefined
-				)
+				async () => {
+					// Same idea as the extensions: the bundler is the two minutes of the build, and
+					// it reads only `src/` and the build's own logic.
+					if (process.env.PICODE_SKIP_BUNDLE === '1') {
+						console.log('[bundle] skipped: src/ and the build logic are unchanged since the last build');
+						return;
+					}
+					await runEsbuildBundle(
+						sourceFolderName,
+						!!minified,
+						true,
+						'desktop',
+						minified && useCdnSourceMapsForPackagingTasks ? `${sourceMappingURLBase}/core` : undefined
+					);
+				}
 			);
 
 			const prepackTask = task.define(`vscode${dashed(minified)}-prepack`, task.series(
@@ -739,9 +758,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 					await spawnTsgo(path.join(root, 'src', 'tsconfig.json'), { taskName: 'picode-typecheck', noEmit: true });
 				}),
 				copyCodiconsTask,
-				cleanExtensionsBuildTask,
-				compileNonNativeExtensionsBuildTask,
-				compileExtensionMediaBuildTask,
+				extensionsBuildTask,
 			));
 			task.task(prepackTask);
 
@@ -759,9 +776,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 		} else {
 			const prepackTask = task.define(`vscode${dashed(minified)}-prepack`, task.series(
 				compileBuildWithoutManglingTask,
-				cleanExtensionsBuildTask,
-				compileNonNativeExtensionsBuildTask,
-				compileExtensionMediaBuildTask,
+				extensionsBuildTask,
 				minified ? minifyVSCodeTask : bundleVSCodeTask,
 			));
 			task.task(prepackTask);

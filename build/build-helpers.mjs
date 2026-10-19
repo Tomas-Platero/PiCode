@@ -1055,7 +1055,169 @@ export function resolvePack(repoRoot) {
 	}
 
 
-const USAGE = `usage: node build/build-helpers.mjs <progress|requirements|deps-current|pack-dir|restore-profile>\n`;
+	// cache -- what makes the next build cheap
+	/*
+	 * A content fingerprint per build step, so a step whose inputs did not change can be skipped.
+	 *
+	 * Three scopes, because three things cost real time and each reads a different part of the tree:
+	 *
+	 *   app         src/ and the build's own logic -- the esbuild bundle (~2 minutes)
+	 *   extensions  extensions/ -- compiling and bundling the built-in extensions (~25 s)
+	 *   pack        everything that ends up in the pack -- the whole build (~4 minutes)
+	 *
+	 * The fingerprint is SHA-256 over every file's path and bytes, in sorted order, for a declared
+	 * list of roots. It walks the tree instead of asking git, so a file created but not yet added
+	 * still changes it. `node_modules`, `out`, `out-*`, `dist` and `target` are skipped: they are
+	 * outputs (fingerprinting them would make every build look different from the last) or
+	 * dependencies (fingerprinting them would read a gigabyte to learn nothing).
+	 *
+	 * `matches` answers the two halves of the same question: is this the fingerprint of the last
+	 * successful build, and are the outputs still there? A fingerprint alone would trust a folder
+	 * somebody deleted, and an output alone would trust a folder from another source.
+	 *
+	 * Usage:
+	 *   node build/build-helpers.mjs cache fingerprint <scope> [extra=value...]
+	 *   node build/build-helpers.mjs cache record <scope> <key>
+	 *   node build/build-helpers.mjs cache matches <scope> <key> [<output path>...]
+	 */
+	const CACHE_SCOPES = {
+		app: [
+			'src',
+			'build/lib',
+			'build/gulpfile.vscode.ts',
+			'build/gulpfile.extensions.ts',
+			'build/buildConfig.ts',
+			'product.json',
+			'package.json',
+			'.nvmrc',
+		],
+		extensions: ['extensions', 'product.json'],
+		pack: [
+			'src',
+			'extensions',
+			'resources',
+			// The build's own pieces, not the whole folder: a README under `build/` documents the
+			// build, it does not change the pack, and hashing it would make every documentation
+			// edit look like a reason to rebuild four minutes of editor.
+			'build/lib',
+			'build/npm',
+			'build/distribution',
+			'build/build.sh',
+			'build/build-connector.sh',
+			'build/build-cli.sh',
+			'build/pi-runtime.sh',
+			'build/durable-runtime.sh',
+			'build/stage-distribution.sh',
+			'build/data-hold.sh',
+			'build/checks.mjs',
+			'build/branding.mjs',
+			'build/gulpfile.vscode.ts',
+			'build/gulpfile.extensions.ts',
+			'build/buildConfig.ts',
+			'cli/src',
+			'cli/Cargo.toml',
+			'cli/Cargo.lock',
+			'product.json',
+			'package.json',
+			'package-lock.json',
+			'.nvmrc',
+		],
+	};
+
+	// Directories whose contents are outputs or dependencies, never inputs.
+	const CACHE_EXCLUDED = new Set(['node_modules', 'dist', 'target', '.git']);
+	const isExcluded = name => CACHE_EXCLUDED.has(name) || name === 'out' || name.startsWith('out-');
+
+	function cacheFiles(root, entry, into) {
+		const full = path.join(root, entry);
+		let stat;
+		try {
+			stat = fs.statSync(full);
+		} catch {
+			return;
+		}
+		if (stat.isDirectory()) {
+			for (const child of fs.readdirSync(full).sort()) {
+				if (!isExcluded(child)) {
+					cacheFiles(root, path.join(entry, child), into);
+				}
+			}
+		} else if (stat.isFile()) {
+			into.push(entry);
+		}
+	}
+
+	async function cmdCache(cli) {
+		const crypto = await import('node:crypto');
+		const [action, scope, ...rest] = cli;
+		const roots = CACHE_SCOPES[scope];
+		if (action === undefined || roots === undefined) {
+			process.stderr.write(`usage: node build/build-helpers.mjs cache <fingerprint|record|matches> <${Object.keys(CACHE_SCOPES).join('|')}> ...\n`);
+			process.exit(2);
+		}
+
+		const cacheDir = path.join(REPO, '.scratch', 'cache');
+		const keyFile = path.join(cacheDir, `${scope}.key`);
+
+		if (action === 'record') {
+			const [key] = rest;
+			if (key === undefined) {
+				process.stderr.write('usage: node build/build-helpers.mjs cache record <scope> <key>\n');
+				process.exit(2);
+			}
+			fs.mkdirSync(cacheDir, { recursive: true });
+			fs.writeFileSync(keyFile, `${key}\n`);
+			return;
+		}
+
+		if (action === 'matches') {
+			const [key, ...outputs] = rest;
+			let recorded;
+			try {
+				recorded = fs.readFileSync(keyFile, 'utf8').trim();
+			} catch {
+				recorded = undefined;
+			}
+			if (key === undefined || recorded !== key) {
+				return process.exit(1);
+			}
+			for (const output of outputs) {
+				if (!fs.existsSync(path.join(REPO, output))) {
+					return process.exit(1);
+				}
+			}
+			return;
+		}
+
+		if (action !== 'fingerprint') {
+			process.stderr.write(`usage: node build/build-helpers.mjs cache <fingerprint|record|matches> <${Object.keys(CACHE_SCOPES).join('|')}> ...\n`);
+			process.exit(2);
+		}
+
+		const files = [];
+		for (const root of roots) {
+			cacheFiles(REPO, root, files);
+		}
+		files.sort();
+
+		const hash = crypto.createHash('sha256');
+		// What the caller knows and the tree does not: channel, pack folder, architecture, whether
+		// the CLI was required. Two builds that differ only in those produce different packs.
+		for (const extra of rest) {
+			hash.update(`env:${extra}\0`);
+		}
+		let bytes = 0;
+		for (const file of files) {
+			const data = fs.readFileSync(path.join(REPO, file));
+			hash.update(`file:${file}\0`);
+			hash.update(data);
+			bytes += data.length;
+		}
+		process.stdout.write(`${hash.digest('hex')}\n`);
+	}
+
+
+const USAGE = `usage: node build/build-helpers.mjs <progress|requirements|deps-current|pack-dir|restore-profile|cache>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -1070,6 +1232,8 @@ async function dispatch() {
 			return cmdPackDir(cli.slice(1));
 		case 'restore-profile':
 			return cmdRestoreProfile(cli.slice(1));
+		case 'cache':
+			return cmdCache(cli.slice(1));
 		default:
 			process.stderr.write(USAGE);
 			return process.exit(2);
