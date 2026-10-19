@@ -1,7 +1,7 @@
 # Continuous build for PiCode: compile, test, pack, upload.
 #
 # The long poles are npm ci (5-8 min cold) and the electron binary download.
-# Both are cached: node_modules keyed on the lockfile (dev/deps-current.mjs
+# Both are cached: node_modules keyed on the lockfile (build/deps-current.mjs
 # then reuses it and skips npm ci), the npm cache (covers the pi runtime
 # install too) and the electron download cache. A warm run is build.sh's
 # own ~3 minutes.
@@ -63,12 +63,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ]; then
-            node dev/check-docs.mjs
+            node build/check-docs.mjs
           elif git fetch --depth=1 origin "$BASE_REF"; then
-            node dev/check-docs.mjs --base FETCH_HEAD
+            node build/check-docs.mjs --base FETCH_HEAD
           else
             # The base could not be fetched: the static half still runs.
-            node dev/check-docs.mjs
+            node build/check-docs.mjs
           fi
 
       # node_modules is reused whenever the lockfile has not moved:
@@ -78,10 +78,10 @@ jobs:
       - name: Cache node_modules and npm cache
         uses: actions/cache@v6
         env:
-          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+          LOCK: ${{ hashFiles('package-lock.json') }}
         with:
           path: |
-            picode-source/node_modules
+            node_modules
             ~\AppData\Local\npm-cache
           key: picode-nm-${{ runner.os }}-${{ env.LOCK }}
           restore-keys: picode-nm-${{ runner.os }}-
@@ -92,7 +92,7 @@ jobs:
       - name: Cache electron binary
         uses: actions/cache@v6
         env:
-          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+          LOCK: ${{ hashFiles('package-lock.json') }}
         with:
           path: ~\AppData\Local\electron\Cache
           key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
@@ -122,17 +122,43 @@ jobs:
           echo "vs2022_install=${VS_PATH}" >> "$GITHUB_ENV"
           echo "C++ toolchain: ${VS_PATH}"
 
+      - name: Validate lockfile
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "package-lock.json is missing" >&2; exit 1
+          fi
+          npx --yes npm-check-updates --version >/dev/null 2>&1 || true
+          echo "lockfile present"
+
+      - name: Audit dependencies
+        shell: bash
+        run: npm audit --audit-level=high || true
+
+      - name: Lint shell scripts
+        shell: bash
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck build/*.sh
+          else
+            echo "shellcheck not available; skipping"
+          fi
+
+      - name: Auto-generate docs map
+        shell: bash
+        run: node build/docs.mjs map
+
       - name: Build
         shell: bash
         env:
           # Authenticates @vscode/ripgrep's GitHub download; a cold
           # npm ci without it hits the unauthenticated rate limit (403).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./dev/build.sh
+        run: ./build/build.sh
 
       - name: Connector tests
         shell: bash
-        working-directory: picode-source/extensions/picode
+        working-directory: extensions/picode
         run: |
           for f in test/*.test.ts; do
             node --experimental-strip-types --test "$f" || exit 1
@@ -143,7 +169,7 @@ jobs:
       # shape still passes at runtime.
       - name: Connector test types
         shell: bash
-        working-directory: picode-source
+        working-directory: .
         run: node_modules/.bin/tsc -p extensions/picode/tsconfig.test.json
 
       # What the connector writes into pi's `mcp.json`, through pi's own
@@ -151,17 +177,17 @@ jobs:
       # silently does nothing.
       - name: MCP entries against pi's validator
         shell: bash
-        run: node dev/check-mcp-entries.mjs
+        run: node build/check-mcp-entries.mjs
 
       - name: Resolve the packed folder
         shell: bash
         run: |
           # The packer names the folder after the channel it sealed (PiCode-win32-x64,
-          # plus -beta or -experimental for the other channels). dev/pack-dir.mjs resolves
+          # plus -beta or -experimental for the other channels). build/pack-dir.mjs resolves
           # it the same way the checks do, so the upload follows whatever the build
           # actually produced. A glob could not: Git Bash matches case-sensitively and the
           # platform segment on disk is lower case, so `PiCode-Win32-x64*` found nothing.
-          PACK=$(node dev/pack-dir.mjs)
+          PACK=$(node build/pack-dir.mjs)
           echo "PACK=${PACK}" >> "$GITHUB_ENV"
           echo "packed folder: ${PACK}"
 

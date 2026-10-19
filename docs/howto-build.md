@@ -5,11 +5,11 @@ Este documento describe cómo se compila PiCode desde su propia fuente: qué es
 versión nueva de VS Code.
 
 No sustituye a la release. El **ZIP precompilado** sigue siendo el camino de quien solo
-quiere usar PiCode (montado por `dev/stage-distribution.sh`, descrito en
+quiere usar PiCode (montado por `build/stage-distribution.sh`, descrito en
 [`DISTRIBUTION.md`](DISTRIBUTION.md)). Este es el camino de quien colabora en el núcleo y
 necesita recompilar.
 
-Construir desde la fuente permite que el producto se aplique a `picode-source/product.json` **antes** de compilar, que los `checksums` se calculen sobre el resultado y que un cambio de comportamiento se escriba en TypeScript, en el propio árbol: nada de parchear un bundle minificado.
+Construir desde la fuente permite que el producto se aplique a `product.json` **antes** de compilar, que los `checksums` se calculen sobre el resultado y que un cambio de comportamiento se escriba en TypeScript, en el propio árbol: nada de parchear un bundle minificado.
 
 **Lo que cambió el 2026-09-27**, y es la razón de que este documento se lea distinto: el árbol
 dejó de ser el resultado desechable de aplicar parches en cada build y pasó a ser **la fuente de
@@ -38,7 +38,7 @@ El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
         │
         │  los cambios propios            patches/picode/**
         │
-        │  la capa de producto            distribution/product-delta.json
+        │  la capa de producto            build/distribution/product-delta.json
         ▼
   ./picode-source   ←  esto es PiCode, y aquí se trabaja
 ```
@@ -66,11 +66,11 @@ primeras no es negociable —así se construyó el árbol— pero **el build ya 
 | Capa | Fuente de verdad | Qué aportó | ¿La ejecuta el build? |
 | --- | --- | --- | --- |
 | Fuente | `upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
-| Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro de `picode-source/`**. | No |
-| Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro de `picode-source/`**. | No |
-| Producto | `distribution/product-delta.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
+| Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro de ``**. | No |
+| Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro de ``**. | No |
+| Producto | `build/distribution/product-delta.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
 | El árbol | `./picode-source` | Todo lo anterior ya aplicado, y es donde se edita. | Es la entrada |
-| Empaquetado | `dev/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. | **Sí** — fase 5 |
+| Empaquetado | `build/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. | **Sí** — fase 5 |
 
 ## Dependencias en Windows
 
@@ -81,11 +81,11 @@ Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash
 | --- | --- | --- |
 | **Git for Windows** | Git **y Git Bash**: sin él no hay shell para los scripts. | `winget install --id Git.Git -e` |
 | **Node.js 24.19.0** (lo que dice [`.nvmrc`](../.nvmrc)) | `npm ci` y las tareas gulp. Con nvm-windows: | `nvm install 24.19.0` y luego `nvm use 24.19.0` |
-| ~~**jq**~~ | **Ya no hace falta para nada.** El build lee y escribe el JSON que toca con `node`; el último guion que usaba `jq` (`dev/utils.sh`) fue borrado el 2026-09-27 junto con el aparato de parches. | — |
+| ~~**jq**~~ | **Ya no hace falta para nada.** El build lee y escribe el JSON que toca con `node`; el último guion que usaba `jq` (`build/utils.sh`) fue borrado el 2026-09-27 junto con el aparato de parches. | — |
 | **Python 3.11** | Lo pide el sistema de build de VS Code para los módulos nativos (`node-gyp`). Medido: con **3.14.7** `node-gyp` llegó hasta MSBuild sin quejarse, así que la versión **no** fue el obstáculo; 3.11 es lo que documenta upstream y lo recomendable. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compila algunos módulos nativos de VS Code. Reescribe el `PATH` al terminar: reinicia el shell. | [rustup.rs](https://rustup.rs/) o `winget install --id Rustlang.Rustup -e` |
 | **7-Zip** | Empaqueta archivos `.zip`. | `winget install --id 7zip.7zip -e` |
-| **Visual Studio 2022** (Community o Build Tools) con *Desktop development with C++* **y las librerías Spectre** | `node-gyp` compila los módulos nativos con MSBuild. **Sin las librerías Spectre el build se para** con `error MSB8040` en `@picode-source/deviceid` y `@picode-source/windows-registry`. | Ver el comando de abajo |
+| **Visual Studio 2022** (Community o Build Tools) con *Desktop development with C++* **y las librerías Spectre** | `node-gyp` compila los módulos nativos con MSBuild. **Sin las librerías Spectre el build se para** con `error MSB8040` en `@deviceid` y `@windows-registry`. | Ver el comando de abajo |
 
 El componente Spectre se añade a una instalación existente con el instalador de Visual
 Studio. Hace falta elevación y conviene cerrar Visual Studio antes:
@@ -149,7 +149,7 @@ Los dos pines ya **no dirigen el build**: son la procedencia del árbol.
 
 | Pin | Qué registra |
 | --- | --- |
-| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./picode-source`: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `dev/vscodium-product.json` se borraron con el aparato de parches. |
+| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./picode-source`: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `build/vscodium-product.json` se borraron con el aparato de parches. |
 
 El día que toque una versión nueva, el trabajo **no** es reaplicar parches: es **juntar las dos
 versiones**. Este repositorio recibió el árbol como una importación aplastada (sin el historial
@@ -163,18 +163,18 @@ ejecutado todavía**: se lee como un plan, no como una receta comprobada.
    nunca se versionó; un clon completo cumple la misma función y no depende de esta máquina.
 2. Juntar allí: `git -C .merge-work merge <commit-nuevo>`. Los conflictos salen uno a uno y con
    contexto, en vez de un `git apply` que se para sin decir dónde.
-3. Traer el resultado a casa: copiar el árbol fusionado sobre `picode-source/` (sin tocar
+3. Traer el resultado a casa: copiar el árbol fusionado sobre `` (sin tocar
    `node_modules` ni los `out*`) y commitear aquí —el commit de la juntanza es la nueva
    procedencia—. `git status` en el padre es el control: si solo cambió lo que cambió el merge,
    entró limpio.
 4. Actualizar `tag` y `commit` en `upstream/stable.json`, y —si el delta de producto necesita
-   ajustes para la versión nueva— aplicarlos en `distribution/product-delta.json`. No hay
+   ajustes para la versión nueva— aplicarlos en `build/distribution/product-delta.json`. No hay
    parches que re-vendorizar: se retiraron el 2026-09-27.
-5. Comprobar que el árbol sigue siendo el que el build espera: `./dev/build.sh -o`. Y volver a
+5. Comprobar que el árbol sigue siendo el que el build espera: `./build/build.sh -o`. Y volver a
    guardar el historial fusionado como bundle, para la próxima versión.
 6. Compilar y confirmar que arranca.
 
-`RELEASE_VERSION` sale de `distribution/product-delta.json` (`set.version`), que es la **única**
+`RELEASE_VERSION` sale de `build/distribution/product-delta.json` (`set.version`), que es la **única**
 casa de la versión desde que las fases 1-5 se retiraron. `upstream/stable.json` ya no la fija.
 
 El pin se mueve **a mano**: el vigilante semanal de CI que abría la PR con el pin nuevo se
@@ -183,15 +183,15 @@ eliminó, y [`docs/CI.md`](CI.md) lo explica.
 ## Cómo compilar
 
 ```bash
-./dev/build.sh          # comprueba la fuente, instala si falta, compila, empaqueta y remata
-./dev/build.sh -o       # solo comprobación: segundos, sin instalar ni compilar
-./dev/build.sh -i       # fuerza la instalación de dependencias aunque el estado cuadre
+./build/build.sh          # comprueba la fuente, instala si falta, compila, empaqueta y remata
+./build/build.sh -o       # solo comprobación: segundos, sin instalar ni compilar
+./build/build.sh -i       # fuerza la instalación de dependencias aunque el estado cuadre
 ```
 
-- **`./dev/build.sh`** ejecuta las 5 fases. Necesita las dependencias completas de la sección
+- **`./build/build.sh`** ejecuta las 5 fases. Necesita las dependencias completas de la sección
   anterior, pero solo la **primera vez**: `npm ci` se repite únicamente cuando el estado que
-  VS Code registró deja de cuadrar, que es lo que responde `dev/deps-current.mjs`.
-- **`./dev/build.sh -o`** para **dentro de la fase 1**, después de comprobar la fuente y la
+  VS Code registró deja de cuadrar, que es lo que responde `build/deps-current.mjs`.
+- **`./build/build.sh -o`** para **dentro de la fase 1**, después de comprobar la fuente y la
   identidad y antes de instalar nada; sale con código 0 y **no compila nada**. En la
   práctica son segundos, y es la forma de saber que el árbol es el correcto antes de pagar un
   build largo.
@@ -231,7 +231,7 @@ scripts\code.bat              # arranca el editor DESDE out/ (la primera vez baj
 Cosas que hay que saber de este modo, para que no sorprendan:
 
 - La interfaz sale **en inglés**: el modo desarrollo omite a propósito el paso de traducción.
-  El español lo mete el empaquetado, y para eso está `./dev/build.sh`.
+  El español lo mete el empaquetado, y para eso está `./build/build.sh`.
 - `transpile-client` **no comprueba tipos**. El control salta al construir el producto (y en
   el bucle se puede tener aparte con `npm run gulp watch-client`).
 - El `out/` de desarrollo **nunca se empaqueta**: el build del producto escribe sus propias
@@ -249,13 +249,13 @@ el del icono— siguen siendo verdad hoy.
 retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y en él
 "compilar y empaquetar" ya no es la fase 7.
 
-- `./dev/build.sh -o` se ha ejecutado **dos veces**, salida **0** las dos, con
+- `./build/build.sh -o` se ha ejecutado **dos veces**, salida **0** las dos, con
   **50 patches aplicados** (43 de `patches/vscodium/*.patch`, 6 de
   `patches/vscodium/windows/*.patch`, 1 de `patches/picode/*.patch`) y las **2 acciones
   JSON** de borrado (`52-ext-copilot-remove-it.json` y `80-ui-disable-onboarding.json`,
   148 rutas). Cero `.rej`.
-- `./dev/build.sh -s` se ha ejecutado sobre un árbol ya preparado, salida **0**.
-- La fase 8 (`dev/stage-distribution.sh`) se ha ejecutado sobre una salida de empaquetado
+- `./build/build.sh -s` se ha ejecutado sobre un árbol ya preparado, salida **0**.
+- La fase 8 (`build/stage-distribution.sh`) se ha ejecutado sobre una salida de empaquetado
   **sintética**, salida 0.
 - **La cadena completa hasta `PiCode.exe` se ha ejecutado** en esta máquina, después de
   instalar el componente Spectre de Visual Studio. Resultado: `compile-src … with 0 errors`,
@@ -270,8 +270,8 @@ retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y 
   (`resources/app/resources/win32/code.ico`) y **después** del empaquetado, así que el
   icono ya incrustado no cambiaba. Ahora la marca del icono —y el redibujado de las dos
   teselas del menú Inicio— está **en el árbol**: los ficheros brandados viven en
-  `picode-source/resources/win32/` y se commitean; para cambiarlos, se cambian allí antes de
-  empaquetar (el `dev/prepare_vscode.sh` que hacía esta marca murió con el aparato de parches).
+  `resources/win32/` y se commitean; para cambiarlos, se cambian allí antes de
+  empaquetar (el `build/prepare_vscode.sh` que hacía esta marca murió con el aparato de parches).
 - **Verificado después del arreglo, y sin lugar a dudas:** parseando el directorio de
   recursos del PE, los **7 frames** de `distribution/picode.ico` (16, 24, 32, 48, 64, 128 y
   256) están presentes en `PiCode.exe` **byte a byte**. Ojo con la forma de medirlo:
@@ -282,13 +282,13 @@ retirado) son los del build **antiguo, de 8 fases**. El build de hoy tiene 5, y 
 ## El camino retirado: los parches (borrados)
 
 El 2026-09-27 el dueño decidió que PiCode no se mantiene con parches, y se **borró** todo el
-aparato: `patches/**` (los propios y los heredados de VSCodium), `dev/get_repo.sh`,
-`dev/prepare_vscode.sh`, `dev/patch.sh`, `dev/update_patches.sh`, `dev/version.sh`,
-`dev/utils.sh`, `dev/vscodium-product.json`, `upstream/vscodium.json` y `dev/ci/pin-check.sh`.
+aparato: `patches/**` (los propios y los heredados de VSCodium), `build/get_repo.sh`,
+`build/prepare_vscode.sh`, `build/patch.sh`, `build/update_patches.sh`, `build/version.sh`,
+`build/utils.sh`, `build/vscodium-product.json`, `upstream/vscodium.json` y `build/ci/pin-check.sh`.
 
 Lo que merecía la pena guardar de ese camino está en otras manos:
 
-- **Los cambios son la fuente**: `picode-source/`, versionada en este repositorio.
+- **Los cambios son la fuente**: ``, versionada en este repositorio.
 - **La procedencia es un único pin**: `upstream/stable.json` (commit `08d4889f`, VS Code
   1.135.0) y el plan para la siguiente versión está más arriba, en *Traer una versión nueva*.
 - La historia completa antes/después del parcheo existe además en el bundle local
@@ -302,7 +302,7 @@ directamente en el árbol y se commitea.
 
 ### La fuente propia (2026-09-27): lo que se midió al retirar las fases 1-5
 
-- Cadena completa `./dev/build.sh`, en régimen normal sobre esta máquina (16 núcleos):
+- Cadena completa `./build/build.sh`, en régimen normal sobre esta máquina (16 núcleos):
   compilar e empaquetar → `PiCode.exe` → rematado. Medidas por separado con los comandos
   exactos del build y con salida 0 en todas las fases: **compilar 5 min 05 s**
   (`compile-src` con gulp-tsb = 264 s, el 85 % del tiempo), **empaquetar 36 s**,
@@ -322,7 +322,7 @@ directamente en el árbol y se commitea.
 - La comprobación de fuente y de identidad de la fase 1 se ejecutó contra el árbol real y pasa:
   nombre de producto, nombre de compañía en `electron.ts`, icono de Windows que lee el
   empaquetador, manifiesto del servidor y conector, todo presente.
-- `dev/deps-current.mjs` se ejecutó contra el estado real y respondió que **cuadra** (node
+- `build/deps-current.mjs` se ejecutó contra el estado real y respondió que **cuadra** (node
   24.19.0). Eso es lo que permite que `npm ci` no vuelva a correr.
 - `bash -n` y el análisis estático de los scripts tocados salen limpios. En esa fecha CI estaba
   apagado; volvió el 2026-09-28 (`.github/workflows/ci.yml` y `release.yml`), y
@@ -358,26 +358,26 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
   `resources/app/product.json` del PiCode enviado, excluyendo solo los sellos de build
   (`commit`, `date`, `version`, `checksums`, `serverDownloadUrlTemplate`): el camino desde
   fuente reproduce el producto del camino del ZIP.
-- `./dev/build.sh -o` sale con `exit 0` (tres veces en un clon aparte, más una tras los
+- `./build/build.sh -o` sale con `exit 0` (tres veces en un clon aparte, más una tras los
   arreglos) y deja el árbol preparado.
 - La marca del `package.json` y los metadatos de electron se aplican de verdad: tras
-  `./dev/build.sh -o`, `picode-source/package.json` lleva `version 1.135.0` y `author.name
+  `./build/build.sh -o`, `package.json` lleva `version 1.135.0` y `author.name
   "PiCode"`, `build/lib/electron.ts` lleva `companyName: 'PiCode'` y el copyright con
   `PiCode`, y `resources/server/manifest.json` lleva `name`/`short_name` `PiCode`.
 - La fase 8 sobre una salida de empaquetado sintética sale con `exit 0` y es idempotente.
 
 **Fallos por dependencias, con el error exacto (resuelto):**
 
-- **`./dev/build.sh -s` se paró en la fase 6 (`npm ci`).** No fue por Python ni por Node:
+- **`./build/build.sh -s` se paró en la fase 6 (`npm ci`).** No fue por Python ni por Node:
   `node-gyp` invocó MSBuild y este respondió
   `error MSB8040: Spectre-mitigated libraries are required for this project` en
-  `@picode-source/deviceid` y `@picode-source/windows-registry`. Faltaba el componente
+  `@deviceid` y `@windows-registry`. Faltaba el componente
   `Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre`. **Instalado, la cadena
   completa termina**; el síntoma y su comprobación están en la tabla de dependencias.
 
 **No medido, y por tanto no afirmado:**
 
-- `dev/patch.sh` y `dev/update_patches.sh` no se han ejecutado (son interactivos y
+- `build/patch.sh` y `build/update_patches.sh` no se han ejecutado (son interactivos y
   reescriben `patches/picode/*.patch`); solo se ha validado su sintaxis con `bash -n`.
   Ambos ficheros, y los parches que escribían, fueron **borrados** el 2026-09-27.
 - La fase 8 se ha ejecutado sobre el empaquetado real de una compilación completa, pero no
@@ -385,11 +385,11 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 - No hay análisis estático de los scripts (`shellcheck` no está instalado).
 - `undo_telemetry.sh` de VSCodium **no está integrado**: el pipeline no reescribe las URLs
   `*.data.microsoft.com` de la fuente. El patch de telemetría y el delta ya desactivan el
-  envío, pero la reescritura de URLs es un hueco declarado en `dev/README.md`. Sigue siendo
+  envío, pero la reescritura de URLs es un hueco declarado en `build/README.md`. Sigue siendo
   hueco hoy: el cambio nunca llegó a hacerse en el árbol.
 - Las teselas PNG del menú Inicio (`code_150x150.png`, `code_70x70.png`) **sí se
   redibujan** desde `distribution/picode.ico`, en la preparación: el empaquetado las copia
-  antes de que la fase 8 pueda tocarlas. `dev/README.md` explica por qué es ahí y no en el
+  antes de que la fase 8 pueda tocarlas. `build/README.md` explica por qué es ahí y no en el
   *stage*.
 - **La configuración de producto se lee en tiempo de ejecución**, desde
   `resources/app/product.json`. El marcador `/*BUILD->INSERT_PRODUCT_CONFIGURATION*/` es un
@@ -404,12 +404,12 @@ También con la numeración antigua de 8 fases: aquí "la fase 5" era el delta d
 - **Lo único que hay que acertar ANTES de la fase 7 es lo que el empaquetador graba dentro
   de los binarios**: el icono y las cadenas de versión que escribe `rcedit`. Eso sí queda
   grabado a fuego en el `.exe`, y corregirlo después exige volver a ejecutar `rcedit`
-  (`picode-source/node_modules/rcedit/rcedit.exe`), no copiar un fichero.
+  (`node_modules/rcedit/rcedit.exe`), no copiar un fichero.
 
 **Sobre `defaultChatAgent` y el límite del núcleo minificado:** este camino elimina el
 límite del camino binario, porque el cambio de fuente se escribe en TypeScript antes de
 compilar y los `checksums` se calculan sobre el producto final. Dicho eso, con el
-`distribution/product-delta.json` **congelado actual** el objeto `defaultChatAgent` sigue
+`build/distribution/product-delta.json` **congelado actual** el objeto `defaultChatAgent` sigue
 en `product.json` (el delta poda sus subclaves de URL con `unsetNested`, pero conserva
 `extensionId`, `chatExtensionId`, `provider` y `providerScopes`), así que hoy las guardas
 que escribió `patches/picode/` —ahora código en el árbol— son **defensivas**: protegen el workbench el día que el delta deje de
@@ -421,39 +421,4 @@ declare Copilot por defecto exige además un cambio en `distribution/`, que est�
 PiCode es una distribución de VSCodium, que es a su vez un build de la fuente MIT de VS
 Code. Este camino reproduce esa cadena; las licencias y atribuciones de upstream se
 conservan y se documentan en [`DISTRIBUTION.md`](DISTRIBUTION.md).
-
-## 🐧 Otros sistemas: Linux, y Windows con WSL
-
-La cadena entiende **Windows y Linux**. macOS no está puesto todavía: necesita su propio nombre de
-carpeta en `build/gulpfile.vscode.ts` (el mismo cambio de una línea que 16 y 17) y un caso más en la
-tabla de `dev/build.sh`; el resto valdría igual.
-
-El sistema se deduce del entorno (`OSTYPE`) y decide dos cosas: qué tarea empaqueta
-(`vscode-<sistema>-<arch>-min-packing`) y **cómo se llama la carpeta que sale**:
-
-| Sistema | Carpeta del paquete |
-| --- | --- |
-| Windows | `PiCode-Win32-x64` |
-| Linux | `PiCode-linux-x64` |
-
-### Construir en Linux
-
-Los mismos pasos que arriba, con `jq`, `python3` y Git instalados. Lo que cambia es poco y está
-resuelto: el paquete se llama PiCode, el icono de la ventana se saca de `distribution/picode.ico`
-(que ya lleva PNGs dentro), y los binarios del pi se podan a los de la plataforma que se construye.
-
-**Una build de Linux hay que hacerla en Linux.** Los módulos nativos (la terminal, el vigía de
-ficheros) se compilan para la máquina donde compilas: no se puede cruzar desde Windows.
-
-### Con WSL, desde Windows
-
-WSL es un Linux de verdad, así que sirve. Dos cosas, en este orden:
-
-1. `wsl --install` **en una terminal como administrador**, y reiniciar. (Pide permisos: la
-   instalación de WSL es una característica de Windows.)
-2. **El repositorio, dentro del disco de Linux** (`~/PiCode`), no sobre `/mnt/d/...`: compilar sobre
-   el disco de Windows con miles de ficheros pequeños es varias veces más lento. El resultado es un
-   paquete para Linux, que se saca copiándolo.
-
-Con WSL 2 en Windows 11 (WSLg) incluso se puede **abrir el editor resultante** y verlo en el
 escritorio, para probarlo sin cambiar de máquina.

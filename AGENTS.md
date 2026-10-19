@@ -49,7 +49,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"lo de la rosa cambialo por el de picode"* — 2026-10-01
 
 * **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor).
-* **La marca vive en el conector** (`picode-source/extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
+* **La marca vive en el conector** (`extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
 > *"El logo que cambiamos en el centro de la pantalla... no uses el png usa el svg"*
@@ -115,7 +115,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
 
-* **Residencia:** el agente durable vive en el propio árbol del editor (`picode-source/durable`, con su puente de chat en `picode-source/durable-bridge` y su cliente de prueba ACP en `picode-source/durable-acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
+* **Residencia:** el agente durable vive en el propio árbol del editor (`durable`, con su puente de chat en `durable-bridge` y su cliente de prueba ACP en `durable-acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
 * **Nombre:** en todo lo que ve el dueño es **Durable agent**, a secas. Ninguna UI, ajuste o documento vivo lo presenta como experimental.
 * **Build:** viaja dentro de la instalación (`resources/durable`), como ya hacía; solo cambia el nombre de la carpeta destino.
 
@@ -180,9 +180,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
 
-* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `dev/release-notes.mjs` a partir de los commits del rango y el pipeline lo inserta solo.
+* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `build/release-notes.mjs` a partir de los commits del rango y el pipeline lo inserta solo.
 * Los commits de feed y housekeeping no aparecen: no le dicen nada a quien lee la página.
-* Siempre conserva: la descripción del canal encima (`dev/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
+* Siempre conserva: la descripción del canal encima (`build/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
 
 ### Idioma del proyecto y del producto
 >
@@ -222,13 +222,13 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * **Toda carpeta nueva lleva su `README.md`:** una frase de qué hace esa carpeta y qué hay
   dentro, escrito al lado del código. Si no lo trae, CI lo avisa y el PR se detiene
-  (`dev/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
+  (`build/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
 * **El mapa se genera, no se escribe:** `docs/MAPA.md` sale de esos README con
-  `node dev/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
+  `node build/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
   locales y salidas de build no entran.
 * **Nivel fichero solo cuando el nombre miente:** si el nombre ya explica el fichero, no se
   documenta; si no, dos líneas de cabecera con el porqué.
-* **La zona upstream no se documenta fichero a fichero:** `picode-source/src`, `cli`, `build`,
+* **La zona upstream no se documenta fichero a fichero:** `src`, `cli`, `build`,
   `scripts`, `resources`, `remote` y las extensiones built-in llevan un solo aviso de que no
   son nuestras (ahí está casi todo el código y detallarlo es trabajo que se pudre).
 * **Dónde mirar primero:** `docs/MAPA.md` (árbol con una frase por carpeta) y, para saber quién
@@ -257,16 +257,16 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-24** · Confirmado que **no existe extensión propia**: todo el desarrollo va dentro del núcleo del editor.
 * **2026-09-25** · Regla de UI: La pantalla muestra acciones y estados (*Built*, *Stop build*), no explicaciones de funcionamiento interno.
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
-* **2026-09-27** · Regla de los iconos: la marca de agua cambia de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasa al núcleo (`picode-source/.../contrib/picode/browser/media/`). El dibujo de trazos del editor vacío no cambia.
+* **2026-09-27** · Regla de los iconos: la marca de agua cambia de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasa al núcleo (`.../contrib/picode/browser/media/`). El dibujo de trazos del editor vacío no cambia.
 * **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
-* **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
+* **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `durable` y en la UI se llama Durable agent, sin el "(experimental)".
 * **2026-10-13** · Regla de fases visibles: el trabajo por fases se muestra en el panel de pi (`set_plan`, widget de pi-plan-widget) («tengo una lista con fases y no se ven»). Confirmado funcionando por el dueño.
 * **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»). 
 * **2026-10-16** · Una sola release por canal: al publicar una release nueva, el pipeline borra la anterior del mismo canal («recuerda borrar la release anterior siempre»). 
 * **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
 * **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
-* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`picode-source/extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
-* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `dev/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`dev/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
+* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
+* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `build/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`build/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
 * **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).
