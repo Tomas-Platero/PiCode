@@ -3,9 +3,9 @@
 #
 # PiCode's build.
 #
-# The editor's source is PiCode's own and it lives in ./picode-source: it already carries
+# The editor's source is PiCode's own and it is this repository: it already carries
 # the vendored VSCodium patch set, PiCode's own changes and the PiCode product identity,
-# recorded in that tree's history.
+# recorded in its history.
 #
 #   ./build/build.sh        install what is missing, compile, pack, stage
 #   ./build/build.sh -o     check the source and stop (seconds; nothing installed or compiled)
@@ -14,13 +14,13 @@
 #
 # What this script deliberately does NOT do any more, and why:
 #
-#   * It does not fetch VS Code. ./picode-source is PiCode's own source, versioned in this
+#   * It does not fetch VS Code. The tree is PiCode's own source, versioned in this
 #     repository. Bringing in a newer VS Code is a merge (docs/howto-build.md), not a
 #     download-and-repatch: the fetch and patch machinery (build/get_repo.sh,
 #     build/prepare_vscode.sh, build/patch.sh, patches/**) was DELETED on 2026-09-27 by the
 #     owner's decision.
 #   * It does not apply patches. There are no patches any more: the changes they carried are
-#     part of the source. Editing PiCode means editing ./picode-source.
+#     part of the source. Editing PiCode means editing the tree.
 #   * It does not re-brand the Windows icons. They are in the tree, committed. To change an
 #     icon, replace resources/win32/code.ico before the pack runs: rcedit
 #     stamps the executable during phase 4, and phase 1 refuses a tree whose icon is missing
@@ -93,11 +93,11 @@ while getopts ":oihs" opt; do
       ;;
     s)
       echo "note: -s is no longer needed. The source is never fetched, so it is always"
-      echo "      the ./picode-source that is here. Continuing."
+      echo "      the tree that is here. Continuing."
       ;;
     *)
       if [[ "${OPTARG}" == "f" ]]; then
-        echo "error: -f is gone, and for a good reason: it used to delete ./picode-source." >&2
+        echo "error: -f is gone, and for a good reason: it used to delete the source tree." >&2
         echo "       That tree is PiCode's own source now, and this repository is the only" >&2
         echo "       place it exists. To bring in a newer VS Code, merge it into the tree" >&2
         echo "       (docs/howto-build.md) instead of throwing the tree away." >&2
@@ -172,8 +172,8 @@ require_tool git "The source tree is a git repository, and a newer VS Code is br
 # Whatever happens, this script leaves its verdict behind: builds started by hand - not through
 # build/build-run.sh, which writes the same file - are the ones the window and the terminal viewer read.
 # Without this, a successful command-line build was invisible to every front-end.
-# The status file is anchored to the repository root on purpose: the build `cd`s into
-# picode-source for the dependency and compile phases, and a failure there used to make this trap
+# The status file is anchored to the repository root on purpose: a phase that
+# could change the working directory would otherwise make this trap
 # try to write into .scratch, which does not exist ("No such file or directory")
 # and the real exit code was lost with it.
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
@@ -209,7 +209,7 @@ if [[ ! -f ./product.json ]]; then
 fi
 
 if [[ ! -f ./product.json || ! -f ./package.json ]]; then
-  echo "error: ./picode-source is not a prepared tree (product.json or package.json is missing)." >&2
+  echo "error: the tree is not a prepared tree (product.json or package.json is missing)." >&2
   exit 2
 fi
 
@@ -302,7 +302,7 @@ if (!fs.existsSync(`${root}/extensions/picode/package.json`)) {
   fail.push('extensions/picode/package.json is missing, and that is the connector');
 }
 // The updater's strings live inside this binary and nothing in the toolchain rewrites them:
-// build/patch-inno-updater.mjs brands them in the file. Two shapes, so two checks - the progress
+// build/branding.mjs patch-inno-updater brands them in the file. Two shapes, so two checks - the progress
 // window's caption is a UTF-16 dialog resource, and the failure box the owner can actually end
 // up reading (plus the "... - Updater" title, the "... is updating..." line and the
 // `vscode-inno-updater-<pid>.log` prefix) are the program's own single-byte literals. A binary
@@ -315,7 +315,7 @@ if (!fs.existsSync(updater)) {
   const stale = ['Visual Studio Code', 'vscode-inno-updater-'].filter(term =>
     binary.indexOf(Buffer.from(term, 'utf16le')) !== -1 || binary.indexOf(Buffer.from(term, 'latin1')) !== -1);
   if (stale.length > 0) {
-    fail.push(`build/win32/inno_updater.exe still says ${stale.map(term => `"${term}"`).join(' and ')}; run node build/patch-inno-updater.mjs`);
+    fail.push(`build/win32/inno_updater.exe still says ${stale.map(term => `"${term}"`).join(' and ')}; run node build/branding.mjs patch-inno-updater`);
   }
 }
 
@@ -326,7 +326,7 @@ if (fail.length > 0) {
 console.log(`  the source carries the PiCode identity (editor ${product.version}, picode ${product.picodeVersion})`);
 NODE
 then
-  echo "error: ./picode-source is not the PiCode source this build expects (see above)." >&2
+  echo "error: the tree is not the PiCode source this build expects (see above)." >&2
   echo "       If the tree was replaced wholesale, brand it in the tree: product.json," >&2
   echo "       build/lib/electron.ts, resources/win32/code.ico, resources/server/manifest.json." >&2
   exit 2
@@ -545,12 +545,12 @@ export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # The install is the step this build exists to stop repeating. VS Code records the dependency
-# state it installed in `node_modules/.postinstall-state`; build/deps-current.mjs compares that
+# state it installed in `node_modules/.postinstall-state`; build/build-helpers.mjs deps-current compares that
 # against the tree as it is now, and the install is skipped ONLY when the two are identical.
 # A partial or stale node_modules is never trusted: it is reinstalled, exactly as before.
 reuse_node_modules="no"
 if [[ "${FORCE_INSTALL}" != "yes" && -f node_modules/.postinstall-state ]]; then
-  if node "${ROOT_DIR}/build/deps-current.mjs"; then
+  if node "${ROOT_DIR}/build/build-helpers.mjs" deps-current; then
     reuse_node_modules="yes"
   fi
 fi
@@ -590,7 +590,7 @@ echo "== phase 2/5 - compile the connector"
 # The vscode-languageserver patch must land before the extensions compile: the markdown
 # server's dist is regenerated from its node_modules here, and the patched uriToFilePath
 # is what keeps the DEP0169 warning out of the extension host's console (see the script).
-node build/patch-vscode-languageserver.mjs
+node build/checks.mjs patch-languageserver
 
 bash build/build-connector.sh
 
@@ -612,8 +612,8 @@ export VSCODE_PUBLISH_COUNTER=1
 # is deliberately absent here, and the reason is a defect that was found by
 # running the phase: the file lives in the *VSCodium repository* (`build/windows/
 # rtf/make.sh`, called by VSCodium as `. ../build/windows/rtf/make.sh`), not in
-# VS Code and not in any patch, so `bash build/windows/rtf/make.sh` from inside
-# `./picode-source` aborted the phase with exit 127 -- `./build/windows/` does not
+# VS Code and not in any patch, so `bash build/windows/rtf/make.sh` from the
+# tree's root aborted the phase with exit 127 -- `./build/windows/` does not
 # exist. It is also not needed: its only product is `LICENSE.rtf`, and the one reader of that
 # file is `build/win32/code.iss`, which omits the licence page when the file is not there instead
 # of aborting over it.

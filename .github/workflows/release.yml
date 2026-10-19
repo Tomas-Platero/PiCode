@@ -2,10 +2,10 @@
 # feed on the release's own channel branch, and verify it live.
 #
 # Hard rules this workflow enforces:
-# - The release version lives ONLY in distribution/product-delta.json
-#   (set.version). The tag must agree with it, and it must be strictly
-#   newer than the previous release.
-# - `--force` is never passed to build/update-feed.mjs: if the generator
+# - The release version lives ONLY in product.json (version, and picodeVersion
+#   for the name the tag carries). The tag must agree with it, and it must be
+#   strictly newer than the previous release.
+# - `--force` is never passed to build/release.mjs update-feed: if the generator
 #   refuses, the release stops. That refusal is the guard that keeps the
 #   editor from being offered an update that is not one.
 # - The feed is served from raw.githubusercontent.com against the DEFAULT
@@ -370,7 +370,7 @@ jobs:
           # this one. Repointed at this tag's own commits: a link that goes
           # nowhere is the one thing these notes must not carry.
           # Above it sits the page's own summary: the release's commits, grouped
-          # by kind of change (build/release-notes.mjs). With no previous tag to
+          # by kind of change (build/release.mjs release-notes). With no previous tag to
           # compare against, the script stays silent and the generated
           # changelog carries the page alone.
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
@@ -380,7 +380,7 @@ jobs:
           ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
           WHAT_CHANGED="build/release-notes/what-changed.md"
           if [ -n "${PREV_TAG}" ]; then
-            node build/release-notes.mjs --from "${PREV_TAG}" \
+            node build/release.mjs release-notes --from "${PREV_TAG}" \
               --to "v${PICODE_VERSION}" > "${WHAT_CHANGED}"
           else
             : > "${WHAT_CHANGED}"
@@ -435,13 +435,13 @@ jobs:
           else
             INSTALLED=()
           fi
-          node build/update-feed.mjs --version "${VERSION}" \
+          node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_ZIP}" --sha256 "${SHA}" \
             --picode-version "${PICODE_VERSION}" \
             --quality "${CHANNEL}" \
             --platform win32 --arch x64 --target archive \
             "${INSTALLED[@]}"
-          node build/update-feed.mjs --version "${VERSION}" \
+          node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
             --picode-version "${PICODE_VERSION}" \
             --quality "${CHANNEL}" \

@@ -604,8 +604,8 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 			glob('**/*explorer_command*.dll', { cwd }),
 			// PiCode: the updater that runs while the app restarts is a Microsoft binary and its
 			// strings used to say so - both its VERSION resource and the windows it opens. The
-			// windows are branded in the vendored binary by dev/patch-inno-updater.mjs, because
-			// nothing in the toolchain rewrites a dialog resource.
+			// windows are branded in the vendored binary by build/branding.mjs
+			// patch-inno-updater, because nothing in the toolchain rewrites a dialog resource.
 			//
 			// This glob is a safety net, not the stamp that does the work: `copyInnoUpdater` lands
 			// the file in the pack during the *installer* phase, so on an ordinary build it is not

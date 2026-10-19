@@ -218,7 +218,7 @@ function Get-BuildState {
     $progress = $null
     if (Test-Path $LogFile) {
         try {
-            $json = & node (Join-Path $PSScriptRoot 'build-progress.mjs') '--json' $LogFile 2>$null
+            $json = & node (Join-Path $PSScriptRoot 'build-helpers.mjs') 'progress' '--json' $LogFile 2>$null
             if ($json) { $progress = $json | ConvertFrom-Json }
         } catch {
             $progress = $null
@@ -639,7 +639,7 @@ function Show-Log {
 <# The step list, from the one file that knows it: the window does not carry its own copy. #>
 function Read-Stages {
     try {
-        $json = & node (Join-Path $PSScriptRoot 'build-progress.mjs') '--stages' 2>$null
+        $json = & node (Join-Path $PSScriptRoot 'build-helpers.mjs') 'progress' '--stages' 2>$null
         $script:stageList = @()
         # Copied one by one: `@($json | ConvertFrom-Json)` around a JSON array lands as a single
         # nested element in Windows PowerShell, and every count after that is a lie.
@@ -811,7 +811,7 @@ if ($SelfTest) {
     }
     # The steps come from the module that knows them.
     if ($script:stageList.Count -eq 0) {
-        $problems += 'the step list did not arrive from dev/build-progress.mjs'
+        $problems += 'the step list did not arrive from build/build-helpers.mjs progress'
     } elseif (($buildPanel.Visibility -eq $visible) -and ($stepsPanel.Children.Count -ne $script:stageList.Count)) {
         # The steps are only on screen once there is a build to talk about; when the panel is open it
         # has to hold one row per step.

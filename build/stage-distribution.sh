@@ -13,7 +13,7 @@
 # is still replaced here, but that is now a belt-and-braces copy, not the fix.
 #
 # The icon the executable actually carries is decided by `rcedit` while the source
-# tree is PACKED, from `picode-source/resources/win32/code.ico`, and the Start Menu tiles
+# tree is PACKED, from `resources/win32/code.ico`, and the Start Menu tiles
 # are copied by the same pack. So the real branding lives IN THE TREE: to change the icon,
 # replace that file before the pack runs (phase 4). Replacing anything here cannot change
 # what the executable already has:
@@ -336,7 +336,7 @@ echo "--- step 6/7 - PiCode, in the editor's own text"
 # The editor is built from VS Code's source and its text says so: measured, 196 of its 24,697
 # strings name VS Code or VSCodium, and those are the ones a person reads in the settings, in the
 # panels and in the extension list. The rewrite keeps identifiers, URLs and the licence files.
-node build/brand-copy.mjs "${PACK_DIR}"
+node build/branding.mjs brand-copy "${PACK_DIR}"
 
 # ---------------------------------------------------------------------------
 # Step 7 - the weight that is not the product

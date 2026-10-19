@@ -44,5 +44,5 @@ AGENTS.md (dueño)  >  TAREAS.md (lista)  >  DECISIONS.md (porqués)  >  DISENO/
 - El detalle de cada feature **no** sube aquí: se queda en su papel dentro de `docs/`.
 - **Documentación por carpeta:** cada carpeta lleva su `README.md` al lado (una frase de qué
   hace, qué hay dentro). De ahí sale el árbol de [`MAPA.md`](MAPA.md), que se regenera con
-  `node dev/map-docs.mjs`; las carpetas nuevas sin ficha las ve CI (`node dev/check-docs.mjs`,
+  `node build/docs.mjs map`; las carpetas nuevas sin ficha las ve CI (`node build/docs.mjs check`,
   con la lista de excepciones en `.docsignore`).

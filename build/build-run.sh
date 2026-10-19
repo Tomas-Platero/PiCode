@@ -44,7 +44,7 @@ if [[ -f "${LOCK}" ]]; then
   RUNNING=$( cat "${LOCK}" )
   if kill -0 "${RUNNING}" 2> /dev/null; then
     echo "error: a build is already running (pid ${RUNNING})." >&2
-    echo "       watch it with the window, or with: node dev/build-progress.mjs" >&2
+    echo "       watch it with the window, or with: node build/build-helpers.mjs progress" >&2
     exit 3
   fi
   # A lock whose process is gone is a build that died: it is not a reason to refuse forever.
@@ -87,7 +87,6 @@ if [[ "${FLAGS[0]}" == "-DepsOnly" ]]; then
   # The dependency install on its own: it is the longest phase, and when it fails there is no point
   # compiling anything. Its retries and its flags are the build's own, so both paths behave alike.
   (
-    cd picode-source || exit 2
     export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
     node build/npm/preinstall.ts
     for attempt in {1..5}; do

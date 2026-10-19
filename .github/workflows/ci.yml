@@ -1,8 +1,8 @@
 # Continuous build for PiCode: compile, test, pack, upload.
 #
 # The long poles are npm ci (5-8 min cold) and the electron binary download.
-# Both are cached: node_modules keyed on the lockfile (build/deps-current.mjs
-# then reuses it and skips npm ci), the npm cache (covers the pi runtime
+# Both are cached: node_modules keyed on the lockfile (build/build-helpers.mjs
+# deps-current then reuses it and skips npm ci), the npm cache (covers the pi runtime
 # install too) and the electron download cache. A warm run is build.sh's
 # own ~3 minutes.
 name: CI
@@ -63,12 +63,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ]; then
-            node build/check-docs.mjs
+            node build/docs.mjs check
           elif git fetch --depth=1 origin "$BASE_REF"; then
-            node build/check-docs.mjs --base FETCH_HEAD
+            node build/docs.mjs check --base FETCH_HEAD
           else
             # The base could not be fetched: the static half still runs.
-            node build/check-docs.mjs
+            node build/docs.mjs check
           fi
 
       # node_modules is reused whenever the lockfile has not moved:
@@ -177,17 +177,18 @@ jobs:
       # silently does nothing.
       - name: MCP entries against pi's validator
         shell: bash
-        run: node build/check-mcp-entries.mjs
+        run: node build/checks.mjs check-mcp
 
       - name: Resolve the packed folder
         shell: bash
         run: |
           # The packer names the folder after the channel it sealed (PiCode-win32-x64,
-          # plus -beta or -experimental for the other channels). build/pack-dir.mjs resolves
-          # it the same way the checks do, so the upload follows whatever the build
-          # actually produced. A glob could not: Git Bash matches case-sensitively and the
-          # platform segment on disk is lower case, so `PiCode-Win32-x64*` found nothing.
-          PACK=$(node build/pack-dir.mjs)
+          # plus -beta or -experimental for the other channels). build/build-helpers.mjs
+          # pack-dir resolves it the same way the checks do, so the upload follows
+          # whatever the build actually produced. A glob could not: Git Bash matches
+          # case-sensitively and the platform segment on disk is lower case, so
+          # `PiCode-Win32-x64*` found nothing.
+          PACK=$(node build/build-helpers.mjs pack-dir)
           echo "PACK=${PACK}" >> "$GITHUB_ENV"
           echo "packed folder: ${PACK}"
 

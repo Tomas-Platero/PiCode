@@ -1,6 +1,6 @@
-# dev/release-notes/ — 📝 El texto de cada canal
+# build/release-notes/ — 📝 El texto de cada canal
 
-**La descripción que encima del changelog en cada página de release**, una por canal. El resumen agrupado por tipo de cambio (novedades, arreglos, rendimiento…) lo genera `dev/release-notes.mjs` a partir de los commits; estos ficheros son la voz del canal, que va justo encima.
+**La descripción que encima del changelog en cada página de release**, una por canal. El resumen agrupado por tipo de cambio (novedades, arreglos, rendimiento…) lo genera `build/release.mjs release-notes` a partir de los commits; estos ficheros son la voz del canal, que va justo encima.
 
 | Fichero | Canal | Se usa cuando |
 | --- | --- | --- |

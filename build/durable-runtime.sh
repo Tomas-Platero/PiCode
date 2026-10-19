@@ -70,7 +70,7 @@ case "${OS_NAME:-windows}" in
   *) echo "error: PiCode only builds on Windows." >&2; exit 2 ;;
 esac
 
-node build/prune-platform-binaries.mjs "${TARGET}/node_modules" "${OS_NAME_PLATFORM}" "${VSCODE_ARCH:-}"
+node build/checks.mjs prune-binaries "${TARGET}/node_modules" "${OS_NAME_PLATFORM}" "${VSCODE_ARCH:-}"
 
 # The check that matters, and the reason this is not just a copy: `cli.js` loads its dependencies
 # from the folder it sits in, so a package that did not travel is an agent that cannot start — and an

@@ -44,7 +44,7 @@ ENTRY="${TARGET}/node_modules/${PACKAGE}/dist/index.js"
 # The pruning is idempotent and cheap, so it also runs on a tree that already has pi: a build that
 # found pi installed would otherwise keep the other platforms' binaries for ever.
 prune_platforms() {
-  node build/prune-platform-binaries.mjs "${TARGET}/node_modules" "${OS_NAME_PLATFORM:-}" "${VSCODE_ARCH:-}"
+  node build/checks.mjs prune-binaries "${TARGET}/node_modules" "${OS_NAME_PLATFORM:-}" "${VSCODE_ARCH:-}"
 }
 
 if [[ -f "${ENTRY}" ]]; then

@@ -180,7 +180,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
 
-* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `build/release-notes.mjs` a partir de los commits del rango y el pipeline lo inserta solo.
+* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `build/release.mjs release-notes` a partir de los commits del rango y el pipeline lo inserta solo.
 * Los commits de feed y housekeeping no aparecen: no le dicen nada a quien lee la página.
 * Siempre conserva: la descripción del canal encima (`build/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
 
@@ -222,9 +222,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * **Toda carpeta nueva lleva su `README.md`:** una frase de qué hace esa carpeta y qué hay
   dentro, escrito al lado del código. Si no lo trae, CI lo avisa y el PR se detiene
-  (`build/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
+  (`build/docs.mjs check`; las excepciones se apuntan en `.docsignore`).
 * **El mapa se genera, no se escribe:** `docs/MAPA.md` sale de esos README con
-  `node build/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
+  `node build/docs.mjs map` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
   locales y salidas de build no entran.
 * **Nivel fichero solo cuando el nombre miente:** si el nombre ya explica el fichero, no se
   documenta; si no, dos líneas de cabecera con el porqué.
@@ -268,5 +268,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
 * **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
 * **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
-* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `build/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`build/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
+* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `build/docs.mjs map` y CI vigila que no aparezcan carpetas sin ficha (`build/docs.mjs check`) («deja avisado algo en el agents.md no? de usar esto»).
 * **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).
