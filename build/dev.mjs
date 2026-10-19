@@ -21,7 +21,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const REPO = path.resolve(import.meta.dirname, '..');
-const READY = path.join(REPO, 'out', 'vs', 'workbench', 'workbench.desktop.main.js');
 const isWindows = process.platform === 'win32';
 const npm = isWindows ? 'npm.cmd' : 'npm';
 
@@ -74,15 +73,43 @@ function run(command, args) {
 	return spawn(command, args, { cwd: REPO, stdio: 'inherit', shell: isWindows, env: process.env });
 }
 
-async function waitForReady() {
-	const started = Date.now();
-	while (!existsSync(READY)) {
-		if (Date.now() - started > 10 * 60 * 1000) {
-			return false;
-		}
-		await new Promise(resolve => setTimeout(resolve, 500));
-	}
-	return true;
+/**
+ * The line the transpiler prints once `out/` is complete.
+ *
+ * Waiting for the file to exist is not enough: the transpiler starts by deleting `out/`, so on a
+ * second run the file is there from the run before, the editor opens, and the delete lands
+ * underneath it -- which is exactly the `ERR_FILE_NOT_FOUND` that made the window come up empty.
+ * This marker comes after the clean and after every file has been written.
+ */
+export const TRANSPILED = /\[watch\] Watching src/;
+
+/** Waits for the watcher to finish transpiling, echoing its output as it arrives. */
+function waitForTranspile(child, timeoutMs = 10 * 60 * 1000) {
+	return new Promise(resolve => {
+		let seen = '';
+		let done = false;
+		const finish = ok => {
+			if (!done) {
+				done = true;
+				clearTimeout(timer);
+				resolve(ok);
+			}
+		};
+		const onData = (chunk, out) => {
+			out.write(chunk);
+			if (!done) {
+				// A line can be split across chunks; keeping a tail makes the match survive that.
+				seen = (seen + chunk.toString()).slice(-4096);
+				if (TRANSPILED.test(seen)) {
+					finish(true);
+				}
+			}
+		};
+		child.stdout?.on('data', chunk => onData(chunk, process.stdout));
+		child.stderr?.on('data', chunk => onData(chunk, process.stderr));
+		child.on('exit', code => finish(false));
+		const timer = setTimeout(() => finish(false), timeoutMs);
+	});
 }
 
 let watch;
@@ -105,11 +132,11 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 
 	linkPackedRuntime();
 
-	watch = run(npm, ['run', 'watch']);
-	console.log('dev: watcher running -- save a file and it recompiles that file');
+	watch = spawn(npm, ['run', 'watch'], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], shell: isWindows, env: process.env });
+	console.log('dev: compiling and watching -- the editor opens when out/ is complete');
 
-	if (!(await waitForReady())) {
-		console.error('dev: the watcher did not produce out/ in ten minutes; stopping.');
+	if (!(await waitForTranspile(watch))) {
+		console.error('dev: the watcher did not finish transpiling in ten minutes; stopping.');
 		stop(1);
 	}
 
