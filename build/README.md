@@ -195,8 +195,9 @@ Nothing is lost that a repository should hold:
 - **The compile and the pack always run in full.** Neither reuses anything from
   the previous build: `compile-build-without-mangling` starts with
   `util.rimraf('out-build')`, and `bundle-vscode` and `minify-vscode` wipe
-  `out-vscode` and `out-vscode-min`. This is the next thing to fix, and it is
-  what makes a build cost hours.
+  `out-vscode` and `out-vscode-min`. `npm run build-fast` (`build/next/`) is the
+  incremental lane, but it feeds the dev host's `out/`, not the pack; making the
+  pack incremental is the next real win and is not done.
 - **CI is on.** Two workflows: `.github/workflows/ci.yml` (compile, connector
   tests, artifact, on pushes and PRs, doc-only changes ignored) and
   `.github/workflows/release.yml` (tag-driven release: build, publish, feed,
