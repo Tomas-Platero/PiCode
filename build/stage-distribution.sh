@@ -44,7 +44,7 @@ picode_cleanup_tmp() {
   PICODE_TMP_DIR=""
 }
 replace() {
-  if sed --version &> /build/null; then
+  if sed --version &> /dev/null; then
     sed -i -E "${1}" "${2}"
   else
     sed -i '' -E "${1}" "${2}"
@@ -77,7 +77,7 @@ for required in "${PRODUCT_JSON}" "${DELTA}" "${APPLIER}" "${SETTINGS_SOURCE}"; 
   fi
 done
 
-if ! command -v node > /build/null 2>&1; then
+if ! command -v node > /dev/null 2>&1; then
   echo "error: node was not found on PATH; the product delta is applied by a node program." >&2
   exit 2
 fi
@@ -189,7 +189,7 @@ rename_if_needed() {
 # in place there is nothing to rename; the legacy upstream names below are only for a pack that
 # still came out as VSCodium/VSCode/code. The path goes in as an argument, not inside the `require`
 # string: only an argument is a path git-bash rewrites for node (an interpolated `/d/...` is not).
-EDITOR_NAME=$( node -p "require(process.argv[1]).nameShort" "${PRODUCT_JSON}" 2> /build/null || echo "" )
+EDITOR_NAME=$( node -p "require(process.argv[1]).nameShort" "${PRODUCT_JSON}" 2> /dev/null || echo "" )
 if [[ -z "${EDITOR_NAME}" || "${EDITOR_NAME}" == "undefined" ]]; then
   EDITOR_NAME="PiCode"
 fi
@@ -390,22 +390,22 @@ echo "--- step 7/7 - maps and locales"
 # `find -printf` and `awk`, not an unquoted `$(find …)` inside `du`: a path with a space in it would
 # have been split into two arguments and the measurement would have been of something else.
 MAPS_BEFORE=$( find "${PACK_DIR}/resources/app/out" -name '*.map' -printf '%s
-' 2> /build/null | awk '{ total += $1 } END { print int(total / 1048576) }' )
-find "${PACK_DIR}/resources/app/out" -name '*.map' -delete 2> /build/null || true
+' 2> /dev/null | awk '{ total += $1 } END { print int(total / 1048576) }' )
+find "${PACK_DIR}/resources/app/out" -name '*.map' -delete 2> /dev/null || true
 echo "removed the source maps: ${MAPS_BEFORE:-0} MB"
 
 # Chromium's own interface translations, which the editor does not use (its text comes from its own
 # tables, which is what a language pack replaces). English is the product's language and Spanish is
 # the one a pack will switch it to, and the native shell needs its own file for each.
 if [[ -d "${PACK_DIR}/locales" ]]; then
-  LOCALES_BEFORE=$( du -sm "${PACK_DIR}/locales" 2> /build/null | cut -f1 )
+  LOCALES_BEFORE=$( du -sm "${PACK_DIR}/locales" 2> /dev/null | cut -f1 )
   for locale in "${PACK_DIR}/locales"/*.pak; do
     case "$( basename "${locale}" )" in
       en-US.pak | es.pak) continue ;;
     esac
     rm -f "${locale}"
   done
-  LOCALES_AFTER=$( du -sm "${PACK_DIR}/locales" 2> /build/null | cut -f1 )
+  LOCALES_AFTER=$( du -sm "${PACK_DIR}/locales" 2> /dev/null | cut -f1 )
   echo "kept en-US.pak and es.pak: ${LOCALES_BEFORE:-0} MB -> ${LOCALES_AFTER:-0} MB"
 fi
 

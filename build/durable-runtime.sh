@@ -94,7 +94,7 @@ fi
 # And the agent is asked to start, once, from where it now lives: the dependencies being present is
 # not the same as the program loading them. `--help` prints its usage and exits; it imports the same
 # modules `serve` does, the SQLite storage among them.
-if ! node "${TARGET}/cli.js" --help > /build/null 2>&1; then
+if ! node "${TARGET}/cli.js" --help > /dev/null 2>&1; then
   echo "error: the agent does not start from the pack (node ${TARGET}/cli.js --help failed)." >&2
   echo "       Run it by hand for the reason; shipping it like this would put the failure in the" >&2
   echo "       owner's editor instead of in this build." >&2

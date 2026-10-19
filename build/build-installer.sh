@@ -65,7 +65,7 @@ cd "${ROOT_DIR}" || exit 2
 # PiCode's own version, not set.version: the editor's number tracks VS Code, and a release is
 # named after this one. Both live in the same file, so it is read here rather than passed in.
 PICODE_VERSION=$( node -p \
-  "require('./distribution/product-delta.json').set.picodeVersion" 2> /build/null ) || {
+  "require('./distribution/product-delta.json').set.picodeVersion" 2> /dev/null ) || {
   echo "error: distribution/product-delta.json could not be read." >&2
   exit 1
 }
@@ -75,7 +75,7 @@ if [[ -z "${PICODE_VERSION}" || "${PICODE_VERSION}" == "undefined" ]]; then
 fi
 
 EDITOR_VERSION=$( node -p \
-  "require('./distribution/product-delta.json').set.version" 2> /build/null ) || {
+  "require('./distribution/product-delta.json').set.version" 2> /dev/null ) || {
   echo "error: distribution/product-delta.json could not be read." >&2
   exit 1
 }
@@ -87,9 +87,9 @@ EDITOR_VERSION=$( node -p \
 # sha1 of the version without its pre-release suffix, newline included. That is also the stamp the
 # packer writes into product.json's `commit`, and the .iss records it in updating_version.
 if [[ ! "${BUILD_SOURCEVERSION:-}" =~ ^[0-9a-f]{40}$ ]]; then
-  if command -v sha1sum > /build/null 2>&1; then
+  if command -v sha1sum > /dev/null 2>&1; then
     BUILD_SOURCEVERSION=$( echo "${EDITOR_VERSION%%-*}" | sha1sum | cut -d' ' -f1 )
-  elif command -v shasum > /build/null 2>&1; then
+  elif command -v shasum > /dev/null 2>&1; then
     BUILD_SOURCEVERSION=$( echo "${EDITOR_VERSION%%-*}" | shasum -a 1 | cut -d' ' -f1 )
   else
     echo "error: neither sha1sum nor shasum was found, and the install stamp needs one." >&2

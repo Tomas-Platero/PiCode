@@ -47,8 +47,8 @@ picode_data_hold_dir() {
 # Windows only, and silent when it cannot answer: a guess here is worse than nothing.
 picode_data_locked_files() {
   local dir="$1"
-  command -v powershell.exe >/build/null 2>&1 || return 0
-  command -v cygpath >/build/null 2>&1 || return 0
+  command -v powershell.exe >/dev/null 2>&1 || return 0
+  command -v cygpath >/dev/null 2>&1 || return 0
   powershell.exe -NoProfile -Command "
     \$n = 0
     Get-ChildItem '$( cygpath -w "${dir}" )' -Recurse -File -ErrorAction SilentlyContinue |
@@ -59,7 +59,7 @@ picode_data_locked_files() {
           try { \$s = [System.IO.File]::Open(\$f, 'Open', 'ReadWrite', 'None'); \$s.Close() }
           catch { Write-Output \$f; \$n++ }
         }
-      }" 2>/build/null | tr -d '\r'
+      }" 2>/dev/null | tr -d '\r'
 }
 
 # picode_editor_running
@@ -78,7 +78,7 @@ picode_editor_running() {
   # The channel exes are named after their channel ("PiCode Experimental.exe"), so the filter is a
   # PREFIX match: any PiCode* process is an editor, whatever channel built it. The builder itself
   # (PiCode.Builder.exe) must NOT count, or a build can never be started from the builder window.
-  count=$( tasklist //FI "IMAGENAME eq PiCode*" 2>/build/null | grep -i "PiCode" | grep -iv "Builder" | wc -l )
+  count=$( tasklist //FI "IMAGENAME eq PiCode*" 2>/dev/null | grep -i "PiCode" | grep -iv "Builder" | wc -l )
   [[ "${count}" -gt 0 ]]
 }
 

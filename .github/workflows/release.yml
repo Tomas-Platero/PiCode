@@ -141,7 +141,7 @@ jobs:
           PREV_FEED="updates/${CHANNEL}/win32/x64/archive/latest.json"
           if [ -f "${PREV_FEED}" ]; then
             PREV_PICODE=$(node -p \
-              "require('./${PREV_FEED}').picodeVersion" 2>/build/null || true)
+              "require('./${PREV_FEED}').picodeVersion" 2>/dev/null || true)
             [ -n "${PREV_PICODE}" ] && PREV_TAG="v${PREV_PICODE}"
           fi
           # The first release of a channel has no previous one to be newer
@@ -179,7 +179,7 @@ jobs:
           FEED_VERSION=""
           if [ -f "${FEED}" ]; then
             FEED_VERSION=$(node -p \
-              "require('./${FEED}').productVersion" 2>/build/null || true)
+              "require('./${FEED}').productVersion" 2>/dev/null || true)
             if [ -n "${FEED_VERSION}" ] \
                && ver_le "${VERSION}" "${FEED_VERSION}"; then
               echo "error: ${VERSION} is not newer than the feed's" >&2
@@ -300,7 +300,7 @@ jobs:
           # this only started failing with the first annotated tag. Only point a
           # tag that does not exist yet at the built commit.
           if git ls-remote --exit-code --tags origin \
-               "refs/tags/v${PICODE_VERSION}" >/build/null 2>&1; then
+               "refs/tags/v${PICODE_VERSION}" >/dev/null 2>&1; then
             TARGET=()
           else
             TARGET=(--target "${GITHUB_SHA}")
@@ -318,7 +318,7 @@ jobs:
           fi
           # Idempotent: a re-run after a partial failure must not die on an
           # existing release and must still refresh the assets.
-          if gh release view "v${PICODE_VERSION}" >/build/null 2>&1; then
+          if gh release view "v${PICODE_VERSION}" >/dev/null 2>&1; then
             gh release upload "v${PICODE_VERSION}" \
               "PiCode-win32-x64-${PICODE_VERSION}.zip" \
               "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" --clobber
@@ -574,10 +574,10 @@ jobs:
           VIS=$(gh repo view "${GITHUB_REPOSITORY}" \
             --json visibility --jq .visibility)
           SIZE=$(stat -c%s "PiCode-win32-x64-${PICODE_VERSION}.zip" \
-            2>/build/null || echo unknown)
+            2>/dev/null || echo unknown)
           SETUP_SIZE=$(stat -c%s \
             "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
-            2>/build/null || echo unknown)
+            2>/dev/null || echo unknown)
           RAW="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}"
           RAW="${RAW}/${FEED_BRANCH}"
           FEED_ARCHIVE_URL="${RAW}/updates/${CHANNEL}/win32"

@@ -19,7 +19,7 @@ fi
 
 PACK_DIR="${1:?usage: build/build-cli.sh <pack dir>}"
 
-if ! command -v cargo > /build/null 2>&1; then
+if ! command -v cargo > /dev/null 2>&1; then
   echo "cli: cargo not found; skipping (install rustup to build it)."
   exit 0
 fi
