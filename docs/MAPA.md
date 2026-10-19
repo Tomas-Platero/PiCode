@@ -302,9 +302,12 @@
 │   │   ├── inno_updater.exe
 │   │   ├── signature.ts
 │   │   └── vcruntime140.dll
+│   ├── branding.mjs
 │   ├── build-builder.cmd
 │   ├── build-cli.sh
 │   ├── build-connector.sh
+│   ├── build-fast.sh
+│   ├── build-helpers.mjs
 │   ├── build-installer.sh
 │   ├── build-live.sh
 │   ├── build-run.sh
@@ -313,7 +316,9 @@
 │   ├── build.sh
 │   ├── buildConfig.ts
 │   ├── buildfile.ts
+│   ├── checks.mjs
 │   ├── data-hold.sh
+│   ├── docs.mjs
 │   ├── durable-runtime.sh
 │   ├── filters.ts
 │   ├── gulpfile.cli.ts
@@ -333,11 +338,12 @@
 │   ├── package.json
 │   ├── pi-runtime.sh
 │   ├── README.md
+│   ├── release.mjs
 │   ├── setup-npm-registry.ts
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 35 files in total
+│   └── … 41 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── cloud/ — Todo lo que vive en la nube: la única parte de pago del producto. El editor es gratis y completo; esto es la sincronización y el respaldo de la…
 │   ├── sync-api/ — The backend of PiCode's sync service: it implements the REST contract the editor's Settings Sync engine expects, authenticates against Firebase Auth,…
