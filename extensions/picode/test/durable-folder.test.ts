@@ -27,12 +27,12 @@ test('the roots are tried in order: the open folders, the repository above the p
 		appRoot());
 
 	assert.deepEqual(candidates.slice(0, 2), [
-		path.join(path.resolve(process.cwd(), 'work', 'one'), 'picode-source', 'durable'),
-		path.join(path.resolve(process.cwd(), 'work', 'two'), 'picode-source', 'durable')
+		path.join(path.resolve(process.cwd(), 'work', 'one'), 'durable'),
+		path.join(path.resolve(process.cwd(), 'work', 'two'), 'durable')
 	]);
 	// The repository a packed build sits in: `PiCode-win32-x64` is unpacked inside the PiCode
 	// source tree, so its agent is three levels above `<app>/resources/app`.
-	assert.equal(candidates[2], path.join(process.cwd(), 'picode-source', 'durable'));
+	assert.equal(candidates[2], path.join(process.cwd(), 'durable'));
 	// And last, the agent this installation carries: `<app>/resources/durable`, the only
 	// candidate an installed editor has.
 	assert.equal(candidates[3], path.join(process.cwd(), 'install', 'resources', SHIPPED_DURABLE_FOLDER));
