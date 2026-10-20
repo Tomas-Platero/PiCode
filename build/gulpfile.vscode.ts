@@ -325,10 +325,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const name = product.nameShort;
 		const packageJsonUpdates: Record<string, unknown> = { name, version };
 
-		if (platform === 'linux') {
-			packageJsonUpdates.desktopName = `${product.applicationName}.desktop`;
-		}
-
 		let packageJsonContents: string;
 		const packageJsonStream = gulp.src(['package.json'], { base: '.' })
 			.pipe(jsonEditor(packageJsonUpdates))
@@ -471,18 +467,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				'resources/win32/code_70x70.png',
 				'resources/win32/code_150x150.png'
 			], { base: '.' }));
-		} else if (platform === 'linux') {
-			const policyDest = gulp.src('.build/policies/linux/**', { base: '.build/policies/linux' })
-				.pipe(rename(f => f.dirname = `policies/${f.dirname}`));
-			all = es.merge(all, gulp.src('resources/linux/code.png', { base: '.' }), policyDest);
-		} else if (platform === 'darwin') {
-			const shortcut = gulp.src('resources/darwin/bin/code.sh')
-				.pipe(replace('@@APPNAME@@', product.applicationName))
-				.pipe(replace('@@NAME@@', product.nameShort))
-				.pipe(rename('bin/' + product.applicationName));
-			const policyDest = gulp.src('.build/policies/darwin/**', { base: '.build/policies/darwin' })
-				.pipe(rename(f => f.dirname = `policies/${f.dirname}`));
-			all = es.merge(all, shortcut, policyDest);
 		}
 
 		const electronConfig = {
@@ -505,15 +489,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 				...(platform === 'win32' ? ['!**/electron_proxy.exe'] : []),
 			], { dot: true }));
 
-		if (platform === 'linux') {
-			result = es.merge(result, gulp.src('resources/completions/bash/code', { base: '.' })
-				.pipe(replace('@@APPNAME@@', product.applicationName))
-				.pipe(rename(function (f) { f.basename = product.applicationName; })));
-
-			result = es.merge(result, gulp.src('resources/completions/zsh/_code', { base: '.' })
-				.pipe(replace('@@APPNAME@@', product.applicationName))
-				.pipe(rename(function (f) { f.basename = '_' + product.applicationName; })));
-		}
 
 		if (platform === 'win32') {
 			result = es.merge(result, gulp.src('resources/win32/bin/code.js', { base: 'resources/win32', allowEmpty: true }));
@@ -573,11 +548,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 			// 		.pipe(replace('@@FileExplorerContextMenuDLL@@', `${quality === 'stable' ? 'code' : 'code_insider'}_explorer_command_${arch}.dll`))
 			// 		.pipe(rename(f => f.dirname = `appx/manifest`)));
 			// }
-		} else if (platform === 'linux') {
-			result = es.merge(result, gulp.src('resources/linux/bin/code.sh', { base: '.' })
-				.pipe(replace('@@PRODNAME@@', product.nameLong))
-				.pipe(replace('@@APPNAME@@', product.applicationName))
-				.pipe(rename('bin/' + product.applicationName)));
 		}
 
 		result = inlineMeta(result, {
