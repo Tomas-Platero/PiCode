@@ -29,7 +29,14 @@ const isWindows = process.platform === 'win32';
 
 const CLI = process.argv.slice(2);
 const VERBOSE = CLI.includes('--verbose') || CLI.includes('-v');
-const EDITOR_ARGS = CLI.filter(argument => argument !== '--verbose' && argument !== '-v');
+// DevTools on launch, because that is what the loop is for. `--no-devtools` keeps them closed for
+// a run that should look like the real product.
+const NO_DEVTOOLS = CLI.includes('--no-devtools');
+const EDITOR_ARGS = [
+	...CLI.filter(argument => !['--verbose', '-v', '--no-devtools'].includes(argument)),
+	// A documented switch of the product itself (src/vs/platform/windows/electron-main/windowImpl.ts).
+	...(NO_DEVTOOLS ? [] : ['--open-devtools']),
+];
 
 // What the pack adds around the editor, and where the editor looks for it in a source tree:
 // `distributionRoot` is the repository root here, so `resources/pi-runtime` and
@@ -373,8 +380,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 	say('note', 'opening the editor (the first run also fetches Electron)');
 	const openedAt = Date.now();
 	launched = isWindows
-		? spawn('cmd.exe', ['/c', 'scripts\\code.bat', ...EDITOR_ARGS], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], env: process.env })
-		: spawn('bash', ['scripts/code.sh', ...EDITOR_ARGS], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
+		? spawn('cmd.exe', ['/c', 'scripts\\code.bat', ...EDITOR_ARGS], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, VSCODE_OPEN_DEVTOOLS: NO_DEVTOOLS ? '0' : '1' } })
+		: spawn('bash', ['scripts/code.sh', ...EDITOR_ARGS], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, VSCODE_OPEN_DEVTOOLS: NO_DEVTOOLS ? '0' : '1' } });
 
 	const editorOut = editorReporter(process.stdout);
 	const editorErr = editorReporter(process.stderr);

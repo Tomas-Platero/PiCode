@@ -219,8 +219,10 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 			}));
 		}
 
-		// Open devtools if instructed from command line args
-		if (this.environmentMainService.args['open-devtools'] === true) {
+		// Open devtools if instructed from command line args, or in dev mode when asked for it
+		// (`npm run dev` passes `--open-devtools`). Dev runs otherwise leave them closed.
+		if (this.environmentMainService.args['open-devtools'] === true
+			|| (process.env.VSCODE_OPEN_DEVTOOLS === '1' && !this.environmentMainService.isBuilt)) {
 			win.webContents.openDevTools();
 		}
 
