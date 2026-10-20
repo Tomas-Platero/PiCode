@@ -8,6 +8,13 @@ justify replacing what came before it:
 2. **A subagent is a background task that does not block the parent conversation.**
 3. **Two clients can attach to the same live conversation at once.**
 
+## The chat bridge (`bridge/`)
+
+A pi extension (TypeScript, loaded by path -- nothing is installed into any pi,
+and no pi directory is written) that bridges the coding agent you use to the durable daemon:
+it registers durable_send, durable_list and durable_read, which the chats session loads next
+to the agent. It ships at <app>/resources/durable/bridge.
+
 ## 🖥️ The CLI (`cli.js`)
 
 A headless agent over the same provider chain. The CLI uses **one shared database**

@@ -22,7 +22,7 @@
 		"durable/*.sh",
 		"durable/package.json",
 		"durable/README.md",
-		"durable-bridge/**",
+		"durable/bridge/**",
 		"durable-acp-client/**",
 		"build/gulpfile.vscode.ts",
 		"build/gulpfile.vscode.win32.ts",

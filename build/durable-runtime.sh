@@ -32,9 +32,9 @@ set -eo pipefail
 PACK_DIR="${1:?usage: build/durable-runtime.sh <pack dir>}"
 
 SOURCE="./durable"
-BRIDGE="./durable-bridge"
+BRIDGE="./durable/bridge"
 TARGET="${PACK_DIR}/resources/durable"
-BRIDGE_TARGET="${PACK_DIR}/resources/durable-bridge"
+BRIDGE_TARGET="${PACK_DIR}/resources/durable/bridge"
 
 if [[ ! -f "${SOURCE}/cli.js" ]]; then
   echo "error: ${SOURCE}/cli.js is missing, so there is no durable agent to ship." >&2
@@ -57,7 +57,7 @@ rm -rf "${TARGET}/.data" \
        "${TARGET}"/proof*.js "${TARGET}/smoke.js"
 
 # The bridge, right where the agent expects its sibling: `durableBridgeExtensionPath()` reads
-# `path.join(folder, '..', 'durable-bridge', 'extension.ts')`.
+# `path.join(folder, 'bridge', 'extension.ts')`.
 echo "copying the chat's bridge into ${BRIDGE_TARGET}"
 mkdir -p "${BRIDGE_TARGET}"
 cp -r "${BRIDGE}/." "${BRIDGE_TARGET}/"

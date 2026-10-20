@@ -43,7 +43,7 @@ const EDITOR_ARGS = [
 // `resources/durable` are the two paths the connector resolves. The pack already has both, built
 // and pruned; linking them is what makes the chat and the agent work while editing, without
 // copying 116 MB into the tree or teaching the connector a second layout.
-const LINKED = ['pi-runtime', 'durable', 'durable-bridge'];
+const LINKED = ['pi-runtime', 'durable'];
 
 function packRoot() {
 	for (const name of ['PiCode-Win32-x64', 'PiCode-Win32-x64-experimental', 'PiCode-Win32-x64-beta']) {

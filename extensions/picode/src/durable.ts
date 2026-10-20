@@ -110,7 +110,7 @@ export function durableFolder(): string | undefined {
  * `durable_read`), as the chat's session loads it.
  *
  * It lives next to the durable folder — the `picode.durable.folder` setting names the
- * folder, the bridge is its `../durable-bridge/extension.ts` sibling — and it is only
+ * folder, the bridge is its `bridge/extension.ts` child — and it is only
  * real when the file is on disk: `undefined` means "no bridge here", which the caller
  * treats as "the chat runs without it", never as an error.
  */
@@ -119,7 +119,7 @@ export function durableBridgeExtensionPath(): string | undefined {
 	if (folder === undefined) {
 		return undefined;
 	}
-	const candidate = path.join(folder, '..', 'durable-bridge', 'extension.ts');
+	const candidate = path.join(folder, 'bridge', 'extension.ts');
 	return fs.existsSync(candidate) ? candidate : undefined;
 }
 

@@ -642,7 +642,7 @@ necesite de durable (tasks, sesiones, memoria, etc)»*.
   `resolveDefaultNewChatSessionType`, `isNewChatSessionTypeUsable`,
   `isVisibleEditorChatSessionType`, and the empty-Local switch in `chatViewPane.ts`).
 - **durable is the backend, reached by pi's tools.** The `durable_send` / `durable_list` /
-  `durable_read` bridge (`durable-bridge`) is loaded into the chat's pi session,
+  `durable_read` bridge (`durable/bridge`) is loaded into the chat's pi session,
   and MCP stays pi's. A prompt pi delegates runs in the daemon and survives pi dying; memory
   and MCP are pi's own tools.
 - **The durable `chatSessions` contribution stays declared but disabled** (`"when": "false"`,

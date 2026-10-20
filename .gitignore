@@ -32,7 +32,6 @@
 # where a source tree expects them (`<root>/resources/...`).
 /resources/pi-runtime
 /resources/durable
-/resources/durable-bridge
 # Electron / Chromium runtime artifacts at the distribution root.
 # Matched by extension, not by name: Step 5 renames the executable and its Start Menu
 # manifest, and an ignore rule written with the VSCodium names left 222 MB exposed after
@@ -119,7 +118,6 @@ desktop.ini
 /builder/dist*/
 /builder/PiCodeBuilder.zip
 /builder/obj*/
-/.vscode
 
 # Local environment and credential files (defense in depth; cloud/sync-api has its own).
 # None of them may ever reach the repository, not even by accident.
@@ -143,10 +141,8 @@ repomix*.xml
 repomix*.md
 
 # --- from former picode-source/.gitignore ---
-.DS_Store
 .cache
 npm-debug.log
-Thumbs.db
 node_modules/
 .tmp/
 .build/
@@ -169,8 +165,6 @@ vscode.db
 /cli/openssl
 product.overrides.json
 *.snap.actual
-*.tsbuildinfo
-.eslintcache
 .vscode-test
 .chat-simulation-data
 vscode-telemetry-docs/

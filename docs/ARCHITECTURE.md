@@ -16,12 +16,12 @@ upstream merges cheap and the product layers replaceable:
 | `docs/` | Internal papers: this document, distribution, CI, decisions, the task board. |
 | `updates/` | The static update feeds, one tree per channel (layout in `updates/README.md`). |
 | `cloud/` | The PiCode Account and cloud-sync API (ADR-017). |
-| `durable/`, `durable-bridge/`, `durable-acp-client/` | The durable agent, its chat bridge and its ACP proof client. |
+| `durable/` (with `durable/bridge/`), `durable-acp-client/` | The durable agent, its chat bridge and its ACP proof client. |
 | `.github/workflows/` | CI and release pipelines ([`CI.md`](CI.md)). |
 
 Nothing of ours lives outside the editor except code the editor itself runs: the
 PiCode changes to the editor, and beside them the **durable agent**
-(`durable`, its chat bridge in `durable-bridge` and its ACP
+(`durable` with its chat bridge in `durable/bridge/`, and its ACP
 proof client in `durable-acp-client`), which the editor carries and spawns as
 its own program. That is why bringing a newer VS Code is a merge against the tree and nothing
 else has to move.
@@ -97,7 +97,7 @@ providers and models surface.
 the `@pi` chat participant, which owns the model, the agent profile and the tools, and streams
 the answer into the panel. `durable` is the **backend**, not a harness: pi reaches it through
 its own tools (the `durable_send` / `durable_list` / `durable_read` bridge in
-`durable-bridge`, plus MCP), and durable keeps in its own SQLite the
+`durable/bridge`, plus MCP), and durable keeps in its own SQLite the
 conversations it is handed — every session, per ADR-021. The durable `chatSessions` contribution stays declared but disabled
 (`"when": "false"`): a `chatSessions` type is a session **provider**, and the CHAT panel runs
 **agents** — selecting it made the panel call `invokeAgent('durable')`, which has no

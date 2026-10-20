@@ -1,4 +1,4 @@
-# durable-bridge — pi stays the driver, durable does the surviving
+# durable/bridge — pi stays the driver, durable does the surviving
 
 A pi extension (TypeScript, loaded by path — **nothing is installed into any pi**,
 and no pi directory is written) that bridges the coding agent you use every day
@@ -37,9 +37,9 @@ internal profile and `PI_CODING_AGENT_SESSION_DIR` keeps session files here):
 
 ```bash
 PI_CODING_AGENT_DIR="C:/Users/tapla/AppData/Local/Programs/PiCode/data/pi-agent" \
-PI_CODING_AGENT_SESSION_DIR="durable-bridge/.data/pi-sessions" \
+PI_CODING_AGENT_SESSION_DIR="durable/bridge/.data/pi-sessions" \
 node "C:/Users/tapla/AppData/Local/Programs/PiCode/resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
-  --extension durable-bridge/extension.ts
+  --extension durable/bridge/extension.ts
 ```
 
 Then, in pi: *"Call durable_send with the prompt: run slow_step six times…"*,
@@ -48,7 +48,7 @@ Then, in pi: *"Call durable_send with the prompt: run slow_step six times…"*,
 The one-command proof (kill-and-survive, real `taskkill`):
 
 ```bash
-node durable-bridge/proof-kill-survive.mjs
+node durable/bridge/proof-kill-survive.mjs
 ```
 
 It starts the daemon if none is up, starts pi with the extension, waits until

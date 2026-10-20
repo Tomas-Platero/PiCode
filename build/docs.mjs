@@ -58,7 +58,6 @@ import { pathToFileURL } from 'node:url';
 		'docs',
 		'durable',
 		'durable-acp-client',
-		'durable-bridge',
 		'extensions',
 		'extensions/picode',
 		'resources/picode',
