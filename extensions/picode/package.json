@@ -137,6 +137,18 @@
 				"icon": "$(gear)"
 			},
 			{
+				"command": "picode.status.filter",
+				"title": "Filter the Status Panel",
+				"category": "PiCode",
+				"icon": "$(search)"
+			},
+			{
+				"command": "picode.status.filterClear",
+				"title": "Clear the Status Filter",
+				"category": "PiCode",
+				"icon": "$(clear-all)"
+			},
+			{
 				"command": "picode.updates.apply",
 				"title": "Update Pi",
 				"category": "PiCode"
@@ -240,6 +252,16 @@
 				{
 					"command": "picode.status.openProviderSettings",
 					"when": "view == picode.status.providers",
+					"group": "navigation"
+				},
+				{
+					"command": "picode.status.filter",
+					"when": "view == picode.status.host && !picode.status.filtered",
+					"group": "navigation"
+				},
+				{
+					"command": "picode.status.filterClear",
+					"when": "view == picode.status.host && picode.status.filtered",
 					"group": "navigation"
 				}
 			],

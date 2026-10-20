@@ -358,6 +358,19 @@ export const UPDATES_APPLY_COMMAND = 'picode.updates.apply';
 export const UPDATES_CHECK_COMMAND = 'picode.updates.check';
 
 /**
+ * The panel's filter: one word asked for, and the way to drop it again.
+ *
+ * The panel is a handful of blocks rather than one list, so the filter is applied block by block —
+ * each keeps the rows that match and the parents whose children do — and the block that carries
+ * the filter row is the first one, so clearing is always one click from the top.
+ */
+export const STATUS_FILTER_COMMAND = 'picode.status.filter';
+export const STATUS_FILTER_CLEAR_COMMAND = 'picode.status.filterClear';
+
+/** The context key that tells a block a filter is in force, so the clear action can appear. */
+export const STATUS_FILTERED_CONTEXT = 'picode.status.filtered';
+
+/**
  * The context key the Tasks block hangs its visibility on.
  *
  * The block is declared with a `when` of this key in the manifest, and the store writes it after
@@ -392,6 +405,19 @@ export function registerStatusTreeViews(): vscode.Disposable {
 		// header now, so the way in is the header's own action.
 		vscode.commands.registerCommand(STATUS_PROVIDER_SETTINGS_COMMAND, () =>
 			vscode.commands.executeCommand('workbench.action.openSettings', 'picode.providers')),
+		// The filter asks for one word and keeps it in the store, so it survives every refresh: the
+		// rows move under it instead of it moving with them.
+		vscode.commands.registerCommand(STATUS_FILTER_COMMAND, async () => {
+			const answer = await vscode.window.showInputBox({
+				prompt: 'Show only the status rows that contain this',
+				placeHolder: 'provider, mcp, branch…',
+				value: store.filter,
+			});
+			if (answer !== undefined) {
+				store.setFilter(answer);
+			}
+		}),
+		vscode.commands.registerCommand(STATUS_FILTER_CLEAR_COMMAND, () => store.setFilter('')),
 	];
 
 	for (const { id, section } of STATUS_SECTIONS) {
@@ -408,10 +434,25 @@ export function registerStatusTreeViews(): vscode.Disposable {
 		};
 		updateBadge();
 
+		// A block with nothing to show under the filter says why, instead of reading as broken or
+		// empty: the editor draws this line where the rows would be.
+		const updateFilterMessage = (): void => {
+			const needle = store.filter.toLowerCase();
+			const data = store.current;
+			if (needle.length === 0 || data === undefined) {
+				view.message = undefined;
+				return;
+			}
+			const matches = filterRows(sectionRows(section, data), needle).length;
+			view.message = matches === 0 ? `Nothing matches “${store.filter}”.` : undefined;
+		};
+		updateFilterMessage();
+
 		disposables.push(
 			provider,
 			view,
 			store.onDidChange(updateBadge),
+			store.onDidChange(updateFilterMessage),
 			view.onDidChangeVisibility(event => store.setVisible(id, event.visible)),
 		);
 		store.setVisible(id, view.visible);
@@ -464,6 +505,50 @@ class StatusItem extends vscode.TreeItem {
 	children: StatusItem[] | undefined;
 }
 
+/** A row's own words, as the filter reads them: its label, its description and its tooltip. */
+function rowText(item: StatusItem): string {
+	const label = typeof item.label === 'string' ? item.label : item.label?.label ?? '';
+	const description = typeof item.description === 'string' ? item.description : '';
+	const tooltip = typeof item.tooltip === 'string' ? item.tooltip : '';
+	return `${label} ${description} ${tooltip}`.toLowerCase();
+}
+
+/**
+ * The rows a word keeps, dropping the rest.
+ *
+ * A parent stays when one of its children matches — a provider whose row names only the file it
+ * came from should still be reachable by the model behind it — and when it does, it opens: what
+ * the owner searched for is below it, and a second click to see it would be a click for nothing.
+ * An empty answer is honest: no rows, and the block says so in its message.
+ */
+function filterRows(rows: readonly StatusItem[], needle: string): StatusItem[] {
+	const kept: StatusItem[] = [];
+	for (const row of rows) {
+		if (rowText(row).includes(needle)) {
+			kept.push(row);
+			continue;
+		}
+		const children = row.children === undefined ? [] : filterRows(row.children, needle);
+		if (children.length === 0) {
+			continue;
+		}
+		row.children = children;
+		row.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
+		kept.push(row);
+	}
+	return kept;
+}
+
+/** The row that says which word is in force, how much it kept, and how to drop it. */
+function filterRow(text: string, matches: number): StatusItem {
+	return new StatusItem(`Filter: ${text}`, {
+		description: matches === 0 ? 'no matches' : `${matches} ${matches === 1 ? 'match' : 'matches'}`,
+		icon: stateIcon('filter'),
+		tooltip: 'Clear the status filter',
+		command: { command: STATUS_FILTER_CLEAR_COMMAND, title: 'Clear the status filter' },
+	});
+}
+
 /**
  * The one reading behind every block.
  *
@@ -479,6 +564,7 @@ class StatusStore implements vscode.Disposable {
 	private data: StatusData | undefined;
 	private inFlight: Promise<void> | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
+	private searchText = '';
 	private readonly visible = new Set<string>();
 	private readonly disposables: vscode.Disposable[] = [];
 
@@ -488,6 +574,29 @@ class StatusStore implements vscode.Disposable {
 
 	get current(): StatusData | undefined {
 		return this.data;
+	}
+
+	/** The word the panel is filtered by, or `''` when it shows everything. */
+	get filter(): string {
+		return this.searchText;
+	}
+
+	/**
+	 * Sets the word every block keeps only the matching rows for.
+	 *
+	 * The word lives here, beside the reading, because it outlives any single render: the timer
+	 * replaces the rows every five seconds, and a filter that vanished with them would be a filter
+	 * the owner had to type again and again. The context key is what lets the header offer the way
+	 * out — a filter with no visible way to clear it is a trap.
+	 */
+	setFilter(text: string): void {
+		const next = text.trim();
+		if (next === this.searchText) {
+			return;
+		}
+		this.searchText = next;
+		void vscode.commands.executeCommand('setContext', STATUS_FILTERED_CONTEXT, next.length > 0);
+		this._onDidChange.fire();
 	}
 
 	/**
@@ -601,7 +710,15 @@ class StatusSectionProvider implements vscode.TreeDataProvider<StatusItem>, vsco
 		if (data === undefined) {
 			return [new StatusItem('The status is not available yet — it will appear in a moment.')];
 		}
-		return sectionRows(this.section, data);
+		const rows = sectionRows(this.section, data);
+		const needle = this.store.filter.toLowerCase();
+		if (needle.length === 0) {
+			return rows;
+		}
+		const kept = filterRows(rows, needle);
+		// The first block carries the filter itself: what is being kept out, how much is left, and
+		// the click that puts everything back. The other blocks just show their matches.
+		return this.section === 'host' ? [filterRow(this.store.filter, kept.length), ...kept] : kept;
 	}
 
 	dispose(): void {
