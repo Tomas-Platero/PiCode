@@ -41,6 +41,12 @@ be PiCode.
 It is not a shipping build: the release pipeline always runs `./build/build.sh`.
 Both are also reachable as `npm run build:pack` and `npm run build:fast`.
 
+There is a second, separate lane: `npm run build-fast` (upstream's
+`build/next/`), which compiles only what changed into `out/` and feeds the
+development host. It is faster than `build-fast.sh` but it does not produce a
+pack, so it is for the editor's own development, not for testing pi or the
+channel seal.
+
 ## 👀 Seeing a change while you work
 
 ```bash
