@@ -114,6 +114,8 @@ export interface SetupState {
 	readonly externalAvailable: boolean;
 	/** The version of the internal pi, from its own package manifest. */
 	readonly internalPiVersion?: string;
+	/** True once the setup has been completed or ended for good. */
+	readonly completed?: boolean;
 }
 
 /** What the About dialog shows: the version of the pi in force. */
@@ -211,6 +213,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 		runtime: readRuntimeMode(),
 		externalAvailable: externalSdkEntry() !== undefined,
 		internalPiVersion: readInternalPiVersion(deps.distributionRoot),
+		completed: deps.globalState.get<boolean>(DONE_KEY, false),
 	});
 
 	const markDone = (): void => {

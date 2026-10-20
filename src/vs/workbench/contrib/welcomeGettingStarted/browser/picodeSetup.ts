@@ -132,6 +132,7 @@ interface SetupState {
 	runtime: 'internal' | 'external';
 	externalAvailable: boolean;
 	internalPiVersion?: string;
+	completed?: boolean;
 }
 
 /** What the probe answers about the machine's pi. */
@@ -258,6 +259,12 @@ export class PiCodeSetup extends Disposable {
 		const [state] = await Promise.all([this.resolveState(), this.resolveThemes()]);
 		if (this._store.isDisposed) { return; }
 		this.state = state;
+		// A setup that was already completed does not need to ask the same questions again: if the
+		// runtime is already chosen, the pi step has nothing to say, so the wizard opens on the
+		// next thing that still needs an answer.
+		if (state !== undefined && state.completed && state.runtime !== undefined && this.step === 0) {
+			this.step = state.runtime === 'internal' ? 2 : 3;
+		}
 		this.renderWizard(state);
 	}
 
