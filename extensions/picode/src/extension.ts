@@ -2087,6 +2087,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		showUpdatesNotice(readUpdatesSnapshot(context.globalState))));
 
 	let checking = false;
+	let firstBackgroundCheck = true;
 	/**
 	 * One check, run now: by the timer on its own rhythm, or by the owner asking (`picode.updates.check`).
 	 *
@@ -2101,7 +2102,14 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 		checking = true;
 		try {
-			showStatus(await runUpdateCheck(context.globalState));
+			const snapshot = await runUpdateCheck(context.globalState);
+			showStatus(snapshot);
+			// Say it once, on the first background check of the session, when something new appeared
+			// since the last time. After that the status bar carries the news until the owner acts.
+			if (firstBackgroundCheck && snapshot !== undefined && snapshot.targets.length > 0) {
+				void showUpdatesNotice(snapshot);
+			}
+			firstBackgroundCheck = false;
 		} catch (error) {
 			report(`updates: the check failed (${error instanceof Error ? error.message : String(error)})`);
 		} finally {
@@ -2112,6 +2120,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// The last check's answer survives restarts, so the item is back the moment the window is —
 	// before the first check of this session has run.
 	showStatus(readUpdatesSnapshot(context.globalState));
+	// If a previous check already found updates, say so once, on startup, instead of waiting for
+	// the owner to open the panel. The delay lets the window finish opening before the toast.
+	const cachedSnapshot = readUpdatesSnapshot(context.globalState);
+	if (cachedSnapshot !== undefined && cachedSnapshot.targets.length > 0) {
+		setTimeout(() => void showUpdatesNotice(cachedSnapshot), 8000);
+	}
 	const firstCheck = setTimeout(() => { void scheduledCheck(); }, UPDATES_FIRST_CHECK_DELAY_MS);
 	const interval = setInterval(() => { void scheduledCheck(); }, UPDATES_CHECK_INTERVAL_MS);
 	context.subscriptions.push(new vscode.Disposable(() => {
