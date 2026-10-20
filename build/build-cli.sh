@@ -33,7 +33,16 @@ if [[ "${PICODE_BUILD_CLI:-yes}" == "no" ]]; then
   give_up "skipped (PICODE_BUILD_CLI=no)"
 fi
 
-PACK_DIR="${1:?usage: build/build-cli.sh <pack dir>}"
+# A pack directory is where the binary is dropped so a source build ships the CLI. When the script is
+# run on its own (`npm run compile-cli`), there is no pack yet: it builds and reports the binary
+# instead of failing on a missing destination.
+COPY_TO_PACK="yes"
+if [[ "${1:-}" == "" || "${1:-}" == "--build-only" ]]; then
+  COPY_TO_PACK="no"
+  PACK_DIR=""
+else
+  PACK_DIR="${1:?usage: build/build-cli.sh [<pack dir>|--build-only]}"
+fi
 
 if ! command -v cargo > /dev/null 2>&1; then
   give_up "cargo not found; skipping (install rustup to build it)."
@@ -98,10 +107,15 @@ if [[ -z "${BINARY}" ]]; then
   give_up "build finished but no binary was found; skipping."
 fi
 
-mkdir -p "${PACK_DIR}/bin"
-cp -f "${BINARY}" "${PACK_DIR}/bin/picode-cli"
-if [[ "${BINARY}" == *.exe ]]; then
-  cp -f "${BINARY}" "${PACK_DIR}/bin/picode-cli.exe"
+if [[ "${COPY_TO_PACK}" == "yes" ]]; then
+  mkdir -p "${PACK_DIR}/bin"
+  cp -f "${BINARY}" "${PACK_DIR}/bin/picode-cli"
+  if [[ "${BINARY}" == *.exe ]]; then
+    cp -f "${BINARY}" "${PACK_DIR}/bin/picode-cli.exe"
+  fi
+  echo "cli: ${BINARY} -> ${PACK_DIR}/bin/picode-cli"
+else
+  echo "cli: built ${BINARY}"
+  echo "    run it with: ${BINARY} --version"
 fi
-echo "cli: ${BINARY} -> ${PACK_DIR}/bin/picode-cli"
 exit 0
