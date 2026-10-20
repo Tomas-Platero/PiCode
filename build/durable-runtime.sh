@@ -31,8 +31,8 @@ set -eo pipefail
 
 PACK_DIR="${1:?usage: build/durable-runtime.sh <pack dir>}"
 
-SOURCE="./durable"
-BRIDGE="./durable/bridge"
+SOURCE="./host/durable"
+BRIDGE="./host/durable/bridge"
 TARGET="${PACK_DIR}/resources/durable"
 BRIDGE_TARGET="${PACK_DIR}/resources/durable/bridge"
 

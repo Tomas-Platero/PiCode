@@ -33,9 +33,10 @@ test('the roots are tried in order: the open folders, the repository above the p
 	// The repository a packed build sits in: `PiCode-win32-x64` is unpacked inside the PiCode
 	// source tree, so its agent is three levels above `<app>/resources/app`.
 	assert.equal(candidates[2], path.join(process.cwd(), 'durable'));
+	assert.equal(candidates[3], path.join(process.cwd(), 'host', 'durable'));
 	// And last, the agent this installation carries: `<app>/resources/durable`, the only
 	// candidate an installed editor has.
-	assert.equal(candidates[3], path.join(process.cwd(), 'install', 'resources', SHIPPED_DURABLE_FOLDER));
+	assert.equal(candidates[4], path.join(process.cwd(), 'install', 'resources', SHIPPED_DURABLE_FOLDER));
 });
 
 test('what the installation carries is tried whatever the setting is spelled as', () => {
@@ -45,6 +46,7 @@ test('what the installation carries is tried whatever the setting is spelled as'
 
 	assert.deepEqual(candidates, [
 		path.join(process.cwd(), 'my', 'agent'),
+		path.join(process.cwd(), 'host', 'durable'),
 		path.join(process.cwd(), 'install', 'resources', SHIPPED_DURABLE_FOLDER)
 	]);
 });
@@ -52,6 +54,6 @@ test('what the installation carries is tried whatever the setting is spelled as'
 test('with no folder open the installation is still a candidate, so nothing has to be configured', () => {
 	const candidates = durableFolderCandidates(DEFAULT_DURABLE_FOLDER, [], appRoot());
 
-	assert.equal(candidates.length, 2);
+	assert.equal(candidates.length, 3);
 	assert.equal(candidates.at(-1), path.join(process.cwd(), 'install', 'resources', SHIPPED_DURABLE_FOLDER));
 });

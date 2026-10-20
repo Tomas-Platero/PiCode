@@ -12,9 +12,9 @@ storage), then run one of the three proofs:
 cd durable
 node cli.js serve          # terminal 1 (or: bash proof-acp.sh does all of this itself)
 
-node ../durable-acp-client/client.js flow          # 1. handshake → session/new → streamed prompt → final answer
-node ../durable-acp-client/client.js cancel        # 2. a 20 s tool call, cancelled mid-flight → stopReason "cancelled"
-node ../durable-acp-client/client.js permission    # 3. the guard asks the client: reject blocks, allow executes
+node ../host/durable/acp-client/client.js flow          # 1. handshake → session/new → streamed prompt → final answer
+node ../host/durable/acp-client/client.js cancel        # 2. a 20 s tool call, cancelled mid-flight → stopReason "cancelled"
+node ../host/durable/acp-client/client.js permission    # 3. the guard asks the client: reject blocks, allow executes
 ```
 
 Or all three with their own daemon in one command:

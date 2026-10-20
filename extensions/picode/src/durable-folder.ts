@@ -43,6 +43,7 @@ export function durableFolderCandidates(configured: string, workspaceFolders: re
 	return [
 		...workspaceFolders.map(folder => join(folder, configured)),
 		resolve(appRoot, '..', '..', '..', configured),
+		resolve(appRoot, '..', '..', '..', 'host', 'durable'),
 		resolve(appRoot, '..', SHIPPED_DURABLE_FOLDER)
 	];
 }

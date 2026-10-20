@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **19** folders documented · **20** without a README.
+- **20** folders documented · **20** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -318,6 +318,7 @@
 │   ├── buildfile.ts
 │   ├── checks.mjs
 │   ├── data-hold.sh
+│   ├── dev.mjs
 │   ├── docs.mjs
 │   ├── durable-runtime.sh
 │   ├── filters.ts
@@ -326,10 +327,7 @@
 │   ├── gulpfile.editor.ts
 │   ├── gulpfile.extensions.ts
 │   ├── gulpfile.hygiene.ts
-│   ├── gulpfile.reh.ts
-│   ├── gulpfile.scan.ts
 │   ├── gulpfile.ts
-│   ├── gulpfile.vscode.linux.ts
 │   ├── gulpfile.vscode.ts
 │   ├── gulpfile.vscode.web.ts
 │   ├── gulpfile.vscode.win32.ts
@@ -343,44 +341,8 @@
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 41 files in total
+│   └── … 39 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
-├── cloud/ — Todo lo que vive en la nube: la única parte de pago del producto. El editor es gratis y completo; esto es la sincronización y el respaldo de la…
-│   ├── sync-api/ — The backend of PiCode's sync service: it implements the REST contract the editor's Settings Sync engine expects, authenticates against Firebase Auth,…
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   └── api/
-│   │   │   │       ├── health/
-│   │   │   │       │   └── route.ts
-│   │   │   │       └── v1/
-│   │   │   │           ├── account/
-│   │   │   │           ├── collection/
-│   │   │   │           ├── download/
-│   │   │   │           ├── manifest/
-│   │   │   │           └── resource/
-│   │   │   └── lib/
-│   │   │       ├── auth.ts
-│   │   │       ├── contract.ts
-│   │   │       ├── crypto.ts
-│   │   │       ├── firebase-admin.ts
-│   │   │       ├── http.ts
-│   │   │       ├── plans.ts
-│   │   │       ├── quota.ts
-│   │   │       ├── retention.ts
-│   │   │       └── store.ts
-│   │   ├── test/
-│   │   │   ├── plans.test.ts
-│   │   │   └── retention.test.ts
-│   │   ├── firebase.json
-│   │   ├── firestore.indexes.json
-│   │   ├── firestore.rules
-│   │   ├── next-env.d.ts
-│   │   ├── next.config.mjs
-│   │   ├── package-lock.json
-│   │   ├── package.json
-│   │   ├── README.md
-│   │   └── tsconfig.json
-│   └── README.md
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
 │   ├── CI.md
@@ -393,45 +355,10 @@
 │   ├── README.md
 │   ├── TAREAS.md
 │   └── VISION.md
-├── durable/ — A self-contained program that runs @earendil-works/pi-durable (1.3.0) against the owner's LAN gateway OmniRoute and proves, with real runs, the three…
-│   ├── lib/
-│   │   ├── acp.js
-│   │   ├── agents.js
-│   │   ├── client.js
-│   │   ├── common.js
-│   │   ├── daemon.d.ts
-│   │   ├── daemon.js
-│   │   ├── extensions.js
-│   │   ├── guard.js
-│   │   ├── mcp.js
-│   │   ├── profile.js
-│   │   ├── protocol.js
-│   │   ├── render.js
-│   │   ├── settings.js
-│   │   └── skills.js
-│   ├── cli.js
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── proof-acp.sh
-│   ├── proof-daemon.sh
-│   ├── proof-editor-lifecycle.js
-│   ├── proof-record.js
-│   ├── proof1-kill.js
-│   ├── proof1-resume.js
-│   ├── proof2-subagent.js
-│   ├── proof3-two-clients.js
-│   ├── README.md
-│   └── smoke.js
-├── durable-acp-client/ — A deliberately small ACP client that proves durable speaks the Agent Client Protocol (v1) over stdio (node cli.js acp). It speaks raw JSON-RPC on the…
-│   ├── client.js
-│   └── README.md
-├── durable-bridge/ — A pi extension (TypeScript, loaded by path — nothing is installed into any pi, and no pi directory is written) that bridges the coding agent you use…
-│   ├── extension.ts
-│   ├── proof-kill-survive.mjs
-│   └── README.md
 ├── extensions/ — Casi todo lo que hay aquí es upstream: las extensiones que VS Code trae de serie (git, json, markdown, typescript-language-features…), tal como…
 │   ├── picode/ — La pieza que hace que el chat exista. Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP,…
 │   │   ├── media/
+│   │   │   ├── picode-activity.svg
 │   │   │   ├── picode-light.svg
 │   │   │   ├── picode-status.svg
 │   │   │   └── picode.svg
@@ -569,6 +496,76 @@
 │   ├── README.md
 │   ├── tsconfig.base.json
 │   └── … and 86 upstream built-in extensions (only picode/ is ours)
+├── host/ — PiCode's own code, grouped so the repository root is not a pile of unrelated folders. VS Code's build system needs src/, extensions/, resources/ and…
+│   ├── cloud/ — Todo lo que vive en la nube: la única parte de pago del producto. El editor es gratis y completo; esto es la sincronización y el respaldo de la…
+│   │   ├── sync-api/ — The backend of PiCode's sync service: it implements the REST contract the editor's Settings Sync engine expects, authenticates against Firebase Auth,…
+│   │   │   ├── src/
+│   │   │   │   ├── app/
+│   │   │   │   │   └── api/
+│   │   │   │   │       ├── health/
+│   │   │   │   │       └── v1/
+│   │   │   │   └── lib/
+│   │   │   │       ├── auth.ts
+│   │   │   │       ├── contract.ts
+│   │   │   │       ├── crypto.ts
+│   │   │   │       ├── firebase-admin.ts
+│   │   │   │       ├── http.ts
+│   │   │   │       ├── plans.ts
+│   │   │   │       ├── quota.ts
+│   │   │   │       ├── retention.ts
+│   │   │   │       └── store.ts
+│   │   │   ├── test/
+│   │   │   │   ├── plans.test.ts
+│   │   │   │   └── retention.test.ts
+│   │   │   ├── firebase.json
+│   │   │   ├── firestore.indexes.json
+│   │   │   ├── firestore.rules
+│   │   │   ├── next-env.d.ts
+│   │   │   ├── next.config.mjs
+│   │   │   ├── package-lock.json
+│   │   │   ├── package.json
+│   │   │   ├── README.md
+│   │   │   └── tsconfig.json
+│   │   └── README.md
+│   ├── durable/ — A self-contained program that runs @earendil-works/pi-durable (1.3.0) against the owner's LAN gateway OmniRoute and proves, with real runs, the three…
+│   │   ├── acp-client/ — A deliberately small ACP client that proves durable speaks the Agent Client Protocol (v1) over stdio (node cli.js acp). It speaks raw JSON-RPC on the…
+│   │   │   ├── client.js
+│   │   │   └── README.md
+│   │   ├── bridge/ — A pi extension (TypeScript, loaded by path — nothing is installed into any pi, and no pi directory is written) that bridges the coding agent you use…
+│   │   │   ├── extension.ts
+│   │   │   ├── proof-kill-survive.mjs
+│   │   │   └── README.md
+│   │   ├── lib/
+│   │   │   ├── acp.js
+│   │   │   ├── agents.js
+│   │   │   ├── client.js
+│   │   │   ├── common.js
+│   │   │   ├── daemon.d.ts
+│   │   │   ├── daemon.js
+│   │   │   ├── extensions.js
+│   │   │   ├── guard.js
+│   │   │   ├── mcp.js
+│   │   │   ├── profile.js
+│   │   │   ├── protocol.js
+│   │   │   ├── render.js
+│   │   │   ├── settings.js
+│   │   │   └── skills.js
+│   │   ├── cli.js
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── proof-acp.sh
+│   │   ├── proof-daemon.sh
+│   │   ├── proof-editor-lifecycle.js
+│   │   ├── proof-record.js
+│   │   ├── proof1-kill.js
+│   │   ├── proof1-resume.js
+│   │   ├── proof2-subagent.js
+│   │   ├── proof3-two-clients.js
+│   │   ├── README.md
+│   │   └── smoke.js
+│   └── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
+│       ├── README.md
+│       └── stable.json
 ├── remote/ · ⬆️ upstream, no breakdown
 ├── resources/
 │   ├── picode/ — Las imágenes del propio repositorio (no las del producto): lo que se ve en el README público y en la cabecera de GitHub.
@@ -576,7 +573,7 @@
 │   │   ├── picode-banner.png
 │   │   ├── README.md
 │   │   └── vscodium.svg
-│   └── … and 5 upstream built-in extensions (only picode/ is ours)
+│   └── … and 3 upstream built-in extensions (only picode/ is ours)
 ├── scripts/ · ⬆️ upstream, no breakdown
 ├── src/ — Carpeta upstream: aquí no se documenta fichero a fichero. Son los 9.400 ficheros del editor de VS Code tal como descienden de upstream/stable.json… · ⬆️ upstream, no breakdown
 ├── updates/ — The static documents the editor's updater reads. They are served directly from this directory by raw.githubusercontent.com, which is why there is no…
@@ -589,9 +586,6 @@
 │   │   │           └── latest.json
 │   │   └── README.md
 │   └── README.md
-├── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
-│   ├── README.md
-│   └── stable.json
 ├── _typos.toml — False positives of the `typos` spell checker.
 ├── AGENTS.md — 📋 The owner's phrases: product, UI, architecture and working rules.
 ├── cglicenses.json

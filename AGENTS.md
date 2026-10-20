@@ -116,7 +116,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
 
-* **Residencia:** el agente durable vive en el propio árbol del editor (`durable`, con su puente de chat en `durable/bridge/` y su cliente de prueba ACP en `durable-acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
+* **Residencia:** el agente durable vive en el propio árbol del editor (`host/durable`, con su puente de chat en `host/durable/bridge/` y su cliente de prueba ACP en `host/durable/acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
 * **Nombre:** en todo lo que ve el dueño es **Durable agent**, a secas. Ninguna UI, ajuste o documento vivo lo presenta como experimental.
 * **Build:** viaja dentro de la instalación (`resources/durable`), como ya hacía; solo cambia el nombre de la carpeta destino.
 

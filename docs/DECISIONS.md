@@ -508,7 +508,7 @@ security fix that only lands in the code, turns this back into a real merge.
 **Status:** accepted.
 
 **Context:** The first design gave every plan a storage quota and agreed it with the website:
-`free` ≈ 1 MB, `pro` ≈ 50 MB, enforced in `cloud/sync-api` (`DEFAULT_PLAN_QUOTAS`). The editor
+`free` ≈ 1 MB, `pro` ≈ 50 MB, enforced in `host/cloud/sync-api` (`DEFAULT_PLAN_QUOTAS`). The editor
 then became stricter than that: `picodeAccountProvider.createSession` refused to mint a sync
 session for an account whose plan is not `pro`, and every API route called `requirePro`
 (`402 PaymentRequired`) — so a Free owner could not even sign in for an account. Three layers

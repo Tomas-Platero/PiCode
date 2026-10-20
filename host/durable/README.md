@@ -260,7 +260,7 @@ stdio — the protocol Zed and JetBrains speak — so an editor panel drives the
 with a protocol that has a spec instead of the local NDJSON one. It is implemented in
 `lib/acp.js` with the authoritative typed definitions from `@agentclientprotocol/sdk` (the
 endpoint is a daemon CLIENT, like `send` and `attach`; it never opens the storage), and
-proven by `durable-acp-client/` with `bash proof-acp.sh` (ends `PROOF-ACP-OK`).
+proven by `host/durable/acp-client/` with `bash proof-acp.sh` (ends `PROOF-ACP-OK`).
 
 **v1, not the v2 draft.** v1 is what existing clients speak, and the SDK itself marks v2 as
 an unstable draft whose wire protocol "may change incompatibly in any SDK release". The
@@ -498,7 +498,7 @@ unless a rule names it.
 | `lib/render.js` | Agent events and transcript entries → CLI output, shared by the in-process `runPrompt` and the daemon clients (`send`, `attach`). |
 | `lib/acp.js` | The ACP entry point: the Agent Client Protocol (v1) over stdio, mapped onto the daemon (see "ACP: the editor protocol"). |
 | `proof-daemon.sh` | Reproducible multi-process evidence for the daemon (see "Proving the daemon"). |
-| `proof-acp.sh` | Reproducible evidence for the ACP endpoint via `durable-acp-client/` (see "ACP: the editor protocol"). |
+| `proof-acp.sh` | Reproducible evidence for the ACP endpoint via `host/durable/acp-client/` (see "ACP: the editor protocol"). |
 | `lib/extensions.js` | `slow_step` tool (a deterministic 2 s tool, `replay: "safe"`) and the background subagent: a `subagent` tool that spawns a **background anchor task** owning a child conversation, drives it, and reports its answer back to the parent as a follow-up input. |
 | `proof1-kill.js` / `proof1-resume.js` | Proof 1, phases A and B. |
 | `proof2-subagent.js` | Proof 2. |

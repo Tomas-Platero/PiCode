@@ -89,7 +89,7 @@ Two paths are easy to confuse, so both are stated: the **user data** directory i
 extensions live in `<userHome>/<dataFolderName>/extensions`.
 
 The profile is disposable by design: deleting `data/` yields a clean PiCode. It is also the
-unit the paid cloud sync is meant to move as one block (see `cloud/sync-api/`), never a
+unit the paid cloud sync is meant to move as one block (see `host/cloud/sync-api/`), never a
 per-setting copy.
 
 ## 🤖 5. The agent runtime

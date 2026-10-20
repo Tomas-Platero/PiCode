@@ -16,7 +16,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 OUT=.data/acp-proof
-CLIENT=../durable-acp-client/client.js
+CLIENT=../host/durable/acp-client/client.js
 mkdir -p "$OUT"
 step() { printf '\n=== %s\n' "$*"; }
 FAIL=0

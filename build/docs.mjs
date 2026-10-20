@@ -53,16 +53,18 @@ import { pathToFileURL } from 'node:url';
 		'.github',
 		'build',
 		'cli',
-		'cloud',
-		'cloud/sync-api',
 		'docs',
-		'durable',
-		'durable-acp-client',
 		'extensions',
 		'extensions/picode',
+		'host',
+		'host/cloud',
+		'host/cloud/sync-api',
+		'host/durable',
+		'host/durable/acp-client',
+		'host/durable/bridge',
+		'host/upstream',
 		'resources/picode',
 		'updates',
-		'upstream',
 	];
 
 	// Names that carry their parent's README rather than their own.
