@@ -49,6 +49,10 @@ export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
 
+# Minification is on by default; `PICODE_MINIFY=0` skips it (~30 s off the bundle) for the
+# edit-compile-look loop. The release always minifies.
+export PICODE_MINIFY="${PICODE_MINIFY:-yes}"
+
 # A fast build (build/build-fast.sh) asks for the same artifact without the whole-tree type check:
 # esbuild never consumed the check's output, so what it leaves out is the report, not the compile.
 # The release never sets this.
@@ -964,7 +968,7 @@ if [[ "${VERIFY_OK}" == "yes" ]]; then
   CLI_ENTRY="${PACK_DIR}/resources/app/out/cli.js"
   if [[ "${OS_NAME}" == "windows" && -f "${PACK_DIR}/${EDITOR_EXE}" && -f "${CLI_ENTRY}" ]]; then
     if ELECTRON_RUN_AS_NODE=1 timeout 30 "${PACK_DIR}/${EDITOR_EXE}" "${CLI_ENTRY}" --version > "${ROOT_DIR}/.scratch/smoke.out" 2>&1; then
-      echo "  ok: cli --version -> $( head -n1 "${ROOT_DIR}/.scratch/smoke.out" )"
+      echo "  ok: cli --version -> $( grep -v -i crashpad "${ROOT_DIR}/.scratch/smoke.out" | head -n1 )"
     else
       echo "  !! the editor's cli --version failed (see .scratch/smoke.out)" >&2
       VERIFY_OK="no"

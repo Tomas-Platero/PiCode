@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentFor } from '../../../durable/lib/daemon.js';
+import { agentFor } from '../../../host/durable/lib/daemon.js';
 
 /** The resolved options the daemon hands `agentFor`: only the model default is read. */
 const resolved = { options: { model: { value: 'omni/auto' }, agent: { value: undefined } } };

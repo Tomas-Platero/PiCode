@@ -704,10 +704,10 @@ BUILD_TARGETS.forEach(buildTarget => {
 					}
 					await runEsbuildBundle(
 						sourceFolderName,
-						!!minified,
+						!!minified && process.env.PICODE_MINIFY !== '0',
 						true,
 						'desktop',
-						minified && useCdnSourceMapsForPackagingTasks ? `${sourceMappingURLBase}/core` : undefined
+						minified && useCdnSourceMapsForPackagingTasks && process.env.PICODE_MINIFY !== '0' ? `${sourceMappingURLBase}/core` : undefined
 					);
 				}
 			);
