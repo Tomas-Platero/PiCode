@@ -24,7 +24,7 @@ import {
 	shouldAsk,
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
-import { toolProgress } from './progress';
+import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
 import {
@@ -362,6 +362,57 @@ function pushBackgroundCompletionCard(
 }
 
 /* ------------------------------------------------------------------ *
+ * The tools, as the chat can see them
+ * ------------------------------------------------------------------ */
+
+/**
+ * Pushes one tool card: the same line the progress pill showed, kept in the transcript.
+ *
+ * The progress line is gone as soon as the tool ends, so a turn that read four files and ran one
+ * command left no trace in the answer of what it actually did. This card is that trace, and it is
+ * the chat's own generic tool row (`ChatSimpleToolResultData`): collapsed to one line, with the
+ * call's arguments and the tool's answer behind it, so the transcript stays readable while the
+ * detail is still one click away.
+ *
+ * The start and the end are the same card updated in place — same `toolCallId`, same
+ * `enablePartialUpdate` — so a call reads as one row that ends, not as two rows that repeat.
+ */
+function pushToolCard(
+	stream: vscode.ChatResponseStream,
+	toolName: string,
+	toolCallId: string,
+	args: unknown,
+	result: unknown,
+	isError: boolean,
+	log: (line: string) => void,
+): void {
+	try {
+		const line = toolProgress(toolName, args);
+		const part = new vscode.ChatToolInvocationPart(toolName, toolCallId);
+		part.invocationMessage = line;
+		part.pastTenseMessage = isError ? `${line} — failed` : line;
+		part.toolSpecificData = { input: toolInputText(args), output: toolOutputText(result) };
+		part.enablePartialUpdate = true;
+		part.isComplete = result !== undefined;
+		part.isError = isError;
+		stream.push(part);
+	} catch (error) {
+		// The card is a window onto the work; losing the window must not end the turn.
+		log(`tool card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
+ * Whether a tool already gets a card of its own.
+ *
+ * A delegation and a background job have richer cards (`durable-cards.ts`, `background-cards.ts`),
+ * and a generic row beside them would say the same thing twice.
+ */
+function hasOwnToolCard(toolName: string): boolean {
+	return isDurableDelegationTool(toolName) || isBackgroundTool(toolName);
+}
+
+/* ------------------------------------------------------------------ *
  * The turn's changed files, as the chat can see them
  * ------------------------------------------------------------------ */
 
@@ -520,6 +571,11 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// A file this tool is about to write is snapshotted now — this is where the "before"
 				// still exists on disk; by the tool's end it does not.
 				snapshotToolTarget(event.toolName, event.args, sessionCwd);
+				// Any other tool keeps a row of its own in the transcript: the pill's line is
+				// gone the moment it ends, and the answer should still say what was run.
+				if (!hasOwnToolCard(event.toolName) && typeof event.toolCallId === 'string') {
+					pushToolCard(stream, event.toolName, event.toolCallId, event.args, undefined, false, log);
+				}
 				return;
 			}
 			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
@@ -532,6 +588,10 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
 				recordToolResult(event.toolName, event.args, event.isError, sessionCwd);
+				// The call's own row, now with what the tool answered.
+				if (!hasOwnToolCard(event.toolName)) {
+					pushToolCard(stream, event.toolName, event.toolCallId, event.args, event.result, event.isError === true, log);
+				}
 				// A background job's call ends at once, when the job **starts**: its result is what names
 				// the job, so the same card is updated with it rather than a second one being pushed.
 				if (isBackgroundTool(event.toolName)) {
