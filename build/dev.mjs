@@ -45,6 +45,9 @@ const EDITOR_ARGS = [
 // copying 116 MB into the tree or teaching the connector a second layout.
 const LINKED = ['pi-runtime', 'durable'];
 
+// Junctions/symlinks created by this session, so they can be removed on exit and the tree stays clean.
+const linkedNames = [];
+
 function packRoot() {
 	for (const name of ['PiCode-Win32-x64', 'PiCode-Win32-x64-experimental', 'PiCode-Win32-x64-beta']) {
 		const candidate = path.join(REPO, name);
@@ -73,6 +76,7 @@ function linkPackedRuntime() {
 			// A junction on Windows and a plain symlink elsewhere; both are ignored by git.
 			symlinkSync(target, link, isWindows ? 'junction' : 'dir');
 			linked.push(name);
+			linkedNames.push(name);
 		} catch (error) {
 			say('warn', `could not link resources/${name}: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -321,6 +325,14 @@ function stop(code) {
 	}
 	if (watch !== undefined) {
 		watch.kill();
+	}
+	for (const name of linkedNames) {
+		const link = path.join(REPO, 'resources', name);
+		try {
+			unlinkSync(link);
+		} catch {
+			// Already gone or never created.
+		}
 	}
 	if (lockFile !== undefined) {
 		try {
