@@ -432,6 +432,38 @@ import { pathToFileURL } from 'node:url';
 	 *
 	 * Usage: node build/checks.mjs test-connector
 	 */
+	async function cmdVerify(cli) {
+	const { execFileSync } = await import('node:child_process');
+	const fs = await import('node:fs');
+	const path = await import('node:path');
+	const REPO = path.resolve(import.meta.dirname, '..');
+
+	const results = [];
+	const run = (name, command, args) => {
+		process.stdout.write(`\n-- ${name}\n`);
+		try {
+			execFileSync(command, args, { stdio: 'inherit', cwd: REPO });
+			results.push({ name, ok: true });
+		} catch {
+			results.push({ name, ok: false });
+		}
+	};
+
+	run('folder documentation', process.execPath, ['build/docs.mjs', 'check']);
+	run('MCP entries against pi', process.execPath, ['build/checks.mjs', 'check-mcp']);
+	run('connector tests', process.execPath, ['build/checks.mjs', 'test-connector']);
+
+	process.stdout.write('\n');
+	let failed = false;
+	for (const result of results) {
+		process.stdout.write(`${result.ok ? 'ok  ' : 'FAIL'}  ${result.name}\n`);
+		if (!result.ok) { failed = true; }
+	}
+	if (failed) {
+		process.exit(1);
+	}
+	}
+
 	async function cmdTestConnector(cli) {
 		const { execFileSync } = await import('node:child_process');
 		const fs = await import('node:fs');
@@ -455,7 +487,7 @@ import { pathToFileURL } from 'node:url';
 
 
 
-const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|patch-gulp-electron|prune-binaries|test-connector>\n`;
+const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|patch-gulp-electron|prune-binaries|test-connector|verify>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -470,8 +502,8 @@ async function dispatch() {
 			return cmdPruneBinaries(cli.slice(1));
 		case 'test-connector':
 			return cmdTestConnector(cli.slice(1));
-		case 'test-connector':
-			return cmdTestConnector(cli.slice(1));
+		case 'verify':
+			return cmdVerify(cli.slice(1));
 		default:
 			process.stderr.write(USAGE);
 			return process.exit(2);

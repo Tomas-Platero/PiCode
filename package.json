@@ -10,6 +10,7 @@
     "type": "module",
     "private": true,
     "scripts": {
+        "verify": "node build/checks.mjs verify",
         "test": "node build/checks.mjs test-connector",
         "test:connector": "node build/checks.mjs test-connector",
         "test-extension": "vscode-test",
