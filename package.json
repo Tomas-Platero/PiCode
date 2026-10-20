@@ -10,7 +10,8 @@
     "type": "module",
     "private": true,
     "scripts": {
-        "test": "node -e \"console.error('Run a test script from the scripts folder, for example: ./scripts/test.sh --run <file>.'); process.exit(1)\"",
+        "test": "node build/checks.mjs test-connector",
+        "test:connector": "node build/checks.mjs test-connector",
         "test-extension": "vscode-test",
         "test-build-scripts": "cd build && npm run test",
         "test-agent-host-e2e": "node scripts/test-agent-host-e2e.ts",
@@ -70,7 +71,7 @@
         "compile-web": "npm run gulp compile-web",
         "serve-out-rspack": "cd build/rspack && npx rspack serve --config rspack.serve-out.config.mts",
         "watch-web": "npm run gulp watch-web",
-        "watch-cli": "npm run gulp watch-cli",
+        "watch-cli": "echo use: cargo watch -C cli  (install cargo-watch first)",
         "mock-policy-server": "node --experimental-strip-types scripts/mock-policy-server/server.ts",
         "stylelint": "node build/stylelint.ts",
         "playwright-install": "npm exec playwright install",

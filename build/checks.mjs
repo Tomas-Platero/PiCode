@@ -423,8 +423,39 @@ import { pathToFileURL } from 'node:url';
 	process.stdout.write(`kept: ${[...KEEP_PLATFORMS].join(', ')} on ${[...KEEP_ARCHITECTURES].join(', ')}\n`);
 	}
 
+	// test-connector -- runs the connector's own tests.
+	/*
+	 * The connector is a Node extension, so its tests are plain Node tests: `node --test` over the
+	 * `.test.ts` files in `extensions/picode/test/`. Running them by hand means remembering the
+	 * flags, the glob and the working directory; this command does it once, in the same place as
+	 * the rest of the build's checks.
+	 *
+	 * Usage: node build/checks.mjs test-connector
+	 */
+	async function cmdTestConnector(cli) {
+		const { execFileSync } = await import('node:child_process');
+		const fs = await import('node:fs');
+		const path = await import('node:path');
+		const dir = path.join(path.resolve(import.meta.dirname, '..'), 'extensions', 'picode', 'test');
+		const files = fs.readdirSync(dir).filter(name => name.endsWith('.test.ts')).sort();
+		let failed = false;
+		for (const file of files) {
+			const full = path.join(dir, file);
+			process.stdout.write(`\n-- ${file}\n`);
+			try {
+				execFileSync(process.execPath, ['--experimental-strip-types', '--test', full], { stdio: 'inherit' });
+			} catch {
+				failed = true;
+			}
+		}
+		if (failed) {
+			process.exit(1);
+		}
+	}
 
-const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|patch-gulp-electron|prune-binaries>\n`;
+
+
+const USAGE = `usage: node build/checks.mjs <check-mcp|patch-languageserver|patch-gulp-electron|prune-binaries|test-connector>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -437,6 +468,10 @@ async function dispatch() {
 			return cmdPatchGulpElectron(cli.slice(1));
 		case 'prune-binaries':
 			return cmdPruneBinaries(cli.slice(1));
+		case 'test-connector':
+			return cmdTestConnector(cli.slice(1));
+		case 'test-connector':
+			return cmdTestConnector(cli.slice(1));
 		default:
 			process.stderr.write(USAGE);
 			return process.exit(2);
