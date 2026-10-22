@@ -18,10 +18,39 @@ use serde_json::Value;
 
 fn main() {
 	let files = enumerate_source_files().expect("expected to enumerate files");
+
+	// Cargo reruns this script when anything in the crate changes — but the moment a
+	// `rerun-if-changed` is printed, it reruns for what was named and nothing else. Two of the
+	// things this script bakes into the binary, the version and the product's identity, live in the
+	// repository root, **outside** the crate: without naming them a version bump left the previous
+	// number inside the shipped cli (measured: a 1.142.1 build whose `cli --version` answered
+	// 1.142.0 and whose commit was unknown). Every source file is named as well, so the crate keeps
+	// the behaviour it had.
+	for file in &files {
+		println!("cargo:rerun-if-changed={}", file.display());
+	}
+	for file in identity_files() {
+		println!("cargo:rerun-if-changed={}", file.display());
+	}
+
 	ensure_file_headers(&files).expect("expected to ensure file headers");
 	apply_build_environment_variables();
 	apply_win32_version_resources();
 	apply_debug_stack_size();
+}
+
+/// The files outside the crate that carry the identity this script writes into the binary.
+fn identity_files() -> Vec<PathBuf> {
+	let repo_dir = env::current_dir().map(|dir| dir.join("..")).unwrap_or_else(|_| PathBuf::from(".."));
+	let mut files = vec![repo_dir.join("package.json")];
+	match env::var("VSCODE_CLI_PRODUCT_JSON") {
+		Ok(configured) => files.push(PathBuf::from(configured)),
+		Err(_) => {
+			files.push(repo_dir.join("product.json"));
+			files.push(repo_dir.join("product.overrides.json"));
+		}
+	}
+	files
 }
 
 /// Windows gives the main thread a 1MB stack by default, where Linux and macOS
