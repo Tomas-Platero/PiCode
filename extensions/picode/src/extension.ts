@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
 import { declarationsFromSetting, isRecord, projectDeclaration } from './declarations';
+import { memoryEnabled, startMemory } from './engram-activation';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
@@ -55,6 +56,7 @@ import { ensureProfilePackages } from './packages-install';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
+import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { launchedAgents, lastActivity, type AgentState } from './agents';
@@ -2205,10 +2207,26 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The MCP servers pi runs are written from the settings row, and followed while the editor is
 	// open: adding one in the form is what makes it available to pi.
 	applyMcpServers(profileDirectory(context.extensionUri));
+
+	// Memory: pi's engine, declared to this profile and woken for the editor's own surfaces. It is
+	// joined, never restarted, when it already serves this store — the same store another agent on
+	// the machine may be using right now. Detached on purpose: it outlives the window, so the next
+	// start finds it instead of opening another one over the same base.
+	// The block exists only while memory is on: the manifest's `when` reads this key, written
+	// here before the views are created and again whenever the switch is flicked.
+	void vscode.commands.executeCommand('setContext', MEMORY_ENABLED_CONTEXT, memoryEnabled());
+	startMemory(profileDirectory(context.extensionUri), line => console.error(`[memory] ${line}`));
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('picode.mcp.servers')) {
 				applyMcpServers(profileDirectory(context.extensionUri));
+			}
+			// The switch, and the engine it points at: both are answered by the same call. Off
+			// takes the declaration and the protocol away; on puts them back and wakes the
+			// engine. The store is never touched, so nothing is lost either way.
+			if (event.affectsConfiguration('picode.memory.enabled') || event.affectsConfiguration('picode.memory.binary')) {
+				void vscode.commands.executeCommand('setContext', MEMORY_ENABLED_CONTEXT, memoryEnabled());
+				startMemory(profileDirectory(context.extensionUri), line => console.error(`[memory] ${line}`));
 			}
 			// The runtime in force changed, so the command list belongs to another pi's
 			// registry: the slash list re-reads.
@@ -2289,6 +2307,44 @@ const setupDeps = {
 			: 'The model\'s thinking is now shown in the chat.');
 	}));
 	context.subscriptions.push(registerStatusTreeViews());
+	// The dashboard's actions: the things the status panel used to spell out as text become
+	// buttons here. They run through the connector's own flows (reset + reload, update, cache
+	// drop, profile reveal) so there is one path to each piece of work.
+	context.subscriptions.push(vscode.commands.registerCommand('picode.pi.restart', async () => {
+		resetChatSession();
+		await vscode.commands.executeCommand('workbench.action.reloadWindow');
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.pi.openProfile', async () => {
+		const uri = vscode.Uri.file(profileInForce());
+		await vscode.commands.executeCommand('revealFileInOS', uri);
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('picode.pi.cleanCache', async () => {
+		const answer = await vscode.window.showWarningMessage(
+			'Clean PiCode\'s model cache? The model list will be rebuilt.',
+			{ modal: true },
+			'Clean',
+		);
+		if (answer !== 'Clean') {
+			return;
+		}
+		configuredModelsCache.clear();
+		subscriptionModelsCache.clear();
+		configuredModelsInFlight.clear();
+		subscriptionModelsInFlight.clear();
+		if (modelCacheFile !== undefined) {
+			try {
+				fs.rmSync(modelCacheFile, { force: true });
+			} catch {
+				// No file yet is the same answer as "cleared".
+			}
+		}
+		forgetPiRuntime();
+		onDidChangeModels.fire();
+		void vscode.window.showInformationMessage('PiCode: the model cache was cleared.');
+	}));
+	// Memory reads what the engine already answered, so it is a view of its own in the same
+	// container: the panel lists what this machine remembers without a second surface to learn.
+	context.subscriptions.push(registerMemoryView());
 	// The durable agent's commands: start, stop, list/open its conversations, and send it a
 	// prompt. The status panel's Durable section rows run the same ones.
 	// The agent is told which profile, which storage directory and which settings file to use: a

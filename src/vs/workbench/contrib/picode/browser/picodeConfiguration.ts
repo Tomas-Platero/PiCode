@@ -13,6 +13,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
 import './picodeMcpSection.js';
+import './picodeStatusSection.js';
 import './picodeAgentStatusPill.js';
 
 /**

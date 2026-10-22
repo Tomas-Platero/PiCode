@@ -1,0 +1,88 @@
+.picode-status-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+
+.picode-status-section-description {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	margin-bottom: 4px;
+}
+
+.picode-status-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.picode-status-card {
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+	border-radius: 6px;
+	padding: 12px;
+	background: var(--vscode-editor-background);
+}
+
+.picode-status-card-header {
+	font-weight: 600;
+	font-size: 13px;
+	margin-bottom: 8px;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-status-card-icon {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-status-line {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 2px 0;
+	font-size: 12px;
+}
+
+.picode-status-label {
+	color: var(--vscode-descriptionForeground);
+	flex: 0 0 auto;
+	max-width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-status-value {
+	color: var(--vscode-foreground);
+	text-align: right;
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-status-error {
+	color: var(--vscode-errorForeground);
+}
+
+.picode-status-empty {
+	color: var(--vscode-descriptionForeground);
+	font-style: italic;
+	padding: 8px 0;
+}
+
+.picode-status-action {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+}
+
+.picode-status-action-description {
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	flex: 1 1 auto;
+}

@@ -53,6 +53,7 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 	 * Copilot"). Harness descriptors can only hide sections, never re-show them.
 	 */
 	readonly managementSections: readonly AICustomizationManagementSection[] = [
+		AICustomizationManagementSection.Status,
 		AICustomizationManagementSection.Agents,
 		AICustomizationManagementSection.Skills,
 		AICustomizationManagementSection.McpServers,
