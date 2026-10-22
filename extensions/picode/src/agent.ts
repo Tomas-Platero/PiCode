@@ -26,6 +26,7 @@ import {
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { memorySection } from './memory-protocol';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
+import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
 import {
@@ -324,6 +325,38 @@ function pushDurableCard(stream: vscode.ChatResponseStream, toolCallId: string, 
 const DURABLE_SEND_TOOL_NAME = 'durable_send';
 
 /**
+ * The card a memory write gets: the call while it runs, and the same card once the engine answers.
+ *
+ * This is the one place the transcript answers *did it keep that?* in words instead of in a tool
+ * name: while the store is being written the row says what is being kept, and when it ends it says
+ * it was kept and where. The body stays the ordinary card's — the call's arguments and the engine's
+ * answer — so the detail is still one click away and nothing is hidden behind a friendly sentence.
+ */
+function pushMemoryCard(
+	stream: vscode.ChatResponseStream,
+	toolCallId: string,
+	card: MemoryCard,
+	state: 'running' | 'done' | 'failed',
+	args: unknown,
+	result: unknown,
+	log: (line: string) => void,
+): void {
+	try {
+		const part = new vscode.ChatToolInvocationPart(card.toolName, toolCallId);
+		part.invocationMessage = card.running;
+		part.pastTenseMessage = state === 'failed' ? card.failed : card.done;
+		part.toolSpecificData = { input: toolInputText(args), output: toolOutputText(result) };
+		part.enablePartialUpdate = true;
+		part.isComplete = state !== 'running';
+		part.isError = state === 'failed';
+		stream.push(part);
+	} catch (error) {
+		// The card is a window onto the work; losing the window must not end the turn.
+		log(`memory card failed: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
  * The card a background job gets: at its start, and updated once its result names the job it became.
  *
  * The agent's `background` tool returns at once, so both ends happen inside this same call — the card
@@ -423,11 +456,12 @@ function pushToolCard(
 /**
  * Whether a tool already gets a card of its own.
  *
- * A delegation and a background job have richer cards (`durable-cards.ts`, `background-cards.ts`),
- * and a generic row beside them would say the same thing twice.
+ * A delegation, a background job and a memory write have richer cards (`durable-cards.ts`,
+ * `background-cards.ts`, `memory-cards.ts`), and a generic row beside them would say the same thing
+ * twice.
  */
-function hasOwnToolCard(toolName: string): boolean {
-	return isDurableDelegationTool(toolName) || isBackgroundTool(toolName);
+function hasOwnToolCard(toolName: string, args: unknown): boolean {
+	return isDurableDelegationTool(toolName) || isBackgroundTool(toolName) || isMemoryWriteCall(toolName, args);
 }
 
 /* ------------------------------------------------------------------ *
@@ -586,12 +620,20 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
 					pushBackgroundCard(stream, event.toolCallId, backgroundCallOf(event.args), undefined, log);
 				}
+				// Memory being kept says what is being kept, from the moment the store is written.
+				// The same card ends the sentence when the engine answers.
+				if (typeof event.toolCallId === 'string') {
+					const memory = memoryCard(event.toolName, event.args);
+					if (memory !== undefined) {
+						pushMemoryCard(stream, event.toolCallId, memory, 'running', event.args, undefined, log);
+					}
+				}
 				// A file this tool is about to write is snapshotted now — this is where the "before"
 				// still exists on disk; by the tool's end it does not.
 				snapshotToolTarget(event.toolName, event.args, sessionCwd);
 				// Any other tool keeps a row of its own in the transcript: the pill's line is
 				// gone the moment it ends, and the answer should still say what was run.
-				if (!hasOwnToolCard(event.toolName) && typeof event.toolCallId === 'string') {
+				if (!hasOwnToolCard(event.toolName, event.args) && typeof event.toolCallId === 'string') {
 					pushToolCard(stream, event.toolName, event.toolCallId, event.args, undefined, false, log);
 				}
 				return;
@@ -607,7 +649,10 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// a failed tool did not change the file, and the card never says it did.
 				recordToolResult(event.toolName, event.args, event.isError, sessionCwd);
 				// The call's own row, now with what the tool answered.
-				if (!hasOwnToolCard(event.toolName)) {
+				const memory = memoryCard(event.toolName, event.args);
+				if (memory !== undefined) {
+					pushMemoryCard(stream, event.toolCallId, memory, event.isError === true ? 'failed' : 'done', event.args, event.result, log);
+				} else if (!hasOwnToolCard(event.toolName, event.args)) {
 					pushToolCard(stream, event.toolName, event.toolCallId, event.args, event.result, event.isError === true, log);
 				}
 				// A background job's call ends at once, when the job **starts**: its result is what names

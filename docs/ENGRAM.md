@@ -105,9 +105,15 @@ Leyenda: `[x]` hecho y comprobado · `[~]` hecho sin comprobar · `[ ]` pendient
   que funciona (la del dueño, otra ruta viva, o incluso un servidor por HTTP) **no se toca**.
   Comprobado sobre una copia de tu perfil: añade `engram`, conserva los 10 servidores que ya
   tienes y una segunda pasada no reescribe nada.
-- [x] Juego corto de herramientas: el perfil `agent` de su motor (**19 de 23**, medido con el
-  handshake real). Incluye el arranque y cierre de sesión, que es lo que permite decir de dónde
-  salió un recuerdo. El coste ya lo imprime el editor al abrir un chat.
+- [x] Juego corto de herramientas: el perfil `agent` de su motor (**22 de 26**, medido con el
+  handshake real contra el motor 3.5.2 de esta máquina). Incluye el arranque y cierre de sesión,
+  que es lo que permite decir de dónde salió un recuerdo. El coste ya lo imprime el editor al
+  abrir un chat.
+- [x] **El chat dice cuándo guarda:** una escritura de verdad en el almacén (`mem_save`,
+  `mem_update`, y una consolidación **confirmada**) deja una fila en la conversación que nombra el
+  recuerdo y dónde cayó — `Saved "…" to memory · picode`. Lo que solo *toca* la memoria (buscar,
+  fijar, dictaminar, una consolidación en vista previa) mantiene la fila normal: anunciar un
+  guardado que no ocurrió enseña a no leer los anuncios. 11 pruebas sobre la parte pura.
 - [x] **Verificado hasta la puerta del chat:** el servidor declarado arranca, contesta
   `initialize`, lista sus 19 herramientas y `mem_search` / `mem_context` devuelven **tus recuerdos
   reales** (proyecto `picode`, 134 recuerdos). Falta verlo dentro de una conversación.
