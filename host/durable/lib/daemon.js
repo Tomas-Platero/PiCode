@@ -27,6 +27,7 @@ import { AssistantEntry, UserEntry, watchEvents } from "@earendil-works/pi-durab
 import { CTX, SHARED_DB, answerText, backfillConversationCwds, listConversations, openHarness } from "./common.js";
 import { allowCommand, makeGuardExtension } from "./guard.js";
 import { loadSkills, makeSkillsExtension } from "./skills.js";
+import { loadMemoryProtocol, makeMemoryExtension, memoryIsConnected } from "./memory.js";
 import { SubagentExtension } from "./extensions.js";
 import { loadAgents, resolveAgentChange } from "./agents.js";
 import { DEFAULT_PROFILE_DIR } from "./profile.js";
@@ -511,6 +512,18 @@ async function serveStorage(resolved, agents, skills) {
 			const armed = await armAllMcpFilters(harness, storage, settled, CTX);
 			if (armed > 0) console.error(`[mcp] deferral filter armed on ${armed} conversation(s) that had none of their own`);
 			if (settled.extension) registry.install(settled.extension);
+			// The memory protocol rides with the memory tools, never before them: installed here,
+			// after the bridge settled, and only when `engram` is one of the servers that answered.
+			// The words come from the profile, written by the connector, so this agent and the chat
+			// say the same thing about the same memory.
+			if (memoryIsConnected(settled.connections)) {
+				const protocol = loadMemoryProtocol(DEFAULT_PROFILE_DIR);
+				if (protocol === undefined) {
+					console.error("[memory] engram connected but no memory protocol is in the profile — the agent will not be told when to use it");
+				} else {
+					registry.install(makeMemoryExtension(protocol));
+				}
+			}
 			bridge = settled;
 			return settled;
 		} catch (error) {
