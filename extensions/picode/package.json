@@ -131,6 +131,29 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.pi.restart",
+				"title": "Restart Pi",
+				"category": "PiCode",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "picode.pi.cleanCache",
+				"title": "Clean Pi Cache",
+				"category": "PiCode",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "picode.pi.openProfile",
+				"title": "Open Pi Profile",
+				"category": "PiCode",
+				"icon": "$(folder-opened)"
+			},
+			{
+				"command": "picode.cancelQueuedTurns",
+				"title": "Cancel Queued Turns",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.status.openProviderSettings",
 				"title": "Open Provider Settings",
 				"category": "PiCode",
@@ -205,6 +228,51 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.memory.search",
+				"title": "Search memories",
+				"category": "PiCode",
+				"icon": "$(search)"
+			},
+			{
+				"command": "picode.memory.clearSearch",
+				"title": "Clear the memory search",
+				"category": "PiCode",
+				"icon": "$(close)"
+			},
+			{
+				"command": "picode.memory.refresh",
+				"title": "Refresh memory",
+				"category": "PiCode",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "picode.memory.check",
+				"title": "Check memory",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.memory.copy",
+				"title": "Copy a memory",
+				"category": "PiCode",
+				"icon": "$(copy)"
+			},
+			{
+				"command": "picode.memory.delete",
+				"title": "Delete a memory",
+				"category": "PiCode",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "picode.memory.open",
+				"title": "Open a memory",
+				"category": "PiCode"
+			},
+			{
+				"command": "picode.memory.showMore",
+				"title": "Show more memories",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.updates.show",
 				"title": "Show pending updates",
 				"category": "PiCode"
@@ -238,6 +306,12 @@
 				"command": "picode.setup.galleryInstall",
 				"title": "Install a theme from the gallery",
 				"category": "PiCode"
+			},
+			{
+				"command": "picode.memory.updateEngine",
+				"title": "Update memory engine",
+				"category": "PiCode",
+				"icon": "$(cloud-download)"
 			}
 		],
 		"menus": {
@@ -249,6 +323,26 @@
 				}
 			],
 			"view/title": [
+				{
+					"command": "picode.memory.updateEngine",
+					"when": "view == picode.status.memory",
+					"group": "navigation"
+				},
+				{
+					"command": "picode.memory.search",
+					"when": "view == picode.status.memory && !picode.memory.searchActive",
+					"group": "navigation"
+				},
+				{
+					"command": "picode.memory.clearSearch",
+					"when": "view == picode.status.memory && picode.memory.searchActive",
+					"group": "navigation"
+				},
+				{
+					"command": "picode.memory.refresh",
+					"when": "view == picode.status.memory",
+					"group": "navigation"
+				},
 				{
 					"command": "picode.status.openProviderSettings",
 					"when": "view == picode.status.providers",
@@ -265,7 +359,35 @@
 					"group": "navigation"
 				}
 			],
+			"view/item/context": [
+				{
+					"command": "picode.memory.copy",
+					"when": "view == picode.status.memory && viewItem == picode.memory.row",
+					"group": "inline@1"
+				},
+				{
+					"command": "picode.memory.delete",
+					"when": "view == picode.status.memory && viewItem == picode.memory.row",
+					"group": "inline@2"
+				}
+			],
 			"commandPalette": [
+				{
+					"command": "picode.memory.open",
+					"when": "false"
+				},
+				{
+					"command": "picode.memory.showMore",
+					"when": "false"
+				},
+				{
+					"command": "picode.memory.copy",
+					"when": "false"
+				},
+				{
+					"command": "picode.memory.delete",
+					"when": "false"
+				},
 				{
 					"command": "picode.setup.gallerySearch",
 					"when": "false"
@@ -277,6 +399,10 @@
 				{
 					"command": "picode.setup.galleryInstall",
 					"when": "false"
+				},
+				{
+					"command": "picode.memory.updateEngine",
+					"when": "false"
 				}
 			]
 		},
@@ -287,6 +413,16 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Check for updates in the background and offer to install them when there are any."
+				},
+				"picode.memory.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Keep memory on: remember decisions, conventions and traps across conversations."
+				},
+				"picode.memory.binary": {
+					"type": "string",
+					"default": "",
+					"description": "Absolute path to another engram engine. Leave empty to use the one PiCode ships."
 				}
 			}
 		},
@@ -350,6 +486,13 @@
 					"name": "Tasks",
 					"icon": "$(checklist)",
 					"when": "picode.status.tasksVisible"
+				},
+				{
+					"type": "tree",
+					"id": "picode.status.memory",
+					"name": "Memory",
+					"icon": "$(database)",
+					"when": "picode.memory.enabled"
 				}
 			]
 		}
