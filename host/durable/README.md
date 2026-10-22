@@ -1,12 +1,20 @@
 # PiCode × pi-durable — the durable agent
 
-A self-contained program that runs `@earendil-works/pi-durable` (1.3.0) against the
+A self-contained program that runs `@earendil-works/pi-durable` (1.4.0) against the
 owner's LAN gateway **OmniRoute** and proves, with real runs, the three promises that
 justify replacing what came before it:
 
 1. **A conversation survives the process being killed and continues where it stopped.**
 2. **A subagent is a background task that does not block the parent conversation.**
 3. **Two clients can attach to the same live conversation at once.**
+
+> **The pin is 1.4.0, and it moves forward only.** Opening a SQLite storage with pi-durable
+> 1.4 migrates it to schema version 2 by rebuilding the task table, and **1.3.0 or earlier
+> cannot open the database afterwards** — a downgrade past this release loses the daemon's
+> conversations, not just its sleeping tasks. 1.4 also made `checkpointWhen` mandatory on every
+> `defineDoc()` (this program's guard document declares `() => false`: its allow list is a
+> handful of strings and every change travels as a delta), and gave tasks a `sleeping` status.
+> Back the database up before pointing a 1.4 build at a store a 1.3 build wrote.
 
 ## The chat bridge (`bridge/`)
 

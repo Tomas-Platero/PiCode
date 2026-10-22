@@ -18,6 +18,10 @@ export const GuardDoc = defineDoc({
 	history: "latest",
 	fork: "current", // a fork starts with its parent's allow list
 	initial: () => ({ allow: [] }),
+	// An allow list is a handful of strings, so every change travels as a delta and the history
+	// never needs a base written. pi-durable 1.4 requires the predicate to be spelled out rather
+	// than picking a policy behind the caller's back.
+	checkpointWhen: () => false,
 });
 
 /** Whitespace-normalized form used both for the allow list and for matching. */

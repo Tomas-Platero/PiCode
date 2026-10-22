@@ -33,3 +33,29 @@ test('the pin and the source dependency name the same exact pi', () => {
 	assert.match(pin['version'] as string, /^\d+\.\d+\.\d+$/, 'the pin is exact, never a range');
 	assert.equal(declared, pin['version'], 'the source dependency must be the pinned pi, exactly');
 });
+
+/**
+ * The durable agent is the same product and must not run a second pi behind the editor's back.
+ *
+ * It is a separate program with its own manifest — `host/durable/package.json`, installed into
+ * `resources/durable` — so nothing but this test stops its `@earendil-works/*` packages (the
+ * harness, the model layer, the MCP client, chord) from sitting on an older release than the one
+ * the editor runs. Ranges are refused for the same reason they are refused above: `^1.3.0` reads
+ * as "some 1.x" and resolves to a different pi the next time somebody installs.
+ */
+test('the durable agent runs the same exact pi release as the editor', () => {
+	const pin = readJson(path.join(REPO, 'build', 'distribution', 'runtime.json'));
+	const durable = readJson(path.join(REPO, 'host', 'durable', 'package.json'));
+	const dependencies = (durable['dependencies'] ?? {}) as Record<string, string>;
+	const piPackages = Object.keys(dependencies).filter(name => name.startsWith('@earendil-works/'));
+
+	assert.deepEqual(piPackages.sort(), [
+		'@earendil-works/chord',
+		'@earendil-works/pi-ai',
+		'@earendil-works/pi-durable',
+		'@earendil-works/pi-mcp',
+	], 'the durable agent declares a different set of pi packages than this test knows about');
+	for (const name of piPackages) {
+		assert.equal(dependencies[name], pin['version'], `${name} must be the pinned pi release, exactly`);
+	}
+});
