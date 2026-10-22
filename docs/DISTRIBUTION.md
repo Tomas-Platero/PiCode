@@ -94,7 +94,7 @@ per-setting copy.
 
 ## 🤖 5. The agent runtime
 
-pi is **pinned in one place**, `build/distribution/runtime.json` (pi **1.3.0** today), and
+pi is **pinned in one place**, `build/distribution/runtime.json` (pi **1.4.0** today), and
 `build/pi-runtime.sh` installs it into the pack during the build, so a freshly built editor is
 born working and nobody has to install or configure it.
 

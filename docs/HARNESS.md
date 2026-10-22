@@ -1,7 +1,7 @@
 # El harness de agentes en PiCode: cómo está integrado
 
 > Documento de arquitectura. Revisado el 2026-10-16 en la rama experimental (pack
-> **0.2.6-experimental**, número declarado 1.142.0, árbol de VS Code 1.135.0, pi 1.3.0).
+> **0.2.6-experimental**, número declarado 1.142.0, árbol de VS Code 1.135.0, pi 1.4.0).
 > Fechas y commits citados. Si este papel y el código discrepan, gana el código — y este
 > papel se corrige.
 
@@ -23,7 +23,7 @@ Este documento describe cómo está montado.
 
 - **Dónde**: `resources/pi-runtime/node_modules/@earendil-works/pi-coding-agent`, dentro
   de la instalación. El pin vive en **un solo sitio**: `build/distribution/runtime.json`
-  (hoy **1.3.0**). El SDK no es dependencia de **ejecución**: se carga por `dynamicImport`
+  (hoy **1.4.0**). El SDK no es dependencia de **ejecución**: se carga por `dynamicImport`
   en runtime desde ese pack. Sí es dependencia de **desarrollo** (`package.json`,
   a la versión exacta del pin): los miembros que se usan se tipan desde **las propias
   declaraciones de pi** (`OfficialSdk` en `extensions/picode/src/piSdk.ts`),

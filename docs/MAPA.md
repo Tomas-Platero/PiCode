@@ -68,6 +68,7 @@
 │   │   ├── produce.ts
 │   │   └── upload.ts
 │   ├── distribution/ — Operator guide for build/distribution/. The strategy behind these files is in docs/DISTRIBUTION.md; this file is the short runbook.
+│   │   ├── engram.json
 │   │   ├── picode-icon.svg
 │   │   ├── picode.ico
 │   │   ├── picode.svg
@@ -321,6 +322,7 @@
 │   ├── dev.mjs
 │   ├── docs.mjs
 │   ├── durable-runtime.sh
+│   ├── engram-runtime.sh
 │   ├── filters.ts
 │   ├── gulpfile.cli.ts
 │   ├── gulpfile.compile.ts
@@ -341,7 +343,7 @@
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 39 files in total
+│   └── … 40 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
@@ -349,6 +351,7 @@
 │   ├── DECISIONS.md
 │   ├── DISENO.md
 │   ├── DISTRIBUTION.md
+│   ├── ENGRAM.md
 │   ├── HARNESS.md
 │   ├── howto-build.md
 │   ├── MAPA.md
@@ -385,6 +388,8 @@
 │   │   │   ├── durable.ts
 │   │   │   ├── editor-context.ts
 │   │   │   ├── endpoint.ts
+│   │   │   ├── engram-activation.ts
+│   │   │   ├── engram.ts
 │   │   │   ├── extension.ts
 │   │   │   ├── import-project.ts
 │   │   │   ├── left-behind-packages.ts
@@ -396,6 +401,10 @@
 │   │   │   ├── mcp.ts
 │   │   │   ├── mcpServers.ts
 │   │   │   ├── mcpTools.ts
+│   │   │   ├── memory-client.ts
+│   │   │   ├── memory-protocol.ts
+│   │   │   ├── memory-update.ts
+│   │   │   ├── memory-view.ts
 │   │   │   ├── models-cache.ts
 │   │   │   ├── npm-run.ts
 │   │   │   ├── onboarding.ts
@@ -421,8 +430,8 @@
 │   │   │   ├── sessions-import.ts
 │   │   │   ├── sessions-provider.ts
 │   │   │   ├── sessions-resume.ts
+│   │   │   ├── status-contract.ts
 │   │   │   ├── status-data.ts
-│   │   │   ├── status-view.ts
 │   │   │   ├── subscriptions.ts
 │   │   │   ├── theme-catalog.ts
 │   │   │   ├── theme-gallery.ts
@@ -431,7 +440,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 68 files in total
+│   │   │   └── … 74 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -450,6 +459,8 @@
 │   │   │   ├── durable-sessions.test.ts
 │   │   │   ├── durable-spawn.test.ts
 │   │   │   ├── durable-tasks.test.ts
+│   │   │   ├── engram-runtime.test.ts
+│   │   │   ├── engram.test.ts
 │   │   │   ├── left-behind-packages.test.ts
 │   │   │   ├── mcp-add.test.ts
 │   │   │   ├── mcp-cwd.test.ts
@@ -457,6 +468,8 @@
 │   │   │   ├── mcp-provider.test.ts
 │   │   │   ├── mcp-signin-scope.test.ts
 │   │   │   ├── mcp-signin.test.ts
+│   │   │   ├── memory-client.test.ts
+│   │   │   ├── memory-protocol.test.ts
 │   │   │   ├── models-cache.test.ts
 │   │   │   ├── npm-run.test.ts
 │   │   │   ├── packages-data.test.ts
@@ -481,7 +494,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 48 files in total
+│   │   │   └── … 52 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
@@ -528,7 +541,7 @@
 │   │   │   ├── README.md
 │   │   │   └── tsconfig.json
 │   │   └── README.md
-│   ├── durable/ — A self-contained program that runs @earendil-works/pi-durable (1.3.0) against the owner's LAN gateway OmniRoute and proves, with real runs, the three…
+│   ├── durable/ — A self-contained program that runs @earendil-works/pi-durable (1.4.0) against the owner's LAN gateway OmniRoute and proves, with real runs, the three…
 │   │   ├── acp-client/ — A deliberately small ACP client that proves durable speaks the Agent Client Protocol (v1) over stdio (node cli.js acp). It speaks raw JSON-RPC on the…
 │   │   │   ├── client.js
 │   │   │   └── README.md
@@ -546,6 +559,7 @@
 │   │   │   ├── extensions.js
 │   │   │   ├── guard.js
 │   │   │   ├── mcp.js
+│   │   │   ├── memory.js
 │   │   │   ├── profile.js
 │   │   │   ├── protocol.js
 │   │   │   ├── render.js
@@ -557,6 +571,7 @@
 │   │   ├── proof-acp.sh
 │   │   ├── proof-daemon.sh
 │   │   ├── proof-editor-lifecycle.js
+│   │   ├── proof-memory.js
 │   │   ├── proof-record.js
 │   │   ├── proof1-kill.js
 │   │   ├── proof1-resume.js

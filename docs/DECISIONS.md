@@ -278,7 +278,7 @@ from the agent's own schema). Reusing the user's installation also means PiCode
 silently inherits whatever extensions and settings that user has accumulated.
 
 PiCode therefore pins the runtime it is verified against. The pin lives in one place,
-`build/distribution/runtime.json` — pi `1.3.0` today — and `build/pi-runtime.sh` installs it into the
+`build/distribution/runtime.json` — pi `1.4.0` today — and `build/pi-runtime.sh` installs it into the
 pack during the build, so a freshly built editor is born working.
 
 **Decision:** PiCode pins and ships its own pi inside the build, instead of resolving it from
