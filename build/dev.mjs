@@ -19,7 +19,7 @@
  *   npm run dev -- --verbose    the same, with every line the tools print
  *   npm run dev -- <args>       arguments go to the editor
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -56,6 +56,31 @@ function packRoot() {
 		}
 	}
 	return undefined;
+}
+
+function ensurePack() {
+	const existing = packRoot();
+	if (existing !== undefined) {
+		return existing;
+	}
+	say('warn', 'no pack found, so pi and the agent have nothing to run from');
+	say('note', 'running a fast build now (one time, ~10 min). Ctrl+C to stop.');
+	const build = spawnSync(isWindows ? 'cmd.exe' : 'bash', isWindows ? ['/d', '/s', '/c', 'npm run build:fast'] : ['-c', 'npm run build:fast'], {
+		cwd: REPO,
+		stdio: 'inherit',
+		env: { ...process.env, npm_config_loglevel: 'error' },
+	});
+	if (build.status !== 0) {
+		say('fail', 'the fast build failed; run "npm run build:fast" by hand to see why');
+		process.exit(build.status ?? 1);
+	}
+	const after = packRoot();
+	if (after === undefined) {
+		say('fail', 'the fast build finished but no pack appeared');
+		process.exit(1);
+	}
+	say('ok', `pack ready: ${path.basename(after)}`);
+	return after;
 }
 
 function linkPackedRuntime() {
@@ -360,6 +385,8 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 		process.stdout.write(`\n  ${paint('1', 'PiCode dev')}  ${dim('save a file, then Ctrl+R in the editor')}\n`);
 		process.stdout.write(`  ${dim('npm run dev -- --verbose shows every line')}\n\n`);
 	}
+
+	ensurePack();
 
 	linkPackedRuntime();
 
