@@ -44,7 +44,7 @@ export ASSETS_REPOSITORY="TomasPlatero/PiCode"
 export GH_REPO_PATH="TomasPlatero/PiCode"
 export GLOBAL_DIRNAME="picode"
 export TUNNEL_APP_NAME="picode-tunnel"
-export VSCODE_QUALITY="stable"
+export VSCODE_QUALITY="${VSCODE_QUALITY:-stable}"
 export CI_BUILD="no"
 export SKIP_ASSETS="yes"
 export VSCODE_SKIP_NODE_VERSION_CHECK="yes"
@@ -887,25 +887,29 @@ node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_mo
 
 
 # ---------------------------------------------------------------------------
-# pi, and the distribution layer
+# pi, the memory engine, and the distribution layer
 # ---------------------------------------------------------------------------
-# pi and the durable agent are independent: neither reads the other's output, and both only
-# write into the pack. Running them in parallel shaves the longer of the two off the build
+# pi, the durable agent and the memory engine are independent: none reads another's output, and
+# all three only write into the pack. Running them in parallel shaves the longest off the build
 # instead of adding them.
-picode_phase 5 "stage" "pi, the durable agent, and the distribution layer, onto ${PACK_DIR}"
+picode_phase 5 "stage" "pi, the durable agent, the memory engine, and the distribution layer, onto ${PACK_DIR}"
 
 bash build/pi-runtime.sh "${PACK_DIR}" &
 PI_PID=$!
 bash build/durable-runtime.sh "${PACK_DIR}" &
 DURABLE_PID=$!
+bash build/engram-runtime.sh "${PACK_DIR}" &
+ENGRAM_PID=$!
 
 PI_OK=0
 DURABLE_OK=0
+ENGRAM_OK=0
 wait "${PI_PID}" && PI_OK=1 || PI_OK=0
 wait "${DURABLE_PID}" && DURABLE_OK=1 || DURABLE_OK=0
+wait "${ENGRAM_PID}" && ENGRAM_OK=1 || ENGRAM_OK=0
 
-if [[ "${PI_OK}" -ne 1 || "${DURABLE_OK}" -ne 1 ]]; then
-  echo "error: pi or durable runtime failed to stage (pi=${PI_OK}, durable=${DURABLE_OK})." >&2
+if [[ "${PI_OK}" -ne 1 || "${DURABLE_OK}" -ne 1 || "${ENGRAM_OK}" -ne 1 ]]; then
+  echo "error: pi, durable or the memory engine failed to stage (pi=${PI_OK}, durable=${DURABLE_OK}, engram=${ENGRAM_OK})." >&2
   exit 1
 fi
 
@@ -948,6 +952,12 @@ fi
 PI_ENTRY="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./build/distribution/runtime.json').package" )/dist/index.js"
 if [[ ! -f "${PI_ENTRY}" ]]; then
   echo "  !! pi runtime entry is missing: ${PI_ENTRY}" >&2; VERIFY_OK="no"
+fi
+# The memory engine travels with the product, so a pack without it is an editor that cannot
+# remember — the reason the whole phase exists.
+ENGRAM_BINARY="${PACK_DIR}/resources/memory/$( node -p "require('./build/distribution/engram.json').binary" )"
+if [[ ! -f "${ENGRAM_BINARY}" ]]; then
+  echo "  !! the memory engine is missing: ${ENGRAM_BINARY}" >&2; VERIFY_OK="no"
 fi
 # Where the binary is part of what is being published, the pack is not complete without it.
 if [[ "${PICODE_REQUIRE_CLI:-0}" == "1" && ! -f "${PACK_DIR}/bin/picode-cli.exe" && ! -f "${PACK_DIR}/bin/picode-cli" ]]; then
