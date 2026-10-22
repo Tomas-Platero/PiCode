@@ -751,3 +751,54 @@ cortada antes de respuesta. Las ~80 filas históricas se sanan solas en la sigui
 importación (sin migración: la reparación añade, no reescribe). Verificado con un daemon
 aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`, después
 `owes=false`.
+
+## ADR-022 — Engram is the product's memory; durable stays the record
+
+**Status:** accepted (2026-10-20). Adds a layer to ADR-021; does not replace it.
+
+**Context:** Durable answers *what happened*: every turn, verbatim, per conversation, and the
+long work that outlives the window. It never answers *what we know*. A new conversation starts
+empty, and nothing a previous one learned survives it — the gap the owner named when he asked
+for memory as a separate thing: *«Pi es el agente | Durable las sesiones y el registro | Engram
+la memoria»*.
+
+Engram is a candidate that already exists, is local (Go binary, SQLite+FTS5), curated rather
+than a transcript sink, and — decisively for this product — shared: other agents on the same
+machine can read the same store. It is **not** gentle-ai: gentle-ai was the framework removed in
+`2ac4e68d`, and `left-behind-packages.ts` keeps its packages out of an import. Engram is a
+standalone engine that framework happened to use.
+
+**Decision:**
+
+- **Engram ships inside PiCode**, like durable: one pinned binary in the product's resources,
+  not something the user installs. *«Yo quiero a engram en el producto… si un usuario escribe
+  engram tiene que funcionar»* — including the integrated terminal.
+- **One declaration serves both engines.** The profile's `mcp.json` already feeds the in-process
+  chat (pi's built-in MCP) and durable (`lib/mcp.js`, deferred behind `mcp_tools`). No second
+  integration path is written.
+- **The `gentle-engram` pi package does not enter.** Its hooks, status bar and session-identity
+  machinery are the coupling that was removed with gentle-ai; the memory protocol is written
+  here, in our words, in both system prompts.
+- **The store is the user's, not the profile's:** `~/.engram`. It is reused **as it is** when it
+  exists, created when it does not, and never moved, migrated or overwritten. If an engram
+  server is already serving, PiCode **joins it**; it does not open a second one on the same
+  store.
+- **The split is one-directional:** pi writes to durable (the turn) and to engram (what is worth
+  keeping). Durable never reads memory; engram never reads transcripts; both are called by
+  whoever is running the turn.
+- **The editor carries what engram's TUI shows** — list, search, detail, history, origin,
+  relations, review, pin, delete, doctor — in **surfaces that already exist** (the container's
+  view, an editor tab, Settings). Its TUI, keys and theme are not ported. Its registry
+  "sessions" are never rendered as sessions: those are durable's.
+
+**Consequences:** Memory survives sessions, windows and compactions, and crosses engines. The
+accepted cost, recorded rather than hidden: **memory does not travel with the profile**, so the
+cloud story (profile as one syncable unit) excludes it until its own work exists. A second
+runtime joins durable in the distribution and the update surface. A memory failure never blocks
+a turn: pi answers without it. This narrows DISENO's rule 2 — what lives outside the profile is
+the *user's memory*, never the product's configuration.
+
+**Reversal trigger:** the store outside the profile makes the cloud profile incoherent when it
+ships; or, a week measured with the protocol injected, the agent still does not search before
+repeating — then the layer is decoration and it comes out rather than stay as a drawer nobody
+opens.

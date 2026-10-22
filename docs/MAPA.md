@@ -469,6 +469,7 @@
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
 │   │   │   ├── pin-sync.test.ts
+│   │   │   ├── progress.test.ts
 │   │   │   ├── provider-stream.test.ts
 │   │   │   ├── providers-list.test.ts
 │   │   │   ├── session-cwd.test.ts
@@ -480,7 +481,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 47 files in total
+│   │   │   └── … 48 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
@@ -563,9 +564,10 @@
 │   │   ├── proof3-two-clients.js
 │   │   ├── README.md
 │   │   └── smoke.js
-│   └── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
-│       ├── README.md
-│       └── stable.json
+│   ├── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
+│   │   ├── README.md
+│   │   └── stable.json
+│   └── README.md
 ├── remote/ · ⬆️ upstream, no breakdown
 ├── resources/
 │   ├── picode/ — Las imágenes del propio repositorio (no las del producto): lo que se ve en el README público y en la cabecera de GitHub.

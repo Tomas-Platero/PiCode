@@ -85,8 +85,14 @@ porque el **propio host de agentes los descubre en disco**, no porque una extens
 
 ### 5. La configuración: el perfil propio
 
-**Todo** —ajustes de pi, credenciales, modelos, paquetes, habilidades, MCPs, sesiones y
-memoria— vive en **el perfil de PiCode**. Nada se lee ni se escribe fuera.
+**Todo** —ajustes de pi, credenciales, modelos, paquetes, habilidades, MCPs y sesiones— vive en
+**el perfil de PiCode**. Nada se lee ni se escribe fuera.
+
+**La memoria es la excepción, y es a propósito.** Vive en `~/.engram`, junto a la de cualquier
+otro agente de la máquina: es del usuario, no del producto. El perfil no la guarda; el perfil
+sabe *dónde está*. Se reutiliza si existe y se crea si no; nunca se mueve ni se pisa. Su coste
+está aceptado y apuntado: **no viaja** con el perfil el día que exista la nube
+([ADR-022](DECISIONS.md), [`ENGRAM.md`](ENGRAM.md)).
 
 Y esto no es solo aislamiento: es **la unidad que se sube y se baja** el día que se venda la
 nube. Un perfil compartido con la máquina no se puede subir ni sobreescribir desde un
@@ -121,7 +127,8 @@ el perfil propio.
 ## 📐 Las reglas de diseño
 
 1. **No hay superficie propia de PiCode.** Chat, Agente y sus ajustes.
-2. **Nada se escribe fuera del perfil de PiCode.**
+2. **Nada se escribe fuera del perfil de PiCode** — salvo la memoria del usuario (`~/.engram`),
+   que se comparte a propósito con otros agentes y nunca se mueve ni se pisa.
 3. **No se reimplementa lo que pi ya trae.** Se enseña.
 4. **Un dato aparece una vez.** Si se puede leer en tres sitios, sobran dos.
 5. **Lo que exige acción es un botón.** "Reinicia pi" no es información.

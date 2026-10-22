@@ -64,6 +64,7 @@
 | 7 | **Las habilidades de los paquetes de pi** | 🟢 | Su descubrimiento no sabe mirar dentro de un paquete de pi; hoy se ven sus agentes, no sus habilidades |
 | 8 | **Recuperar lo que valía del panel viejo** | 🟡 | Estadísticas de pi, sus comandos y las sesiones — dentro del Chat. El contexto del editor ya viaja con cada mensaje |
 | 9 | **La nube** | 🔴 | Subir y bajar **el perfil como una unidad** |
+| 13 | **La memoria: engram** | 🔴 | Pi recuerda entre sesiones y entre agentes. Fase 0 cerrada; detalle punto por punto en [`ENGRAM.md`](ENGRAM.md) |
 
 ## 🚫 Lo que NO hay que hacer
 
