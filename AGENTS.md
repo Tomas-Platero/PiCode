@@ -42,6 +42,16 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 ---
 
+### El texto del editor es funcional, no técnico
+>
+> *"todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario"*
+
+* **Carácter funcional:** Todo texto que aparece en el editor (etiquetas, mensajes, tooltips, notificaciones, filas del panel, botones) se redacta para el usuario: qué hay, qué puedes hacer, qué cambió. Sin nombres de código, rutas, banderas ni detalles de la maquinaria interna.
+* **Una sola voz:** El mismo concepto se dice igual en todas partes; si un dato necesita explicación técnica, esa explicación va a `docs/` o a los ficheros de tareas, no a la pantalla.
+* **Acción = botón:** Si el texto pide hacer algo, se convierte en acción ejecutable (ver «Acciones directas» arriba); no se deja como instrucción de texto.
+
+---
+
 ## 2. Marca e Iconografía
 
 ### Los iconos
@@ -50,6 +60,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor).
 * **Variante para 24 px (2026-10-19):** la barra de actividad usa `media/picode-activity.svg`, derivada de esa misma marca (cabeza, ojos y chevrones; sin la barra horizontal y con trazos más gruesos), porque a 24 px y en máscara la marca completa se leía como una hoja de papel. La marca completa sigue en `picode-status.svg` para el título de la vista de estado, que la pinta a su tamaño.
+* **2026-10-21:** la barra de actividad usa **el mismo dibujo** que el título de la vista de estado (`picode-status.svg`), copiado tal cual a `picode-activity.svg`. El dueño pidió que la extensión y la app lleven el mismo icono; las dos variantes se leían como dos marcas distintas. Si a 24 px la barra horizontal vuelve a parecer una hoja de papel, se retoca entonces, pero partiendo del mismo dibujo.
 * **La marca vive en el conector** (`extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
@@ -248,6 +259,60 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **El panel es estado real, no decoración:** no se eliminan las fases ya hechas y cada cambio de fase se refleja en el panel en el mismo turno.
 * **Sin ruido:** trabajos triviales de un solo paso no llevan plan.
 
+## 9. La memoria: pi, durable y engram
+
+### Tres papeles, y ninguno repite al otro
+>
+> *"Pi es el agente | Durable las sesiones y el registro | Engram la memoria"*
+>
+> *"La idea es integrar a engram en picode, que funcione con pi y pi durable."*
+
+* **Pi piensa.** Es el único que ejecuta: modelo, herramientas, permisos, pantalla.
+* **Durable recuerda lo que pasó.** Las sesiones, el registro palabra por palabra y el trabajo
+  largo que sigue sin el dueño delante. No piensa y no decide.
+* **Engram recuerda lo que importa.** Conocimiento curado (decisiones, convenciones, porqués)
+  que sobrevive a todo y que **es lo único que ve otro agente** de la misma máquina.
+* **Las flechas van en un solo sentido:** pi escribe en los dos. Durable no lee la memoria y
+  engram no lee las conversaciones; se cruzan solo a través de pi.
+* **No son dos agentes:** el pi del chat y el pi durable son el mismo pi. Durable es dónde
+  apunta y a dónde manda lo largo.
+
+### Engram vive en el producto
+>
+> *"Yo quiero a engram en el producto, osea quiero que se ejecute con pi. ¿esto sería así?, si un usuario escribe engram tiene que funcionar."*
+
+* Engram **viaja dentro de PiCode**, como durable: no se instala aparte.
+* **Una sola declaración** en el perfil sirve a los dos motores.
+* Escribir **`engram`** en el terminal integrado tiene que hacer algo de verdad.
+* El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
+  Sigue valiendo la lista de `left-behind-packages.ts`.
+
+### Su memoria es del usuario, no del perfil
+>
+> *"Luego donde gestiona él su memoria que será .engram es otro tema, el puede leer si ya hay algo existente o crearlo en el pc del usuario"*
+
+* El almacén vive en **`~/.engram`** y **se comparte** con cualquier otro agente de la máquina.
+* **Se mira primero:** si ya hay almacén se reutiliza **tal cual**; si no, se crea. Nunca se
+  mueve, ni se migra, ni se pisa.
+* **Consecuencia aceptada:** la memoria **no viaja con el perfil en la nube**. Queda apuntado
+  como deuda, no se esconde.
+* Si ya hay un engram sirviendo, PiCode **se engancha a ese**; no abre otro sobre la misma base.
+
+### Lo que enseña el TUI, se enseña en el editor
+>
+> *"Recuerda que tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE"*
+
+* Se porta **lo que muestra** (datos y acciones), no el TUI: ni sus teclas, ni su tema, ni su
+  terminal.
+* Todo vive en **superficies que ya existen** (la vista del contenedor, una pestaña del editor y
+  Ajustes). No se inventa panel, pestaña ni página de ajustes propia.
+* **Las «sesiones» de engram no se pintan como sesiones:** son registros de atribución, y las
+  sesiones de verdad son las de durable. Aparecen como *«de dónde salió»* dentro del detalle.
+* La interfaz habla nuestro idioma: inglés, iconos, sin rutas ni nombres internos.
+
+> 📋 El detalle punto por punto, con lo hecho y lo que falta, vive en
+> [`docs/ENGRAM.md`](docs/ENGRAM.md).
+
 ## Registro de Cambios
 
 * **2026-09-23** · Creado con las frases iniciales de la sesión de trabajo.
@@ -271,3 +336,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
 * **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `build/docs.mjs map` y CI vigila que no aparezcan carpetas sin ficha (`build/docs.mjs check`) («deja avisado algo en el agents.md no? de usar esto»).
 * **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).
+* **2026-10-20** · Memoria del producto: **pi piensa, durable recuerda lo que pasó, engram recuerda lo que importa** («Pi es el agente | Durable las sesiones y el registro | Engram la memoria»). Engram viaja dentro de PiCode y sirve a los dos motores («quiero a engram en el producto… si un usuario escribe engram tiene que funcionar»). Su almacén vive en `~/.engram`, se reutiliza si existe y se comparte con otros agentes — con su coste aceptado: no viaja con el perfil («él puede leer si ya hay algo existente o crearlo en el pc del usuario»). Todo lo que su TUI muestra se muestra en el editor, en superficies que ya existen («tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE»). Registro punto por punto en [`docs/ENGRAM.md`](docs/ENGRAM.md).
+* **2026-10-22** · Texto del editor: **todo texto que va en el editor se escribe con carácter funcional para el usuario** («todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario»). Etiquetas, mensajes, tooltips, notificaciones y filas del panel hablan de qué hay y qué se puede hacer, sin nombres de código, rutas ni detalles de la maquinaria interna.
