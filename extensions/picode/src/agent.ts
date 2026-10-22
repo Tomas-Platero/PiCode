@@ -24,6 +24,7 @@ import {
 	shouldAsk,
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
+import { memorySection } from './memory-protocol';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
@@ -130,9 +131,26 @@ interface PiToolCallResult {
 	reason?: string;
 }
 
-/** pi's extension API, reduced to the one event this bridge listens on. */
+/**
+ * pi's extension API, reduced to the events this bridge listens on.
+ *
+ * `before_agent_start` is how a section reaches the system prompt: pi hands the pending options
+ * before every prompt and whatever is written into `sections` is rendered as `<name>…</name>`
+ * (`system-prompt.js`). The tool list is read at the same moment, because the memory protocol is
+ * only offered when the tools it names are actually there.
+ */
 interface PiExtensionApi {
 	on(event: 'tool_call', handler: (event: PiToolCallEvent) => Promise<PiToolCallResult | undefined>): () => void;
+	on(event: 'before_agent_start', handler: (event: PiBeforeAgentStartEvent) => void | Promise<void>): () => void;
+	getAllTools(): readonly PiKnownTool[];
+}
+
+interface PiBeforeAgentStartEvent {
+	readonly systemPromptOptions: { readonly sections: Record<string, string> };
+}
+
+interface PiKnownTool {
+	readonly name: string;
 }
 
 /**
@@ -731,6 +749,35 @@ function permissionQuestion(toolName: string, input: unknown): vscode.ChatQuesti
 			],
 		},
 	);
+}
+
+/**
+ * The inline extension that gives the chat its memory protocol.
+ *
+ * It writes one section into the system prompt and reads the session's tool list in the same
+ * breath: the protocol is offered **only** when the `engram` server actually connected, because
+ * telling a model to call `mem_search` in a session that has no such tool is worse than saying
+ * nothing. Since the section is re-decided before every prompt, a server that connects late — or
+ * one the owner just declared — is picked up on the next turn without a session rebuild.
+ *
+ * A section that no longer applies is **deleted**, not emptied: pi renders whatever is present as
+ * `<memory>…</memory>`, and an empty element in the prompt is paid for and reads as a rule.
+ */
+function memoryExtension(): PiInlineExtension {
+	return {
+		name: 'picode-memory',
+		hidden: true,
+		factory: pi => {
+			pi.on('before_agent_start', event => {
+				const section = memorySection(pi.getAllTools().map(tool => tool.name));
+				if (section === undefined) {
+					delete event.systemPromptOptions.sections['memory'];
+				} else {
+					event.systemPromptOptions.sections['memory'] = section;
+				}
+			});
+		},
+	};
 }
 
 /**
@@ -1471,7 +1518,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log)],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), memoryExtension()],
 						...(bridgePath === undefined ? {} : { additionalExtensionPaths: [bridgePath] }),
 					},
 				});
