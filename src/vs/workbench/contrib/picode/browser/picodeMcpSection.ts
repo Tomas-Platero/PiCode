@@ -23,7 +23,7 @@ import { PICODE_MCP_SERVERS_SETTING } from './picodeConfiguration.js';
  * This is the one place pi's MCP servers are configured. The list reads the servers the
  * `picode.mcp.servers` store holds — name, where the server runs, its address or command —
  * and each row's state, which is not part of that store: pi holds it in its own profile. The
- * state comes from the same command the status panel reads (`picode.setup.status`), never
+ * state comes from the same command the Status section reads (`picode.setup.status`), never
  * from the profile's files themselves — those belong to the connector, not to the core. It
  * tells three facts apart (`mcp-provider.ts`): `On` — pi will start it and can use it;
  * `Needs sign-in` — pi will start it but has no credential for it; `Off` — pi will not
@@ -42,7 +42,7 @@ interface IMcpServerSettingRow {
 	readonly args?: string;
 }
 
-/** One server's state, as the status panel's data reports it. */
+/** One server's state, as the status command reports it. */
 interface IMcpServerState {
 	readonly on: boolean;
 	/** Whether pi can use the server (`mcp-provider.ts`); left out when the row is off. */
@@ -51,7 +51,7 @@ interface IMcpServerState {
 	readonly origin?: 'profile' | 'project' | 'discovered';
 }
 
-/** The slice of the status panel's answer this widget reads. */
+/** The slice of the status command's answer this widget reads. */
 interface IStatusDataSlice {
 	readonly mcpServers?: readonly (IMcpServerState & { readonly name: string })[];
 }
@@ -176,7 +176,7 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		const stored = this.configurationService.getValue<readonly IMcpServerSettingRow[]>(PICODE_MCP_SERVERS_SETTING);
 		const declared = Array.isArray(stored) ? stored : [];
 
-		// The on/off state is pi's, not the store's: the same command the status panel
+		// The on/off state is pi's, not the store's: the same command the Status section
 		// reads answers it. Without it the rows still list, but show no switch.
 		const states = new Map<string, IMcpServerState>();
 		try {

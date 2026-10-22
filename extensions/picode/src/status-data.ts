@@ -8,7 +8,6 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { getSessionUsage, liveSessionMcpServers } from './agent';
-import { agentsSummary, launchedAgents } from './agents';
 import { declarationsFromSetting, isRecord } from './declarations';
 import { readDurableStatus } from './durable';
 import { providerInventory } from './providers-list';
@@ -16,19 +15,19 @@ import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { readPiChatSettings } from './piConfig';
 import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
-import { internalProfileDir, projectSlugsOfWindow, readRuntimeMode, resolveProjectScope } from './runtime';
-import { listProjectSessionFiles } from './sessions-provider';
-import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-view';
+import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
+import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import { getCachedNanUsage, matchedNanProvider, nanModelUsage, resolveNanApiKey, spokenWindowLabel } from './usage-data';
 
 /**
- * The data behind the PiCode status view.
+ * The data behind PiCode's status surface.
  *
- * One call answers the whole tree: the pi in force and its version, the providers pi has, the
- * default model, the MCP servers, the session's usage and cost, and the
- * project's branch, pending files and diff totals. What `status-view.ts` draws is exactly this,
- * so the shape returned here is that module's `StatusData` contract and nothing else.
+ * One call answers the whole surface: the pi in force and its version, the providers pi has, the
+ * default model, the MCP servers, the session's usage and cost, and the project's branch, pending
+ * files and diff totals. `status-contract.ts` is the shape and nothing else is: the Status section
+ * of the Agent Customizations page, the MCP Servers section and the providers list in Settings all
+ * read this one answer.
  *
  * ## The profile **in force**, not always PiCode's own
  *
@@ -392,35 +391,16 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		subscription: await readSubscription(profileDir, usage?.model),
 		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
 		durable: await readDurableStatus(),
-		// The agents launched from the folders open in this window, counted off their own
-		// transcripts: the same rows `picode.agents` lists, and the same project slugs the
-		// conversations panel uses. A listing that throws leaves the row out rather than
-		// reporting zero agents, which would read as "nothing was ever launched".
-		agents: tryAgents(sessionsDirOf(profileDir)),
 		// What the update check last found, read from where the check stored it: the lookup and its
 		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
 		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),
 		// The chat's own background jobs, straight from the tracker the pill reads — the same rows,
-		// so the Tasks block and the pill can never disagree about what is still out.
+		// so the card and the pill can never disagree about what is still out.
 		jobs: deps.runningJobs(),
 	};
 }
 
-/** The profile's own `sessions/` folder — where pi files every transcript, project by project. */
-function sessionsDirOf(profileDir: string): string {
-	return path.join(profileDir, 'sessions');
-}
-
-/** How many agents the open projects launched, or `undefined` when the listing cannot be read. */
-function tryAgents(sessionsDir: string): StatusData['agents'] {
-	try {
-		return agentsSummary(launchedAgents(listProjectSessionFiles(sessionsDir, projectSlugsOfWindow())));
-	} catch {
-		return undefined;
-	}
-}
-
-/** Registers the command the status tree calls; the caller collects the disposable. */
+/** Registers the command the status surface calls; the caller collects the disposable. */
 export function registerStatusDataCommand(deps: StatusDeps): vscode.Disposable {
 	return vscode.commands.registerCommand(STATUS_DATA_COMMAND, (): Promise<StatusData> => buildStatusData(deps));
 }

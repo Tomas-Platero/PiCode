@@ -17,6 +17,40 @@
 	gap: 12px;
 }
 
+.picode-status-filter {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 4px;
+	background: var(--vscode-input-background);
+}
+
+.picode-status-filter-icon {
+	color: var(--vscode-input-placeholderForeground);
+	font-size: 12px;
+}
+
+.picode-status-filter-input {
+	flex: 1 1 auto;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--vscode-input-foreground);
+	font-size: 12px;
+	font-family: inherit;
+}
+
+.picode-status-filter-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+/* The filter narrows what the status says; a card that does not carry the word steps aside. */
+.picode-status-filtered-out {
+	display: none;
+}
+
 .picode-status-card {
 	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
 	border-radius: 6px;
@@ -53,6 +87,15 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-status-line-icon {
+	display: flex;
+	align-items: center;
+	font-size: 12px;
 }
 
 .picode-status-value {

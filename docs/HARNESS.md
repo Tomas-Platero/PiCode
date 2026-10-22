@@ -59,7 +59,7 @@ Este documento describe cómo está montado.
 | `background-jobs.ts` / `background-cards.ts` | Los trabajos en background: tarjeta en el transcript y registro vivo para la píldora |
 | `durable*.ts` | El puente con **durable** (ver Parte 2): conversaciones que sobreviven un kill, subagentes como trabajo en fondo |
 | `sessions-provider.ts` | Los transcríptos JSONL del perfil (`sessions/`): registro de referencia y entrada de importación; la lista viva del panel la alimenta durable |
-| `status-data.ts` / `status-view.ts` | El panel de estado: versión de pi, proveedores por origen, MCP por origen, uso y coste, git |
+| `status-data.ts` / `status-contract.ts` | Una sola lectura del estado: versión de pi, proveedores por origen, MCP por origen, uso y coste, git. La forma va en el contrato; quien pinta es la sección **Status** del núcleo |
 | `providers*.ts`, `models*.ts` | Declaración de endpoints y suscripciones; todo acaba en `models.json`/`auth.json` del perfil, que es lo que pi lee |
 | `packages*.ts` | Los paquetes de pi (skills, agentes, extensiones), instalados en el perfil |
 | `onboarding.ts`, `wizard*.ts` | El arranque: qué pi corre, migración, modelos |
@@ -72,9 +72,12 @@ Este documento describe cómo está montado.
 - **La píldora de estado** sobre el input: qué herramienta está usando, cuántos mensajes
   esperan turno (con *Cancel queued*), qué trabajos en background corren. El conector
   **empuja** (`picode.picodeAgentStatusChanged`); nada se sondea.
-- **El panel de estado** (`picode.setup.status`): los datos que alimenta panel, página de
-  Providers (proveedores del perfil como filas de solo lectura) y página de MCP
-  (perfil + proyecto + descubiertos, con origen en cada fila).
+- **La sección Status** de la página de Agent Customizations (`picode.setup.status`): tarjetas
+  con el pi en fuerza, proveedores, sesión, proyecto, actualizaciones, suscripción, agente
+  durable, trabajos en fondo, error y acciones — con filtro y con un botón por acción. La misma
+  lectura alimenta la página de Providers (proveedores del perfil como filas de solo lectura) y la
+  de MCP (perfil + proyecto + descubiertos, con origen en cada fila). El panel del activity bar
+  queda solo para **Memory**.
 - **Ajustes**: `picode.pi.*` (runtime, razonamiento — **show** por defecto —,
   herramientas desactivadas), `picode.mcp.*`, `picode.providers`.
 

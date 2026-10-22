@@ -55,7 +55,7 @@ import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from '.
 import { ensureProfilePackages } from './packages-install';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
-import { onDidToggleMcpServer, registerStatusTreeViews, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-view';
+import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
@@ -1239,11 +1239,8 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 				return;
 			}
 			// The editor's own list follows: an entry that is off stops being offered as a server, so the
-			// page re-reads and the panel's rows move by one.
+			// page re-reads and its own row moves by one.
 			fire();
-			// The panel's own row is moved here instead: left to itself it would wait for the next tick
-			// and then pay for a `git` call per folder before the icon changed.
-			onDidToggleMcpServer.fire({ name: server, on: toggled.on });
 			void vscode.window.showInformationMessage(`PiCode: "${server}" is now ${toggled.on ? 'on' : 'off'}.`);
 			// Answered so the MCP page can move its own row with what was just written, rather
 			// than re-reading the whole status (git included) to learn one boolean.
@@ -2291,9 +2288,10 @@ const setupDeps = {
 	// read one theme's colours, install it — travel as commands. Without this registration they do
 	// not exist, and the gallery answers an empty list as if the search had found nothing.
 	context.subscriptions.push(...registerThemeGalleryCommands(context));
-	// The activity-bar panel is six native trees (declared `type: "tree"` in the manifest), so each
-	// block's rows come from the data command. The command is registered before the views, because a
-	// view refreshes the moment it is registered and would otherwise answer with an error row.
+	// The status is one command (`picode.setup.status`) and three readers: the Status section of the
+	// Agent Customizations page, the MCP Servers section (which takes the servers out of it) and the
+	// providers list in Settings. The command is registered before any of them asks, because a reader
+	// that arrives first would answer with an error row.
 	context.subscriptions.push(registerStatusDataCommand(setupDeps));
 	// The Thinking row of the Host block is the switch: a click flips `picode.pi.reasoning`, and the
 	// chat stops (or starts) writing the model's thinking from the next turn on. The setting was
@@ -2306,7 +2304,10 @@ const setupDeps = {
 			? 'The model\'s thinking is now hidden in the chat. New turns will not show it.'
 			: 'The model\'s thinking is now shown in the chat.');
 	}));
-	context.subscriptions.push(registerStatusTreeViews());
+	// The way into the providers' settings page. It used to be one click on the `Providers` row of the
+	// activity-bar tree; that tree is gone, so the Providers card offers it as its own action.
+	context.subscriptions.push(vscode.commands.registerCommand(STATUS_PROVIDER_SETTINGS_COMMAND, () =>
+		vscode.commands.executeCommand('workbench.action.openSettings', 'picode.providers')));
 	// The dashboard's actions: the things the status panel used to spell out as text become
 	// buttons here. They run through the connector's own flows (reset + reload, update, cache
 	// drop, profile reveal) so there is one path to each piece of work.

@@ -160,18 +160,6 @@
 				"icon": "$(gear)"
 			},
 			{
-				"command": "picode.status.filter",
-				"title": "Filter the Status Panel",
-				"category": "PiCode",
-				"icon": "$(search)"
-			},
-			{
-				"command": "picode.status.filterClear",
-				"title": "Clear the Status Filter",
-				"category": "PiCode",
-				"icon": "$(clear-all)"
-			},
-			{
 				"command": "picode.updates.apply",
 				"title": "Update Pi",
 				"category": "PiCode"
@@ -342,21 +330,6 @@
 					"command": "picode.memory.refresh",
 					"when": "view == picode.status.memory",
 					"group": "navigation"
-				},
-				{
-					"command": "picode.status.openProviderSettings",
-					"when": "view == picode.status.providers",
-					"group": "navigation"
-				},
-				{
-					"command": "picode.status.filter",
-					"when": "view == picode.status.host && !picode.status.filtered",
-					"group": "navigation"
-				},
-				{
-					"command": "picode.status.filterClear",
-					"when": "view == picode.status.host && picode.status.filtered",
-					"group": "navigation"
 				}
 			],
 			"view/item/context": [
@@ -437,56 +410,6 @@
 		},
 		"views": {
 			"picode-status": [
-				{
-					"type": "tree",
-					"id": "picode.status.host",
-					"name": "Host",
-					"icon": "media/picode-status.svg"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.subscription",
-					"name": "Model Subscription",
-					"icon": "$(credit-card)",
-					"when": "picode.status.subscriptionVisible"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.updates",
-					"name": "Updates",
-					"icon": "$(cloud-download)"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.providers",
-					"name": "Providers",
-					"icon": "$(plug)"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.mcp",
-					"name": "MCP servers",
-					"icon": "$(server-environment)"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.session",
-					"name": "Session",
-					"icon": "$(history)"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.project",
-					"name": "Project",
-					"icon": "$(root-folder)"
-				},
-				{
-					"type": "tree",
-					"id": "picode.status.tasks",
-					"name": "Tasks",
-					"icon": "$(checklist)",
-					"when": "picode.status.tasksVisible"
-				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",

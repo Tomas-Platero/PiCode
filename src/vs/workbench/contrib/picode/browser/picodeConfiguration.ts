@@ -195,8 +195,8 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		},
 
 		// The durable agent lives in the repository's `durable` folder
-		// (the folder setting below says where), and the editor runs it: the status panel's
-		// Durable section and the "PiCode: Durable" commands start and stop its daemon, list its
+		// (the folder setting below says where), and the editor runs it: the Durable card of the
+		// Status section and the "PiCode: Durable" commands start and stop its daemon, list its
 		// conversations and send prompts through it. These settings are that agent's own options,
 		// kept here (and not only as CLI flags) because this is where options belong; the agent
 		// reads this settings file read-only when it starts. Each description says what the
@@ -205,19 +205,19 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'string',
 			default: 'durable',
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.folder', "Where the durable agent lives: the folder that holds its cli.js. A relative path is resolved against your open workspace folders, and then beside the application itself — which is what finds the agent of a build packed inside the PiCode repository while you work in another project. The status panel's Durable section and the PiCode: Durable commands use it to find the agent."),
+			markdownDescription: localize('picode.durable.folder', "Where the durable agent lives: the folder that holds its cli.js. A relative path is resolved against your open workspace folders, and then beside the application itself — which is what finds the agent of a build packed inside the PiCode repository while you work in another project. The Durable card of the Status section and the PiCode: Durable commands use it to find the agent."),
 		},
 		[PICODE_DURABLE_AUTOSTART_SETTING]: {
 			type: 'boolean',
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.autoStart', "Whether PiCode starts the durable agent by itself when a window opens, so the status panel's Durable section is already running instead of asking. 'PiCode: Stop Durable Agent' means stopped: the editor does not start it again until you ask it to, or the window is reloaded. This is the editor's own behaviour — the agent has no say in it."),
+			markdownDescription: localize('picode.durable.autoStart', "Whether PiCode starts the durable agent by itself when a window opens, so the Durable card of the Status section is already running instead of asking. 'PiCode: Stop Durable Agent' means stopped: the editor does not start it again until you ask it to, or the window is reloaded. This is the editor's own behaviour — the agent has no say in it."),
 		},
 		[PICODE_DURABLE_MCP_SETTING]: {
 			type: 'boolean',
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.mcp', "Whether the durable agent (start it with 'PiCode: Start Durable Agent' or from the status panel's Durable section) connects the MCP servers of the host's profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
+			markdownDescription: localize('picode.durable.mcp', "Whether the durable agent (start it with 'PiCode: Start Durable Agent' or from the Durable card of the Status section) connects the MCP servers of the host's profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
 		},
 		[PICODE_DURABLE_GUARD_SETTING]: {
 			type: 'boolean',
