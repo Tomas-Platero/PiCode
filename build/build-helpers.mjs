@@ -1115,6 +1115,10 @@ export function resolvePack(repoRoot) {
 			'build/gulpfile.extensions.ts',
 			'build/buildConfig.ts',
 			'cli/src',
+			// The script that bakes the version and the product's identity into the binary lives
+			// beside `src`, not inside it: leaving it out let a source change get "nothing changed
+			// since the last successful build" and reuse a pack whose cli reported the old version.
+			'cli/build.rs',
 			'cli/Cargo.toml',
 			'cli/Cargo.lock',
 			'product.json',

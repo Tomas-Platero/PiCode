@@ -89,6 +89,19 @@ if ! ensure_perl; then
   give_up "no complete Perl found, and OpenSSL's configure needs one (install Strawberry Perl, or set PICODE_PERL to its bin directory)."
 fi
 
+# What the binary knows about itself. `--version` prints the commit, and the tunnel and
+# serve-web commands read the quality to pick which build they are running; both are baked in at
+# compile time and, unset, the binary answers "commit unknown" and self-updates against a quality
+# it guessed. The editor's build knows both (`build.sh` stamps the version hash and seals the
+# channel), so they are handed over; a standalone `npm run compile-cli` does not, and then the
+# previous behaviour — unknown — is the honest answer.
+if [[ -n "${BUILD_SOURCEVERSION:-}" ]]; then
+  export VSCODE_CLI_COMMIT="${BUILD_SOURCEVERSION}"
+fi
+if [[ -n "${QUALITY_VALUE:-}" ]]; then
+  export VSCODE_CLI_QUALITY="${QUALITY_VALUE}"
+fi
+
 echo "cli: building the Rust CLI (release)..."
 if ! ( cd "${CLI_DIR}" && cargo build --release ); then
   give_up "cargo build failed; the pack keeps the shell shim only."
