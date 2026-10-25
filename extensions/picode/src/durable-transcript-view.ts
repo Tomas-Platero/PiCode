@@ -387,18 +387,18 @@ function transcriptHtml(nonce: string, conversationId: number): string {
 		border-radius: 6px;
 	}
 	.bubble pre.code code { background: none; padding: 0; white-space: pre; }
+	.bubble table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; max-width: 100%; }
+	.bubble th, .bubble td {
+		border: 1px solid var(--vscode-panel-border, rgba(127,127,127,.35));
+		padding: 4px 8px;
+		text-align: left;
+		vertical-align: top;
+	}
+	.bubble th { background: var(--vscode-keybindingTable-headerBackground, rgba(127,127,127,.12)); font-weight: 600; }
+	.bubble th.t-center, .bubble td.t-center { text-align: center; }
+	.bubble th.t-right, .bubble td.t-right { text-align: right; }
 	.bubble a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
 	.bubble a:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground)); text-decoration: underline; }
-
-	.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-	.chip {
-		font-family: var(--vscode-editor-font-family, monospace);
-		font-size: 0.85em;
-		padding: 1px 7px;
-		border-radius: 999px;
-		background: var(--vscode-badge-background);
-		color: var(--vscode-badge-foreground);
-	}
 
 	details.tool {
 		width: 100%;
@@ -423,6 +423,55 @@ function transcriptHtml(nonce: string, conversationId: number): string {
 	details.tool > summary::before { content: '▸'; color: var(--vscode-descriptionForeground); }
 	details.tool[open] > summary::before { content: '▾'; }
 	details.tool > summary .name { color: var(--vscode-editor-foreground); font-weight: 600; }
+	/* The command, on the folded line: the beginning of it, never a second row. */
+	details.tool > summary .cmd {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--vscode-editor-foreground);
+		opacity: .85;
+	}
+	details.tool > summary .stats { white-space: nowrap; margin-left: auto; }
+	details.tool.running > summary::before { content: '◌'; color: var(--vscode-textLink-foreground); }
+	details.tool.no-result > summary::before { content: '∅'; color: var(--vscode-errorForeground); }
+	details.tool > pre.cmd-body { color: var(--vscode-descriptionForeground); white-space: pre-wrap; }
+
+	/* A streak of calls: one folded line, and the same rows inside. */
+	details.tool-group {
+		width: 100%;
+		max-width: 82%;
+		border: 1px solid var(--vscode-panel-border, transparent);
+		border-radius: 8px;
+		overflow: hidden;
+		background: var(--vscode-editorWidget-background, transparent);
+	}
+	details.tool-group > summary {
+		cursor: pointer;
+		padding: 6px 11px;
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		font-family: var(--vscode-editor-font-family, monospace);
+		font-size: 0.88em;
+		color: var(--vscode-descriptionForeground);
+		list-style: none;
+	}
+	details.tool-group > summary::-webkit-details-marker { display: none; }
+	details.tool-group > summary::before { content: '▸'; }
+	details.tool-group[open] > summary::before { content: '▾'; }
+	details.tool-group > summary .name { color: var(--vscode-editor-foreground); font-weight: 600; }
+	details.tool-group > summary .cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	details.tool-group > summary .stats { white-space: nowrap; margin-left: auto; }
+	details.tool-group > details.tool {
+		max-width: 100%;
+		border: none;
+		border-top: 1px solid var(--vscode-panel-border, transparent);
+		border-radius: 0;
+		background: none;
+	}
+	details.tool-group > details.tool > summary { padding-left: 20px; }
 	details.tool > summary .error-badge { color: var(--vscode-errorForeground); font-weight: 700; }
 	details.tool > pre {
 		margin: 0;
@@ -539,6 +588,59 @@ function transcriptHtml(nonce: string, conversationId: number): string {
 		reconnectButton.hidden = !stale && !running;
 	}
 
+	/**
+	 * One tool call, folded: what ran and the beginning of the command on the line, the whole
+	 * command and the whole output when it opens. Text only: textContent, never markup.
+	 */
+	function toolDetails(tool) {
+		const details = document.createElement('details');
+		details.className = 'tool' + (tool.isError ? ' error' : '') + (tool.status ? ' ' + tool.status : '');
+		if (tool.isError) { details.open = true; }
+		const summary = document.createElement('summary');
+		const name = document.createElement('span');
+		name.className = 'name';
+		name.textContent = tool.name;
+		summary.appendChild(name);
+		if (tool.summary) {
+			const command = document.createElement('span');
+			command.className = 'cmd';
+			command.textContent = tool.summary;
+			command.title = tool.details || tool.summary;
+			summary.appendChild(command);
+		}
+		const stats = document.createElement('span');
+		stats.className = 'stats';
+		if (tool.status) {
+			stats.textContent = tool.status === 'running' ? 'running…' : 'no result';
+		} else {
+			const parts = [(tool.lines === 1 ? '1 line' : tool.lines + ' lines'), formatBytes(tool.bytes)];
+			if (tool.durationMs !== undefined) { parts.push(formatElapsed(tool.durationMs)); }
+			if (tool.truncated) { parts.push('truncated'); }
+			stats.textContent = parts.join(' · ');
+		}
+		summary.appendChild(stats);
+		if (tool.isError) {
+			const badge = document.createElement('span');
+			badge.className = 'error-badge';
+			badge.textContent = 'error';
+			summary.appendChild(badge);
+		}
+		details.appendChild(summary);
+		if (tool.details) {
+			const command = document.createElement('pre');
+			command.className = 'cmd-body';
+			command.textContent = tool.details;
+			details.appendChild(command);
+		}
+		if (tool.text) {
+			const pre = document.createElement('pre');
+			// Tool output is text, always: it never becomes markup.
+			pre.textContent = tool.text;
+			details.appendChild(pre);
+		}
+		return details;
+	}
+
 	function buildRow(row) {
 		if (row.kind === 'notice') {
 			const notice = document.createElement('div');
@@ -550,32 +652,31 @@ function transcriptHtml(nonce: string, conversationId: number): string {
 		wrap.className = 'row ' + row.kind;
 
 		if (row.kind === 'tool') {
-			const details = document.createElement('details');
-			details.className = 'tool' + (row.tool.isError ? ' error' : '');
-			if (row.tool.isError) { details.open = true; }
+			wrap.appendChild(toolDetails(row.tool));
+			return wrap;
+		}
+
+		if (row.kind === 'tool-group') {
+			const group = document.createElement('details');
+			group.className = 'tool-group';
 			const summary = document.createElement('summary');
-			const name = document.createElement('span');
-			name.className = 'name';
-			name.textContent = row.tool.name;
-			summary.appendChild(name);
-			const stats = document.createElement('span');
-			const parts = [(row.tool.lines === 1 ? '1 line' : row.tool.lines + ' lines'), formatBytes(row.tool.bytes)];
-			if (row.tool.durationMs !== undefined) { parts.push(formatElapsed(row.tool.durationMs)); }
-			if (row.tool.truncated) { parts.push('truncated'); }
-			stats.textContent = parts.join(' · ');
-			summary.appendChild(stats);
-			if (row.tool.isError) {
-				const badge = document.createElement('span');
-				badge.className = 'error-badge';
-				badge.textContent = 'error';
-				summary.appendChild(badge);
+			const head = document.createElement('span');
+			head.className = 'name';
+			head.textContent = row.group.count === 1 ? '1 call' : row.group.count + ' calls';
+			summary.appendChild(head);
+			const names = document.createElement('span');
+			names.className = 'cmd';
+			names.textContent = row.group.names;
+			summary.appendChild(names);
+			const total = document.createElement('span');
+			total.className = 'stats';
+			total.textContent = formatBytes(row.group.totalBytes);
+			summary.appendChild(total);
+			group.appendChild(summary);
+			for (const call of row.group.calls) {
+				group.appendChild(toolDetails(call));
 			}
-			details.appendChild(summary);
-			const pre = document.createElement('pre');
-			// Tool output is text, always: it never becomes markup.
-			pre.textContent = row.tool.text;
-			details.appendChild(pre);
-			wrap.appendChild(details);
+			wrap.appendChild(group);
 			return wrap;
 		}
 
@@ -594,18 +695,6 @@ function transcriptHtml(nonce: string, conversationId: number): string {
 				body.textContent = row.thinking;
 				thinking.appendChild(body);
 				bubble.appendChild(thinking);
-			}
-			if (row.toolCalls && row.toolCalls.length > 0) {
-				const chips = document.createElement('div');
-				chips.className = 'chips';
-				for (const call of row.toolCalls) {
-					const chip = document.createElement('span');
-					chip.className = 'chip';
-					chip.textContent = call.name;
-					if (call.args) { chip.title = call.args; }
-					chips.appendChild(chip);
-				}
-				bubble.appendChild(chips);
 			}
 		} else {
 			bubble.textContent = row.text;

@@ -159,3 +159,125 @@ test('a reconnect snapshot replaces the frame', () => {
 	assert.equal(after.rows.length, 2);
 	assert.equal(after.entries, 2);
 });
+
+// --- one row per call: the call and its result are the same thing ---------------------------
+
+let nextCallId = 0;
+const callId = () => `call_${++nextCallId}`;
+
+/** An assistant entry that only announced calls: no prose, no reasoning. */
+const assistantWithCalls = (id: string, calls: readonly { id: string; name: string; command?: string }[], at = 2_000) => ({
+	id,
+	kind: 'pi.assistant',
+	model: [{
+		role: 'assistant',
+		content: calls.map(call => ({
+			type: 'toolCall',
+			id: call.id,
+			name: call.name,
+			// The shape a real conversation carries: the command lives in `arguments.command`.
+			arguments: call.command === undefined ? { path: 'README.md' } : { command: call.command },
+		})),
+		timestamp: at,
+	}],
+});
+
+/** The result of one call, as `pi.tool-result` stores it. */
+const resultOf = (id: string, toolCallId: string, text: string, options: { isError?: boolean; durationMs?: number; toolName?: string } = {}) => ({
+	id,
+	kind: 'pi.tool-result',
+	model: [{
+		role: 'toolResult',
+		toolCallId,
+		toolName: options.toolName ?? 'bash',
+		content: [{ type: 'text', text }],
+		isError: options.isError === true,
+		...(options.durationMs === undefined ? {} : { durationMs: options.durationMs }),
+		timestamp: 3_000,
+	}],
+});
+
+test('a call and its result are one row, with the command on the line', () => {
+	const id = callId();
+	const command = 'find src/app/api -maxdepth 1 -mindepth 1 -type d | sort';
+	const view = transcriptOf(7, snapshot([
+		user('e1', 'lista las rutas'),
+		assistantWithCalls('e2', [{ id, name: 'bash', command }]),
+		resultOf('e3', id, '/api/account\n/api/admin\n', { durationMs: 91 }),
+	]), 10_000);
+
+	assert.deepEqual(view.rows.map(row => row.kind), ['user', 'tool'], 'the call and the result are ONE row');
+	const row = view.rows.find(candidate => candidate.kind === 'tool');
+	assert.equal(row?.kind, 'tool');
+	if (row?.kind !== 'tool') { return; }
+	assert.equal(row.summary, command, 'the folded line says what ran');
+	assert.equal(row.details, command, 'the opened row has the whole command');
+	assert.equal(row.durationMs, 91);
+	assert.equal(row.lines, 2);
+	assert.equal(row.status, undefined, 'a call with a result is not running');
+});
+
+test('a call with no result yet is a row that says it is running, and stops saying it', () => {
+	const id = callId();
+	const entries = [user('e1', 'corre esto'), assistantWithCalls('e2', [{ id, name: 'bash', command: 'sleep 5' }])];
+
+	const during = transcriptOf(7, snapshot(entries, true), 10_000);
+	const running = during.rows.find(row => row.kind === 'tool');
+	assert.equal(running?.kind, 'tool');
+	if (running?.kind !== 'tool') { return; }
+	assert.equal(running.status, 'running');
+	assert.equal(running.summary, 'sleep 5');
+	assert.equal(running.text, '', 'there is no output to show yet');
+	assert.equal(running.lines, 0);
+
+	const after = applyTranscriptEvent(during, { type: 'run_end', inputs: [1] }, 20_000);
+	const ended = after.rows.find(row => row.kind === 'tool');
+	assert.equal(ended?.kind, 'tool');
+	if (ended?.kind !== 'tool') { return; }
+	assert.equal(ended.status, 'no-result', 'a run that ended without a result says so');
+});
+
+test('three calls in a row fold into one line that names them', () => {
+	const ids = [callId(), callId(), callId()];
+	const view = transcriptOf(7, snapshot([
+		user('e1', 'mira'),
+		assistantWithCalls('e2', ids.map((id, index) => ({ id, name: 'bash', command: `echo ${index}` }))),
+		...ids.map((id, index) => resultOf(`r${index}`, id, 'ok\n')),
+	]), 10_000);
+
+	assert.deepEqual(view.rows.map(row => row.kind), ['user', 'tool-group']);
+	const group = view.rows[1];
+	assert.equal(group.kind, 'tool-group');
+	if (group.kind !== 'tool-group') { return; }
+	assert.equal(group.calls.length, 3);
+	assert.equal(group.names, 'bash ×3');
+	const expectedBytes = group.calls.reduce((sum, call) => sum + (call.kind === 'tool' ? call.bytes : 0), 0);
+	assert.ok(expectedBytes > 0, 'the members carry their output size');
+	assert.equal(group.totalBytes, expectedBytes, 'the folded line says how much output the streak produced');
+});
+
+test('two calls in a row stay separate, and an error inside a streak stays visible', () => {
+	const ids = [callId(), callId(), callId(), callId(), callId(), callId()];
+	const view = transcriptOf(7, snapshot([
+		user('e1', 'varias'),
+		assistantWithCalls('e2', ids.map((id, index) => ({ id, name: 'bash', command: `echo ${index}` }))),
+		resultOf('r1', ids[0], 'ok'),
+		resultOf('r2', ids[1], 'ok'),
+		resultOf('r3', ids[2], 'command not found', { isError: true }),
+		resultOf('r4', ids[3], 'ok'),
+		resultOf('r5', ids[4], 'ok'),
+		resultOf('r6', ids[5], 'ok'),
+	]), 10_000);
+
+	const kinds = view.rows.map(row => row.kind);
+	assert.deepEqual(kinds, ['user', 'tool', 'tool', 'tool', 'tool-group'],
+		'a streak shorter than three stays open, the error never folds');
+	const error = view.rows.find(row => row.kind === 'tool' && row.isError === true);
+	assert.equal(error?.kind, 'tool');
+	if (error?.kind !== 'tool') { return; }
+	assert.equal(error.summary, 'echo 2', 'the failing call still says which command failed');
+	const group = view.rows[view.rows.length - 1];
+	assert.equal(group.kind, 'tool-group');
+	if (group.kind !== 'tool-group') { return; }
+	assert.equal(group.calls.length, 3, 'the three after the error do fold');
+});

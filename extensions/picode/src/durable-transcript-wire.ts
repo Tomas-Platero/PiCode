@@ -17,24 +17,38 @@
 
 import type { TranscriptRow, TranscriptView } from './durable-transcript-model';
 
+export interface WireTool {
+	readonly name: string;
+	/** The one line the folded row shows: the command it ran, or its arguments. */
+	readonly summary?: string;
+	/** What the opened row shows in full: the command, or the arguments indented. */
+	readonly details?: string;
+	readonly text: string;
+	readonly lines: number;
+	readonly bytes: number;
+	readonly isError: boolean;
+	readonly durationMs?: number;
+	readonly truncated?: true;
+	/** Present only with no result yet: `running`, or `no-result` once the run ended without one. */
+	readonly status?: 'running' | 'no-result';
+}
+
 export interface WireRow {
 	readonly id: string;
-	readonly kind: 'user' | 'assistant' | 'tool' | 'notice';
+	readonly kind: 'user' | 'assistant' | 'tool' | 'tool-group' | 'notice';
 	readonly at?: number;
 	/** user, notice: plain text. */
 	readonly text?: string;
 	/** assistant: HTML built by `renderMarkdown` on the host side, never by the model. */
 	readonly html?: string;
 	readonly thinking?: string;
-	readonly toolCalls?: readonly { readonly name: string; readonly args: string }[];
-	readonly tool?: {
-		readonly name: string;
-		readonly text: string;
-		readonly lines: number;
-		readonly bytes: number;
-		readonly isError: boolean;
-		readonly durationMs?: number;
-		readonly truncated?: true;
+	readonly tool?: WireTool;
+	/** tool-group: the calls the folded line stands for, each a whole tool row. */
+	readonly group?: {
+		readonly names: string;
+		readonly count: number;
+		readonly totalBytes: number;
+		readonly calls: readonly WireTool[];
 	};
 }
 
@@ -56,6 +70,22 @@ export interface WireView {
 	readonly connection: 'live' | 'reconnecting' | 'offline';
 }
 
+/** One tool row, in the shape the page draws. */
+function wireTool(row: Extract<TranscriptRow, { kind: 'tool' }>): WireTool {
+	return {
+		name: row.name,
+		...(row.summary === undefined ? {} : { summary: row.summary }),
+		...(row.details === undefined ? {} : { details: row.details }),
+		text: row.text,
+		lines: row.lines,
+		bytes: row.bytes,
+		isError: row.isError,
+		...(row.durationMs === undefined ? {} : { durationMs: row.durationMs }),
+		...(row.truncated === undefined ? {} : { truncated: row.truncated }),
+		...(row.status === undefined ? {} : { status: row.status }),
+	};
+}
+
 export function wireRow(row: TranscriptRow, renderMarkdown: (markdown: string) => string): WireRow {
 	switch (row.kind) {
 		case 'user':
@@ -67,21 +97,24 @@ export function wireRow(row: TranscriptRow, renderMarkdown: (markdown: string) =
 				// The markdown is rendered on this side: the page never sees markdown, only safe HTML.
 				html: renderMarkdown(row.markdown),
 				...(row.thinking === undefined ? {} : { thinking: row.thinking }),
-				toolCalls: row.toolCalls,
 				...(row.at === undefined ? {} : { at: row.at }),
 			};
 		case 'tool':
 			return {
 				id: row.id,
 				kind: 'tool',
-				tool: {
-					name: row.name,
-					text: row.text,
-					lines: row.lines,
-					bytes: row.bytes,
-					isError: row.isError,
-					...(row.durationMs === undefined ? {} : { durationMs: row.durationMs }),
-					...(row.truncated === undefined ? {} : { truncated: row.truncated }),
+				tool: wireTool(row),
+				...(row.at === undefined ? {} : { at: row.at }),
+			};
+		case 'tool-group':
+			return {
+				id: row.id,
+				kind: 'tool-group',
+				group: {
+					names: row.names,
+					count: row.calls.length,
+					totalBytes: row.totalBytes,
+					calls: row.calls.map(call => (call.kind === 'tool' ? wireTool(call) : undefined)).filter((tool): tool is WireTool => tool !== undefined),
 				},
 				...(row.at === undefined ? {} : { at: row.at }),
 			};

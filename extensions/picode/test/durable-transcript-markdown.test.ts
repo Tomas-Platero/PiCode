@@ -69,3 +69,34 @@ test('a placeholder character from the model cannot resurrect a code token', () 
 	assert.ok(!html.includes('\u0000'), html);
 	assert.ok(html.includes('<code>code</code>'), html);
 });
+
+test('a GFM table becomes a table, and every cell is escaped first', () => {
+	const html = renderMarkdown('| what | how |\n| --- | --- |\n| <img src=x onerror=alert(1)> | plain |');
+	assert.ok(html.startsWith('<table><thead><tr><th>what</th><th>how</th></tr></thead><tbody>'), html);
+	assert.ok(html.includes('<td>&lt;img src=x onerror=alert(1)&gt;</td>'), html);
+	assert.ok(!html.includes('<img'), 'a tag was emitted from a cell');
+	assert.ok(html.includes('<td>plain</td>'), html);
+});
+
+test('a cell keeps an escaped pipe instead of splitting on it', () => {
+	const html = renderMarkdown('| left | right |\n| --- | --- |\n| a \\| b | c |');
+	assert.ok(html.includes('<tr><td>a | b</td><td>c</td></tr>'), html);
+});
+
+test('a table with no body rows is still a table', () => {
+	const html = renderMarkdown('| one | two |\n| --- | --- |');
+	assert.ok(html.includes('<thead><tr><th>one</th><th>two</th></tr></thead>'), html);
+	assert.ok(html.includes('<tbody></tbody>'), html);
+});
+
+test('column alignment is read from the delimiter row, and a short row is padded', () => {
+	const html = renderMarkdown('| a | b | c |\n| :--- | :---: | ---: |\n| 1 | 2 |');
+	assert.ok(html.includes('<th>a</th><th class="t-center">b</th><th class="t-right">c</th>'), html);
+	assert.ok(html.includes('<tr><td>1</td><td class="t-center">2</td><td class="t-right"></td></tr>'), html);
+});
+
+test('a pipe with no delimiter row under it stays a sentence', () => {
+	const html = renderMarkdown('the value is a | b');
+	assert.ok(!html.includes('<table'), html);
+	assert.ok(html.includes('<p>the value is a | b</p>'), html);
+});

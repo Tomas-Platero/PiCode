@@ -21,8 +21,23 @@
  *
  * ## What it produces
  *
- * A flat list of rows a person reads: the prompt, the answer (as markdown), each tool result
- * (folded to one line), and a notice for the context marks. Nothing here knows about HTML.
+ * A flat list of rows a person reads: the prompt, the answer (as markdown), one row per tool
+ * CALL (name, the command it ran, its size and duration, folded to one line), and a notice for the
+ * context marks. Nothing here knows about HTML.
+ *
+ * ## How a tool call and its result become one row
+ *
+ * The two halves are separate entries: `pi.assistant` carries `content[]` blocks of
+ * `{ type: 'toolCall', id, name, arguments }`, and `pi.tool-result` carries
+ * `model[0] = { role: 'toolResult', toolCallId, toolName, content, isError, durationMs }`. The
+ * `id` of the call and the `toolCallId` of the result are the same string, so that is the link —
+ * checked against a real conversation (281): 43 calls, 43 results, all 43 paired, none left over.
+ * `byTaskId` is NOT the link: in that same conversation it disagreed with the call's entry on all
+ * 43 (the call's entry belongs to one task, each result's entry to its own tool task).
+ *
+ * A call with no result yet is a row of its own (`status: 'running'`), and a call whose run ended
+ * without a result is `status: 'no-result'` — the honest shape of a tool that was cancelled or
+ * lost. Neither case occurs in 281; both are reachable (a Stop mid-tool), so they are modelled.
  *
  * ## Two limits, both said out loud
  *
@@ -39,10 +54,14 @@ export const MAX_ROWS = 500;
 export const MAX_TOOL_BYTES = 128 * 1024;
 
 export interface TranscriptToolCall {
+	/** `content[].id` of the call: the string `pi.tool-result` repeats as `toolCallId`. */
+	readonly id: string;
 	/** The tool's name, as the model called it. */
 	readonly name: string;
-	/** Its arguments, serialized and shortened: a chip in the bubble, not a document. */
-	readonly args: string;
+	/** One line for the folded row: the command it ran, or the arguments, shortened. */
+	readonly summary: string;
+	/** What the row shows when it is opened: the whole command, or the arguments in full. */
+	readonly details: string;
 }
 
 export type TranscriptRow =
@@ -58,7 +77,14 @@ export type TranscriptRow =
 		readonly toolCalls: readonly TranscriptToolCall[];
 		readonly at?: number;
 	}
-	/** One tool result, folded to a summary line. `isError` is what the UI paints red. */
+	/**
+	 * One tool CALL, folded to a summary line — result and call are the same row.
+	 *
+	 * `summary` is the one line the folded row shows (the command it ran), `details` what the
+	 * opened row shows in full. Both come from the call; a result with no call in the frame (older
+	 * than the kept window) simply has neither. `status` is present only while there is no result:
+	 * `running` while the run is in flight, `no-result` once it ended without one.
+	 */
 	| {
 		readonly kind: 'tool';
 		readonly id: string;
@@ -69,6 +95,21 @@ export type TranscriptRow =
 		readonly isError: boolean;
 		readonly durationMs?: number;
 		readonly truncated?: true;
+		/** The call's id: the link to `pi.tool-result`'s `toolCallId`. */
+		readonly toolCallId?: string;
+		readonly summary?: string;
+		readonly details?: string;
+		readonly status?: 'running' | 'no-result';
+		readonly at?: number;
+	}
+	/** A streak of tool calls, folded to one line. Its members are whole tool rows. */
+	| {
+		readonly kind: 'tool-group';
+		readonly id: string;
+		readonly calls: readonly TranscriptRow[];
+		/** `bash ×3, read ×1`: what the folded line says it did. */
+		readonly names: string;
+		readonly totalBytes: number;
 		readonly at?: number;
 	}
 	/** A context mark: the prompt was rebuilt, the context reset, or older entries were summarized. */
@@ -76,7 +117,15 @@ export type TranscriptRow =
 
 export interface TranscriptView {
 	readonly conversationId: number;
+	/** The rows to draw: calls paired with their results, and streaks gathered. */
 	readonly rows: readonly TranscriptRow[];
+	/**
+	 * The rows as the entries built them, before pairing and grouping.
+	 *
+	 * Kept because a live entry has to be added to an unpaired list: pairing a row that was already
+	 * paired, or grouping a group, would count the same call twice. It is not on the wire.
+	 */
+	readonly unpaired: readonly TranscriptRow[];
 	/** How many entries the conversation has, whether or not they all fit in `rows`. */
 	readonly entries: number;
 	/** How many of the oldest entries `rows` does not show. */
@@ -157,20 +206,49 @@ function thinkingOf(message: Record<string, unknown> | undefined): string {
 		.trim();
 }
 
-/** A tool call, as the chip shows it: the name and a shortened argument list. */
+/** The first line that says something, shortened: what a folded row can show. */
+function oneLine(text: string, limit = 120): string {
+	const line = text.split('\n').find(candidate => candidate.trim().length > 0)?.trim() ?? '';
+	return line.length > limit ? `${line.slice(0, limit)}…` : line;
+}
+
+/**
+ * A call's two presentations: the one line a folded row shows, and the full text it opens to.
+ *
+ * A shell tool puts what the reader wants in `arguments.command` — the command, not JSON with the
+ * command inside it — so that is preferred when it is there. Anything else is its arguments, as
+ * JSON on one line for the summary and indented for the opened row.
+ */
+function callPresentations(argumentsValue: unknown): { summary: string; details: string } {
+	const args = recordOf(argumentsValue);
+	const command = typeof args?.command === 'string' ? args.command : undefined;
+	if (command !== undefined && command.trim().length > 0) {
+		return { summary: oneLine(command), details: command };
+	}
+	let compact = '';
+	let indented = '';
+	try {
+		compact = typeof argumentsValue === 'string' ? argumentsValue : JSON.stringify(argumentsValue ?? {});
+	} catch {
+		compact = '';
+	}
+	try {
+		indented = typeof argumentsValue === 'string' ? argumentsValue : JSON.stringify(argumentsValue ?? {}, null, 2);
+	} catch {
+		indented = compact;
+	}
+	return { summary: oneLine(compact), details: indented };
+}
+
+/** The tool calls a message announced, each with the id its result will repeat. */
 function toolCallsOf(message: Record<string, unknown> | undefined): TranscriptToolCall[] {
 	return blocksOf(message)
 		.filter(block => block.type === 'toolCall')
-		.map(block => {
-			const args = block.arguments;
-			let serialized = '';
-			try {
-				serialized = typeof args === 'string' ? args : JSON.stringify(args ?? {});
-			} catch {
-				serialized = '';
-			}
-			return { name: textOf(block.name) || 'tool', args: serialized.length > 120 ? `${serialized.slice(0, 120)}…` : serialized };
-		});
+		.map(block => ({
+			id: textOf(block.id),
+			name: textOf(block.name) || 'tool',
+			...callPresentations(block.arguments),
+		}));
 }
 
 function lineCount(text: string): number {
@@ -221,6 +299,7 @@ function rowOf(entry: unknown): TranscriptRow | undefined {
 			// Cut on characters, then say so: never a silent truncation.
 			const text = truncated ? `${raw.slice(0, MAX_TOOL_BYTES)}\n… (truncated)` : raw;
 			const durationMs = numberOr(message?.durationMs);
+			const toolCallId = textOf(message?.toolCallId);
 			return {
 				kind: 'tool',
 				id,
@@ -229,6 +308,7 @@ function rowOf(entry: unknown): TranscriptRow | undefined {
 				lines: lineCount(text),
 				bytes,
 				isError: message?.isError === true,
+				...(toolCallId.length === 0 ? {} : { toolCallId }),
 				...(durationMs === undefined ? {} : { durationMs }),
 				...(truncated ? { truncated: true as const } : {}),
 				...(at === undefined ? {} : { at }),
@@ -251,6 +331,134 @@ function capped(rows: TranscriptRow[]): { rows: TranscriptRow[]; omitted: number
 		return { rows, omitted: 0 };
 	}
 	return { rows: rows.slice(rows.length - MAX_ROWS), omitted: rows.length - MAX_ROWS };
+}
+
+/** How many consecutive calls make a streak worth folding. */
+export const TOOL_GROUP_MIN = 3;
+
+/** A done call with no error: the only thing a streak may hide. */
+function foldable(row: TranscriptRow): boolean {
+	return row.kind === 'tool' && row.status === undefined && !row.isError;
+}
+
+/** `bash ×3, read ×1` — in the order the tools were called. */
+function namesOf(calls: readonly TranscriptRow[]): string {
+	const counts = new Map<string, number>();
+	for (const call of calls) {
+		const name = call.kind === 'tool' ? call.name : 'tool';
+		counts.set(name, (counts.get(name) ?? 0) + 1);
+	}
+	return [...counts].map(([name, count]) => (count === 1 ? name : `${name} ×${count}`)).join(', ');
+}
+
+/** Runs of `TOOL_GROUP_MIN` or more foldable calls become one row; errors and open calls never do. */
+function folded(rows: readonly TranscriptRow[]): TranscriptRow[] {
+	const out: TranscriptRow[] = [];
+	let index = 0;
+	while (index < rows.length) {
+		if (!foldable(rows[index])) {
+			out.push(rows[index]);
+			index++;
+			continue;
+		}
+		let end = index;
+		while (end < rows.length && foldable(rows[end])) {
+			end++;
+		}
+		const streak = rows.slice(index, end);
+		if (streak.length < TOOL_GROUP_MIN) {
+			out.push(...streak);
+		} else {
+			let totalBytes = 0;
+			for (const row of streak) {
+				if (row.kind === 'tool') {
+					totalBytes += row.bytes;
+				}
+			}
+			out.push({
+				kind: 'tool-group',
+				id: `group-${streak[0].id}`,
+				calls: streak,
+				names: namesOf(streak),
+				totalBytes,
+				...(streak[0].at === undefined ? {} : { at: streak[0].at }),
+			});
+		}
+		index = end;
+	}
+	return out;
+}
+
+/**
+ * The rows the tab draws, from the rows the entries built.
+ *
+ * Three passes, in this order because each one needs the previous one complete:
+ *
+ *  1. **Pair** a call with its result by id. The result row keeps its place in the transcript (it
+ *     is the moment the call finished) and gains the call's one-line command and full text. A call
+ *     with no result anywhere becomes a row of its own — `running` while the run is in flight,
+ *     `no-result` once it ended without one — so a call is never invisible.
+ *  2. **Drop** an assistant row that carries nothing but calls: those are rows now, and an empty
+ *     bubble above them is the duplication this replaces.
+ *  3. **Fold** streaks of done, successful calls (`TOOL_GROUP_MIN` or more).
+ */
+export function decorateRows(unpaired: readonly TranscriptRow[], running: boolean): TranscriptRow[] {
+	const calls = new Map<string, TranscriptToolCall>();
+	for (const row of unpaired) {
+		if (row.kind === 'assistant') {
+			for (const call of row.toolCalls) {
+				if (call.id.length > 0) {
+					calls.set(call.id, call);
+				}
+			}
+		}
+	}
+	const answered = new Set<string>();
+	for (const row of unpaired) {
+		if (row.kind === 'tool' && row.toolCallId !== undefined) {
+			answered.add(row.toolCallId);
+		}
+	}
+
+	const paired: TranscriptRow[] = [];
+	for (const row of unpaired) {
+		if (row.kind === 'assistant') {
+			const hasProse = row.markdown.trim().length > 0 || row.thinking !== undefined;
+			if (hasProse) {
+				// No chips: the call is a row of its own below, with its command and its result.
+				paired.push({ ...row, toolCalls: [] });
+			}
+			for (const call of row.toolCalls) {
+				if (call.id.length === 0 || answered.has(call.id)) {
+					continue;
+				}
+				paired.push({
+					kind: 'tool',
+					id: `${row.id}#${call.id}`,
+					name: call.name,
+					text: '',
+					lines: 0,
+					bytes: 0,
+					isError: false,
+					toolCallId: call.id,
+					summary: call.summary,
+					details: call.details,
+					status: running ? 'running' : 'no-result',
+					...(row.at === undefined ? {} : { at: row.at }),
+				});
+			}
+			continue;
+		}
+		if (row.kind === 'tool' && row.toolCallId !== undefined) {
+			const call = calls.get(row.toolCallId);
+			paired.push(call === undefined
+				? row
+				: { ...row, summary: call.summary, details: call.details });
+			continue;
+		}
+		paired.push(row);
+	}
+	return folded(paired);
 }
 
 /** When the current (or last) run started: the newest user entry's timestamp. */
@@ -279,12 +487,14 @@ export function transcriptOf(conversationId: number, snapshot: unknown, now: num
 	}
 	const kept = capped(rows);
 	const run = recordOf(recordOf(snapshot)?.run);
+	const running = run !== undefined;
 	return {
 		conversationId,
-		rows: kept.rows,
+		rows: decorateRows(kept.rows, running),
+		unpaired: kept.rows,
 		entries: entries.length || rows.length + omittedUnreadable,
 		omitted: kept.omitted,
-		running: run !== undefined,
+		running,
 		...(startedAtOf(kept.rows) === undefined ? {} : { startedAt: startedAtOf(kept.rows) }),
 		at: now,
 	};
@@ -309,11 +519,12 @@ export function applyTranscriptEvent(view: TranscriptView, event: unknown, now: 
 	}
 
 	if (record.type === 'run_start') {
-		return view.running ? view : { ...view, running: true, startedAt: view.startedAt ?? now, at: now };
+		return view.running ? view : { ...view, running: true, rows: decorateRows(view.unpaired, true), startedAt: view.startedAt ?? now, at: now };
 	}
 
 	if (record.type === 'run_end') {
-		return view.running ? { ...view, running: false, at: now } : view;
+		// A call that never got a result stops saying "running" here, and says it ended without one.
+		return view.running ? { ...view, running: false, rows: decorateRows(view.unpaired, false), at: now } : view;
 	}
 
 	if (record.type === 'entry_appended' || record.type === 'message_end') {
@@ -323,13 +534,14 @@ export function applyTranscriptEvent(view: TranscriptView, event: unknown, now: 
 			return view;
 		}
 		// Idempotent by id: the same entry can arrive twice (snapshot then event, or a reconnect).
-		if (view.rows.some(existing => existing.id === row.id)) {
+		if (view.unpaired.some(existing => existing.id === row.id)) {
 			return view;
 		}
-		const rows = capped([...view.rows, row]);
+		const rows = capped([...view.unpaired, row]);
 		return {
 			...view,
-			rows: rows.rows,
+			rows: decorateRows(rows.rows, view.running),
+			unpaired: rows.rows,
 			entries: view.entries + 1,
 			omitted: view.omitted + rows.omitted,
 			at: now,
