@@ -50,6 +50,7 @@ import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerPiSessionsProvider } from './sessions-register';
 import { applyProductEnv } from './product-env';
+import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
@@ -106,15 +107,15 @@ const VENDOR = 'picode';
 /**
  * PiCode's own profile directory.
  *
- * Derived from this extension's location rather than configured, because there is only one
- * answer and a wrong one would read somebody else's models: the extension lives at
- * `<root>/resources/app/extensions/picode`, so four levels up is the distribution, and the
- * profile is `<root>/data/pi-agent` — the same directory `instance.ts` resolves for the
- * host. **Nothing outside PiCode is ever read.**
+ * Derived from the editor's own location rather than configured, because there is only one
+ * answer and a wrong one would read somebody else's models: the application lives at
+ * `<root>/resources/app`, so two levels up is the distribution (the repository itself in a dev
+ * run), and the profile is `<root>/data/pi-agent` — the same directory `instance.ts` resolves for
+ * the host. **Nothing outside PiCode is ever read.**
  */
-/** The distribution root: four levels up from `resources/app/extensions/picode`. */
-function distributionRoot(extensionUri: vscode.Uri): string {
-	return path.resolve(extensionUri.fsPath, '..', '..', '..', '..');
+/** The distribution root: `<root>` in a pack, the repository in a dev run (`distribution-root.ts`). */
+function distributionRoot(_extensionUri: vscode.Uri): string {
+	return distributionRootOf(vscode.env.appRoot);
 }
 
 /**
