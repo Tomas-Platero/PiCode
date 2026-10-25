@@ -49,7 +49,7 @@ import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } f
 import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerPiSessionsProvider } from './sessions-register';
-import { applyProductEnv } from './product-env';
+import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
 import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
@@ -2238,6 +2238,11 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
+	// gentle-pi's subagents are child pi processes: they start the pi this editor carries.
+	pointChildPiAtThisPi(
+		path.join(piRuntimeRoot(distributionRoot(context.extensionUri)), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'),
+		candidate => fs.existsSync(candidate),
+	);
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));

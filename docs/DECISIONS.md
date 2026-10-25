@@ -1219,3 +1219,17 @@ play. Unverified in a running editor.
   still declared, `extensions`/`skills`/`prompts`/`themes` empty, so nothing of theirs loads. An
   entry already written as an object is the owner's own choice of what to load and is left as it
   is, which is also how it is switched back on.
+
+**Addendum 3 (2026-10-25, found when the first gentle-pi agent failed with `spawn pi ENOENT`).**
+
+- gentle-pi starts each subagent as a child pi process. It reuses the pi entry the current process was
+  launched with (`process.argv[1]`, when it is a `cli.js`) and otherwise runs `pi` from the PATH — which
+  an editor does not have, so every agent failed at once and the Tasks block showed it: *failed · could not
+  start pi*. The environment variable it offers for this (`GENTLE_PI_AGENTS_PI`) is split on spaces, so a
+  path like `C:\Program Files\…` or `PiCode Experimental.exe` cannot go through it.
+- `pointChildPiAtThisPi` (`product-env.ts`) sets `process.argv[1]` to the runtime's `cli.js` and
+  `ELECTRON_RUN_AS_NODE=1`, so the editor's binary is started as Node over pi's script. It touches nothing
+  when there is no runtime at that path (an external pi).
+- gentle-pi's `review-*` agents are not general-purpose: they run only inside its native review, which
+  needs the helper program the product does not install (addendum 1). Tasks is verified with
+  `gentle-ai-explore`.

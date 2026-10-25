@@ -45,6 +45,34 @@ export function configHomeEnv(profileDir: string): Readonly<Record<string, strin
 	return { GENTLE_PI_CONFIG_HOME: path.join(profileDir, 'gentle-ai') };
 }
 
+/** The part of a process this module reads and sets: what a test can stand in for. */
+export interface ChildPiProcess {
+	readonly env: NodeJS.ProcessEnv;
+	readonly argv: string[];
+}
+
+/**
+ * Points gentle-pi's subagents at the pi this editor runs.
+ *
+ * gentle-pi starts each subagent as a child pi process. It finds the pi to start from the entry
+ * the current process was launched with (`process.argv[1]`, when it is a `cli.js`) and falls back
+ * to a `pi` on the PATH — which an editor has none of, so the first agent failed with
+ * `could not start pi: spawn pi ENOENT`. Here pi runs inside the editor's own process, so the
+ * entry it should reuse is the runtime's `cli.js`, and the editor's binary — what `execPath`
+ * names — has to be told to act as Node when it is handed that script.
+ *
+ * Returns whether it applied: with no pi runtime at that path (an external pi, a tree with none)
+ * nothing is touched.
+ */
+export function pointChildPiAtThisPi(cliEntry: string, exists: (path: string) => boolean, proc: ChildPiProcess = process): boolean {
+	if (!exists(cliEntry)) {
+		return false;
+	}
+	proc.argv[1] = cliEntry;
+	proc.env['ELECTRON_RUN_AS_NODE'] = '1';
+	return true;
+}
+
 /** `env` with the product's variables laid over it; the product's values win. */
 export function withProductEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return { ...env, ...PRODUCT_ENV };

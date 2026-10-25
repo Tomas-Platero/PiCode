@@ -26,6 +26,7 @@ registerHooks({
 	},
 });
 
+const { pointChildPiAtThisPi } = await import('../src/product-env.ts');
 const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, switchedOff, withProductPackages } = await import('../src/product-packages.ts');
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
@@ -147,4 +148,19 @@ test('gentle-pi keeps its own files inside the profile, never in the pi of the m
 
 test('the host signal rides on this process only, never on an npm run', () => {
 	assert.equal(withProductEnv({})['GENTLE_SHELL_INTERACTIVE_HOST'], undefined);
+});
+
+test('gentle-pi\'s child pi is the one this editor carries, when there is one', () => {
+	const proc = { env: {} as NodeJS.ProcessEnv, argv: ['editor', '/ext-host.js'] };
+	assert.equal(pointChildPiAtThisPi('/pi/dist/cli.js', () => true, proc), true);
+	assert.equal(proc.argv[1], '/pi/dist/cli.js');
+	assert.equal(proc.env['ELECTRON_RUN_AS_NODE'], '1');
+	assert.equal(proc.argv[0], 'editor');
+});
+
+test('with no pi runtime at that path nothing is touched', () => {
+	const proc = { env: {} as NodeJS.ProcessEnv, argv: ['editor', '/ext-host.js'] };
+	assert.equal(pointChildPiAtThisPi('/pi/dist/cli.js', () => false, proc), false);
+	assert.deepEqual(proc.argv, ['editor', '/ext-host.js']);
+	assert.deepEqual(proc.env, {});
 });
