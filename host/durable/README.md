@@ -20,8 +20,8 @@ justify replacing what came before it:
 
 A pi extension (TypeScript, loaded by path -- nothing is installed into any pi,
 and no pi directory is written) that bridges the coding agent you use to the durable daemon:
-it registers durable_send, durable_list and durable_read, which the chats session loads next
-to the agent. It ships at <app>/resources/durable/bridge.
+it registers durable_send, durable_submit, durable_result, durable_list and durable_read,
+which the chats session loads next to the agent. It ships at <app>/resources/durable/bridge.
 
 ## 🖥️ The CLI (`cli.js`)
 
@@ -206,6 +206,7 @@ Methods:
 | `sessions` | — | `{conversations: [{id, entries, newest, note}]}` — the same rows as the CLI table. |
 | `open` | `{conversationId?, model?, agent?}` | `{conversationId}` — resolves an existing conversation or creates one (ownerless; model per params or the daemon's resolved default; MCP deferral armed). |
 | `run` | `{conversationId, prompt, model?, agent?}` | `{conversationId, status, answer}` — submits the prompt and settles; all subscribers of that conversation receive the events live. |
+| `start` | `{conversationId, prompt, model?, agent?}` | `{conversationId, submissionId, status: "running"}` — submits the prompt and returns **at once**: nobody waits, the run keeps going in the daemon, and its outcome is read later through `subscribe` (the snapshot's `run`, then the `pi.assistant` entry). Same queue as `run`: an input for a busy conversation takes its turn. |
 | `fork` | `{conversationId, prompt, model?, agent?}` | `{conversationId, forkedFrom, status, answer}` — forks at the newest entry, runs the prompt on the fork. |
 | `allow` | `{conversationId, command}` | `{conversationId, allowed: [..]}` — guard opt-in; the same list `node cli.js allow` shows. |
 | `subscribe` | `{conversationId}` | `{conversationId, snapshot}` — the response carries the conversation's snapshot; every later commit is pushed to this client as an `events` line until it disconnects or unsubscribes. |

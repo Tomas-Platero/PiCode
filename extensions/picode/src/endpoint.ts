@@ -54,16 +54,86 @@ export function parseModelIds(payload: unknown): string[] {
  * not answer is a fact to tell the owner about, not a reason to stop serving the models the
  * profile already has.
  */
-export async function fetchModelIds(baseUrl: string, apiKey: string | undefined): Promise<string[] | undefined> {
+/**
+ * What one request to an endpoint's model list found out.
+ *
+ * Answering with a reason and a duration, rather than `undefined`, is the difference between
+ * "it did not work" and something the owner can act on: a refused key, an empty balance, an
+ * address that is not an API, a machine with no network. All four used to collapse into the
+ * same silence.
+ */
+export interface EndpointProbe {
+	readonly ok: boolean;
+	/** The HTTP status, when the address answered at all. */
+	readonly status?: number;
+	/** How long the round trip took, in milliseconds. Measured, never estimated. */
+	readonly latencyMs: number;
+	readonly models: readonly string[];
+	/** A sentence for a person: what went wrong and what to change. */
+	readonly error?: string;
+}
+
+/** The sentence for a status the endpoint answered with. */
+function refusalOf(status: number): string {
+	if (status === 401 || status === 403) {
+		return 'the key was refused';
+	}
+	if (status === 402) {
+		return 'the account has no credit left';
+	}
+	if (status === 404) {
+		return 'that address has no model list — check it ends in /v1 when it should';
+	}
+	if (status === 429) {
+		return 'too many requests right now';
+	}
+	return `the address answered ${status}`;
+}
+
+/**
+ * Asks an endpoint what it has, and says how it went.
+ *
+ * The model list is the test: a key that cannot list models cannot run one either, so this is
+ * the same request the provider projection needs, timed and explained. Nothing is invented — an
+ * address that answers with a shape this does not recognise yields no models and says so.
+ */
+export async function probeEndpoint(baseUrl: string, apiKey: string | undefined, timeoutMs = 20_000): Promise<EndpointProbe> {
+	const started = Date.now();
+	const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
+	const timer = controller === undefined ? undefined : setTimeout(() => controller.abort(), timeoutMs);
+	const stop = (): number => {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+		}
+		return Date.now() - started;
+	};
 	try {
 		const response = await fetch(`${baseUrl.replace(/\/$/, '')}/models`, {
 			headers: apiKey === undefined || apiKey.length === 0 ? {} : { authorization: `Bearer ${apiKey}` },
+			...(controller === undefined ? {} : { signal: controller.signal }),
 		});
+		const latencyMs = stop();
 		if (!response.ok) {
-			return undefined;
+			return { ok: false, status: response.status, latencyMs, models: [], error: refusalOf(response.status) };
 		}
-		return parseModelIds(await response.json());
-	} catch {
-		return undefined;
+		const models = parseModelIds(await response.json());
+		if (models.length === 0) {
+			return { ok: false, status: response.status, latencyMs, models: [], error: 'the address answered no models' };
+		}
+		return { ok: true, status: response.status, latencyMs, models };
+	} catch (error) {
+		const latencyMs = stop();
+		const timedOut = error instanceof Error && error.name === 'AbortError';
+		return {
+			ok: false,
+			latencyMs,
+			models: [],
+			error: timedOut ? `no answer within ${Math.round(timeoutMs / 1000)} s` : 'the address could not be reached',
+		};
 	}
+}
+
+export async function fetchModelIds(baseUrl: string, apiKey: string | undefined): Promise<string[] | undefined> {
+	const probe = await probeEndpoint(baseUrl, apiKey);
+	return probe.ok ? [...probe.models] : undefined;
 }

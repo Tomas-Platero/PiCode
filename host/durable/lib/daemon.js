@@ -240,6 +240,20 @@ async function serveStorage(resolved, agents, skills) {
 		}
 	}
 
+	/**
+	 * The part `run` and `start` share: resolve the agent the request asks for, arm the MCP deferral
+	 * filter, and admit the prompt. Returns the submission; waiting on it is the caller's choice,
+	 * which is the whole difference between the two methods.
+	 */
+	async function submitInput(conversation, params) {
+		const change = agentFor(resolved, agents, params);
+		if (change.model || change.instructions || change.cwd) await conversation.configure(change, CTX);
+		// The deferral needs the CONNECTED tools' names: wait for the bridge (bounded).
+		const settledBridge = await bridgeForAgent();
+		await armMcpFilter(harness, conversation, settledBridge, CTX);
+		return conversation.submit({ type: "input", content: String(params.prompt ?? "") }, CTX);
+	}
+
 	const methods = {
 		async ping() {
 			return { protocol: PROTOCOL_VERSION, pid: process.pid, uptimeMs: Math.round(process.uptime() * 1000), streams: streams.size, cwd: process.cwd() };
@@ -309,16 +323,31 @@ async function serveStorage(resolved, agents, skills) {
 			// plain reason — not succeed hollowly, not hang, not die with a stack trace.
 			if (profileProblem) throw new Error(profileProblem);
 			const conversation = await requireConversation(harness, params.conversationId);
-			const change = agentFor(resolved, agents, params);
-			if (change.model || change.instructions || change.cwd) await conversation.configure(change, CTX);
-			// The deferral needs the CONNECTED tools' names: wait for the bridge (bounded).
-			const settledBridge = await bridgeForAgent();
-			await armMcpFilter(harness, conversation, settledBridge, CTX);
-			const submission = await conversation.submit({ type: "input", content: String(params.prompt ?? "") }, CTX);
+			const submission = await submitInput(conversation, params);
 			const settled = await submission.wait(CTX);
 			const answer = await answerText(conversation, settled, CTX);
 			// `reason` (on "unanswered": aborted, failed, ...) lets protocol mappers turn a cancel into a cancel.
 			return { conversationId: conversation.id, status: settled.status, answer, ...(settled.status !== "done" ? { reason: settled.reason } : {}) };
+		},
+
+		/**
+		 * Submit a prompt and return AT ONCE. The run belongs to the daemon: it keeps going after
+		 * this connection closes, and its outcome is committed to the same storage `run` writes.
+		 * Nothing is awaited here on purpose — the answer is read later through `subscribe` (the
+		 * snapshot's `run`, then the `pi.assistant` entry).
+		 *
+		 * The settlement promise is not dropped: it is logged, so a run that dies in the background
+		 * says so in the daemon log instead of vanishing.
+		 */
+		async start(params) {
+			if (profileProblem) throw new Error(profileProblem);
+			const conversation = await requireConversation(harness, params.conversationId);
+			const submission = await submitInput(conversation, params);
+			void submission.wait(CTX).then(
+				(settled) => console.error(`[daemon] detached run ${conversation.id} (submission ${submission.id}) settled: ${settled.status}${settled.status !== "done" && settled.reason ? ` (${settled.reason})` : ""}`),
+				(error) => console.error(`[daemon] detached run ${conversation.id} (submission ${submission.id}) failed: ${error?.message ?? error}`),
+			);
+			return { conversationId: conversation.id, submissionId: submission.id, status: "running" };
 		},
 
 		/** Fork at the newest entry, then run the prompt on the fork. */
@@ -470,7 +499,7 @@ async function serveStorage(resolved, agents, skills) {
 	}
 
 	console.error(`[daemon] owner of ${SHARED_DB} — listening on ${endpoint}`);
-	console.error("[daemon] methods: ping sessions open run record fork allow cancel permissions.listen permissions.decide subscribe unsubscribe shutdown");
+	console.error("[daemon] methods: ping sessions open run start record fork allow cancel permissions.listen permissions.decide subscribe unsubscribe shutdown");
 
 	// Graceful Ctrl+C: same path as the shutdown method.
 	process.on("SIGINT", () => {

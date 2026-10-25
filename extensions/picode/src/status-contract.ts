@@ -79,6 +79,11 @@ export interface McpServerSwitch {
 	 * rows the reading has always answered.
 	 */
 	readonly origin?: 'profile' | 'project' | 'discovered';
+	/**
+	 * `true` when the entry is this product's own — the memory engine's declaration — rather than
+	 * a server the owner added. The MCP section leaves those out: they are machinery, not choices.
+	 */
+	readonly internal?: boolean;
 }
 
 /**

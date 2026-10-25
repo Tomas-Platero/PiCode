@@ -11,11 +11,13 @@ work runs **inside the daemon's process**; if pi is killed mid-work, the daemon
 finishes the conversation and commits the answer to its SQLite. A later pi — the
 same one or a brand-new process — can read the finished conversation back.
 
-## 🧰 The three tools it registers
+## 🧰 The five tools it registers
 
 | Tool | What it does |
 | --- | --- |
 | `durable_send` | Hands a prompt to the durable daemon (`open` + `run` over the protocol) and returns the daemon's answer. The run settles in the daemon: killing pi does not stop it, and there is deliberately no cancel — durability is the point. `conversationId` continues an existing durable conversation. |
+| `durable_submit` | The same hand-off as `durable_send`, but it **returns immediately** (`open` + `start`): the run keeps going inside the daemon and the answer is collected later with `durable_result`. Use it when there is other work to do meanwhile. The run is queued, not parallel — a busy conversation takes the input in turn. |
+| `durable_result` | Reports where one durable conversation stands: still running, or its final answer once it settled (subscribe snapshot → newest `pi.assistant` → unsubscribe). It never waits. |
 | `durable_list` | Lists the daemon's conversations (id, entries, last activity). |
 | `durable_read` | Reads one durable conversation's transcript (subscribe snapshot → entry lines → unsubscribe). |
 

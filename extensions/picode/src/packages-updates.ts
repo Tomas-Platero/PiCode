@@ -176,6 +176,17 @@ export interface CheckDependencies {
 /** The latest-version answers, per package name — so refreshing the page does not re-ask npm. */
 const latestCache = new Map<string, CacheEntry<string>>();
 
+/**
+ * Forgets every cached "latest" answer.
+ *
+ * `Check again` must ask npm afresh: after an update the cached answer is the *previous* one, and a
+ * fresh check that keeps serving it is how a badge stays red after the fix (the loop the owner saw).
+ */
+export function clearPackageUpdateCache(): void {
+	latestCache.clear();
+	latestFlights.clear();
+}
+
 /** The lookups already running, per package name — so overlapping checks share one request. */
 const latestFlights = new Map<string, Promise<string | undefined>>();
 

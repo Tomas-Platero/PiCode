@@ -8,6 +8,7 @@ import type { Socket } from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DaemonClient, daemonEndpoint } from './durable-client';
+import { openTranscriptPanel } from './durable-transcript-view';
 import { DURABLE_SESSION_SCHEME, durableSessionMarkdown } from './durable-sessions';
 import { daemonSpawnPlan } from './durable-spawn';
 import { DEFAULT_DURABLE_FOLDER, durableFolderCandidates, SHIPPED_DURABLE_FOLDER } from './durable-folder';
@@ -188,53 +189,6 @@ export async function readDurableStatus(): Promise<DurableStatus> {
 		const message = error instanceof Error ? error.message : String(error);
 		return { up: false, endpoint, error: message };
 	}
-}
-
-/**
- * Concatenated text of a pi-ai assistant message (content may be a string, an array of
- * blocks, or missing) — copied from `durable/lib/common.js`'s `textOf`, for
- * the same reason the wire client is copied: the connector cannot import from there.
- */
-function textOf(message: unknown): string {
-	const record = message as { content?: unknown } | null | undefined;
-	const content = record?.content;
-	if (typeof content === 'string') {
-		return content;
-	}
-	if (!Array.isArray(content)) {
-		return '';
-	}
-	return content
-		.map(block => (block !== null && typeof block === 'object' && typeof (block as { text?: unknown }).text === 'string' ? (block as { text: string }).text : ''))
-		.join('');
-}
-
-/** Text of one transcript entry — copied from `durable/lib/common.js`'s `entryText`. */
-function entryText(entry: unknown): string {
-	const record = entry as { model?: unknown; data?: unknown } | null | undefined;
-	const messages = Array.isArray(record?.model) ? record.model : Array.isArray(record?.data) ? record.data : [];
-	return messages.map(textOf).join(' ').trim();
-}
-
-/** A transcript entry's role, as a person reading the output channel would want it. */
-function entryRole(kind: unknown): string {
-	const name = typeof kind === 'string' ? kind.replace(/^pi\./, '') : 'entry';
-	return name;
-}
-
-/** The snapshot's entries, as readable lines for the output channel. */
-function renderSnapshot(snapshot: unknown): string {
-	const entries = (snapshot as { entries?: unknown } | null | undefined)?.entries;
-	if (!Array.isArray(entries) || entries.length === 0) {
-		return '(no entries in the snapshot)';
-	}
-	const lines: string[] = [];
-	for (const entry of entries) {
-		const record = entry as { id?: unknown; kind?: unknown } | null | undefined;
-		const text = entryText(entry);
-		lines.push(`[${entryRole(record?.kind)}] ${text.length > 0 ? text : '(no text)'}`);
-	}
-	return lines.join('\n');
 }
 
 /** The output channel the durable answers land in, created once. */
@@ -483,6 +437,26 @@ async function chooseDurableModel(): Promise<void> {
 	void vscode.window.showInformationMessage(`PiCode: the durable agent runs on ${picked.model.id}.`);
 }
 
+/**
+ * One conversation's transcript, in a tab of its own.
+ *
+ * A tab, not the output channel: a transcript is something you read, and it needs markdown,
+ * collapsible tool output and live updates. The channel stays for what it is good at — the
+ * answers a command prints — and the tab replaces only the reading of a whole conversation.
+ *
+ * Two callers reach this: the command that asks which conversation (`picode.durable.list`) and
+ * a Tasks row, which already knows. They open the same tab, so opening it twice reveals it
+ * instead of duplicating it.
+ */
+export async function openDurableConversation(conversationId: number): Promise<void> {
+	const status = await readDurableStatus();
+	if (!status.up) {
+		void vscode.window.showWarningMessage('PiCode: the durable agent is not running, so its conversations cannot be read. Start it with "PiCode: Start Durable Agent".');
+		return;
+	}
+	openTranscriptPanel({ conversationId, endpoint: daemonEndpoint(durableFolder()), title: `Durable · ${conversationId}` });
+}
+
 /** "PiCode: Show Durable Conversations": pick one, and read its transcript into the output channel. */
 async function showDurableConversations(): Promise<void> {
 	try {
@@ -494,15 +468,10 @@ async function showDurableConversations(): Promise<void> {
 				return;
 			}
 			const picked = await pickConversation(rows, 'Which durable conversation to open', false);
-			if (picked === undefined) {
+			if (typeof picked !== 'number') {
 				return;
 			}
-			const subscribed = await client.request('subscribe', { conversationId: picked }) as { snapshot?: unknown };
-			const channel = outputChannel();
-			channel.appendLine(`--- Conversation ${picked} · ${new Date().toLocaleString()} ---`);
-			channel.appendLine(renderSnapshot(subscribed.snapshot));
-			channel.appendLine('');
-			channel.show(true);
+			await openDurableConversation(picked);
 		});
 	} catch (error) {
 		void vscode.window.showWarningMessage(`PiCode: the durable agent could not be read (${daemonUnavailableSentence(error)}).`);

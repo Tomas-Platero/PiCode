@@ -17,6 +17,7 @@ import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFil
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
 import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
+import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import { getCachedNanUsage, matchedNanProvider, nanModelUsage, resolveNanApiKey, spokenWindowLabel } from './usage-data';
 
@@ -126,8 +127,16 @@ function readMcpServers(profileDir: string, runtime: 'internal' | 'external'): r
 	const authFile: McpAuthFile | undefined = runtime === 'internal'
 		? mcpAuthFile(path.join(profileDir, 'mcp-auth.json'))
 		: undefined;
-	return mcpServerStates(isRecord(servers) ? servers : undefined, authFile, Date.now())
-		.map(row => ({ ...row, origin: 'profile' as const }));
+	const byName = isRecord(servers) ? servers : undefined;
+	return mcpServerStates(byName, authFile, Date.now())
+		.map(row => ({
+			...row,
+			origin: 'profile' as const,
+			// The memory engine's entry is this product's own declaration (`engram.ts`), not a server
+			// the owner added or can manage. It is marked so the MCP section leaves it out: a row the
+			// owner never created, with an address they cannot edit, is a row that only confuses.
+			...(byName !== undefined && isOurEngramDeclaration(byName[row.name]) ? { internal: true } : {}),
+		}));
 }
 
 /**

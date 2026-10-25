@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { contextBlock, CONTEXT_MAX_DIAGNOSTICS, type ContextAttachment, type ContextDiagnostic, type EditorContext } from './context';
+import { applyContextMode, contextBlock, CONTEXT_MAX_DIAGNOSTICS, type ContextAttachment, type ContextDiagnostic, type ContextMode, type EditorContext } from './context';
 import { missingDirectories, type SessionCwd } from './session-cwd';
 import type { PiProjectScope } from './runtime';
 import { areaContextBlock } from './workspace-area';
@@ -18,12 +18,12 @@ import { areaContextBlock } from './workspace-area';
  * exercised. Every prompt runs through it — the in-process chat and the durable turn alike —
  * so the agent answers about what the owner is looking at instead of about what it guesses.
  */
-export function editorContext(folder: string | undefined, references?: readonly vscode.ChatPromptReference[]): EditorContext {
+export function editorContext(folder: string | undefined, references?: readonly vscode.ChatPromptReference[], mode: ContextMode = 'project'): EditorContext {
 	const attachments = attachmentsOf(references ?? []);
 	const extras = attachments.length === 0 ? {} : { attachments };
 	const editor = vscode.window.activeTextEditor;
 	if (editor === undefined || editor.document.uri.scheme !== 'file') {
-		return { ...(folder === undefined ? {} : { folder }), ...extras };
+		return applyContextMode({ ...(folder === undefined ? {} : { folder }), ...extras }, mode);
 	}
 	const selection = editor.selection.isEmpty
 		? undefined
@@ -32,13 +32,13 @@ export function editorContext(folder: string | undefined, references?: readonly 
 			lines: editor.selection.end.line - editor.selection.start.line + 1,
 		};
 	const diagnostics = diagnosticsOf(editor.document.uri);
-	return {
+	return applyContextMode({
 		...(folder === undefined ? {} : { folder }),
 		file: editor.document.uri.fsPath,
 		...(selection === undefined ? {} : { selection }),
 		...(diagnostics.length === 0 ? {} : { diagnostics }),
 		...extras,
-	};
+	}, mode);
 }
 
 /**
@@ -54,9 +54,9 @@ export function editorContext(folder: string | undefined, references?: readonly 
  * once. A folder that is not on disk is named as such — the session must know `guildboard`
  * is not there rather than discover it with a failed command.
  */
-export function contextBlockFor(scope: PiProjectScope, picked: SessionCwd, references?: readonly vscode.ChatPromptReference[]): string | undefined {
+export function contextBlockFor(scope: PiProjectScope, picked: SessionCwd, references?: readonly vscode.ChatPromptReference[], contextMode: ContextMode = 'project'): string | undefined {
 	if (scope.mode !== 'workspace' || scope.area === undefined) {
-		return contextBlock(editorContext(picked.cwd, references));
+		return contextBlock(editorContext(picked.cwd, references, contextMode));
 	}
 	// Every root's on-disk state is checked on its own (see `missingDirectories`): a folder
 	// the editor keeps after a move or delete sits wherever it sits in the order, and the
@@ -67,7 +67,7 @@ export function contextBlockFor(scope: PiProjectScope, picked: SessionCwd, refer
 		path: root.path,
 		onDisk: !missing.includes(root.path),
 	}));
-	const base = contextBlock(editorContext(undefined, references));
+	const base = contextBlock(editorContext(undefined, references, contextMode));
 	const area = areaContextBlock(roots, picked.cwd);
 	if (area === undefined) {
 		return base;

@@ -101,6 +101,15 @@ export class LineStream {
 }
 
 /**
+ * How long a request may wait for its answer.
+ *
+ * Generous on purpose: the daemon's slowest truthful answer (a `sessions` listing of a grown
+ * database, or a `subscribe` that has to open a stream) is well under this. What it exists for is
+ * the case with no answer at all, where waiting is not patience but a hang.
+ */
+export const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
  * A connected daemon client: request/response matching plus pushed-event listeners.
  *
  * `connect` is **bounded** (`timeoutMs`, default 3 s) and fails with a
@@ -119,7 +128,7 @@ export class DaemonClient {
 	private readonly line: LineStream;
 	private live = true;
 	private nextId = 1;
-	private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+	private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
 	private readonly eventListeners = new Set<(message: unknown) => void>();
 
 	/** Connect to the daemon. Bounded; see the class comment. */
@@ -146,7 +155,8 @@ export class DaemonClient {
 	private onMessage(message: unknown): void {
 		const record = message as { id?: unknown; ok?: unknown; result?: unknown; error?: unknown; event?: unknown };
 		if (typeof record?.id === 'number' && this.pending.has(record.id)) {
-			const { resolve, reject } = this.pending.get(record.id)!;
+			const { resolve, reject, timer } = this.pending.get(record.id)!;
+			clearTimeout(timer);
 			this.pending.delete(record.id);
 			if (record.ok) {
 				resolve(record.result);
@@ -167,7 +177,8 @@ export class DaemonClient {
 			return;
 		}
 		this.live = false;
-		for (const [, { reject }] of this.pending) {
+		for (const [, { reject, timer }] of this.pending) {
+			clearTimeout(timer);
 			reject(new Error('the daemon closed the connection'));
 		}
 		this.pending.clear();
@@ -176,14 +187,28 @@ export class DaemonClient {
 		}
 	}
 
-	/** Send a request; resolves with the response's `result` or rejects with its `error`. */
-	request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+	/**
+	 * Send a request; resolves with the response's `result` or rejects with its `error`.
+	 *
+	 * **Bounded, like `connect`.** A daemon that accepts the socket and then stops answering used
+	 * to leave this promise pending forever, which froze every caller that awaited two requests in
+	 * sequence — the Tasks panel's refresh set a "reading" flag before awaiting and never cleared
+	 * it, so the block stopped updating and kept its last frame (a conversation that had finished
+	 * still read "running"). A request now has a deadline; the wait is the caller's own to widen.
+	 */
+	request(method: string, params: Record<string, unknown> = {}, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<unknown> {
 		if (!this.live) {
 			return Promise.reject(new Error('the daemon connection is closed'));
 		}
 		const id = this.nextId++;
 		return new Promise((resolve, reject) => {
-			this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+			const timer = setTimeout(() => {
+				// Only this entry's own wait: a late answer is dropped by `pending.has` above.
+				if (this.pending.delete(id)) {
+					reject(new Error(`the durable daemon did not answer "${method}" within ${timeoutMs} ms`));
+				}
+			}, Math.max(1, timeoutMs));
+			this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
 			this.line.send({ id, method, params });
 		});
 	}

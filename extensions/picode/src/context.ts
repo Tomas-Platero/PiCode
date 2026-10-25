@@ -58,6 +58,53 @@ export interface EditorContext {
 	readonly attachments?: readonly ContextAttachment[];
 }
 
+/**
+ * How much of the editor travels with a prompt.
+ *
+ * Three answers, because there are three questions the owner actually asks:
+ *
+ * - `project` — the folder, the open file and what is selected in it. The default, and what
+ *   makes *"fix this"* work without explaining what "this" is.
+ * - `file` — the open file only. For work inside one document, where the folder is noise.
+ * - `selection` — only the text that is selected, plus whatever was attached by hand. The
+ *   answer for somebody who does not want a path leaving their machine.
+ *
+ * The names describe **what travels**, not what the agent can reach: pi reads the repository
+ * itself when it needs more, so "project" is not a promise that the whole workspace was sent.
+ */
+export type ContextMode = 'project' | 'file' | 'selection';
+
+/** The modes, in the order the settings row and the setup offer them. */
+export const CONTEXT_MODES: readonly ContextMode[] = ['project', 'file', 'selection'];
+
+/** Reads a mode, falling back to the default when the value is not one of them. */
+export function contextModeOf(raw: unknown): ContextMode {
+	return raw === 'file' || raw === 'selection' ? raw : 'project';
+}
+
+/**
+ * The same context, reduced to what the chosen mode sends.
+ *
+ * Kept here, as a pure function, rather than inside the reader that touches the editor: this is
+ * the decision, and a decision that can be run against a plain object is one that can be checked
+ * instead of trusted.
+ */
+export function applyContextMode(context: EditorContext, mode: ContextMode): EditorContext {
+	if (mode === 'project') {
+		return context;
+	}
+	const { folder, ...rest } = context;
+	if (mode === 'file') {
+		return { ...rest };
+	}
+	// Selection only: the selection and what was attached by hand, nothing that names a path or
+	// describes a file the owner did not point at.
+	return {
+		...(rest.selection === undefined ? {} : { selection: rest.selection }),
+		...(rest.attachments === undefined ? {} : { attachments: rest.attachments }),
+	};
+}
+
 /** A block of text, capped in lines and then in characters, so one paste cannot become the prompt. */
 function capped(text: string): string {
 	return text.split('\n').slice(0, CONTEXT_MAX_LINES).join('\n').slice(0, CONTEXT_MAX_CHARS);

@@ -25,7 +25,8 @@
 		"chatPromptFiles",
 		"chatParticipantAdditions",
 		"chatParticipantPrivate",
-		"languageModelThinkingPart"
+		"languageModelThinkingPart",
+		"chatSessionCustomizationProvider"
 	],
 	"activationEvents": [
 		"onLanguageModelChatProvider:picode",
@@ -300,6 +301,17 @@
 				"title": "Update memory engine",
 				"category": "PiCode",
 				"icon": "$(cloud-download)"
+			},
+			{
+				"command": "picode.tasks.refresh",
+				"title": "Refresh the tasks",
+				"category": "PiCode",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "picode.tasks.open",
+				"title": "Open the task",
+				"category": "PiCode"
 			}
 		],
 		"menus": {
@@ -311,6 +323,11 @@
 				}
 			],
 			"view/title": [
+				{
+					"command": "picode.tasks.refresh",
+					"when": "view == picode.status.tasks",
+					"group": "navigation"
+				},
 				{
 					"command": "picode.memory.updateEngine",
 					"when": "view == picode.status.memory",
@@ -334,6 +351,11 @@
 			],
 			"view/item/context": [
 				{
+					"command": "picode.tasks.open",
+					"when": "view == picode.status.tasks && viewItem == picode.tasks.task",
+					"group": "inline@1"
+				},
+				{
 					"command": "picode.memory.copy",
 					"when": "view == picode.status.memory && viewItem == picode.memory.row",
 					"group": "inline@1"
@@ -345,6 +367,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "picode.tasks.open",
+					"when": "false"
+				},
 				{
 					"command": "picode.memory.open",
 					"when": "false"
@@ -379,26 +405,6 @@
 				}
 			]
 		},
-		"configuration": {
-			"title": "PiCode",
-			"properties": {
-				"picode.updates.check": {
-					"type": "boolean",
-					"default": true,
-					"description": "Check for updates in the background and offer to install them when there are any."
-				},
-				"picode.memory.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "Keep memory on: remember decisions, conventions and traps across conversations."
-				},
-				"picode.memory.binary": {
-					"type": "string",
-					"default": "",
-					"description": "Absolute path to another engram engine. Leave empty to use the one PiCode ships."
-				}
-			}
-		},
 		"viewsContainers": {
 			"activitybar": [
 				{
@@ -410,6 +416,12 @@
 		},
 		"views": {
 			"picode-status": [
+				{
+					"type": "tree",
+					"id": "picode.status.tasks",
+					"name": "Tasks",
+					"icon": "$(tasklist)"
+				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",

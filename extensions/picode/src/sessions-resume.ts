@@ -194,7 +194,7 @@ export function piResumeRequestHandler(file: string, deps: AgentDeps): vscode.Ch
 			const scope = resolveProjectScope();
 			const picked = resolveSessionCwd(scope.folders, os.homedir());
 			const settings = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key));
-			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references, settings.contextMode) : undefined;
 			const framed = withContext(prompt, context, 'internal');
 			// The chat's model picker reaches pi here too, exactly as in the live chat: a session
 			// that answered with the previous model while the picker said otherwise is the defect
@@ -333,7 +333,7 @@ export function piDurableResumeHandler(conversationId: number, deps: AgentDeps):
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 			};
 			const settings = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key));
-			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references, settings.contextMode) : undefined;
 			const framed = withContext(prompt, context, 'internal');
 			const model = modelRefOf(request.model, VENDOR);
 			if (model !== undefined) {

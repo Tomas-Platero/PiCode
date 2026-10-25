@@ -19,7 +19,7 @@ import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, sp
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, searchPackages } from './packages-registry';
-import { checkPackageUpdates, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
+import { checkPackageUpdates, clearPackageUpdateCache, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -57,6 +57,7 @@ import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
+import { registerTasksView } from './tasks-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { launchedAgents, lastActivity, type AgentState } from './agents';
@@ -958,6 +959,52 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.chat.registerSkillProvider(skillsProvider));
 	disposables.push(vscode.lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, mcpProvider));
 
+	// The Agent Customizations page, when it is looking at one of PiCode's own sessions: the agents
+	// and skills it lists, and — what the page could not do before — the folders it **creates** them
+	// in. The page's default folders are GitHub's (`.github/agents`, the editor's prompts home), so an
+	// agent created there appeared in the list and was never loaded by pi: it looked real and could
+	// not answer. With this registration the creation picker offers pi's own places, and a new file is
+	// picked up by the same discovery the chat's pickers use.
+	const customizationType = vscode.ChatSessionCustomizationType;
+	const piCreationFolders = (type: string): { uri: vscode.Uri; label: string; source: 'user' | 'local' }[] => {
+		if (type === customizationType.Agent.id) {
+			return agentRoots(profileInForce(), workspaceFolderPaths()).map(root => ({
+				uri: vscode.Uri.file(root.dir),
+				label: root.source === 'local' ? 'This project' : 'PiCode profile',
+				source: root.source === 'local' ? 'local' as const : 'user' as const,
+			}));
+		}
+		if (type === customizationType.Skill.id) {
+			// Only the two places a person writes skills: the profile, and the project. A package's own
+			// skill directory is the package's to keep, not a place to create somebody else's file.
+			return [
+				{ uri: vscode.Uri.file(path.join(profileInForce(), 'skills')), label: 'PiCode profile', source: 'user' },
+				...workspaceFolderPaths().map(folder => ({ uri: vscode.Uri.file(path.join(folder, '.pi', 'skills')), label: folder, source: 'local' as const })),
+			];
+		}
+		return [];
+	};
+	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('durable', { label: 'PiCode' }, {
+		onDidChange: changed.event,
+		provideChatSessionCustomizations: () => [
+			...discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader).map(agent => ({
+				uri: vscode.Uri.file(agent.file),
+				type: customizationType.Agent,
+				name: agent.name,
+				...(agent.description === undefined ? {} : { description: agent.description }),
+				source: agent.source,
+			})),
+			...discoverSkills(currentSkillRoots(), fsReader).map(skill => ({
+				uri: vscode.Uri.file(skill.file),
+				type: customizationType.Skill,
+				name: skill.name,
+				...(skill.description === undefined ? {} : { description: skill.description }),
+				source: skill.source,
+			})),
+		],
+		provideSourceFolders: (_session, type) => piCreationFolders(type.id),
+	}));
+
 	// pi's agents and skills, wherever they are: the profile in force, each folder's project
 	// directory, and the skill directories of the installed packages.
 	const profileDir = profileInForce();
@@ -1050,8 +1097,15 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
 	// the page asks the registry for nothing inside that lifetime. Reading is all it does, so it
 	// runs in external mode too, where only the writes stop.
+	// Only packages the owner **declared** take part in the check. The list also carries modules
+	// pi installed as dependencies (`quickjs-wasi` arrives inside `pi-lens`), and offering those as
+	// updates is a notice that cannot be satisfied: updating them would declare them, npm would
+	// keep the pinned version nested, and the same notice would come back on the next check. A
+	// declaration is what makes a package the owner's to update.
+	const declaredRows = (): PiPackageRow[] => packageRows().filter(row => typeof row.source === 'string' && row.source.length > 0);
+
 	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATES_CHECK_COMMAND, async (): Promise<readonly PackageUpdateStatusRow[]> =>
-		checkPackageUpdates(packageRows().map(found => ({
+		checkPackageUpdates(declaredRows().map(found => ({
 			path: found.path,
 			name: found.name,
 			...(found.version === undefined ? {} : { version: found.version }),
@@ -1078,6 +1132,9 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// leaves the row saying it is behind until the next six-hourly pass — the "it
 			// said it updated and it still says so" the owner hit. The check runs now, over
 			// the profile the update just touched, and the panel repaints its answer.
+			// And npm's cached "latest" goes too: after the update, the previous answer is what
+			// would keep the row red.
+			clearPackageUpdateCache();
 			void runUpdateCheck(globalState).then(() => fire(), () => fire());
 		}
 		return result;
@@ -1984,9 +2041,26 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	// are skipped.
 	const scopes = packageScopes(profileInForce());
 	const npmRoots = scopes.map(scope => scope.npmRoot);
-	const npmPackages = piPackages(scopes, nodeFs()).packages.filter((found): found is PiPackage & { version: string } =>
+	const profileDir = profileInForce();
+	// Only what the owner **declared**. The list pi loads also carries modules it installed as
+	// dependencies of a package (`quickjs-wasi` arrives inside `pi-lens`); offering those as updates
+	// is a notice nobody can satisfy — "updating" one only declares it, npm keeps the pinned copy
+	// nested, and the same notice returns on the next check.
+	//
+	// The mark of a declaration is its **source string**: `packageDisplayInfo` fills an entry for
+	// every package (that is what the page needs), so testing for membership decided nothing — the
+	// first version of this filter let everything through.
+	const allPackages = piPackages(scopes, nodeFs()).packages;
+	const declaredPaths = new Set(
+		[...packageDisplayInfo(allPackages, scopes, {}, profileDir).entries()]
+			.filter(([, info]) => info.source !== undefined && info.source.length > 0)
+			.map(([path]) => path),
+	);
+	const npmPackages = allPackages.filter((found): found is PiPackage & { version: string } =>
 		found.version !== undefined
+		&& declaredPaths.has(found.path)
 		&& npmRoots.some(root => isInside(root, found.path)));
+
 	const latestVersions = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
 	npmPackages.forEach((found, index) => {
 		const latest = latestVersions[index];
@@ -2064,6 +2138,11 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		});
 	};
 
+	/** Forgets npm's cached answers: what was "latest" before an update may not be after it. */
+	const forgetUpdateAnswers = (): void => {
+		clearPackageUpdateCache();
+	};
+
 	const showUpdatesNotice = (snapshot: UpdatesSnapshot | undefined): void => {
 		if (snapshot === undefined || snapshot.targets.length === 0) {
 			void vscode.window.showInformationMessage('PiCode: everything is up to date.');
@@ -2098,6 +2177,11 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// at fire time, so turning it off silences the check without a restart.
 		if (checking || (!force && !updatesCheckEnabled())) {
 			return;
+		}
+		// Asked for out loud ("Check again"): forget what was cached, so the answer describes the
+		// disk as it is now rather than as it was before the update.
+		if (force) {
+			forgetUpdateAnswers();
 		}
 		checking = true;
 		try {
@@ -2263,6 +2347,10 @@ export function activate(context: vscode.ExtensionContext): void {
 const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
+		// `<userData>/User/globalStorage/<extension>` → three levels up. The account hand-over is
+		// written straight into that `User/settings.json`, because its keys are hidden from Settings
+		// and the configuration service therefore refuses to write them.
+		userDataPath: path.dirname(path.dirname(path.dirname(context.globalStorageUri.fsPath))),
 		globalState: context.globalState,
 		// The Tasks block lists the background jobs the chat itself launched, from the same tracker the
 		// pill above the chat input reads — one holder of the truth, two surfaces.
@@ -2346,6 +2434,10 @@ const setupDeps = {
 	// Memory reads what the engine already answered, so it is a view of its own in the same
 	// container: the panel lists what this machine remembers without a second surface to learn.
 	context.subscriptions.push(registerMemoryView());
+	// The work the chat has out — its background jobs and the tasks it handed to the durable agent —
+	// as a list that stays put while the owner works elsewhere. Same container, same rule: it reads
+	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
+	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs }));
 	// The durable agent's commands: start, stop, list/open its conversations, and send it a
 	// prompt. The status panel's Durable section rows run the same ones.
 	// The agent is told which profile, which storage directory and which settings file to use: a

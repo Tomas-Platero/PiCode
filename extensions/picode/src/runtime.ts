@@ -177,7 +177,16 @@ export function readRuntimeMode(): PiRuntimeMode {
 
 /** PiCode's own profile, inside the distribution. Every PiCode write lands here. */
 export function internalProfileDir(distributionRoot: string): string {
-	return path.join(distributionRoot, 'data', 'pi-agent');
+	// A portable install moves the whole data folder somewhere else and says so in
+	// `VSCODE_PORTABLE`; pi's profile moves with it. Without that variable the profile sits in the
+	// distribution's own `data/`, which is the layout every other install has.
+	//
+	// The setup window resolves the same profile before the editor exists
+	// (`src/vs/code/electron-main/picodeOnboarding.ts`), so the two rules have to stay identical:
+	// a setup that wrote to one profile while the editor read another would look like a setup that
+	// did nothing.
+	const portable = process.env['VSCODE_PORTABLE'];
+	return path.join(portable !== undefined && portable.length > 0 ? portable : path.join(distributionRoot, 'data'), 'pi-agent');
 }
 
 /** Where the SDK is loaded from, for the mode in force. */

@@ -1,15 +1,21 @@
 // extension.ts — the pi ⇄ durable bridge.
 //
 // A pi extension (TypeScript, loaded with `pi --extension <this file>`; pi runs
-// it through jiti, no build step). It registers three tools that hand work to
+// it through jiti, no build step). It registers five tools that hand work to
 // the durable daemon in durable/ and read back what it did:
 //
-//   durable_send  — hand a prompt to the durable daemon and wait for its answer.
-//                   The run executes INSIDE the daemon process: if pi dies
-//                   mid-call, the daemon finishes the conversation anyway and
-//                   the answer is committed to its SQLite.
-//   durable_list  — list the durable conversations the daemon owns.
-//   durable_read  — read one durable conversation's transcript.
+//   durable_send   — hand a prompt to the durable daemon and wait for its answer.
+//                    The run executes INSIDE the daemon process: if pi dies
+//                    mid-call, the daemon finishes the conversation anyway and
+//                    the answer is committed to its SQLite.
+//   durable_submit — the same hand-off, but it RETURNS AT ONCE. Nothing waits:
+//                    the run keeps going in the daemon and `durable_result`
+//                    reads the outcome later. This is the one to use when there
+//                    is other work to do while the long task runs.
+//   durable_result — ask one durable conversation where its work stands: still
+//                    running, or the final answer once it settled.
+//   durable_list   — list the durable conversations the daemon owns.
+//   durable_read   — read one durable conversation's transcript.
 //
 // Wire format and client are REUSED, not reimplemented: everything talks through
 // durable/lib/client.js and lib/protocol.js, imported by relative
@@ -31,10 +37,10 @@
 // nothing is opened, connected, or written at import time — connections happen
 // lazily, per tool call, and a missing daemon fails fast with a plain message.
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "../durable/node_modules/@earendil-works/pi-ai/dist/index.js";
-import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "../durable/lib/client.js";
-import { daemonEndpoint } from "../durable/lib/protocol.js";
-import { describeEntry, entryText } from "../durable/lib/render.js";
+import { Type } from "../node_modules/@earendil-works/pi-ai/dist/index.js";
+import { DaemonClient, DaemonUnavailableError, daemonIsUp } from "../lib/client.js";
+import { daemonEndpoint } from "../lib/protocol.js";
+import { describeEntry, entryText } from "../lib/render.js";
 
 const START_HINT = "node durable/cli.js serve   (run from the repository root; --no-mcp starts faster)";
 
@@ -85,7 +91,7 @@ const durableSend = defineTool({
 					? client.request("open", { conversationId: params.conversationId })
 					: client.request("open", {}),
 			);
-			onUpdate?.({ content: [{ type: "text", text: `handed to the durable daemon (conversation ${conversationId}); waiting for it to settle…` }] });
+			onUpdate?.({ content: [{ type: "text", text: `handed to the durable daemon (conversation ${conversationId}); waiting for it to settle…` }], details: { conversationId, status: "running" } });
 			const run = await withClient((client) =>
 				client.request("run", { conversationId, prompt: params.prompt }),
 			);
@@ -93,6 +99,85 @@ const durableSend = defineTool({
 			return {
 				content: [{ type: "text", text: `durable conversation ${conversationId} answered:\n${answer}` }],
 				details: { conversationId, status: run.status, answer },
+			};
+		} catch (error) {
+			fail(error);
+		}
+	},
+});
+
+const durableSubmit = defineTool({
+	name: "durable_submit",
+	label: "Durable submit",
+	description:
+		"Hand a prompt to the durable agent daemon and RETURN IMMEDIATELY, without waiting for the answer. " +
+		"The run continues inside the durable process (it survives this pi session being killed) and its result is " +
+		"committed to the durable conversation. Use it when there is other work to do meanwhile: you get the " +
+		"conversation id now, and `durable_result` reads the answer later. " +
+		"The run is queued, not parallel: if that conversation is already running something, this waits its turn.",
+	parameters: Type.Object({
+		prompt: Type.String({ description: "The prompt to run in the durable conversation." }),
+		conversationId: Type.Optional(
+			Type.Number({ description: "Continue an existing durable conversation instead of creating a new one." }),
+		),
+	}),
+	async execute(_toolCallId, params, _signal, onUpdate) {
+		try {
+			// No signal handling, for the same reason as durable_send: once submitted, the work is the
+			// daemon's, and abandoning this call does not abandon it.
+			const { conversationId } = await withClient((client) =>
+				params.conversationId != null
+					? client.request("open", { conversationId: params.conversationId })
+					: client.request("open", {}),
+			);
+			onUpdate?.({ content: [{ type: "text", text: `handing the prompt to durable conversation ${conversationId}…` }], details: { conversationId, status: "submitting" } });
+			const started = await withClient((client) =>
+				client.request("start", { conversationId, prompt: params.prompt }),
+			);
+			return {
+				content: [{
+					type: "text",
+					text: `handed to durable conversation ${conversationId} — it keeps running in the daemon. ` +
+						`Ask durable_result { conversationId: ${conversationId} } for the answer when you need it.`,
+				}],
+				details: { conversationId, submissionId: started.submissionId, status: "running" },
+			};
+		} catch (error) {
+			fail(error);
+		}
+	},
+});
+
+const durableResult = defineTool({
+	name: "durable_result",
+	label: "Durable result",
+	description:
+		"Ask one durable conversation how its work stands: still running, or the final answer once it settled. " +
+		"This is how the answer to a `durable_submit` is collected — it does not wait, it reports what is there now.",
+	parameters: Type.Object({
+		conversationId: Type.Number({ description: "The durable conversation id (returned by durable_submit or durable_list)." }),
+	}),
+	async execute(_toolCallId, params) {
+		try {
+			// subscribe answers with the snapshot and then keeps pushing events; unsubscribing at once
+			// leaves the daemon exactly as it was (its stream is reference counted, daemon.js release()).
+			const { snapshot } = await withClient(async (client) => {
+				const answer = await client.request("subscribe", { conversationId: params.conversationId });
+				await client.request("unsubscribe", { conversationId: params.conversationId });
+				return answer;
+			});
+			const entries: { kind: string }[] = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
+			const running = Boolean(snapshot?.run);
+			const answerEntry = [...entries].reverse().find((e) => e.kind === "pi.assistant");
+			const answer = answerEntry ? entryText(answerEntry) : null;
+			const head = running
+				? `durable conversation ${params.conversationId} is still running.`
+				: answer === null
+					? `durable conversation ${params.conversationId} is idle and has no answer yet.`
+					: `durable conversation ${params.conversationId} answered:\n${answer}`;
+			return {
+				content: [{ type: "text", text: head }],
+				details: { conversationId: params.conversationId, running, answer },
 			};
 		} catch (error) {
 			fail(error);
@@ -165,6 +250,8 @@ const durableRead = defineTool({
 
 export default function (pi: ExtensionAPI) {
 	pi.registerTool(durableSend);
+	pi.registerTool(durableSubmit);
+	pi.registerTool(durableResult);
 	pi.registerTool(durableList);
 	pi.registerTool(durableRead);
 }

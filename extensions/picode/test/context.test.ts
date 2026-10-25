@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentFrame, contextBlock, withContext } from '../src/context.ts';
+import { agentFrame, applyContextMode, contextBlock, contextModeOf, withContext } from '../src/context.ts';
 
 test('nothing to say means no block, not an empty header', () => {
 	assert.equal(contextBlock({}), undefined);
@@ -80,4 +80,47 @@ test('withContext without a context still frames the agent, and the frame names 
 	assert.equal(prompt.endsWith('\n\n---\n\nhola'), true);
 	assert.match(agentFrame('internal'), /runs inside the PiCode editor/);
 	assert.match(agentFrame('external'), /the machine's own coding agent/);
+});
+
+test('the mode decides what travels, and the default sends what the product already sent', () => {
+	const full = {
+		folder: '/repo',
+		file: '/repo/a.ts',
+		selection: { text: 'const a = 1;', lines: 1 },
+		diagnostics: [{ severity: 'error' as const, line: 3, message: 'boom' }],
+		attachments: [{ label: '#file', text: 'x' }],
+	};
+
+	// `project` is untouched: this is the behaviour of every version before the setting existed.
+	assert.deepEqual(applyContextMode(full, 'project'), full);
+
+	// `file` drops the folder and keeps the rest.
+	const file = applyContextMode(full, 'file');
+	assert.equal(file.folder, undefined);
+	assert.equal(file.file, '/repo/a.ts');
+	assert.equal(file.selection?.text, 'const a = 1;');
+	assert.equal(file.diagnostics?.length, 1);
+
+	// `selection` names no path at all — neither the folder nor the file — and keeps what the
+	// owner pointed at, including a hand attachment.
+	const selection = applyContextMode(full, 'selection');
+	assert.equal(selection.folder, undefined);
+	assert.equal(selection.file, undefined);
+	assert.equal(selection.diagnostics, undefined);
+	assert.equal(selection.selection?.text, 'const a = 1;');
+	assert.equal(selection.attachments?.length, 1);
+});
+
+test('a mode that is not one of the three falls back to the default', () => {
+	assert.equal(contextModeOf('selection'), 'selection');
+	assert.equal(contextModeOf('file'), 'file');
+	assert.equal(contextModeOf('project'), 'project');
+	assert.equal(contextModeOf('everything'), 'project');
+	assert.equal(contextModeOf(undefined), 'project');
+	assert.equal(contextModeOf(7), 'project');
+});
+
+test('selection mode with nothing selected says nothing rather than naming the file', () => {
+	const block = contextBlock(applyContextMode({ folder: '/repo', file: '/repo/a.ts' }, 'selection'));
+	assert.equal(block, undefined);
 });

@@ -200,6 +200,8 @@ export function setDefaultModel(deps: WizardModelDeps, ref: unknown): void {
  * whose settings cannot be written is not a reason to fail it.
  */
 function rememberChatDefault(ref: string): void {
+	// The chat resolves this against the model's own id (`<provider>/<model>`), not the qualified
+	// `picode/...` identifier — a qualified value matches nothing.
 	void vscode.workspace.getConfiguration('chat')
 		.update('defaultModel', ref, vscode.ConfigurationTarget.Global)
 		.then(undefined, () => {

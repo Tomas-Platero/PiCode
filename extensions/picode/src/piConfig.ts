@@ -26,6 +26,7 @@
  */
 
 import type { OfficialSdk } from './piSdk';
+import type { ContextMode } from './context';
 
 /** pi's own thinking level, named from pi's own signature — the list below is checked against it member by member. */
 type PiThinkingLevel = NonNullable<Parameters<OfficialSdk['createAgentSessionFromServices']>[0]['thinkingLevel']>;
@@ -58,6 +59,8 @@ export interface PiChatSettings {
 	readonly showReasoning: boolean;
 	/** Whether the editor's context (folder, file, selection) travels with the prompt. */
 	readonly attachContext: boolean;
+	/** How much of the editor travels with a prompt, when the context is attached at all. */
+	readonly contextMode: ContextMode;
 	/** Whether the editor's MCP servers' tools are given to pi. */
 	readonly mcpEnabled: boolean;
 	/** The agent tools that stay off, by name. Empty — nothing is excluded — unless filled. */
@@ -89,8 +92,24 @@ export function readPiChatSettings(get: (key: string) => unknown): PiChatSetting
 		// agent answer about the file the owner is looking at without being told which one, and a
 		// user who does not want it is the exception, not the rule.
 		attachContext: attach === undefined ? true : attach === true,
+		// The default is what the product already did: the folder, the file and the selection.
+		// Parsed here rather than with `context.ts`'s helper on purpose: a **type-only** import is
+		// erased, so this module keeps loading on its own (the connector's tests run it with
+		// `node --test`, which resolves imports strictly and would not find an extensionless one).
+		contextMode: contextModeOfRaw(get('context.mode')),
 		disabledTools: disabledToolsOf(disabledTools),
 	};
+}
+
+/**
+ * The context mode, from the setting's raw value.
+ *
+ * Anything that is not `file` or `selection` is the default: an older settings file and a fresh
+ * install have to report the same thing, and a typo must not leave the editor with a mode it
+ * does not know.
+ */
+function contextModeOfRaw(raw: unknown): ContextMode {
+	return raw === 'file' || raw === 'selection' ? raw : 'project';
 }
 
 /**

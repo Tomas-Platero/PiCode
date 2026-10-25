@@ -52,7 +52,8 @@ import {
 	runningResultLine,
 	type BackgroundCall,
 } from './background-cards';
-import { durableBridgeExtensionPath } from './durable';
+import { durableBridgeExtensionPath, durableFolder } from './durable';
+import { daemonEndpoint } from './durable-client';
 import { ensureConversation, recordChatTurn } from './chat-record';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
@@ -1111,6 +1112,35 @@ export function pinAgentDir(agentDir: string | undefined): void {
 }
 
 /**
+ * The endpoint the session's durable bridge must dial, pinned the same way and for the
+ * same reason as the profile above.
+ *
+ * The bridge (`durable/bridge/extension.ts`) resolves its endpoint through the durable
+ * checkout's own `daemonEndpoint()`, which reads `PICODE_DURABLE_ENDPOINT` first and
+ * otherwise falls back to pi's own pipe (`\\.\pipe\picode-durable-agent`). The editor's
+ * daemon listens on its own pipe instead — `durable.ts` pins the same value into the
+ * spawn — so without this the tools load and then dial a name nothing is listening on:
+ * measured, the chat's `durable_list` answered "the durable daemon is not running
+ * (endpoint \\.\pipe\picode-durable-agent)" while the editor's own status read was
+ * up. Pinning the variable is what makes the pair editor-only, and it is set before
+ * anything pi loads can read it.
+ *
+ * Internal and external mode are kept apart, like the profile. External means the machine's
+ * own profile is the point, so its bridge keeps pi's pipe: the variable is **removed** there,
+ * even on Windows, rather than left carrying the editor's endpoint from an earlier internal
+ * session. Internal pins `daemonEndpoint(folder)` — the fixed pipe on Windows, which needs no
+ * folder, and the folder's socket on POSIX, where no folder means the variable is removed
+ * rather than given a path relative to something that does not exist.
+ */
+export function pinDurableEndpoint(agentDir: string | undefined, folder: string | undefined): void {
+	if (agentDir === undefined || (process.platform !== 'win32' && folder === undefined)) {
+		delete process.env.PICODE_DURABLE_ENDPOINT;
+		return;
+	}
+	process.env.PICODE_DURABLE_ENDPOINT = daemonEndpoint(folder);
+}
+
+/**
  * Whether pi's failure is "this model has no provider", told from pi's own words.
  *
  * The match is deliberately narrow. pi says `No API key found for the selected model.` and then points
@@ -1559,6 +1589,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// never installs one itself — its per-package installs each flashed a console window.
 				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
+				pinDurableEndpoint(agentDir, durableFolder());
 				services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
@@ -1573,6 +1604,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
 						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
 					}
+				}
+				// `services.diagnostics` carries provider registrations, not extension load
+				// failures: pi collects those in the loader's own `errors`, which nothing read,
+				// so a bridge with a broken import graph disappeared without a single line.
+				for (const { path: failedPath, error } of services.resourceLoader.getExtensions().errors) {
+					deps.log(`pi extension failed to load (${failedPath}): ${error}`);
 				}
 				if (scopeChanged || sessionManager === undefined || profileChanged) {
 					// pi's own session home: the per-project folder under the profile's `sessions/`,
@@ -1636,7 +1673,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
-			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references) : undefined;
+			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references, settings.contextMode) : undefined;
 			// One turn at a time in this window: the next one waits for the turn in flight to end, so
 			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
 			const previousTurn = turnChain;
