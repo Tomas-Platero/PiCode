@@ -906,7 +906,10 @@ configurationRegistry.registerConfiguration({
 		[mcpAutoStartConfig]: {
 			type: 'string',
 			description: nls.localize('chat.mcp.autostart', "Controls whether MCP servers should be automatically started when the chat messages are submitted."),
-			default: McpAutoStartValue.NewAndOutdated,
+			// PiCode: never. The pack's defaults already say so (`build/distribution/settings.json`); the
+			// editor's own default must agree, or a dev run starts servers on every message, waits for
+			// them, and says so in the chat each time.
+			default: McpAutoStartValue.Never,
 			enum: [
 				McpAutoStartValue.Never,
 				McpAutoStartValue.OnlyNew,

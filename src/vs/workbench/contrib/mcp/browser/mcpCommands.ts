@@ -861,7 +861,7 @@ export class MCPServerActionRendering extends Disposable implements IWorkbenchCo
 		super();
 
 		const hoverIsOpen = observableValue(this, false);
-		const config = observableConfigValue(mcpAutoStartConfig, McpAutoStartValue.NewAndOutdated, configurationService);
+		const config = observableConfigValue(mcpAutoStartConfig, McpAutoStartValue.Never, configurationService);
 
 		const enum DisplayedState {
 			None,
