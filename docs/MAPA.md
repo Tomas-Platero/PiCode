@@ -401,6 +401,7 @@
 │   │   │   ├── mcp.ts
 │   │   │   ├── mcpServers.ts
 │   │   │   ├── mcpTools.ts
+│   │   │   ├── memory-cards.ts
 │   │   │   ├── memory-client.ts
 │   │   │   ├── memory-protocol.ts
 │   │   │   ├── memory-update.ts
@@ -440,7 +441,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 74 files in total
+│   │   │   └── … 75 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -468,6 +469,7 @@
 │   │   │   ├── mcp-provider.test.ts
 │   │   │   ├── mcp-signin-scope.test.ts
 │   │   │   ├── mcp-signin.test.ts
+│   │   │   ├── memory-cards.test.ts
 │   │   │   ├── memory-client.test.ts
 │   │   │   ├── memory-protocol.test.ts
 │   │   │   ├── models-cache.test.ts
@@ -494,7 +496,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 52 files in total
+│   │   │   └── … 53 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

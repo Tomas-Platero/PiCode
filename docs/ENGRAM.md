@@ -148,6 +148,10 @@ Leyenda: `[x]` hecho y comprobado · `[~]` hecho sin comprobar · `[ ]` pendient
 
 - [x] Vista de memoria en el contenedor que **ya existe**: *Memory*, un bloque más de PiCode, con
   su contador en la primera fila (`163 memories · 8 projects`) y nada de maquinaria.
+- [x] **La memoria no se lista como servidor MCP.** Se declara a pi por `mcp.json` porque así es como
+  pi le da sus herramientas al modelo, pero no es un servidor que el dueño añada o edite: la
+  sección **MCP Servers** deja esa fila fuera y lo dice en una línea. Su superficie es el bloque
+  *Memory*, y ahí está lo que se puede mirar y tocar.
 - [x] Lista agrupada por proyecto, de 50 en 50 (`Show 50 more`), leída al desplegar y guardada
   hasta el siguiente refresco.
 - [x] Búsqueda sobre todo el almacén desde la cabecera del bloque: la respuesta ocupa el sitio de

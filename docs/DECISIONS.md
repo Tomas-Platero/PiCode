@@ -802,3 +802,261 @@ the *user's memory*, never the product's configuration.
 ships; or, a week measured with the protocol injected, the agent still does not search before
 repeating — then the layer is decoration and it comes out rather than stay as a drawer nobody
 opens.
+
+## ADR-023 — The setup is a window of its own, before the workbench exists
+
+**Status:** accepted (2026-10-23)
+
+**Context:** The first-run setup lived on the Welcome page, as cards inside a column. It competes
+with everything the editor puts on screen before anybody has configured anything — a sidebar
+inviting a folder, a chat inviting a word, a status bar reporting things nobody asked for — and
+the step that matters most (which model answers) was the poorest one. *«Compite con el ruido del
+editor… el paso Provider & model es el más importante y el más pobre»*. The tree is PiCode's own
+source (ADR-011 / ADR-013), so there is no patch to write: the change is code in the tree.
+
+**Decision:**
+
+- **The setup runs before the editor.** The main process reads a flag, shows a dedicated
+  `BrowserWindow` when it is missing, and opens the workbench only when the setup answers or is
+  skipped. No window of the editor exists behind it, so nothing competes.
+- **One page, three situations.** `first-run`, `update` and `PiCode: Setup` from the palette all
+  load the same `resources/onboarding/index.html`; `mode` tells the page which it is and the
+  state it is given is preselect, so nothing configured is asked again and nothing is overwritten
+  without a click.
+- **The window has no privilege.** It loads a local page with `contextIsolation`, no node, and a
+  preload that exposes five named operations. Everything that touches disk happens in a child
+  process (`resources/onboarding/host.cjs`) which loads the **connector's own**
+  `onboarding-host` — the profile copy, the provider projection and the model list are the
+  modules the editor already uses, not a second implementation.
+- **The flag is per installation**, in `data/onboarding.json` next to the portable profile (or
+  the user data directory outside a portable install), holding
+  `{ completed, onboardingVersion, productVersion }`. It is re-read, never consulted live: a
+  later start does nothing at all.
+- **The editor always opens.** A closed window, a dead renderer, a page that failed to load and a
+  backend that never answers are all "skip": the flag is recorded and the workbench opens. The
+  setup can never cost somebody their editor.
+- **It never leaves the editor at zero windows.** The setup window is hidden when the answer
+  arrives and destroyed only once another window exists. Closing it first is not a detail of
+  taste: VS Code quits on `window-all-closed`, so the setup — the only window there is at that
+  moment — took the application down and the editor being opened right after died with
+  *"Trying to add a disposable to a DisposableStore that has already been disposed of"*. Found on
+  the packed build, on **Skip** and on the **X**, and fixed by not being, even for a millisecond,
+  the last window.
+- **Nothing of the machine's pi is written.** The external profile is read by the scan and by the
+  import's source side and by nothing else; choosing the external pi writes one editor setting.
+
+**Consequences:** The first thing a new install shows is the product's question, not the editor's
+chrome. The welcome page's wizard was **removed** once the window was verified in a real run
+(2026-10-23: the window appeared, its page reached the backend, and closing it recorded the flag
+and opened the editor): `picodeSetup.ts` is gone, and the column now says what the setup covers
+and offers the one button that reopens it. The connector's own commands for the old wizard
+(`picode.setup.getState`, `…importFromExternal`, `…providerAddManual` and the rest) still exist
+and are now unused by the core — they are the extension's API and keep working for anything that
+speaks to them, but they are dead weight to remove deliberately, not in a hurry. A second language lives with
+the page itself (English and Spanish in one table) until a language-pack layer exists. The
+accepted cost: a `BrowserWindow` whose page is not part of the workbench bundle, so
+`build/stage-distribution.sh` copies the folder into the pack and a missing copy degrades to
+"open the editor" rather than to a crash.
+
+**Rejected alternatives:** a webview panel inside the workbench (it cannot show before the
+workbench, which is the whole point, and would need a second backend); cards on the Welcome page
+(the noise this ADR removes); blocking the editor until the setup finishes (a setup that fails
+would leave somebody with no editor).
+
+## ADR-024 — The Activity Bar draws outline icons, not the editor's glyph font
+
+**Status:** accepted (2026-10-24)
+
+**Context:** Every item in the Activity Bar was a Codicon — the same drawings, at the same
+weight, as any VS Code. The bar is the first thing the eye lands on and it read as "another
+VS Code", which is precisely what the product is not. A request came to give it its own
+language: clean outline strokes, a thinner weight, more air between items.
+
+**Decision:**
+
+- **The five built-in containers and Manage use drawings from the Tabler set (MIT).**
+  Explorer `folders`, Search `search`, Source Control `git-branch`, Run and Debug `bug`,
+  Extensions `puzzle`, Manage `settings`. They live in
+  `src/vs/workbench/contrib/picode/browser/media/tabler/`, together with the licence and the
+  geometry note. The PiCode mark stays as it is: it is the brand, not a borrowed icon.
+- **They are URI icons, not theme icons.** The bar already paints URI icons as CSS masks, so
+  the shape comes from the SVG and the colour from the theme. One asset serves every state and
+  every theme; hover, selection and high contrast keep working with no second drawing.
+- **Stroke weight is normalised at the bar's 24 px icon size.** Tabler's `stroke-width="2"` on a
+  24 viewBox lands at exactly 2 px, and the PiCode mark was re-stroked (84 → 66 on its 788
+  viewBox, the handle 60 → 48) so that its silhouette lands on the same 2 px instead of the
+  2.56 px it used to draw. The mark used by the status view keeps its own weight: it is drawn
+  larger there, so keeping the old value is what preserves the drawing.
+- **The bar is airier, not tighter**: an 8 px gap between items at the default size (0 at the
+  compact size, where a gap would eat the 28 px cell), published to CSS as
+  `--activity-bar-action-gap` so the stylesheet and the overflow computation cannot drift. The
+  item box stays 48 × 48 — with a 24 px icon that is 12 px of padding above and below, and the
+  crowding came from the missing gap, not from the box — so nothing outside the bar has to be
+  re-measured.
+- **The default dark theme lifts the icons**: `activityBar.foreground` `#bfbfbf` → `#e2e8f0`,
+  `activityBar.inactiveForeground` `#8C8C8C` → `#94a3b8`. Light themes are untouched: their
+  icons must stay ink, and a hard-coded pale grey would vanish on them.
+- **Hover and selection are transitions, not jumps** (120 ms on colour and background), so the
+  brighter icon and the existing modern-UI pill arrive without a flash.
+- **The bar is two flex blocks, not one stack.** The containers above take the free height and
+  scroll inside themselves if they ever need more; Accounts and Manage sit in their own block
+  pinned to the bottom. With every item content-sized, a taller bar (bigger icons, the gap, a
+  larger activity bar font) pushed the bottom block past the window edge and the Settings gear
+  was clipped — the taller the bar grew, the more certain the clip.
+
+**Consequences:** The Activity Bar no longer matches upstream's silhouette, so a future upstream
+redesign of the bar has to be reconciled by hand in six places plus the CSS metrics. Icons are
+monochrome by construction: the blue accent inside the PiCode mark is not visible in the bar
+(the mask paints the whole silhouette in the theme colour) — already true before this ADR, and
+the reason the mark reads as one shape. The default-mode gap stops being 0, and that stride is
+pinned by the activity bar unit tests, which is where a regression will show up first.
+
+**Rejected alternatives:** a product icon theme (SVG is not supported there — it is a glyph
+font swap, which is exactly the medium we wanted to leave); a custom icon font (new binary
+asset, new licence surface, and strokes cannot be tuned per size); recolouring Codicons
+(the shape is the problem, not the colour).
+
+## ADR-025 — Installing from Open VSX never asks "do you trust this publisher?"
+
+**Status:** accepted (2026-10-24)
+
+**Context:** Before installing an extension from the gallery, the editor asked whether the user
+trusts its publisher, once per publisher, and refused to install unless the answer was yes. That
+prompt was built for the Microsoft Marketplace, where publishers can verify ownership of a domain
+and the check has something to say. PiCode installs from **Open VSX**, which has no such
+programme: nearly every publisher is "not verified" there, so the dialog fired on the first
+install from each of them and turned a one-click install into a security quiz. *«Queremos eliminar
+completamente este paso de confirmación»*.
+
+**Decision:**
+
+- **The prompt is gone.** `checkForTrustedPublishers` — the dialog, its publisher lookup and the
+  "will also install extensions by…" walk over pack members — was deleted from
+  `extensionManagementService.ts`, together with the three call sites that ran before an install
+  (gallery batch, single gallery install, profile restore). `requestPublisherTrust` stays on the
+  interface as a no-op because a profile restore asks for it; it never prompts.
+- **Installing is the consent.** The Install button is the decision; the extension's own workspace
+  trust declaration is still honoured (`checkForWorkspaceTrust` is untouched), so an extension that
+  needs a trusted workspace still asks for one.
+- **The "not verified" badge stays** on the extension page. It is information, not a gate, and
+  removing the dialog does not mean pretending verification exists.
+- **The badge-provider allow-list and the workspace-trust keys were not touched.** The brief
+  suggested emptying `extensionAllowedBadgeProviders` and adding an
+  `extensionUntrustedWorkspaceSupport` default: the first would strip README badges from every
+  extension page, and the second is not a key the product reads (`ProductConfiguration` has no
+  such field, and workspace trust support is declared per extension in its manifest). Neither has
+  anything to do with this dialog, so neither was cargo-culted in.
+
+**Consequences:** Any publisher can be installed without a prompt, including a copy-cat name —
+that is the trade the brief asks for, taken because the alternative was a prompt with no signal.
+The trust bookkeeping still exists (`trustPublishers`, the "Manage Trusted Extension Publishers"
+command) and is now only ever fed by the post-install auto-trust, so the list stays a record of
+what was installed rather than a gate.
+
+**Rejected alternatives:** keeping the prompt behind a setting (the default would still be the
+quiz); trusting every publisher up front by writing to storage (a hidden write the user cannot see
+or undo); keeping the dialog only for extensions that *are* verified on Open VSX (none are, so it
+would be dead code).
+
+## ADR-026 — A PiCode colour family, and PiCode Dark as the default
+
+**Status:** accepted (2026-10-24)
+
+**Context:** The editor's default theme was *Dark 2026*, an upstream-flavoured palette with blue
+accents that belong to no brand in particular. The brief named a palette taken from the PiCode
+mark and asked for it to be the default, plus two companion themes and a light pair, with Abyss
+no longer being what a new install lands on. *«sustituyendo Abyss»*. A second pass then pinned the
+default's colours to the **landing page**: near-black surfaces (`#030712` … `#080C17`), the
+`#111827` grid lines and the "Download for Windows" button blues (`#2563EB` / `#3B82F6`). A third
+added a sixth theme for the retro crowd (*«PiCode Synthwave»*).
+
+**Decision:**
+
+- **Six themes ship in `extensions/theme-defaults`**, next to the upstream ones:
+  **PiCode Dark**, **PiCode Light**, **PiCode Neon Minimal** (OLED black), **PiCode Slate**
+  (neutral greys), **PiCode Sepia** (warm reading light) and **PiCode Synthwave** (magenta neon on
+  violet-black, with its own syntax tokens so the code sample is 80s too). The three beyond the
+  named pair are the "ecosistema visual" the brief describes — OLED, neutral, warm — because the
+  brief asked for three extra themes and specified only the first.
+- **Each file inherits `2026-dark.json` / `2026-light.json` and repaints the chrome.** The base
+  brings a complete palette (syntax tokens, git decorations, chat and widget surfaces); the theme
+  brings the brand surfaces — editor, side bar, activity and title bar, status bar, tabs, panels,
+  widgets, lists, inputs, menus, terminal — plus the accents. One map generated all five, so they
+  cannot drift apart in the keys they forget.
+- **`activityBar.foreground` is the brand accent and `inactiveForeground` is muted slate**, so the
+  outline icons carry colour only where they matter (the selected item and hover). In the default
+  that accent is the web's `#3B82F6`; in Neon it is the cyan, and in Synthwave the magenta — each
+  theme keeps its own signal colour, because a single hue for all of them would make the family
+  pointless.
+- **The default is PiCode Dark** (`ThemeSettingDefaults.COLOR_THEME_DARK`), and PiCode Light for the
+  light preference, so a profile that never chose a theme — and the automatic dark/light switch —
+  lands on the family. *Dark 2026* and *Light 2026* are still installed and still selectable; a
+  user who already chose one keeps it.
+- **The first-run setup offers the PiCode themes as its featured cards**, PiCode Dark first, and
+  demotes Abyss to "see all themes". The cards' preview palettes were measured from the theme
+  files, so the tint the setup window takes on hover is the theme it will apply.
+- **A first run writes the default down.** When the setup finds no theme set, it stores
+  `workbench.colorTheme: "PiCode Dark"` instead of leaving the setting empty: the card shows as
+  chosen, the welcome step can name the theme, and the editor opens on the brand palette whatever
+  the OS colour scheme is. A profile that already chose a theme is never touched.
+
+**Consequences:** The product now has a colour identity of its own, and a future palette change is
+one file per theme (or one palette entry in the generator, kept in the tree's history). Because the
+themes inherit 2026, a change to that base moves all six — which is the intent, but it also means
+they cannot diverge from the editor's component colours without an explicit override. Writing the
+default during setup removes the OS-driven first impression for a fresh profile: a user whose
+system is light still lands on PiCode Dark until they pick otherwise, which is what *«pon pi-dark
+como default»* asks for and the reason the Light card sits right next to it.
+
+**Rejected alternatives:** writing five complete themes from scratch (thousands of lines of
+untouched widget colours, five times over); a product icon/theme extension of their own (a separate
+extension for what `theme-defaults` already contributes); putting the palette in `settings.json`
+(themes belong in a theme).
+
+## ADR-027 — The command palette has no Copilot surfaces
+
+**Status:** accepted (2026-10-24)
+
+**Context:** The palette still carried *Extensions: Show Extensions using Copilot*
+(`workbench.action.chat.showExtensionsUsingCopilot`), an upstream action that opens an extension
+search filtered by an extension contribution point only Copilot uses. PiCode ships no Copilot
+(ADR-001, and `docs/DISENO.md` says so plainly), so the entry was a dead end that named a product
+this editor does not have.
+
+**Decision:** The action is deleted, with the three imports that fed it (`IExtensionsWorkbenchService`,
+`EXTENSIONS_CATEGORY`, `CopilotUsageExtensionFeatureId`). Nothing else in the chat or extensions
+palette was touched: this is one command, not a sweep.
+
+**Consequences:** The search it opened is still reachable by asking for `@contribute:…` by hand,
+which is fine — this removes a misleading label, not a capability. Other Copilot-named strings
+that remain (for example the quota error) belong to the chat service and are out of scope here.
+
+## ADR-028 — The agent-host settings are findable in Settings
+
+**Status:** accepted (2026-10-24)
+
+**Context:** Searching the Settings UI for `agentHost` returned *No Settings Found*, and the chat
+debug panel's own "open settings" link landed on the same empty page. The settings existed all
+along, registered in code (`chat.shared.contribution.ts`) — not in a `package.json`, which is what
+the brief assumed. The real cause was a tag: the editor hides settings tagged `advanced` unless the
+query contains the setting's **full key** (`settingsEditor2.canShowAdvancedSettings`), so a
+human search for "agentHost" or "agent debug" matched nothing. All four `chat.agentHost.*` settings
+carried `experimental` **and** `advanced`.
+
+**Decision:** Drop the `advanced` tag from the four agent-host settings (`agentDebugLog.enabled`,
+`agentDebugLog.maxEventsInMemory`, `ahpJsonlLogging`, `allowSignedOutWhenUsable`). They keep
+`experimental`, which is honest and does not hide anything, and they keep the `experiment`
+metadata. The settings stay in the **Chat** group where they belong; no separate node was invented
+for four entries whose siblings live there.
+
+**Not done, deliberately:** the root `package.json` of the editor is not an extension manifest (it
+has `name`, `version` and `main`), so a `contributes.configuration` block there is never read —
+adding it would have looked like a fix and changed nothing. The brief's
+`chat.agentHost.maxEventsInMemory` was not created as a second name for
+`chat.agentHost.agentDebugLog.maxEventsInMemory`: two ids for one buffer is a bug, not an alias.
+Its default stays at 10000; 100 would cut the debug buffer a hundredfold for a panel that already
+drops older events.
+
+**Consequences:** Typing `agentHost`, `agentDebugLog` or `debug` in Settings now lists them, and the
+link from the chat debug panel works. A future agent-host setting must not be tagged `advanced`
+unless it is genuinely meant to be found only by its exact id.

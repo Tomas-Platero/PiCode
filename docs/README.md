@@ -14,6 +14,7 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
 | [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las cinco capas de pi y durable | ES |
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
+| [SETTINGS.md](SETTINGS.md) | ⚙️ El inventario de **todas** las opciones: clave, para qué, dónde aparece y dónde debe aparecer, con lo que se oculta y lo que no se toca | ES |
 | [ENGRAM.md](ENGRAM.md) | 📚 La memoria del producto: reparto pi · durable · engram, decisiones y tareas punto por punto | ES |
 | [MAPA.md](MAPA.md) | 🗺️ **Qué hace cada carpeta y cada fichero de la raíz** — generado a partir de los README de cada carpeta | ES |
 

@@ -60,9 +60,13 @@ Este documento describe cómo está montado.
 | `durable*.ts` | El puente con **durable** (ver Parte 2): conversaciones que sobreviven un kill, subagentes como trabajo en fondo |
 | `sessions-provider.ts` | Los transcríptos JSONL del perfil (`sessions/`): registro de referencia y entrada de importación; la lista viva del panel la alimenta durable |
 | `status-data.ts` / `status-contract.ts` | Una sola lectura del estado: versión de pi, proveedores por origen, MCP por origen, uso y coste, git. La forma va en el contrato; quien pinta es la sección **Status** del núcleo |
+| `tasks-rows.ts` / `tasks-view.ts` | El bloque **Tasks** del panel: los trabajos en fondo del chat y las tareas de durable en una lista, con el detalle de cada una al abrirla. `tasks-rows.ts` es puro (sin `vscode`), así que `node --test` lo ejecuta tal cual |
 | `providers*.ts`, `models*.ts` | Declaración de endpoints y suscripciones; todo acaba en `models.json`/`auth.json` del perfil, que es lo que pi lee |
 | `packages*.ts` | Los paquetes de pi (skills, agentes, extensiones), instalados en el perfil |
-| `onboarding.ts`, `wizard*.ts` | El arranque: qué pi corre, migración, modelos |
+| `onboarding.ts`, `wizard*.ts` | Los comandos de arranque que quedan del asistente antiguo: estado, migración, modelos. La **pantalla** ya no vive en la Welcome (ver abajo) |
+| `context.ts` | Qué viaja con cada mensaje al agente: carpeta, archivo abierto y selección (con topes), más `applyContextMode`, que reduce ese bloque a `project` · `file` · `selection` según el ajuste `picode.context.mode`. Es puro (sin `vscode`), así que `node --test` lo ejecuta |
+| `picodeAccount*.ts` | La cuenta de PiCode: el proveedor de autenticación del núcleo (flujo de código de un solo uso) y el ajuste `picode.account.signInOnStart`, que la ventana de setup deja pedido y el editor atiende y borra al arrancar — el inicio de sesión ocurre en el editor porque el callback es un protocolo del workbench y el token vive en su almacén cifrado |
+| `onboarding-host.ts` / `onboarding-settings.ts` | El backend de la **ventana de setup**: la que se abre antes de que exista el editor. `onboarding-host.ts` hace el trabajo de pi (proveedores, versiones, escaneo y copia del perfil) reutilizando `profile-import`, `declarations`, `endpoint` y `piLocate`; `onboarding-settings.ts` escribe (fusionando, nunca reemplazando) los ajustes del editor y filtra las credenciales. Sin `vscode` y sin adivinar rutas: las recibe del proceso principal |
 
 ### 4. Las superficies (lo que el dueño ve)
 
@@ -76,8 +80,19 @@ Este documento describe cómo está montado.
   con el pi en fuerza, proveedores, sesión, proyecto, actualizaciones, suscripción, agente
   durable, trabajos en fondo, error y acciones — con filtro y con un botón por acción. La misma
   lectura alimenta la página de Providers (proveedores del perfil como filas de solo lectura) y la
-  de MCP (perfil + proyecto + descubiertos, con origen en cada fila). El panel del activity bar
-  queda solo para **Memory**.
+  de MCP (perfil + proyecto + descubiertos, con origen en cada fila).
+- **El contenedor del activity bar** lleva lo que el chat no puede enseñar: **Tasks** (el trabajo
+  que el chat tiene fuera — sus trabajos en fondo y las tareas que delegó a durable, cada una con
+  su detalle al abrirla) y **Memory** (lo que este equipo recuerda). Los datos son los mismos que
+  leen la píldora y la sección Status; aquí se dibujan en una lista que se queda quieta mientras se
+  trabaja en otro fichero. Solo se refrescan mientras el bloque está visible.
+- **Los agentes y skills de pi, en la página**: el conector registra un proveedor de
+  personalizaciones para sus sesiones, así que la página lista los agentes y skills reales de pi y
+  **crea los nuevos en sus carpetas** (`<perfil>/agents`, `.pi/agents`), no en las de GitHub — un
+  agente creado en `.github/agents` aparecía en la lista y pi no lo cargaba nunca.
+- **El motor de memoria no se lista como servidor MCP**: se declara a pi por `mcp.json`, pero no es
+  un servidor que el dueño administre; la sección MCP lo deja fuera y lo dice en una línea. Su
+  superficie es el bloque **Memory**.
 - **Ajustes**: `picode.pi.*` (runtime, razonamiento — **show** por defecto —,
   herramientas desactivadas), `picode.mcp.*`, `picode.providers`.
 

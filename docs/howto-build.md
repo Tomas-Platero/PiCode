@@ -68,9 +68,21 @@ primeras no es negociable —así se construyó el árbol— pero **el build ya 
 | Fuente | `upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
 | Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro del árbol**. | No |
 | Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro del árbol**. | No |
-| Producto | `product.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente |
+| Producto | `product.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente y **se deshace**: un build de canal lo sella, lo usa para empaquetar y lo devuelve tal cual al terminar |
 | El árbol | la raíz del repositorio | Todo lo anterior ya aplicado, y es donde se edita. | Es la entrada |
 | Empaquetado | `build/stage-distribution.sh` | Perfil portable, settings de primer arranque, panel como extensión built-in, iconos y nombres. | **Sí** — fase 5 |
+
+## El sello del canal y su vuelta atrás
+
+Un build con canal (`PICODE_CHANNEL=stable|beta|experimental`) escribe el canal **en el
+`product.json` del árbol**: `quality`, la rama de `updateUrl`, la identidad de instalación y los
+nombres de carpeta son lo que leen el compilador y el empaquetador. Eso es un sello, no un
+cambio: el canal pertenece al producto **empaquetado**, y el árbol vuelve a ser el que era.
+
+El original se copia en `.scratch/product.json.source` antes de sellar y se restaura en la
+salida —build bueno, build fallido o `Ctrl-C`—, así que después de compilar el árbol queda
+limpio. Si el build muere de golpe (sin trampa de salida), la copia sigue ahí y la siguiente
+fase 1 la devuelve **antes** de leer nada.
 
 ## Dependencias en Windows
 
