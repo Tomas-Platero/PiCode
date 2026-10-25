@@ -758,11 +758,16 @@ export class AgentSessionsModel extends Disposable implements IAgentSessionsMode
 		// Phase 2: Atomically update sessions (sync - reads latest this._sessions
 		// so concurrent updateItems calls for other providers don't lose data)
 
+		// The sessions another provider listed stay while it is still there. A provider the editor
+		// knows only because an extension registered it (PiCode's `pi`, which declares no contribution
+		// in its manifest) must count too: dropping its rows whenever some other provider resolves —
+		// the chat's own session does so on every message — made the list vanish and come back.
+		const registeredProviders = new Set(this.chatSessionsService.getRegisteredChatSessionItemProviders());
 		for (const [, session] of this._sessions) {
 			if (
 				session.providerType !== provider &&
 				!sessions.has(session.resource) &&
-				(isBuiltInAgentSessionProvider(session.providerType) || mapSessionContributionToType.has(session.providerType))
+				(isBuiltInAgentSessionProvider(session.providerType) || mapSessionContributionToType.has(session.providerType) || registeredProviders.has(session.providerType))
 			) {
 				sessions.set(session.resource, session);
 			}
