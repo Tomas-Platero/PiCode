@@ -31,11 +31,9 @@ import { IMarkdownRendererService } from '../../../../platform/markdown/browser/
 import { localize } from '../../../../nls.js';
 import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { IUserDataSyncService } from '../../../../platform/userDataSync/common/userDataSync.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
-import { IExtensionResourceLoaderService } from '../../../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
@@ -54,7 +52,7 @@ import { IEditorOpenContext, IEditorSerializer } from '../../../common/editor.js
 import { IWebviewElement, IWebviewService } from '../../webview/browser/webview.js';
 import './gettingStartedColors.js';
 import { GettingStartedDetailsRenderer } from './gettingStartedDetailsRenderer.js';
-import { PiCodeSetup, renderPiCodeSetup } from './picodeSetup.js';
+import { PICODE_OPEN_SETUP_COMMAND_ID } from '../../picode/browser/picodeSetupCommands.js';
 import { gettingStartedCheckedCodicon, gettingStartedUncheckedCodicon } from './gettingStartedIcons.js';
 import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
 import { IResolvedWalkthrough, IResolvedWalkthroughStep, IWalkthroughsService, hiddenEntriesConfigurationKey, parseDescription } from './gettingStartedService.js';
@@ -91,8 +89,7 @@ type GettingStartedActionEvent = {
 
 const REDUCED_MOTION_KEY = 'workbench.welcomePage.preferReducedMotion';
 
-/** The setup facts the connector answers with (`picode.setup.getState`). */
-/** The sentence an error carries, whatever threw it. */
+/** The sentence an error carries, whatever it threw. */
 /**
  * PiCode's mark, drawn as strokes, in the colors of the theme.
  *
@@ -195,11 +192,6 @@ export class GettingStartedPage extends EditorPane {
 
 	private readonly categoriesSlideDisposables: DisposableStore;
 
-	/** The container the setup section renders into, kept so an action can re-render it. */
-	private setupContainer: HTMLElement | undefined;
-	/** The setup renderer's handle; disposed before the section is rendered again. */
-	private setupRenderer: PiCodeSetup | undefined;
-
 	get editorInput(): GettingStartedInput | undefined {
 		return this._input as GettingStartedInput | undefined;
 	}
@@ -207,7 +199,6 @@ export class GettingStartedPage extends EditorPane {
 	constructor(
 		group: IEditorGroup,
 		@ICommandService private readonly commandService: ICommandService,
-	@IUserDataSyncService private readonly userDataSyncService: IUserDataSyncService,
 		@IProductService private readonly productService: IProductService,
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@IWalkthroughsService private readonly gettingStartedService: IWalkthroughsService,
@@ -229,7 +220,6 @@ export class GettingStartedPage extends EditorPane {
 		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
-		@IExtensionResourceLoaderService private readonly extensionResourceLoaderService: IExtensionResourceLoaderService,
 	) {
 
 		super(GettingStartedPage.ID, group, telemetryService, themeService, storageService);
@@ -923,15 +913,27 @@ export class GettingStartedPage extends EditorPane {
 			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "Editing evolved"))
 		);
 
-		// PiCode's welcome is its own, not the inherited start page: the agent is built in, so
-		// the page carries the setup itself — the same window, no popups — and the way into a folder.
-		const setupContainer = this.setupContainer = $('div.setup-section');
+		// PiCode's welcome is its own, not the inherited start page: the agent is built in, and the
+		// questions are asked in a window of their own **before** this page exists. So this column
+		// does not grow a second set of them: it says what the setup covers and gives the one
+		// action that reopens it.
+		const setupDetail = localize('welcome.setup.detail', "which pi runs, which model answers and how it looks");
+		const setupButton = $('button.welcome-action.button-link', { tabindex: 0, title: setupDetail },
+			$('span.codicon.codicon-settings-gear'),
+			$('span.welcome-action-text', {},
+				$('span.welcome-action-label', {}, localize('welcome.setup', "Open the setup")),
+				$('span.welcome-action-detail', {}, setupDetail),
+			),
+		);
+		this.categoriesSlideDisposables.add(addDisposableListener(setupButton, 'click', () => {
+			void this.commandService.executeCommand(PICODE_OPEN_SETUP_COMMAND_ID);
+		}));
 		const welcomeColumn = $('.categories-column.categories-column-left', {},
-			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, your providers and your themes are all part of it. Set up once and start working — you can change any of this later.")),
-			setupContainer,
+			$('p.welcome-intro.description', {}, localize('welcome.intro', "PiCode is your editor and your coding agent in one: pi, your providers and your themes are all part of it.")),
 			$('ul.welcome-actions', {},
 				this.welcomeAction('openFolder', 'folder', localize('welcome.openFolder', "Open Folder"), undefined),
-			)
+				$('li', {}, setupButton),
+			),
 		);
 
 		const footerChildren: HTMLElement[] = [];
@@ -959,7 +961,6 @@ export class GettingStartedPage extends EditorPane {
 
 		this.updateCategoryProgress();
 		this.registerDispatchListeners();
-		void this.renderSetupSection();
 
 		const editorInput = this.editorInput;
 		if (editorInput?.selectedCategory) {
@@ -1002,25 +1003,6 @@ export class GettingStartedPage extends EditorPane {
 				text,
 			)
 		);
-	}
-
-	/**
-	 * The setup, rendered into the welcome page itself by its own module.
-	 *
-	 * The page owns the container and the lifecycle; `picodeSetup.ts` owns the cards, the
-	 * facts they show and the calls they make. The previous handle is disposed before a new
-	 * one is made, because this slide can be rebuilt at any time.
-	 */
-	private async renderSetupSection(): Promise<void> {
-		if (this.setupContainer === undefined) { return; }
-		this.setupRenderer?.dispose();
-		this.setupRenderer = this._register(renderPiCodeSetup(this.setupContainer, {
-			commandService: this.commandService,
-			userDataSyncService: this.userDataSyncService,
-			themeService: this.themeService,
-			extensionResourceLoaderService: this.extensionResourceLoaderService,
-		}));
-		this.registerDispatchListeners();
 	}
 
 	layout(size: Dimension) {

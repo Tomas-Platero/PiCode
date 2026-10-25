@@ -13,6 +13,7 @@ import { NativeParsedArgs } from '../../environment/common/argv.js';
 import { isLaunchedFromCli } from '../../environment/node/argvHelper.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 import { ILogService } from '../../log/common/log.js';
+import { isSetupWindowOpen, tryConsumeAccountCallback } from '../../../code/electron-main/picodeAccountSignIn.js';
 import { IURLService } from '../../url/common/url.js';
 import { ICodeWindow } from '../../window/electron-main/window.js';
 import { IWindowSettings } from '../../window/common/window.js';
@@ -61,6 +62,39 @@ export class LaunchMainService implements ILaunchMainService {
 		// that the app has focus.
 		if (isMacintosh) {
 			app.focus({ steal: true });
+		}
+
+		// PiCode's setup window may be waiting for a sign-in callback: while it is, that URL belongs
+		// to it and must not open an editor window behind the setup.
+		const claimed = args['open-url'] ? (args._urls ?? args._) : [];
+		const remaining: string[] = [];
+		for (const candidate of claimed) {
+			if (typeof candidate === 'string' && candidate.startsWith('picode:')) {
+				if (tryConsumeAccountCallback(candidate)) {
+					this.logService.info('[picode.account] sign-in callback delivered to the setup window.');
+					continue;
+				}
+				// A PiCode link that is not a sign-in callback, while the setup is on screen: an editor
+				// window behind the setup is the one thing this must never do, so it is dropped here
+				// and picked up by the window that already exists.
+				if (isSetupWindowOpen()) {
+					this.logService.info(`[picode.url] link ignored while the setup is on screen: ${candidate.slice(0, 120)}`);
+					continue;
+				}
+			}
+			remaining.push(candidate);
+		}
+		if (remaining.length !== claimed.length) {
+			args._urls = remaining;
+			args._ = remaining;
+
+			// Nothing left to open: the URL was the setup's, so this launch must end here. Falling
+			// through would reach `startOpenWindow` below and put an empty editor behind the setup —
+			// the thing that made signing in feel like a glitch.
+			if (remaining.length === 0) {
+				this.logService.info('[picode.account] the sign-in callback was the only thing this launch had to do.');
+				return;
+			}
 		}
 
 		// Check early for open-url which is handled in URL service

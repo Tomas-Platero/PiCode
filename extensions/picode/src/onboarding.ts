@@ -16,6 +16,7 @@ import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from '.
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
 import { importTranscriptsIntoDurable, importOutcomeMessage, type ImportPassOutcome } from './sessions-import';
+import { clearAccountHandover, clearSignOutRequest, publishAccountSession } from './onboarding-settings';
 
 /**
  * The first-run setup, as a **bridge** for the welcome page.
@@ -94,6 +95,12 @@ export interface SetupDeps {
 	readonly distributionRoot: string;
 	/** PiCode's own profile — the write target of every setup action. */
 	readonly profileDir: string;
+	/**
+	 * The editor's user data directory, where its `User/settings.json` lives. Needed because the
+	 * account hand-over is written straight to that file: the keys are `included: false`, so the
+	 * configuration service refuses to write them.
+	 */
+	readonly userDataPath?: string;
 	readonly globalState: vscode.Memento;
 	/** Drops the cached pi runtime, so the editor asks for models again after a pi change. */
 	readonly forgetRuntime: () => void;
@@ -208,12 +215,33 @@ async function syncImportedRowsToSettings(deps: SetupDeps, report: ImportReport)
 	}
 }
 
+/**
+ * Whether PiCode's own setup window already ran for this installation.
+ *
+ * That window comes before the editor and records its answer in `data/onboarding.json`, a file
+ * the extension host cannot see from its own storage — so it is read here. Both answers mean the
+ * same thing to the welcome page: there is nothing left to ask.
+ */
+function setupWindowDone(deps: SetupDeps): boolean {
+	try {
+		const raw: unknown = JSON.parse(readFileSync(path.join(deps.distributionRoot, 'data', 'onboarding.json'), 'utf8'));
+		return typeof raw === 'object' && raw !== null && (raw as Record<string, unknown>)['completed'] === true;
+	} catch {
+		return false;
+	}
+}
+
+/** The account hand-over keys, written straight to the settings file (see the comment there). */
+export const CLEAR_HANDOVER_COMMAND = 'picode.setup.clearHandover';
+export const CLEAR_SIGN_OUT_COMMAND = 'picode.setup.clearSignOutRequest';
+export const PUBLISH_SESSION_COMMAND = 'picode.setup.publishSession';
+
 export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 	const state = (): SetupState => ({
 		runtime: readRuntimeMode(),
 		externalAvailable: externalSdkEntry() !== undefined,
 		internalPiVersion: readInternalPiVersion(deps.distributionRoot),
-		completed: deps.globalState.get<boolean>(DONE_KEY, false),
+		completed: deps.globalState.get<boolean>(DONE_KEY, false) || setupWindowDone(deps),
 	});
 
 	const markDone = (): void => {
@@ -221,6 +249,24 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 	};
 
 	return [
+		// The editor cannot write these itself: they are `included: false` so they never appear in
+		// Settings, and that flag also makes them unwritable through the configuration service.
+		vscode.commands.registerCommand(CLEAR_HANDOVER_COMMAND, () => {
+			if (deps.userDataPath !== undefined) {
+				clearAccountHandover({ distributionRoot: deps.distributionRoot, profileDir: deps.profileDir, userDataPath: deps.userDataPath });
+			}
+		}),
+		vscode.commands.registerCommand(CLEAR_SIGN_OUT_COMMAND, () => {
+			if (deps.userDataPath !== undefined) {
+				// Only the request: the pending session must survive to be adopted a moment later.
+				clearSignOutRequest({ distributionRoot: deps.distributionRoot, profileDir: deps.profileDir, userDataPath: deps.userDataPath });
+			}
+		}),
+		vscode.commands.registerCommand(PUBLISH_SESSION_COMMAND, (email?: string) => {
+			if (deps.userDataPath !== undefined) {
+				publishAccountSession({ distributionRoot: deps.distributionRoot, profileDir: deps.profileDir, userDataPath: deps.userDataPath }, typeof email === 'string' ? email : '');
+			}
+		}),
 		vscode.commands.registerCommand(SETUP_COMMAND, () => vscode.commands.executeCommand('workbench.action.openWalkthrough')),
 		vscode.commands.registerCommand(GET_STATE_COMMAND, (): SetupState => state()),
 		vscode.commands.registerCommand(ABOUT_VERSIONS_COMMAND, async (): Promise<AboutVersions> => {

@@ -71,6 +71,7 @@ import { METERED_CONNECTION_CHANNEL } from '../../platform/meteredConnection/com
 import { MeteredConnectionChannel } from '../../platform/meteredConnection/electron-main/meteredConnectionChannel.js';
 import { MeteredConnectionMainService } from '../../platform/meteredConnection/electron-main/meteredConnectionMainService.js';
 import { IProductService } from '../../platform/product/common/productService.js';
+import { openSetupWindowFromEditor, registerSetupWindowOpener, requestSetupWindow, runOnboardingGate, type EditorApplicationStore } from './picodeOnboarding.js';
 import { getRemoteAuthority } from '../../platform/remote/common/remoteHosts.js';
 import { SharedProcess } from '../../platform/sharedProcess/electron-main/sharedProcess.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
@@ -214,6 +215,8 @@ export class CodeApplication extends Disposable {
 	private windowsMainService: IWindowsMainService | undefined;
 	private auxiliaryWindowsMainService: IAuxiliaryWindowsMainService | undefined;
 	private nativeHostMainService: INativeHostMainService | undefined;
+	/** The folder chosen in PiCode's setup, opened by the first workbench window. */
+	private picodeOnboardingFolder: string | undefined;
 
 	constructor(
 		private readonly mainProcessNodeIpcServer: NodeIPCServer,
@@ -726,6 +729,29 @@ export class CodeApplication extends Disposable {
 		// Services
 		const appInstantiationService = await this.initServices(machineId, sqmId, devDeviceId, sharedProcessReady);
 
+		// PiCode's setup window, as the editor's own command opens it again later. Registered here,
+		// before any window exists, so "PiCode: Setup" works from the first editor start onwards.
+		const picodeSetupDeps = appInstantiationService.invokeFunction(accessor => ({
+			environmentMainService: accessor.get(IEnvironmentMainService),
+			productService: accessor.get(IProductService),
+			logService: accessor.get(ILogService),
+			// The editor's own stores: the setup writes the account session where the editor reads it.
+			// The application storage the editor reads its account from, and the encryption that
+			// protects its secret. Both live here, in the main process.
+			// The decorator is typed as the registry, so the cast is the price of using it from here.
+			applicationStorage: accessor.get(IApplicationStorageMainService) as unknown as EditorApplicationStore,
+			encryptionService: accessor.get(IEncryptionMainService),
+		}));
+		registerSetupWindowOpener(() => openSetupWindowFromEditor(picodeSetupDeps));
+		// The editor's "PiCode: Setup" reaches the application through the native host service, which
+		// is what every renderer already talks to; the opener above is what it calls.
+		appInstantiationService.invokeFunction(accessor => {
+			const nativeHostMainService = accessor.get(INativeHostMainService);
+			if (nativeHostMainService instanceof NativeHostMainService) {
+				nativeHostMainService.registerPiCodeSetupOpener(() => requestSetupWindow());
+			}
+		});
+
 		// Error telemetry
 		appInstantiationService.invokeFunction(accessor => this._register(new ErrorTelemetry(accessor.get(ILogService), accessor.get(ITelemetryService))));
 
@@ -762,6 +788,12 @@ export class CodeApplication extends Disposable {
 
 		// Signal phase: ready - before opening first window
 		this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
+
+		// PiCode setup: on a first run (and again after a major version change) the setup window
+		// comes first, and the workbench is opened only when it is done or skipped. It resolves with
+		// the folder the owner picked there, if any, and it never throws — a setup that fails opens
+		// the editor anyway, which is the one promise this window cannot break.
+		this.picodeOnboardingFolder = await runOnboardingGate(picodeSetupDeps).then(outcome => outcome.folder);
 
 		// Open Windows
 		await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
@@ -1573,10 +1605,12 @@ export class CodeApplication extends Disposable {
 			}
 		}
 
-		// default: read paths from cli
+		// default: read paths from cli. A folder chosen in PiCode's setup takes precedence: it is the
+		// one thing the owner picked with this start in front of them.
 		return windowsMainService.open({
 			context,
 			cli: args,
+			urisToOpen: this.picodeOnboardingFolder !== undefined ? [{ folderUri: URI.file(this.picodeOnboardingFolder) }] : undefined,
 			forceNewWindow: args['new-window'],
 			diffMode: args.diff,
 			mergeMode: args.merge,

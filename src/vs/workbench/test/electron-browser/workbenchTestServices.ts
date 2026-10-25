@@ -105,6 +105,8 @@ export class TestNativeHostService implements INativeHostService {
 
 	async openAgentsWindow(_options?: { folderUri?: UriComponents; sessionResource?: UriComponents }): Promise<void> { }
 
+	async openPiCodeSetup(): Promise<boolean> { return false; }
+
 	async syncSystemWideKeybindings(_keybindings: INativeSystemWideKeybinding[]): Promise<INativeSystemWideKeybindingResult> { return { failed: [] }; }
 
 	async toggleFullScreen(): Promise<void> { }

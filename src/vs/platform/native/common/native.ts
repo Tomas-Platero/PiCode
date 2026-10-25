@@ -295,6 +295,10 @@ export interface ICommonNativeHostService {
 	pickFolderAndOpen(options: INativeOpenDialogOptions): Promise<void>;
 	pickWorkspaceAndOpen(options: INativeOpenDialogOptions): Promise<void>;
 
+	// PiCode
+	/** Opens PiCode's setup window again; resolves `false` when it is not available here. */
+	openPiCodeSetup(): Promise<boolean>;
+
 	// OS
 	showItemInFolder(path: string): Promise<void>;
 	setRepresentedFilename(path: string, options?: INativeHostOptions): Promise<void>;

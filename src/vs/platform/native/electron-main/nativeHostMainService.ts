@@ -638,6 +638,28 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	//#endregion
 
 
+	//#region PiCode
+
+	/**
+	 * How the editor asks for PiCode's setup window.
+	 *
+	 * The window belongs to the application (it exists before the workbench and keeps existing
+	 * after it), so the opener is registered from `app.ts` instead of being created here: this
+	 * service only carries the call across. Until it is registered — an embedding that never ran
+	 * the application start — the answer is `false` and nothing happens.
+	 */
+	private piCodeSetupOpener: (() => boolean) | undefined;
+
+	registerPiCodeSetupOpener(opener: () => boolean): void {
+		this.piCodeSetupOpener = opener;
+	}
+
+	async openPiCodeSetup(): Promise<boolean> {
+		return this.piCodeSetupOpener?.() ?? false;
+	}
+
+	//#endregion
+
 	//#region OS
 
 	async showItemInFolder(windowId: number | undefined, path: string): Promise<void> {
