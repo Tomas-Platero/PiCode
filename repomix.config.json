@@ -5,7 +5,7 @@
 		"style": "xml",
 		"showLineNumbers": false,
 		"topFilesLength": 10,
-		"headerText": "PiCode — modification layer on top of VSCodium.\nThis pack does NOT contain the VSCodium tree (src/): for that there is the LSP index and codegraph.\nIt contains: build scripts (build/), documentation and tasks (docs/),\nthe pi extension (extensions/picode), the durable agent and its bridges (durable*, ADR-020),\nand the parts of the build system PiCode touches (build/next, build/win32, vscode gulpfiles).\nRegenerate: repomix (reads this file)."
+		"headerText": "PiCode — modification layer on top of VSCodium.\nThis pack does NOT contain the VSCodium tree (src/): for that there is the LSP index and codegraph.\nIt contains: build scripts (build/), documentation and tasks (docs/),\nthe pi extension (extensions/picode),\nand the parts of the build system PiCode touches (build/next, build/win32, vscode gulpfiles).\nRegenerate: repomix (reads this file)."
 	},
 	"include": [
 		"AGENTS.md",
