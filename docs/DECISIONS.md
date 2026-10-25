@@ -35,6 +35,7 @@ alternatives were seriously considered.
 | 021 | One orchestrator (pi), one list, sessions always durable | superseded by 030 |
 | 030 | Durable leaves the product; pi's own transcripts are the conversations | accepted |
 | 031 | gentle-pi and gentle-engram enter as pinned packages of the product | accepted |
+| 032 | The Tasks block draws gentle-pi's subagents from the push it already makes | accepted |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -1171,3 +1172,25 @@ blocked: `left-behind-packages.ts` named them, and an import refused to copy the
 later decision may carry a pinned build in `resources/`. gentle-pi's subagents still run as pi
 child processes and are not yet in the Tasks block; routing them there is the next step. The
 engine stays at 3.5.1 (gentle-engram 0.4.2 accepts any stable core from 3.0.0).
+
+## ADR-032 — The Tasks block draws gentle-pi's subagents from the push it already makes
+
+**Status:** accepted. Completes ADR-030 (the Tasks block lost durable's work) and ADR-031.
+
+**Context:** gentle-pi runs its subagents as child pi processes and publishes their live state to
+an interactive host through pi's one structured push, `setWidget("gentle-agents", [json])`, shaped
+`gentle-agents.activity/v1`. It does so only when pi runs with `GENTLE_SHELL_INTERACTIVE_HOST=1` in a
+mode with a UI. The chat's bridge answered every `setWidget` with nothing.
+
+**Decision:** The signal is set on this process (`product-env.ts`, `HOST_ENV`) and the bridge's
+`setWidget` hands the push to `gentle-agents-store.ts`, which keeps only a whitelisted summary per
+task — role, label, state, times, last step, turns, tool calls, error — and never the prompt, the
+thread or a tool's output. The Tasks block shows the agents still going under *Running*, after the
+background jobs, and the last five that ended under *Finished*; each opens to its facts. The store
+is cleared whenever the session that published it is rebuilt or disposed. Nothing else reads the
+push: any other widget is still the terminal's, and the chat owns that surface.
+
+**Consequences:** The block shows what gentle-pi says and no more: nothing here starts, stops or
+answers an agent. The signal also tells gentle-pi it has dialogs, so its questions arrive as chat
+questions; the chat never asked before, and gentle-pi's own permission modes are now the ones in
+play. Unverified in a running editor.

@@ -410,6 +410,8 @@
 │   │   │   ├── piConfig.ts
 │   │   │   ├── piLocate.ts
 │   │   │   ├── piSdk.ts
+│   │   │   ├── product-env.ts
+│   │   │   ├── product-packages.ts
 │   │   │   ├── profile-import.ts
 │   │   │   ├── progress.ts
 │   │   │   ├── provider-stream.ts
@@ -434,7 +436,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 67 files in total
+│   │   │   └── … 69 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -469,6 +471,7 @@
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
 │   │   │   ├── pin-sync.test.ts
+│   │   │   ├── product-packages.test.ts
 │   │   │   ├── progress.test.ts
 │   │   │   ├── provider-stream.test.ts
 │   │   │   ├── providers-list.test.ts
@@ -482,7 +485,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 46 files in total
+│   │   │   └── … 47 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

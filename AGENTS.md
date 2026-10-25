@@ -140,7 +140,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * **Fuera durable entero:** el programa, su puente, sus comandos y ajustes, el interruptor del primer arranque, la tarjeta de estado y el paso del build.
 * **Las conversaciones son las de pi:** la lista única del panel son los transcríptos que pi escribe en el perfil, y se continúan en el sitio. Lo que solo guardaba durable no se migra.
-* **Tasks:** muestra los trabajos del chat; los subagentes de gentle-pi se suman cuando gentle-pi entre.
+* **Tasks:** muestra los trabajos del chat y los subagentes de gentle-pi (ADR-032), los que siguen y los últimos que acabaron.
 * **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` ya está levantado y los dos entran fijados (ADR-031). El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
@@ -354,3 +354,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-22** · Texto del editor: **todo texto que va en el editor se escribe con carácter funcional para el usuario** («todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario»). Etiquetas, mensajes, tooltips, notificaciones y filas del panel hablan de qué hay y qué se puede hacer, sin nombres de código, rutas ni detalles de la maquinaria interna.
 * **2026-10-25** · Durable sale del producto: **el producto es Pi + Gentle AI** («quiero quitar todo durable, ya que impacta con Gentle»). La lista del panel pasa a ser la de los transcríptos de pi; ADR-030 sustituye a ADR-018, 020 y 021. Siguen: entrada de gentle-pi y gentle-engram.
 * **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.
+* **2026-10-25** · El panel Tasks enseña los subagentes de gentle-pi, a partir de lo que gentle-pi ya publica (ADR-032).

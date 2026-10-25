@@ -57,6 +57,7 @@ import { piProjectSlug } from './sessions-provider';
 import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
+import { gentleAgents } from './gentle-agents-store';
 
 /**
  * `@pi` inside the editor's own chat.
@@ -983,7 +984,9 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 		setWorkingVisible: noop,
 		setWorkingIndicator: noop,
 		setHiddenThinkingLabel: noop,
-		setWidget: noop,
+		// gentle-pi publishes its subagents' live state here, and only here; the Tasks block draws it.
+		// Every other widget is the terminal's, and the chat owns that surface.
+		setWidget: (key: string, content?: unknown): void => gentleAgents.publish(key, content),
 		setFooter: noop,
 		setHeader: noop,
 		setTitle: noop,
@@ -1253,7 +1256,7 @@ export function liveSessionMcpServers(): readonly string[] | undefined {
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	// The setup bridge needs to drop the live session when the profile's packages change:
 	// what they load (agents, skills, commands) registers when pi's session is created.
-	sessionResetter = () => { session?.dispose(); session = undefined; services = undefined; backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire(); };
+	sessionResetter = () => { session?.dispose(); gentleAgents.clear(); session = undefined; services = undefined; backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire(); };
 	sessionUsageProvider = () => {
 		if (sessionManager === undefined) {
 			return undefined;
@@ -1446,6 +1449,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			disabledToolsKey = settings.disabledTools.join('\u0000');
 			if (session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
 				session?.dispose();
+				// The agents the old session published are gone with it.
+				gentleAgents.clear();
 				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
 				// extensions load beside the permission gate, exactly as pi's own CLI builds a session
 				// (`dist/main.js:451`: built-ins first, the caller's after): pi takes its built-in map **from
@@ -1597,6 +1602,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		participant,
 		new vscode.Disposable(() => {
 			session?.dispose();
+			gentleAgents.clear();
 			session = undefined;
 		}),
 	);

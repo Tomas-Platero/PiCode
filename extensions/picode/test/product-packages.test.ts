@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PRODUCT_ENV, applyProductEnv, withProductEnv } from '../src/product-env.ts';
+import { HOST_ENV, PRODUCT_ENV, applyProductEnv, withProductEnv } from '../src/product-env.ts';
 import { GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, withProductPackages } from '../src/product-packages.ts';
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
@@ -92,8 +92,13 @@ test('the product fixes the install and the telemetry switches, and its values w
 	assert.deepEqual(withProductEnv({ A: '1', DO_NOT_TRACK: '0' }), { A: '1', ...PRODUCT_ENV });
 });
 
-test('applying the product environment sets it on the target and nothing else', () => {
+test('applying the product environment sets it, and the host signal, on the target and nothing else', () => {
 	const target: NodeJS.ProcessEnv = { KEEP: 'yes' };
 	applyProductEnv(target);
-	assert.deepEqual(target, { KEEP: 'yes', ...PRODUCT_ENV });
+	assert.deepEqual(target, { KEEP: 'yes', ...PRODUCT_ENV, ...HOST_ENV });
+	assert.deepEqual({ ...HOST_ENV }, { GENTLE_SHELL_INTERACTIVE_HOST: '1' });
+});
+
+test('the host signal rides on this process only, never on an npm run', () => {
+	assert.equal(withProductEnv({})['GENTLE_SHELL_INTERACTIVE_HOST'], undefined);
 });

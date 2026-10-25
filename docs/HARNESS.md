@@ -59,7 +59,7 @@ Este documento describe cómo está montado.
 | `background-jobs.ts` / `background-cards.ts` | Los trabajos en background: tarjeta en el transcript y registro vivo para la píldora |
 | `sessions-provider.ts` / `sessions-register.ts` / `sessions-resume.ts` | Los transcríptos JSONL del perfil (`sessions/`): se leen y se listan, son la lista única del panel y se continúan en el sitio |
 | `status-data.ts` / `status-contract.ts` | Una sola lectura del estado: versión de pi, proveedores por origen, MCP por origen, uso y coste, git. La forma va en el contrato; quien pinta es la sección **Status** del núcleo |
-| `tasks-rows.ts` / `tasks-view.ts` | El bloque **Tasks** del panel: los trabajos en fondo del chat en una lista, con el detalle de cada uno al abrirlo. `tasks-rows.ts` es puro (sin `vscode`), así que `node --test` lo ejecuta tal cual |
+| `tasks-rows.ts` / `tasks-view.ts` | El bloque **Tasks** del panel: los trabajos en fondo del chat y los subagentes de gentle-pi (`gentle-agents-store.ts`) en una lista, con el detalle de cada uno al abrirlo. `tasks-rows.ts` es puro (sin `vscode`), así que `node --test` lo ejecuta tal cual |
 | `providers*.ts`, `models*.ts` | Declaración de endpoints y suscripciones; todo acaba en `models.json`/`auth.json` del perfil, que es lo que pi lee |
 | `packages*.ts` | Los paquetes de pi (skills, agentes, extensiones), instalados en el perfil |
 | `onboarding.ts`, `wizard*.ts` | Los comandos de arranque que quedan del asistente antiguo: estado, migración, modelos. La **pantalla** ya no vive en la Welcome (ver abajo) |
@@ -81,7 +81,7 @@ Este documento describe cómo está montado.
   lectura alimenta la página de Providers (proveedores del perfil como filas de solo lectura) y la
   de MCP (perfil + proyecto + descubiertos, con origen en cada fila).
 - **El contenedor del activity bar** lleva lo que el chat no puede enseñar: **Tasks** (el trabajo
-  que el chat tiene fuera — sus trabajos en fondo, cada uno con
+  que el chat tiene fuera — sus trabajos en fondo y los agentes de gentle-pi, cada uno con
   su detalle al abrirlo) y **Memory** (lo que este equipo recuerda). Los datos son los mismos que
   leen la píldora y la sección Status; aquí se dibujan en una lista que se queda quieta mientras se
   trabaja en otro fichero. Solo se refrescan mientras el bloque está visible.

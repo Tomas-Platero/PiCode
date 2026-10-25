@@ -92,6 +92,7 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `packages-updates.ts` | Si un paquet instalado va tarde y cómo llevarlo a la versión nueva. |
 | `left-behind-packages.ts` | Los paquetes que una importación de un pi externo deja atrás (hoy ninguno). |
 | `product-packages.ts` | gentle-pi y gentle-engram, fijados en el perfil por el producto, y qué se recorta de gentle-pi. |
+| `gentle-agents-store.ts` | Los subagentes de gentle-pi, leídos de lo que publica, para el bloque Tasks. |
 | `product-env.ts` | Las variables que el producto fija para pi y para npm: sin descargas de instalación ni telemetría. |
 | `npm-run.ts` | Cómo ejecuta npm este editor, decidido en un sitio (el caso de `npm.cmd` en Windows). |
 | `updates-check.ts` | Las reglas del chequeo de actualizaciones: qué se comprueba, qué se guarda y qué se avisa. |

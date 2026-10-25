@@ -23,12 +23,23 @@ export const PRODUCT_ENV: Readonly<Record<string, string>> = Object.freeze({
 	GENTLE_AI_TELEMETRY: '0',
 });
 
+/**
+ * The signal that tells gentle-pi it runs under an interactive host with a screen of its own: it
+ * then asks through the chat's dialogs and publishes its subagents' live state, which the Tasks
+ * block draws (`gentle-agents-store.ts`). Only pi in this window needs it, so it is set on this
+ * process (`applyProductEnv`) and not laid over every npm run; gentle-pi strips it from its own
+ * children.
+ */
+export const HOST_ENV: Readonly<Record<string, string>> = Object.freeze({
+	GENTLE_SHELL_INTERACTIVE_HOST: '1',
+});
+
 /** `env` with the product's variables laid over it; the product's values win. */
 export function withProductEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return { ...env, ...PRODUCT_ENV };
 }
 
-/** Sets the product's variables on this process, so everything it starts inherits them. */
+/** Sets the product's variables, and the host signal, on this process, so everything it starts inherits them. */
 export function applyProductEnv(target: NodeJS.ProcessEnv = process.env): void {
-	Object.assign(target, PRODUCT_ENV);
+	Object.assign(target, PRODUCT_ENV, HOST_ENV);
 }

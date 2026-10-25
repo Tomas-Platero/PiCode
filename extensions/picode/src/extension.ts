@@ -50,6 +50,7 @@ import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerPiSessionsProvider } from './sessions-register';
 import { applyProductEnv } from './product-env';
+import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
@@ -2437,10 +2438,10 @@ const setupDeps = {
 	// Memory reads what the engine already answered, so it is a view of its own in the same
 	// container: the panel lists what this machine remembers without a second surface to learn.
 	context.subscriptions.push(registerMemoryView());
-	// The work the chat has out — its background jobs —
+	// The work the chat has out — its background jobs and the agents gentle-pi runs —
 	// as a list that stays put while the owner works elsewhere. Same container, same rule: it reads
 	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
-	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs }));
+	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs, agents: () => gentleAgents.current(), onAgentsChange: listener => gentleAgents.onDidChange(listener) }));
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the
