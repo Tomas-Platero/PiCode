@@ -15,6 +15,13 @@ description = "Build artifacts and prepared trees: gitignored, not published"
 paths = [
   '''(^|/)PiCode-[^/]*/''',
   '''(^|/)picode-source/''',
+  # Downloaded Electron built-in extensions (`.build/` is fetched by the pre-launch step, and
+  # ignored at .gitignore:148). The matches are the git extension's own API-key *detection*
+  # patterns and extension-editing's manifest validation, matching themselves.
+  '''(^|/)\.build/''',
+  # The Rust CLI's build output, ignored at .gitignore:164. Its vendored OpenSSL sources carry
+  # the library's own DES/EC test vectors, which read as high-entropy keys.
+  '''(^|/)cli/target/''',
 ]
 
 # Allowlisted **by value**, not by path, so any other key in those same files still fails the scan.

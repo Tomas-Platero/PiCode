@@ -109,10 +109,11 @@ const vscodeResourceIncludes = [
 	'out-build/vs/sessions/prompts/*.prompt.md',
 	'out-build/vs/sessions/skills/**/SKILL.md',
 
-	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts).
-	// Without this entry the build ships no file there and the renderer logs
-	// `picode.svg ... net::ERR_FILE_NOT_FOUND` on every window.
+	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts) and the
+	// Activity Bar's outline icons (picodeActivityBarIcons.ts). Without these entries the build
+	// ships no file there and the renderer logs `picode.svg ... net::ERR_FILE_NOT_FOUND`.
 	'out-build/vs/workbench/contrib/picode/browser/media/*.svg',
+	'out-build/vs/workbench/contrib/picode/browser/media/tabler/*.svg',
 
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',

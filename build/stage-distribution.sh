@@ -122,6 +122,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Step 3b - PiCode's setup window
+# ---------------------------------------------------------------------------
+# The window that runs before the editor is a page, a preload and a backend shim, and it sits
+# beside `resources/app` rather than inside it: the main process finds it at
+# `<root>/resources/onboarding`. Copied here because the pack only carries what the packer knows
+# about, and a setup that cannot find its page silently opens the editor instead.
+echo "--- step 3b - the setup window in resources/onboarding"
+
+ONBOARDING_SOURCE="./resources/onboarding"
+ONBOARDING_TARGET="${PACK_DIR}/resources/onboarding"
+
+if [[ ! -d "${ONBOARDING_SOURCE}" ]]; then
+  echo "error: ${ONBOARDING_SOURCE} is missing; the setup window would not exist in the pack." >&2
+  exit 2
+fi
+
+rm -rf "${ONBOARDING_TARGET}"
+mkdir -p "${ONBOARDING_TARGET}"
+cp -R "${ONBOARDING_SOURCE}/." "${ONBOARDING_TARGET}/"
+echo "copied resources/onboarding ($( find "${ONBOARDING_TARGET}" -type f | wc -l | tr -d ' ' ) files)"
+
+# ---------------------------------------------------------------------------
 # Step 4 - the names Windows shows
 # ---------------------------------------------------------------------------
 echo "--- step 4/7 - visible names"

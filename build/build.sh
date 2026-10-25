@@ -276,10 +276,43 @@ picode_end_event() {  # picode_end_event <exit code>
 : > "${EVENTS}" 2> /dev/null || true
 picode_event '"event":"start","pid":'"$$"
 
-# The channel seal's undo: a no-op until the seal replaces it with the real saver. Defined
-# here so the exit trap below can call it on any path, even one that exits before phase 1
-# reaches the channel block.
-trap 'rc=$?; picode_write_status "${rc}"; picode_end_event "${rc}"; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
+# ---------------------------------------------------------------------------
+# The channel seal's undo
+# ---------------------------------------------------------------------------
+# A channel build rewrites the SOURCE product.json: `quality`, the feed URL, the install identity
+# and the folder names are what the compiler and the packer read, so the seal lands on the file the
+# tree carries. What the channel owns is the PACKED product; the source belongs to whoever wrote
+# it, and a tree left sealed is no longer the tree that was built.
+#
+# So the source is copied aside before the seal writes and put back on the way out - after a good
+# build, after a failure and after Ctrl-C alike, through the exit trap below. The copy lives in
+# `.scratch` (ignored by git) instead of in a variable, because a run that is killed outright
+# never reaches its trap: the copy is still there, and phase 1 puts it back before anything reads
+# product.json. Without this, every channel build left the tree dirty and the next one had to be
+# cleaned by hand.
+PICODE_PRODUCT_SOURCE="${ROOT_DIR}/.scratch/product.json.source"
+
+picode_product_hold_save() {
+  cp -f "${ROOT_DIR}/product.json" "${PICODE_PRODUCT_SOURCE}" || {
+    echo "error: product.json could not be saved to ${PICODE_PRODUCT_SOURCE}, so a seal would have nothing to put back." >&2
+    return 1
+  }
+}
+
+picode_product_hold_put_back() {
+  # Nothing saved: this build never sealed the source, and there is nothing to undo. That is the
+  # ordinary build, so it says nothing.
+  [[ -f "${PICODE_PRODUCT_SOURCE}" ]] || return 0
+  if cp -f "${PICODE_PRODUCT_SOURCE}" "${ROOT_DIR}/product.json"; then
+    rm -f "${PICODE_PRODUCT_SOURCE}"
+    echo "  -- the source product.json is back to what it was (the channel lives in the pack)"
+    return 0
+  fi
+  echo "warning: product.json could not be put back; the original is saved in ${PICODE_PRODUCT_SOURCE} -- copy it over product.json by hand" >&2
+  return 1
+}
+
+trap 'rc=$?; picode_write_status "${rc}"; picode_end_event "${rc}"; picode_product_hold_put_back || true; if [[ -n "${PICODE_DATA_HOLD_DIR:-}" && -d "${PICODE_DATA_HOLD_DIR}" ]]; then echo "  -- the build ended with the portable profile beside the folder: putting it back in ${PICODE_DATA_DIR}"; picode_data_hold_put_back "${PACK_DIR}" || echo "warning: the profile is still in ${PICODE_DATA_HOLD_DIR}; it is safe there -- move it back to ${PICODE_DATA_DIR} by hand" >&2; fi' EXIT
 
 # The portable-profile hold, the mechanism that keeps data/ out of the pack's wholesale delete.
 # The functions and their rationale live in build/data-hold.sh; build.sh calls recover + move-aside
@@ -296,6 +329,11 @@ PICODE_DATA_HOLD_DIR="$(picode_data_hold_dir "${PACK_DIR}")"
 # confirm the tree is PiCode's, put the product identity on it, and install what it needs. Of the
 # three, only the install can be long, and only the first time it runs.
 picode_phase 1 "prepare" "prepare (the source, the identity, the dependencies)"
+
+# A hold left by a build that was killed outright (its trap never ran): the source is sealed and the
+# original is still beside the records. It goes back before anything reads product.json, so a crash
+# cannot leave the next build building from a sealed tree.
+picode_product_hold_put_back || exit 2
 
 if [[ ! -f ./product.json ]]; then
   echo "error: product.json is missing." >&2
@@ -471,11 +509,10 @@ if [[ -n "${PICODE_CHANNEL:-}" ]]; then
   fi
   # The folder was computed before the channel check; recompute it with the suffix.
   PACK_DIR="./PiCode-Win32-${VSCODE_ARCH}${PICODE_PACK_SUFFIX:-}"
-  # The seal rewrites the SOURCE product.json, and the identity check above reads it back
-  # against the delta — a tree left sealed fails its own next build. So the source copy is
-  # saved before the seal and put back when the pack is done (the trap restores it on any
-  # earlier exit, the same promise the profile's hold makes). What the channel owns is the
-  # PACKED product; the source stays what the delta wrote.
+  # The source is saved before the seal writes and put back by the exit trap; the mechanism and the
+  # reason live with the seal's undo at the top of this script. The save is checked rather than
+  # assumed: a build that cannot put the source back must not seal it in the first place.
+  picode_product_hold_save || exit 2
   PICODE_CHANNEL="${PICODE_CHANNEL}" QUALITY_VALUE="${QUALITY_VALUE}" FEED_BRANCH="${FEED_BRANCH}" node <<'NODE'
 const fs = require('fs');
 const crypto = require('crypto');

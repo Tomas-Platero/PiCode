@@ -254,10 +254,11 @@ const commonResourcePatterns = [
 	'vs/sessions/contrib/chat/browser/media/*.svg',
 	'vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg',
 
-	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts).
-	// Without this entry the build ships no file there and the renderer logs
-	// `picode.svg ... net::ERR_FILE_NOT_FOUND` on every window.
-	'vs/workbench/contrib/picode/browser/media/*.svg'
+	// PiCode's own contrib: the brand mark the chat widget loads by path (chatWidget.ts) and the
+	// Activity Bar's outline icons (picodeActivityBarIcons.ts). Without these entries the build
+	// ships no file there and the renderer logs `picode.svg ... net::ERR_FILE_NOT_FOUND`.
+	'vs/workbench/contrib/picode/browser/media/*.svg',
+	'vs/workbench/contrib/picode/browser/media/tabler/*.svg'
 ];
 
 // Resources for desktop target
