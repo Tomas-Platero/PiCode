@@ -141,10 +141,34 @@
 	],
 	"onboardingThemes": [
 		{
-			"id": "dark-2026",
-			"label": "Dark 2026",
-			"themeId": "Dark 2026",
+			"id": "picode-dark",
+			"label": "PiCode Dark",
+			"themeId": "PiCode Dark",
 			"type": "dark"
+		},
+		{
+			"id": "picode-light",
+			"label": "PiCode Light",
+			"themeId": "PiCode Light",
+			"type": "light"
+		},
+		{
+			"id": "picode-neon",
+			"label": "PiCode Neon Minimal",
+			"themeId": "PiCode Neon Minimal",
+			"type": "dark"
+		},
+		{
+			"id": "picode-slate",
+			"label": "PiCode Slate",
+			"themeId": "PiCode Slate",
+			"type": "dark"
+		},
+		{
+			"id": "picode-sepia",
+			"label": "PiCode Sepia",
+			"themeId": "PiCode Sepia",
+			"type": "light"
 		},
 		{
 			"id": "hc-dark",
@@ -153,28 +177,10 @@
 			"type": "hcDark"
 		},
 		{
-			"id": "solarized-dark",
-			"label": "Solarized Dark",
-			"themeId": "Solarized Dark",
-			"type": "dark"
-		},
-		{
-			"id": "light-2026",
-			"label": "Light 2026",
-			"themeId": "Light 2026",
-			"type": "light"
-		},
-		{
 			"id": "hc-light",
 			"label": "Light High Contrast",
 			"themeId": "Default High Contrast Light",
 			"type": "hcLight"
-		},
-		{
-			"id": "solarized-light",
-			"label": "Solarized Light",
-			"themeId": "Solarized Light",
-			"type": "light"
 		}
 	],
 	"builtInExtensionsEnabledWithAutoUpdates": [],

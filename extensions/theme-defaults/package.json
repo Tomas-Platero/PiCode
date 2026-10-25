@@ -14,6 +14,42 @@
   "contributes": {
     "themes": [
       {
+        "id": "PiCode Dark",
+        "label": "%picodeDarkThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/picode-dark.json"
+      },
+      {
+        "id": "PiCode Light",
+        "label": "%picodeLightThemeLabel%",
+        "uiTheme": "vs",
+        "path": "./themes/picode-light.json"
+      },
+      {
+        "id": "PiCode Neon Minimal",
+        "label": "%picodeNeonThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/picode-neon-minimal.json"
+      },
+      {
+        "id": "PiCode Slate",
+        "label": "%picodeSlateThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/picode-slate.json"
+      },
+      {
+        "id": "PiCode Sepia",
+        "label": "%picodeSepiaThemeLabel%",
+        "uiTheme": "vs",
+        "path": "./themes/picode-sepia.json"
+      },
+      {
+        "id": "PiCode Synthwave",
+        "label": "%picodeSynthwaveThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/picode-synthwave.json"
+      },
+      {
         "id": "Light 2026",
         "label": "%light2026ThemeLabel%",
         "uiTheme": "vs",
