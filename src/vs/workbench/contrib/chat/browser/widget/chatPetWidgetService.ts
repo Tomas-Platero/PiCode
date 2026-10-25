@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as dom from '../../../../../base/browser/dom.js';
+import { mainWindow } from '../../../../../base/browser/window.js';
 import { Event } from '../../../../../base/common/event.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../../../base/common/lifecycle.js';
 import { autorun, constObservable, IObservable, ISettableObservable, observableValue, transaction } from '../../../../../base/common/observable.js';
@@ -152,7 +153,11 @@ export class ChatPetWidgetCoordinator extends Disposable {
 	}
 
 	private createDormantHost(host: IChatPetWidgetHost): IChatPetWidgetHost {
-		const parent = host.parent.ownerDocument.createElement('div');
+		// From the main window on purpose: the host's parent can live in an auxiliary window,
+		// whose document forbids `createElement` (auxiliaryWindowService.ts) because an element
+		// built there fails every `instanceof HTMLElement` check in the workbench. This node is
+		// only a detached bounds reference, so it belongs to no window in particular.
+		const parent = mainWindow.document.createElement('div');
 		return {
 			parent,
 			dragBounds: parent,

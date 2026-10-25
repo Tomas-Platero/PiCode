@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as DOM from '../../../../base/browser/dom.js';
+import { mainWindow } from '../../../../base/browser/window.js';
 import { DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
@@ -24,9 +25,12 @@ export function renderChatPetAchievementPreview(
 	logService: ILogService,
 ): IDisposable {
 	const store = new DisposableStore();
-	const targetWindow = DOM.getWindow(canvas);
-	const bodyImage = targetWindow.document.createElement('img');
-	const accessoryImage = accessory ? targetWindow.document.createElement('img') : undefined;
+	// The main window's document, not the canvas'. In an auxiliary window the canvas lives in a
+	// child document that forbids `createElement` (auxiliaryWindowService.ts) — an image built
+	// there would fail every `instanceof HTMLElement` check. These <img> nodes are never attached,
+	// only drawn into the canvas, so their document does not matter beyond that.
+	const bodyImage = mainWindow.document.createElement('img');
+	const accessoryImage = accessory ? mainWindow.document.createElement('img') : undefined;
 	const accessorySource = accessory ? getChatPetAccessoryImageSource(accessory) : undefined;
 	const bodySource = FileAccess.asBrowserUri(`vs/workbench/contrib/chat/browser/widget/media/chatPet/buddy-idle-${variant}-96.png`).toString(true);
 	let bodyLoaded = !unlocked;

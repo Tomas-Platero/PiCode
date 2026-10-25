@@ -1137,13 +1137,13 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			description: nls.localize('chat.agentHost.ahpJsonlLogging', "When enabled, logs all AHP transport messages for agent host connections to JSONL files under the window's log directory."),
 			default: product.quality !== 'stable',
-			tags: ['experimental', 'advanced'],
+			tags: ['experimental'],
 		},
 		[AgentHostAgentDebugLogEnabledSettingId]: {
 			type: 'boolean',
 			markdownDescription: nls.localize('chat.agentHost.agentDebugLog.enabled', "Enable agent debug logging for agent host sessions: surface their debug events in the agent debug panel. Takes effect immediately; only sessions that run while this is enabled are captured."),
 			default: false,
-			tags: ['experimental', 'advanced'],
+			tags: ['experimental'],
 			experiment: {
 				mode: 'startup'
 			},
@@ -1153,7 +1153,7 @@ configurationRegistry.registerConfiguration({
 			minimum: 10,
 			markdownDescription: nls.localize('chat.agentHost.agentDebugLog.maxEventsInMemory', "Maximum number of debug events kept in memory per agent host session for the agent debug panel. Older events beyond this limit are dropped from the in-memory buffer, which also lowers the totals (such as token usage) shown in the panel overview."),
 			default: 10000,
-			tags: ['experimental', 'advanced'],
+			tags: ['experimental'],
 			experiment: {
 				mode: 'startup'
 			},
@@ -1163,7 +1163,7 @@ configurationRegistry.registerConfiguration({
 			markdownDescription: nls.localize('chat.agentHost.allowSignedOutWhenUsable', "When enabled, Agent Host sessions remain available while signed out. The Agents window opens without forcing GitHub sign-in, and editor chat lets you select the Copilot harness. Agents usable without GitHub (for example Codex with ChatGPT authentication or Claude in native mode with your own Anthropic credentials) work while signed out; agents that require GitHub prompt you to add a model or sign in. When disabled, GitHub sign-in is required before the Agents window opens."),
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
-			tags: ['experimental', 'advanced'],
+			tags: ['experimental'],
 			experiment: { mode: 'startup' }
 		},
 		[ChatConfiguration.ToolConfirmationCarousel]: {
