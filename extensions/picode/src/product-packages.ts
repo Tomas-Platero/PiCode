@@ -20,6 +20,8 @@
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
+import { packageNameOf } from './left-behind-packages';
+
 /** One package the product pins. */
 export interface ProductPackage {
 	/** The npm name. */
@@ -47,6 +49,21 @@ export const GENTLE_PI_TERMINAL_EXTENSIONS: readonly string[] = [
 	'!extensions/gentle-shell.ts',
 	'!extensions/runtime-metrics.ts',
 	'!extensions/resume-hint.ts',
+];
+
+/**
+ * Packages that do what Gentle AI already does here, and so are switched off in the profile.
+ *
+ * PiCode is pi plus Gentle AI: one set of subagents (gentle-pi's `subagent_run`) and one memory
+ * (gentle-engram). An imported profile can carry others — `@tintinweb/pi-subagents` registers an
+ * `Agent` tool, and the model picks whichever tool it likes, so the chat's Tasks block, which
+ * draws gentle-pi's agents, would see nothing of the work the other one ran. These are named as
+ * `packageNameOf` reads them (`left-behind-packages.ts`).
+ */
+export const DISPLACED_PACKAGE_NAMES: readonly string[] = [
+	'@tintinweb/pi-subagents',
+	'github.com/HazAT/pi-interactive-subagents',
+	'pi-memory',
 ];
 
 /** What the product pins, in the order it declares them. */
@@ -83,6 +100,11 @@ function npmNameOf(entry: unknown): string | undefined {
 	return at > 0 ? spec.slice(0, at) : spec;
 }
 
+/** The entry that keeps a displaced package declared and loads nothing from it. */
+export function switchedOff(source: string): { readonly source: string; readonly extensions: readonly string[]; readonly skills: readonly string[]; readonly prompts: readonly string[]; readonly themes: readonly string[] } {
+	return { source, extensions: [], skills: [], prompts: [], themes: [] };
+}
+
 /** What one reconciliation answered. */
 export interface ProductPackagesResult {
 	/** The settings text to keep: the original when nothing had to change. */
@@ -97,9 +119,17 @@ export interface ProductPackagesResult {
  * position and is rewritten to the pinned entry; a duplicate declaration is dropped; a missing
  * one is appended. A settings file that is not a JSON object is left alone — the owner's file
  * is never replaced by a guess.
+ *
+ * A displaced package written as a plain declaration is switched off (`switchedOff`): still
+ * declared, nothing loaded. One already written as an object is the owner's own choice of what to
+ * load from it, and is left as it is — which is also how it is switched back on.
  */
-export function withProductPackages(settingsText: string | undefined, products: readonly ProductPackage[] = PRODUCT_PACKAGES): ProductPackagesResult {
-	if (products.length === 0) {
+export function withProductPackages(
+	settingsText: string | undefined,
+	products: readonly ProductPackage[] = PRODUCT_PACKAGES,
+	displaced: readonly string[] = DISPLACED_PACKAGE_NAMES,
+): ProductPackagesResult {
+	if (products.length === 0 && displaced.length === 0) {
 		return { text: settingsText, changed: false };
 	}
 	let settings: Record<string, unknown>;
@@ -123,7 +153,7 @@ export function withProductPackages(settingsText: string | undefined, products: 
 	for (const entry of declared) {
 		const name = npmNameOf(entry);
 		if (name === undefined || !wanted.has(name)) {
-			next.push(entry);
+			next.push(typeof entry === 'string' && displaced.includes(packageNameOf(entry)) ? switchedOff(entry) : entry);
 			continue;
 		}
 		if (!placed.has(name)) {
@@ -136,7 +166,7 @@ export function withProductPackages(settingsText: string | undefined, products: 
 			next.push(entry);
 		}
 	}
-	if (JSON.stringify(next) === JSON.stringify(declared) && Array.isArray(settings['packages'])) {
+	if (JSON.stringify(next) === JSON.stringify(declared) && (Array.isArray(settings['packages']) || next.length === 0)) {
 		return { text: settingsText, changed: false };
 	}
 	const text = `${JSON.stringify({ ...settings, packages: next }, undefined, '\t')}\n`;

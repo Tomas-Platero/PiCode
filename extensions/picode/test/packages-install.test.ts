@@ -97,7 +97,7 @@ const join = (parts: string[]): string => parts.join('\\');
 test('a missing declared npm package becomes one spec; installed ones and local paths do not', () => {
 	const settings = parseSettings(JSON.stringify({
 		packages: [
-			'npm:pi-memory',
+			'npm:pi-notes',
 			'npm:pi-lens',
 			'npm:specpi@2.0.0',
 			'local:tools/skill',
@@ -109,7 +109,7 @@ test('a missing declared npm package becomes one spec; installed ones and local 
 		GIT_ROOT,
 		scanIoFixture(
 			new Set([
-				join([NPM_ROOT, 'pi-memory']),
+				join([NPM_ROOT, 'pi-notes']),
 				join([NPM_ROOT, 'specpi']),
 			]),
 			new Map([[join([NPM_ROOT, 'specpi']), '2.0.0']]),
@@ -117,7 +117,7 @@ test('a missing declared npm package becomes one spec; installed ones and local 
 	);
 	assert.deepEqual(scan.specs, ['pi-lens']);
 	assert.deepEqual(scan.gitClones, []);
-	assert.equal(scan.present, 2); // pi-memory, specpi at its pinned version
+	assert.equal(scan.present, 2); // pi-notes, specpi at its pinned version
 	assert.equal(scan.skipped, 1); // the local path is not installable
 });
 
@@ -137,7 +137,7 @@ test('a stale exact pin is reinstalled, so pi never reinstalls it with its own w
 });
 
 test('a missing git declaration becomes one clone into the profile git root', () => {
-	const settings = parseSettings(JSON.stringify({ packages: ['git:github.com/HazAT/pi-interactive-subagents'] }));
+	const settings = parseSettings(JSON.stringify({ packages: ['git:github.com/SomeOne/pi-widgets'] }));
 	const scan = scanDeclaredPackages(
 		settings,
 		NPM_ROOT,
@@ -145,8 +145,8 @@ test('a missing git declaration becomes one clone into the profile git root', ()
 		scanIoFixture(new Set(), new Map()),
 	);
 	assert.deepEqual(scan.gitClones, [{
-		url: 'https://github.com/HazAT/pi-interactive-subagents',
-		target: join([GIT_ROOT, 'github.com', 'HazAT', 'pi-interactive-subagents']),
+		url: 'https://github.com/SomeOne/pi-widgets',
+		target: join([GIT_ROOT, 'github.com', 'SomeOne', 'pi-widgets']),
 	}]);
 	assert.deepEqual(scan.specs, []);
 });

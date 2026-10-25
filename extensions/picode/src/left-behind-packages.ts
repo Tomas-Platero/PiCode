@@ -21,7 +21,13 @@
  */
 
 /** The package names this editor does not carry, spelled as npm knows them. */
-export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = ['@earendil-works/pi-durable'];
+export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = [
+	'@earendil-works/pi-durable',
+	// Other subagents and another memory, next to gentle-pi's and gentle-engram's (ADR-031 addendum).
+	'@tintinweb/pi-subagents',
+	'github.com/HazAT/pi-interactive-subagents',
+	'pi-memory',
+];
 
 /**
  * A package entry's bare name, from any of the spellings a `packages` entry uses: the

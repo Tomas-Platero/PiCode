@@ -1205,3 +1205,17 @@ play. Unverified in a running editor.
   (`left-behind-packages.ts`): an import does not bring it, nothing installs it, and the update check
   no longer offers to update it. The update notice that named it came from a stored snapshot of a
   profile that declared it.
+
+**Addendum 2 (2026-10-25, found when the Tasks block stayed empty after an agent ran).**
+
+- A profile imported from another pi can carry other subagents and another memory next to gentle's:
+  `@tintinweb/pi-subagents` (an `Agent` tool), `pi-interactive-subagents` and `pi-memory`. The model
+  picks whichever tool it likes, so work run by the other one never reached the Tasks block, which
+  draws gentle-pi's agents. PiCode is pi plus Gentle AI, so there is **one** of each: gentle-pi's
+  `subagent_run` and gentle-engram.
+- Those three join the left-behind list (an import does not bring them, nothing installs them, the
+  update check does not offer them) and, in a profile that already declares them as plain entries,
+  are **switched off** by the package installer (`product-packages.ts`, `DISPLACED_PACKAGE_NAMES`):
+  still declared, `extensions`/`skills`/`prompts`/`themes` empty, so nothing of theirs loads. An
+  entry already written as an object is the owner's own choice of what to load and is left as it
+  is, which is also how it is switched back on.

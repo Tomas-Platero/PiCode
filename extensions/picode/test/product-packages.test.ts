@@ -11,9 +11,22 @@
  */
 
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { HOST_ENV, PRODUCT_ENV, applyProductEnv, configHomeEnv, withProductEnv } from '../src/product-env.ts';
-import { GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, withProductPackages } from '../src/product-packages.ts';
+
+// `product-packages.ts` imports a sibling the way the compiler wants it (no extension); the
+// runtime needs the extension, which this hook adds in this process only.
+registerHooks({
+	resolve(specifier, context, nextResolve) {
+		if (specifier.startsWith('.') && !/\.[cm]?[jt]s$/.test(specifier)) {
+			return nextResolve(`${specifier}.ts`, context);
+		}
+		return nextResolve(specifier, context);
+	},
+});
+
+const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, switchedOff, withProductPackages } = await import('../src/product-packages.ts');
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
@@ -84,7 +97,28 @@ test('a settings file that is not a JSON object is never replaced by a guess', (
 });
 
 test('an empty list of products changes nothing', () => {
+	assert.deepEqual(withProductPackages('{}', [], []), { text: '{}', changed: false });
 	assert.deepEqual(withProductPackages('{}', []), { text: '{}', changed: false });
+});
+
+test('packages that do what Gentle AI does are switched off: still declared, nothing loaded', () => {
+	assert.deepEqual([...DISPLACED_PACKAGE_NAMES], ['@tintinweb/pi-subagents', 'github.com/HazAT/pi-interactive-subagents', 'pi-memory']);
+	const source = JSON.stringify({ packages: ['npm:pi-lens', 'npm:@tintinweb/pi-subagents', 'git:github.com/HazAT/pi-interactive-subagents', 'npm:pi-memory@1.2.3'] });
+	const packages = JSON.parse(withProductPackages(source).text!).packages;
+	assert.equal(packages[0], 'npm:pi-lens');
+	assert.deepEqual(packages[1], switchedOff('npm:@tintinweb/pi-subagents'));
+	assert.deepEqual(packages[2], switchedOff('git:github.com/HazAT/pi-interactive-subagents'));
+	assert.deepEqual(packages[3], switchedOff('npm:pi-memory@1.2.3'));
+	assert.equal(switchedOff('x').extensions.length, 0);
+});
+
+test('a displaced package the owner already wrote as an object is the owner\'s choice and stays', () => {
+	const own = { source: 'npm:pi-memory', extensions: ['extensions/only-this.ts'] };
+	const once = JSON.parse(withProductPackages(JSON.stringify({ packages: [own] })).text!).packages;
+	assert.deepEqual(once[0], own);
+	// And what was switched off is not switched off again: a second run changes nothing.
+	const first = withProductPackages(JSON.stringify({ packages: ['npm:pi-memory'] }));
+	assert.equal(withProductPackages(first.text).changed, false);
 });
 
 test('the product fixes the install and the telemetry switches, and its values win', () => {

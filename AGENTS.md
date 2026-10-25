@@ -356,3 +356,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.
 * **2026-10-25** · El panel Tasks enseña los subagentes de gentle-pi, a partir de lo que gentle-pi ya publica (ADR-032).
 * **2026-10-25** · Lo de gentle-pi se queda dentro del perfil de PiCode (nada en `~/.pi`), y el paquete `@earendil-works/pi-durable` se deja atrás en las importaciones y no se ofrece actualizar (ADR-031, adenda).
+* **2026-10-25** · Un solo sistema de subagentes y una sola memoria: los de gentle («¿no debería siempre elegir el de gentle?»). Los paquetes que hacen lo mismo (`@tintinweb/pi-subagents`, `pi-interactive-subagents`, `pi-memory`) se dejan atrás en las importaciones y se apagan en el perfil (ADR-031, adenda 2).
