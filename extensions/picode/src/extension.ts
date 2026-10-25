@@ -50,6 +50,7 @@ import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerPiSessionsProvider } from './sessions-register';
 import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
+import { traceChildPi } from './child-trace';
 import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
@@ -2243,6 +2244,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		path.join(piRuntimeRoot(distributionRoot(context.extensionUri)), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'),
 		candidate => fs.existsSync(candidate),
 	);
+	// What those children do, and when: a line each in the log, so an agent that fails to end can be read.
+	traceChildPi(require('node:child_process'), line => console.error(`[pi] ${line}`));
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));

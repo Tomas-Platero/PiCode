@@ -424,6 +424,7 @@
 │   │   │   ├── runtime.ts
 │   │   │   ├── session-cwd.ts
 │   │   │   ├── sessions-backup.ts
+│   │   │   ├── sessions-digest.ts
 │   │   │   ├── sessions-provider.ts
 │   │   │   ├── sessions-register.ts
 │   │   │   ├── sessions-resume.ts
@@ -439,7 +440,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 72 files in total
+│   │   │   └── … 73 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -484,6 +485,7 @@
 │   │   │   ├── session-cwd.test.ts
 │   │   │   ├── session-listing.test.ts
 │   │   │   ├── sessions-backup.test.ts
+│   │   │   ├── sessions-digest.test.ts
 │   │   │   ├── sessions-provider.test.ts
 │   │   │   ├── setup-host-no-editor.test.ts
 │   │   │   ├── status-layout.test.ts
@@ -492,7 +494,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 51 files in total
+│   │   │   └── … 52 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
