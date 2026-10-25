@@ -6,6 +6,23 @@
 import * as path from 'node:path';
 
 /**
+ * Where the distribution is and where its pi lives: two pure rules, in a file with no `vscode`
+ * import, so that the setup window's host — plain Node, no editor — can use them without loading
+ * `runtime.ts`, which needs the editor. `node --test` runs this file directly.
+ */
+
+/**
+ * The runtime root: PiCode's own pi, installed by the build at its pinned version.
+ *
+ * Spelled out here for callers, because it is also where the profile's `@earendil-works/*`
+ * versions come from (`packages-install.ts`): the profile carries a copy of the same family for
+ * npm's sake, and the only version that copy may have is the one in force here.
+ */
+export function piRuntimeRoot(distributionRoot: string): string {
+	return path.join(distributionRoot, 'resources', 'pi-runtime');
+}
+
+/**
  * The distribution root, from the editor's own application root.
  *
  * In a pack the editor's code lives at `<root>/resources/app`, so the distribution — the folder
@@ -20,8 +37,6 @@ import * as path from 'node:path';
  * Deriving it from this extension's folder, as it was done, counted four levels up from
  * `resources/app/extensions/picode` — right in a pack, and the drive root in a source tree,
  * where pi was looked for in `D:\resources` and the profile made in `D:\data`.
- *
- * No `vscode` import, so `node --test` runs this file directly.
  */
 export function distributionRootOf(appRoot: string): string {
 	if (!/[\\/]resources[\\/]app$/.test(appRoot)) {

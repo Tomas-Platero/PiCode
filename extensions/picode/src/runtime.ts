@@ -189,16 +189,9 @@ export function internalProfileDir(distributionRoot: string): string {
 	return path.join(portable !== undefined && portable.length > 0 ? portable : path.join(distributionRoot, 'data'), 'pi-agent');
 }
 
-/**
- * The runtime root: PiCode's own pi, installed by the build at its pinned version.
- *
- * Spelled out here for callers, because it is also where the profile's `@earendil-works/*`
- * versions come from (`packages-install.ts`): the profile carries a copy of the same family for
- * npm's sake, and the only version that copy may have is the one in force here.
- */
-export function piRuntimeRoot(distributionRoot: string): string {
-	return path.join(distributionRoot, 'resources', 'pi-runtime');
-}
+// Where PiCode's own pi lives is a pure rule, kept in `distribution-root.ts` so the setup window's
+// host (plain Node, no editor) can use it without loading this file, which needs `vscode`.
+export { piRuntimeRoot } from './distribution-root';
 
 /** Where the SDK is loaded from, for the mode in force. */
 export function sdkEntryCandidates(distributionRoot: string): string[] {
