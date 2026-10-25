@@ -199,7 +199,6 @@ export function writeProfileSettings(paths: SetupPaths, patch: Record<string, un
 export const EXTRA_SETTINGS: Readonly<Record<string, string>> = {
 	mcp: 'picode.mcp.enabled',
 	context: 'picode.context.attach',
-	durable: 'picode.durable.autoStart',
 };
 
 /** Turns the extras on or off, ignoring any key the product does not declare. */

@@ -47,9 +47,8 @@ import {
 import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
-import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
 import { registerWizardModelCommands } from './wizard-models';
-import { registerDurableSessionsProvider } from './durable-sessions-register';
+import { registerPiSessionsProvider } from './sessions-register';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
@@ -984,7 +983,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		return [];
 	};
-	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('durable', { label: 'PiCode' }, {
+	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('pi', { label: 'PiCode' }, {
 		onDidChange: changed.event,
 		provideChatSessionCustomizations: () => [
 			...discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader).map(agent => ({
@@ -2335,15 +2334,15 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own sessions, in the editor's Sessions panel. Nothing in the editor lists the
 	// runtime profile's sessions directory; this provider is the bridge, and the import
 	// fires it when a tree of transcripts lands.
-	// The durable daemon's conversations, in the panel: THE one list (`RETIRED_SESSION_PROVIDERS`
-	// names `local` and `pi`, so the old pi-transcripts provider is no longer registered — it
-	// only bought the startup flicker the owner saw, its rows painting first and the filter
-	// hiding them). Its rows come from the daemon's own answers over the local pipe (never
-	// from its SQLite, which only it may open), and when it is down the last real listing
-	// stands rather than an empty panel that would read as "every durable conversation is
-	// gone". The registration is what puts `durable` in the panel's provider filter.
-	const durableSessions = registerDurableSessionsProvider({ participant: piParticipant, deps: { distributionRoot: distributionRoot(context.extensionUri), log: line => console.error(`[pi] ${line}`) } });
-	context.subscriptions.push(durableSessions, new vscode.Disposable(disposeResumedSessions));
+	// pi's own conversations, in the editor's Sessions panel: the one list. The transcripts pi
+	// writes under the profile's `sessions/` folder are listed here, opened as history, and
+	// continued in place; the import fires it when a tree of transcripts lands.
+	const piSessions = registerPiSessionsProvider({
+		participant: piParticipant,
+		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },
+		profileDir: profileInForce,
+	});
+	context.subscriptions.push(piSessions, new vscode.Disposable(disposeResumedSessions));
 
 const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
@@ -2365,9 +2364,8 @@ const setupDeps = {
 			configuredModelsCache.clear();
 			onDidChangeModels.fire();
 		},
-		// An import also lands a tree of session transcripts: the panel re-lists (the durable
-		// handle's fire — the pi provider it replaced is retired and unregistered).
-		sessionsChanged: () => durableSessions.fireChanged(),
+		// An import also lands a tree of session transcripts: the panel re-lists.
+		sessionsChanged: () => piSessions.fireChanged(),
 		// npm runs shell-free, over npm's own CLI script (npm-run.ts) — the spaced install
 		// folder a side-by-side build carries must not be split by a shell's concatenation.
 		npmCli: locateNpmCli(),
@@ -2435,30 +2433,10 @@ const setupDeps = {
 	// Memory reads what the engine already answered, so it is a view of its own in the same
 	// container: the panel lists what this machine remembers without a second surface to learn.
 	context.subscriptions.push(registerMemoryView());
-	// The work the chat has out — its background jobs and the tasks it handed to the durable agent —
+	// The work the chat has out — its background jobs —
 	// as a list that stays put while the owner works elsewhere. Same container, same rule: it reads
 	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
 	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs }));
-	// The durable agent's commands: start, stop, list/open its conversations, and send it a
-	// prompt. The status panel's Durable section rows run the same ones.
-	// The agent is told which profile, which storage directory and which settings file to use: a
-	// portable or side-by-side PiCode has its own, and the agent's defaults would find a different
-	// install's — the very mixing a separate build exists to avoid. Its storage is `data/durable`,
-	// beside the profile, because the agent ships *inside* the installation: anything it kept in its
-	// own folder would be replaced on the next install and removed on uninstall, and the durable
-	// conversations are the one thing it exists to keep. `globalStorageUri` is `<userData>/User/
-	// globalStorage/<extension>`, so two directories up is the settings file the editor itself obeys.
-	const agentProfile = profileDirectory(context.extensionUri);
-	const durablePaths = {
-		agentProfile,
-		agentDataDir: path.join(path.dirname(agentProfile), 'durable'),
-		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
-	};
-	context.subscriptions.push(...registerDurableCommands(durablePaths));
-	// And it comes up running rather than waiting to be asked: a panel that says "not running"
-	// when the editor could have started it is an obstacle, not a safeguard. Quiet, and skipped
-	// when the owner stopped it in this window or the agent is not installed here at all.
-	void ensureDurableAgentRunning(durablePaths);
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the
@@ -2515,11 +2493,4 @@ const setupDeps = {
 
 export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
-
-	// The durable daemon is this editor's child, and nothing PiCode starts may outlive
-	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
-	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
-	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
-	// it stops itself (durable/lib/daemon.js).
-	stopDurableAgentOnShutdown();
 }

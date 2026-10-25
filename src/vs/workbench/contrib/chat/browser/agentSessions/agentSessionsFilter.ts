@@ -52,45 +52,29 @@ export interface IAgentSessionsFilterOptions extends Partial<IAgentSessionsFilte
 }
 
 /**
- * The id PiCode's own transcripts are listed under, and the id of the list the panel **hides**.
+ * The id of **the one list**: pi's own transcripts, which are the conversations.
  *
- * The owner's final shape (ADR-021 corrected): the chat's conversations **live in durable** —
- * pi thinks, durable remembers — so the panel's one list is durable's conversations, and pi's
- * JSONL transcripts are the *other* record: what the pi CLI wrote or an import landed, kept
- * reachable through the agents view, not mixed into the conversation list.
+ * The chat's agent is pi, in process, and the JSONL transcripts it writes under the profile are
+ * its conversations, so the panel's one list is theirs.
  */
 export const PI_TRANSCRIPT_SESSION_PROVIDER = 'pi';
 
 /**
  * The providers the panel never shows and never offers as a filter: they are not other lists to
- * visit, they are the records the one list replaced. `Local` is the editor's duplicate; `pi` is
- * the transcripts of another surface (the CLI, an import) — a conversation that lived there
- * belongs to durable's list once imported.
+ * visit, they are the records the one list replaced. `Local` is the editor's own duplicate.
  */
-export const RETIRED_SESSION_PROVIDERS: readonly string[] = [AgentSessionProviders.Local, PI_TRANSCRIPT_SESSION_PROVIDER];
-
-/** The provider of **the one list**: the conversations that live in durable. */
-export const DURABLE_SESSION_PROVIDER = 'durable';
+export const RETIRED_SESSION_PROVIDERS: readonly string[] = [AgentSessionProviders.Local];
 
 /**
  * What the panel shows, however a previous install stored the filter: pi's transcripts, with
  * the retired providers forced out. The stored excludes may still carry a pre-one-list state
- * (a `pi` hidden by the old toggle, a `Local` shown by it); normalization is what makes the
+ * (a `pi` hidden by an older toggle, a `Local` shown by it); normalization is what makes the
  * owner's rule hold without asking anyone to reset anything.
  */
-export function normalizedExcludes(excludes: IAgentSessionsFilterExcludes, registered?: readonly string[]): IAgentSessionsFilterExcludes {
-	// The one list is durable's conversations — **when durable exists**. An external pi may
-	// carry no durable at all (another backend, or nothing but pi): there, the one list is
-	// pi's transcripts, and durable — unregistered, therefore unshowable — joins the retired.
-	// Without the caller's registration snapshot, durable is assumed (the editor's shape).
-	const oneList = registered !== undefined && !registered.includes(DURABLE_SESSION_PROVIDER)
-		? PI_TRANSCRIPT_SESSION_PROVIDER
-		: DURABLE_SESSION_PROVIDER;
-	const retired = new Set(RETIRED_SESSION_PROVIDERS);
-	retired.delete(oneList);
+export function normalizedExcludes(excludes: IAgentSessionsFilterExcludes): IAgentSessionsFilterExcludes {
 	const providers = new Set(excludes.providers);
-	providers.delete(oneList);
-	for (const hidden of retired) {
+	providers.delete(PI_TRANSCRIPT_SESSION_PROVIDER);
+	for (const hidden of RETIRED_SESSION_PROVIDERS) {
 		providers.add(hidden);
 	}
 	return { ...excludes, providers: Array.from(providers) };
@@ -98,7 +82,7 @@ export function normalizedExcludes(excludes: IAgentSessionsFilterExcludes, regis
 
 /** What the panel hides before the owner touches the filter; exported so a test can pin it. */
 export const DEFAULT_EXCLUDES: IAgentSessionsFilterExcludes = Object.freeze(normalizedExcludes({
-	// The one list is durable's conversations; the retired providers never come back.
+	// The one list is pi's transcripts; the retired providers never come back.
 	providers: [] as const,
 	states: [] as const,
 	archived: true as const /* archived are never excluded but toggle between expanded and collapsed */,
@@ -139,12 +123,12 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 
 	private registerListeners(): void {
 		this._register(this.chatSessionsService.onDidChangeItemsProviders(() => {
-			// A provider registered AFTER this filter was built (the connector's `durable` and
-			// `pi` arrive imperatively, with extension activation, possibly after the panel)
-			// changes which list is the one list. The excludes renormalize here, or a provider
+			// A provider registered AFTER this filter was built (the connector's `pi` arrives imperatively,
+			// with extension activation, possibly after the panel)
+			// changes what is hidden. The excludes renormalize here, or a provider
 			// that just became the one list stays hidden behind a decision made too early —
 			// the "No matching sessions · Reset Filter" that reset could not fix.
-			const next = normalizedExcludes(this.excludes, this.chatSessionsService.getRegisteredChatSessionItemProviders());
+			const next = normalizedExcludes(this.excludes);
 			console.log(`[agentSessions.filter] providers changed — excluded: [${next.providers.join(', ')}]`);
 			// Fire ONLY when the normalization moved something: a fire with the same result
 			// makes the panel re-filter, and if that re-filter reaches back into provider
@@ -169,16 +153,13 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 					// Normalized, not trusted: a state stored by an install that still offered the
 					// provider toggles must not resurrect a hidden `pi` or a visible `Local`. See
 					// `normalizedExcludes`.
-					this.excludes = normalizedExcludes(JSON.parse(excludedTypesRaw) as IAgentSessionsFilterExcludes, this.chatSessionsService.getRegisteredChatSessionItemProviders());
+					this.excludes = normalizedExcludes(JSON.parse(excludedTypesRaw) as IAgentSessionsFilterExcludes);
 				} catch {
 					this.excludes = { ...DEFAULT_EXCLUDES };
 				}
 			} else {
-				// The default hides the same thing the stored path does — whichever list is the
-				// one list for THIS install (durable when it is registered; the transcripts
-				// otherwise). `DEFAULT_EXCLUDES` assumes durable: it exists before the
-				// registrations are known.
-				this.excludes = normalizedExcludes({ ...DEFAULT_EXCLUDES }, this.chatSessionsService.getRegisteredChatSessionItemProviders());
+				// The default hides the same thing the stored path does: the retired providers.
+				this.excludes = normalizedExcludes({ ...DEFAULT_EXCLUDES });
 			}
 		}
 
@@ -233,8 +214,8 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 		}
 
 		this.registerSortActions(this.actionDisposables, menuId);
-		// **No provider toggles.** The panel's list is the one list (pi's durable transcripts) and
-		// the owner retired the filter that moved between Local, pi and durable. A consumer that
+		// **No provider toggles.** The panel's list is the one list (pi's transcripts) and
+		// the owner retired the filter that moved between Local and pi. A consumer that
 		// genuinely has several providers of its own still opts in with `allowedProviders`.
 		if (this.options.allowedProviders) {
 			this.registerProviderActions(this.actionDisposables, menuId);
@@ -480,7 +461,7 @@ export class AgentSessionsFilter extends Disposable implements Required<IAgentSe
 	}
 
 	reset(): void {
-		this.storeExcludes(normalizedExcludes({ ...DEFAULT_EXCLUDES }, this.chatSessionsService.getRegisteredChatSessionItemProviders()));
+		this.storeExcludes(normalizedExcludes({ ...DEFAULT_EXCLUDES }));
 		if (this.currentSorting !== AgentSessionsSorting.Created) {
 			this.setSorting(AgentSessionsSorting.Created);
 		}

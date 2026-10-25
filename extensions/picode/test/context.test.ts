@@ -7,8 +7,8 @@
  * What the editor adds to a prompt, as a pure function.
  *
  * `context.ts` imports nothing relative (no `vscode`), so `node --test` runs it directly: the
- * checks below are the block the durable turn and the in-process chat both prepend, and the
- * frame the transcript replay strips back out (`durable-sessions.ts`).
+ * checks below are the block the in-process chat prepends, and the
+ * frame the transcript replay strips back out (`sessions-provider.ts`).
  */
 
 import assert from 'node:assert/strict';

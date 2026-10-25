@@ -7,7 +7,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
-import * as os from 'node:os';
 import { externalSdkEntry, resolveOnPath, sdkEntryOfShim } from './piLocate';
 import { PICODE_RUNTIME_SETTING, piRuntimeRoot, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
@@ -15,7 +14,6 @@ import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-pack
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
-import { importTranscriptsIntoDurable, importOutcomeMessage, type ImportPassOutcome } from './sessions-import';
 import { clearAccountHandover, clearSignOutRequest, publishAccountSession } from './onboarding-settings';
 
 /**
@@ -477,19 +475,6 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				// still holds the pre-import pi. The next conversation loads what landed.
 				deps.resetChat();
 				deps.sessionsChanged();
-				// The one list is durable's: every transcript that just landed is recorded as a
-				// durable conversation, so it shows up and continues like any other. Fire-and-
-				// forget — the files are imported either way; a daemon that is down records
-				// nothing now and a later pass catches up. Skipped when the owner declined the
-				// conversations: a pass over a directory nothing copied would only report an
-				// empty outcome as if it meant something.
-				if (wanted.sessions) {
-					void importTranscriptsIntoDurable(
-						path.join(deps.profileDir, 'sessions'),
-						vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
-						logImport,
-					);
-				}
 				importLog.step = importLog.total;
 				logImport('Done.');
 				return { ...report, packagesInstalled, packagesFailed, packagesSkipped, credentialsImported: wanted.credentials };
@@ -515,21 +500,6 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				selection: { sessions: true },
 			});
 			const sessions = report.items.find(entry => entry.item === 'sessions');
-			// The one list is durable's: the transcripts that just landed are recorded as
-			// durable conversations (see the full-import path). AWAITED, not fire-and-forget:
-			// the popup must say what the panel now holds — or why it does not. "Nothing
-			// happened" is how a working pass and a dead one read exactly the same.
-			let outcome: ImportPassOutcome;
-			try {
-				outcome = await importTranscriptsIntoDurable(
-					path.join(deps.profileDir, 'sessions'),
-					vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
-					logImport,
-				);
-			} catch (error) {
-				outcome = { landed: 0, repaired: 0, completed: 0, daemonDown: true };
-				logImport(`sessions import: the pass itself failed — ${messageOf(error)}`);
-			}
 			// The panel re-lists even when nothing came over: an import that finds nothing must not
 			// leave the owner wondering whether it ran.
 			deps.sessionsChanged();
@@ -540,7 +510,7 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				void vscode.window.showInformationMessage('PiCode: your external pi has no conversations to bring in.');
 				return;
 			}
-			void vscode.window.showInformationMessage(`${importOutcomeMessage(outcome)} Your external pi's ${sessions.files} conversation files are in this profile now. Nothing was moved or deleted.`);
+			void vscode.window.showInformationMessage(`PiCode: your external pi's ${sessions.files} conversation files are in this profile now, and the panel lists them. Nothing was moved or deleted.`);
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];

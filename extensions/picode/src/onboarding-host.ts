@@ -192,11 +192,10 @@ export function accountAvailable(distributionRoot: string): boolean {
 	return false;
 }
 
-/** The extras step's three switches, as they are in force (each has its own default). */
+/** The extras step's two switches, as they are in force (each has its own default). */
 export interface SetupExtras {
 	readonly mcp: boolean;
 	readonly context: boolean;
-	readonly durable: boolean;
 }
 
 /** The whole picture the window renders, in one call. */
@@ -255,7 +254,6 @@ function readExtras(paths: SetupPaths): SetupExtras {
 	return {
 		mcp: value('picode.mcp.enabled', true),
 		context: value('picode.context.attach', true),
-		durable: value('picode.durable.autoStart', true),
 	};
 }
 

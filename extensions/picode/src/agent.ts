@@ -28,7 +28,6 @@ import { memorySection } from './memory-protocol';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
-import { durableCard, isDurableDelegationTool, type DurableCardData } from './durable-cards';
 import {
 	beforeUriPathOf,
 	clearTurnEdits,
@@ -52,9 +51,6 @@ import {
 	runningResultLine,
 	type BackgroundCall,
 } from './background-cards';
-import { durableBridgeExtensionPath, durableFolder } from './durable';
-import { daemonEndpoint } from './durable-client';
-import { ensureConversation, recordChatTurn } from './chat-record';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
@@ -226,7 +222,7 @@ export interface PiSession {
 export type PiServices = Awaited<ReturnType<OfficialSdk['createAgentSessionServices']>>;
 
 export interface PiSdk {
-	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP), and here the durable bridge as a pi extension file (`resourceLoaderOptions`, see `mcp.ts`). */
+	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP) (`resourceLoaderOptions`, see `mcp.ts`). */
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 	/** What this editor passes: `customTools` are the editor's MCP tools given to pi as its own (see `mcp.ts`), `excludeTools` the agent tools that stay off (see `piConfig.ts`). */
 	createAgentSessionFromServices: OfficialSdk['createAgentSessionFromServices'];
@@ -292,38 +288,6 @@ export async function loadSdk(distributionRoot: string, log: (line: string) => v
 	const builtins = mcp === undefined ? read.builtins : read.builtins.map(entry => (entry.name === 'mcp' ? mcp : entry));
 	return { sdk: loaded.sdk as PiSdk, builtins };
 }
-
-/* ------------------------------------------------------------------ *
- * The durable delegation, as the chat can see it
- * ------------------------------------------------------------------ */
-
-/**
- * Pushes one durable-delegation card into the chat stream.
- *
- * The renderer API is proposed-API surface (`chatParticipantAdditions`); if it ever moves,
- * the turn must not die with it — the card is a window onto the delegated work, and losing
- * the window is reported, not fatal.
- */
-function pushDurableCard(stream: vscode.ChatResponseStream, toolCallId: string, data: DurableCardData, log: (line: string) => void): void {
-	try {
-		const subagent = new vscode.ChatSubagentToolInvocationData(data.description, data.agentName, data.prompt, data.result);
-		const part = new vscode.ChatToolInvocationPart(DURABLE_SEND_TOOL_NAME, toolCallId);
-		part.toolSpecificData = subagent;
-		part.enablePartialUpdate = true;
-		if (data.complete !== undefined) {
-			part.isComplete = data.complete;
-		}
-		if (data.isError !== undefined) {
-			part.isError = data.isError;
-		}
-		stream.push(part);
-	} catch (error) {
-		log(`durable card failed: ${error instanceof Error ? error.message : String(error)}`);
-	}
-}
-
-/** The delegation tool's name, as the bridge extension registers it (`durable-cards.ts` owns the check). */
-const DURABLE_SEND_TOOL_NAME = 'durable_send';
 
 /**
  * The card a memory write gets: the call while it runs, and the same card once the engine answers.
@@ -457,12 +421,12 @@ function pushToolCard(
 /**
  * Whether a tool already gets a card of its own.
  *
- * A delegation, a background job and a memory write have richer cards (`durable-cards.ts`,
- * `background-cards.ts`, `memory-cards.ts`), and a generic row beside them would say the same thing
+ * A background job and a memory write have richer cards (`background-cards.ts`,
+ * `memory-cards.ts`), and a generic row beside them would say the same thing
  * twice.
  */
 function hasOwnToolCard(toolName: string, args: unknown): boolean {
-	return isDurableDelegationTool(toolName) || isBackgroundTool(toolName) || isMemoryWriteCall(toolName, args);
+	return isBackgroundTool(toolName) || isMemoryWriteCall(toolName, args);
 }
 
 /* ------------------------------------------------------------------ *
@@ -577,8 +541,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
 	clearTurnEdits();
-	// The answer's own text, as it streamed: what the durable copy of this conversation
-	// records (`chat-record.ts`) — the room saw it, so the file holds the same words.
+	// The answer's own text, as it streamed.
 	let answer = '';
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
@@ -607,15 +570,6 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				// the input where it stays visible while the transcript scrolls on.
 				agentActivity = toolProgress(event.toolName, event.args);
 				notifyAgentStatus();
-				// A durable delegation gets a card the renderer can update in place: which
-				// conversation the work became, what was asked, and — when the call ends —
-				// what came back. Losing the card is reported, never fatal.
-				if (isDurableDelegationTool(event.toolName) && typeof event.toolCallId === 'string') {
-					const card = durableCard(event.toolName, event.args, undefined, false);
-					if (card !== undefined) {
-						pushDurableCard(stream, event.toolCallId, card, log);
-					}
-				}
 				// Work the agent left running: its card says so from the first moment, which is what the
 				// owner asked to be able to see.
 				if (isBackgroundTool(event.toolName) && typeof event.toolCallId === 'string') {
@@ -640,12 +594,6 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				return;
 			}
 			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
-				// The same card, now with the answer: the toolCallId and enablePartialUpdate are
-				// what make the renderer update instead of append.
-				const card = durableCard(event.toolName, event.args, event.result, event.isError === true);
-				if (card !== undefined) {
-					pushDurableCard(stream, event.toolCallId, card, log);
-				}
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
 				recordToolResult(event.toolName, event.args, event.isError, sessionCwd);
@@ -1112,35 +1060,6 @@ export function pinAgentDir(agentDir: string | undefined): void {
 }
 
 /**
- * The endpoint the session's durable bridge must dial, pinned the same way and for the
- * same reason as the profile above.
- *
- * The bridge (`durable/bridge/extension.ts`) resolves its endpoint through the durable
- * checkout's own `daemonEndpoint()`, which reads `PICODE_DURABLE_ENDPOINT` first and
- * otherwise falls back to pi's own pipe (`\\.\pipe\picode-durable-agent`). The editor's
- * daemon listens on its own pipe instead — `durable.ts` pins the same value into the
- * spawn — so without this the tools load and then dial a name nothing is listening on:
- * measured, the chat's `durable_list` answered "the durable daemon is not running
- * (endpoint \\.\pipe\picode-durable-agent)" while the editor's own status read was
- * up. Pinning the variable is what makes the pair editor-only, and it is set before
- * anything pi loads can read it.
- *
- * Internal and external mode are kept apart, like the profile. External means the machine's
- * own profile is the point, so its bridge keeps pi's pipe: the variable is **removed** there,
- * even on Windows, rather than left carrying the editor's endpoint from an earlier internal
- * session. Internal pins `daemonEndpoint(folder)` — the fixed pipe on Windows, which needs no
- * folder, and the folder's socket on POSIX, where no folder means the variable is removed
- * rather than given a path relative to something that does not exist.
- */
-export function pinDurableEndpoint(agentDir: string | undefined, folder: string | undefined): void {
-	if (agentDir === undefined || (process.platform !== 'win32' && folder === undefined)) {
-		delete process.env.PICODE_DURABLE_ENDPOINT;
-		return;
-	}
-	process.env.PICODE_DURABLE_ENDPOINT = daemonEndpoint(folder);
-}
-
-/**
  * Whether pi's failure is "this model has no provider", told from pi's own words.
  *
  * The match is deliberately narrow. pi says `No API key found for the selected model.` and then points
@@ -1469,8 +1388,6 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	let sessionScopeKey: string | undefined;
 	/** The profile the live session was built against, so a runtime switch rebuilds it. */
 	let sessionAgentDir: string | undefined;
-	/** The durable bridge the live session was built with, so a folder change rebuilds it. */
-	let sessionBridgePath: string | undefined;
 	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
 	let services: PiServices | undefined;
 	/**
@@ -1546,29 +1463,18 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// switched while the window is open, and a session built against the previous
 			// profile would answer from credentials it does not have ("No API key found").
 			const agentDir = chatAgentDir(deps.distributionRoot);
-			// The bridge extension (durable_send/durable_list/durable_read) is loaded from disk
-			// when it sits next to the durable folder (`durable.ts` resolves it from the same
-			// setting). Resolved per request, so a moved durable folder rebuilds the session.
-			const bridgePath = durableBridgeExtensionPath();
 			// Rebuilt when the project scope changes — the working directory, the project
 			// mode, or the area identity the session files under — when the editor's MCP
-			// servers do, when the chosen pi's profile changes, which is the same
-			// conversation pointed at a different pi, and when the durable bridge the
-			// session should load does.
+			// servers do, and when the chosen pi's profile changes, which is the same
+			// conversation pointed at a different pi.
 			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
-			// The durable copy exists from the moment the request arrives, not when the turn
-			// ends: a brand-new chat opens its conversation here, so the sessions panel shows
-			// the row while the model is still answering — the TUI's own immediacy.
-			const sessionKey = request.sessionResource?.toString();
-			void ensureConversation(scopeKey, sessionKey, cwd, deps.log);
 			const scopeChanged = sessionScopeKey !== scopeKey;
 			const toolsChanged = signature !== mcpSignature;
 			const profileChanged = sessionAgentDir !== agentDir;
-			const bridgeChanged = sessionBridgePath !== bridgePath;
 			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
 			const disabledChanged = disabledToolsKey !== settings.disabledTools.join('\u0000');
 			disabledToolsKey = settings.disabledTools.join('\u0000');
-			if (session === undefined || scopeChanged || toolsChanged || profileChanged || bridgeChanged || disabledChanged) {
+			if (session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
 				session?.dispose();
 				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
 				// extensions load beside the permission gate, exactly as pi's own CLI builds a session
@@ -1589,17 +1495,15 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// never installs one itself — its per-package installs each flashed a console window.
 				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
-				pinDurableEndpoint(agentDir, durableFolder());
 				services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
 						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), memoryExtension()],
-						...(bridgePath === undefined ? {} : { additionalExtensionPaths: [bridgePath] }),
 					},
 				});
-				// pi collects load problems instead of failing the session; a bridge extension
-				// that could not be loaded is said here, and the turn still runs without it.
+				// pi collects load problems instead of failing the session; one that could not be
+				// loaded is said here, and the turn still runs without it.
 				for (const diagnostic of services.diagnostics ?? []) {
 					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
 						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
@@ -1655,7 +1559,6 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				sessionFolder = cwd;
 				sessionScopeKey = scopeKey;
 				sessionAgentDir = agentDir;
-				sessionBridgePath = bridgePath;
 				mcpSignature = signature;
 				sessionChangedEmitter.fire();
 			} else {
@@ -1698,15 +1601,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					return {};
 				}
 				const framed = withContext(request.prompt, context, readRuntimeMode());
-				const answer = await runTurn(session, framed, stream, token, settings.showReasoning, deps.log, cwd);
-				// The durable copy: the room saw this turn, so the daemon holds it (ADR-021
-				// corrected — pi thinks, durable remembers). Fire-and-forget: a recording
-				// failure is logged, never a failed answer; the daemon being down records
-				// nothing and the next turn tries again. The session resource rides along so
-				// the record follows the chat session: a "New Session" opens its own
-				// conversation (and the panel gets its row), a resumed one records into the
-				// conversation it resumed.
-				void recordChatTurn(scopeKey, cwd, { prompt: framed, answer }, deps.log, sessionKey);
+				await runTurn(session, framed, stream, token, settings.showReasoning, deps.log, cwd);
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;

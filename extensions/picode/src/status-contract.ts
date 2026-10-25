@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { DurableStatus } from './durable';
 import type { PiProviderRow } from './providers-list';
 import type { UpdatesSnapshot } from './updates-check';
 /**
@@ -133,8 +132,6 @@ export interface StatusData {
 	outputTokens?: number;
 	cacheRead?: number;
 	cacheWrite?: number;
-	/** The durable daemon as it answered right now (`durable.ts`): up or down, and what it holds. */
-	durable?: DurableStatus;
 	/**
 	 * The subscription meter of the model in force, as the provider reported it
 	 * (`usage-data.ts` reads it; NaN's quota is the route that exists). `undefined` when the

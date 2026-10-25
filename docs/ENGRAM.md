@@ -7,6 +7,12 @@
 > **La lista de qué queda la manda [`TAREAS.md`](TAREAS.md).** Este papel es el detalle de una
 > sola cosa: la memoria. Si los dos discrepan, gana `TAREAS.md`, y este papel se corrige.
 
+> ⚠️ **2026-10-25 · Durable sale del producto ([ADR-030](DECISIONS.md)).** PiCode es pi más
+> Gentle AI: el reparto de abajo queda en **pi piensa · engram recuerda lo que importa**, y las
+> sesiones son los transcríptos de pi. Lo que este papel dice de durable (fases 3 y 4, la fila 📼 y
+> los «dos motores») es historia: el protocolo de memoria ya no se escribe para él. El motor, el
+> almacén `~/.engram` y el panel Memory no cambian.
+
 **Estado:** fases 0–7 cerradas en lo que se puede cerrar en código · **Última revisión:** 2026-10-21
 
 **Lo que ya funciona, y se puede comprobar:** el motor viaja dentro del producto (3.5.1 fijado,
@@ -289,3 +295,4 @@ migrar memorias entre almacenes · el TUI y su tema · sus teclas.
   `resources/memory/engram.exe`. MAPA regenerado. 44 pruebas.
   *Queda para la release:* la acción de actualizar el motor (diseño anotado en fase 6: aviso,
   copia de la base, arranque, comprobación, vuelta atrás) y las notas de release.
+- **2026-10-25** · Durable sale del producto (ADR-030): el fichero `memory-protocol.md` que se escribía para él deja de escribirse; el chat sigue recibiendo el mismo protocolo en su prompt. La entrada de gentle-engram queda para el paso siguiente.

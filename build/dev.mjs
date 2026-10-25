@@ -6,9 +6,9 @@
  * That is not the pack: no copying, no staging, no installer -- the window runs the code in the
  * tree, so a change is visible after a reload (`Ctrl+R`), not after a build.
  *
- * What it does not show: anything the pack adds around the editor (the pi runtime, the durable
- * agent, the channel seal). Those need `build/build.sh` or the incremental pack; this is for
- * editing the editor itself. When a pack exists, its pi and durable agent are linked into
+ * What it does not show: anything the pack adds around the editor (the pi runtime, the
+ * channel seal). Those need `build/build.sh` or the incremental pack; this is for
+ * editing the editor itself. When a pack exists, its pi is linked into
  * `resources/` so the chat works while editing.
  *
  * The first run downloads Electron into `.build/electron` (~100 MB) and the built-in extensions;
@@ -39,11 +39,11 @@ const EDITOR_ARGS = [
 ];
 
 // What the pack adds around the editor, and where the editor looks for it in a source tree:
-// `distributionRoot` is the repository root here, so `resources/pi-runtime` and
-// `resources/durable` are the two paths the connector resolves. The pack already has both, built
-// and pruned; linking them is what makes the chat and the agent work while editing, without
+// `distributionRoot` is the repository root here, so `resources/pi-runtime` is the path the
+// connector resolves. The pack already has it, built
+// and pruned; linking it is what makes the chat work while editing, without
 // copying 116 MB into the tree or teaching the connector a second layout.
-const LINKED = ['pi-runtime', 'durable'];
+const LINKED = ['pi-runtime'];
 
 // Junctions/symlinks created by this session, so they can be removed on exit and the tree stays clean.
 const linkedNames = [];

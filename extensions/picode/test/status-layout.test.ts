@@ -46,11 +46,6 @@ test('the Host strip is content-sized, and its values stay on one line', () => {
 	assert.match(rule('.kv > div'), /min-width:\s*0/);
 });
 
-test('Updates and Durable are two columns that fold into one on a narrow panel', () => {
-	assert.match(rule('.two'), /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
-	assert.match(CSS, /@media\s*\(max-width:\s*640px\)[\s\S]*?\.two\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/, 'below 640px the pair stacks');
-});
-
 test('no button is full width, and a column of them lines up', () => {
 	assert.doesNotMatch(CSS, /width:\s*100%/, 'a full-width button is what ran out of the panel');
 	assert.match(rule('.picode-status-btn.monaco-button'), /width:\s*auto/);

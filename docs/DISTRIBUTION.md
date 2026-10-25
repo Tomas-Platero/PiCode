@@ -41,7 +41,6 @@ TypeScript in the tree, compiled.
 | 3 | Portable profile | `data/{user-data,extensions,tmp}` | `build/stage-distribution.sh` |
 | 4 | Defaults | `build/distribution/settings.json` → `data/user-data/User/settings.json` | `build/stage-distribution.sh`, only when absent |
 | 5 | Agent runtime | pi, pinned in `build/distribution/runtime.json` | `build/pi-runtime.sh` |
-| 6 | Durable agent | `durable` → `resources/durable` | `build/durable-runtime.sh` |
 
 Staging is `build/stage-distribution.sh [pack-dir]`, default `./PiCode-Win32-x64`. It is
 idempotent — a second run reports every step as already current. The retired
@@ -102,11 +101,6 @@ It is **used as an in-process SDK** by the connector (ADR-014: `createAgentSessi
 `createAgentSessionFromServices`, loaded at runtime), not as a CLI or over RPC. The CLI of the
 active runtime covers what the SDK does not expose — package management. The pin is not a
 lock-in: `picode.pi.runtime` lets a user choose a different pi.
-
-`build/durable-runtime.sh` stages the durable agent PiCode's own source carries
-(`durable`) and the chat's bridge into `resources/durable`; its own
-dependencies travel with it (~116 MB) and nothing else does — no proofs, no `.data/`, no
-credentials. The proof log is `durable/README.md`.
 
 ## ⬆️ 6. Updating VS Code
 

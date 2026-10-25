@@ -16,8 +16,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import * as path from 'path';
-import { MEMORY_PROTOCOL, MEMORY_PROTOCOL_BUDGET, memoryProtocolFile, memorySection } from '../src/memory-protocol.ts';
+import { MEMORY_PROTOCOL, MEMORY_PROTOCOL_BUDGET, memorySection } from '../src/memory-protocol.ts';
 
 test('the section is offered only when the session really has the memory tools', () => {
 	// The chat's names are whatever pi gave the server: only the markers matter.
@@ -47,9 +46,4 @@ test('the protocol stays inside its budget', () => {
 		MEMORY_PROTOCOL.length <= MEMORY_PROTOCOL_BUDGET,
 		`the memory protocol is ${MEMORY_PROTOCOL.length} characters, over its ${MEMORY_PROTOCOL_BUDGET} budget`
 	);
-});
-
-test('both engines read the same file', () => {
-	const file = memoryProtocolFile(path.join('C:', 'PiCode', 'data', 'pi-agent'));
-	assert.equal(file.replace(/\\/g, '/'), 'C:/PiCode/data/pi-agent/memory-protocol.md');
 });

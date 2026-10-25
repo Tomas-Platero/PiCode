@@ -37,7 +37,6 @@ import {
 	type EngramProbeIo
 } from './engram';
 import { mcpServersTextWithAdded, mcpServersTextWithRemoved, serverEntry } from './mcp-add';
-import { MEMORY_PROTOCOL, memoryProtocolFile } from './memory-protocol';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
 export const MEMORY_ENABLED_SETTING = 'picode.memory.enabled';
@@ -94,27 +93,6 @@ export function declareMemory(profileDir: string, binary: string, log: (line: st
 	}
 }
 
-/**
- * Leaves the memory protocol where the durable agent reads it.
- *
- * The chat gets the same text from its own build (`memoryExtension`), and the durable agent reads
- * it from here because it is a separate program with its own prompt. One writer, one file: there
- * is no second copy to drift. Rewritten only when it changed, since activation runs on every start.
- */
-function writeMemoryProtocol(profileDir: string, log: (line: string) => void): void {
-	const file = memoryProtocolFile(profileDir);
-	try {
-		const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined;
-		if (current === MEMORY_PROTOCOL) {
-			return;
-		}
-		fs.mkdirSync(path.dirname(file), { recursive: true });
-		fs.writeFileSync(file, MEMORY_PROTOCOL, 'utf8');
-	} catch (error) {
-		log(`memory: the protocol could not be written — ${error instanceof Error ? error.message : String(error)}`);
-	}
-}
-
 /** Runs the engine detached, so it serves this store while the window is open and after it closes. */
 function spawnDetached(binary: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>): void {
 	const child = spawn(binary, [...args], {
@@ -129,8 +107,7 @@ function spawnDetached(binary: string, args: readonly string[], env: Readonly<Re
 /**
  * Takes memory away, when the owner turned it off.
  *
- * Two things leave: the declaration — **only** when it is the one this product wrote — and the
- * protocol file, which is what tells the durable agent that memory exists. The store itself is
+ * The declaration leaves — **only** when it is the one this product wrote. The store itself is
  * never touched: turning memory off is not deleting what it remembers, and a person who switches
  * back on finds everything where it was.
  */
@@ -147,11 +124,6 @@ export function forgetMemory(profileDir: string, log: (line: string) => void): v
 				log(`memory: the declaration could not be removed — ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
-	}
-	try {
-		fs.rmSync(memoryProtocolFile(profileDir), { force: true });
-	} catch {
-		// Nothing to remove is the normal case.
 	}
 }
 
@@ -236,7 +208,6 @@ export function startMemory(profileDir: string, log: (line: string) => void): vo
 		return;
 	}
 	const io = memoryIo();
-	writeMemoryProtocol(profileDir, log);
 	exposeOnTerminalPath(log);
 	void (async () => {
 		const first = await probeEngram(io);

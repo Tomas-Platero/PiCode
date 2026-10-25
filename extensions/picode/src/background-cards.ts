@@ -11,8 +11,8 @@
  * chat should be able to see the first one **as work** — instead of a collapsed tool row, and
  * see the second one as the same work finishing.
  *
- * The card is the shape the chat already draws for a delegation (`vscode.ChatSubagentToolInvocationData`,
- * the one `durable-cards.ts` uses), with the job's own identity on it: the label the agent gave it,
+ * The card is the shape the chat already draws for a delegation (`vscode.ChatSubagentToolInvocationData`),
+ * with the job's own identity on it: the label the agent gave it,
  * the command, the job number, and — at the end — the exit code and the tail of its output.
  *
  * Both ends are read from what is really there: the tool's arguments (`label`, `command`) and the
@@ -124,7 +124,7 @@ export function backgroundJobNumberOf(resultText: unknown): string | undefined {
 /**
  * The text a tool result carries, whichever of the shapes the framework hands over.
  *
- * Same tolerance as the durable cards' own reader, and for the same reason: a result travels as a list
+ * The reader is tolerant, for a simple reason: a result travels as a list
  * of typed parts, and a card without the job's number is a card that cannot be tied to its ending.
  */
 export function backgroundResultOf(result: unknown): string | undefined {

@@ -7,7 +7,7 @@
  * answers is *ours* — decided in one pure place.
  *
  * The engine is a program this installation carries (`<app>/resources/memory/engram.exe`), the
- * same way pi and the durable agent travel. Two rules shape everything here:
+ * same way pi travels. Two rules shape everything here:
  *
  *  1. **The store is the user's, not the profile's.** `~/.engram` by default, and it is used
  *     exactly as found: never moved, never migrated, never overwritten. It is shared on purpose
@@ -19,7 +19,7 @@
  *     {@link engramOwnsStore}. A server answering on the port that does *not* own this store is
  *     somebody else's, and it is left alone.
  *
- * Runs under `node --test` through Node's own type stripping, exactly like `durable-folder.ts`, so
+ * Runs under `node --test` through Node's own type stripping, exactly like `memory-update.ts`, so
  * the rules above are pinned in tests instead of asserted in prose. That is also why the file
  * imports nothing of its own: type stripping resolves `./sibling` only with an extension, and the
  * build compiles these sources as CommonJS without one. One file, one set of rules.
@@ -42,7 +42,7 @@ export function engramBinaryName(platform: string = process.platform): string {
 /**
  * The folders to try, in order, for a configured value.
  *
- * Mirrors the durable agent's search, because the owner's rule is the same: the program is always
+ * The owner's rule is simple: the program is always
  * found **wherever PiCode is installed**, without the owner configuring anything and without
  * depending on which project happens to be open. A copy that travels with the project wins, so
  * the engine can be worked on inside the project it is being tried in.
@@ -342,7 +342,7 @@ function isWindowsPathValue(value: string | undefined): boolean {
  * The probe: the half that touches the disk and the network
  *
  * Everything above decides *what* the rules are; this decides them *once*, so the status surface,
- * the chat and the durable agent all ask the same question and get the same answer. Two details
+ * the chat and the terminal all ask the same question and get the same answer. Two details
  * are deliberate:
  *
  *  * **A short timeout.** Memory is support, not the product: if the engine does not answer in a

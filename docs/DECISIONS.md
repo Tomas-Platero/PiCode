@@ -29,10 +29,11 @@ alternatives were seriously considered.
 | 015 | Three release channels, one branch each | accepted |
 | 016 | The declared product version may lead the tree's base | accepted |
 | 017 | Cloud sync is a Pro feature; the free plan is an account, not storage | accepted |
-| 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020 |
+| 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020, 030 |
 | 019 | The editor's context travels with every chat turn, durable included | accepted |
-| 020 | The chat is pi; durable is the backend it reaches through tools | accepted |
-| 021 | One orchestrator (pi), one list, sessions always durable | accepted (refines 020) |
+| 020 | The chat is pi; durable is the backend it reaches through tools | superseded by 030 |
+| 021 | One orchestrator (pi), one list, sessions always durable | superseded by 030 |
+| 030 | Durable leaves the product; pi's own transcripts are the conversations | accepted |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -549,7 +550,7 @@ profile beyond the third upload.
 
 ## ADR-018 — Durable is the chat; Local retires from the pickers (the harness reads "PiCode")
 
-**Status:** superseded by ADR-020.
+**Status:** superseded by ADR-020, and ADR-020 by ADR-030.
 
 **Context:** A chat could run in the editor's Local harness or in the durable agent's daemon.
 The owner had already made durable the preferred default, but Local was still offered as a
@@ -619,7 +620,7 @@ and characters, problems in count). Attachments whose editor gives no text still
 
 ## ADR-020 — The chat is pi; durable is the backend it reaches through tools
 
-**Status:** accepted. Supersedes ADR-018.
+**Status:** superseded by ADR-030. Supersedes ADR-018.
 
 **Context:** ADR-018 made durable the chat by declaring it the default `chatSessions` type and
 retiring Local. In a real run, sending "Hola" answered **`No activated agent with id "durable"`**.
@@ -665,7 +666,7 @@ decides conversations must live in durable and pays for the agent implementation
 
 ## ADR-021 — One orchestrator (pi), one list, sessions always durable
 
-**Status:** accepted. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
+**Status:** superseded by ADR-030. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
 in 0.2.3-experimental.
 
 **Context:** The 0.2.3 build shipped three coexisting engines (the in-window harness "Local",
@@ -754,7 +755,7 @@ aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`
 
 ## ADR-022 — Engram is the product's memory; durable stays the record
 
-**Status:** accepted (2026-10-20). Adds a layer to ADR-021; does not replace it.
+**Status:** accepted (2026-10-20), except its durable half, which ADR-030 retires. Adds a layer to ADR-021; does not replace it.
 
 **Context:** Durable answers *what happened*: every turn, verbatim, per conversation, and the
 long work that outlives the window. It never answers *what we know*. A new conversation starts
@@ -1109,3 +1110,29 @@ profile with it on the next load, and a package that publishes a newer pi than t
 inherited only when PiCode chooses to bump. The duplication (and npm's own nested `typebox` copies)
 stays, and is now harmless rather than dangerous. The derivation lives in one place and reads the
 truth on disk, so a dev tree that never ran the runtime step simply does no family work.
+
+## ADR-030 — Durable leaves the product; pi's own transcripts are the conversations
+
+**Status:** accepted. Supersedes ADR-018, ADR-020 and ADR-021, and the durable half of ADR-022.
+
+**Context:** The owner decided that PiCode is **pi plus Gentle AI** (gentle-pi and gentle-engram):
+"quiero quitar todo durable, ya que impacta con Gentle en ciertas cosas". The durable agent was a
+second runtime beside pi — its own daemon, storage, subagent runner and memory protocol — and the
+two overlap with what gentle-pi brings: its subagents already run as pi processes and its memory
+protocol is its own. Keeping both meant two sources of subagents and two sources of memory rules.
+
+**Decision:** The durable agent is removed from the product: `host/durable`, its chat bridge, the
+connector files that spoke to it, its commands, its `picode.durable.*` settings, the first-run
+"long jobs" switch, the Status card, the session type and the build step that packed it.
+
+- The panel's **one list is pi's own transcripts** (`sessions-register.ts`, over the files pi writes
+  under the profile's `sessions/` folder). Opening one continues it in place (`sessions-resume.ts`).
+- The **Tasks** block shows the chat's background jobs. gentle-pi's subagents join it when gentle-pi
+  enters the profile.
+- Memory is Engram, served to pi by gentle-engram once it enters; the protocol file written for
+  durable is gone.
+
+**Consequences:** Work no longer outlives the window. Conversations that durable alone held
+(`data/durable`) are not migrated and stop being listed; pi's transcripts, which the chat has always
+written, are the record from here on. The pi-durable package leaves the product's dependencies.
+ADR-022's rule that Engram is the product's memory stands; its "durable stays the record" half does not.

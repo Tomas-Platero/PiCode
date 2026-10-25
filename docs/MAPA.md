@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **20** folders documented · **20** without a README.
+- **17** folders documented · **20** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -317,11 +317,11 @@
 │   ├── build.sh
 │   ├── buildConfig.ts
 │   ├── buildfile.ts
+│   ├── check-picode-ui.mjs
 │   ├── checks.mjs
 │   ├── data-hold.sh
 │   ├── dev.mjs
 │   ├── docs.mjs
-│   ├── durable-runtime.sh
 │   ├── engram-runtime.sh
 │   ├── filters.ts
 │   ├── gulpfile.cli.ts
@@ -356,6 +356,7 @@
 │   ├── howto-build.md
 │   ├── MAPA.md
 │   ├── README.md
+│   ├── SETTINGS.md
 │   ├── TAREAS.md
 │   └── VISION.md
 ├── extensions/ — Casi todo lo que hay aquí es upstream: las extensiones que VS Code trae de serie (git, json, markdown, typescript-language-features…), tal como…
@@ -371,21 +372,11 @@
 │   │   │   ├── background-cards.ts
 │   │   │   ├── background-jobs.ts
 │   │   │   ├── chat-edits.ts
-│   │   │   ├── chat-record.ts
 │   │   │   ├── command-registry.ts
 │   │   │   ├── commands.ts
 │   │   │   ├── context.ts
 │   │   │   ├── customizations.ts
 │   │   │   ├── declarations.ts
-│   │   │   ├── durable-cards.ts
-│   │   │   ├── durable-client.ts
-│   │   │   ├── durable-folder.ts
-│   │   │   ├── durable-run-stream.ts
-│   │   │   ├── durable-sessions-register.ts
-│   │   │   ├── durable-sessions.ts
-│   │   │   ├── durable-spawn.ts
-│   │   │   ├── durable-tasks.ts
-│   │   │   ├── durable.ts
 │   │   │   ├── editor-context.ts
 │   │   │   ├── endpoint.ts
 │   │   │   ├── engram-activation.ts
@@ -408,6 +399,8 @@
 │   │   │   ├── memory-view.ts
 │   │   │   ├── models-cache.ts
 │   │   │   ├── npm-run.ts
+│   │   │   ├── onboarding-host.ts
+│   │   │   ├── onboarding-settings.ts
 │   │   │   ├── onboarding.ts
 │   │   │   ├── packages-data.ts
 │   │   │   ├── packages-install.ts
@@ -427,13 +420,13 @@
 │   │   │   ├── runtime.ts
 │   │   │   ├── session-cwd.ts
 │   │   │   ├── sessions-backup.ts
-│   │   │   ├── sessions-import-plan.ts
-│   │   │   ├── sessions-import.ts
 │   │   │   ├── sessions-provider.ts
 │   │   │   ├── sessions-resume.ts
 │   │   │   ├── status-contract.ts
 │   │   │   ├── status-data.ts
 │   │   │   ├── subscriptions.ts
+│   │   │   ├── tasks-rows.ts
+│   │   │   ├── tasks-view.ts
 │   │   │   ├── theme-catalog.ts
 │   │   │   ├── theme-gallery.ts
 │   │   │   ├── theme-types.ts
@@ -441,7 +434,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 75 files in total
+│   │   │   └── … 67 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -452,14 +445,6 @@
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
 │   │   │   ├── disabled-tools.test.ts
-│   │   │   ├── durable-cards.test.ts
-│   │   │   ├── durable-client.test.ts
-│   │   │   ├── durable-daemon-agent.test.ts
-│   │   │   ├── durable-folder.test.ts
-│   │   │   ├── durable-run-stream.test.ts
-│   │   │   ├── durable-sessions.test.ts
-│   │   │   ├── durable-spawn.test.ts
-│   │   │   ├── durable-tasks.test.ts
 │   │   │   ├── engram-runtime.test.ts
 │   │   │   ├── engram.test.ts
 │   │   │   ├── left-behind-packages.test.ts
@@ -474,6 +459,7 @@
 │   │   │   ├── memory-protocol.test.ts
 │   │   │   ├── models-cache.test.ts
 │   │   │   ├── npm-run.test.ts
+│   │   │   ├── onboarding-settings.test.ts
 │   │   │   ├── packages-data.test.ts
 │   │   │   ├── packages-install.test.ts
 │   │   │   ├── packages-manage.test.ts
@@ -490,13 +476,14 @@
 │   │   │   ├── session-cwd.test.ts
 │   │   │   ├── session-listing.test.ts
 │   │   │   ├── sessions-backup.test.ts
-│   │   │   ├── sessions-import-plan.test.ts
 │   │   │   ├── sessions-provider.test.ts
+│   │   │   ├── status-layout.test.ts
+│   │   │   ├── tasks-rows.test.ts
 │   │   │   ├── theme-catalog.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 53 files in total
+│   │   │   └── … 47 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
@@ -543,44 +530,6 @@
 │   │   │   ├── README.md
 │   │   │   └── tsconfig.json
 │   │   └── README.md
-│   ├── durable/ — A self-contained program that runs @earendil-works/pi-durable (1.4.0) against the owner's LAN gateway OmniRoute and proves, with real runs, the three…
-│   │   ├── acp-client/ — A deliberately small ACP client that proves durable speaks the Agent Client Protocol (v1) over stdio (node cli.js acp). It speaks raw JSON-RPC on the…
-│   │   │   ├── client.js
-│   │   │   └── README.md
-│   │   ├── bridge/ — A pi extension (TypeScript, loaded by path — nothing is installed into any pi, and no pi directory is written) that bridges the coding agent you use…
-│   │   │   ├── extension.ts
-│   │   │   ├── proof-kill-survive.mjs
-│   │   │   └── README.md
-│   │   ├── lib/
-│   │   │   ├── acp.js
-│   │   │   ├── agents.js
-│   │   │   ├── client.js
-│   │   │   ├── common.js
-│   │   │   ├── daemon.d.ts
-│   │   │   ├── daemon.js
-│   │   │   ├── extensions.js
-│   │   │   ├── guard.js
-│   │   │   ├── mcp.js
-│   │   │   ├── memory.js
-│   │   │   ├── profile.js
-│   │   │   ├── protocol.js
-│   │   │   ├── render.js
-│   │   │   ├── settings.js
-│   │   │   └── skills.js
-│   │   ├── cli.js
-│   │   ├── package-lock.json
-│   │   ├── package.json
-│   │   ├── proof-acp.sh
-│   │   ├── proof-daemon.sh
-│   │   ├── proof-editor-lifecycle.js
-│   │   ├── proof-memory.js
-│   │   ├── proof-record.js
-│   │   ├── proof1-kill.js
-│   │   ├── proof1-resume.js
-│   │   ├── proof2-subagent.js
-│   │   ├── proof3-two-clients.js
-│   │   ├── README.md
-│   │   └── smoke.js
 │   ├── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
 │   │   ├── README.md
 │   │   └── stable.json
@@ -592,7 +541,7 @@
 │   │   ├── picode-banner.png
 │   │   ├── README.md
 │   │   └── vscodium.svg
-│   └── … and 3 upstream built-in extensions (only picode/ is ours)
+│   └── … and 4 upstream built-in extensions (only picode/ is ours)
 ├── scripts/ · ⬆️ upstream, no breakdown
 ├── src/ — Carpeta upstream: aquí no se documenta fichero a fichero. Son los 9.400 ficheros del editor de VS Code tal como descienden de upstream/stable.json… · ⬆️ upstream, no breakdown
 ├── updates/ — The static documents the editor's updater reads. They are served directly from this directory by raw.githubusercontent.com, which is why there is no…

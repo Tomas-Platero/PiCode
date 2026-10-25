@@ -9,7 +9,6 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { getSessionUsage, liveSessionMcpServers } from './agent';
 import { declarationsFromSetting, isRecord } from './declarations';
-import { readDurableStatus } from './durable';
 import { providerInventory } from './providers-list';
 import { probeExternalPi, readInternalPiVersion } from './onboarding';
 import { readPiChatSettings } from './piConfig';
@@ -114,8 +113,7 @@ function mcpAuthFile(file: string): McpAuthFile {
 
 /**
  * pi's MCP servers in the profile, one row each: the name, whether pi will start it, and
- * whether pi can actually use it (`mcp-provider.ts` — the same rule the durable bridge
- * decides before every request).
+ * whether pi can actually use it (`mcp-provider.ts`).
  *
  * The sign-in file of the profile in force is only read where it **may** be: PiCode's own
  * profile, the internal one. The external pi's directory is off-limits to this connector, so
@@ -398,8 +396,6 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The model's subscription meter, read the way the Session Usage row used to be: the lookup
 		// and its one-minute cache belong to `usage-data.ts`, and the block draws what it answered.
 		subscription: await readSubscription(profileDir, usage?.model),
-		// The durable daemon's own answer about itself (up, and what it holds) — never invented.
-		durable: await readDurableStatus(),
 		// What the update check last found, read from where the check stored it: the lookup and its
 		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
 		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),

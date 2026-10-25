@@ -3,7 +3,7 @@
 # Puts the memory engine inside the editor that was just built.
 #
 # Why this step exists: PiCode's memory is not a service the owner installs, it is a program the
-# product carries — the same rule pi and the durable agent already follow. The editor looks for it
+# product carries — the same rule pi already follows. The editor looks for it
 # by walking a short list of folders, and the only candidate an *installed* PiCode has is the one
 # this script writes: `<pack>/resources/memory/engram.exe`. Without it, an installation can only
 # say "the memory engine was not found", which is exactly what the owner's rule is about:
@@ -45,7 +45,7 @@ if [[ -z "${VERSION}" || "${VERSION}" == "null" || -z "${BINARY}" || "${BINARY}"
   exit 2
 fi
 
-# Only Windows is built (see durable-runtime.sh); the two Windows releases are the ones pinned.
+# Only Windows is built; the two Windows releases are the ones pinned.
 case "${VSCODE_ARCH:-x64}" in
   x64)   ASSET_KEY="asset";    SHA_KEY="sha256" ;;
   arm64) ASSET_KEY="assetArm64"; SHA_KEY="sha256Arm64" ;;
