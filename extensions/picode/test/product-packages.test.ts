@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HOST_ENV, PRODUCT_ENV, applyProductEnv, withProductEnv } from '../src/product-env.ts';
+import { HOST_ENV, PRODUCT_ENV, applyProductEnv, configHomeEnv, withProductEnv } from '../src/product-env.ts';
 import { GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, withProductPackages } from '../src/product-packages.ts';
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
@@ -97,6 +97,18 @@ test('applying the product environment sets it, and the host signal, on the targ
 	applyProductEnv(target);
 	assert.deepEqual(target, { KEEP: 'yes', ...PRODUCT_ENV, ...HOST_ENV });
 	assert.deepEqual({ ...HOST_ENV }, { GENTLE_SHELL_INTERACTIVE_HOST: '1' });
+});
+
+test('gentle-pi keeps its own files inside the profile, never in the pi of the machine', () => {
+	const target: NodeJS.ProcessEnv = {};
+	applyProductEnv(target, 'D:\PiCode\data\pi-agent');
+	const home = target['GENTLE_PI_CONFIG_HOME'] ?? '';
+	assert.ok(home.startsWith('D:\PiCode\data\pi-agent'), home);
+	assert.ok(home.endsWith('gentle-ai'), home);
+	assert.equal(configHomeEnv('/p')['GENTLE_PI_CONFIG_HOME']?.endsWith('gentle-ai'), true);
+	const without: NodeJS.ProcessEnv = {};
+	applyProductEnv(without);
+	assert.equal(without['GENTLE_PI_CONFIG_HOME'], undefined, 'no profile, no home');
 });
 
 test('the host signal rides on this process only, never on an npm run', () => {

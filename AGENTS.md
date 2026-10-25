@@ -355,3 +355,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-25** · Durable sale del producto: **el producto es Pi + Gentle AI** («quiero quitar todo durable, ya que impacta con Gentle»). La lista del panel pasa a ser la de los transcríptos de pi; ADR-030 sustituye a ADR-018, 020 y 021. Siguen: entrada de gentle-pi y gentle-engram.
 * **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.
 * **2026-10-25** · El panel Tasks enseña los subagentes de gentle-pi, a partir de lo que gentle-pi ya publica (ADR-032).
+* **2026-10-25** · Lo de gentle-pi se queda dentro del perfil de PiCode (nada en `~/.pi`), y el paquete `@earendil-works/pi-durable` se deja atrás en las importaciones y no se ofrece actualizar (ADR-031, adenda).

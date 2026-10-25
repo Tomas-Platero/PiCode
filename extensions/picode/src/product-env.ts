@@ -3,6 +3,8 @@
  *  See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as path from 'node:path';
+
 /**
  * The environment the product fixes for pi and for every package install it runs.
  *
@@ -34,12 +36,24 @@ export const HOST_ENV: Readonly<Record<string, string>> = Object.freeze({
 	GENTLE_SHELL_INTERACTIVE_HOST: '1',
 });
 
+/**
+ * Where gentle-pi keeps its own files — its settings, its scratch folders, its notes — as a folder
+ * of PiCode's own profile. Left to itself it uses `~/.pi/gentle-ai`, which is the machine's own pi:
+ * PiCode never reads or writes there.
+ */
+export function configHomeEnv(profileDir: string): Readonly<Record<string, string>> {
+	return { GENTLE_PI_CONFIG_HOME: path.join(profileDir, 'gentle-ai') };
+}
+
 /** `env` with the product's variables laid over it; the product's values win. */
 export function withProductEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return { ...env, ...PRODUCT_ENV };
 }
 
-/** Sets the product's variables, and the host signal, on this process, so everything it starts inherits them. */
-export function applyProductEnv(target: NodeJS.ProcessEnv = process.env): void {
-	Object.assign(target, PRODUCT_ENV, HOST_ENV);
+/**
+ * Sets the product's variables, the host signal and — when the profile is known — gentle-pi's home
+ * on this process, so everything it starts inherits them.
+ */
+export function applyProductEnv(target: NodeJS.ProcessEnv = process.env, profileDir?: string): void {
+	Object.assign(target, PRODUCT_ENV, HOST_ENV, profileDir === undefined ? {} : configHomeEnv(profileDir));
 }

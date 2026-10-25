@@ -1194,3 +1194,14 @@ push: any other widget is still the terminal's, and the chat owns that surface.
 answers an agent. The signal also tells gentle-pi it has dialogs, so its questions arrive as chat
 questions; the chat never asked before, and gentle-pi's own permission modes are now the ones in
 play. Unverified in a running editor.
+
+**Addendum (2026-10-25, found running pi with the two packages).**
+
+- gentle-pi keeps its own files (settings, scratch folders, notes) in `~/.pi/gentle-ai` unless
+  `GENTLE_PI_CONFIG_HOME` says otherwise — the machine's own pi. The product sets it to
+  `<profile>/gentle-ai` (`product-env.ts`, `configHomeEnv`), so nothing of gentle-pi's lands outside
+  PiCode's profile.
+- `@earendil-works/pi-durable`, the durable agent's own package, is now the left-behind list
+  (`left-behind-packages.ts`): an import does not bring it, nothing installs it, and the update check
+  no longer offers to update it. The update notice that named it came from a stored snapshot of a
+  profile that declared it.

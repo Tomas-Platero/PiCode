@@ -7,9 +7,11 @@
  * The packages an import from an external pi leaves behind.
  *
  * When this product carries an integration that its owner decided against, an import must not
- * drag those packages into PiCode's own profile. The list is empty today: gentle-pi and
- * gentle-engram, which it held after their first integration was removed (commit `2ac4e68d`),
- * entered the product again as pinned packages (ADR-030, `product-packages.ts`). The refusal has to happen twice, because a declaration left in the copied
+ * drag those packages into PiCode's own profile. Today that is `@earendil-works/pi-durable`, the
+ * durable agent's own package: the durable agent left the product (ADR-030), so an import does not
+ * bring it, nothing installs it, and the update check does not offer to update it. gentle-pi and
+ * gentle-engram, which this list held after their first integration was removed (commit
+ * `2ac4e68d`), entered the product again as pinned packages (`product-packages.ts`). The refusal has to happen twice, because a declaration left in the copied
  * `settings.json` is an instruction: the next `pi install` reads that list and installs
  * whatever it names. The import therefore neither installs these packages nor copies their
  * declarations.
@@ -19,7 +21,7 @@
  */
 
 /** The package names this editor does not carry, spelled as npm knows them. */
-export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = [];
+export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = ['@earendil-works/pi-durable'];
 
 /**
  * A package entry's bare name, from any of the spellings a `packages` entry uses: the

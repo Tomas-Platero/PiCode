@@ -46,8 +46,10 @@ const { filteredSettingsText } = await import('../src/profile-import.ts');
 // gentle-pi and gentle-engram are pinned packages of the product (ADR-030).
 const NAMES = ['gentle-pi', 'gentle-engram'];
 
-test('the product carries gentle-pi and gentle-engram: nothing is left behind today', () => {
-	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], []);
+test('the product carries gentle-pi and gentle-engram, and leaves the durable agent\'s package behind', () => {
+	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], ['@earendil-works/pi-durable']);
+	assert.strictEqual(isLeftBehindPackage('npm:@earendil-works/pi-durable'), true);
+	assert.strictEqual(isLeftBehindPackage({ source: 'npm:@earendil-works/pi-durable@1.4.0' }), true);
 	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi'), false);
 	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.4.2' }), false);
 	const source = JSON.stringify({ packages: ['npm:gentle-pi', 'npm:gentle-engram@0.4.2'] });

@@ -55,6 +55,7 @@ import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
+import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
@@ -2060,6 +2061,8 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	);
 	const npmPackages = allPackages.filter((found): found is PiPackage & { version: string } =>
 		found.version !== undefined
+		// A package the product left behind is not news: nothing here installs or uses it.
+		&& !LEFT_BEHIND_PACKAGE_NAMES.includes(found.name)
 		&& declaredPaths.has(found.path)
 		&& npmRoots.some(root => isInside(root, found.path)));
 
@@ -2234,7 +2237,7 @@ function requireProfileUri(): vscode.Uri {
 export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
-	applyProductEnv();
+	applyProductEnv(process.env, profileDirectory(context.extensionUri));
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
