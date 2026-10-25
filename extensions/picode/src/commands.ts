@@ -12,6 +12,8 @@ import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
 import { fileNameOf, piCommandsOfRunner, promptFileText, type PiCommand } from './command-registry';
+import { bindSessionExtensions, type PiSession } from './agent';
+import { listAgents } from './gentle-models';
 
 /**
  * pi's commands, in the editor's own chat input.
@@ -114,6 +116,12 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		// others instead of at the sessions root.
 		const sessionManager = sdk.SessionManager.create(cwd, agentDir === undefined ? undefined : path.join(agentDir, 'sessions', piProjectSlug(cwd)));
 		const created = await sdk.createAgentSessionFromServices({ services, sessionManager });
+		// A profile that has never run a chat has none of Gentle's agents yet: Gentle puts them there when
+		// a session starts, so the Agents page would read "No agents yet" until the first message. Starting
+		// this one session's extensions once is what makes them appear.
+		if (agentDir !== undefined && listAgents(agentDir).length === 0) {
+			await bindSessionExtensions(created.session as unknown as PiSession, deps.log);
+		}
 		return created.session;
 	})();
 	try {
