@@ -81,7 +81,8 @@ import { ExtensionActivationProgress } from './extensionsActivationProgress.js';
 import { ExtensionsCompletionItemsProvider } from './extensionsCompletionItemsProvider.js';
 import { ExtensionEnablementContextKeysContribution } from './extensionEnablementContext.js';
 import { ExtensionDependencyChecker } from './extensionsDependencyChecker.js';
-import { clearSearchResultsIcon, configureRecommendedIcon, extensionsViewIcon, filterIcon, installWorkspaceRecommendedIcon, refreshIcon } from './extensionsIcons.js';
+import { clearSearchResultsIcon, configureRecommendedIcon, filterIcon, installWorkspaceRecommendedIcon, refreshIcon } from './extensionsIcons.js';
+import { PicodeActivityBarIcons } from '../../picode/browser/picodeActivityBarIcons.js';
 import { InstallExtensionQuickAccessProvider, ManageExtensionsQuickAccessProvider } from './extensionsQuickAccess.js';
 import { BuiltInExtensionsContext, ExtensionMarketplaceStatusUpdater, ExtensionsSearchValueContext, ExtensionsSortByContext, ExtensionsViewletViewsContribution, ExtensionsViewPaneContainer, MaliciousExtensionChecker, RecommendedExtensionsContext, SearchHasTextContext, SearchMarketplaceExtensionsContext, StatusUpdater } from './extensionsViewlet.js';
 import { ExtensionsWorkbenchService } from './extensionsWorkbenchService.js';
@@ -123,7 +124,7 @@ export const VIEW_CONTAINER = Registry.as<IViewContainersRegistry>(ViewContainer
 			order: 4,
 		},
 		ctorDescriptor: new SyncDescriptor(ExtensionsViewPaneContainer),
-		icon: extensionsViewIcon,
+		icon: PicodeActivityBarIcons.extensions,
 		order: 4,
 		rejectAddedViews: true,
 		alwaysUseContainerInfo: true,

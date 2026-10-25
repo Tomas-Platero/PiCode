@@ -311,7 +311,7 @@ suite('ActivitybarPart', () => {
 
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-width'), `${ActivitybarPart.ACTIVITYBAR_WIDTH}px`);
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-height'), `${ActivitybarPart.ACTION_HEIGHT}px`);
-		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-gap'), '0px');
+		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-gap'), `${ActivitybarPart.ACTION_GAP}px`);
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-icon-size'), `${ActivitybarPart.ICON_SIZE}px`);
 		assert.strictEqual(el.classList.contains('compact'), false);
 	});
@@ -339,7 +339,7 @@ suite('ActivitybarPart', () => {
 
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-width'), `${ActivitybarPart.FLOATING_ACTIVITYBAR_WIDTH}px`);
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-height'), `${ActivitybarPart.FLOATING_ACTION_HEIGHT}px`);
-		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-gap'), `${ActivitybarPart.FLOATING_ACTION_GAP}px`);
+		assert.strictEqual(el.style.getPropertyValue('--activity-bar-action-gap'), `${ActivitybarPart.ACTION_GAP}px`);
 		assert.strictEqual(el.style.getPropertyValue('--activity-bar-icon-size'), `${ActivitybarPart.ICON_SIZE}px`);
 		assert.strictEqual(el.classList.contains('compact'), false);
 	});
@@ -494,8 +494,9 @@ suite('ActivitybarPart', () => {
 				modernCompact: sizesFor(true, true),
 			},
 			{
-				// Items stack flush against each other, so the stride is just the action height.
-				classicDefault: { compositeSize: 48, overflowActionSize: 48 },
+				// Items stack flush against each other at the compact size; the default size
+				// separates them by a small gap.
+				classicDefault: { compositeSize: ActivitybarPart.ACTION_HEIGHT + ActivitybarPart.ACTION_GAP, overflowActionSize: ActivitybarPart.ACTION_HEIGHT + ActivitybarPart.ACTION_GAP },
 				classicCompact: { compositeSize: 28, overflowActionSize: 28 },
 				// Modern UI separates items with an 8px gap, but only at the default size.
 				modernDefault: { compositeSize: 44, overflowActionSize: 44 },
@@ -543,11 +544,11 @@ suite('ActivitybarPart', () => {
 				modernCompact: compositeBarLayoutHeight(true, true),
 			},
 			{
-				// No floating gutters and no gap between items.
-				classicDefault: 300,
+				// The default size hands the leading gap back; the compact size renders none.
+				classicDefault: 300 + ActivitybarPart.ACTION_GAP,
 				classicCompact: 300,
 				// Floating reserves a bottom gutter; the 8px gap is then handed back.
-				modernDefault: 300 - margin + ActivitybarPart.FLOATING_ACTION_GAP,
+				modernDefault: 300 - margin + ActivitybarPart.ACTION_GAP,
 				modernCompact: 300 - margin,
 			}
 		);
@@ -582,7 +583,7 @@ suite('ActivitybarPart', () => {
 	}
 
 	test('reserves the measured height of the global activity icons', () => {
-		const gap = ActivitybarPart.FLOATING_ACTION_GAP;
+		const gap = ActivitybarPart.ACTION_GAP;
 		const itemHeight = ActivitybarPart.FLOATING_ACTION_HEIGHT;
 
 		assert.deepStrictEqual(

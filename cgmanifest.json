@@ -610,6 +610,19 @@
 		},
 		{
 			"component": {
+				"type": "git",
+				"git": {
+					"name": "tabler-icons",
+					"repositoryUrl": "https://github.com/tabler/tabler-icons",
+					"commitHash": "bbed884d15354b5cebf2493371f20dc2d5e83eaf",
+					"tag": "v3.49.0"
+				}
+			},
+			"license": "MIT",
+			"version": "3.49.0"
+		},
+		{
+			"component": {
 				"type": "npm",
 				"npm": {
 					"name": "mdn-data",

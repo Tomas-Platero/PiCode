@@ -43,6 +43,7 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { CHAT_SETUP_SUPPORT_ANONYMOUS_ACTION_ID } from '../../chat/browser/actions/chatActions.js';
 import { SCMInputContextKeys } from './scmInput.js';
 import product from '../../../../platform/product/common/product.js';
+import { PicodeActivityBarIcons } from '../../picode/browser/picodeActivityBarIcons.js';
 
 ModesRegistry.registerLanguage({
 	id: 'scminput',
@@ -58,7 +59,7 @@ const viewContainer = Registry.as<IViewContainersRegistry>(ViewContainerExtensio
 	title: localize2('source control', 'Source Control'),
 	ctorDescriptor: new SyncDescriptor(SCMViewPaneContainer),
 	storageId: 'workbench.scm.views.state',
-	icon: sourceControlViewIcon,
+	icon: PicodeActivityBarIcons.sourceControl,
 	alwaysUseContainerInfo: true,
 	order: 2,
 	hideIfEmpty: true,

@@ -41,11 +41,54 @@
 	border-left-width: 1px;
 }
 
+/*
+ * Two blocks, one column.
+ *
+ *   .composite-bar        the containers (Explorer, Search, ...), top block
+ *   .global-activity-bar  Accounts + Manage, pinned to the bottom
+ *
+ * The top block is the flexible one: it takes whatever height is left and, if the
+ * containers ever need more than that, it scrolls inside itself. Before this, both
+ * blocks were content-sized, so a taller activity bar (bigger icons, a gap between
+ * items, a user font size) pushed the bottom block past the window edge and the
+ * Settings gear was clipped. The bottom block can never be shrunk or pushed out now.
+ */
 .monaco-workbench .activitybar > .content {
 	height: 100%;
 	display: flex;
 	flex-direction: column;
 	justify-content: space-between;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* Top block: flexible, shrinkable, and the only one allowed to scroll. */
+.monaco-workbench .activitybar > .content > .composite-bar {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	/* The bar is 48px wide: a scrollbar would eat the icons. The wheel still scrolls,
+	 * and the overflow menu keeps this from being the normal path. */
+	scrollbar-width: none;
+}
+
+.monaco-workbench .activitybar > .content > .composite-bar::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+}
+
+/* Bottom block: fixed height, always at the bottom, never shrunk. */
+.monaco-workbench .activitybar > .content > .global-activity-bar {
+	flex: 0 0 auto;
+	/* Air above the block (separates it from the containers) and below it (the gear
+	 * no longer sits on the window edge). `clientHeight` includes both, so the layout
+	 * arithmetic in activitybarPart.ts picks them up without a second constant. */
+	padding: 6px 0;
+}
+
+.monaco-workbench .activitybar > .content > .menubar {
+	flex: 0 0 auto;
 }
 
 /** Viewlet Switcher */
@@ -57,10 +100,6 @@
 
 .monaco-workbench .activitybar .action-item:focus {
 	outline: 0 !important; /* activity bar indicates focus custom */
-}
-
-.monaco-workbench .activitybar > .content > .composite-bar {
-	margin-bottom: auto;
 }
 
 /** Menu Bar */

@@ -50,6 +50,7 @@ import { ICommandService } from '../../../platform/commands/common/commands.js';
 import { IDefaultAccountService } from '../../../platform/defaultAccount/common/defaultAccount.js';
 import { WORKBENCH_MENU_MOTION_CLASS, workbenchMenuCloseAnimation } from '../actions/menuMotion.js';
 import { createCodexAccountMenuActions, ICodexAccountService, shouldShowCodexAccount } from '../../services/agentHost/browser/codexAccountService.js';
+import { PicodeActivityBarIcons, activityBarMaskIconClass } from '../../contrib/picode/browser/picodeActivityBarIcons.js';
 
 export class GlobalCompositeBar extends Disposable {
 
@@ -73,7 +74,10 @@ export class GlobalCompositeBar extends Disposable {
 	) {
 		super();
 
-		this.element = $('div');
+		// Named so the activity bar can pin this block to the bottom with flexbox
+		// (`activitybarpart.css`): it is the Accounts/Manage row, and it must stay visible
+		// even when the containers above need more room than the window has.
+		this.element = $('div.global-activity-bar');
 		const contextMenuAlignmentOptions = () => ({
 			anchorAlignment: configurationService.getValue('workbench.sideBar.location') === 'left' ? AnchorAlignment.RIGHT : AnchorAlignment.LEFT,
 			anchorAxisAlignment: AnchorAxisAlignment.HORIZONTAL
@@ -676,6 +680,22 @@ export class AccountsActivityActionViewItem extends AbstractGlobalActivityAction
 	//#endregion
 }
 
+let manageMaskIconClass: string | undefined;
+
+/**
+ * Icon of the Manage action at the bottom of the Activity Bar. The default look is
+ * the outline Settings drawing from the Tabler set, so it matches the items above;
+ * a profile that picked an icon of its own keeps that Codicon.
+ */
+function manageActionIcon(profileIcon: string | undefined): { classNames: string[]; iconUrl?: URI } {
+	if (profileIcon && profileIcon !== DEFAULT_ICON.id) {
+		return { classNames: ThemeIcon.asClassNameArray(ThemeIcon.fromId(profileIcon)) };
+	}
+
+	manageMaskIconClass ??= activityBarMaskIconClass('manage', PicodeActivityBarIcons.settings);
+	return { classNames: [manageMaskIconClass, 'uri-icon'], iconUrl: PicodeActivityBarIcons.settings };
+}
+
 export class GlobalActivityActionViewItem extends AbstractGlobalActivityActionViewItem {
 
 	private profileBadge: HTMLElement | undefined;
@@ -700,14 +720,14 @@ export class GlobalActivityActionViewItem extends AbstractGlobalActivityActionVi
 		const action = instantiationService.createInstance(CompositeBarAction, {
 			id: GLOBAL_ACTIVITY_ID,
 			name: localize('manage', "Manage"),
-			classNames: ThemeIcon.asClassNameArray(userDataProfileService.currentProfile.icon ? ThemeIcon.fromId(userDataProfileService.currentProfile.icon) : DEFAULT_ICON)
+			...manageActionIcon(userDataProfileService.currentProfile.icon)
 		});
 		super(MenuId.GlobalActivity, action, options, contextMenuActionsProvider, contextMenuAlignmentOptions, themeService, hoverService, menuService, contextMenuService, contextKeyService, configurationService, keybindingService, activityService);
 		this._register(action);
 		this._register(this.userDataProfileService.onDidChangeCurrentProfile(e => {
 			action.compositeBarActionItem = {
 				...action.compositeBarActionItem,
-				classNames: ThemeIcon.asClassNameArray(userDataProfileService.currentProfile.icon ? ThemeIcon.fromId(userDataProfileService.currentProfile.icon) : DEFAULT_ICON)
+				...manageActionIcon(userDataProfileService.currentProfile.icon)
 			};
 		}));
 	}

@@ -50,7 +50,14 @@
 	height: var(--activity-bar-action-height, 48px);
 	margin-right: 0;
 	box-sizing: border-box;
+	transition: color 120ms ease-out, background-color 120ms ease-out;
+}
 
+/* Airier rhythm: the gap between items is published by activitybarPart.ts, so the
+ * stylesheet and the overflow computation cannot drift apart. Vertical bars only —
+ * a horizontal bar lays the items out in a row. */
+.monaco-workbench .activitybar > .content .composite-bar > .monaco-action-bar.vertical .action-item + .action-item {
+	margin-top: var(--activity-bar-action-gap, 0px);
 }
 
 .monaco-workbench .activitybar > .content :not(.monaco-menu) > .monaco-action-bar .action-label:not(.codicon) {

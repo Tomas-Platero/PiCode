@@ -43,6 +43,7 @@ import { DebugConsoleQuickAccess } from './debugConsoleQuickAccess.js';
 import { RunToCursorAction, SelectionToReplAction, SelectionToWatchExpressionsAction } from './debugEditorActions.js';
 import { DebugEditorContribution } from './debugEditorContribution.js';
 import * as icons from './debugIcons.js';
+import { PicodeActivityBarIcons } from '../../picode/browser/picodeActivityBarIcons.js';
 import { DebugProgressContribution } from './debugProgress.js';
 import { StartDebugQuickAccessProvider } from './debugQuickAccess.js';
 import './debugSettingMigration.js';
@@ -460,7 +461,7 @@ const viewContainer = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewCo
 		order: 3
 	},
 	ctorDescriptor: new SyncDescriptor(DebugViewPaneContainer),
-	icon: icons.runViewIcon,
+	icon: PicodeActivityBarIcons.debug,
 	alwaysUseContainerInfo: true,
 	order: 3,
 }, ViewContainerLocation.Sidebar);

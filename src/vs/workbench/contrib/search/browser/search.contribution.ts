@@ -15,6 +15,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
 import { Extensions as ViewExtensions, IViewContainersRegistry, IViewDescriptor, IViewsRegistry, ViewContainerLocation } from '../../../common/views.js';
 import { searchViewIcon } from './searchIcons.js';
+import { PicodeActivityBarIcons } from '../../picode/browser/picodeActivityBarIcons.js';
 import { SearchView } from './searchView.js';
 import { registerContributions as searchWidgetContributions } from './searchWidget.js';
 import { SearchViewModelWorkbenchService } from './searchTreeModel/searchModel.js';
@@ -55,7 +56,7 @@ const viewContainer = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewCo
 	title: nls.localize2('search', "Search"),
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [VIEWLET_ID, { mergeViewWithContainerWhenSingleView: true }]),
 	hideIfEmpty: true,
-	icon: searchViewIcon,
+	icon: PicodeActivityBarIcons.search,
 	order: 1,
 }, ViewContainerLocation.Sidebar, { doNotRegisterOpenCommand: true });
 

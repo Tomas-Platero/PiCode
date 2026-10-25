@@ -59,11 +59,12 @@ export class ActivitybarPart extends Part {
 	static readonly FLOATING_COMPACT_ACTIVITYBAR_WIDTH_RATIO = 28/36;
 
 	/**
-	 * Vertical gap between activity bar items at the default size under the floating
-	 * panels experiment. Published to CSS as `--activity-bar-action-gap` so that the
-	 * stylesheet and the overflow computation cannot drift apart.
+	 * Vertical gap between activity bar items. The bar reads as a column of separate
+	 * targets instead of a stack, so it is published to CSS as `--activity-bar-action-gap`
+	 * and the stylesheet and the overflow computation cannot drift apart. Compact keeps
+	 * its items tight; a bare gap there would eat the 28 px cell.
 	 */
-	static readonly FLOATING_ACTION_GAP = 8;
+	static readonly ACTION_GAP = 8;
 
 	static readonly ICON_SIZE = 24;
 	static readonly COMPACT_ICON_SIZE = 16;
@@ -104,11 +105,11 @@ export class ActivitybarPart extends Part {
 	}
 
 	/**
-	 * Vertical gap rendered between two adjacent items. Only the floating panels
-	 * experiment separates items, and only at the default size.
+	 * Vertical gap rendered between two adjacent items: a real gap at the default and
+	 * floating sizes, none at the compact size.
 	 */
 	private get actionGap(): number {
-		return this.layoutService.isFloatingPanelsEnabled() && !this._isCompact ? FONT.activityBarSize8 : 0;
+		return this._isCompact ? 0 : ActivitybarPart.ACTION_GAP;
 	}
 
 	/**
