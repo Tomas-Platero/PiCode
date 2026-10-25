@@ -18,7 +18,7 @@ import {
 import { contextBlockFor } from './editor-context';
 import { withContext } from './context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, internalProfileDir, resolveProjectScope } from './runtime';
+import { chatAgentDir, internalProfileDir, piRuntimeRoot, resolveProjectScope } from './runtime';
 import { resolveSessionCwd } from './session-cwd';
 import { durableBridgeExtensionPath, durableFolder } from './durable';
 import { DaemonClient, daemonEndpoint } from './durable-client';
@@ -136,7 +136,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 	if (loaded === undefined) {
 		throw new Error('this editor has no pi to talk to');
 	}
-	await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+	await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 	pinAgentDir(agentDir);
 	const toolToken: ToolTokenHolder = {};
 	const services = await loaded.sdk.createAgentSessionServices({
@@ -267,7 +267,7 @@ async function durableResumedSessionOf(conversationId: number, cwd: string, deps
 	if (existing !== undefined) return existing;
 	const loaded = await loadSdk(deps.distributionRoot, deps.log);
 	if (loaded === undefined) throw new Error('this editor has no pi to talk to');
-	await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+	await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 	const agentDir = chatAgentDir(deps.distributionRoot);
 	pinAgentDir(agentDir);
 	const toolToken: ToolTokenHolder = {};

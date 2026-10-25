@@ -12,6 +12,7 @@ import { externalSdkEntry } from './piLocate';
 import { searchPackages, type PackageSearchRow } from './packages-registry';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
+import { piRuntimeRoot } from './runtime';
 import { firstExisting, importPiModule, sdkCandidates } from './piSdk';
 import { FEATURED_SUBSCRIPTIONS, rankOf, type PiAuthEvent, type PiAuthPrompt, type PiModelRuntime } from './subscriptions';
 import {
@@ -461,7 +462,7 @@ export interface LoginBridge {
  */
 async function settlePackages(paths: SetupPaths): Promise<void> {
 	try {
-		await ensureProfilePackages({ profileDir: paths.profileDir, npmCli: locateNpmCli() });
+		await ensureProfilePackages({ profileDir: paths.profileDir, runtimeRoot: piRuntimeRoot(paths.distributionRoot), npmCli: locateNpmCli() });
 	} catch {
 		// A package that cannot be installed is not a reason to fail a sign-in or an import: pi will
 		// try again later, and the editor's own pass reports it there.

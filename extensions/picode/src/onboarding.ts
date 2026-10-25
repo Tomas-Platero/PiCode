@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
 import * as os from 'node:os';
 import { externalSdkEntry, resolveOnPath, sdkEntryOfShim } from './piLocate';
-import { PICODE_RUNTIME_SETTING, readRuntimeMode } from './runtime';
+import { PICODE_RUNTIME_SETTING, piRuntimeRoot, readRuntimeMode } from './runtime';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportItem, type ImportReport, type ProfilePreview } from './profile-import';
 import { isLeftBehindPackage, splitLeftBehindPackages } from './left-behind-packages';
 import { mcpRowsFromMcpFile, mergeRowsById, providerRowsFromModelsFile } from './import-project';
@@ -560,7 +560,7 @@ function readTextFile(file: string): string {
 export function readInternalPiVersion(distributionRoot: string): string | undefined {
 	try {
 		const value: unknown = JSON.parse(readTextFile(path.join(
-			distributionRoot, 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'package.json')));
+			piRuntimeRoot(distributionRoot), 'node_modules', '@earendil-works', 'pi-coding-agent', 'package.json')));
 		return typeof (value as { version?: unknown }).version === 'string' ? (value as { version: string }).version : undefined;
 	} catch {
 		return undefined;

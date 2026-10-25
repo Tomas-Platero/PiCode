@@ -38,7 +38,9 @@ registerHooks({
 const {
 	ensureProfilePackages,
 	isSafeNpmInstallSpec,
+	runtimeFamilyPins,
 	scanDeclaredPackages,
+	scanRuntimeFamily,
 } = await import('../src/packages-install.ts');
 const { parseSettings } = await import('../src/packages-data.ts');
 
@@ -258,4 +260,191 @@ test("with npm's CLI script the install runs as node over it: no shell, nothing 
 	assert.equal(calls.length, 1);
 	assert.equal(calls[0]!.file, process.execPath, 'the CLI script runs under the editor binary, as Node');
 	assert.deepEqual(calls[0]!.args, ['C:\\node\\npm-cli.js', 'install', '--save', '--no-audit', '--no-fund', 'alpha', 'beta', 'gamma']);
+});
+
+
+/* ------------------------------------------------------------------ *
+ * The runtime's family: the profile carries it, at the runtime's version
+ * ------------------------------------------------------------------ */
+
+const RUNTIME = 'C:\dist\resources\pi-runtime';
+const FAMILY_SCOPE = join([RUNTIME, 'node_modules', '@earendil-works']);
+
+test('the family and its versions are read off the runtime, never listed by hand', () => {
+	const versions = new Map([
+		[join([FAMILY_SCOPE, 'pi-ai']), '1.4.0'],
+		[join([FAMILY_SCOPE, 'pi-coding-agent']), '1.4.0'],
+		// A dist-tag is not a version: nothing to pin the profile to.
+		[join([FAMILY_SCOPE, 'pi-next']), 'next'],
+	]);
+	const io = {
+		directoryExists: (): boolean => true,
+		manifestVersion: (dir: string): string | undefined => versions.get(dir),
+		listDirectory: (dir: string): readonly string[] =>
+			dir === FAMILY_SCOPE ? ['pi-coding-agent', 'pi-ai', 'pi-next'] : [],
+	};
+	assert.deepEqual(runtimeFamilyPins(RUNTIME, io), [
+		{ name: '@earendil-works/pi-ai', version: '1.4.0' },
+		{ name: '@earendil-works/pi-coding-agent', version: '1.4.0' },
+	]);
+});
+
+test('a runtime that is not there (a dev tree without the build step) pins nothing', () => {
+	const missing = {
+		directoryExists: (): boolean => false,
+		manifestVersion: (): string | undefined => undefined,
+		listDirectory: (): readonly string[] => [],
+	};
+	assert.deepEqual(runtimeFamilyPins(RUNTIME, missing), []);
+});
+
+const PINS = [
+	{ name: '@earendil-works/pi-ai', version: '1.4.0' },
+	{ name: '@earendil-works/pi-coding-agent', version: '1.4.0' },
+];
+
+test('a profile already on the runtime version declares the family and installs nothing', () => {
+	const npmRoot = join(['C:\profile', 'npm', 'node_modules']);
+	const installed = new Map([
+		[join([npmRoot, '@earendil-works', 'pi-ai']), '1.4.0'],
+		[join([npmRoot, '@earendil-works', 'pi-coding-agent']), '1.4.0'],
+	]);
+	const work = scanRuntimeFamily(npmRoot, PINS, {
+		directoryExists: (dir: string): boolean => installed.has(dir),
+		manifestVersion: (dir: string): string | undefined => installed.get(dir),
+	});
+	assert.deepEqual(work.specs, []);
+	assert.deepEqual(work.declared, {
+		'@earendil-works/pi-ai': '1.4.0',
+		'@earendil-works/pi-coding-agent': '1.4.0',
+	});
+});
+
+test('a stale or absent family version is one exact spec per package', () => {
+	const npmRoot = join(['C:\profile', 'npm', 'node_modules']);
+	const installed = new Map([[join([npmRoot, '@earendil-works', 'pi-ai']), '1.3.0']]);
+	const work = scanRuntimeFamily(npmRoot, PINS, {
+		// pi-coding-agent is declared but its directory is gone: still work, not silence.
+		directoryExists: (): boolean => true,
+		manifestVersion: (dir: string): string | undefined => installed.get(dir),
+	});
+	assert.deepEqual(work.specs, ['@earendil-works/pi-ai@1.4.0', '@earendil-works/pi-coding-agent@1.4.0']);
+});
+
+function familyProfileFixture(directory: string, installed: Map<string, string>, manifest: Record<string, unknown>) {
+	const written: { file: string; text: string }[] = [];
+	const files = new Map<string, string>([
+		[join([directory, 'settings.json']), JSON.stringify({ packages: [] })],
+		[join([directory, 'npm', 'package.json']), JSON.stringify(manifest, null, '\t')],
+	]);
+	return {
+		written,
+		io: {
+			readSettingsText: (file: string): string | undefined => files.get(file),
+			writeText: (file: string, text: string): void => {
+				written.push({ file, text });
+				files.set(file, text);
+			},
+			directoryExists: (dir: string): boolean => installed.has(dir),
+			manifestVersion: (dir: string): string | undefined => installed.get(dir),
+			listDirectory: (dir: string): readonly string[] => (dir === FAMILY_SCOPE ? ['pi-ai', 'pi-coding-agent'] : []),
+		},
+	};
+}
+
+const RUNTIME_VERSIONS = new Map([
+	[join([FAMILY_SCOPE, 'pi-ai']), '1.4.0'],
+	[join([FAMILY_SCOPE, 'pi-coding-agent']), '1.4.0'],
+]);
+
+test("the profile's manifest takes the runtime's exact versions, and one hidden run aligns the tree", async () => {
+	const profile = 'C:\profiles\family';
+	const npmRoot = join([profile, 'npm', 'node_modules']);
+	const { spawn, calls } = fakeSpawn();
+	const fixture = familyProfileFixture(
+		profile,
+		new Map([
+			[join([npmRoot, '@earendil-works', 'pi-ai']), '1.3.0'],
+			[join([npmRoot, '@earendil-works', 'pi-coding-agent']), '1.4.0'],
+		]),
+		{ private: true, dependencies: { 'some-other-package': '^1.0.0' } },
+	);
+	const options = {
+		profileDir: profile,
+		runtimeRoot: RUNTIME,
+		spawn,
+		io: {
+			...fixture.io,
+			manifestVersion: (dir: string): string | undefined => RUNTIME_VERSIONS.get(dir) ?? fixture.io.manifestVersion(dir),
+			listDirectory: (dir: string): readonly string[] => (dir === join([RUNTIME, 'node_modules', '@earendil-works']) ? ['pi-ai', 'pi-coding-agent'] : []),
+		},
+	};
+	const outcome = await ensureProfilePackages(options);
+	assert.equal(calls.length, 1, 'one process for the whole family');
+	assert.deepEqual(calls[0]!.args.slice(0, 5), ['install', '--save-exact', '--no-audit', '--no-fund', '@earendil-works/pi-ai@1.4.0']);
+	// pi-coding-agent is already on 1.4.0, so only the stale one is asked for.
+	assert.deepEqual(calls[0]!.args.slice(5), []);
+	assert.equal(calls[0]!.options.windowsHide, true);
+	assert.equal(outcome.failed, 0);
+	// The declaring is written by us, so it lands even though npm is the one that owns the file.
+	const manifest = fixture.written.find(entry => entry.file === join([profile, 'npm', 'package.json']));
+	assert.ok(manifest, 'the manifest was rewritten');
+	const parsed = JSON.parse(manifest!.text);
+	assert.deepEqual(parsed.dependencies, {
+		'some-other-package': '^1.0.0',
+		'@earendil-works/pi-ai': '1.4.0',
+		'@earendil-works/pi-coding-agent': '1.4.0',
+	});
+});
+
+test('a profile whole and already declaring the family costs nothing: no write, no process, no line', async () => {
+	const profile = 'C:\profiles\family-whole';
+	const npmRoot = join([profile, 'npm', 'node_modules']);
+	const { spawn, calls } = fakeSpawn();
+	const fixture = familyProfileFixture(
+		profile,
+		new Map([
+			[join([npmRoot, '@earendil-works', 'pi-ai']), '1.4.0'],
+			[join([npmRoot, '@earendil-works', 'pi-coding-agent']), '1.4.0'],
+		]),
+		{
+			private: true,
+			dependencies: {
+				'@earendil-works/pi-ai': '1.4.0',
+				'@earendil-works/pi-coding-agent': '1.4.0',
+			},
+		},
+	);
+	const outcome = await ensureProfilePackages({
+		profileDir: profile,
+		runtimeRoot: RUNTIME,
+		spawn,
+		io: {
+			...fixture.io,
+			manifestVersion: (dir: string): string | undefined => RUNTIME_VERSIONS.get(dir) ?? fixture.io.manifestVersion(dir),
+			listDirectory: (dir: string): readonly string[] => (dir === join([RUNTIME, 'node_modules', '@earendil-works']) ? ['pi-ai', 'pi-coding-agent'] : []),
+		},
+	});
+	assert.equal(calls.length, 0);
+	assert.deepEqual(fixture.written, []);
+	assert.deepEqual(outcome.lines, []);
+});
+
+test('without a runtime root the run is exactly what it was: declarations only', async () => {
+	const profile = 'C:\profiles\no-runtime';
+	const npmRoot = join([profile, 'npm', 'node_modules']);
+	const { spawn, calls } = fakeSpawn();
+	const fixture = familyProfileFixture(profile, new Map(), { private: true });
+	await ensureProfilePackages({
+		profileDir: profile,
+		spawn,
+		io: {
+			...fixture.io,
+			listDirectory: (): readonly string[] => ['pi-ai', 'pi-coding-agent'],
+			manifestVersion: (dir: string): string | undefined => RUNTIME_VERSIONS.get(dir) ?? fixture.io.manifestVersion(dir),
+		},
+	});
+	assert.equal(calls.length, 0);
+	assert.deepEqual(fixture.written, []);
+	assert.ok(npmRoot.length > 0);
 });

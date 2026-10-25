@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
-import { chatAgentDir, internalProfileDir, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
@@ -103,7 +103,7 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		// Before pi loads anything: the profile's declared-but-missing packages are installed here
 		// (hidden, one run) so pi's loader never installs one itself — its per-package installs
 		// each flashed a console window on Windows.
-		await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+		await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 		const services = await sdk.createAgentSessionServices({
 			cwd,
 			...(agentDir === undefined ? {} : { agentDir }),

@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { withContext } from './context';
 import { contextBlockFor } from './editor-context';
 import { readPiChatSettings } from './piConfig';
-import { chatAgentDir, internalProfileDir, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
@@ -1587,7 +1587,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// Before pi loads anything: the profile's declared-but-missing packages are installed here
 				// (hidden, one run for the whole list) so pi's loader finds every declaration on disk and
 				// never installs one itself — its per-package installs each flashed a console window.
-				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
 				pinDurableEndpoint(agentDir, durableFolder());
 				services = await loaded.sdk.createAgentSessionServices({

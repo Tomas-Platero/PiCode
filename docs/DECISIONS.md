@@ -1060,3 +1060,52 @@ drops older events.
 **Consequences:** Typing `agentHost`, `agentDebugLog` or `debug` in Settings now lists them, and the
 link from the chat debug panel works. A future agent-host setting must not be tagged `advanced`
 unless it is genuinely meant to be found only by its exact id.
+
+## ADR-029 — The profile's copy of pi's own family is pinned to the runtime, not removed
+
+**Status:** accepted. Extends ADR-010 to the second copy of the family.
+
+**Context:** The profile holds its own `@earendil-works/*` tree, and nothing in PiCode asks for it:
+about a dozen ecosystem packages (subagents, image input, memory, intercom, btw, nan-provider,
+deepseek-cache, codegraph-fix, specpi…) declare the family as a **non-optional** peer, and npm
+installs every peer it must satisfy inside the profile — `data/pi-agent/npm/node_modules` — which
+is nowhere near `resources/pi-runtime`. Removing it is not an option: npm puts it back on the next
+install, and a profile whose packages cannot be resolved does not start.
+
+That second copy is **not** the one that runs. pi's extension loader aliases every
+`@earendil-works/*` specifier (and `typebox`) to the pi doing the loading
+(`pi-coding-agent/dist/core/extensions/loader.js`, `getAliases`), which is always the runtime — so
+what an extension imports is the runtime's code, at the runtime's version. What npm keeps in the
+profile is therefore a *declaration*, not a second live instance.
+
+Left alone it is still a hazard, because the version it lands on is the newest published one, not
+the pinned one: `pi-durable` is declared without a version, so its exact family dependencies (and
+the peers of everything else) float to `latest`. The moment npm publishes ahead of PiCode's pin,
+the profile carries code the runtime does not have, and an extension compiled against it asks the
+older runtime for an export that never existed. The build pin moving to 1.4.0 (and the profile
+following it only by luck, because `latest` happened to be 1.4.0) is exactly the state this ADR
+closes.
+
+**Decision:** The profile keeps its copy of the family, and that copy is **declared at the exact
+versions the runtime carries**. `packages-install.ts` derives both the package set and the versions
+from `resources/pi-runtime` on disk (`runtimeFamilyPins` → `scanRuntimeFamily`) — never from a list
+written by hand and never from `build/distribution/runtime.json` a second time — writes them into
+`<profile>/npm/package.json` as exact dependencies, and runs one hidden `npm install --save-exact`
+only when an installed version differs. A profile already on the runtime's versions costs no
+process and no rewrite.
+
+Rejected: **unifying resolution** so the profile reads the runtime's tree (symlinks, a shared
+`node_modules`, a resolver hook). It would remove 42 MB of duplicated files and it is the only way
+to get one single instance instead of one instance plus one declaration, but the price is that
+every install in the profile has to be made to leave those links alone: npm prunes and reifies
+`node_modules` on its own schedule, links need a privilege Windows does not always grant, and a
+rebuilt distribution (`pi update`, a new build) would silently leave the profile pointing at
+nothing. It would also fight the peer resolution npm performs for every declared package, which is
+the mechanism that put the tree there. The alias in pi's loader already gives the *behaviour* of a
+single instance; pinning gives the *version*; a filesystem trick would mainly save disk.
+
+**Consequences:** The two trees can no longer disagree on a version: bumping the runtime moves the
+profile with it on the next load, and a package that publishes a newer pi than the runtime is
+inherited only when PiCode chooses to bump. The duplication (and npm's own nested `typebox` copies)
+stays, and is now harmless rather than dangerous. The derivation lives in one place and reads the
+truth on disk, so a dev tree that never ran the runtime step simply does no family work.

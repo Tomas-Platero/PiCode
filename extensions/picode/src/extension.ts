@@ -59,7 +59,7 @@ import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
 import { registerThemeGalleryCommands } from './theme-gallery';
-import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
+import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, piRuntimeRoot, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { launchedAgents, lastActivity, type AgentState } from './agents';
 import { listProjectSessionFiles } from './sessions-provider';
 import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
@@ -752,7 +752,7 @@ function profileInForce(): string {
 
 /** The directory holding the bundled pi runtime's `node_modules` — what npm reinstalls into. */
 function piRuntimeDir(): string {
-	return path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime');
+	return piRuntimeRoot(distributionRoot(requireProfileUri()));
 }
 
 /** The bundled pi CLI's entry script; a path that does not exist when the runtime is absent. */
@@ -1634,7 +1634,7 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 			// The same guard every pi load has: if any declared package is still missing, it is
 			// installed here (hidden, one run) rather than being left for pi's loader to install
 			// with its own process — and its own window — per package.
-			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), npmCli: locateNpmCli(), log: line => console.error(`[picode] ${line}`) });
+			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), runtimeRoot: piRuntimeRoot(distributionRoot), npmCli: locateNpmCli(), log: line => console.error(`[picode] ${line}`) });
 			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
 		}
 	} catch {
@@ -2254,6 +2254,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi load ever finds a package to install. Failures are one sentence, not silence.
 	void ensureProfilePackages({
 		profileDir: profileDirectory(context.extensionUri),
+		runtimeRoot: piRuntimeRoot(distributionRoot(context.extensionUri)),
 		npmCli: locateNpmCli(),
 		log: line => console.error(`[picode] ${line}`),
 	}).then(outcome => {
