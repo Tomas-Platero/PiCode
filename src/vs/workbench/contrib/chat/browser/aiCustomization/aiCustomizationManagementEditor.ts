@@ -453,7 +453,9 @@ export class AICustomizationManagementEditor extends EditorPane {
 			[AICustomizationManagementSection.Hooks]: { label: localize('hooks', "Hooks"), icon: hookIcon, description: localize('hooksDesc', "Configure automated actions triggered by events like saving files or running tasks.") },
 			[AICustomizationManagementSection.McpServers]: { label: localize('mcpServers', "MCP Servers"), icon: Codicon.server, description: localize('mcpServersDesc', "Connect external tool servers that extend AI capabilities with custom tools and data sources.") },
 			[AICustomizationManagementSection.Plugins]: { label: localize('plugins', "Packages"), icon: pluginIcon, description: localize('pluginsDesc', "Extend pi with packages that add extensions, skills, prompts, and MCP servers.") },
-			[AICustomizationManagementSection.Models]: { label: localize('models', "Models"), icon: Codicon.vm, description: localize('modelsDesc', "Configure and manage language models available for use.") },
+			// Providers and models are one question in this product: the model list is whatever the
+			// providers declare, so the section that manages both says both.
+			[AICustomizationManagementSection.ProvidersModels]: { label: localize('providersModels', "Providers & Models"), icon: Codicon.vm, description: localize('providersModelsDesc', "The services PiCode can talk to, and the models they offer.") },
 			[AICustomizationManagementSection.Tools]: { label: localize('tools', "Tools"), icon: toolsIcon, description: localize('toolsDesc', "Enable or disable groups of language model tools available to chat.") },
 		};
 		const activeHarnessId = this.harnessService.activeHarness.get();

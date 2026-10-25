@@ -207,7 +207,10 @@ export const tocData: ITOCEntry<string> = {
 				{
 					id: 'chat/picode',
 					label: localize('chatPicode', "Settings"),
-					settings: ['picode.pi.*', 'picode.context.*']
+					// `picode.memory.*` and `picode.updates.*` were declared by the connector, which
+					// buried them under `Extensions › PiCode`; they are core settings now, so they
+					// have a place in this tree like any other row of PiCode's.
+					settings: ['picode.pi.*', 'picode.context.*', 'picode.memory.*', 'picode.updates.*']
 				},
 				// PiCode: the durable agent's own settings (`durable` in the
 				// repository, run by the editor under its own settings node). Its own

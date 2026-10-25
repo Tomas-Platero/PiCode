@@ -258,6 +258,8 @@ interface IPluginPiPackageRowTemplateData {
 	readonly version: HTMLElement;
 	readonly source: HTMLElement;
 	readonly stateText: HTMLElement;
+	/** The warning glyph inside the badge (a row whose updates cannot be checked). */
+	readonly warn: HTMLElement;
 	readonly updateHint: HTMLElement;
 	readonly toggleButton: Button;
 	readonly updateButton: Button;
@@ -274,6 +276,32 @@ interface IPluginPiPackageRowTemplateData {
  * disk scan found without pi's settings spelling it) renders without buttons: there is no
  * spelling for the actions to act on.
  */
+/**
+ * A package's source, short enough for a column.
+ *
+ * The full spelling (`npm:@earendil-works/pi-durable`) repeats the package name the row already
+ * shows. What is worth a glance is **how** it came (npm, git) and **whose** it is (the scope), so
+ * that is what travels; the raw spelling stays in the tooltip.
+ */
+function compactSource(source: string | undefined): string {
+	if (source === undefined || source.length === 0) {
+		return '';
+	}
+	const colon = source.indexOf(':');
+	const protocol = colon === -1 ? source : source.slice(0, colon);
+	const rest = colon === -1 ? '' : source.slice(colon + 1);
+	if (protocol === 'npm') {
+		// `@scope/name` → `npm · @scope`;  `name` → `npm`.
+		const slash = rest.indexOf('/');
+		return rest.startsWith('@') && slash !== -1 ? `npm · ${rest.slice(0, slash)}` : 'npm';
+	}
+	if (protocol === 'git') {
+		const parts = rest.replace(/^github\.com\//, '').split('/');
+		return parts.length >= 2 ? `git · ${parts[0]}` : 'git';
+	}
+	return protocol.length > 0 ? protocol : source;
+}
+
 class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEntry, IPluginPiPackageRowTemplateData> {
 	readonly templateId = PI_PACKAGE_ITEM_TEMPLATE_ID;
 
@@ -291,6 +319,11 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		const source = DOM.append(container, $('.pi-package-row-source'));
 		const state = DOM.append(container, $('.pi-package-row-state'));
 		const stateText = DOM.append(state, $('.pi-package-row-state-text'));
+		// The warning lives inside the badge: a row that cannot be checked says so with a glyph and
+		// a tooltip, not by growing a second line of text.
+		const warn = DOM.append(stateText, $('.pi-package-row-warn'));
+		warn.textContent = '⚠';
+		warn.style.display = 'none';
 		const updateHint = DOM.append(state, $('.pi-package-row-update'));
 		const actions = DOM.append(container, $('.pi-package-row-actions'));
 
@@ -307,7 +340,7 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		const hint = DOM.append(actions, $('.pi-package-row-hint'));
 		hint.style.display = 'none';
 
-		return { container, name, version, source, stateText, updateHint, toggleButton, updateButton, uninstallButton, hint, disposables: new DisposableStore() };
+		return { container, name, version, source, stateText, warn, updateHint, toggleButton, updateButton, uninstallButton, hint, disposables: new DisposableStore() };
 	}
 
 	renderElement(element: IPluginPiPackageItemEntry, _index: number, templateData: IPluginPiPackageRowTemplateData): void {
@@ -316,7 +349,7 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		templateData.name.textContent = formatDisplayName(row.name);
 		templateData.name.title = truncateToFirstLine(row.description ?? '');
 		templateData.version.textContent = row.version ?? '';
-		templateData.source.textContent = row.source ?? '';
+		templateData.source.textContent = compactSource(row.source);
 		templateData.source.title = row.source ?? '';
 		const disabled = row.state === 'disabled';
 		const declared = row.source !== undefined;
@@ -332,21 +365,20 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		// it is behind to (with the action that takes it there); a row that cannot be checked
 		// says so instead of pretending; a row that is current says nothing at all.
 		const update = row.update;
+		// Nothing is said in a second line: the state badge carries the glyph and the reason, and
+		// the Update button carries the version it would take.
+		templateData.updateHint.style.display = 'none';
+		templateData.updateHint.textContent = '';
+		templateData.warn.style.display = 'none';
+		templateData.warn.title = '';
+		templateData.stateText.title = '';
 		if (!disabled && update?.state === 'behind' && update.latest) {
-			templateData.updateHint.textContent = localize('packageUpdateBehind', "Update to {0} available", update.latest);
-			templateData.updateHint.title = localize('packageUpdateBehindTitle', "Now {0}", row.version ?? '?');
-			templateData.updateHint.style.display = '';
-			templateData.updateHint.classList.add('behind');
+			templateData.updateHint.textContent = `→ ${update.latest}`;
+			templateData.stateText.title = localize('packageUpdateBehindTitle', "Update to {0} available (now {1})", update.latest, row.version ?? '?');
 		} else if (!disabled && row.source !== undefined && (update?.state === 'uncheckable' || update?.state === 'unknown')) {
-			templateData.updateHint.textContent = localize('packageUpdateCannotCheck', "Cannot check for updates");
-			templateData.updateHint.title = update.reason ?? '';
-			templateData.updateHint.style.display = '';
-			templateData.updateHint.classList.remove('behind');
-		} else {
-			templateData.updateHint.style.display = 'none';
-			templateData.updateHint.textContent = '';
-			templateData.updateHint.title = '';
-			templateData.updateHint.classList.remove('behind');
+			templateData.warn.style.display = '';
+			templateData.warn.title = update.reason ?? localize('packageUpdateCannotCheck', "Cannot check for updates");
+			templateData.stateText.title = templateData.warn.title;
 		}
 		templateData.updateButton.element.style.display = !disabled && row.source !== undefined && update?.state === 'behind' ? '' : 'none';
 
@@ -364,10 +396,10 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		templateData.uninstallButton.element.style.display = '';
 		templateData.hint.style.display = 'none';
 		if (disabled) {
-			templateData.toggleButton.label = `$(${Codicon.play.id}) ${localize('enablePackageAction', "Enable")}`;
+			templateData.toggleButton.label = localize('enablePackageAction', "Enable");
 			templateData.toggleButton.setTitle(localize('enablePackageTooltip', "Pi loads this package again"));
 		} else {
-			templateData.toggleButton.label = `$(${Codicon.debugPause.id}) ${localize('disablePackageAction', "Disable")}`;
+			templateData.toggleButton.label = localize('disablePackageAction', "Disable");
 			templateData.toggleButton.setTitle(localize('disablePackageTooltip', "Pi stops loading this package. Its files stay on disk."));
 		}
 		templateData.disposables.add(templateData.toggleButton.onDidClick(() => this.onToggle(row)));

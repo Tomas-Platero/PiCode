@@ -8,6 +8,8 @@ import { $ } from '../../../../base/browser/dom.js';
 import * as DOM from '../../../../base/browser/dom.js';
 import { Button } from '../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../base/common/codicons.js';
+import { Action } from '../../../../base/common/actions.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -49,6 +51,11 @@ interface IMcpServerState {
 	readonly signIn?: 'ok' | 'needed' | 'unknown';
 	/** Where the server comes from (`status-view.ts`): left out for the profile's own rows. */
 	readonly origin?: 'profile' | 'project' | 'discovered';
+	/**
+	 * `true` when the entry is this product's own — the memory engine — rather than a server the
+	 * owner added. The section leaves those out: they are machinery, not choices.
+	 */
+	readonly internal?: boolean;
 }
 
 /** The slice of the status command's answer this widget reads. */
@@ -110,41 +117,30 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		container: HTMLElement,
 		@ICommandService private readonly commandService: ICommandService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 	) {
 		super();
 
 		this.root = DOM.append(container, $('.picode-mcp-section'));
 
-		const description = DOM.append(this.root, $('.picode-mcp-section-description'));
-		description.textContent = localize('picodeMcpSectionDescription', "The MCP servers pi uses. You are asked before one of their tools runs.");
+		// A header, not a banner: the title says what the page is, the subtitle what a server is
+		// allowed to do, and the one thing to do first sits on the right.
+		const header = DOM.append(this.root, $('.picode-mcp-header'));
+		const headerText = DOM.append(header, $('.picode-mcp-header-text'));
+		const title = DOM.append(headerText, $('h2.picode-mcp-title'));
+		title.textContent = localize('picodeMcpSectionTitle', "MCP Servers");
+		const description = DOM.append(headerText, $('p.picode-mcp-subtitle'));
+		description.textContent = localize('picodeMcpSectionDescription', "External tools and APIs that Pi can query. You will be prompted before any tool executes.");
 
-		const toolbar = DOM.append(this.root, $('.picode-mcp-section-toolbar'));
-		const addButton = this._register(new Button(toolbar, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
-		addButton.label = `$(${Codicon.add.id}) ${localize('picodeMcpSectionAdd', "Add server")}`;
-		addButton.setTitle(localize('picodeMcpSectionAddTooltip', "Add an MCP server for pi"));
+		const addButton = this._register(new Button(header, { ...defaultButtonStyles, supportIcons: true }));
+		addButton.label = `$(${Codicon.add.id}) ${localize('picodeMcpSectionAdd', "Add MCP Server")}`;
+		addButton.setTitle(localize('picodeMcpSectionAddTooltip', "Connect an MCP server to pi"));
 		this._register(addButton.onDidClick(() => { void this.runCommand(ADD_SERVER_COMMAND); }));
 
-		const tableHeader = DOM.append(this.root, $('.picode-mcp-table-header'));
-		for (const label of [
-			localize('picodeMcpSectionColumnName', "Name"),
-			localize('picodeMcpSectionColumnRuns', "Runs"),
-			localize('picodeMcpSectionColumnTarget', "Address or command"),
-			localize('picodeMcpSectionColumnState', "State"),
-			localize('picodeMcpSectionColumnActions', "Actions"),
-		]) {
-			DOM.append(tableHeader, $('.picode-mcp-table-column')).textContent = label;
-		}
+		this.emptyContainer = DOM.append(this.root, $('.picode-mcp-empty'));
+		this.emptyContainer.textContent = localize('picodeMcpSectionEmpty', "No MCP servers configured. Click \"+ Add MCP Server\" to connect external capabilities.");
 
 		this.rowsContainer = DOM.append(this.root, $('.picode-mcp-rows'));
-		this.emptyContainer = DOM.append(this.root, $('.picode-mcp-empty-state'));
-		this.emptyContainer.textContent = localize('picodeMcpSectionEmpty', "No MCP servers yet. Add one to give pi more tools.");
-
-		// The store changed somewhere else (an import, the setup wizard): repaint.
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(PICODE_MCP_SERVERS_SETTING)) {
-				void this.refresh();
-			}
-		}));
 
 		void this.refresh();
 	}
@@ -182,7 +178,7 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		try {
 			const data = await this.commandService.executeCommand<IStatusDataSlice>(STATUS_DATA_COMMAND);
 			for (const server of data?.mcpServers ?? []) {
-				states.set(server.name, { on: server.on, signIn: server.signIn, origin: server.origin });
+				states.set(server.name, { on: server.on, signIn: server.signIn, origin: server.origin, ...(server.internal === true ? { internal: true } : {}) });
 			}
 		} catch {
 			// The connector is not answering; the rows stay honest about not knowing.
@@ -200,17 +196,23 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		this.rowDisposables.clear();
 		DOM.clearNode(this.rowsContainer);
 
-		const rows: IServerRow[] = declared.map(row => ({
-			name: row.name,
-			transport: row.transport,
-			target: row.target,
-			args: row.args,
-			on: states.get(row.name)?.on,
-			signIn: states.get(row.name)?.signIn,
-			origin: 'profile',
-		}));
+		const rows: IServerRow[] = declared
+			.filter(row => states.get(row.name)?.internal !== true)
+			.map(row => ({
+				name: row.name,
+				transport: row.transport,
+				target: row.target,
+				args: row.args,
+				on: states.get(row.name)?.on,
+				signIn: states.get(row.name)?.signIn,
+				origin: 'profile',
+			}));
 		for (const [name, state] of states) {
 			if (!declared.some(row => row.name === name)) {
+				// A server this product declares for itself is not the owner's to see or manage here.
+				if (state.internal === true) {
+					continue;
+				}
 				rows.push({ name, on: state.on, signIn: state.signIn, undeclared: true, origin: state.origin });
 			}
 		}
@@ -221,99 +223,124 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 		}
 	}
 
+	/**
+	 * One server, as a card.
+	 *
+	 * Left: what it is (a mark, its name in bold, and where it runs). Middle: its state as a
+	 * badge. Right: **one** action — the sign-in when it needs one, otherwise the switch — and the
+	 * rest behind a three-dot menu. The five buttons that sat here made every row a control panel,
+	 * and the one thing the owner came to do was the hardest to find.
+	 */
 	private renderRow(row: IServerRow): HTMLElement {
-		const rowElement = $('.picode-mcp-row');
-		rowElement.classList.toggle('off', row.on === false);
+		const card = $('.picode-mcp-card');
+		card.classList.toggle('off', row.on === false);
 
-		const name = DOM.append(rowElement, $('.picode-mcp-cell-name'));
+		const main = DOM.append(card, $('.picode-mcp-card-main'));
+		const mark = DOM.append(main, $('.picode-mcp-card-mark'));
+		mark.textContent = '🛠️';
+
+		const text = DOM.append(main, $('.picode-mcp-card-text'));
+		const name = DOM.append(text, $('.picode-mcp-card-name'));
 		name.textContent = row.name;
 
-		const runs = DOM.append(rowElement, $('.picode-mcp-cell-runs'));
+		const subtitleParts: string[] = [];
 		if (row.origin === 'project') {
-			runs.textContent = localize('picodeMcpSectionProject', "Project");
-			runs.title = localize('picodeMcpSectionProjectTooltip',
-				"Declared in this project's .pi/mcp.json. pi loads it for trusted projects; edit it in the project, not here.");
+			subtitleParts.push(localize('picodeMcpSectionProject', "Project"));
 		} else if (row.origin === 'discovered') {
-			runs.textContent = localize('picodeMcpSectionDiscovered', "Discovered");
-			runs.title = localize('picodeMcpSectionDiscoveredTooltip',
-				"Connected into the live session by a pi extension or plugin. It has no entry here to edit or remove.");
-		} else if (row.undeclared || row.transport === undefined) {
-			runs.textContent = '';
-		} else {
-			runs.textContent = row.transport === 'http'
+			subtitleParts.push(localize('picodeMcpSectionDiscovered', "Discovered"));
+		} else if (!row.undeclared && row.transport !== undefined) {
+			subtitleParts.push(row.transport === 'http'
 				? localize('picodeMcpSectionRemote', "Remote")
-				: localize('picodeMcpSectionLocal', "Local");
+				: localize('picodeMcpSectionLocal', "Local"));
 		}
+		if (row.target !== undefined) {
+			subtitleParts.push(row.args ? `${row.target} ${row.args}` : row.target);
+		}
+		const subtitle = DOM.append(text, $('.picode-mcp-card-sub'));
+		subtitle.textContent = subtitleParts.join(' · ');
+		subtitle.title = row.origin === 'project'
+			? localize('picodeMcpSectionProjectTooltip', "Declared in this project's .pi/mcp.json. pi loads it for trusted projects; edit it in the project, not here.")
+			: row.origin === 'discovered'
+				? localize('picodeMcpSectionDiscoveredTooltip', "Connected into the live session by a pi extension or plugin. It has no entry here to edit or remove.")
+				: subtitle.textContent;
 
-		const target = DOM.append(rowElement, $('.picode-mcp-cell-target'));
-		target.textContent = row.target === undefined ? '' : row.args ? `${row.target} ${row.args}` : row.target;
-		target.title = target.textContent ?? '';
-
-		const state = DOM.append(rowElement, $('.picode-mcp-cell-state'));
-		state.classList.toggle('disabled', row.on === false);
+		// The badge says one of three things, and nothing else.
+		const badges = DOM.append(card, $('.picode-mcp-card-badges'));
+		const badge = DOM.append(badges, $('.picode-mcp-badge'));
 		if (row.on === undefined) {
-			state.textContent = '';
+			badge.classList.add('muted');
+			badge.textContent = localize('picodeMcpSectionUnknown', "Unknown");
+			badge.title = localize('picodeMcpSectionUnknownTooltip', "pi's state for this server could not be read.");
 		} else if (!row.on) {
-			state.textContent = localize('picodeMcpSectionOff', "Off");
+			badge.classList.add('muted');
+			badge.textContent = localize('picodeMcpSectionBadgeDisabled', "Disabled");
 		} else if (row.signIn === 'needed') {
-			// The truth the page used to hide behind an `On`: the entry is enabled, but pi has
-			// no credential for it, so it cannot be used. The fix is this page's own Sign in
-			// button, which starts pi's own sign-in pointed at PiCode's profile.
-			state.textContent = localize('picodeMcpSectionNeedsSignIn', "Needs sign-in");
-			state.title = localize('picodeMcpSectionNeedsSignInTooltip',
-				"pi has no sign-in stored for this server, so pi cannot use it. Use Sign in below: a browser window opens, and the credential is stored in PiCode's own profile.");
+			badge.classList.add('warn');
+			badge.textContent = localize('picodeMcpSectionBadgeSignIn', "Needs Sign-In");
+			badge.title = localize('picodeMcpSectionNeedsSignInTooltip', "pi has no sign-in stored for this server, so pi cannot use it. Use Sign in: a browser window opens, and the credential is stored in PiCode's own profile.");
 		} else if (row.signIn === 'unknown') {
-			state.textContent = localize('picodeMcpSectionSignInUnknown', "On · sign-in unknown");
-			state.title = localize('picodeMcpSectionSignInUnknownTooltip',
-				"Whether pi can sign in to this server could not be read, so the row does not claim either way.");
+			badge.classList.add('muted');
+			badge.textContent = localize('picodeMcpSectionBadgeUnknownSignIn', "Active · sign-in unknown");
+			badge.title = localize('picodeMcpSectionSignInUnknownTooltip', "Whether pi can sign in to this server could not be read, so the row does not claim either way.");
 		} else {
-			state.textContent = localize('picodeMcpSectionOn', "On");
+			badge.classList.add('ok');
+			badge.textContent = localize('picodeMcpSectionBadgeActive', "Active");
 		}
 
-		const actions = DOM.append(rowElement, $('.picode-mcp-row-actions'));
+		// A row the profile does not own has nothing here to act on: the project's file is edited
+		// in the project, and a discovered server has no entry anywhere.
+		if (row.origin === 'project' || row.origin === 'discovered') {
+			return card;
+		}
+
+		const actions = DOM.append(card, $('.picode-mcp-card-actions'));
 		const disposables = this.rowDisposables;
 
-		// A row the profile does not own has nothing here to act on: the project's file is
-		// edited in the project, and a discovered server has no entry anywhere — offering Edit
-		// or Remove would write a **new** profile entry instead of touching what the row shows.
-		if (row.origin === 'project' || row.origin === 'discovered') {
-			return rowElement;
-		}
-
-		// The sign-in is the first action of a row that needs one, because fixing the server is
-		// what the owner came here to do. It runs pi's own sign-in pointed at PiCode's profile,
-		// so the credential lands where pi reads it — and stays there across restarts.
+		// One primary action per card: fix the sign-in if that is what is missing, otherwise the
+		// switch. Everything else is behind the menu.
 		if (row.on !== false && row.signIn === 'needed') {
-			const signInButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
+			const signInButton = disposables.add(new Button(actions, defaultButtonStyles));
 			signInButton.label = localize('picodeMcpSectionSignIn', "Sign in");
-			signInButton.setTitle(localize('picodeMcpSectionSignInTooltip',
-				"Start pi's sign-in for this server: a browser window opens, and the credential is stored in PiCode's own profile."));
+			signInButton.setTitle(localize('picodeMcpSectionSignInTooltip', "Start pi's sign-in for this server: a browser window opens, and the credential is stored in PiCode's own profile."));
 			disposables.add(signInButton.onDidClick(() => { void this.runCommand(SIGN_IN_SERVER_COMMAND, row.name); }));
-		}
-
-		const editButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
-		editButton.label = localize('picodeMcpSectionEdit', "Edit");
-		editButton.setTitle(localize('picodeMcpSectionEditTooltip', "Change what this server says"));
-		disposables.add(editButton.onDidClick(() => { void this.runCommand(EDIT_SERVER_COMMAND, row.name); }));
-
-		const toggleLabel = row.on === false
-			? localize('picodeMcpSectionEnable', "Enable")
-			: localize('picodeMcpSectionDisable', "Disable");
-		if (row.on !== undefined) {
-			const toggleButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
-			toggleButton.label = toggleLabel;
-			toggleButton.setTitle(row.on
+		} else if (row.on !== undefined) {
+			const toggle = DOM.append(actions, $('label.picode-mcp-switch'));
+			toggle.title = row.on
 				? localize('picodeMcpSectionDisableTooltip', "pi stops starting this server. It stays in the list.")
-				: localize('picodeMcpSectionEnableTooltip', "pi starts this server again."));
-			disposables.add(toggleButton.onDidClick(() => { void this.runCommand(TOGGLE_SERVER_COMMAND, row.name); }));
+				: localize('picodeMcpSectionEnableTooltip', "pi starts this server again.");
+			const input = DOM.append(toggle, $('input')) as HTMLInputElement;
+			input.type = 'checkbox';
+			input.checked = row.on;
+			disposables.add(DOM.addDisposableListener(input, 'change', () => { void this.runCommand(TOGGLE_SERVER_COMMAND, row.name); }));
+			DOM.append(toggle, $('span.picode-mcp-switch-track'));
 		}
 
-		const removeButton = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
-		removeButton.label = localize('picodeMcpSectionRemove', "Remove");
-		removeButton.setTitle(localize('picodeMcpSectionRemoveTooltip', "Remove this server from pi"));
-		disposables.add(removeButton.onDidClick(() => { void this.runCommand(REMOVE_SERVER_COMMAND, row.name); }));
+		const menu = disposables.add(new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
+		menu.label = `$(${Codicon.kebabVertical.id})`;
+		menu.setTitle(localize('picodeMcpSectionMore', "More actions"));
+		disposables.add(menu.onDidClick(() => {
+			const rect = menu.element.getBoundingClientRect();
+			this.contextMenuService.showContextMenu({
+				getAnchor: () => ({ x: rect.left, y: rect.bottom }),
+				getActions: () => {
+					const entries: Action[] = [
+						new Action('picode.mcp.edit', localize('picodeMcpSectionEdit', "Edit configuration"), undefined, true, () => this.runCommand(EDIT_SERVER_COMMAND, row.name)),
+					];
+					if (row.on !== undefined) {
+						entries.push(new Action(
+							'picode.mcp.toggle',
+							row.on ? localize('picodeMcpSectionDisable', "Disable server") : localize('picodeMcpSectionEnable', "Enable server"),
+							undefined, true,
+							() => this.runCommand(TOGGLE_SERVER_COMMAND, row.name),
+						));
+					}
+					entries.push(new Action('picode.mcp.remove', localize('picodeMcpSectionRemove', "Remove server"), undefined, true, () => this.runCommand(REMOVE_SERVER_COMMAND, row.name)));
+					return entries;
+				},
+			});
+		}));
 
-		return rowElement;
+		return card;
 	}
 
 	/** Runs one of the connector's commands — the form — and repaints what it changed. */

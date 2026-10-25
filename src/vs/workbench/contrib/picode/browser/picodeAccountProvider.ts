@@ -14,6 +14,8 @@ import { decodeBase64 } from '../../../../base/common/buffer.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
@@ -41,12 +43,15 @@ export const PICODE_AUTH_PROVIDER_ID = 'picode';
 export const PICODE_ACCOUNT_LABEL = localize('picode.account.label', "PiCode Account");
 
 /** Secret storage key for the refresh token of the editor's own Firebase session. */
-const PICODE_REFRESH_TOKEN_SECRET_KEY = 'picode.account.refreshToken';
+export const PICODE_REFRESH_TOKEN_SECRET_KEY = 'picode.account.refreshToken';
+
+/** The one-time code the setup window obtained; read once, then cleared. */
+const PICODE_PENDING_CODE_KEY = 'picode.account.pendingCode';
 
 /** Application-scope storage keys caching who is signed in, so sessions can be rebuilt without a network round-trip. */
-const PICODE_UID_STORAGE_KEY = 'picode.account.uid';
-const PICODE_EMAIL_STORAGE_KEY = 'picode.account.email';
-const PICODE_SCOPES_STORAGE_KEY = 'picode.account.scopes';
+export const PICODE_UID_STORAGE_KEY = 'picode.account.uid';
+export const PICODE_EMAIL_STORAGE_KEY = 'picode.account.email';
+export const PICODE_SCOPES_STORAGE_KEY = 'picode.account.scopes';
 
 /** Firebase ID tokens live for one hour; treat them as stale a little earlier so a refresh happens before they expire. */
 const ID_TOKEN_STALENESS_MS = 50 * 60 * 1000;
@@ -101,6 +106,8 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		@ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
 		@IStorageService private readonly _storageService: IStorageService,
 		@IRequestService private readonly _requestService: IRequestService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ICommandService private readonly _commandService: ICommandService,
 	) {
 		super();
 	}
@@ -113,7 +120,12 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 
 	async createSession(scopes: string[], _options: IAuthenticationProviderSessionOptions): Promise<AuthenticationSession> {
 		// 1. Send the user to the web app and wait for it to come back with the one-time code.
-		const code = await this._requestOneTimeCode();
+		// The setup window may have already done the browser round-trip and left the code here: then
+		// there is nothing to ask a browser for, and the session is minted from that code instead.
+		const pending = this._configurationService.getValue<string>(PICODE_PENDING_CODE_KEY);
+		const code = typeof pending === 'string' && pending.length > 0
+			? await this._takePendingCode(pending)
+			: await this._requestOneTimeCode();
 
 		// 2. Exchange the code for a Firebase custom token (server-side, on the web app's API).
 		const { customToken } = await this._exchangeOneTimeCode(code);
@@ -285,6 +297,21 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 	}
 
 	/** Waits for the web app to redirect back to `picode://` with the one-time code. */
+	/**
+	 * Takes the code the setup window left behind, and clears it.
+	 *
+	 * Cleared first, because a one-time code that is used twice is a code that fails the second
+	 * time — and a stale one would make every later sign-in try to redeem it.
+	 */
+	private async _takePendingCode(code: string): Promise<string> {
+		// Cleared by the **connector**: the hand-over keys are `included: false` (they never appear
+		// in Settings), and that flag makes them unwritable through the configuration service — the
+		// editor answers "not a registered configuration" and the sign-in would stop there.
+		await this._commandService.executeCommand('picode.setup.clearHandover');
+		this._logService.info('[picode.account] finishing the sign-in the setup window started.');
+		return code;
+	}
+
 	private _requestOneTimeCode(): Promise<string> {
 		// Built by hand instead of via `urlService.create()`: the workbench URL service
 		// decorates every created URL with `windowId=N` and URI serialization double-encodes

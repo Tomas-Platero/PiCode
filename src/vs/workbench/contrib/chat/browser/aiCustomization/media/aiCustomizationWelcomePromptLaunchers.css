@@ -171,21 +171,31 @@
 	padding: 0 4px;
 }
 
+/* Two columns of cards, not a single squeezed row: the screen is a dashboard, and each card
+   gets the width to say what it is for and one whole-sentence action. */
 .ai-customization-management-editor .welcome-prompts-cards {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+	margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+	.ai-customization-management-editor .welcome-prompts-cards {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .ai-customization-management-editor .welcome-prompts-card {
 	display: flex;
 	flex-direction: column;
-	padding: 10px 12px 12px;
+	gap: 6px;
+	padding: 14px 16px 14px;
 	border: 1px solid var(--vscode-widget-border);
-	border-radius: 6px;
-	background: var(--vscode-sideBar-background);
+	border-radius: 10px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	cursor: pointer;
-	transition: background-color 0.1s ease;
+	transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 
 .ai-customization-management-editor .welcome-prompts-card:hover {
@@ -242,6 +252,12 @@
 }
 
 .ai-customization-management-editor .welcome-prompts-card-action {
+	padding: 4px 10px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	border-radius: 6px;
+	background: var(--vscode-button-secondaryBackground, transparent);
+	color: var(--vscode-button-secondaryForeground, inherit);
+	cursor: pointer;
 	font-size: 11px;
 	color: var(--vscode-button-secondaryForeground);
 	cursor: pointer;

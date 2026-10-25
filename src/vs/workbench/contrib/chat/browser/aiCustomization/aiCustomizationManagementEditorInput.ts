@@ -55,10 +55,10 @@ export class AICustomizationManagementEditorInput extends EditorInput implements
 	}
 
 	override getName(): string {
-		const harnessLabel = AICustomizationManagementEditorInput._activeHarnessLabel;
-		return harnessLabel
-			? localize('aiCustomizationManagementEditorNameWithHarness', "Agent Customizations for {0}", harnessLabel)
-			: localize('aiCustomizationManagementEditorName', "Agent Customizations");
+		// One name for the tab, whatever engine is answering: the owner calls this screen "Chat
+		// Settings", and a title that changes with the harness ("Agent Customizations for pi")
+		// reads as a different window every time the runtime moves.
+		return localize('aiCustomizationManagementEditorName', "Chat Settings");
 	}
 
 	override getIcon(): ThemeIcon {

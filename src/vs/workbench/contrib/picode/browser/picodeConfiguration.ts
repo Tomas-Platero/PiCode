@@ -13,8 +13,10 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
 import './picodeMcpSection.js';
+import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';
 import './picodeAgentStatusPill.js';
+import './picodeSetupCommands.js';
 
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.
@@ -48,6 +50,7 @@ export const PICODE_MCP_SERVERS_SETTING = 'picode.mcp.servers';
 
 /** Whether the editor's context travels with every prompt. */
 export const PICODE_CONTEXT_ATTACH_SETTING = 'picode.context.attach';
+export const PICODE_CONTEXT_MODE_SETTING = 'picode.context.mode';
 
 /** Which pi runs as the editor's agent: PiCode's own, or the machine's. */
 export const PICODE_PI_RUNTIME_SETTING = 'picode.pi.runtime';
@@ -77,6 +80,25 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 	id: 'picode',
 	title: 'PiCode',
 	properties: {
+		// Declared here, not by the connector: settings an extension declares land under
+		// `Extensions › PiCode` for ever (`settingsEditor2.ts` builds the tree from core groups only),
+		// so a row the owner needs to find has to be born in the core.
+		'picode.updates.check': {
+			type: 'boolean',
+			default: true,
+			description: localize('picode.updates.check', "Check for updates in the background and offer to install them when there are any."),
+		},
+		'picode.memory.enabled': {
+			type: 'boolean',
+			default: true,
+			description: localize('picode.memory.enabled', "Keep memory on: remember decisions, conventions and traps across conversations."),
+		},
+		'picode.memory.binary': {
+			type: 'string',
+			default: '',
+			description: localize('picode.memory.binary', "Absolute path to another memory engine. Leave empty to use the one PiCode ships."),
+		},
+
 		[PICODE_PROVIDERS_SETTING]: {
 			type: 'array',
 			items: {
@@ -169,12 +191,24 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		// credentials) and the connector gives their tools to pi, through `lm.invokeTool` — one path
 		// to a server, not two.
 		//
-		// Neither `picode.mcp.enabled` nor `picode.mcp.servers` is declared here any more: they
-		// are configured on the Agent Customizations page's MCP Servers section now, whose form
-		// is the connector's commands. The keys stay the stores the connector reads and writes
-		// (`PICODE_MCP_ENABLED_SETTING`, `PICODE_MCP_SERVERS_SETTING`), and every reader of them
-		// carries its own default (`enabled` → true, `servers` → an empty list), because the
-		// declaration that used to supply one is gone.
+		// The MCP servers are the **editor's** (its page, pi's `mcp.json`, its trust and its
+		// credentials) and the connector gives their tools to pi. Neither key below is a row in the
+		// Settings tree: the live store is `<profile>/mcp.json`, written by the MCP Servers page.
+		//
+		// They are declared `included: false` on purpose. Undeclared, a leftover value in
+		// `settings.json` shows up as an *Unknown Configuration Setting* warning — the editor
+		// telling the owner off for a key it wrote itself. Declared and hidden, the value stays
+		// readable by the readers that still honour it and nothing appears in any tree.
+		'picode.mcp.enabled': {
+			type: 'boolean',
+			default: true,
+			included: false,
+		},
+		'picode.mcp.servers': {
+			type: 'array',
+			default: [],
+			included: false,
+		},
 		[PICODE_PROJECT_MODE_SETTING]: {
 			type: 'string',
 			enum: ['auto', 'workspace', 'folder'],
@@ -188,10 +222,66 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.WINDOW,
 			markdownDescription: localize('picode.pi.projectMode', "How much of your workspace pi works on: only the first folder, or every folder of the workspace area together. A change here applies to new conversations."),
 		},
+		// Written by the setup window, read and cleared by the account contribution. Nobody sets it
+		// by hand: it exists so the first sign-in can be asked for before the editor exists.
+		// Written by the setup window when it finished the browser round-trip, read once by the
+		// account provider (which trades it for its own session and clears it). Nobody types here.
+		// The session the setup minted, waiting for the editor's first start (which moves it into
+		// encrypted storage and clears these).
+		// Published by the editor on every auth change so any other surface (PiCode's setup window)
+		// can show the same truth. Empty means signed out.
+		'picode.account.sessionEmail': {
+			// Internal hand-over between the setup window and the editor: readable, never edited by hand.
+			included: false,
+			type: 'string',
+			default: '',
+			markdownDescription: localize('picode.account.sessionEmail', "Written by the editor: the account it is signed in with, or empty. Read by PiCode's setup window."),
+		},
+		'picode.account.pendingRefreshToken': {
+			// Internal hand-over between the setup window and the editor: readable, never edited by hand.
+			included: false,
+			type: 'string',
+			default: '',
+			markdownDescription: localize('picode.account.pendingRefreshToken', "Session left by PiCode's setup. The editor adopts it on start and clears it."),
+		},
+		'picode.account.pendingUid': { type: 'string', default: '', included: false },
+		'picode.account.pendingEmail': { type: 'string', default: '', included: false },
+		'picode.account.pendingCode': {
+			// Internal hand-over between the setup window and the editor: readable, never edited by hand.
+			included: false,
+			type: 'string',
+			default: '',
+			markdownDescription: localize('picode.account.pendingCode', "One-time code from a sign-in completed in PiCode's setup. The editor redeems it once and clears it."),
+		},
+		'picode.account.signOutOnStart': {
+			// Internal hand-over between the setup window and the editor: readable, never edited by hand.
+			included: false,
+			type: 'boolean',
+			default: false,
+			markdownDescription: localize('picode.account.signOutOnStart', "Set by PiCode's setup when you signed out there. The editor drops its PiCode session on start and clears it."),
+		},
+		'picode.account.signInOnStart': {
+			// Internal hand-over between the setup window and the editor: readable, never edited by hand.
+			included: false,
+			type: 'boolean',
+			default: false,
+			markdownDescription: localize('picode.account.signInOnStart', "Set by PiCode's setup when you asked to sign in there. The editor signs in on start and clears it."),
+		},
 		[PICODE_CONTEXT_ATTACH_SETTING]: {
 			type: 'boolean',
 			default: true,
 			markdownDescription: localize('picode.context.attach', "Send the folder, the file you have open and what is selected in it with every message, so \"fix this\" needs no explaining. The selection is capped: pi can read the rest of the file itself when it needs it."),
+		},
+		[PICODE_CONTEXT_MODE_SETTING]: {
+			type: 'string',
+			enum: ['project', 'file', 'selection'],
+			enumDescriptions: [
+				localize('picode.context.mode.project', "The workspace folder, the open file and the selection. What \"fix this\" needs."),
+				localize('picode.context.mode.file', "The open file and the selection, without naming the folder."),
+				localize('picode.context.mode.selection', "Only the text you selected, plus what you attached by hand. No paths leave the editor."),
+			],
+			default: 'project',
+			markdownDescription: localize('picode.context.mode', "How much of what you see travels with each message. The agent can still read any file it needs; this says what it is told without asking."),
 		},
 
 		// The durable agent lives in the repository's `durable` folder

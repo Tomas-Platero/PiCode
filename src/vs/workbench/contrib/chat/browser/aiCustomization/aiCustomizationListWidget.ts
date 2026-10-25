@@ -47,6 +47,9 @@ import { ITelemetryService } from '../../../../../platform/telemetry/common/tele
 import { ICustomizationHarnessService } from '../../common/customizationHarnessService.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IAICustomizationListItem } from './aiCustomizationItemSource.js';
+import { getIconClasses } from '../../../../../editor/common/services/getIconClasses.js';
+import { IModelService } from '../../../../../editor/common/services/model.js';
+import { ILanguageService } from '../../../../../editor/common/languages/language.js';
 import { IAICustomizationItemsModel, ItemsModelSection, filterVisibleSectionItems } from './aiCustomizationItemsModel.js';
 
 export { truncateToFirstLine } from './aiCustomizationListWidgetUtils.js';
@@ -247,6 +250,8 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IAgentPluginService private readonly agentPluginService: IAgentPluginService,
+		@IModelService private readonly modelService: IModelService,
+		@ILanguageService private readonly languageService: ILanguageService,
 	) { }
 
 	/**
@@ -313,9 +318,16 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		templateData.actionBar.setFocusable(this.focusedIndex !== -1 && index === this.focusedIndex);
 		const element = entry.item;
 
-		// Type icon: use per-item override or fall back to prompt type
+		// Type icon: the active file icon theme when the row is a real file, which is what makes an
+		// agent read as the markdown file it is (Seti's markdown mark, when Seti is the theme in
+		// force) instead of every row carrying the same generic codicon. A built-in item has no file
+		// of its own, and a per-item override wins over both.
 		templateData.typeIcon.className = 'item-type-icon';
-		templateData.typeIcon.classList.add(...ThemeIcon.asClassNameArray(element.typeIcon ?? promptTypeToIcon(element.promptType)));
+		if (element.typeIcon !== undefined || element.isBuiltin) {
+			templateData.typeIcon.classList.add(...ThemeIcon.asClassNameArray(element.typeIcon ?? promptTypeToIcon(element.promptType)));
+		} else {
+			templateData.typeIcon.classList.add(...getIconClasses(this.modelService, this.languageService, element.uri));
+		}
 
 		// Hover tooltip: name + source + badge context + plugin source
 		templateData.elementDisposables.add(this.hoverService.setupDelayedHover(templateData.container, () => {
@@ -583,6 +595,8 @@ export class AICustomizationListWidget extends Disposable {
 	private addButton!: ButtonWithDropdown;
 	private addButtonSimple!: Button;
 	private listContainer!: HTMLElement;
+	/** The two-column view Skills uses instead of the flat list (see `renderSkillsGrid`). */
+	private skillsGrid!: HTMLElement;
 	private list!: WorkbenchList<IListEntry>;
 	private emptyStateContainer!: HTMLElement;
 	private emptyStateText!: HTMLElement;
@@ -746,6 +760,9 @@ export class AICustomizationListWidget extends Disposable {
 
 		// List container
 		this.listContainer = DOM.append(this.element, $('.list-container'));
+		// Skills renders here instead of in the list (see `renderSkillsGrid`).
+		this.skillsGrid = DOM.append(this.listContainer, $('.skills-grid-view'));
+		this.skillsGrid.style.display = 'none';
 
 		// Empty state container
 		this.emptyStateContainer = DOM.append(this.element, $('.list-empty-state'));
@@ -950,6 +967,8 @@ export class AICustomizationListWidget extends Disposable {
 	private updateSectionHeader(): void {
 		let title: string;
 		let description: string;
+		// Set by the section that wants its own words; the generic one is the default.
+		let searchPlaceholder: string | undefined;
 		let docsUrl: string;
 		let learnMoreLabel: string;
 		switch (this.currentSection) {
@@ -961,7 +980,8 @@ export class AICustomizationListWidget extends Disposable {
 				break;
 			case AICustomizationManagementSection.Skills:
 				title = localize('skills', "Skills");
-				description = localize('skillsDescription', "Folders of instructions, scripts, and resources that the agent loads when relevant to perform specialized tasks.");
+				description = localize('skillsDescription', "Folders of instructions, scripts, and resources that Pi loads when relevant to perform specialized tasks.");
+				searchPlaceholder = localize('skillsSearchPlaceholder', "Search skills by name or trigger...");
 				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/agent-skills?referrer=in-product';
 				learnMoreLabel = localize('learnMoreSkills', "Learn more about agent skills");
 				break;
@@ -989,6 +1009,9 @@ export class AICustomizationListWidget extends Disposable {
 		this.sectionTitleDescriptionText.textContent = description;
 		this.sectionLink.textContent = learnMoreLabel;
 		this.sectionLink.href = docsUrl;
+		// One placeholder per section, because the field searches different things: a skill is
+		// found by its name **or its trigger**, and saying "Type to search..." hid that.
+		this.searchInput.setPlaceHolder(searchPlaceholder ?? localize('searchPlaceholder', "Type to search..."));
 	}
 
 	/**
@@ -1361,6 +1384,7 @@ export class AICustomizationListWidget extends Disposable {
 	private commitDisplayEntries(): void {
 		this.list.splice(0, this.list.length, this.displayEntries);
 		this.updateEmptyState();
+		this.renderSkillsGrid();
 	}
 
 	/**
@@ -1438,6 +1462,79 @@ export class AICustomizationListWidget extends Disposable {
 	/**
 	 * Filters items based on the current search query and builds grouped display entries.
 	 */
+	/**
+	 * Skills as a **grid of cards**, which is how this section is read: a name, what it does, and
+	 * where it comes from — two per line instead of a dense column of rows.
+	 *
+	 * Only Skills takes this path. The list is virtualised with a fixed row height and shared with
+	 * Agents, Instructions and Prompts, so turning it into a grid would change those as well; here a
+	 * plain DOM container reads the same `displayEntries`, so filtering, collapsing and opening keep
+	 * working exactly as before.
+	 */
+	private renderSkillsGrid(): void {
+		if (this.currentSection !== AICustomizationManagementSection.Skills) {
+			this.skillsGrid.style.display = 'none';
+			this.list.getHTMLElement().style.display = '';
+			return;
+		}
+		this.list.getHTMLElement().style.display = 'none';
+		this.skillsGrid.style.display = '';
+
+		DOM.clearNode(this.skillsGrid);
+		let currentGrid: HTMLElement | undefined;
+
+		for (const entry of this.displayEntries) {
+			if (entry.type === 'group-header') {
+				const banner = DOM.append(this.skillsGrid, $('.skills-section-banner'));
+				const icon = DOM.append(banner, $('.skills-section-icon'));
+				icon.classList.add(...ThemeIcon.asClassNameArray(entry.icon));
+				const label = DOM.append(banner, $('.skills-section-label'));
+				// "User" and "Packages" are the storage names; in this section they are what the
+				// skills are, so the banner says so.
+				label.textContent = entry.label === 'Packages'
+					? localize('skillsPackageSection', "Package Skills")
+					: entry.label === 'User'
+						? localize('skillsUserSection', "User Skills")
+						: entry.label === 'Extensions'
+							? localize('skillsExtensionSection', "Extension Skills")
+							: entry.label;
+				const count = DOM.append(banner, $('.skills-section-count'));
+				count.textContent = `${entry.count}`;
+				const chevron = DOM.append(banner, $('.skills-section-chevron'));
+				chevron.classList.add(...ThemeIcon.asClassNameArray(entry.collapsed ? Codicon.chevronRight : Codicon.chevronDown));
+				banner.classList.toggle('collapsed', entry.collapsed);
+				banner.addEventListener('click', () => this.toggleGroup(entry));
+
+				currentGrid = entry.collapsed ? undefined : DOM.append(this.skillsGrid, $('.skills-grid'));
+				continue;
+			}
+
+			if (currentGrid === undefined) {
+				continue;
+			}
+			const item = entry.item;
+			const card = DOM.append(currentGrid, $('.skills-card'));
+			const head = DOM.append(card, $('.skills-card-head'));
+			const name = DOM.append(head, $('.skills-card-name'));
+			name.textContent = item.name;
+			const origin = DOM.append(head, $('.skills-card-badge'));
+			origin.textContent = item.source === 'user' ? 'User'
+				: item.source === 'plugin' ? 'Package'
+					: item.source === 'extension' ? 'Extension'
+						: item.source === 'builtin' ? 'Built-in'
+							: 'Workspace';
+			const description = DOM.append(card, $('.skills-card-description'));
+			description.textContent = item.description ?? '';
+			description.title = item.description ?? '';
+			// The description can be long: two lines, then it stops, so the cards keep one shape.
+			if (item.description === undefined || item.description.length === 0) {
+				description.style.display = 'none';
+			}
+			card.title = item.description ?? item.name;
+			card.addEventListener('click', () => this._onDidSelectItem.fire(item));
+		}
+	}
+
 	private filterItems(): number {
 		const matchedItems = this.applySearchFilter(this.allItems);
 		this.groupMatchedItems(matchedItems);

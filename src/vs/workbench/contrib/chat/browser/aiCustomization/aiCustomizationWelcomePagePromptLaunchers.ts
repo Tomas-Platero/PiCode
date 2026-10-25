@@ -25,6 +25,8 @@ interface IPromptLaunchersCategoryDescription {
 	readonly label: string;
 	readonly icon: ThemeIcon;
 	readonly description: string;
+	/** The card's one action, spelled out: "Manage Agents", not "New...". */
+	readonly actionLabel?: string;
 	readonly promptType?: PromptsType;
 }
 
@@ -51,16 +53,18 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 	private readonly categoryDescriptions: IPromptLaunchersCategoryDescription[] = [
 		{
 			id: AICustomizationManagementSection.Agents,
-			label: localize('agents', "Agents"),
+			label: localize('agents', "Custom Agents"),
 			icon: agentIcon,
+			actionLabel: localize('manageAgents', "Manage Agents"),
 			description: localize('agentsDesc', "Define custom agents with specialized personas, tool access, and instructions for specific tasks."),
 			promptType: PromptsType.agent,
 		},
 		{
 			id: AICustomizationManagementSection.Skills,
-			label: localize('skills', "Skills"),
+			label: localize('skills', "Agent Skills"),
 			icon: skillIcon,
-			description: localize('skillsDesc', "Create reusable skill files that provide domain-specific knowledge and workflows."),
+			actionLabel: localize('exploreSkills', "Explore Skills"),
+			description: localize('skillsDesc', "Provide reusable instruction files, scripts, and workflows to expand capabilities."),
 			promptType: PromptsType.skill,
 		},
 		{
@@ -79,15 +83,17 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 		},
 		{
 			id: AICustomizationManagementSection.McpServers,
-			label: localize('mcpServers', "MCP Servers"),
+			label: localize('mcpServers', "MCP Tool Servers"),
 			icon: Codicon.server,
-			description: localize('mcpServersDesc', "Connect external tool servers that extend AI capabilities with custom tools and data sources."),
+			actionLabel: localize('configureMcp', "Configure MCP"),
+			description: localize('mcpServersDesc', "Connect external tool protocols so agents can reach databases and APIs."),
 		},
 		{
 			id: AICustomizationManagementSection.Plugins,
-			label: localize('plugins', "Packages"),
+			label: localize('plugins', "Ecosystem Packages"),
 			icon: pluginIcon,
-			description: localize('pluginsDesc', "Extend pi with packages that add extensions, skills, prompts, and MCP servers."),
+			actionLabel: localize('browsePackages', "Browse Packages"),
+			description: localize('pluginsDesc', "Manage installed extensions, skill collections, and system packages."),
 		},
 		{
 			id: AICustomizationManagementSection.Tools,
@@ -174,7 +180,8 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 			const footer = DOM.append(card, $('.welcome-prompts-card-footer'));
 			if (category.promptType) {
 				const generateBtn = DOM.append(footer, $('button.welcome-prompts-card-action'));
-				generateBtn.textContent = localize('new', "New...");
+				// A full sentence, not "New...": the button says what it opens.
+				generateBtn.textContent = category.actionLabel ?? localize('newCategory', "Create {0}", category.label);
 				generateBtn.setAttribute('aria-label', localize('newCategoryAriaLabel', "New {0}...", category.label));
 				this.cardDisposables.add(DOM.addDisposableListener(generateBtn, 'click', e => {
 					e.stopPropagation();
@@ -188,7 +195,7 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 				}));
 			} else {
 				const browseBtn = DOM.append(footer, $('button.welcome-prompts-card-action'));
-				browseBtn.textContent = localize('browse', "Browse...");
+				browseBtn.textContent = category.actionLabel ?? localize('browseCategory', "Browse {0}", category.label);
 				browseBtn.setAttribute('aria-label', localize('browseCategoryAriaLabel', "Browse {0}...", category.label));
 				this.cardDisposables.add(DOM.addDisposableListener(browseBtn, 'click', e => {
 					e.stopPropagation();

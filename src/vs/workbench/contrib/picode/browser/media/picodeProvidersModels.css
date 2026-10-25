@@ -1,0 +1,465 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * Providers & Models, the panel PiCode owns inside Chat Settings.
+ *
+ * The layout is the point: the toolbar (search, filters, the + button) never scrolls and never
+ * shrinks, and only the list moves. In a narrow side panel that is the difference between a button
+ * that is always reachable and one that is clipped into "Add Provid…".
+ */
+
+.picode-pm {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+	padding: 8px 16px 12px;
+	box-sizing: border-box;
+}
+
+/* ---------------------------------------------------------------- header + tabs */
+
+.picode-pm-header {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.picode-pm-title {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-heading2, 16px);
+	font-weight: 600;
+}
+
+.picode-pm-subtitle {
+	margin: 0;
+	max-width: 70ch;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.picode-pm-tabs {
+	flex-shrink: 0;
+	display: flex;
+	gap: 6px;
+	margin: 10px 0 12px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.25));
+}
+
+.picode-pm-tab {
+	padding: 5px 12px;
+	border: 1px solid transparent;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-body2);
+	cursor: pointer;
+	transition: color 90ms linear, background-color 90ms linear, border-color 90ms linear;
+}
+
+.picode-pm-tab:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-pm-tab.active {
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.6));
+	background: var(--vscode-list-hoverBackground);
+}
+
+/* --------------------------------------------------------------- body + toolbar */
+
+.picode-pm-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.picode-pm-toolbar {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding-bottom: 10px;
+}
+
+.picode-pm-search {
+	flex: 1;
+	min-width: 160px;
+}
+
+.picode-pm-filter {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------- providers */
+
+.picode-pm-list {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	scrollbar-gutter: stable;
+}
+
+.picode-pm-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.22));
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-pm-card-main {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	flex: 1;
+}
+
+.picode-pm-card-mark {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	flex: none;
+}
+
+.picode-pm-card-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.picode-pm-card-name {
+	font-weight: 600;
+	font-size: var(--vscode-agents-fontSize-body1);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pm-card-sub {
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-descriptionForeground);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pm-badge {
+	flex: none;
+	padding: 0 8px;
+	border-radius: 999px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	line-height: 16px;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+}
+
+.picode-pm-badge.ok {
+	color: var(--vscode-testing-iconPassed, #3fb950);
+	border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 45%, transparent);
+	background: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 12%, transparent);
+}
+
+.picode-pm-card-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+
+/* ------------------------------------------------------------------------ form */
+
+.picode-pm-form {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--vscode-focusBorder, rgba(59, 155, 255, 0.5));
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-pm-form.invalid {
+	border-color: var(--vscode-editorError-foreground, #f14c4c);
+}
+
+.picode-pm-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.picode-pm-field-label {
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-pm-form-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.picode-pm-error {
+	margin: 0;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-editorError-foreground, #f14c4c);
+}
+
+/* ----------------------------------------------------------------------- table */
+
+.picode-pm-table {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	scrollbar-gutter: stable;
+}
+
+.picode-pm-row {
+	display: grid;
+	grid-template-columns: minmax(140px, 2fr) minmax(90px, 1fr) 70px 60px;
+	gap: 10px;
+	align-items: center;
+	padding: 6px 8px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-widget-border, rgba(128, 128, 128, 0.25)) 60%, transparent);
+	font-size: var(--vscode-agents-fontSize-body2);
+}
+
+.picode-pm-row:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-pm-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--vscode-editor-background, var(--vscode-sideBar-background));
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--vscode-descriptionForeground);
+	border-bottom: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+}
+
+.picode-pm-cell {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pm-cell.context,
+.picode-pm-cell.tools {
+	text-align: right;
+}
+
+.picode-pm-empty {
+	margin: 8px 0;
+	font-size: var(--vscode-agents-fontSize-body2);
+	color: var(--vscode-descriptionForeground);
+}
+
+/* A line of feedback under the toolbar (a sign-in that could not start). */
+.picode-pm-note {
+	flex-shrink: 0;
+	margin: 0 0 8px;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	color: var(--vscode-editorWarning-foreground, #d29922);
+}
+
+/* A provider that works without a stored key: not a fault, so not the grey of a fault. */
+.picode-pm-badge.info {
+	color: var(--vscode-descriptionForeground);
+	border-color: var(--vscode-widget-border, rgba(128, 128, 128, 0.4));
+	background: var(--vscode-list-hoverBackground);
+}
+
+/* The provider filter, beside the search: same height, same border as the panel's other fields. */
+.picode-pm-select {
+	flex-shrink: 0;
+	padding: 3px 6px;
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.3)));
+	border-radius: 4px;
+	background: var(--vscode-dropdown-background, var(--vscode-input-background));
+	color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	max-width: 220px;
+}
+
+/* ------------------------------------------------- models: chips and compact rows */
+
+.picode-pm-chip {
+	flex-shrink: 0;
+	padding: 3px 10px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	cursor: pointer;
+	transition: color 90ms linear, border-color 90ms linear, background-color 90ms linear;
+}
+
+.picode-pm-chip:hover {
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.6));
+}
+
+.picode-pm-chip[aria-pressed='true'] {
+	color: var(--vscode-foreground);
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.8));
+	background: var(--vscode-list-hoverBackground);
+}
+
+/*
+ * The catalogue as a list, not as cards: one row per model, 28px tall, so twenty of them fit where
+ * four cards used to. The actions appear on hover (and on keyboard focus), which keeps the row
+ * quiet until it is the one you are pointing at.
+ */
+.picode-pm-models {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	scrollbar-gutter: stable;
+}
+
+.picode-pm-model {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 10px;
+	min-height: 28px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	box-sizing: border-box;
+}
+
+.picode-pm-model:hover,
+.picode-pm-model:focus-within {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-pm-model-left {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.picode-pm-model-name {
+	font-size: var(--vscode-agents-fontSize-body2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pm-model-provider {
+	flex: none;
+	padding: 0 6px;
+	border-radius: 999px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	line-height: 15px;
+}
+
+.picode-pm-model .picode-pm-badge.ok {
+	flex: none;
+	padding: 0 7px;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 45%, transparent);
+	background: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 14%, transparent);
+	color: var(--vscode-testing-iconPassed, #3fb950);
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	line-height: 15px;
+	white-space: nowrap;
+}
+
+.picode-pm-model-facts {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	flex: none;
+}
+
+.picode-pm-fact {
+	padding: 0 6px;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label2, 11px);
+	line-height: 15px;
+	white-space: nowrap;
+}
+
+/* Quiet until the row is the one in hand. */
+.picode-pm-model-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	opacity: 0;
+	transition: opacity 90ms linear;
+}
+
+.picode-pm-model:hover .picode-pm-model-actions,
+.picode-pm-model:focus-within .picode-pm-model-actions {
+	opacity: 1;
+}
+
+.picode-pm-model-actions .monaco-button {
+	height: 20px;
+	padding: 0 8px;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	line-height: 18px;
+}
+
+/* The provider's mark: a circle that holds the favicon once it loads, initials until then. */
+.picode-pm-logo {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.picode-pm-logo img {
+	width: 16px;
+	height: 16px;
+	object-fit: contain;
+}

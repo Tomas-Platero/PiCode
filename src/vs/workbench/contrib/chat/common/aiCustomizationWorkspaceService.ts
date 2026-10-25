@@ -45,6 +45,8 @@ export const AICustomizationManagementSection = {
 	McpServers: 'mcpServers',
 	Plugins: 'plugins',
 	Models: 'models',
+	/** PiCode's own panel: providers and models in one place (see `picodeProvidersModelsSection.ts`). */
+	ProvidersModels: 'providersModels',
 	Tools: 'tools',
 	HarnessSettings: 'harnessSettings',
 	Status: 'status',

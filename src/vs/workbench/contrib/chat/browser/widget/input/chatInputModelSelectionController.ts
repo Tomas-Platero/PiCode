@@ -258,7 +258,13 @@ export class ChatInputModelSelectionController extends Disposable {
 	 * @param conversationModelReason How the conversation's own model stands, for a caller deciding
 	 * whether to wait for one this controller has not been given yet. Omit to use what it applied.
 	 */
-	configuredDefaultToSeed(conversationModelReason?: RestoredModelReason): ILanguageModelChatMetadataAndIdentifier | undefined {
+	configuredDefaultToSeed(conversationModelReason?: RestoredModelReason, force = false): ILanguageModelChatMetadataAndIdentifier | undefined {
+		// `force` is the setting having **changed** under a chat that is not empty: somebody just
+		// picked a default in PiCode's setup, and that explicit act outranks the model this
+		// conversation happened to be using. Without it a chat with messages never moved.
+		if (force) {
+			return resolveConfiguredModel(this._runtime.getConfiguredModelValue(), this._pool());
+		}
 		const claimedByConversation = conversationModelReason !== undefined
 			? isInConversationModelChoice(conversationModelReason)
 			: (isInConversationModelChoice(this._selectionReason)
@@ -270,8 +276,8 @@ export class ChatInputModelSelectionController extends Disposable {
 		return resolveConfiguredModel(this._runtime.getConfiguredModelValue(), this._pool());
 	}
 
-	applyConfiguredDefault(): boolean {
-		const configuredModel = this.configuredDefaultToSeed();
+	applyConfiguredDefault(force = false): boolean {
+		const configuredModel = this.configuredDefaultToSeed(undefined, force);
 		if (!configuredModel) {
 			return false;
 		}

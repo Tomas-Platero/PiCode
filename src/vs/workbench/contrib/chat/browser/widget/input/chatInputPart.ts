@@ -1045,7 +1045,14 @@ export class ChatInputPart extends Disposable implements IHistoryNavigationWidge
 				// constructed — desktop policy values are delivered asynchronously
 				// from the main process, so `initSelectedModel` may have read an empty
 				// value at startup. Re-apply it to a fresh empty session when it lands.
-				this._modelSelectionController.applyConfiguredDefault();
+				//
+				// And **force it when the setting changed under a conversation that is not
+				// empty**: choosing a default in PiCode's setup is an explicit act, and leaving
+				// the open chat on the previous model is what made that click look like it did
+				// nothing.
+				if (!this._modelSelectionController.applyConfiguredDefault() && this.configurationService.getValue<string>(ChatConfiguration.DefaultModel)) {
+					this._modelSelectionController.applyConfiguredDefault(true);
+				}
 			}
 			if (e.affectsConfiguration(AccessibilityVerbositySettingId.Chat)) {
 				newOptions.ariaLabel = this._getAriaLabel();

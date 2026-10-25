@@ -56,6 +56,10 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 		AICustomizationManagementSection.Status,
 		AICustomizationManagementSection.Agents,
 		AICustomizationManagementSection.Skills,
+		// PiCode's own panel: providers and models together, beside "which agent" rather than after the
+		// shelves of installable things. It replaces the editor's full-screen Models page, which does
+		// not fit in a side panel.
+		AICustomizationManagementSection.ProvidersModels,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,
 		AICustomizationManagementSection.Tools,
