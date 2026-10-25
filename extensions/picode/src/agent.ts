@@ -58,6 +58,7 @@ import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
+import { isSlashCommand } from './context';
 import { isExpectedHelperNotice } from './extension-notices';
 
 /**
@@ -538,6 +539,9 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
  * `agent_settled` is what ends the turn — not `agent_end`, which also fires when pi is about to
  * retry, and not `prompt()` resolving, which only means the order was accepted.
  */
+/** How long a slash command that began no agent run is given before its turn is ended, in milliseconds. */
+const COMMAND_GRACE_MS = 1_500;
+
 export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<string> {
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
@@ -546,7 +550,13 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 	let answer = '';
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
+		// Whether pi began an agent run for this prompt. A slash command that an extension runs by
+		// itself (`/gentle:status`) never does, and so never settles: see the end of this function.
+		let agentRunBegan = false;
 		const subscription = session.subscribe(event => {
+			if (event.type === 'agent_start') {
+				agentRunBegan = true;
+			}
 			if (event.type === 'message_update') {
 				const delta = event.assistantMessageEvent;
 				if (delta?.type === 'text_delta' && typeof delta.delta === 'string') {
@@ -688,7 +698,24 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 		// once, after everything queued has run (`_runAgentPrompt` loops on `hasQueuedMessages` and calls
 		// `_emitAgentSettled` in its `finally`), so the single `agent_settled` this awaits is the end of
 		// the work that includes this prompt.
-		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).catch(reject);
+		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).then(() => {
+			// A command an extension answers itself ends when its handler does: no agent run begins, so
+			// pi never says `agent_settled` and the turn would stay "working" for ever. A moment is
+			// allowed for a command that hands its text on to the agent (a skill) to start its run.
+			if (!isSlashCommand(prompt)) {
+				return;
+			}
+			setTimeout(() => {
+				if (settled || agentRunBegan) {
+					return;
+				}
+				settled = true;
+				agentActivity = undefined;
+				notifyAgentStatus();
+				subscription();
+				resolve();
+			}, COMMAND_GRACE_MS);
+		}, reject);
 		void cancellation;
 	});
 	return answer;

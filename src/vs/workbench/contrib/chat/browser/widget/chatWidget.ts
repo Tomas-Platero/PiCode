@@ -117,6 +117,9 @@ const $ = dom.$;
  * `padding: 0 32px` in sessions `style.css`). Reserved when laying out embedded editors so code
  * blocks match the rendered content width. See {@link IChatListItemRendererOptions.contentHorizontalPadding}.
  */
+/** PiCode: the air kept between the end of the transcript and the input box, in pixels. */
+const CHAT_LIST_BOTTOM_GAP = 12;
+
 const SESSIONS_CHAT_ITEM_HORIZONTAL_PADDING = 64;
 
 export interface IChatWidgetStyles extends IChatInputStyles {
@@ -3575,7 +3578,9 @@ export class ChatWidget extends Disposable implements IChatWidget {
 		const lastElementVisible = this.listWidget.isScrolledToBottom;
 		const lastItem = this.listWidget.lastItem;
 
-		const contentHeight = Math.max(0, height - inputHeight - readOnlyBannerHeight - chatSuggestNextWidgetHeight);
+		// PiCode: a few pixels of air between the last line and the input. Without them the end of
+		// the transcript sits under the input's top edge and the last line reads as cut off.
+		const contentHeight = Math.max(0, height - inputHeight - readOnlyBannerHeight - chatSuggestNextWidgetHeight - CHAT_LIST_BOTTOM_GAP);
 		this.listWidget.layout(contentHeight, width);
 
 		this.welcomeMessageContainer.style.height = `${contentHeight}px`;
