@@ -111,6 +111,11 @@
 		],
 		"commands": [
 			{
+				"command": "picode.agents.chooseModels",
+				"title": "Choose Models for Agents",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.pi.toggleThinking",
 				"title": "Toggle Thinking in Chat",
 				"category": "PiCode"
@@ -256,6 +261,12 @@
 				"icon": "$(cloud-download)"
 			},
 			{
+				"command": "picode.tasks.openTranscript",
+				"title": "Open Transcript",
+				"category": "PiCode",
+				"icon": "$(book)"
+			},
+			{
 				"command": "picode.tasks.refresh",
 				"title": "Refresh the tasks",
 				"category": "PiCode",
@@ -292,6 +303,16 @@
 			],
 			"view/item/context": [
 				{
+					"command": "picode.tasks.openTranscript",
+					"when": "view == picode.status.tasks && viewItem == picode.tasks.agent",
+					"group": "inline"
+				},
+				{
+					"command": "picode.tasks.openTranscript",
+					"when": "view == picode.status.tasks && viewItem == picode.tasks.agent",
+					"group": "navigation"
+				},
+				{
 					"command": "picode.memory.copy",
 					"when": "view == picode.status.memory && viewItem == picode.memory.row",
 					"group": "inline@1"
@@ -303,6 +324,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "picode.tasks.openTranscript",
+					"when": "false"
+				},
 				{
 					"command": "picode.memory.open",
 					"when": "false"

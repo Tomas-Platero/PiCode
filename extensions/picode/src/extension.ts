@@ -47,7 +47,8 @@ import {
 import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
-import { registerWizardModelCommands } from './wizard-models';
+import { listModels, registerWizardModelCommands } from './wizard-models';
+import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
 import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
 import { traceChildPi } from './child-trace';
@@ -62,6 +63,8 @@ import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
+import { isRunning, isTaskId, transcriptOf, transcriptOfJson } from './agent-transcript';
+import { showAgentTranscript } from './agent-transcript-panel';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, piRuntimeRoot, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { launchedAgents, lastActivity, type AgentState } from './agents';
@@ -2246,6 +2249,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	);
 	// What those children do, and when: a line each in the log, so an agent that fails to end can be read.
 	traceChildPi(require('node:child_process'), line => console.error(`[pi] ${line}`));
+	// Modules that imported `spawn` by name see the wrapped one.
+	require('node:module').syncBuiltinESMExports();
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
@@ -2285,9 +2290,28 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
 	// runtime switch takes effect without a window reload. What PiCode projects for pi
 	// keeps going to PiCode's own profile either way.
+	// Which model each Gentle agent answers with: the same pickers from the chat's `/gentle:models`
+	// and from the status view's row.
+	const chooseModelsOfAgents = (): Promise<string | undefined> => chooseAgentModels({
+		profileDir: profileDirectory(context.extensionUri),
+		listModels: () => listModels({
+			distributionRoot: distributionRoot(context.extensionUri),
+			profileDir: profileDirectory(context.extensionUri),
+			refreshModels: () => undefined,
+		}),
+		onSaved: resetChatSession,
+	});
+	context.subscriptions.push(vscode.commands.registerCommand(AGENT_MODELS_COMMAND, async () => {
+		const done = await chooseModelsOfAgents();
+		if (done !== undefined) {
+			void vscode.window.showInformationMessage(done.split('\n')[0]!);
+		}
+	}));
+	context.subscriptions.push(...registerAgentModelsStateCommands(profileDirectory(context.extensionUri), resetChatSession));
 	const piParticipant = registerPiAgent(context, {
 		distributionRoot: distributionRoot(context.extensionUri),
 		log: line => console.error(`[pi] ${line}`),
+		chooseAgentModels: chooseModelsOfAgents,
 	});
 
 	// pi's own extension commands (`/omni` and its fellows) in the input's slash list,
@@ -2453,7 +2477,32 @@ const setupDeps = {
 	// The work the chat has out — its background jobs and the agents gentle-pi runs —
 	// as a list that stays put while the owner works elsewhere. Same container, same rule: it reads
 	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
-	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs, agents: () => gentleAgents.current(), onAgentsChange: listener => gentleAgents.onDidChange(listener) }));
+	context.subscriptions.push(registerTasksView({
+		runningJobs: runningBackgroundJobs,
+		agents: () => gentleAgents.current(),
+		onAgentsChange: listener => gentleAgents.onDidChange(listener),
+		openTranscript: id => {
+			if (!isTaskId(id)) {
+				return;
+			}
+			showAgentTranscript({
+				id,
+				// Gentle writes the full record when a task ends; until then what it last published is all there is.
+				source: () => {
+					const live = transcriptOf(gentleAgents.record(id));
+					if (live !== undefined && isRunning(live.status)) {
+						return live;
+					}
+					try {
+						return transcriptOfJson(fs.readFileSync(path.join(profileDirectory(context.extensionUri), 'gentle-agents', 'tasks', `${id}.json`), 'utf8')) ?? live;
+					} catch {
+						return live;
+					}
+				},
+				onChange: listener => gentleAgents.onDidChange(listener),
+			});
+		},
+	}));
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the

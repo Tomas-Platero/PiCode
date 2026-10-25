@@ -123,13 +123,49 @@ export function parseAgentActivity(lines: readonly string[]): AgentTaskRow[] | u
 	return rows;
 }
 
+/**
+ * What each task of a push said and did so far, keyed by task id, in the shape of gentle's own task
+ * record (`{task, thread}`) so one page builder reads both. The push keeps only the latest steps
+ * and cuts long outputs; `thread.dropped` says how many steps were left out.
+ */
+export function parseAgentRecords(lines: readonly string[]): Map<string, unknown> | undefined {
+	const line = lines.find(candidate => candidate.includes(GENTLE_AGENTS_SCHEMA));
+	if (line === undefined) {
+		return undefined;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(line);
+	} catch {
+		return undefined;
+	}
+	const tasks = (parsed as { tasks?: unknown } | null)?.tasks;
+	if (!Array.isArray(tasks)) {
+		return undefined;
+	}
+	const records = new Map<string, unknown>();
+	for (const entry of tasks) {
+		const { summary, thread } = (entry ?? {}) as { summary?: { id?: unknown }; thread?: unknown };
+		if (typeof summary?.id === 'string' && summary.id.length > 0) {
+			records.set(summary.id, { task: summary, thread });
+		}
+	}
+	return records;
+}
+
 /** One listener of the store's movement. */
 type Listener = () => void;
 
 /** The holder of the last answer, with listeners; one per window. */
 export class GentleAgentsStore {
 	private rows: readonly AgentTaskRow[] = [];
+	private records = new Map<string, unknown>();
 	private readonly listeners = new Set<Listener>();
+
+	/** What one task has said and done so far, as last published, or `undefined` when it is not in the last push. */
+	record(id: string): unknown {
+		return this.records.get(id);
+	}
 
 	/** The tasks as last published. */
 	current(): readonly AgentTaskRow[] {
@@ -153,6 +189,7 @@ export class GentleAgentsStore {
 			return;
 		}
 		this.rows = rows;
+		this.records = parseAgentRecords(content as string[]) ?? new Map();
 		this.fire();
 	}
 
@@ -162,6 +199,7 @@ export class GentleAgentsStore {
 			return;
 		}
 		this.rows = [];
+		this.records = new Map();
 		this.fire();
 	}
 

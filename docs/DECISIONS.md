@@ -1233,3 +1233,46 @@ play. Unverified in a running editor.
 - gentle-pi's `review-*` agents are not general-purpose: they run only inside its native review, which
   needs the helper program the product does not install (addendum 1). Tasks is verified with
   `gentle-ai-explore`.
+
+### Adenda 4 (2026-10-25) · Los modelos de los agentes de gentle se eligen desde el editor
+
+> *"gentle-ai hay que configurar modelos… quiero que pueda usar /gentle models para configurarlo,
+> como en el TUI, quiero poder los modelos que yo quiera a cada uno"*
+
+- **Por qué hacía falta:** un agente de gentle sin modelo propio responde con el modelo por defecto del
+  perfil, que no tiene por qué ser el del chat. Así falló el primer subagente de verdad: el modelo por
+  defecto tenía la cuota mensual agotada (402) mientras el del chat respondía.
+- **Dónde se guarda:** el mismo fichero que usa gentle, `<perfil>/gentle-ai/models.json`
+  (`{agente: {model, thinking}}`). Gentle lo aplica a sus agentes **cada vez que arranca una sesión de
+  chat**; por eso al guardar se reinicia la sesión del chat y el cambio vale desde el siguiente mensaje.
+  Un agente devuelto a «el mismo modelo que el resto» se guarda como entrada vacía (así gentle borra el
+  que escribió antes).
+- **Dónde se elige:** `/gentle:models` en el chat y la fila *Choose models for agents* de la vista de
+  estado (comando `picode.agents.chooseModels`). El panel de pantalla completa de gentle no se puede
+  dibujar en el editor (`ui.custom` es nulo), así que el editor lo contesta con sus propios selectores:
+  agente (o todos) → modelo (los que el editor alcanza, o uno escrito a mano) → esfuerzo. Los agentes
+  `review-*` no salen: solo funcionan dentro de la revisión nativa.
+- **Pendiente:** una opción en los ajustes del chat (hoy solo comando y fila de estado).
+- **Onboarding (2026-10-25):** el paso del modelo dice que los agentes usan ese mismo modelo y que cada
+  uno puede tener el suyo con `/gentle:models`. No se pregunta nada más ahí: la ventana de setup se abre
+  sin el editor y los selectores viven en él.
+- **Transcripción de un agente (2026-10-25):** cada fila de agente en Tasks tiene el icono *Open Transcript*
+  (`picode.tasks.openTranscript`, también en el clic derecho). Abre un panel propio con la tarea, los pasos
+  en una línea de tiempo (lo que dijo, pensó y llamó, con su salida plegada) y la respuesta. **Se actualiza
+  solo** mientras el agente trabaja: gentle publica el estado de cada tarea con sus últimos pasos y el panel
+  se redibuja en cuanto llega (sin perder dónde estabas; si estabas al final, sigue el último paso). Al
+  terminar lee el registro completo que gentle guarda (`<perfil>/gentle-agents/tasks/<id>.json`). Solo
+  muestra lo que el registro tiene. Un segundo clic sobre el mismo agente trae el panel que ya está abierto.
+- **En Chat Settings (2026-10-25):** *Providers & Models* tiene una tercera pestaña, **Agents**: una fila por
+  agente de gentle con dos listas (modelo y esfuerzo) y, arriba, «Every agent» para dar el mismo modelo a
+  todos. Cada cambio se guarda al momento en el mismo fichero (`picode.agents.models` lee,
+  `picode.agents.setModel` escribe; pide un agente, un modelo `proveedor/modelo` y un nivel válidos o lo
+  rechaza) y reinicia la sesión del chat. Un agente en «Same model as the rest» usa el modelo con el que
+  abren las conversaciones nuevas. El esfuerzo puede ir solo, sin modelo.
+- **Persona y permisos (2026-10-25):** la pestaña se llama ahora **Gentle AI** y empieza por dos
+  preferencias de gentle: *How it talks* (persona: Gentleman o Neutral, en `<perfil>/gentle-ai/persona.json`)
+  y *Permissions for new conversations* (Normal, Auto o YOLO, en `permission-mode.json`, con la línea de
+  esquema que gentle exige). Es el mismo valor que `/gentle:persona` y `/gentle:mode default …`, en el mismo
+  formato, así que lo que cambia uno lo lee el otro. Un fichero de permisos que gentle no puede leer no se
+  reemplaza: se avisa y el control queda apagado. Cada cambio reinicia la sesión del chat. Los permisos de
+  *esta* conversación siguen cambiándose con `/gentle:mode`.

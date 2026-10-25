@@ -118,6 +118,7 @@ const STRINGS = {
 		modelStale: (ref) => `El modelo que tenías (${ref}) ya no está en tu configuración. Elige uno abajo y guárdalo.`,
 		modelPickProvider: 'Choose a provider',
 		modelNewConversations: 'Model for new conversations',
+		modelAgentsNote: 'Your agents use this model too. Give each one its own any time with /gentle:models in the chat.',
 		modelNoKey: 'no key saved',
 
 		modelLocal: 'Local / Self-Hosted',
@@ -303,6 +304,7 @@ const STRINGS = {
 		modelWord: 'modelo',
 		modelCount: 'modelos',
 		modelNewConversations: 'Modelo para conversaciones nuevas',
+		modelAgentsNote: 'Tus agentes usan este modelo también. Dale uno distinto a cada uno cuando quieras con /gentle:models en el chat.',
 		modelNoKey: 'sin clave guardada',
 		modelLocal: 'Local / propio',
 		providerAdvancedShow: 'Opciones avanzadas (dirección, dialecto, nombre)',
@@ -1618,6 +1620,7 @@ function renderLocal(refs) {
 			}, entryRefs.toSorted((left, right) => left.localeCompare(right)).map(ref =>
 				el('option', { value: ref, selected: ref === selected, text: ref }))),
 		),
+		el('p', { class: 'hint', text: t('modelAgentsNote') }),
 		el('div', { class: 'panel-actions' },
 			el('button', {
 				type: 'button', class: 'secondary',

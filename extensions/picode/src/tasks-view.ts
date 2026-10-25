@@ -28,6 +28,7 @@ import { elapsedLabel, taskBoard, taskDetail, taskState, taskTitle, type TaskBoa
 export const TASKS_VIEW_ID = 'picode.status.tasks';
 
 export const TASKS_REFRESH_COMMAND = 'picode.tasks.refresh';
+export const TASKS_TRANSCRIPT_COMMAND = 'picode.tasks.openTranscript';
 
 /** How often a visible block asks again. Folded away, the timer is cleared. */
 const REFRESH_MS = 5_000;
@@ -46,6 +47,8 @@ export interface TasksViewDeps {
 	readonly agents?: () => readonly AgentTaskRow[];
 	/** Calls the listener when the agents change; returns how to stop. */
 	readonly onAgentsChange?: (listener: () => void) => () => void;
+	/** Opens the page that follows what one agent does (by its task id). */
+	readonly openTranscript?: (id: string) => void;
 	/** What "now" is, so the tests can hold a clock still. */
 	readonly now?: () => number;
 }
@@ -153,7 +156,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 						: `${node.row.job.command}\n\nA background job of this chat; its report lands in the conversation when it ends.`;
 				} else {
 					item.contextValue = 'picode.tasks.agent';
-					item.tooltip = 'An agent this chat started; its report lands in the conversation when it ends.';
+					item.tooltip = 'An agent this chat started; its report lands in the conversation when it ends. Open its transcript to follow what it did.';
 				}
 				return item;
 			}
@@ -244,6 +247,12 @@ export function registerTasksView(deps: TasksViewDeps): vscode.Disposable {
 		provider,
 		view,
 		vscode.commands.registerCommand(TASKS_REFRESH_COMMAND, () => provider.refresh()),
+		vscode.commands.registerCommand(TASKS_TRANSCRIPT_COMMAND, (node?: TasksNode) => {
+			if (node?.kind !== 'row' || node.row.kind !== 'agent') {
+				return;
+			}
+			deps.openTranscript?.(node.row.agent.id);
+		}),
 		// The agents are pushed, and this block is polled: without this, an agent that just ended
 		// kept its row at "running" for up to one tick.
 		{ dispose: deps.onAgentsChange?.(() => provider.refreshIfVisible()) ?? (() => undefined) },

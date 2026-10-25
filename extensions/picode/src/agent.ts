@@ -59,6 +59,7 @@ import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
 import { isSlashCommand } from './context';
+import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice } from './extension-notices';
 
 /**
@@ -1142,6 +1143,8 @@ export interface AgentDeps {
 	/** The distribution root, so pi and the profile can be found without configuration. */
 	readonly distributionRoot: string;
 	readonly log: (line: string) => void;
+	/** Opens the pickers that give each Gentle agent its model; what changed, or `undefined` when nothing did. */
+	readonly chooseAgentModels?: () => Promise<string | undefined>;
 }
 
 /**
@@ -1441,6 +1444,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
 		};
+		// Gentle's terminal panel for the agents' models cannot be drawn here, so the editor answers
+		// the command with its own pickers.
+		if (deps.chooseAgentModels !== undefined && isAgentModelsCommand(request.prompt)) {
+			stream.markdown(await deps.chooseAgentModels() ?? 'No change to the agents’ models.');
+			return {};
+		}
 		const loaded = await loadSdk(deps.distributionRoot, deps.log);
 		if (loaded === undefined) {
 			stream.markdown('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.');

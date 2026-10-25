@@ -72,3 +72,19 @@ test('any other process is left exactly as it was, and wrapping twice wraps once
 	restore();
 	assert.equal(typeof module.spawn, 'function');
 });
+
+test('an exit the editor hears late is announced once the process is gone, and not said twice', () => {
+	const lines: string[] = [];
+	const child = new FakeChild();
+	const module: SpawnModule = { spawn: () => child as never };
+	const timers: Array<() => void> = [];
+	traceChildPi(module, line => lines.push(line), EDITOR, () => 0, body => { timers.push(body); return 1; }, () => undefined, () => false);
+	const spawned = module.spawn(EDITOR, ['/pi/dist/cli.js', '--mode', 'rpc']) as unknown as FakeChild;
+	const heard: unknown[][] = [];
+	spawned.on('exit', (...args) => heard.push(args));
+	spawned.kill('SIGTERM');
+	timers[1]!(); // the process is already gone
+	spawned.emit('exit', null, 'SIGTERM'); // the late real one
+	assert.deepEqual(heard, [[null, 'SIGTERM']]);
+	assert.ok(lines.some(line => /exit announced by the editor/.test(line)));
+});

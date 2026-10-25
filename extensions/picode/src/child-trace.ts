@@ -48,6 +48,7 @@ export function traceChildPi(
 	now: () => number = Date.now,
 	setTimer: (body: () => void, ms: number) => unknown = (body, ms) => setInterval(body, ms),
 	clearTimer: (timer: unknown) => void = timer => clearInterval(timer as ReturnType<typeof setInterval>),
+	isAlive: (pid: number) => boolean = pid => { try { process.kill(pid, 0); return true; } catch { return false; } },
 ): () => void {
 	const original = module.spawn;
 	if ((original as { __picodeTraced?: boolean }).__picodeTraced === true) {
@@ -56,6 +57,9 @@ export function traceChildPi(
 	const wrapped = function (this: unknown, command: string, args?: readonly string[], options?: unknown): ChildProcess {
 		const child = original.call(this, command, args, options as never);
 		if (!isChildPi(command, args, editorBinary)) {
+			if (args?.includes('rpc')) {
+				log(`child pi ${child.pid ?? '?'}: not recognised (${command} ${String(args[0])})`);
+			}
 			return child;
 		}
 		const started = now();
@@ -72,13 +76,41 @@ export function traceChildPi(
 			}
 			expected = now() + tick;
 		}, tick);
+		let watching = false;
+		let exited = false;
+		const passOn = child.emit;
+		// The real exit event, when it finally comes, is not said a second time.
+		child.emit = function (this: ChildProcess, event: string | symbol, ...rest: unknown[]): boolean {
+			if (event === 'exit' && exited) {
+				return false;
+			}
+			return (passOn as (...args: unknown[]) => boolean).call(this, event, ...rest);
+		} as ChildProcess['emit'];
 		const originalKill = child.kill.bind(child);
 		child.kill = ((signal?: NodeJS.Signals | number): boolean => {
 			const done = originalKill(signal);
+			if (!watching && child.pid !== undefined) {
+				watching = true;
+				const pid = child.pid;
+				// When the process is really gone, whatever the exit event does: tells a slow exit from a slow notice.
+				const watch = setTimer(() => {
+					if (!isAlive(pid)) {
+						clearTimer(watch);
+						log(`child pi ${pid}: process gone ${at()}`);
+						if (!exited) {
+							// The editor's own notice of the exit can arrive seconds late; say it now, once.
+							exited = true;
+							log(`child pi ${pid}: exit announced by the editor ${at()}`);
+							(child as { signalCode: NodeJS.Signals | null }).signalCode = 'SIGTERM';
+							(passOn as (...args: unknown[]) => boolean).call(child, 'exit', null, 'SIGTERM');
+						}
+					}
+				}, 50);
+			}
 			log(`child pi ${child.pid ?? '?'}: asked to stop (${String(signal ?? 'SIGTERM')}, accepted: ${done}) ${at()}`);
 			return done;
 		}) as ChildProcess['kill'];
-		child.once('exit', (code, signal) => log(`child pi ${child.pid ?? '?'}: exit event (code ${String(code)}, signal ${String(signal)}) ${at()}`));
+		child.once('exit', (code, signal) => { exited = true; log(`child pi ${child.pid ?? '?'}: exit event (code ${String(code)}, signal ${String(signal)}) ${at()}`); });
 		child.once('close', () => {
 			clearTimer(timer);
 			log(`child pi ${child.pid ?? '?'}: closed ${at()}; the editor stood still up to ${worst}ms while it ran`);

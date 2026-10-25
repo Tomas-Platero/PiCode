@@ -111,3 +111,14 @@ test('a listener that throws does not stop the others', () => {
 	store.publish(GENTLE_AGENTS_WIDGET_KEY, [line([task('1', 'running')])]);
 	assert.equal(heard, true);
 });
+
+test('what a task has said so far is kept by its id, and forgotten with the session', async () => {
+	const { GentleAgentsStore } = await import('../src/gentle-agents-store.ts');
+	const store = new GentleAgentsStore();
+	const line = JSON.stringify({ schema: 'gentle-agents.activity/v1', tasks: [{ summary: { id: 't1', agent: 'a', status: 'running' }, thread: { items: [{ kind: 'text', text: 'hi' }] } }] });
+	store.publish('gentle-agents', [line]);
+	assert.deepEqual(store.record('t1'), { task: { id: 't1', agent: 'a', status: 'running' }, thread: { items: [{ kind: 'text', text: 'hi' }] } });
+	assert.equal(store.record('nope'), undefined);
+	store.clear();
+	assert.equal(store.record('t1'), undefined);
+});

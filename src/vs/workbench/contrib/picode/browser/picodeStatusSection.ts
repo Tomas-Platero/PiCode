@@ -39,6 +39,7 @@ const UPDATE_COMMAND = 'picode.updates.apply';
 const CHECK_UPDATES_COMMAND = 'picode.updates.check';
 const OPEN_PROVIDER_SETTINGS_COMMAND = 'picode.status.openProviderSettings';
 const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
+const AGENT_MODELS_COMMAND = 'picode.agents.chooseModels';
 
 /** The state pastille in a card's header: a word, and the tone that colours it. */
 interface IPill {
@@ -274,6 +275,9 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				}
 				this.addActionRow(card, localize('picodeStatusOpenProviderSettings', "Open provider settings"), Codicon.gear, undefined, () => {
 					void this.commandService.executeCommand(OPEN_PROVIDER_SETTINGS_COMMAND);
+				});
+				this.addActionRow(card, localize('picodeStatusAgentModels', "Choose models for agents"), Codicon.hubot, localize('picodeStatusAgentModelsDescription', "The model each agent answers with."), () => {
+					void this.commandService.executeCommand(AGENT_MODELS_COMMAND);
 				});
 			});
 		}
