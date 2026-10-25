@@ -13,7 +13,7 @@
  * was kept, and where it went.
  *
  * No `vscode` import and no clock: everything here is a pure function of the pi tool event, so
- * `node --test` runs this file directly, the same rule `durable-cards.ts` keeps.
+ * `node --test` runs this file directly.
  *
  * Only the tools that **put something permanent in the store** speak this way — saving, updating,
  * and a consolidation that was actually confirmed. Searching, pinning and recording a verdict are

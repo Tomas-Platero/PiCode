@@ -5,54 +5,38 @@
 /**
  * The Tasks block's rows.
  *
- * `tasks-rows.ts` is pure (no `vscode`), so `node --test` runs it directly: the two lists it
- * merges are the shapes the pill and the durable reader already answer.
+ * `tasks-rows.ts` is pure (no `vscode`), so `node --test` runs it directly: the list it builds
+ * is the shape the pill already answers.
  */
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { DurableWorkRow } from '../src/durable-tasks.ts';
+import type { AgentTaskRow } from '../src/gentle-agents-store.ts';
 import type { BackgroundJobStatus } from '../src/status-contract.ts';
-import { elapsedLabel, newestLine, taskBoard, taskDetail, taskState, taskTitle } from '../src/tasks-rows.ts';
+import { FINISHED_AGENTS_SHOWN, elapsedLabel, taskBoard, taskDetail, taskState, taskTitle } from '../src/tasks-rows.ts';
 
 const job = (jobNumber: string, label?: string): BackgroundJobStatus =>
 	({ jobNumber, ...(label === undefined ? {} : { label }), startedAt: 1_000 });
 
-const work = (conversationId: number, inFlight: boolean | undefined, taskId?: string, entries = 4, newest = 'entry 9 (pi.assistant)'): DurableWorkRow =>
-	({ conversationId, ...(taskId === undefined ? {} : { taskId }), inFlight, entries, ...(newest === '' ? {} : { newest }) });
-
-test('every open job leads; tasks split by whether a run is in flight', () => {
-	const board = taskBoard([job('1', 'lint')], [work(10, true, 't1'), work(11, false, 't2'), work(12, undefined)]);
-	assert.deepEqual(board.running.map(row => taskTitle(row)), ['lint', 'Task t1']);
-	// A task whose state could not be read is not guessed into either group: it waits.
-	assert.deepEqual(board.idle.map(row => taskTitle(row)), ['Task t2', 'Conversation 12']);
-	assert.equal(board.total, 4);
+test('every open job is a running row, in the order the tracker gave them', () => {
+	const board = taskBoard([job('1', 'lint'), job('2')]);
+	assert.deepEqual(board.running.map(row => taskTitle(row)), ['lint', 'Background job 2']);
+	assert.equal(board.total, 2);
 });
 
-test('a daemon that did not answer contributes no task, and does not erase the jobs', () => {
-	const board = taskBoard([job('7')], undefined);
-	assert.equal(board.total, 1);
-	assert.equal(taskTitle(board.running[0]), 'Background job 7');
-	assert.equal(board.idle.length, 0);
+test('no jobs is an empty board, not an error', () => {
+	const board = taskBoard([]);
+	assert.equal(board.total, 0);
+	assert.equal(board.running.length, 0);
 });
 
-test('the title is the label, the task id, or the conversation it lives in', () => {
+test('the title is the label, or the job number when it has none', () => {
 	assert.equal(taskTitle({ kind: 'job', job: job('2', 'web lint') }), 'web lint');
 	assert.equal(taskTitle({ kind: 'job', job: job('2') }), 'Background job 2');
-	assert.equal(taskTitle({ kind: 'task', work: work(4, false, 'proof#3') }), 'Task proof#3');
-	assert.equal(taskTitle({ kind: 'task', work: work(4, false) }), 'Conversation 4');
 });
 
-test('the state word never guesses: unknown stays unknown', () => {
+test('a job is running by definition and counts time', () => {
 	assert.equal(taskState({ kind: 'job', job: job('1') }), 'running');
-	assert.equal(taskState({ kind: 'task', work: work(1, true) }), 'running');
-	assert.equal(taskState({ kind: 'task', work: work(1, false) }), 'idle');
-	assert.equal(taskState({ kind: 'task', work: work(1, undefined) }), 'state unavailable');
-});
-
-test('a job counts time and a task counts entries', () => {
-	assert.equal(taskDetail({ kind: 'task', work: work(1, true, 't', 1) }, 0), 'running · 1 entry');
-	assert.equal(taskDetail({ kind: 'task', work: work(1, true, 't', 8) }, 0), 'running · 8 entries');
 	assert.equal(taskDetail({ kind: 'job', job: job('1') }, 1_000 + 90_000), 'running · 1m');
 });
 
@@ -65,10 +49,36 @@ test('elapsed time is the shortest true wording', () => {
 	assert.equal(elapsedLabel(5_000, 1_000), '0s');
 });
 
-test('the newest entry is one line, shortened and not rewritten', () => {
-	assert.equal(newestLine(undefined), undefined);
-	assert.equal(newestLine('   '), undefined);
-	assert.equal(newestLine('entry 9 (pi.assistant)\nmore'), 'entry 9 (pi.assistant)');
-	assert.equal(newestLine('x'.repeat(80), 10), 'xxxxxxxxx…');
-	assert.equal(newestLine('short'), 'short');
+const agent = (id: string, status: AgentTaskRow['status'], extra: Partial<AgentTaskRow> = {}): AgentTaskRow =>
+	({ id, agent: 'review-risk', label: 'check the diff', status, startedAt: 1_000, endedAt: undefined, lastStep: 'read', turns: 1, toolCalls: 2, error: undefined, ...extra });
+
+test('agents still going are running rows, after the jobs; the ones that ended are listed apart', () => {
+	const board = taskBoard([job('1', 'lint')], [agent('a', 'running'), agent('b', 'queued'), agent('c', 'waiting'), agent('d', 'completed', { endedAt: 4_000 }), agent('e', 'failed', { endedAt: 3_000 })]);
+	assert.deepEqual(board.running.map(row => row.kind === 'job' ? row.job.jobNumber : row.agent.id), ['1', 'a', 'b', 'c']);
+	assert.deepEqual(board.finished.map(row => row.kind === 'agent' ? row.agent.id : ''), ['d', 'e']);
+	assert.equal(board.total, 6);
+});
+
+test('finished agents are capped, newest first as gentle-pi ordered them', () => {
+	const many = Array.from({ length: FINISHED_AGENTS_SHOWN + 3 }, (_, index) => agent(String(index), 'completed'));
+	const board = taskBoard([], many);
+	assert.equal(board.finished.length, FINISHED_AGENTS_SHOWN);
+	assert.equal(board.finished[0]?.kind === 'agent' && board.finished[0].agent.id, '0');
+});
+
+test('an agent is titled by its label, then its role, then its id', () => {
+	assert.equal(taskTitle({ kind: 'agent', agent: agent('1', 'running') }), 'check the diff');
+	assert.equal(taskTitle({ kind: 'agent', agent: agent('1', 'running', { label: '' }) }), 'review-risk');
+	assert.equal(taskTitle({ kind: 'agent', agent: agent('7', 'running', { label: '', agent: '' }) }), 'Agent 7');
+});
+
+test('an agent says its state in words a person uses', () => {
+	const state = (status: AgentTaskRow['status']) => taskState({ kind: 'agent', agent: agent('1', status) });
+	assert.deepEqual((["queued", "running", "waiting", "completed", "failed", "cancelled", "timed_out"] as const).map(state), ['queued', 'running', 'waiting for you', 'done', 'failed', 'stopped', 'timed out']);
+});
+
+test('an agent counts its role and its time: running until now, finished until it ended', () => {
+	assert.equal(taskDetail({ kind: 'agent', agent: agent('1', 'running') }, 1_000 + 90_000), 'running · review-risk · 1m');
+	assert.equal(taskDetail({ kind: 'agent', agent: agent('1', 'completed', { endedAt: 1_000 + 5_000 }) }, 1_000 + 90_000_000), 'done · review-risk · 5s');
+	assert.equal(taskDetail({ kind: 'agent', agent: agent('1', 'running', { label: '', startedAt: undefined }) }, 0), 'running');
 });

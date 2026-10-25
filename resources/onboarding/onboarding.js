@@ -118,6 +118,7 @@ const STRINGS = {
 		modelStale: (ref) => `El modelo que tenías (${ref}) ya no está en tu configuración. Elige uno abajo y guárdalo.`,
 		modelPickProvider: 'Choose a provider',
 		modelNewConversations: 'Model for new conversations',
+		modelAgentsNote: 'Your agents use this model too. Give each one its own any time with /gentle:models in the chat.',
 		modelNoKey: 'no key saved',
 
 		modelLocal: 'Local / Self-Hosted',
@@ -151,8 +152,6 @@ const STRINGS = {
 		extraMcpWhy: 'Let the agent use servers you add (MCP).',
 		extraContext: 'Your code in the chat',
 		extraContextWhy: 'The chat sees the file and the folder you are working in.',
-		extraDurable: 'Long jobs keep running',
-		extraDurableWhy: 'Work that outlives the conversation continues on its own. Running jobs show above the chat, where you can stop them.',
 		search: 'Search',
 		skipExtras: 'Skip extras',
 		doneTitle: 'Ready',
@@ -305,6 +304,7 @@ const STRINGS = {
 		modelWord: 'modelo',
 		modelCount: 'modelos',
 		modelNewConversations: 'Modelo para conversaciones nuevas',
+		modelAgentsNote: 'Tus agentes usan este modelo también. Dale uno distinto a cada uno cuando quieras con /gentle:models en el chat.',
 		modelNoKey: 'sin clave guardada',
 		modelLocal: 'Local / propio',
 		providerAdvancedShow: 'Opciones avanzadas (dirección, dialecto, nombre)',
@@ -337,8 +337,6 @@ const STRINGS = {
 		extraMcpWhy: 'Deja que el agente use los servidores que añadas (MCP).',
 		extraContext: 'Tu código en el chat',
 		extraContextWhy: 'El chat ve el archivo y la carpeta en la que trabajas.',
-		extraDurable: 'Los trabajos largos siguen',
-		extraDurableWhy: 'El trabajo que dura más que la conversación continúa solo. Los trabajos en marcha se ven encima del chat, y ahí puedes pararlos.',
 		search: 'Buscar',
 		skipExtras: 'Omitir extras',
 		doneTitle: 'Listo',
@@ -508,7 +506,7 @@ const state = {
 	theme: undefined,
 	showAllThemes: false,
 	/** The three switches, as the editor has them in force; the backend says. */
-	extras: { mcp: true, context: true, durable: true },
+	extras: { mcp: true, context: true },
 	packageQuery: '',
 	packageRows: undefined,
 	packageError: undefined,
@@ -1622,6 +1620,7 @@ function renderLocal(refs) {
 			}, entryRefs.toSorted((left, right) => left.localeCompare(right)).map(ref =>
 				el('option', { value: ref, selected: ref === selected, text: ref }))),
 		),
+		el('p', { class: 'hint', text: t('modelAgentsNote') }),
 		el('div', { class: 'panel-actions' },
 			el('button', {
 				type: 'button', class: 'secondary',
@@ -1763,7 +1762,6 @@ function renderExtras() {
 	fill($('extras-list'),
 		el('div', { class: 'panel' },
 			toggle('mcp', t('extraMcp'), t('extraMcpWhy')),
-			toggle('durable', t('extraDurable'), t('extraDurableWhy')),
 		),
 		el('div', { class: 'panel' },
 			el('div', { class: 'panel-head' },

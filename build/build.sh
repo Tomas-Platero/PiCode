@@ -738,12 +738,11 @@ KEY_EXT=$( node build/build-helpers.mjs cache fingerprint extensions "${PICODE_C
 KEY_PACK=$( node build/build-helpers.mjs cache fingerprint pack "${PICODE_CACHE_ENV[@]}" )
 
 # What the early exit trusts is exactly what the verification at the end trusts: an editor
-# executable, the packaged out/, the durable agent and pi.
+# executable, the packaged out/ and pi.
 pack_intact() {
   [[ -d "${PACK_DIR}" ]] || return 1
   compgen -G "${PACK_DIR}/PiCode*.exe" > /dev/null || return 1
   [[ -f "${PACK_DIR}/resources/app/out/cli.js" ]] || return 1
-  [[ -f "${PACK_DIR}/resources/durable/cli.js" ]] || return 1
   local pi_entry
   pi_entry="${PACK_DIR}/resources/pi-runtime/node_modules/$( node -p "require('./build/distribution/runtime.json').package" )/dist/index.js"
   [[ -f "${pi_entry}" ]] || return 1
@@ -926,27 +925,23 @@ node --experimental-strip-types --max-old-space-size="${NODE_HEAP_MB}" ./node_mo
 # ---------------------------------------------------------------------------
 # pi, the memory engine, and the distribution layer
 # ---------------------------------------------------------------------------
-# pi, the durable agent and the memory engine are independent: none reads another's output, and
-# all three only write into the pack. Running them in parallel shaves the longest off the build
+# pi and the memory engine are independent: none reads another's output, and
+# both only write into the pack. Running them in parallel shaves the longest off the build
 # instead of adding them.
-picode_phase 5 "stage" "pi, the durable agent, the memory engine, and the distribution layer, onto ${PACK_DIR}"
+picode_phase 5 "stage" "pi, the memory engine, and the distribution layer, onto ${PACK_DIR}"
 
 bash build/pi-runtime.sh "${PACK_DIR}" &
 PI_PID=$!
-bash build/durable-runtime.sh "${PACK_DIR}" &
-DURABLE_PID=$!
 bash build/engram-runtime.sh "${PACK_DIR}" &
 ENGRAM_PID=$!
 
 PI_OK=0
-DURABLE_OK=0
 ENGRAM_OK=0
 wait "${PI_PID}" && PI_OK=1 || PI_OK=0
-wait "${DURABLE_PID}" && DURABLE_OK=1 || DURABLE_OK=0
 wait "${ENGRAM_PID}" && ENGRAM_OK=1 || ENGRAM_OK=0
 
-if [[ "${PI_OK}" -ne 1 || "${DURABLE_OK}" -ne 1 || "${ENGRAM_OK}" -ne 1 ]]; then
-  echo "error: pi, durable or the memory engine failed to stage (pi=${PI_OK}, durable=${DURABLE_OK}, engram=${ENGRAM_OK})." >&2
+if [[ "${PI_OK}" -ne 1 || "${ENGRAM_OK}" -ne 1 ]]; then
+  echo "error: pi or the memory engine failed to stage (pi=${PI_OK}, engram=${ENGRAM_OK})." >&2
   exit 1
 fi
 

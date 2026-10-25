@@ -37,6 +37,7 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { resolveOnPath } from './piLocate';
+import { withProductEnv } from './product-env';
 
 /* ------------------------------------------------------------------ *
  * Finding npm's CLI script
@@ -149,5 +150,7 @@ export function planNpmRun(args: readonly string[], deps: NpmRunDeps = {}): NpmR
  * when it is handed npm's CLI script, and handed through untouched otherwise.
  */
 export function npmRunEnv(plan: NpmRunPlan, base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	return plan.runAsNode ? { ...base, ELECTRON_RUN_AS_NODE: '1' } : { ...base };
+	// The product's own variables ride on every npm run: no install script fetches anything and
+	// nothing reports usage (`product-env.ts`).
+	return withProductEnv(plan.runAsNode ? { ...base, ELECTRON_RUN_AS_NODE: '1' } : { ...base });
 }

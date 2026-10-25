@@ -48,9 +48,6 @@
 	// product *is* the agent.
 	"chat.disableAIFeatures": false,
 
-	// --- Agents: the durable agent starts with the window and brakes what is destructive --------
-	"picode.durable.autoStart": true,
-	"picode.durable.guard": true,
 
 	// --- MCP Servers -----------------------------------------------------------------------------
 	// `access: all` lets the chat use the configured servers (the actual list is edited on the MCP

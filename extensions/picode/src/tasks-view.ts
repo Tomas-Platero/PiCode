@@ -8,57 +8,47 @@
  *
  * It is a **block of the existing container**, like Memory — no second panel, no page, no window.
  * What it shows is exactly what the chat cannot: a list that stays put while you work in another
- * file, a running job's clock, and the tasks the chat delegated to the durable agent, each one
- * opening to its own facts instead of to a transcript you have to scroll.
+ * file, a running job's clock, and the subagents gentle-pi runs, each one opening to its own
+ * facts instead of to a transcript you have to scroll.
  *
- * Three rules decide the shape of this file:
+ * Two rules decide the shape of this file:
  *
  *  * **Nothing is invented.** The jobs come from the tracker the pill above the chat input reads;
- *    the tasks from the daemon's own answer. A daemon that does not answer is said as a row, not
- *    drawn as "no work".
- *  * **Opening is not reading.** The block refreshes the work it lists every few seconds while it
- *    is visible and stops when it is folded away, so a panel that nobody is looking at does not
- *    keep asking the durable agent anything.
- *  * **The words are ours.** No endpoint, no socket, no conversation internals reach the screen;
- *    the conversation id stays in the tooltip, where the export command wants it.
+ *    the agents from what gentle-pi last published.
+ *  * **Opening is not reading.** The block refreshes while it is visible and stops when it is
+ *    folded away, so a panel that nobody is looking at does no work.
  */
 
 import * as vscode from 'vscode';
-import { openDurableConversation, readDurableStatus, type DurableStatus } from './durable';
-import { onDurableChange } from './durable-signal';
+import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
-import { elapsedLabel, newestLine, taskBoard, taskDetail, taskState, taskTitle, type TaskBoard, type TaskRow } from './tasks-rows';
+import { elapsedLabel, taskBoard, taskDetail, taskState, taskTitle, type TaskBoard, type TaskRow } from './tasks-rows';
 
 /** The view id, which the manifest also declares: the two must not drift. */
 export const TASKS_VIEW_ID = 'picode.status.tasks';
 
 export const TASKS_REFRESH_COMMAND = 'picode.tasks.refresh';
-export const TASKS_OPEN_COMMAND = 'picode.tasks.open';
+export const TASKS_TRANSCRIPT_COMMAND = 'picode.tasks.openTranscript';
 
-/**
- * How often a visible block asks again.
- *
- * The status surface reads the same daemon on the same cadence, so the two cannot disagree by
- * more than one tick. Folded away, the timer is cleared: the answer only matters when it is on
- * screen.
- */
+/** How often a visible block asks again. Folded away, the timer is cleared. */
 const REFRESH_MS = 5_000;
 
 type TasksNode =
 	| { readonly kind: 'heading' }
 	| { readonly kind: 'message'; readonly text: string }
-	| { readonly kind: 'group'; readonly group: 'running' | 'idle'; readonly count: number }
+	| { readonly kind: 'group'; readonly group: 'running' | 'finished'; readonly count: number }
 	| { readonly kind: 'row'; readonly row: TaskRow }
-	| { readonly kind: 'fact'; readonly label: string; readonly detail: string; readonly icon: string; readonly tooltip?: string }
-	| { readonly kind: 'open'; readonly row: TaskRow };
-
-type TasksData =
-	| { readonly kind: 'loading' }
-	| { readonly kind: 'ready'; readonly board: TaskBoard; readonly durable: DurableStatus };
+	| { readonly kind: 'fact'; readonly label: string; readonly detail: string; readonly icon: string; readonly tooltip?: string };
 
 /** Where the block reads from. The jobs are the chat's own tracker, not a copy of it. */
 export interface TasksViewDeps {
 	readonly runningJobs: () => readonly BackgroundJobStatus[];
+	/** The subagents gentle-pi last published. */
+	readonly agents?: () => readonly AgentTaskRow[];
+	/** Calls the listener when the agents change; returns how to stop. */
+	readonly onAgentsChange?: (listener: () => void) => () => void;
+	/** Opens the page that follows what one agent does (by its task id). */
+	readonly openTranscript?: (id: string) => void;
 	/** What "now" is, so the tests can hold a clock still. */
 	readonly now?: () => number;
 }
@@ -68,19 +58,21 @@ function rowIcon(row: TaskRow): string {
 	if (row.kind === 'job') {
 		return 'terminal';
 	}
-	if (row.work.inFlight === undefined) {
-		return 'question';
+	switch (row.agent.status) {
+		case 'queued': return 'clock';
+		case 'running': return 'sync';
+		case 'waiting': return 'bell';
+		case 'completed': return 'check';
+		default: return 'error';
 	}
-	return row.work.inFlight ? 'sync' : 'circle-outline';
 }
 
 class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	private readonly changed = new vscode.EventEmitter<TasksNode | undefined | void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	private data: TasksData = { kind: 'loading' };
+	private board: TaskBoard | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
-	private reading = false;
 
 	constructor(private readonly deps: TasksViewDeps) { }
 
@@ -89,25 +81,17 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 		this.changed.dispose();
 	}
 
-	/**
-	 * Refreshes only while the block is on screen.
-	 *
-	 * The transcript tab announces a run starting or ending; folding the answer away means the
-	 * block is not asking, and a notification must not start it asking behind the owner's back.
-	 */
+	/** Reads the board from the tracker and from what gentle-pi published. */
+	refresh(): void {
+		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? []);
+		this.changed.fire();
+	}
+
+	/** Refreshes only while the block is on screen: a push must not start it asking by itself. */
 	refreshIfVisible(): void {
 		if (this.timer !== undefined) {
 			this.refresh();
 		}
-	}
-
-	/** Reads the board. The previous answer stays on screen while the new one is read. */
-	refresh(): void {
-		if (this.reading) {
-			return;
-		}
-		this.reading = true;
-		void this.load();
 	}
 
 	/** Starts asking again: called when the block is opened, and only then. */
@@ -125,25 +109,6 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 		}
 	}
 
-	private async load(): Promise<void> {
-		try {
-			const jobs = this.deps.runningJobs();
-			const durable = await readDurableStatus();
-			this.data = { kind: 'ready', board: taskBoard(jobs, durable.work), durable };
-		} catch (error) {
-			// `readDurableStatus` answers a down daemon as data, so this is the unexpected case:
-			// one honest row rather than a block that silently keeps its last answer forever.
-			this.data = {
-				kind: 'ready',
-				board: taskBoard(this.deps.runningJobs(), undefined),
-				durable: { up: false, endpoint: '', error: error instanceof Error ? error.message : String(error) },
-			};
-		} finally {
-			this.reading = false;
-			this.changed.fire();
-		}
-	}
-
 	private now(): number {
 		return this.deps.now?.() ?? Date.now();
 	}
@@ -151,47 +116,47 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	getTreeItem(node: TasksNode): vscode.TreeItem {
 		switch (node.kind) {
 			case 'heading': {
-				const board = this.data.kind === 'ready' ? this.data.board : undefined;
+				const board = this.board;
 				const label = board === undefined
 					? 'Tasks'
-					: board.total === 0
+					: board.running.length === 0
 						? 'Nothing running'
-						: `${board.running.length} running · ${board.idle.length} idle`;
+						: `${board.running.length} running`;
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon('dashboard');
 				item.contextValue = 'picode.tasks.heading';
-				item.tooltip = 'The work the chat has out: background jobs it launched, and the tasks it handed to the durable agent.';
+				item.tooltip = 'The work the chat has out: the background jobs it launched and the agents it started.';
 				return item;
 			}
 			case 'message': {
 				const item = new vscode.TreeItem(node.text, vscode.TreeItemCollapsibleState.None);
-				item.iconPath = new vscode.ThemeIcon('warning');
+				item.iconPath = new vscode.ThemeIcon('info');
 				item.contextValue = 'picode.tasks.message';
 				return item;
 			}
 			case 'group': {
-				const label = node.group === 'running' ? 'Running' : 'Waiting';
-				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
+				const running = node.group === 'running';
+				const item = new vscode.TreeItem(running ? 'Running' : 'Finished', running ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
 				item.description = String(node.count);
-				item.iconPath = new vscode.ThemeIcon(node.group === 'running' ? 'sync' : 'clock');
+				item.iconPath = new vscode.ThemeIcon(running ? 'sync' : 'history');
 				item.contextValue = 'picode.tasks.group';
-				item.tooltip = node.group === 'running'
-					? 'Happening now: the chat\'s background jobs and the tasks with a run in flight.'
-					: 'Tasks that exist and are quiet. Open one to see what it holds.';
+				item.tooltip = running
+					? 'Happening now: the chat\'s background jobs and the agents still working.'
+					: 'Agents that ended, newest first.';
 				return item;
 			}
 			case 'row': {
 				const item = new vscode.TreeItem(taskTitle(node.row), vscode.TreeItemCollapsibleState.Collapsed);
 				item.description = taskDetail(node.row, this.now());
 				item.iconPath = new vscode.ThemeIcon(rowIcon(node.row));
-				item.contextValue = node.row.kind === 'job' ? 'picode.tasks.job' : 'picode.tasks.task';
 				if (node.row.kind === 'job') {
+					item.contextValue = 'picode.tasks.job';
 					item.tooltip = node.row.job.command === undefined
 						? 'A background job of this chat; its report lands in the conversation when it ends.'
 						: `${node.row.job.command}\n\nA background job of this chat; its report lands in the conversation when it ends.`;
 				} else {
-					item.tooltip = `Durable task in conversation ${node.row.work.conversationId}. A task is work the chat handed to the durable agent — one per batch of several things to do.`;
-					item.command = { command: TASKS_OPEN_COMMAND, title: 'Open the task', arguments: [node.row] };
+					item.contextValue = 'picode.tasks.agent';
+					item.tooltip = 'An agent this chat started; its report lands in the conversation when it ends. Open its transcript to follow what it did.';
 				}
 				return item;
 			}
@@ -205,14 +170,6 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				}
 				return item;
 			}
-			case 'open': {
-				const item = new vscode.TreeItem('Open the transcript', vscode.TreeItemCollapsibleState.None);
-				item.iconPath = new vscode.ThemeIcon('comment-discussion');
-				item.contextValue = 'picode.tasks.open';
-				item.command = { command: TASKS_OPEN_COMMAND, title: 'Open the task', arguments: [node.row] };
-				item.tooltip = 'What this task holds, in a tab of its own.';
-				return item;
-			}
 		}
 	}
 
@@ -222,8 +179,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 		}
 		switch (node.kind) {
 			case 'group': {
-				const board = this.data.kind === 'ready' ? this.data.board : undefined;
-				const rows = node.group === 'running' ? board?.running ?? [] : board?.idle ?? [];
+				const rows = node.group === 'running' ? this.board?.running ?? [] : this.board?.finished ?? [];
 				return rows.map(row => ({ kind: 'row', row }));
 			}
 			case 'row':
@@ -235,22 +191,17 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 
 	private root(): TasksNode[] {
 		const nodes: TasksNode[] = [{ kind: 'heading' }];
-		if (this.data.kind === 'loading') {
+		if (this.board === undefined) {
 			return nodes;
 		}
-		const { board, durable } = this.data;
-		// The daemon down is not "no tasks": the jobs are still readable, and the tasks are not.
-		if (!durable.up) {
-			nodes.push({ kind: 'message', text: 'The durable agent is not answering, so its tasks cannot be listed.' });
+		if (this.board.running.length > 0) {
+			nodes.push({ kind: 'group', group: 'running', count: this.board.running.length });
 		}
-		if (board.running.length > 0) {
-			nodes.push({ kind: 'group', group: 'running', count: board.running.length });
+		if (this.board.finished.length > 0) {
+			nodes.push({ kind: 'group', group: 'finished', count: this.board.finished.length });
 		}
-		if (board.idle.length > 0) {
-			nodes.push({ kind: 'group', group: 'idle', count: board.idle.length });
-		}
-		if (board.total === 0) {
-			nodes.push({ kind: 'message', text: durable.up ? 'No work in flight.' : 'No background jobs running.' });
+		if (this.board.total === 0) {
+			nodes.push({ kind: 'message', text: 'No background jobs or agents running.' });
 		}
 		return nodes;
 	}
@@ -266,22 +217,28 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			}
 			return facts;
 		}
-		const work = row.work;
+		const { agent } = row;
 		const facts: TasksNode[] = [
 			{ kind: 'fact', label: 'State', detail: taskState(row), icon: rowIcon(row) },
-			{ kind: 'fact', label: 'Entries', detail: String(work.entries), icon: 'list-ordered' },
-			{ kind: 'fact', label: 'Conversation', detail: String(work.conversationId), icon: 'comment-discussion' },
 		];
-		const newest = newestLine(work.newest);
-		if (newest !== undefined) {
-			facts.push({ kind: 'fact', label: 'Newest', detail: newest, icon: 'history', tooltip: work.newest });
+		if (agent.agent.length > 0) {
+			facts.push({ kind: 'fact', label: 'Agent', detail: agent.agent, icon: 'person' });
 		}
-		facts.push({ kind: 'open', row });
+		if (agent.startedAt !== undefined) {
+			facts.push({ kind: 'fact', label: agent.endedAt === undefined ? 'Running for' : 'Took', detail: elapsedLabel(agent.startedAt, agent.endedAt ?? this.now()), icon: 'watch' });
+		}
+		facts.push({ kind: 'fact', label: 'Steps', detail: `${agent.turns} ${agent.turns === 1 ? 'turn' : 'turns'} · ${agent.toolCalls} ${agent.toolCalls === 1 ? 'tool call' : 'tool calls'}`, icon: 'list-ordered' });
+		if (agent.lastStep.length > 0) {
+			facts.push({ kind: 'fact', label: 'Last step', detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
+		}
+		if (agent.error !== undefined) {
+			facts.push({ kind: 'fact', label: 'Problem', detail: agent.error, icon: 'warning', tooltip: agent.error });
+		}
 		return facts;
 	}
 }
 
-/** Registers the block and its two actions. */
+/** Registers the block and its refresh action. */
 export function registerTasksView(deps: TasksViewDeps): vscode.Disposable {
 	const provider = new TasksProvider(deps);
 	const view = vscode.window.createTreeView(TASKS_VIEW_ID, { treeDataProvider: provider, showCollapseAll: false });
@@ -290,15 +247,15 @@ export function registerTasksView(deps: TasksViewDeps): vscode.Disposable {
 		provider,
 		view,
 		vscode.commands.registerCommand(TASKS_REFRESH_COMMAND, () => provider.refresh()),
-		// The tab is event-driven and this block is polled: without this, a finished run kept this
-		// row at "running" for up to one tick. The listener asks the daemon again — it carries no state.
-		{ dispose: onDurableChange(() => provider.refreshIfVisible()) },
-		vscode.commands.registerCommand(TASKS_OPEN_COMMAND, (row: TaskRow | undefined) => {
-			if (row === undefined || row.kind !== 'task') {
-				return undefined;
+		vscode.commands.registerCommand(TASKS_TRANSCRIPT_COMMAND, (node?: TasksNode) => {
+			if (node?.kind !== 'row' || node.row.kind !== 'agent') {
+				return;
 			}
-			return openDurableConversation(row.work.conversationId);
+			deps.openTranscript?.(node.row.agent.id);
 		}),
+		// The agents are pushed, and this block is polled: without this, an agent that just ended
+		// kept its row at "running" for up to one tick.
+		{ dispose: deps.onAgentsChange?.(() => provider.refreshIfVisible()) ?? (() => undefined) },
 		// Reading costs, so the clock runs only while the block is on screen: opening it reads
 		// once and keeps asking; folding it away stops everything and leaves the last answer.
 		view.onDidChangeVisibility(event => {

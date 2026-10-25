@@ -1,6 +1,6 @@
 # extensions/picode/ — 🔌 El conector de PiCode
 
-**La pieza que hace que el chat exista.** Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP, gestiona paquetes, manda trabajo al agente durable y pinta el panel de estado.
+**La pieza que hace que el chat exista.** Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP, gestiona paquetes, lista y continúa las conversaciones de pi y pinta el panel de estado.
 
 > Regla de producto: PiCode **no tiene extensión propia instalable**. Este conector es código del núcleo: viaja dentro del árbol (`the tree`), se empaqueta con el editor y no se instala de ningún sitio. La capa de superficie vive en el chat y en la barra de actividad, no en una ventana aparte.
 
@@ -47,7 +47,6 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `agent.ts` | `@pi` dentro del chat propio del editor: lo que hace que el chat exista. |
 | `agents.ts` | Los agentes que el editor lanzó, como una sola lista. |
 | `chat-edits.ts` | Los ficheros que un turno cambió, contados y con diff. |
-| `chat-record.ts` | La copia durable del chat: cada turno que ve la sala lo guarda el daemon (*pi piensa, durable recuerda*). |
 | `commands.ts` | Los comandos de pi en la caja de entrada del chat, como prompts de fichero. |
 | `command-registry.ts` | El registro de comandos de una sesión, leído sin `vscode` (por eso los tests pueden ejecutarlo). |
 | `customizations.ts` | Agentes y skills de pi, como los necesita la página de gestión del chat. |
@@ -91,35 +90,27 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `packages-manage.ts` | Habilitar, deshabilitar y quitar paquetes. |
 | `packages-registry.ts` | El catálogo y el instalador detrás de la sección Paquetes. |
 | `packages-updates.ts` | Si un paquet instalado va tarde y cómo llevarlo a la versión nueva. |
-| `left-behind-packages.ts` | Los paquetes que una importación de un pi externo deja atrás. |
+| `left-behind-packages.ts` | Los paquetes que una importación de un pi externo deja atrás (hoy ninguno). |
+| `product-packages.ts` | gentle-pi y gentle-engram, fijados en el perfil por el producto, y qué se recorta de gentle-pi. |
+| `gentle-agents-store.ts` | Los subagentes de gentle-pi, leídos de lo que publica, para el bloque Tasks. |
+| `child-trace.ts` | La cronología de los procesos pi hijos de gentle-pi: cuándo empiezan, cuándo se les pide parar y cuándo salen. |
+| `distribution-root.ts` | Qué carpeta es la distribución: la del pack, o el repositorio en una ejecución de desarrollo. |
+| `extension-notices.ts` | Los avisos de una extensión que el chat no enseña porque el producto ya los espera. |
+| `product-env.ts` | Las variables que el producto fija para pi y para npm: sin descargas de instalación ni telemetría. |
 | `npm-run.ts` | Cómo ejecuta npm este editor, decidido en un sitio (el caso de `npm.cmd` en Windows). |
 | `updates-check.ts` | Las reglas del chequeo de actualizaciones: qué se comprueba, qué se guarda y qué se avisa. |
 | `onboarding.ts` | La configuración de primer arranque, como puente de la página de bienvenida. |
 | `profile-import.ts` | La copia única de un perfil y el escaneo que la previsualiza. |
 | `import-project.ts` | Lo que un perfil importado significa para los ajustes del editor. |
 
-### ⏳ Agente durable
-
-| Fichero | Qué hace |
-| --- | --- |
-| `durable.ts` | El agente durable visto desde el editor. |
-| `durable-spawn.ts` | Cómo el editor lanza el daemon, decidido en un sitio puro. |
-| `durable-folder.ts` | Dónde se busca el agente durable, decidido en un sitio puro. |
-| `durable-client.ts` | El cliente del protocolo del daemon, copiado del dueño del protocolo. |
-| `durable-run-stream.ts` | El flujo en vivo de una ejecución durable, mapeado para el chat. |
-| `durable-sessions.ts` | Las conversaciones del daemon, como las lista el panel de Sesiones. |
-| `durable-sessions-register.ts` | Esas conversaciones como tercera fuente del panel (junto a Local y las de pi). |
-| `durable-tasks.ts` | El trabajo del daemon, como lo lista el panel de estado. |
-| `durable-cards.ts` | La delegación durable, como tarjeta de chat. |
-
 ### 📚 Sesiones de pi
 
 | Fichero | Qué hace |
 | --- | --- |
-| `sessions-provider.ts` | Las sesiones de pi en el panel de Sesiones. |
+| `sessions-provider.ts` | Las sesiones de pi: cómo se leen y se listan. |
+| `sessions-digest.ts` | Qué avisa al panel de Sesiones de que mire otra vez: nombres de transcripciones y minutos, no cada escritura. |
+| `sessions-register.ts` | Esas sesiones como la lista única del panel de Sesiones. |
 | `sessions-resume.ts` | Continuar una conversación que el panel lista. |
-| `sessions-import.ts` | Una importación aterriza donde la única lista la ve. |
-| `sessions-import-plan.ts` | Qué hace una importación al daemon, decidido antes de tocar la red. |
 | `sessions-backup.ts` | Respaldar las sesiones de pi en PiCode Cloud y restaurarlas desde allí. |
 
 ### 📊 Panel de estado y trabajo en segundo plano
@@ -143,4 +134,3 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 
 - El mapa de todo el repositorio: [`docs/MAPA.md`](../../../docs/MAPA.md).
 - La capa de agente y el SDK de pi: [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
-- El agente al que se conecta: [`durable/README.md`](../../durable/README.md).

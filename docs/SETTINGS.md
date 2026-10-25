@@ -39,17 +39,6 @@ código: el árbol de Ajustes del editor (`settingsLayout.ts`), lo que declara e
 | `picode.memory.binary` | Ruta a otro motor de memoria | Ajustes › Chat › Settings | Ajustes (infraestructura) |
 | `picode.updates.check` | Buscar actualizaciones en segundo plano | **Ajustes › Chat › Settings** (antes en Extensions) | Chat Settings › *Updates* |
 
-### 1.4 Agente durable (infraestructura)
-
-| Clave | Para qué | Destino |
-| --- | --- | --- |
-| `picode.durable.folder` | Carpeta donde vive su `cli.js` | Ajustes de VS Code (infraestructura) |
-| `picode.durable.autoStart` | Arrancarlo solo al abrir una ventana | Ajustes de VS Code (infraestructura) |
-| `picode.durable.mcp` | Si recibe las herramientas MCP | Ajustes de VS Code (infraestructura) |
-| `picode.durable.guard` | Bloquear comandos destructivos | Ajustes de VS Code (infraestructura) |
-| `picode.durable.model` | Modelo con el que corre, `proveedor/modelo` | Ajustes de VS Code (infraestructura) |
-| `picode.durable.agent` | Perfil `agents/<nombre>.md` que ejecuta | Ajustes de VS Code (infraestructura) |
-
 ### 1.5 MCP
 
 | Clave | Para qué | Estado |

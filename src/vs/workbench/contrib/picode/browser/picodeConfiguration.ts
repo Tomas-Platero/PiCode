@@ -58,24 +58,6 @@ export const PICODE_PI_RUNTIME_SETTING = 'picode.pi.runtime';
 /** Whether pi works on the whole workspace area or on the first folder alone. */
 export const PICODE_PROJECT_MODE_SETTING = 'picode.pi.projectMode';
 
-/** Where the durable agent lives: the folder that holds its `cli.js`. */
-export const PICODE_DURABLE_FOLDER_SETTING = 'picode.durable.folder';
-
-/** Whether PiCode starts the durable agent by itself when a window opens. */
-export const PICODE_DURABLE_AUTOSTART_SETTING = 'picode.durable.autoStart';
-
-/** Whether the durable agent's MCP bridge connects the pi profile's servers. */
-export const PICODE_DURABLE_MCP_SETTING = 'picode.durable.mcp';
-
-/** Whether the durable agent's deterministic destructive-command guard is on. */
-export const PICODE_DURABLE_GUARD_SETTING = 'picode.durable.guard';
-
-/** Which model the durable agent runs on, as `provider/model`. */
-export const PICODE_DURABLE_MODEL_SETTING = 'picode.durable.model';
-
-/** Which profile agent's instructions the durable agent runs with. */
-export const PICODE_DURABLE_AGENT_SETTING = 'picode.durable.agent';
-
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	id: 'picode',
 	title: 'PiCode',
@@ -282,54 +264,6 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			],
 			default: 'project',
 			markdownDescription: localize('picode.context.mode', "How much of what you see travels with each message. The agent can still read any file it needs; this says what it is told without asking."),
-		},
-
-		// The durable agent lives in the repository's `durable` folder
-		// (the folder setting below says where), and the editor runs it: the Durable card of the
-		// Status section and the "PiCode: Durable" commands start and stop its daemon, list its
-		// conversations and send prompts through it. These settings are that agent's own options,
-		// kept here (and not only as CLI flags) because this is where options belong; the agent
-		// reads this settings file read-only when it starts. Each description says what the
-		// setting actually does to that agent, and no more.
-		[PICODE_DURABLE_FOLDER_SETTING]: {
-			type: 'string',
-			default: 'durable',
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.folder', "Where the durable agent lives: the folder that holds its cli.js. A relative path is resolved against your open workspace folders, and then beside the application itself — which is what finds the agent of a build packed inside the PiCode repository while you work in another project. The Durable card of the Status section and the PiCode: Durable commands use it to find the agent."),
-		},
-		[PICODE_DURABLE_AUTOSTART_SETTING]: {
-			type: 'boolean',
-			default: true,
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.autoStart', "Whether PiCode starts the durable agent by itself when a window opens, so the Durable card of the Status section is already running instead of asking. 'PiCode: Stop Durable Agent' means stopped: the editor does not start it again until you ask it to, or the window is reloaded. This is the editor's own behaviour — the agent has no say in it."),
-		},
-		[PICODE_DURABLE_MCP_SETTING]: {
-			type: 'boolean',
-			default: true,
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.mcp', "Whether the durable agent (start it with 'PiCode: Start Durable Agent' or from the Durable card of the Status section) connects the MCP servers of the host's profile when it starts, offering their tools through a search tool instead of declaring them all. Turning it off is the agent's --no-mcp flag."),
-		},
-		[PICODE_DURABLE_GUARD_SETTING]: {
-			type: 'boolean',
-			default: true,
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.guard', "Whether the durable agent blocks destructive commands in code before they run: recursive deletes, forced pushes and history rewrites, disk operations, and any write outside the working directory. Turning it off is the agent's --no-guard flag — with the guard off, nothing stops those commands but you."),
-		},
-		// The model is **not** defaulted to anything, and the name that used to be here is why: it was
-		// the owner's own provider (`omni/auto`), which no other machine has, so a fresh install
-		// pointed the agent at a model that does not exist there. Empty means "not chosen" and the
-		// agent picks its own; the list is what the profile in force actually offers.
-		[PICODE_DURABLE_MODEL_SETTING]: {
-			type: 'string',
-			default: '',
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.model', "Which model the durable agent runs on, written as provider/model. [Choose a model](command:picode.durable.chooseModel) lists the ones the host's profile knows — the same list the chat's picker shows. Leave it empty and the agent chooses. The agent's --model flag wins over this setting."),
-		},
-		[PICODE_DURABLE_AGENT_SETTING]: {
-			type: 'string',
-			default: '',
-			scope: ConfigurationScope.APPLICATION,
-			markdownDescription: localize('picode.durable.agent', "Which profile agent the durable agent runs as: the name of an agents/<name>.md file in the host's profile, whose instructions the conversation then follows. Leave it empty for no agent. The agent's --agent flag wins over this setting."),
 		},
 	},
 });

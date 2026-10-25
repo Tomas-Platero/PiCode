@@ -63,8 +63,8 @@ the tools narrate in between (npm's config warnings, every extension being clean
 `INFO:CONSOLE` from Chromium). Errors and warnings always survive the filter.
 `npm run dev -- --verbose` shows the raw stream instead.
 
-That editor runs the source tree, not the pack. When a pack exists, `dev` links its pi runtime and
-durable agent into `resources/` (gitignored) so the chat and the agent work while you edit; the
+That editor runs the source tree, not the pack. When a pack exists, `dev` links its pi runtime
+into `resources/` (gitignored) so the chat works while you edit; the
 channel seal and anything else the pack rewrites around the editor are still absent. With no pack
 yet, it says so and the chat has nothing to run.
 
@@ -101,7 +101,7 @@ in full.
 | 2 | connector | `build/build-connector.sh`: `tsc` over `extensions/picode`. The packer collects extensions but does not compile them, so this has to happen first. |
 | 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s; skipped by `build-fast.sh`), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
 | 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-vscode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
-| 5 | stage | `build/pi-runtime.sh` (installs the pinned pi into the pack), `build/durable-runtime.sh` (the durable agent, `durable/`, and the chat's bridge into `resources/durable` — its own dependencies travel with it, ~116 MB, and nothing else does: no proofs, no `.data/`, no credentials) and `build/stage-distribution.sh` (portable profile, settings, icons, names). |
+| 5 | stage | `build/pi-runtime.sh` (installs the pinned pi into the pack), `build/engram-runtime.sh` (the memory engine) and `build/stage-distribution.sh` (portable profile, settings, icons, names). |
 
 `-o` stops inside phase 1 with exit code 0: after the source and the identity are
 checked, before anything is installed. It exists so the source can be checked in

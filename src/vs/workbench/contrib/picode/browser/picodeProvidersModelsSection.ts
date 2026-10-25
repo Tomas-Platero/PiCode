@@ -7,6 +7,7 @@ import './media/picodeProvidersModels.css';
 import { $, addDisposableListener, append, clearNode } from '../../../../base/browser/dom.js';
 import { Button } from '../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -59,7 +60,23 @@ interface IProfileProvider {
 }
 
 /** The two sub-tabs of this section. */
-type PanelTab = 'providers' | 'models';
+type PanelTab = 'providers' | 'models' | 'agents';
+
+/** What the connector says about Gentle's agents: who they are and what each is set to. */
+interface IAgentModelsState {
+	readonly agents: readonly string[];
+	readonly models: Readonly<Record<string, { readonly model?: string; readonly thinking?: string }>>;
+	readonly invalid: boolean;
+}
+
+/** Gentle's own preferences: how it talks and what new sessions start with. */
+interface IGentleSettings {
+	readonly persona: string;
+	readonly permissions: string;
+	readonly permissionsBroken: boolean;
+}
+
+const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 export class PiCodeProvidersModelsSection extends Disposable implements IAICustomizationManagementSectionWidget {
 
@@ -72,6 +89,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** The providers the **profile** has, as the connector reports them (`picode.setup.status`). */
 	private profileProviders: readonly IProfileProvider[] = [];
 	private profileLoaded = false;
+	/** Gentle's agents and their models; `undefined` until the connector has answered. */
+	private agentState: IAgentModelsState | undefined;
+	private agentNote = '';
+	private gentleState: IGentleSettings | undefined;
 	/**
 	 * The model the chat runs on, as this panel believes it.
 	 *
@@ -169,7 +190,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		clearNode(this.tabsBar);
 		clearNode(this.body);
 
-		for (const [key, label] of [['providers', localize('picodePm.tabProviders', "Providers")], ['models', localize('picodePm.tabModels', "Models")]] as const) {
+		for (const [key, label] of [['providers', localize('picodePm.tabProviders', "Providers")], ['models', localize('picodePm.tabModels', "Models")], ['agents', localize('picodePm.tabAgents', "Gentle AI")]] as const) {
 			const button = append(this.tabsBar, $('button.picode-pm-tab'));
 			button.setAttribute('type', 'button');
 			button.textContent = label;
@@ -179,6 +200,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			this.store.add(addDisposableListener(button, 'click', () => {
 				if (this.tab !== key) {
 					this.tab = key;
+					if (key === 'agents') {
+						void this.loadAgents();
+					}
 					this.render();
 				}
 			}));
@@ -186,8 +210,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 
 		if (this.tab === 'providers') {
 			this.renderProviders();
-		} else {
+		} else if (this.tab === 'models') {
 			this.renderModels();
+		} else {
+			this.renderAgents();
 		}
 	}
 
@@ -383,6 +409,185 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		cancel.label = localize('picodePm.cancel', "Cancel");
 		this.store.add(cancel.onDidClick(() => this.render()));
 		idInput.focus();
+	}
+
+	/* --------------------------------------------------------------------- agents */
+
+	/** Asks the connector for Gentle's agents and what each is set to. */
+	private async loadAgents(): Promise<void> {
+		try {
+			this.agentState = await this.commandService.executeCommand<IAgentModelsState>('picode.agents.models');
+		} catch {
+			this.agentState = { agents: [], models: {}, invalid: false };
+		}
+		try {
+			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.settings');
+		} catch {
+			this.gentleState = undefined;
+		}
+		if (this.tab === 'agents') {
+			this.render();
+		}
+	}
+
+	/** One of Gentle's own preferences (`persona` or `permissions`). */
+	private async saveGentle(key: string, value: string): Promise<void> {
+		try {
+			this.gentleState = await this.commandService.executeCommand<IGentleSettings>('picode.gentle.setSetting', { key, value });
+			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
+		} catch (error) {
+			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
+		}
+		if (this.tab === 'agents') {
+			this.render();
+		}
+	}
+
+	/** One change: an agent (or all of them), its model and its effort, as the rows now say. */
+	private async saveAgent(agent: string, model: string, thinking: string): Promise<void> {
+		try {
+			this.agentState = await this.commandService.executeCommand<IAgentModelsState>('picode.agents.setModel', { agent, model, thinking });
+			this.agentNote = localize('picodePm.agentSaved', "Saved. The agents use it from your next message.");
+		} catch (error) {
+			this.agentNote = localize('picodePm.agentFailed', "It could not be saved: {0}", error instanceof Error ? error.message : String(error));
+		}
+		if (this.tab === 'agents') {
+			this.render();
+		}
+	}
+
+	/** Gentle's own preferences: how it talks and what new conversations start with. */
+	private renderGentleBehaviour(): void {
+		const gentle = this.gentleState;
+		if (gentle !== undefined) {
+			const choice = (label: string, description: string, current: string, options: ReadonlyArray<[string, string]>, key: string, disabled: boolean): void => {
+				const line = append(this.body, $('.picode-pm-agent'));
+				const text = append(line, $('.picode-pm-agent-name'));
+				append(text, $('span')).textContent = label;
+				const select = document.createElement('select');
+				select.className = 'picode-pm-select picode-pm-agent-select';
+				select.setAttribute('aria-label', label);
+				select.disabled = disabled;
+				for (const [value, name] of options) {
+					select.append(new Option(name, value));
+				}
+				select.value = current;
+				line.append(select);
+				append(this.body, $('p.picode-pm-note')).textContent = description;
+				this.store.add(addDisposableListener(select, 'change', () => { void this.saveGentle(key, select.value); }));
+			};
+			choice(
+				localize('picodePm.gentlePersona', "How it talks"),
+				localize('picodePm.gentlePersonaNote', "Gentleman is direct and teaches the why behind each step. Neutral is plain and professional."),
+				gentle.persona,
+				[['gentleman', localize('picodePm.personaGentleman', "Gentleman")], ['neutral', localize('picodePm.personaNeutral', "Neutral")]],
+				'persona',
+				false,
+			);
+			choice(
+				localize('picodePm.gentlePermissions', "Permissions for new conversations"),
+				gentle.permissionsBroken
+					? localize('picodePm.gentlePermissionsBroken', "The saved permissions could not be read. Delete the file and try again.")
+					: localize('picodePm.gentlePermissionsNote', "Normal asks before it acts. Auto lets a second model call decide, which costs extra. YOLO does ordinary development steps without asking; anything destructive still asks."),
+				gentle.permissions,
+				[['normal', localize('picodePm.permNormal', "Normal")], ['auto', localize('picodePm.permAuto', "Auto")], ['yolo', localize('picodePm.permYolo', "YOLO")]],
+				'permissions',
+				gentle.permissionsBroken,
+			);
+		}
+	}
+
+	private renderAgents(): void {
+		const state = this.agentState;
+		if (state === undefined) {
+			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsReading', "Reading Gentle's agents...");
+			return;
+		}
+		this.renderGentleBehaviour();
+		if (state.invalid) {
+			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsInvalid', "The agents' model list could not be read. Delete it and try again.");
+			return;
+		}
+		if (state.agents.length === 0) {
+			append(this.body, $('p.picode-pm-empty')).textContent = localize('picodePm.agentsNone', "The agents are not ready yet. Send a message in the chat once, then come back.");
+			return;
+		}
+
+		// Every model the editor can reach, by provider; a model the file names that is not in the list is kept.
+		const catalogue = new Map<string, { name: string; provider: string }>();
+		for (const modelId of this.languageModelsService.getLanguageModelIds()) {
+			const metadata = this.languageModelsService.lookupLanguageModel(modelId);
+			if (metadata !== undefined) {
+				catalogue.set(metadata.id, { name: metadata.name, provider: metadata.family || metadata.vendor });
+			}
+		}
+		const modelSelect = (current: string, placeholder: string): HTMLSelectElement => {
+			const select = document.createElement('select');
+			select.className = 'picode-pm-select picode-pm-agent-select';
+			select.append(new Option(placeholder, ''));
+			if (current.length > 0 && !catalogue.has(current)) {
+				select.append(new Option(current, current));
+			}
+			const byProvider = new Map<string, Array<[string, string]>>();
+			for (const [ref, { name, provider }] of catalogue) {
+				byProvider.set(provider, [...(byProvider.get(provider) ?? []), [ref, name]]);
+			}
+			for (const provider of [...byProvider.keys()].sort((left, right) => left.localeCompare(right))) {
+				const group = document.createElement('optgroup');
+				group.label = provider;
+				for (const [ref, name] of byProvider.get(provider)!.sort((left, right) => left[1].localeCompare(right[1]))) {
+					group.append(new Option(name, ref));
+				}
+				select.append(group);
+			}
+			select.value = current;
+			return select;
+		};
+		const thinkingSelect = (current: string): HTMLSelectElement => {
+			const select = document.createElement('select');
+			select.className = 'picode-pm-select picode-pm-agent-select';
+			select.setAttribute('aria-label', localize('picodePm.agentThinking', "How much it thinks"));
+			select.append(new Option(localize('picodePm.agentThinkingDefault', "Default effort"), ''));
+			for (const level of THINKING_LEVELS) {
+				select.append(new Option(level, level));
+			}
+			select.value = current;
+			return select;
+		};
+
+		append(this.body, $('p.picode-pm-note')).textContent = localize(
+			'picodePm.agentsNote',
+			"The model each of Gentle's agents answers with. An agent on the same model as the rest uses the model new conversations open with.",
+		);
+		const toolbar = append(this.body, $('.picode-pm-toolbar'));
+		append(toolbar, $('span.picode-pm-agent-all')).textContent = localize('picodePm.agentAll', "Every agent");
+		const all = modelSelect('', localize('picodePm.agentAllPlaceholder', "Set them all to..."));
+		all.setAttribute('aria-label', localize('picodePm.agentAllLabel', "Set every agent to one model"));
+		toolbar.appendChild(all);
+		this.store.add(addDisposableListener(all, 'change', () => {
+			if (all.value.length > 0) {
+				void this.saveAgent('all', all.value, '');
+			}
+		}));
+		if (this.agentNote.length > 0) {
+			append(this.body, $('p.picode-pm-note')).textContent = this.agentNote;
+		}
+
+		const list = append(this.body, $('.picode-pm-models'));
+		for (const agent of state.agents) {
+			const saved = state.models[agent] ?? {};
+			const line = append(list, $('.picode-pm-agent'));
+			const name = append(line, $('.picode-pm-agent-name'));
+			append(name, $('span' + ThemeIcon.asCSSSelector(Codicon.hubot)));
+			append(name, $('span')).textContent = agent;
+			const model = modelSelect(saved.model ?? '', localize('picodePm.agentSame', "Same model as the rest"));
+			model.setAttribute('aria-label', localize('picodePm.agentModelLabel', "Model for {0}", agent));
+			const thinking = thinkingSelect(saved.thinking ?? '');
+			line.append(model, thinking);
+			const save = () => { void this.saveAgent(agent, model.value, thinking.value); };
+			this.store.add(addDisposableListener(model, 'change', save));
+			this.store.add(addDisposableListener(thinking, 'change', save));
+		}
 	}
 
 	/* --------------------------------------------------------------------- models */

@@ -6,20 +6,28 @@
 /**
  * The packages an import from an external pi leaves behind.
  *
- * This product carries an integration that its owner decided against — it was taken out of
- * the product (commit `2ac4e68d`) — so an import must not drag those packages into PiCode's
- * own profile. The refusal has to happen twice, because a declaration left in the copied
+ * When this product carries an integration that its owner decided against, an import must not
+ * drag those packages into PiCode's own profile. Today that is `@earendil-works/pi-durable`, the
+ * durable agent's own package: the durable agent left the product (ADR-030), so an import does not
+ * bring it, nothing installs it, and the update check does not offer to update it. gentle-pi and
+ * gentle-engram, which this list held after their first integration was removed (commit
+ * `2ac4e68d`), entered the product again as pinned packages (`product-packages.ts`). The refusal has to happen twice, because a declaration left in the copied
  * `settings.json` is an instruction: the next `pi install` reads that list and installs
  * whatever it names. The import therefore neither installs these packages nor copies their
  * declarations.
  *
  * This module is the one place that knows which names count, so adding a package later is
- * one line in the list below. The names come from the owner's real profile and from the
- * removed integration's own record of what it installed — no others were ever known.
+ * one line in the list below.
  */
 
 /** The package names this editor does not carry, spelled as npm knows them. */
-export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = ['gentle-pi', 'gentle-engram'];
+export const LEFT_BEHIND_PACKAGE_NAMES: readonly string[] = [
+	'@earendil-works/pi-durable',
+	// Other subagents and another memory, next to gentle-pi's and gentle-engram's (ADR-031 addendum).
+	'@tintinweb/pi-subagents',
+	'github.com/HazAT/pi-interactive-subagents',
+	'pi-memory',
+];
 
 /**
  * A package entry's bare name, from any of the spellings a `packages` entry uses: the
@@ -55,14 +63,14 @@ function sourceOf(entry: unknown): string | undefined {
 }
 
 /** Whether a `packages` entry — a string or an object with a `source` — names a left-behind package. */
-export function isLeftBehindPackage(entry: unknown): boolean {
+export function isLeftBehindPackage(entry: unknown, names: readonly string[] = LEFT_BEHIND_PACKAGE_NAMES): boolean {
 	const source = sourceOf(entry);
-	return source !== undefined && LEFT_BEHIND_PACKAGE_NAMES.includes(packageNameOf(source));
+	return source !== undefined && names.includes(packageNameOf(source));
 }
 
 /** The reference a log line can quote: what the profile actually declared, verbatim. */
-export function leftBehindReference(entry: unknown): string | undefined {
-	return isLeftBehindPackage(entry) ? sourceOf(entry) : undefined;
+export function leftBehindReference(entry: unknown, names: readonly string[] = LEFT_BEHIND_PACKAGE_NAMES): string | undefined {
+	return isLeftBehindPackage(entry, names) ? sourceOf(entry) : undefined;
 }
 
 /**
@@ -70,14 +78,14 @@ export function leftBehindReference(entry: unknown): string | undefined {
  * order and untouched, and the references of the ones the import leaves behind. A list
  * that is not a list leaves nothing behind and keeps nothing.
  */
-export function splitLeftBehindPackages(packages: unknown): { kept: unknown[]; leftBehind: string[] } {
+export function splitLeftBehindPackages(packages: unknown, names: readonly string[] = LEFT_BEHIND_PACKAGE_NAMES): { kept: unknown[]; leftBehind: string[] } {
 	if (!Array.isArray(packages)) {
 		return { kept: [], leftBehind: [] };
 	}
 	const kept: unknown[] = [];
 	const leftBehind: string[] = [];
 	for (const entry of packages) {
-		const reference = leftBehindReference(entry);
+		const reference = leftBehindReference(entry, names);
 		if (reference === undefined) {
 			kept.push(entry);
 		} else {

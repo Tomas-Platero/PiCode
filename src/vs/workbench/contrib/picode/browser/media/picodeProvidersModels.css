@@ -463,3 +463,38 @@
 	height: 16px;
 	object-fit: contain;
 }
+
+/* Gentle's agents: a name, the model it answers with, how much it thinks. */
+.picode-pm-agent {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 6px;
+}
+
+.picode-pm-agent:hover,
+.picode-pm-agent:focus-within {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-pm-agent-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1 1 160px;
+	min-width: 0;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pm-agent-select {
+	flex: 0 1 240px;
+	min-width: 0;
+}
+
+.picode-pm-agent-all {
+	font-weight: 600;
+}

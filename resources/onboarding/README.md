@@ -186,8 +186,6 @@ apart — reading, the counts, or the failure with a **Retry**.
   switch of this page: `project` (folder + file + selection, the default), `file` (no folder),
   `selection` (only the text you selected — no paths at all). The context is assembled in
   `extensions/picode/src/context.ts` (`applyContextMode`), which is pure and covered by tests.
-- **Long jobs** sets `picode.durable.autoStart`. The panel that shows a running job is the
-  editor's own — the pill above the chat — so this window does not grow a second one.
 
 ## Why it is written this way
 

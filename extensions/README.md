@@ -6,7 +6,7 @@
 
 | Carpeta | Qué es |
 | --- | --- |
-| [`picode/`](picode/README.md) | **El conector de PiCode**: habla con pi (proveedores, modelos, MCP, agentes, durable) y es la mitad de código que hace que el chat exista. Aquí sí hay ficha por fichero. |
+| [`picode/`](picode/README.md) | **El conector de PiCode**: habla con pi (proveedores, modelos, MCP, agentes, sesiones) y es la mitad de código que hace que el chat exista. Aquí sí hay ficha por fichero. |
 
 ## 📌 Regla para el resto
 

@@ -15,7 +15,7 @@ import { areaContextBlock } from './workspace-area';
  *
  * Read here rather than passed around, because this is the only place that knows about the
  * editor's own objects; what is written from them is decided in `context.ts`, where it can be
- * exercised. Every prompt runs through it — the in-process chat and the durable turn alike —
+ * exercised. Every prompt runs through it,
  * so the agent answers about what the owner is looking at instead of about what it guesses.
  */
 export function editorContext(folder: string | undefined, references?: readonly vscode.ChatPromptReference[], mode: ContextMode = 'project'): EditorContext {

@@ -3,99 +3,107 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * The work the chat has out, as one list: its background jobs and the tasks it handed to the
- * durable agent.
+ * The work the chat has out, as one list: its background jobs and the subagents gentle-pi runs.
  *
- * This is the third reader of facts that already existed — the pill above the chat input holds
- * the running jobs (`background-jobs.ts`), the status surface holds the durable work
- * (`durable-tasks.ts`) — and it adds no new source of truth: the two lists are merged into the
- * one question a person asks ("what is still running?").
+ * This is a reader of facts that already existed — the pill above the chat input holds the
+ * running jobs (`background-jobs.ts`), and gentle-pi publishes its subagents
+ * (`gentle-agents-store.ts`) — and it adds no new source of truth: the two lists are merged into
+ * the one question a person asks ("what is still running?").
  *
  * Two rules decide the shape:
  *
  *  * **A job is running by definition.** The tracker only holds jobs whose completion has not
  *    arrived, so every job row leads; a finished job's report is already in the conversation.
- *  * **A task that could not be read is not idle.** `inFlight === undefined` means the snapshot
- *    did not answer, and the row says so instead of guessing in either direction.
+ *  * **An agent says its own state.** A queued, running or waiting agent is out; a finished one
+ *    is listed apart, newest first and capped, so its outcome is not lost the moment it ends.
  *
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
-import type { DurableWorkRow } from './durable-tasks';
+import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
 
-/** One row of the Tasks block: a background job, or a durable conversation worth a row. */
+/** One row of the Tasks block: a background job, or a subagent. */
 export type TaskRow =
 	| { readonly kind: 'job'; readonly job: BackgroundJobStatus }
-	| { readonly kind: 'task'; readonly work: DurableWorkRow };
+	| { readonly kind: 'agent'; readonly agent: AgentTaskRow };
+
+/**
+ * Whether an agent is still going. Written here, not imported: this file has only type imports so
+ * `node --test` can run it straight, and the rule is three words.
+ */
+function isActive(status: AgentTaskRow['status']): boolean {
+	return status === 'queued' || status === 'running' || status === 'waiting';
+}
+
+/** How many finished agents the block keeps listing. */
+export const FINISHED_AGENTS_SHOWN = 5;
 
 /** The rows, split by the only state that changes what a person does next. */
 export interface TaskBoard {
-	/** Work happening now: every open job, then the tasks with a run in flight. */
+	/** Work happening now: every open job, then the agents still going. */
 	readonly running: readonly TaskRow[];
-	/** Tasks that exist and are quiet — delegated work waiting, and nothing else. */
-	readonly idle: readonly TaskRow[];
+	/** Agents that ended, newest first, capped. */
+	readonly finished: readonly TaskRow[];
 	readonly total: number;
 }
 
-/**
- * Merges the two lists into the board.
- *
- * `work` is absent when the durable agent is down, which is not the same as "no work": the
- * caller draws that difference, so here an absent list simply contributes nothing.
- */
-export function taskBoard(jobs: readonly BackgroundJobStatus[], work: readonly DurableWorkRow[] | undefined): TaskBoard {
-	const running: TaskRow[] = [];
-	const idle: TaskRow[] = [];
-	for (const job of jobs) {
-		running.push({ kind: 'job', job });
-	}
-	for (const row of work ?? []) {
-		if (row.inFlight === true) {
-			running.push({ kind: 'task', work: row });
+/** Builds the board from the chat's running jobs and the subagents' last published state. */
+export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly AgentTaskRow[] = []): TaskBoard {
+	const running: TaskRow[] = jobs.map(job => ({ kind: 'job', job }));
+	const finished: TaskRow[] = [];
+	for (const agent of agents) {
+		if (isActive(agent.status)) {
+			running.push({ kind: 'agent', agent });
 		} else {
-			idle.push({ kind: 'task', work: row });
+			finished.push({ kind: 'agent', agent });
 		}
 	}
-	return { running, idle, total: running.length + idle.length };
+	const shown = finished.slice(0, FINISHED_AGENTS_SHOWN);
+	return { running, finished: shown, total: running.length + shown.length };
 }
 
-/**
- * The row's name: the job's own label, the task's own id, and — when durable gave neither —
- * the conversation it lives in, which is still a real thing the owner can open.
- */
+/** The row's name: the job's or the agent's own label, or what it is. */
 export function taskTitle(row: TaskRow): string {
 	if (row.kind === 'job') {
 		return row.job.label ?? `Background job ${row.job.jobNumber}`;
 	}
-	return row.work.taskId === undefined
-		? `Conversation ${row.work.conversationId}`
-		: `Task ${row.work.taskId}`;
+	return row.agent.label.length > 0 ? row.agent.label : row.agent.agent.length > 0 ? row.agent.agent : `Agent ${row.agent.id}`;
 }
 
-/** What the row is doing, in one word that is true: `running`, `idle`, or could not be read. */
+/** What the row is doing, in one word that is true. */
 export function taskState(row: TaskRow): string {
 	if (row.kind === 'job') {
 		return 'running';
 	}
-	if (row.work.inFlight === undefined) {
-		return 'state unavailable';
+	switch (row.agent.status) {
+		case 'queued': return 'queued';
+		case 'running': return 'running';
+		case 'waiting': return 'waiting for you';
+		case 'completed': return 'done';
+		case 'failed': return 'failed';
+		case 'cancelled': return 'stopped';
+		case 'timed_out': return 'timed out';
 	}
-	return row.work.inFlight ? 'running' : 'idle';
 }
 
 /**
- * The line after the name: how long a job has been out, how much a task holds.
- *
- * A job counts time because that is the only thing a background job can be late at; a task
- * counts entries because that is how much work it has kept.
+ * The line after the name: how long a job has been out; for an agent, its role and how long it
+ * worked or has been working.
  */
 export function taskDetail(row: TaskRow, now: number): string {
-	if (row.kind === 'task') {
-		const entries = row.work.entries;
-		return `${taskState(row)} · ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
+	if (row.kind === 'job') {
+		return `${taskState(row)} · ${elapsedLabel(row.job.startedAt, now)}`;
 	}
-	return `${taskState(row)} · ${elapsedLabel(row.job.startedAt, now)}`;
+	const { agent } = row;
+	const parts = [taskState(row)];
+	if (agent.label.length > 0 && agent.agent.length > 0) {
+		parts.push(agent.agent);
+	}
+	if (agent.startedAt !== undefined) {
+		parts.push(elapsedLabel(agent.startedAt, agent.endedAt ?? now));
+	}
+	return parts.join(' · ');
 }
 
 /** How long ago something started, in the shortest words that are still true. */
@@ -113,22 +121,4 @@ export function elapsedLabel(startedAt: number, now: number): string {
 		return `${hours}h ${minutes % 60}m`;
 	}
 	return `${Math.floor(hours / 24)}d ${hours % 24}h`;
-}
-
-/**
- * The newest thing a task holds, cut to one line.
- *
- * Durable's `newest` is one entry in its own words ("entry 12 (pi.assistant)"), which can be
- * long enough to push the row's description off the panel; the first line, capped, is what a
- * panel can carry. Nothing is rewritten — only shortened.
- */
-export function newestLine(newest: string | undefined, cap = 60): string | undefined {
-	if (newest === undefined) {
-		return undefined;
-	}
-	const firstLine = newest.split('\n', 1)[0].trim();
-	if (firstLine.length === 0) {
-		return undefined;
-	}
-	return firstLine.length <= cap ? firstLine : `${firstLine.slice(0, cap - 1)}…`;
 }

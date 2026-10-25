@@ -57,22 +57,6 @@
 				]
 			}
 		],
-		"chatSessions": [
-			{
-				"type": "durable",
-				"name": "durable",
-				"displayName": "PiCode",
-				"description": "PiCode's own agent: the conversation survives closing the tab and reloading the window, and its tools run in the first workspace folder that exists.",
-				"icon": {
-					"light": "media/picode-light.svg",
-					"dark": "media/picode.svg"
-				},
-				"canDelegate": false,
-				"supportsAutoModel": true,
-				"welcomeTitle": "PiCode",
-				"welcomeMessage": "PiCode's own agent — the conversation survives closing this tab and reloading the window. Its tools run in the workspace folder; the model is the one PiCode is configured with."
-			}
-		],
 		"mcpServerDefinitionProviders": [
 			{
 				"id": "pi",
@@ -127,6 +111,11 @@
 		],
 		"commands": [
 			{
+				"command": "picode.agents.chooseModels",
+				"title": "Choose Models for Agents",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.pi.toggleThinking",
 				"title": "Toggle Thinking in Chat",
 				"category": "PiCode"
@@ -169,37 +158,6 @@
 				"command": "picode.updates.check",
 				"title": "Check for Pi updates",
 				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.start",
-				"title": "Start Durable Agent",
-				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.stop",
-				"title": "Stop Durable Agent",
-				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.list",
-				"title": "Show Durable Conversations",
-				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.chooseModel",
-				"title": "Choose Durable Model",
-				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.send",
-				"title": "Send a Prompt to the Durable Agent",
-				"category": "PiCode"
-			},
-			{
-				"command": "picode.durable.exportConversation",
-				"title": "Export Durable Conversation...",
-				"category": "PiCode",
-				"icon": "$(export)"
 			},
 			{
 				"command": "picode.agents",
@@ -303,25 +261,19 @@
 				"icon": "$(cloud-download)"
 			},
 			{
+				"command": "picode.tasks.openTranscript",
+				"title": "Open Transcript",
+				"category": "PiCode",
+				"icon": "$(book)"
+			},
+			{
 				"command": "picode.tasks.refresh",
 				"title": "Refresh the tasks",
 				"category": "PiCode",
 				"icon": "$(refresh)"
-			},
-			{
-				"command": "picode.tasks.open",
-				"title": "Open the task",
-				"category": "PiCode"
 			}
 		],
 		"menus": {
-			"chat/chatSessions": [
-				{
-					"command": "picode.durable.exportConversation",
-					"when": "chatSessionType == durable",
-					"group": "4_export"
-				}
-			],
 			"view/title": [
 				{
 					"command": "picode.tasks.refresh",
@@ -351,9 +303,14 @@
 			],
 			"view/item/context": [
 				{
-					"command": "picode.tasks.open",
-					"when": "view == picode.status.tasks && viewItem == picode.tasks.task",
-					"group": "inline@1"
+					"command": "picode.tasks.openTranscript",
+					"when": "view == picode.status.tasks && viewItem == picode.tasks.agent",
+					"group": "inline"
+				},
+				{
+					"command": "picode.tasks.openTranscript",
+					"when": "view == picode.status.tasks && viewItem == picode.tasks.agent",
+					"group": "navigation"
 				},
 				{
 					"command": "picode.memory.copy",
@@ -368,7 +325,7 @@
 			],
 			"commandPalette": [
 				{
-					"command": "picode.tasks.open",
+					"command": "picode.tasks.openTranscript",
 					"when": "false"
 				},
 				{

@@ -29,10 +29,13 @@ alternatives were seriously considered.
 | 015 | Three release channels, one branch each | accepted |
 | 016 | The declared product version may lead the tree's base | accepted |
 | 017 | Cloud sync is a Pro feature; the free plan is an account, not storage | accepted |
-| 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020 |
+| 018 | Durable is the chat; Local retires from the pickers (the harness reads "PiCode") | superseded by 020, 030 |
 | 019 | The editor's context travels with every chat turn, durable included | accepted |
-| 020 | The chat is pi; durable is the backend it reaches through tools | accepted |
-| 021 | One orchestrator (pi), one list, sessions always durable | accepted (refines 020) |
+| 020 | The chat is pi; durable is the backend it reaches through tools | superseded by 030 |
+| 021 | One orchestrator (pi), one list, sessions always durable | superseded by 030 |
+| 030 | Durable leaves the product; pi's own transcripts are the conversations | accepted |
+| 031 | gentle-pi and gentle-engram enter as pinned packages of the product | accepted |
+| 032 | The Tasks block draws gentle-pi's subagents from the push it already makes | accepted |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -549,7 +552,7 @@ profile beyond the third upload.
 
 ## ADR-018 — Durable is the chat; Local retires from the pickers (the harness reads "PiCode")
 
-**Status:** superseded by ADR-020.
+**Status:** superseded by ADR-020, and ADR-020 by ADR-030.
 
 **Context:** A chat could run in the editor's Local harness or in the durable agent's daemon.
 The owner had already made durable the preferred default, but Local was still offered as a
@@ -619,7 +622,7 @@ and characters, problems in count). Attachments whose editor gives no text still
 
 ## ADR-020 — The chat is pi; durable is the backend it reaches through tools
 
-**Status:** accepted. Supersedes ADR-018.
+**Status:** superseded by ADR-030. Supersedes ADR-018.
 
 **Context:** ADR-018 made durable the chat by declaring it the default `chatSessions` type and
 retiring Local. In a real run, sending "Hola" answered **`No activated agent with id "durable"`**.
@@ -665,7 +668,7 @@ decides conversations must live in durable and pays for the agent implementation
 
 ## ADR-021 — One orchestrator (pi), one list, sessions always durable
 
-**Status:** accepted. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
+**Status:** superseded by ADR-030. Refines ADR-020 and reverts the durable-as-chat-destination re-shipping
 in 0.2.3-experimental.
 
 **Context:** The 0.2.3 build shipped three coexisting engines (the in-window harness "Local",
@@ -754,7 +757,7 @@ aislado y el transcript real de «Este pi tiene pi durable?»: antes `owes=true`
 
 ## ADR-022 — Engram is the product's memory; durable stays the record
 
-**Status:** accepted (2026-10-20). Adds a layer to ADR-021; does not replace it.
+**Status:** accepted (2026-10-20), except its durable half, which ADR-030 retires. Adds a layer to ADR-021; does not replace it.
 
 **Context:** Durable answers *what happened*: every turn, verbatim, per conversation, and the
 long work that outlives the window. It never answers *what we know*. A new conversation starts
@@ -776,9 +779,9 @@ standalone engine that framework happened to use.
 - **One declaration serves both engines.** The profile's `mcp.json` already feeds the in-process
   chat (pi's built-in MCP) and durable (`lib/mcp.js`, deferred behind `mcp_tools`). No second
   integration path is written.
-- **The `gentle-engram` pi package does not enter.** Its hooks, status bar and session-identity
-  machinery are the coupling that was removed with gentle-ai; the memory protocol is written
-  here, in our words, in both system prompts.
+- **The `gentle-engram` pi package does not enter.** *(Superseded by ADR-031: it enters, pinned.)*
+  Its hooks, status bar and session-identity machinery are the coupling that was removed with
+  gentle-ai; the memory protocol is written here, in our words, in both system prompts.
 - **The store is the user's, not the profile's:** `~/.engram`. It is reused **as it is** when it
   exists, created when it does not, and never moved, migrated or overwritten. If an engram
   server is already serving, PiCode **joins it**; it does not open a second one on the same
@@ -1109,3 +1112,167 @@ profile with it on the next load, and a package that publishes a newer pi than t
 inherited only when PiCode chooses to bump. The duplication (and npm's own nested `typebox` copies)
 stays, and is now harmless rather than dangerous. The derivation lives in one place and reads the
 truth on disk, so a dev tree that never ran the runtime step simply does no family work.
+
+## ADR-030 — Durable leaves the product; pi's own transcripts are the conversations
+
+**Status:** accepted. Supersedes ADR-018, ADR-020 and ADR-021, and the durable half of ADR-022.
+
+**Context:** The owner decided that PiCode is **pi plus Gentle AI** (gentle-pi and gentle-engram):
+"quiero quitar todo durable, ya que impacta con Gentle en ciertas cosas". The durable agent was a
+second runtime beside pi — its own daemon, storage, subagent runner and memory protocol — and the
+two overlap with what gentle-pi brings: its subagents already run as pi processes and its memory
+protocol is its own. Keeping both meant two sources of subagents and two sources of memory rules.
+
+**Decision:** The durable agent is removed from the product: `host/durable`, its chat bridge, the
+connector files that spoke to it, its commands, its `picode.durable.*` settings, the first-run
+"long jobs" switch, the Status card, the session type and the build step that packed it.
+
+- The panel's **one list is pi's own transcripts** (`sessions-register.ts`, over the files pi writes
+  under the profile's `sessions/` folder). Opening one continues it in place (`sessions-resume.ts`).
+- The **Tasks** block shows the chat's background jobs. gentle-pi's subagents join it when gentle-pi
+  enters the profile.
+- Memory is Engram, served to pi by gentle-engram once it enters; the protocol file written for
+  durable is gone.
+
+**Consequences:** Work no longer outlives the window. Conversations that durable alone held
+(`data/durable`) are not migrated and stop being listed; pi's transcripts, which the chat has always
+written, are the record from here on. The pi-durable package leaves the product's dependencies.
+ADR-022's rule that Engram is the product's memory stands; its "durable stays the record" half does not.
+
+## ADR-031 — gentle-pi and gentle-engram enter as pinned packages of the product
+
+**Status:** accepted. Supersedes the "gentle-engram does not enter" half of ADR-022 and the
+left-behind list that enforced it.
+
+**Context:** With durable gone (ADR-030) the product is pi plus Gentle AI. gentle-pi brings the
+method, ten roles and the review tools; gentle-engram brings pi its memory tools. Both were
+blocked: `left-behind-packages.ts` named them, and an import refused to copy them.
+
+**Decision:**
+
+- The block is lifted: `LEFT_BEHIND_PACKAGE_NAMES` is empty (the mechanism stays for a future
+  refusal).
+- `product-packages.ts` pins **gentle-pi 4.3.0** and **gentle-engram 0.4.2** at exact versions.
+  Every run of the package installer declares them in the profile's `settings.json` as pinned, in
+  place of whatever an import, an old profile or a hand edit left — ranged, unpinned or filtered
+  differently.
+- gentle-pi is **narrowed** through pi's own package filter: its terminal experience (banner,
+  sounds, pretty printer, prompt history, Herdr, statistics, shell, usage metrics, resume hint) is
+  excluded. Method, roles, tools and review stay.
+- `product-env.ts` fixes the environment of pi and of every npm run: `GENTLE_PI_SKIP_GENTLE_AI_INSTALL=1`
+  (a package's install script fetches nothing; on Windows it would compile a helper with Go, so
+  the review operations that need that helper stay off in this delivery), and `DO_NOT_TRACK=1` plus
+  `GENTLE_AI_TELEMETRY=0` (gentle-pi reports usage by default; PiCode sends nothing).
+- Memory is gentle-engram's. The `engram` MCP declaration this product wrote is removed (a
+  second set of tools would offer the model the same memory twice), the `<memory>` prompt section
+  and `memory-protocol.ts` are gone, and `ENGRAM_BIN` is set before pi loads to the engine the
+  installation carries, so the chat and the Memory panel read the same store (`~/.engram`).
+
+**Consequences:** The helper binary and its review operations are not part of this delivery; a
+later decision may carry a pinned build in `resources/`. gentle-pi's subagents still run as pi
+child processes and are not yet in the Tasks block; routing them there is the next step. The
+engine stays at 3.5.1 (gentle-engram 0.4.2 accepts any stable core from 3.0.0).
+
+## ADR-032 — The Tasks block draws gentle-pi's subagents from the push it already makes
+
+**Status:** accepted. Completes ADR-030 (the Tasks block lost durable's work) and ADR-031.
+
+**Context:** gentle-pi runs its subagents as child pi processes and publishes their live state to
+an interactive host through pi's one structured push, `setWidget("gentle-agents", [json])`, shaped
+`gentle-agents.activity/v1`. It does so only when pi runs with `GENTLE_SHELL_INTERACTIVE_HOST=1` in a
+mode with a UI. The chat's bridge answered every `setWidget` with nothing.
+
+**Decision:** The signal is set on this process (`product-env.ts`, `HOST_ENV`) and the bridge's
+`setWidget` hands the push to `gentle-agents-store.ts`, which keeps only a whitelisted summary per
+task — role, label, state, times, last step, turns, tool calls, error — and never the prompt, the
+thread or a tool's output. The Tasks block shows the agents still going under *Running*, after the
+background jobs, and the last five that ended under *Finished*; each opens to its facts. The store
+is cleared whenever the session that published it is rebuilt or disposed. Nothing else reads the
+push: any other widget is still the terminal's, and the chat owns that surface.
+
+**Consequences:** The block shows what gentle-pi says and no more: nothing here starts, stops or
+answers an agent. The signal also tells gentle-pi it has dialogs, so its questions arrive as chat
+questions; the chat never asked before, and gentle-pi's own permission modes are now the ones in
+play. Unverified in a running editor.
+
+**Addendum (2026-10-25, found running pi with the two packages).**
+
+- gentle-pi keeps its own files (settings, scratch folders, notes) in `~/.pi/gentle-ai` unless
+  `GENTLE_PI_CONFIG_HOME` says otherwise — the machine's own pi. The product sets it to
+  `<profile>/gentle-ai` (`product-env.ts`, `configHomeEnv`), so nothing of gentle-pi's lands outside
+  PiCode's profile.
+- `@earendil-works/pi-durable`, the durable agent's own package, is now the left-behind list
+  (`left-behind-packages.ts`): an import does not bring it, nothing installs it, and the update check
+  no longer offers to update it. The update notice that named it came from a stored snapshot of a
+  profile that declared it.
+
+**Addendum 2 (2026-10-25, found when the Tasks block stayed empty after an agent ran).**
+
+- A profile imported from another pi can carry other subagents and another memory next to gentle's:
+  `@tintinweb/pi-subagents` (an `Agent` tool), `pi-interactive-subagents` and `pi-memory`. The model
+  picks whichever tool it likes, so work run by the other one never reached the Tasks block, which
+  draws gentle-pi's agents. PiCode is pi plus Gentle AI, so there is **one** of each: gentle-pi's
+  `subagent_run` and gentle-engram.
+- Those three join the left-behind list (an import does not bring them, nothing installs them, the
+  update check does not offer them) and, in a profile that already declares them as plain entries,
+  are **switched off** by the package installer (`product-packages.ts`, `DISPLACED_PACKAGE_NAMES`):
+  still declared, `extensions`/`skills`/`prompts`/`themes` empty, so nothing of theirs loads. An
+  entry already written as an object is the owner's own choice of what to load and is left as it
+  is, which is also how it is switched back on.
+
+**Addendum 3 (2026-10-25, found when the first gentle-pi agent failed with `spawn pi ENOENT`).**
+
+- gentle-pi starts each subagent as a child pi process. It reuses the pi entry the current process was
+  launched with (`process.argv[1]`, when it is a `cli.js`) and otherwise runs `pi` from the PATH — which
+  an editor does not have, so every agent failed at once and the Tasks block showed it: *failed · could not
+  start pi*. The environment variable it offers for this (`GENTLE_PI_AGENTS_PI`) is split on spaces, so a
+  path like `C:\Program Files\…` or `PiCode Experimental.exe` cannot go through it.
+- `pointChildPiAtThisPi` (`product-env.ts`) sets `process.argv[1]` to the runtime's `cli.js` and
+  `ELECTRON_RUN_AS_NODE=1`, so the editor's binary is started as Node over pi's script. It touches nothing
+  when there is no runtime at that path (an external pi).
+- gentle-pi's `review-*` agents are not general-purpose: they run only inside its native review, which
+  needs the helper program the product does not install (addendum 1). Tasks is verified with
+  `gentle-ai-explore`.
+
+### Adenda 4 (2026-10-25) · Los modelos de los agentes de gentle se eligen desde el editor
+
+> *"gentle-ai hay que configurar modelos… quiero que pueda usar /gentle models para configurarlo,
+> como en el TUI, quiero poder los modelos que yo quiera a cada uno"*
+
+- **Por qué hacía falta:** un agente de gentle sin modelo propio responde con el modelo por defecto del
+  perfil, que no tiene por qué ser el del chat. Así falló el primer subagente de verdad: el modelo por
+  defecto tenía la cuota mensual agotada (402) mientras el del chat respondía.
+- **Dónde se guarda:** el mismo fichero que usa gentle, `<perfil>/gentle-ai/models.json`
+  (`{agente: {model, thinking}}`). Gentle lo aplica a sus agentes **cada vez que arranca una sesión de
+  chat**; por eso al guardar se reinicia la sesión del chat y el cambio vale desde el siguiente mensaje.
+  Un agente devuelto a «el mismo modelo que el resto» se guarda como entrada vacía (así gentle borra el
+  que escribió antes).
+- **Dónde se elige:** `/gentle:models` en el chat y la fila *Choose models for agents* de la vista de
+  estado (comando `picode.agents.chooseModels`). El panel de pantalla completa de gentle no se puede
+  dibujar en el editor (`ui.custom` es nulo), así que el editor lo contesta con sus propios selectores:
+  agente (o todos) → modelo (los que el editor alcanza, o uno escrito a mano) → esfuerzo. Los agentes
+  `review-*` no salen: solo funcionan dentro de la revisión nativa.
+- **Pendiente:** una opción en los ajustes del chat (hoy solo comando y fila de estado).
+- **Onboarding (2026-10-25):** el paso del modelo dice que los agentes usan ese mismo modelo y que cada
+  uno puede tener el suyo con `/gentle:models`. No se pregunta nada más ahí: la ventana de setup se abre
+  sin el editor y los selectores viven en él.
+- **Transcripción de un agente (2026-10-25):** cada fila de agente en Tasks tiene el icono *Open Transcript*
+  (`picode.tasks.openTranscript`, también en el clic derecho). Abre un panel propio con la tarea, los pasos
+  en una línea de tiempo (lo que dijo, pensó y llamó, con su salida plegada) y la respuesta. **Se actualiza
+  solo** mientras el agente trabaja: gentle publica el estado de cada tarea con sus últimos pasos y el panel
+  se redibuja en cuanto llega (sin perder dónde estabas; si estabas al final, sigue el último paso). Al
+  terminar lee el registro completo que gentle guarda (`<perfil>/gentle-agents/tasks/<id>.json`). Solo
+  muestra lo que el registro tiene. Un segundo clic sobre el mismo agente trae el panel que ya está abierto.
+- **En Chat Settings (2026-10-25):** *Providers & Models* tiene una tercera pestaña, **Agents**: una fila por
+  agente de gentle con dos listas (modelo y esfuerzo) y, arriba, «Every agent» para dar el mismo modelo a
+  todos. Cada cambio se guarda al momento en el mismo fichero (`picode.agents.models` lee,
+  `picode.agents.setModel` escribe; pide un agente, un modelo `proveedor/modelo` y un nivel válidos o lo
+  rechaza) y reinicia la sesión del chat. Un agente en «Same model as the rest» usa el modelo con el que
+  abren las conversaciones nuevas. El esfuerzo puede ir solo, sin modelo.
+- **Persona y permisos (2026-10-25):** la pestaña se llama ahora **Gentle AI** y empieza por dos
+  preferencias de gentle: *How it talks* (persona: Gentleman o Neutral, en `<perfil>/gentle-ai/persona.json`)
+  y *Permissions for new conversations* (Normal, Auto o YOLO, en `permission-mode.json`, con la línea de
+  esquema que gentle exige). Es el mismo valor que `/gentle:persona` y `/gentle:mode default …`, en el mismo
+  formato, así que lo que cambia uno lo lee el otro. Un fichero de permisos que gentle no puede leer no se
+  reemplaza: se avisa y el control queda apagado. Cada cambio reinicia la sesión del chat. Los permisos de
+  *esta* conversación siguen cambiándose con `/gentle:mode`.

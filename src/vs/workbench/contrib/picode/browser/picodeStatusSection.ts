@@ -21,8 +21,8 @@ import { AICustomizationManagementSection } from '../../chat/common/aiCustomizat
  * The Status section of the Agent Customizations page, as PiCode owns it.
  *
  * One read answers the whole panel (`picode.setup.status`): the pi in force and its version,
- * the providers, the session's usage and cost, the project's git, the update check, the durable
- * daemon, the subscription meter, the background jobs. The cards below draw exactly that, and
+ * the providers, the session's usage and cost, the project's git, the update check, the subscription
+ * meter, the background jobs. The cards below draw exactly that, and
  * the Actions card turns the things the owner does most often into buttons — restart, update,
  * clean the cache, open the profile, open the settings — instead of instructions to type.
  *
@@ -39,14 +39,7 @@ const UPDATE_COMMAND = 'picode.updates.apply';
 const CHECK_UPDATES_COMMAND = 'picode.updates.check';
 const OPEN_PROVIDER_SETTINGS_COMMAND = 'picode.status.openProviderSettings';
 const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
-
-/**
- * How many rows of durable work a card lists before it stops counting out loud.
- *
- * A card is a summary, not the work itself: past a handful of rows it says how many are left and
- * offers the way to the full list, which is the durable agent's own output.
- */
-const MAX_DURABLE_ROWS = 6;
+const AGENT_MODELS_COMMAND = 'picode.agents.chooseModels';
 
 /** The state pastille in a card's header: a word, and the tone that colours it. */
 interface IPill {
@@ -69,23 +62,6 @@ interface IProjectRow {
 	readonly changes?: number;
 	readonly insertions?: number;
 	readonly deletions?: number;
-}
-
-/** The durable daemon's answer, and the work it holds (`durable-tasks.ts`). */
-interface IDurableStatus {
-	readonly up?: boolean;
-	readonly conversations?: number;
-	readonly subagentTasks?: number;
-	readonly work?: readonly IDurableWorkRow[];
-}
-
-/** One row of durable work: a task-owned conversation, or any conversation with a run in flight. */
-interface IDurableWorkRow {
-	readonly conversationId: number;
-	readonly taskId?: string;
-	/** `true` running, `false` quiet, `undefined` the snapshot did not answer. */
-	readonly inFlight?: boolean;
-	readonly entries: number;
 }
 
 /** A subscription window. */
@@ -125,7 +101,6 @@ interface IStatusData {
 	readonly outputTokens?: number;
 	readonly cacheRead?: number;
 	readonly cacheWrite?: number;
-	readonly durable?: IDurableStatus;
 	readonly subscription?: ISubscriptionStatus;
 	readonly jobs?: readonly { readonly label?: string; readonly command?: string }[];
 	readonly updates?: IUpdatesSnapshot;
@@ -146,7 +121,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 	 */
 	private cards: { readonly element: HTMLElement; readonly text: string; readonly alwaysVisible: boolean }[] = [];
 	/** The two-card groups on screen, so the filter can hide one that has nothing left to show. */
-	private twoGroups: HTMLElement[] = [];
 	/** Buttons of the cards on screen; cleared and refilled on every render. */
 	private readonly rowDisposables = this._register(new DisposableStore());
 	/** Guards a slow status answer against a newer render. */
@@ -223,7 +197,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		DOM.clearNode(this.cardsContainer);
 		DOM.clearNode(this.emptyContainer);
 		this.cards = [];
-		this.twoGroups = [];
 
 		if (data === undefined) {
 			this.emptyContainer.textContent = localize('picodeStatusSectionEmpty', "The status is not available yet — it will appear in a moment.");
@@ -262,8 +235,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			]);
 		});
 
-		// Updates and Durable: two cards, side by side, each one headline fact and its button. They
-		// used to take a block each for one line of text and a full-width button.
+		// Updates: one card, a headline fact and its button.
 		const updatesCard = (parent: HTMLElement): void => {
 			const targets = data.updates?.targets ?? [];
 			const checked = data.updates?.checkedAt;
@@ -290,51 +262,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			}, { parent, pill });
 		};
 
-		const durableCard = (parent: HTMLElement): void => {
-			const durable = data.durable!;
-			const up = durable.up === true;
-			const work = durable.work ?? [];
-			this.renderCard(localize('picodeStatusCardDurable', "Durable agent"), Codicon.layers, card => {
-				this.addRowButton(card, Codicon.commentDiscussion, localize('picodeStatusDurableConversations', "Conversations"), durable.conversations === undefined
-					? '—'
-					: localize('picodeStatusDurableConversationCount', "{0} open", durable.conversations), localize('picodeStatusDurableOpen', "Open its work"), Codicon.output, () => {
-					void this.commandService.executeCommand('picode.durable.list');
-				});
-				if (!up) {
-					// Down, there is nothing to list: the card says why it knows nothing rather than
-					// drawing a zero it does not have.
-					this.addRow(card, Codicon.info, localize('picodeStatusDurableDownWhy', "Its work"), localize('picodeStatusDurableDownWhyValue', "nothing to list while it is not running"));
-					return;
-				}
-				if (durable.subagentTasks !== undefined && durable.subagentTasks > 0) {
-					this.addRow(card, Codicon.tasklist, localize('picodeStatusDurableTasks', "Tasks"), String(durable.subagentTasks));
-				}
-				// The work itself, one row per thing: what it is, whether it is running, how much it
-				// holds. A state alone tells nobody what the agent is actually doing.
-				for (const row of work.slice(0, MAX_DURABLE_ROWS)) {
-					const state = row.inFlight === undefined
-						? localize('picodeStatusDurableUnknown', "state unavailable")
-						: row.inFlight ? localize('picodeStatusDurableRunning', "running") : localize('picodeStatusDurableIdle', "idle");
-					const name = row.taskId === undefined
-						? localize('picodeStatusDurableConversation', "Conversation {0}", row.conversationId)
-						: localize('picodeStatusDurableTask', "Task {0}", row.taskId);
-					this.addRow(card, row.inFlight === true ? Codicon.sync : Codicon.circleOutline, name, `${state} · ${row.entries} ${row.entries === 1 ? localize('picodeStatusDurableEntry', "entry") : localize('picodeStatusDurableEntries', "entries")}`);
-				}
-				if (work.length > MAX_DURABLE_ROWS) {
-					this.addRow(card, Codicon.ellipsis, localize('picodeStatusDurableMore', "And {0} more", work.length - MAX_DURABLE_ROWS), localize('picodeStatusDurableMoreValue', "open the agent's work to see them"));
-				}
-			}, { parent, pill: up
-				? { text: localize('picodeStatusDurableUp', "Running"), tone: 'ok' }
-				: { text: localize('picodeStatusDurableDown', "Not running"), tone: 'off' } });
-		};
-
-		if (data.durable !== undefined) {
-			const two = this.openTwoColumnGroup();
-			updatesCard(two);
-			durableCard(two);
-		} else {
-			updatesCard(this.cardsContainer);
-		}
+		updatesCard(this.cardsContainer);
 
 		if (data.providers !== undefined && data.providers.length > 0) {
 			this.renderCard(localize('picodeStatusCardProviders', "Providers"), Codicon.account, card => {
@@ -347,6 +275,9 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				}
 				this.addActionRow(card, localize('picodeStatusOpenProviderSettings', "Open provider settings"), Codicon.gear, undefined, () => {
 					void this.commandService.executeCommand(OPEN_PROVIDER_SETTINGS_COMMAND);
+				});
+				this.addActionRow(card, localize('picodeStatusAgentModels', "Choose models for agents"), Codicon.hubot, localize('picodeStatusAgentModelsDescription', "The model each agent answers with."), () => {
+					void this.commandService.executeCommand(AGENT_MODELS_COMMAND);
 				});
 			});
 		}
@@ -459,18 +390,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		this.cards.push({ element: card, text: (card.textContent ?? '').toLowerCase(), alwaysVisible: options.alwaysVisible === true });
 	}
 
-	/**
-	 * The two-card group, and its record.
-	 *
-	 * The group is remembered because the filter hides cards one by one: when both of its cards step
-	 * aside, the group has to step aside too, or the page keeps a gap where nothing lives.
-	 */
-	private openTwoColumnGroup(): HTMLElement {
-		const two = DOM.append(this.cardsContainer, $('.two'));
-		this.twoGroups.push(two);
-		return two;
-	}
-
 	/** The Host strip: small label above, value below, three of them side by side. */
 	private addFacts(card: HTMLElement, fields: readonly { label: string; value: string; title?: string }[]): void {
 		const strip = DOM.append(card, $('.kv'));
@@ -495,7 +414,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		}
 	}
 
-	/** A fact whose right-hand side is a button: the headline row of Updates and Durable. */
+	/** A fact whose right-hand side is a button: the headline row of Updates. */
 	private addRowButton(card: HTMLElement, icon: { readonly id: string }, label: string, value: string, buttonLabel: string, buttonIcon: { readonly id: string }, onClick: () => void): void {
 		const row = DOM.append(card, $('.row'));
 		const text = this.addRowTitle(row, icon, label);
@@ -552,10 +471,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			if (match) {
 				visible++;
 			}
-		}
-		for (const group of this.twoGroups) {
-			const any = Array.from(group.children).some(child => !child.classList.contains('picode-status-filtered-out'));
-			group.classList.toggle('picode-status-two-empty', !any);
 		}
 		this.noMatch.textContent = visible === 0
 			? localize('picodeStatusNoMatch', "Nothing here says \"{0}\".", term)

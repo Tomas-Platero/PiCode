@@ -47,17 +47,24 @@ import {
 import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
-import { ensureDurableAgentRunning, registerDurableCommands, stopDurableAgentOnShutdown } from './durable';
-import { registerWizardModelCommands } from './wizard-models';
-import { registerDurableSessionsProvider } from './durable-sessions-register';
+import { listModels, registerWizardModelCommands } from './wizard-models';
+import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
+import { registerPiSessionsProvider } from './sessions-register';
+import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
+import { traceChildPi } from './child-trace';
+import { distributionRootOf } from './distribution-root';
+import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
+import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
+import { isRunning, isTaskId, transcriptOf, transcriptOfJson } from './agent-transcript';
+import { showAgentTranscript } from './agent-transcript-panel';
 import { registerThemeGalleryCommands } from './theme-gallery';
 import { chatAgentDir, internalProfileDir, PICODE_RUNTIME_SETTING, piRuntimeRoot, projectSlugsOfWindow, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { launchedAgents, lastActivity, type AgentState } from './agents';
@@ -105,15 +112,15 @@ const VENDOR = 'picode';
 /**
  * PiCode's own profile directory.
  *
- * Derived from this extension's location rather than configured, because there is only one
- * answer and a wrong one would read somebody else's models: the extension lives at
- * `<root>/resources/app/extensions/picode`, so four levels up is the distribution, and the
- * profile is `<root>/data/pi-agent` — the same directory `instance.ts` resolves for the
- * host. **Nothing outside PiCode is ever read.**
+ * Derived from the editor's own location rather than configured, because there is only one
+ * answer and a wrong one would read somebody else's models: the application lives at
+ * `<root>/resources/app`, so two levels up is the distribution (the repository itself in a dev
+ * run), and the profile is `<root>/data/pi-agent` — the same directory `instance.ts` resolves for
+ * the host. **Nothing outside PiCode is ever read.**
  */
-/** The distribution root: four levels up from `resources/app/extensions/picode`. */
-function distributionRoot(extensionUri: vscode.Uri): string {
-	return path.resolve(extensionUri.fsPath, '..', '..', '..', '..');
+/** The distribution root: `<root>` in a pack, the repository in a dev run (`distribution-root.ts`). */
+function distributionRoot(_extensionUri: vscode.Uri): string {
+	return distributionRootOf(vscode.env.appRoot);
 }
 
 /**
@@ -984,7 +991,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		return [];
 	};
-	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('durable', { label: 'PiCode' }, {
+	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('pi', { label: 'PiCode' }, {
 		onDidChange: changed.event,
 		provideChatSessionCustomizations: () => [
 			...discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader).map(agent => ({
@@ -2058,6 +2065,8 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	);
 	const npmPackages = allPackages.filter((found): found is PiPackage & { version: string } =>
 		found.version !== undefined
+		// A package the product left behind is not news: nothing here installs or uses it.
+		&& !LEFT_BEHIND_PACKAGE_NAMES.includes(found.name)
 		&& declaredPaths.has(found.path)
 		&& npmRoots.some(root => isInside(root, found.path)));
 
@@ -2230,6 +2239,18 @@ function requireProfileUri(): vscode.Uri {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
+	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
+	applyProductEnv(process.env, profileDirectory(context.extensionUri));
+	// gentle-pi's subagents are child pi processes: they start the pi this editor carries.
+	pointChildPiAtThisPi(
+		path.join(piRuntimeRoot(distributionRoot(context.extensionUri)), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'),
+		candidate => fs.existsSync(candidate),
+	);
+	// What those children do, and when: a line each in the log, so an agent that fails to end can be read.
+	traceChildPi(require('node:child_process'), line => console.error(`[pi] ${line}`));
+	// Modules that imported `spawn` by name see the wrapped one.
+	require('node:module').syncBuiltinESMExports();
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
@@ -2269,9 +2290,28 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The chat's profile is resolved per request by the agent (see `agent.ts`), so a
 	// runtime switch takes effect without a window reload. What PiCode projects for pi
 	// keeps going to PiCode's own profile either way.
+	// Which model each Gentle agent answers with: the same pickers from the chat's `/gentle:models`
+	// and from the status view's row.
+	const chooseModelsOfAgents = (): Promise<string | undefined> => chooseAgentModels({
+		profileDir: profileDirectory(context.extensionUri),
+		listModels: () => listModels({
+			distributionRoot: distributionRoot(context.extensionUri),
+			profileDir: profileDirectory(context.extensionUri),
+			refreshModels: () => undefined,
+		}),
+		onSaved: resetChatSession,
+	});
+	context.subscriptions.push(vscode.commands.registerCommand(AGENT_MODELS_COMMAND, async () => {
+		const done = await chooseModelsOfAgents();
+		if (done !== undefined) {
+			void vscode.window.showInformationMessage(done.split('\n')[0]!);
+		}
+	}));
+	context.subscriptions.push(...registerAgentModelsStateCommands(profileDirectory(context.extensionUri), resetChatSession));
 	const piParticipant = registerPiAgent(context, {
 		distributionRoot: distributionRoot(context.extensionUri),
 		log: line => console.error(`[pi] ${line}`),
+		chooseAgentModels: chooseModelsOfAgents,
 	});
 
 	// pi's own extension commands (`/omni` and its fellows) in the input's slash list,
@@ -2335,15 +2375,15 @@ export function activate(context: vscode.ExtensionContext): void {
 	// pi's own sessions, in the editor's Sessions panel. Nothing in the editor lists the
 	// runtime profile's sessions directory; this provider is the bridge, and the import
 	// fires it when a tree of transcripts lands.
-	// The durable daemon's conversations, in the panel: THE one list (`RETIRED_SESSION_PROVIDERS`
-	// names `local` and `pi`, so the old pi-transcripts provider is no longer registered — it
-	// only bought the startup flicker the owner saw, its rows painting first and the filter
-	// hiding them). Its rows come from the daemon's own answers over the local pipe (never
-	// from its SQLite, which only it may open), and when it is down the last real listing
-	// stands rather than an empty panel that would read as "every durable conversation is
-	// gone". The registration is what puts `durable` in the panel's provider filter.
-	const durableSessions = registerDurableSessionsProvider({ participant: piParticipant, deps: { distributionRoot: distributionRoot(context.extensionUri), log: line => console.error(`[pi] ${line}`) } });
-	context.subscriptions.push(durableSessions, new vscode.Disposable(disposeResumedSessions));
+	// pi's own conversations, in the editor's Sessions panel: the one list. The transcripts pi
+	// writes under the profile's `sessions/` folder are listed here, opened as history, and
+	// continued in place; the import fires it when a tree of transcripts lands.
+	const piSessions = registerPiSessionsProvider({
+		participant: piParticipant,
+		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },
+		profileDir: profileInForce,
+	});
+	context.subscriptions.push(piSessions, new vscode.Disposable(disposeResumedSessions));
 
 const setupDeps = {
 		distributionRoot: distributionRoot(context.extensionUri),
@@ -2365,9 +2405,8 @@ const setupDeps = {
 			configuredModelsCache.clear();
 			onDidChangeModels.fire();
 		},
-		// An import also lands a tree of session transcripts: the panel re-lists (the durable
-		// handle's fire — the pi provider it replaced is retired and unregistered).
-		sessionsChanged: () => durableSessions.fireChanged(),
+		// An import also lands a tree of session transcripts: the panel re-lists.
+		sessionsChanged: () => piSessions.fireChanged(),
 		// npm runs shell-free, over npm's own CLI script (npm-run.ts) — the spaced install
 		// folder a side-by-side build carries must not be split by a shell's concatenation.
 		npmCli: locateNpmCli(),
@@ -2435,30 +2474,35 @@ const setupDeps = {
 	// Memory reads what the engine already answered, so it is a view of its own in the same
 	// container: the panel lists what this machine remembers without a second surface to learn.
 	context.subscriptions.push(registerMemoryView());
-	// The work the chat has out — its background jobs and the tasks it handed to the durable agent —
+	// The work the chat has out — its background jobs and the agents gentle-pi runs —
 	// as a list that stays put while the owner works elsewhere. Same container, same rule: it reads
 	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
-	context.subscriptions.push(registerTasksView({ runningJobs: runningBackgroundJobs }));
-	// The durable agent's commands: start, stop, list/open its conversations, and send it a
-	// prompt. The status panel's Durable section rows run the same ones.
-	// The agent is told which profile, which storage directory and which settings file to use: a
-	// portable or side-by-side PiCode has its own, and the agent's defaults would find a different
-	// install's — the very mixing a separate build exists to avoid. Its storage is `data/durable`,
-	// beside the profile, because the agent ships *inside* the installation: anything it kept in its
-	// own folder would be replaced on the next install and removed on uninstall, and the durable
-	// conversations are the one thing it exists to keep. `globalStorageUri` is `<userData>/User/
-	// globalStorage/<extension>`, so two directories up is the settings file the editor itself obeys.
-	const agentProfile = profileDirectory(context.extensionUri);
-	const durablePaths = {
-		agentProfile,
-		agentDataDir: path.join(path.dirname(agentProfile), 'durable'),
-		userSettingsFile: path.join(path.dirname(path.dirname(context.globalStorageUri.fsPath)), 'settings.json'),
-	};
-	context.subscriptions.push(...registerDurableCommands(durablePaths));
-	// And it comes up running rather than waiting to be asked: a panel that says "not running"
-	// when the editor could have started it is an obstacle, not a safeguard. Quiet, and skipped
-	// when the owner stopped it in this window or the agent is not installed here at all.
-	void ensureDurableAgentRunning(durablePaths);
+	context.subscriptions.push(registerTasksView({
+		runningJobs: runningBackgroundJobs,
+		agents: () => gentleAgents.current(),
+		onAgentsChange: listener => gentleAgents.onDidChange(listener),
+		openTranscript: id => {
+			if (!isTaskId(id)) {
+				return;
+			}
+			showAgentTranscript({
+				id,
+				// Gentle writes the full record when a task ends; until then what it last published is all there is.
+				source: () => {
+					const live = transcriptOf(gentleAgents.record(id));
+					if (live !== undefined && isRunning(live.status)) {
+						return live;
+					}
+					try {
+						return transcriptOfJson(fs.readFileSync(path.join(profileDirectory(context.extensionUri), 'gentle-agents', 'tasks', `${id}.json`), 'utf8')) ?? live;
+					} catch {
+						return live;
+					}
+				},
+				onChange: listener => gentleAgents.onDidChange(listener),
+			});
+		},
+	}));
 
 	// The chat's management page lists **pi's own** data — agents, skills, MCP servers and packages —
 	// so this registers the three providers it reads (and the package commands) before anything the
@@ -2515,11 +2559,4 @@ const setupDeps = {
 
 export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
-
-	// The durable daemon is this editor's child, and nothing PiCode starts may outlive
-	// PiCode: on the way out it is stopped through its own protocol (the graceful path,
-	// in durable.ts). If the teardown outruns the goodbye — a crash, a taskkill, a hard
-	// shutdown, no hook at all — the daemon's lifeline pipe closes with this process and
-	// it stops itself (durable/lib/daemon.js).
-	stopDurableAgentOnShutdown();
 }

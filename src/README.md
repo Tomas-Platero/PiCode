@@ -4,7 +4,7 @@
 
 ## 📌 La regla
 
-- **Lo nuestro** se vive en `extensions/picode/`, `durable/` (con su puente en `durable/bridge/`) y en `build/distribution/` (identidad). Este motor se toca solo cuando algo del editor en sí tiene que cambiar.
+- **Lo nuestro** se vive en `extensions/picode/` y en `build/distribution/` (identidad). Este motor se toca solo cuando algo del editor en sí tiene que cambiar.
 - **Quien toque aquí** documenta el porqué en el commit, no en un README: el fichero no es nuestro, la decisión sí.
 - El «quién llama a quién» de esta zona está en el grafo de código (`.codegraph/`), no en ficheros.
 

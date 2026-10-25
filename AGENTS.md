@@ -124,12 +124,24 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Requisito de producto:** cuando el HOST conectado es el externo (PATH), los botones de actualizar Pi y Packages deben actuar sobre ese externo, no sobre el interno.
 
 ### pi durable ya no es experimental
+
+> ⚠️ **Sustituido el 2026-10-25** por «Durable sale del producto» (abajo). Se conserva la frase original.
+
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
 
 * **Residencia:** el agente durable vive en el propio árbol del editor (`host/durable`, con su puente de chat en `host/durable/bridge/` y su cliente de prueba ACP en `host/durable/acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
 * **Nombre:** en todo lo que ve el dueño es **Durable agent**, a secas. Ninguna UI, ajuste o documento vivo lo presenta como experimental.
 * **Build:** viaja dentro de la instalación (`resources/durable`), como ya hacía; solo cambia el nombre de la carpeta destino.
+
+### Durable sale del producto: Pi + Gentle AI
+>
+> *"Lo primero - Quiero quitar todo durable. ya que impacta con Gentle en ciertas cosas. Este cambio será gordo pero necesario, quiero que sea Pi + Gentle AI (gentle pi y engram)."* — 2026-10-25
+
+* **Fuera durable entero:** el programa, su puente, sus comandos y ajustes, el interruptor del primer arranque, la tarjeta de estado y el paso del build.
+* **Las conversaciones son las de pi:** la lista única del panel son los transcríptos que pi escribe en el perfil, y se continúan en el sitio. Lo que solo guardaba durable no se migra.
+* **Tasks:** muestra los trabajos del chat y los subagentes de gentle-pi (ADR-032), los que siguen y los últimos que acabaron.
+* **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` ya está levantado y los dos entran fijados (ADR-031). El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
 
@@ -261,6 +273,8 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 ## 9. La memoria: pi, durable y engram
 
+> ⚠️ **Sustituido en parte el 2026-10-25:** durable sale del producto (sección 4). Pi y engram siguen como están descritos; lo que aquí se dice de durable es historia.
+
 ### Tres papeles, y ninguno repite al otro
 >
 > *"Pi es el agente | Durable las sesiones y el registro | Engram la memoria"*
@@ -284,8 +298,8 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Engram **viaja dentro de PiCode**, como durable: no se instala aparte.
 * **Una sola declaración** en el perfil sirve a los dos motores.
 * Escribir **`engram`** en el terminal integrado tiene que hacer algo de verdad.
-* El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
-  Sigue valiendo la lista de `left-behind-packages.ts`.
+* ~~El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
+  Sigue valiendo la lista de `left-behind-packages.ts`.~~ **Sustituido el 2026-10-25:** gentle-engram entra, fijado por el producto (ADR-031). La lista de `left-behind-packages.ts` queda vacía.
 
 ### Su memoria es del usuario, no del perfil
 >
@@ -338,3 +352,10 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).
 * **2026-10-20** · Memoria del producto: **pi piensa, durable recuerda lo que pasó, engram recuerda lo que importa** («Pi es el agente | Durable las sesiones y el registro | Engram la memoria»). Engram viaja dentro de PiCode y sirve a los dos motores («quiero a engram en el producto… si un usuario escribe engram tiene que funcionar»). Su almacén vive en `~/.engram`, se reutiliza si existe y se comparte con otros agentes — con su coste aceptado: no viaja con el perfil («él puede leer si ya hay algo existente o crearlo en el pc del usuario»). Todo lo que su TUI muestra se muestra en el editor, en superficies que ya existen («tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE»). Registro punto por punto en [`docs/ENGRAM.md`](docs/ENGRAM.md).
 * **2026-10-22** · Texto del editor: **todo texto que va en el editor se escribe con carácter funcional para el usuario** («todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario»). Etiquetas, mensajes, tooltips, notificaciones y filas del panel hablan de qué hay y qué se puede hacer, sin nombres de código, rutas ni detalles de la maquinaria interna.
+* **2026-10-25** · Durable sale del producto: **el producto es Pi + Gentle AI** («quiero quitar todo durable, ya que impacta con Gentle»). La lista del panel pasa a ser la de los transcríptos de pi; ADR-030 sustituye a ADR-018, 020 y 021. Siguen: entrada de gentle-pi y gentle-engram.
+* **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.
+* **2026-10-25** · El panel Tasks enseña los subagentes de gentle-pi, a partir de lo que gentle-pi ya publica (ADR-032).
+* **2026-10-25** · Los modelos de los agentes de gentle se eligen desde el editor, con `/gentle:models` o la vista de estado («quiero poder los modelos que yo quiera a cada uno»; ADR-031, adenda 4).
+* **2026-10-25** · Lo de gentle-pi se queda dentro del perfil de PiCode (nada en `~/.pi`), y el paquete `@earendil-works/pi-durable` se deja atrás en las importaciones y no se ofrece actualizar (ADR-031, adenda).
+* **2026-10-25** · Un solo sistema de subagentes y una sola memoria: los de gentle («¿no debería siempre elegir el de gentle?»). Los paquetes que hacen lo mismo (`@tintinweb/pi-subagents`, `pi-interactive-subagents`, `pi-memory`) se dejan atrás en las importaciones y se apagan en el perfil (ADR-031, adenda 2).
+* **2026-10-25** · Los subagentes de gentle-pi arrancan el pi que lleva el editor (antes fallaban con «spawn pi ENOENT»), y el panel Tasks ya los enseña (ADR-031, adenda 3). Sus agentes `review-*` solo funcionan dentro de la revisión nativa, que necesita el programa auxiliar que el producto no instala.

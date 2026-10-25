@@ -1106,7 +1106,6 @@ export function resolvePack(repoRoot) {
 			'build/build-connector.sh',
 			'build/build-cli.sh',
 			'build/pi-runtime.sh',
-			'build/durable-runtime.sh',
 			'build/stage-distribution.sh',
 			'build/data-hold.sh',
 			'build/checks.mjs',

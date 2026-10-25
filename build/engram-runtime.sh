@@ -3,7 +3,7 @@
 # Puts the memory engine inside the editor that was just built.
 #
 # Why this step exists: PiCode's memory is not a service the owner installs, it is a program the
-# product carries — the same rule pi and the durable agent already follow. The editor looks for it
+# product carries — the same rule pi already follows. The editor looks for it
 # by walking a short list of folders, and the only candidate an *installed* PiCode has is the one
 # this script writes: `<pack>/resources/memory/engram.exe`. Without it, an installation can only
 # say "the memory engine was not found", which is exactly what the owner's rule is about:
@@ -14,9 +14,9 @@
 # usual: the store it opens (`~/.engram`) is shared with whatever other engram is on the machine.
 # An engine that moves on its own could migrate somebody else's memories without asking.
 #
-# What does not travel: the `gentle-engram` pi package. PiCode removed gentle-ai and keeps its
-# packages out of an import (`extensions/picode/src/left-behind-packages.ts`); the memory
-# protocol is written here instead of inherited from it.
+# What travels apart: the `gentle-engram` pi package, which is pi's side of the memory. The
+# product pins it in the profile (`extensions/picode/src/product-packages.ts`, ADR-031) and points
+# it at this engine through `ENGRAM_BIN`.
 #
 # Engram is MIT, and its name and logo belong to its author. Shipping the engine is allowed;
 # dressing any surface as their product is not.
@@ -45,7 +45,7 @@ if [[ -z "${VERSION}" || "${VERSION}" == "null" || -z "${BINARY}" || "${BINARY}"
   exit 2
 fi
 
-# Only Windows is built (see durable-runtime.sh); the two Windows releases are the ones pinned.
+# Only Windows is built; the two Windows releases are the ones pinned.
 case "${VSCODE_ARCH:-x64}" in
   x64)   ASSET_KEY="asset";    SHA_KEY="sha256" ;;
   arm64) ASSET_KEY="assetArm64"; SHA_KEY="sha256Arm64" ;;

@@ -40,11 +40,11 @@ Este documento describe cómo está montado.
   cambia el perfil de cualquier pi. Nada se escribe nunca en el `~/.pi` externo.
 - **Qué hay dentro**: `settings.json` (modelo por defecto, razonamiento, paquetes),
   `models.json` (endpoints y modelos), `auth.json` (credenciales, 0600), `mcp.json`,
-  `skills/`, `sessions/` (los transcríptos JSONL de pi, registro de referencia para importaciones y CLI; las conversaciones viven en durable — Parte 2).
+  `skills/`, `sessions/` (los transcríptos JSONL de pi: son las conversaciones del panel — ADR-030).
 - **Runtime interno o externo**: ajuste `picode.pi.runtime`. El externo se **conecta**
   (se lee, nunca se escribe) y el asistente de primer arranque ofrece **migrar** de él
   al interno — siempre a petición expresa del dueño. Una importación se niega a arrastrar
-  paquetes vetados (`left-behind-packages.ts`).
+  paquetes vetados (`left-behind-packages.ts`, hoy vacía); gentle-pi y gentle-engram los fija el producto (`product-packages.ts`, ADR-031).
 
 ### 3. El conector (lo que une el editor con pi)
 
@@ -57,10 +57,9 @@ Este documento describe cómo está montado.
 | `permissions.ts` | La puerta de permisos: `bash`, `edit`, `write` y toda tool `mcp__…` preguntan antes, con niveles (default/assisted); los comandos de solo lectura pasan sin preguntar |
 | `mcp-provider.ts` / `mcpTools.ts` | Los servidores MCP del **editor** entran a pi como tools propias; los del perfil los carga pi con su conector builtin |
 | `background-jobs.ts` / `background-cards.ts` | Los trabajos en background: tarjeta en el transcript y registro vivo para la píldora |
-| `durable*.ts` | El puente con **durable** (ver Parte 2): conversaciones que sobreviven un kill, subagentes como trabajo en fondo |
-| `sessions-provider.ts` | Los transcríptos JSONL del perfil (`sessions/`): registro de referencia y entrada de importación; la lista viva del panel la alimenta durable |
+| `sessions-provider.ts` / `sessions-register.ts` / `sessions-resume.ts` | Los transcríptos JSONL del perfil (`sessions/`): se leen y se listan, son la lista única del panel y se continúan en el sitio |
 | `status-data.ts` / `status-contract.ts` | Una sola lectura del estado: versión de pi, proveedores por origen, MCP por origen, uso y coste, git. La forma va en el contrato; quien pinta es la sección **Status** del núcleo |
-| `tasks-rows.ts` / `tasks-view.ts` | El bloque **Tasks** del panel: los trabajos en fondo del chat y las tareas de durable en una lista, con el detalle de cada una al abrirla. `tasks-rows.ts` es puro (sin `vscode`), así que `node --test` lo ejecuta tal cual |
+| `tasks-rows.ts` / `tasks-view.ts` | El bloque **Tasks** del panel: los trabajos en fondo del chat y los subagentes de gentle-pi (`gentle-agents-store.ts`) en una lista, con el detalle de cada uno al abrirlo. `tasks-rows.ts` es puro (sin `vscode`), así que `node --test` lo ejecuta tal cual |
 | `providers*.ts`, `models*.ts` | Declaración de endpoints y suscripciones; todo acaba en `models.json`/`auth.json` del perfil, que es lo que pi lee |
 | `packages*.ts` | Los paquetes de pi (skills, agentes, extensiones), instalados en el perfil |
 | `onboarding.ts`, `wizard*.ts` | Los comandos de arranque que quedan del asistente antiguo: estado, migración, modelos. La **pantalla** ya no vive en la Welcome (ver abajo) |
@@ -77,13 +76,13 @@ Este documento describe cómo está montado.
   esperan turno (con *Cancel queued*), qué trabajos en background corren. El conector
   **empuja** (`picode.picodeAgentStatusChanged`); nada se sondea.
 - **La sección Status** de la página de Agent Customizations (`picode.setup.status`): tarjetas
-  con el pi en fuerza, proveedores, sesión, proyecto, actualizaciones, suscripción, agente
-  durable, trabajos en fondo, error y acciones — con filtro y con un botón por acción. La misma
+  con el pi en fuerza, proveedores, sesión, proyecto, actualizaciones, suscripción,
+  trabajos en fondo, error y acciones — con filtro y con un botón por acción. La misma
   lectura alimenta la página de Providers (proveedores del perfil como filas de solo lectura) y la
   de MCP (perfil + proyecto + descubiertos, con origen en cada fila).
 - **El contenedor del activity bar** lleva lo que el chat no puede enseñar: **Tasks** (el trabajo
-  que el chat tiene fuera — sus trabajos en fondo y las tareas que delegó a durable, cada una con
-  su detalle al abrirla) y **Memory** (lo que este equipo recuerda). Los datos son los mismos que
+  que el chat tiene fuera — sus trabajos en fondo y los agentes de gentle-pi, cada uno con
+  su detalle al abrirlo) y **Memory** (lo que este equipo recuerda). Los datos son los mismos que
   leen la píldora y la sección Status; aquí se dibujan en una lista que se queda quieta mientras se
   trabaja en otro fichero. Solo se refrescan mientras el bloque está visible.
 - **Los agentes y skills de pi, en la página**: el conector registra un proveedor de
@@ -106,19 +105,11 @@ extensión para vivir en el proceso host del editor. Está como tarea abierta en
 
 ---
 
-## 💾 Parte 2 — durable: el backend de conversaciones (no es un segundo harness)
+## 💾 Parte 2 — durable: retirado (ADR-030)
 
-`durable` es el **backend** del agente (conversaciones y trabajo en fondo), integrado en el propio árbol del editor
-(`durable`) y ejecutado por él.
-
-- **Dónde**: `resources/durable`, junto a las dependencias que carga. Se ejecuta sobre
-  el binario del propio editor en modo Node: una instalación es autocontenida.
-- **Qué hace**: posee sus conversaciones en SQLite (`data/durable`, junto al perfil, nunca
-  en la carpeta que una actualización reemplaza), sirve clientes locales por named pipe, y
-  recupera un envío (submission) si el proceso muere a mitad de turno.
-- **Cómo entra en el chat**: el conector delega en durable lo que no puede perderse; las
-  tarjetas de background y de subagente dibujan su identidad.
-  Quien orquesta el chat es pi: durable no es un segundo harness (ADR-020) y las sesiones las guarda siempre durable (ADR-021).
+El agente durable ya no forma parte del producto: PiCode es pi más Gentle AI. Las conversaciones son
+los transcríptos de pi (`sessions/` del perfil) y el chat sigue siendo pi, en proceso. Esta parte
+describía el backend retirado; el detalle histórico vive en `docs/DECISIONS.md` (ADR-018 a ADR-021).
 
 ---
 
