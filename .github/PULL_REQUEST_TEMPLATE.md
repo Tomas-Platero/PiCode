@@ -27,8 +27,8 @@ of leaving it implied.
 
 ## Which layer
 
-- [ ] The editor itself (`picode-source/`)
-- [ ] The product layer (`distribution/`, `dev/`, `builder/`)
+- [ ] The editor itself (`the tree`)
+- [ ] The product layer (`product.json`, `build/distribution/`, `build/`)
 - [ ] Agent integration (chat, connector, agent host)
 - [ ] Build pipeline or `.github/workflows/`
 - [ ] Docs and records only
@@ -38,7 +38,7 @@ of leaving it implied.
 - Approx. lines changed: ______
 - Does the VS Code pin move? If `upstream/stable.json` is touched, say so
   and point at the merge that produced the tree.
-- Anything a reviewer should run before reading: `./dev/build.sh -o`,
+- Anything a reviewer should run before reading: `build/build.sh -o`,
   `npm test` in the connector, etc.
 
 ## Records

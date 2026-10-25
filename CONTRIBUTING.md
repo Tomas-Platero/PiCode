@@ -15,22 +15,22 @@ Three things to read before anything else:
 | You want to… | You work on… | Start with |
 | --- | --- | --- |
 | Use PiCode | nothing — download a release | [Releases](https://github.com/Tomas-Platero/PiCode/releases) |
-| Change branding, defaults, or what is removed from the product | `distribution/product-delta.json` and the apply scripts | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) |
-| Change editor behaviour | `picode-source/` — the TypeScript itself | [docs/howto-build.md](docs/howto-build.md) |
-| Change the agent integration | the core connector and agent host under `picode-source/extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Fix the pipeline | `dev/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
+| Change branding, defaults, or what is removed from the product | `product.json` and the apply scripts | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) |
+| Change editor behaviour | `the tree` — the TypeScript itself | [docs/howto-build.md](docs/howto-build.md) |
+| Change the agent integration | the core connector and agent host under `extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Fix the pipeline | `build/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
 
 ## 🔨 Building from source
 
 The scripts are **Bash** — on Windows run them from Git Bash, PowerShell will not work.
 
 ```bash
-./dev/build.sh          # check the source, install what is missing, compile, pack, stage
-./dev/build.sh -o       # check the source only: seconds, nothing installed or compiled
-./dev/build.sh -i       # install the dependencies even when the recorded state still matches
+build/build.sh          # check the source, install what is missing, compile, pack, stage
+build/build.sh -o       # check the source only: seconds, nothing installed or compiled
+build/build.sh -i       # install the dependencies even when the recorded state still matches
 ```
 
-`./picode-source` is PiCode's own source, not a download: it already carries the VSCodium
+`./the tree` is PiCode's own source, not a download: it already carries the VSCodium
 changes, PiCode's own work and the PiCode product identity, and it is committed **in this
 repository** — a plain tracked folder, no submodule and no nested repository. Building is
 therefore local work on the tree: there is no fetch and no patch step to wait for, and the
@@ -39,14 +39,14 @@ dependencies are installed once instead of on every build.
 Dependencies (Windows): Git for Windows, Node matching `.nvmrc`, Python 3.11, Rustup,
 and Visual Studio 2022 with the **Spectre-mitigated libraries** — without that component the
 native modules stop with `error MSB8040`. The authoritative list of checks lives in
-[`dev/build-requirements.mjs`](dev/build-requirements.mjs); run it and it tells you what this
+[`build/build-helpers.mjs requirements`](build/build-helpers.mjs requirements); run it and it tells you what this
 machine is missing. `jq` is no longer needed by the build: the JSON it touches is read and
 written by node.
 
-There is also a graphical front-end, [`builder/`](builder/README.md) (C# / WinUI 3, drives the
-same scripts; needs only the .NET SDK).
+Prefer buttons? `build/build-window.cmd` opens a small window that drives the same pipeline
+(nothing to install beyond PowerShell and WPF).
 
-`picode-source/` is **not** a build output any more: it is the source, and it is versioned in
+`the tree` is **not** a build output any more: it is the source, and it is versioned in
 this repository (decided by the owner on 2026-09-27: one clone carries everything). `PiCode-*`
 still is a build output and is ignored. Because Microsoft's MIT-licensed source now lives in
 this tree, the upstream licence and attribution notices travel with it and must never be
@@ -75,7 +75,7 @@ plan (unexercised so far).
   extension IDs, the Open VSX API URL, or the legal notices.** "VSCodium" legitimately
   remains in some binary names (`@vscodium/native-keymap`, ripgrep) — it is the upstream base
   and pretending otherwise would be false.
-- **Never edit a running bash script** — `dev/build.sh` will be re-read mid-flight.
+- **Never edit a running bash script** — `build/build.sh` will be re-read mid-flight.
 
 ## 🌐 Language
 
@@ -97,7 +97,7 @@ do not translate sources in place.
 
 ## 🧪 Tests
 
-The connector keeps hermetic suites that need no editor (`node --test picode-source/extensions/picode/test/*.test.ts`); CI runs them on every push. The editor's own behaviour is verified by building and running it: a fresh-clone build is the first thing a maintainer will look at in a PR that touches `dev/` or `distribution/`. The full checklist is [DISTRIBUTION.md §8](docs/DISTRIBUTION.md).
+The connector keeps hermetic suites that need no editor (`node --test extensions/picode/test/*.test.ts`); CI runs them on every push. The editor's own behaviour is verified by building and running it: a fresh-clone build is the first thing a maintainer will look at in a PR that touches `build/` or `build/distribution/`. The full checklist is [DISTRIBUTION.md §8](docs/DISTRIBUTION.md).
 
 ## 🐞 Reporting
 

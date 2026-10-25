@@ -9,4 +9,4 @@
 
 📖 Cómo se genera, por qué cada canal es una rama distinta y la regla de «una release por canal»: [`updates/README.md`](../README.md) y [`docs/DISTRIBUTION.md`](../../docs/DISTRIBUTION.md).
 
-**Cuándo se toca:** nunca a mano. Lo escribe `dev/update-feed.mjs` desde el pipeline de release (`--force` no se pasa jamás: si el generador se niega, la release se detiene).
+**Cuándo se toca:** nunca a mano. Lo escribe `build/release.mjs update-feed` desde el pipeline de release (`--force` no se pasa jamás: si el generador se niega, la release se detiene).
