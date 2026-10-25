@@ -107,6 +107,7 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | Fichero | Qué hace |
 | --- | --- |
 | `sessions-provider.ts` | Las sesiones de pi: cómo se leen y se listan. |
+| `sessions-digest.ts` | Qué avisa al panel de Sesiones de que mire otra vez: nombres de transcripciones y minutos, no cada escritura. |
 | `sessions-register.ts` | Esas sesiones como la lista única del panel de Sesiones. |
 | `sessions-resume.ts` | Continuar una conversación que el panel lista. |
 | `sessions-backup.ts` | Respaldar las sesiones de pi en PiCode Cloud y restaurarlas desde allí. |

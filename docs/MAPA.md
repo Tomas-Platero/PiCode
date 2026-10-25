@@ -382,6 +382,7 @@
 │   │   │   ├── endpoint.ts
 │   │   │   ├── engram-activation.ts
 │   │   │   ├── engram.ts
+│   │   │   ├── extension-notices.ts
 │   │   │   ├── extension.ts
 │   │   │   ├── gentle-agents-store.ts
 │   │   │   ├── import-project.ts
@@ -438,7 +439,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 71 files in total
+│   │   │   └── … 72 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -452,6 +453,7 @@
 │   │   │   ├── distribution-root.test.ts
 │   │   │   ├── engram-runtime.test.ts
 │   │   │   ├── engram.test.ts
+│   │   │   ├── extension-notices.test.ts
 │   │   │   ├── gentle-agents-store.test.ts
 │   │   │   ├── left-behind-packages.test.ts
 │   │   │   ├── mcp-add.test.ts
@@ -490,7 +492,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 50 files in total
+│   │   │   └── … 51 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentFrame, applyContextMode, contextBlock, contextModeOf, withContext } from '../src/context.ts';
+import { agentFrame, applyContextMode, contextBlock, contextModeOf, withContext, isSlashCommand } from '../src/context.ts';
 
 test('nothing to say means no block, not an empty header', () => {
 	assert.equal(contextBlock({}), undefined);
@@ -123,4 +123,19 @@ test('a mode that is not one of the three falls back to the default', () => {
 test('selection mode with nothing selected says nothing rather than naming the file', () => {
 	const block = contextBlock(applyContextMode({ folder: '/repo', file: '/repo/a.ts' }, 'selection'));
 	assert.equal(block, undefined);
+});
+
+test('a slash command is recognised by its first word, and a path is not one', () => {
+	for (const command of ['/gentle:status', '/mcp login github', '  /skill:judgment-day  ', '/gentle:mode yolo']) {
+		assert.equal(isSlashCommand(command), true, command);
+	}
+	for (const text of ['/etc/hosts explain this', 'explain /gentle:status', '', '/', '//comment']) {
+		assert.equal(isSlashCommand(text), false, text);
+	}
+});
+
+test('a slash command reaches pi first, unframed; any other request keeps its frame', () => {
+	assert.equal(withContext('/gentle:status', 'CONTEXT', 'internal'), '/gentle:status');
+	assert.equal(withContext('  /mcp login x ', undefined, 'internal'), '/mcp login x');
+	assert.ok(withContext('hola', 'CONTEXT', 'internal').includes('CONTEXT'));
 });

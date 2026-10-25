@@ -169,8 +169,25 @@ export function agentFrame(runtime: 'internal' | 'external'): string {
 		: 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.';
 }
 
-/** The prompt pi is asked with: who it is, the editor's context when there is one, then the request. */
+/**
+ * Whether the request is one of pi's slash commands (`/gentle:status`, `/mcp login`, `/skill:name`).
+ *
+ * pi runs a command only when the text **starts** with it (`AgentSession.prompt` checks the first
+ * character), so a command that arrives behind a frame is no command: the model reads it as a
+ * sentence and improvises. A path (`/etc/hosts`) is not a command: the name stops at the first `/`.
+ */
+export function isSlashCommand(prompt: string): boolean {
+	return /^\/[A-Za-z0-9][\w:.-]*(\s|$)/.test(prompt.trim());
+}
+
+/**
+ * The prompt pi is asked with: who it is, the editor's context when there is one, then the request.
+ * A slash command goes through untouched, because pi has to see it first to run it.
+ */
 export function withContext(prompt: string, context: string | undefined, runtime: 'internal' | 'external'): string {
+	if (isSlashCommand(prompt)) {
+		return prompt.trim();
+	}
 	const head = context === undefined ? agentFrame(runtime) : `${agentFrame(runtime)}\n\n${context}`;
 	return `${head}\n\n---\n\n${prompt}`;
 }

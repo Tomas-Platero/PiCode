@@ -9,6 +9,7 @@ import type { AgentDeps } from './agent';
 import { piResumeRequestHandler } from './sessions-resume';
 import { areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
 import { projectSlugsOfWindow, resolveProjectScope, windowSessionScope } from './runtime';
+import { coarseMinute, transcriptDigest } from './sessions-digest';
 
 /**
  * pi's own sessions, in the editor's Sessions panel: the one list.
@@ -39,6 +40,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 	// `[]`: the extension-host bridge diffs by reference and removes every item absent from the
 	// returned array, so an empty answer would clear the panel until the next good one.
 	let lastItems: vscode.ChatSessionItem[] | undefined = undefined;
+	let lastLoggedCount = -1;
 	const sessionsDir = (): string => path.join(options.profileDir(), 'sessions');
 
 	const provider: vscode.ChatSessionItemProvider & vscode.ChatSessionContentProvider = {
@@ -61,8 +63,9 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 				label: file.label,
 				iconPath: vscode.ThemeIcon.File,
 				// A transcript is only ever appended to, so its mtime is both the created and the
-				// last-activity marker; without one the panel dates every row 1970.
-				timing: { created: file.mtime, lastRequestEnded: file.mtime },
+				// last-activity marker; without one the panel dates every row 1970. Rounded to the
+				// minute, the grain the panel shows, so a row that only grew is the same row to it.
+				timing: { created: coarseMinute(file.mtime), lastRequestEnded: coarseMinute(file.mtime) },
 			}));
 			// Rows nobody touched come back as the objects the panel already has, so the list does
 			// not republish and blink on every refresh.
@@ -77,7 +80,10 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 			// A listing that came back short because a directory refused to be read is no answer;
 			// publishing it is what emptied the panel while the profile was being written.
 			lastItems = listingForPanel(reusable, lastItems, folders !== undefined && report.complete);
-			options.deps.log(`sessions: ${lastItems.length} conversation${lastItems.length === 1 ? '' : 's'} listed${report.complete ? '' : ' (the folder could not be read completely)'}`);
+			if (lastItems.length !== lastLoggedCount) {
+				lastLoggedCount = lastItems.length;
+				options.deps.log(`sessions: ${lastItems.length} conversation${lastItems.length === 1 ? '' : 's'} listed${report.complete ? '' : ' (the folder could not be read completely)'}`);
+			}
 			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -120,18 +126,27 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 		},
 	};
 
-	// A conversation that starts, and every turn that lands in one, writes to the transcripts
-	// folder: the panel is told when that happens, a moment after the writes settle, so a new
-	// conversation is in the list without anyone pressing refresh.
+	// A conversation that starts writes a new transcript into the folder: the panel is told when a
+	// transcript is added or removed, a moment after the writes settle, so a new conversation is in
+	// the list without anyone pressing refresh. A transcript that only grows does not tell it
+	// anything (`sessions-digest.ts`): pi appends after every message, and a repaint per message
+	// is what made the list blink while an answer streamed.
 	let settle: ReturnType<typeof setTimeout> | undefined;
 	let watcher: fs.FSWatcher | undefined;
 	try {
 		fs.mkdirSync(sessionsDir(), { recursive: true });
+		let known = transcriptDigest(sessionsDir());
 		watcher = fs.watch(sessionsDir(), { recursive: true }, () => {
 			if (settle !== undefined) {
 				clearTimeout(settle);
 			}
-			settle = setTimeout(() => changed.fire(), 800);
+			settle = setTimeout(() => {
+				const now = transcriptDigest(sessionsDir());
+				if (now !== known) {
+					known = now;
+					changed.fire();
+				}
+			}, 800);
 		});
 		watcher.on('error', () => { /* a folder that vanished is listed again when the window is */ });
 	} catch (error) {
