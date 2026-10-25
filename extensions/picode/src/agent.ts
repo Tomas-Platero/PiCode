@@ -58,6 +58,7 @@ import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
+import { isExpectedHelperNotice } from './extension-notices';
 
 /**
  * `@pi` inside the editor's own chat.
@@ -963,6 +964,10 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 		notify: (message: string, type?: 'info' | 'warning' | 'error'): void => {
 			const stream = turnContext.current?.stream;
 			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
+				return;
+			}
+			// Expected by the product, and written in terms of files and variables: not shown.
+			if (isExpectedHelperNotice(message)) {
 				return;
 			}
 			const styled = styledExtensionNotice(message.trim());

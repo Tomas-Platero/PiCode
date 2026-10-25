@@ -377,6 +377,7 @@
 │   │   │   ├── context.ts
 │   │   │   ├── customizations.ts
 │   │   │   ├── declarations.ts
+│   │   │   ├── distribution-root.ts
 │   │   │   ├── editor-context.ts
 │   │   │   ├── endpoint.ts
 │   │   │   ├── engram-activation.ts
@@ -437,7 +438,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 70 files in total
+│   │   │   └── … 71 files in total
 │   │   ├── test/
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -448,6 +449,7 @@
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
 │   │   │   ├── disabled-tools.test.ts
+│   │   │   ├── distribution-root.test.ts
 │   │   │   ├── engram-runtime.test.ts
 │   │   │   ├── engram.test.ts
 │   │   │   ├── gentle-agents-store.test.ts
@@ -481,13 +483,14 @@
 │   │   │   ├── session-listing.test.ts
 │   │   │   ├── sessions-backup.test.ts
 │   │   │   ├── sessions-provider.test.ts
+│   │   │   ├── setup-host-no-editor.test.ts
 │   │   │   ├── status-layout.test.ts
 │   │   │   ├── tasks-rows.test.ts
 │   │   │   ├── theme-catalog.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 48 files in total
+│   │   │   └── … 50 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

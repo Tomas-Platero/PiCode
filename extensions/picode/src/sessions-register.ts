@@ -77,6 +77,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 			// A listing that came back short because a directory refused to be read is no answer;
 			// publishing it is what emptied the panel while the profile was being written.
 			lastItems = listingForPanel(reusable, lastItems, folders !== undefined && report.complete);
+			options.deps.log(`sessions: ${lastItems.length} conversation${lastItems.length === 1 ? '' : 's'} listed${report.complete ? '' : ' (the folder could not be read completely)'}`);
 			return lastItems;
 		},
 		async provideChatSessionContent(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -119,6 +120,23 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 		},
 	};
 
+	// A conversation that starts, and every turn that lands in one, writes to the transcripts
+	// folder: the panel is told when that happens, a moment after the writes settle, so a new
+	// conversation is in the list without anyone pressing refresh.
+	let settle: ReturnType<typeof setTimeout> | undefined;
+	let watcher: fs.FSWatcher | undefined;
+	try {
+		fs.mkdirSync(sessionsDir(), { recursive: true });
+		watcher = fs.watch(sessionsDir(), { recursive: true }, () => {
+			if (settle !== undefined) {
+				clearTimeout(settle);
+			}
+			settle = setTimeout(() => changed.fire(), 800);
+		});
+		watcher.on('error', () => { /* a folder that vanished is listed again when the window is */ });
+	} catch (error) {
+		options.deps.log(`sessions: the transcripts folder could not be watched (${error instanceof Error ? error.message : String(error)})`);
+	}
 	const registration = vscode.chat.registerChatSessionItemProvider(PI_SESSION_SCHEME, provider);
 	// The listing is filtered by the folders this window has open, so a window whose folders
 	// arrive after the first ask is asked again.
@@ -127,6 +145,10 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 	return {
 		fireChanged: () => changed.fire(),
 		dispose: () => {
+			if (settle !== undefined) {
+				clearTimeout(settle);
+			}
+			watcher?.close();
 			folders.dispose();
 			contentRegistration.dispose();
 			registration.dispose();
