@@ -34,6 +34,7 @@ alternatives were seriously considered.
 | 020 | The chat is pi; durable is the backend it reaches through tools | superseded by 030 |
 | 021 | One orchestrator (pi), one list, sessions always durable | superseded by 030 |
 | 030 | Durable leaves the product; pi's own transcripts are the conversations | accepted |
+| 031 | gentle-pi and gentle-engram enter as pinned packages of the product | accepted |
 
 ## ADR-001 — Distribution layered on VS Code/VSCodium instead of a full fork
 
@@ -777,9 +778,9 @@ standalone engine that framework happened to use.
 - **One declaration serves both engines.** The profile's `mcp.json` already feeds the in-process
   chat (pi's built-in MCP) and durable (`lib/mcp.js`, deferred behind `mcp_tools`). No second
   integration path is written.
-- **The `gentle-engram` pi package does not enter.** Its hooks, status bar and session-identity
-  machinery are the coupling that was removed with gentle-ai; the memory protocol is written
-  here, in our words, in both system prompts.
+- **The `gentle-engram` pi package does not enter.** *(Superseded by ADR-031: it enters, pinned.)*
+  Its hooks, status bar and session-identity machinery are the coupling that was removed with
+  gentle-ai; the memory protocol is written here, in our words, in both system prompts.
 - **The store is the user's, not the profile's:** `~/.engram`. It is reused **as it is** when it
   exists, created when it does not, and never moved, migrated or overwritten. If an engram
   server is already serving, PiCode **joins it**; it does not open a second one on the same
@@ -1136,3 +1137,37 @@ connector files that spoke to it, its commands, its `picode.durable.*` settings,
 (`data/durable`) are not migrated and stop being listed; pi's transcripts, which the chat has always
 written, are the record from here on. The pi-durable package leaves the product's dependencies.
 ADR-022's rule that Engram is the product's memory stands; its "durable stays the record" half does not.
+
+## ADR-031 — gentle-pi and gentle-engram enter as pinned packages of the product
+
+**Status:** accepted. Supersedes the "gentle-engram does not enter" half of ADR-022 and the
+left-behind list that enforced it.
+
+**Context:** With durable gone (ADR-030) the product is pi plus Gentle AI. gentle-pi brings the
+method, ten roles and the review tools; gentle-engram brings pi its memory tools. Both were
+blocked: `left-behind-packages.ts` named them, and an import refused to copy them.
+
+**Decision:**
+
+- The block is lifted: `LEFT_BEHIND_PACKAGE_NAMES` is empty (the mechanism stays for a future
+  refusal).
+- `product-packages.ts` pins **gentle-pi 4.3.0** and **gentle-engram 0.4.2** at exact versions.
+  Every run of the package installer declares them in the profile's `settings.json` as pinned, in
+  place of whatever an import, an old profile or a hand edit left — ranged, unpinned or filtered
+  differently.
+- gentle-pi is **narrowed** through pi's own package filter: its terminal experience (banner,
+  sounds, pretty printer, prompt history, Herdr, statistics, shell, usage metrics, resume hint) is
+  excluded. Method, roles, tools and review stay.
+- `product-env.ts` fixes the environment of pi and of every npm run: `GENTLE_PI_SKIP_GENTLE_AI_INSTALL=1`
+  (a package's install script fetches nothing; on Windows it would compile a helper with Go, so
+  the review operations that need that helper stay off in this delivery), and `DO_NOT_TRACK=1` plus
+  `GENTLE_AI_TELEMETRY=0` (gentle-pi reports usage by default; PiCode sends nothing).
+- Memory is gentle-engram's. The `engram` MCP declaration this product wrote is removed (a
+  second set of tools would offer the model the same memory twice), the `<memory>` prompt section
+  and `memory-protocol.ts` are gone, and `ENGRAM_BIN` is set before pi loads to the engine the
+  installation carries, so the chat and the Memory panel read the same store (`~/.engram`).
+
+**Consequences:** The helper binary and its review operations are not part of this delivery; a
+later decision may carry a pinned build in `resources/`. gentle-pi's subagents still run as pi
+child processes and are not yet in the Tasks block; routing them there is the next step. The
+engine stays at 3.5.1 (gentle-engram 0.4.2 accepts any stable core from 3.0.0).

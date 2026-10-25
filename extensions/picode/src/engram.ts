@@ -77,6 +77,17 @@ export function engramBinaryCandidates(configured: string | undefined, workspace
 	];
 }
 
+/**
+ * The engine this installation can run: the first candidate that exists, read without waiting.
+ *
+ * gentle-engram reads `ENGRAM_BIN` once, when pi loads it, so the answer has to be there before
+ * any session is built — the probe below waits on the network and cannot be.
+ */
+export function firstEngramBinary(io: Pick<EngramProbeIo, 'env' | 'home' | 'appRoot' | 'workspaceFolders' | 'configured' | 'exists'>): string | undefined {
+	return engramBinaryCandidates(io.configured, io.workspaceFolders, io.appRoot, io.env['PATH'] ?? io.env['Path'], io.home)
+		.find(candidate => io.exists(candidate));
+}
+
 /** `~/.engram` — the engine's own default, kept so the store is shared rather than owned. */
 export function defaultEngramDataDir(home: string): string {
 	return joinPath(home, '.engram');
@@ -427,8 +438,7 @@ export interface EngramProbe {
  *  5. an engine and no store → `empty` (the engine creates one on first use).
  */
 export async function probeEngram(io: EngramProbeIo, timeoutMs: number = ENGRAM_PROBE_TIMEOUT_MS): Promise<EngramProbe> {
-	const binary = engramBinaryCandidates(io.configured, io.workspaceFolders, io.appRoot, io.env['PATH'] ?? io.env['Path'], io.home)
-		.find(candidate => io.exists(candidate));
+	const binary = firstEngramBinary(io);
 	const dataDir = engramDataDir(io.env, io.home);
 	const database = join(dataDir, 'engram.db');
 	const instanceFile = join(dataDir, '.instance-id');

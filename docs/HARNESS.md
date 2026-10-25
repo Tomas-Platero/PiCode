@@ -44,7 +44,7 @@ Este documento describe cómo está montado.
 - **Runtime interno o externo**: ajuste `picode.pi.runtime`. El externo se **conecta**
   (se lee, nunca se escribe) y el asistente de primer arranque ofrece **migrar** de él
   al interno — siempre a petición expresa del dueño. Una importación se niega a arrastrar
-  paquetes vetados (`left-behind-packages.ts`).
+  paquetes vetados (`left-behind-packages.ts`, hoy vacía); gentle-pi y gentle-engram los fija el producto (`product-packages.ts`, ADR-031).
 
 ### 3. El conector (lo que une el editor con pi)
 

@@ -141,7 +141,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Fuera durable entero:** el programa, su puente, sus comandos y ajustes, el interruptor del primer arranque, la tarjeta de estado y el paso del build.
 * **Las conversaciones son las de pi:** la lista única del panel son los transcríptos que pi escribe en el perfil, y se continúan en el sitio. Lo que solo guardaba durable no se migra.
 * **Tasks:** muestra los trabajos del chat; los subagentes de gentle-pi se suman cuando gentle-pi entre.
-* **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` se levanta en el paso siguiente. El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
+* **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` ya está levantado y los dos entran fijados (ADR-031). El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
 
@@ -298,8 +298,8 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Engram **viaja dentro de PiCode**, como durable: no se instala aparte.
 * **Una sola declaración** en el perfil sirve a los dos motores.
 * Escribir **`engram`** en el terminal integrado tiene que hacer algo de verdad.
-* El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
-  Sigue valiendo la lista de `left-behind-packages.ts`.
+* ~~El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
+  Sigue valiendo la lista de `left-behind-packages.ts`.~~ **Sustituido el 2026-10-25:** gentle-engram entra, fijado por el producto (ADR-031). La lista de `left-behind-packages.ts` queda vacía.
 
 ### Su memoria es del usuario, no del perfil
 >
@@ -353,3 +353,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-20** · Memoria del producto: **pi piensa, durable recuerda lo que pasó, engram recuerda lo que importa** («Pi es el agente | Durable las sesiones y el registro | Engram la memoria»). Engram viaja dentro de PiCode y sirve a los dos motores («quiero a engram en el producto… si un usuario escribe engram tiene que funcionar»). Su almacén vive en `~/.engram`, se reutiliza si existe y se comparte con otros agentes — con su coste aceptado: no viaja con el perfil («él puede leer si ya hay algo existente o crearlo en el pc del usuario»). Todo lo que su TUI muestra se muestra en el editor, en superficies que ya existen («tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE»). Registro punto por punto en [`docs/ENGRAM.md`](docs/ENGRAM.md).
 * **2026-10-22** · Texto del editor: **todo texto que va en el editor se escribe con carácter funcional para el usuario** («todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario»). Etiquetas, mensajes, tooltips, notificaciones y filas del panel hablan de qué hay y qué se puede hacer, sin nombres de código, rutas ni detalles de la maquinaria interna.
 * **2026-10-25** · Durable sale del producto: **el producto es Pi + Gentle AI** («quiero quitar todo durable, ya que impacta con Gentle»). La lista del panel pasa a ser la de los transcríptos de pi; ADR-030 sustituye a ADR-018, 020 y 021. Siguen: entrada de gentle-pi y gentle-engram.
+* **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.

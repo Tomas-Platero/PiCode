@@ -14,9 +14,9 @@
 # usual: the store it opens (`~/.engram`) is shared with whatever other engram is on the machine.
 # An engine that moves on its own could migrate somebody else's memories without asking.
 #
-# What does not travel: the `gentle-engram` pi package. PiCode removed gentle-ai and keeps its
-# packages out of an import (`extensions/picode/src/left-behind-packages.ts`); the memory
-# protocol is written here instead of inherited from it.
+# What travels apart: the `gentle-engram` pi package, which is pi's side of the memory. The
+# product pins it in the profile (`extensions/picode/src/product-packages.ts`, ADR-031) and points
+# it at this engine through `ENGRAM_BIN`.
 #
 # Engram is MIT, and its name and logo belong to its author. Shipping the engine is allowed;
 # dressing any surface as their product is not.

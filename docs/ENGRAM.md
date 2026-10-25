@@ -56,7 +56,7 @@ Reglas que mantienen esto sano:
 | Decisión | A cambio |
 | --- | --- |
 | Engram **viaja dentro del producto** (no se instala aparte) | Un runtime más que empaquetar y actualizar, como durable |
-| **No** se usa el paquete `gentle-engram` de pi | Perdemos sus ganchos automáticos; el protocolo lo escribimos nosotros. Sigue valiendo `left-behind-packages.ts` |
+| ~~**No** se usa el paquete `gentle-engram` de pi~~ → **sí se usa, fijado** (ADR-031, 2026-10-25) | Pi recibe la memoria por sus herramientas nativas y su captura; el protocolo propio y la declaración MCP se retiran |
 | La memoria vive en **`~/.engram`**, compartida con cualquier otro agente | **No viaja con el perfil en la nube.** Deuda reconocida, no escondida |
 | Si ya hay almacén, **se reutiliza**; si no, se crea. Nunca se mueve ni se pisa | — |
 | **Una sola declaración** en el perfil sirve al chat y a durable | — |
@@ -262,7 +262,7 @@ queda como deuda anotada y el fijado como decisión pendiente para 5b.
 
 ## 6. Fuera de alcance
 
-Nube de engram · el paquete `gentle-engram` · sincronizar la memoria con el perfil ·
+Nube de engram · sincronizar la memoria con el perfil ·
 migrar memorias entre almacenes · el TUI y su tema · sus teclas.
 
 ---
@@ -296,3 +296,4 @@ migrar memorias entre almacenes · el TUI y su tema · sus teclas.
   *Queda para la release:* la acción de actualizar el motor (diseño anotado en fase 6: aviso,
   copia de la base, arranque, comprobación, vuelta atrás) y las notas de release.
 - **2026-10-25** · Durable sale del producto (ADR-030): el fichero `memory-protocol.md` que se escribía para él deja de escribirse; el chat sigue recibiendo el mismo protocolo en su prompt. La entrada de gentle-engram queda para el paso siguiente.
+- **2026-10-25** · gentle-engram 0.4.2 entra como paquete fijado (ADR-031): la declaración MCP de `engram` que escribía el producto se retira, el prompt `<memory>` propio también, y `ENGRAM_BIN` apunta al motor que viaja con la instalación antes de que pi cargue. Mismo almacén `~/.engram`, mismo panel Memory.

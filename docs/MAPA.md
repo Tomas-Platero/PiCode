@@ -394,7 +394,6 @@
 │   │   │   ├── mcpTools.ts
 │   │   │   ├── memory-cards.ts
 │   │   │   ├── memory-client.ts
-│   │   │   ├── memory-protocol.ts
 │   │   │   ├── memory-update.ts
 │   │   │   ├── memory-view.ts
 │   │   │   ├── models-cache.ts
@@ -421,6 +420,7 @@
 │   │   │   ├── session-cwd.ts
 │   │   │   ├── sessions-backup.ts
 │   │   │   ├── sessions-provider.ts
+│   │   │   ├── sessions-register.ts
 │   │   │   ├── sessions-resume.ts
 │   │   │   ├── status-contract.ts
 │   │   │   ├── status-data.ts
@@ -456,7 +456,6 @@
 │   │   │   ├── mcp-signin.test.ts
 │   │   │   ├── memory-cards.test.ts
 │   │   │   ├── memory-client.test.ts
-│   │   │   ├── memory-protocol.test.ts
 │   │   │   ├── models-cache.test.ts
 │   │   │   ├── npm-run.test.ts
 │   │   │   ├── onboarding-settings.test.ts
@@ -483,7 +482,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 47 files in total
+│   │   │   └── … 46 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

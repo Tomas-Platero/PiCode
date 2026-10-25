@@ -94,12 +94,11 @@ const NPM_ROOT = 'C:\\profile\\npm\\node_modules';
 const GIT_ROOT = 'C:\\profile\\git';
 const join = (parts: string[]): string => parts.join('\\');
 
-test('a missing declared npm package becomes one spec; installed and left-behind ones do not', () => {
+test('a missing declared npm package becomes one spec; installed ones and local paths do not', () => {
 	const settings = parseSettings(JSON.stringify({
 		packages: [
 			'npm:pi-memory',
 			'npm:pi-lens',
-			'npm:gentle-pi',
 			'npm:specpi@2.0.0',
 			'local:tools/skill',
 		],
@@ -119,7 +118,7 @@ test('a missing declared npm package becomes one spec; installed and left-behind
 	assert.deepEqual(scan.specs, ['pi-lens']);
 	assert.deepEqual(scan.gitClones, []);
 	assert.equal(scan.present, 2); // pi-memory, specpi at its pinned version
-	assert.equal(scan.skipped, 2); // gentle-pi is left behind; the local path is not installable
+	assert.equal(scan.skipped, 1); // the local path is not installable
 });
 
 test('a stale exact pin is reinstalled, so pi never reinstalls it with its own window', () => {
@@ -188,6 +187,7 @@ function fakeSpawn(ok = true): { spawn: (file: string, args: readonly string[], 
 function optionsFor(profile: string, spawn: (file: string, args: readonly string[], options: { cwd: string; windowsHide: boolean }) => Promise<{ ok: boolean; stderr: string }>) {
 	return {
 		profileDir: profile,
+		productPackages: [],
 		spawn,
 		io: {
 			readSettingsText: (_file: string): string | undefined =>
@@ -371,6 +371,7 @@ test("the profile's manifest takes the runtime's exact versions, and one hidden 
 	);
 	const options = {
 		profileDir: profile,
+		productPackages: [],
 		runtimeRoot: RUNTIME,
 		spawn,
 		io: {
@@ -417,6 +418,7 @@ test('a profile whole and already declaring the family costs nothing: no write, 
 	);
 	const outcome = await ensureProfilePackages({
 		profileDir: profile,
+		productPackages: [],
 		runtimeRoot: RUNTIME,
 		spawn,
 		io: {
@@ -437,6 +439,7 @@ test('without a runtime root the run is exactly what it was: declarations only',
 	const fixture = familyProfileFixture(profile, new Map(), { private: true });
 	await ensureProfilePackages({
 		profileDir: profile,
+		productPackages: [],
 		spawn,
 		io: {
 			...fixture.io,

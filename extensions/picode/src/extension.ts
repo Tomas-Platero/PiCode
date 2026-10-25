@@ -49,6 +49,7 @@ import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } f
 import { registerPiCommandPromptFiles } from './commands';
 import { registerWizardModelCommands } from './wizard-models';
 import { registerPiSessionsProvider } from './sessions-register';
+import { applyProductEnv } from './product-env';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
@@ -2229,6 +2230,9 @@ function requireProfileUri(): vscode.Uri {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
+	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
+	applyProductEnv();
 	profileUri = context.extensionUri;
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));

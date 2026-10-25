@@ -24,6 +24,7 @@
 
 import { execFile } from 'node:child_process';
 import { cacheKey, cachedModels, storeModels, type CacheEntry } from './models-cache';
+import { withProductEnv } from './product-env';
 
 /* ------------------------------------------------------------------ *
  * The catalog: what npm says about pi packages
@@ -354,7 +355,7 @@ async function runInstall(rawTarget: string, context: InstallContext): Promise<I
 			// The editor's executable is Electron: without this flag it would try to open an
 			// app instead of running pi's script as Node — the same invocation the MCP
 			// server writer uses for pi.
-			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: context.profileDir },
+			env: withProductEnv({ ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: context.profileDir }),
 			windowsHide: true,
 			timeoutMs: INSTALL_TIMEOUT_MS,
 		});

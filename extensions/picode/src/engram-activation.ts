@@ -26,17 +26,15 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
 	engramBinaryName,
-	engramDeclarationDecision,
-	engramMcpDeclaration,
+	firstEngramBinary,
 	engramStateLine,
 	ensureEngramServer,
 	isOurEngramDeclaration,
 	nodeEngramProbeIo,
-	probeEngram,
 	SHIPPED_ENGRAM_FOLDER,
 	type EngramProbeIo
 } from './engram';
-import { mcpServersTextWithAdded, mcpServersTextWithRemoved, serverEntry } from './mcp-add';
+import { mcpServersTextWithRemoved, serverEntry } from './mcp-add';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
 export const MEMORY_ENABLED_SETTING = 'picode.memory.enabled';
@@ -69,30 +67,6 @@ function readServersFile(file: string): Record<string, unknown> | undefined {
 	}
 }
 
-/**
- * Makes sure pi can see the memory, without ever overwriting a working declaration.
- *
- * The profile is PiCode's own; the file is the same one the MCP page edits, and the settings
- * writer preserves entries it does not declare — so this entry survives every activation and
- * every settings change.
- */
-export function declareMemory(profileDir: string, binary: string, log: (line: string) => void): void {
-	const file = path.join(profileDir, 'mcp.json');
-	const existing = readServersFile(file);
-	const entry = serverEntry(existing, 'engram');
-	const decision = engramDeclarationDecision(entry, binary, candidate => fs.existsSync(candidate));
-	if (decision === 'keep') {
-		return;
-	}
-	try {
-		fs.mkdirSync(path.dirname(file), { recursive: true });
-		fs.writeFileSync(file, mcpServersTextWithAdded(existing, engramMcpDeclaration(binary)), { mode: 0o600 });
-		log(`memory: the engram server was ${decision === 'add' ? 'declared' : 'pointed at this installation'} in the profile`);
-	} catch (error) {
-		log(`memory: the engram server could not be declared — ${error instanceof Error ? error.message : String(error)}`);
-	}
-}
-
 /** Runs the engine detached, so it serves this store while the window is open and after it closes. */
 function spawnDetached(binary: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>): void {
 	const child = spawn(binary, [...args], {
@@ -105,11 +79,13 @@ function spawnDetached(binary: string, args: readonly string[], env: Readonly<Re
 }
 
 /**
- * Takes memory away, when the owner turned it off.
+ * Takes out the `engram` server this product used to write into the profile's `mcp.json`.
  *
- * The declaration leaves — **only** when it is the one this product wrote. The store itself is
- * never touched: turning memory off is not deleting what it remembers, and a person who switches
- * back on finds everything where it was.
+ * Memory reaches pi through gentle-engram now (ADR-030), which brings its own tools: a second
+ * set through MCP would offer the model the same memory twice. Only the declaration this
+ * product wrote leaves; one the owner wrote or changed stays. The store itself is never touched:
+ * turning memory off is not deleting what it remembers, and a person who switches back on finds
+ * everything where it was.
  */
 export function forgetMemory(profileDir: string, log: (line: string) => void): void {
 	const file = path.join(profileDir, 'mcp.json');
@@ -119,7 +95,7 @@ export function forgetMemory(profileDir: string, log: (line: string) => void): v
 		if (text !== undefined) {
 			try {
 				fs.writeFileSync(file, text, { mode: 0o600 });
-				log('memory: off — the engram server was removed from the profile');
+				log('memory: the engram server this product declared was removed from the profile');
 			} catch (error) {
 				log(`memory: the declaration could not be removed — ${error instanceof Error ? error.message : String(error)}`);
 			}
@@ -204,16 +180,24 @@ export function startMemory(profileDir: string, log: (line: string) => void): vo
 	if (!memoryEnabled()) {
 		forgetMemory(profileDir, log);
 		hideFromTerminalPath(log);
+		// With no engine named, gentle-engram finds none of ours and has nothing to open.
+		delete process.env['ENGRAM_BIN'];
 		log('memory: turned off in the settings');
 		return;
 	}
+	// The memory tools are gentle-engram's, not an MCP server's: an old declaration would offer the
+	// model the same memory twice.
+	forgetMemory(profileDir, log);
 	const io = memoryIo();
 	exposeOnTerminalPath(log);
+	// gentle-engram runs the engine it is told to — the one this installation carries — so the memory
+	// the chat reads is the memory the panel shows. It reads the answer once, when pi loads it, so it
+	// is set here, before anything waits.
+	const binary = firstEngramBinary(io);
+	if (binary !== undefined) {
+		process.env['ENGRAM_BIN'] = binary;
+	}
 	void (async () => {
-		const first = await probeEngram(io);
-		if (first.binary !== undefined) {
-			declareMemory(profileDir, first.binary, log);
-		}
 		const settled = await ensureEngramServer(io, { spawn: spawnDetached });
 		log(`memory: ${engramStateLine(settled.state)}`);
 	})().catch(error => {

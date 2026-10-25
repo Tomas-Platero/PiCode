@@ -241,7 +241,7 @@ function readJsonObjectForCopy(file: string): { text: string } | { failure: stri
  * as it was. When nothing is removed, the file's own bytes are written unchanged; when
  * something is, the file is re-serialized from the same parse with the list filtered.
  */
-export function filteredSettingsText(text: string): { text: string; leftBehind: string[] } {
+export function filteredSettingsText(text: string, names?: readonly string[]): { text: string; leftBehind: string[] } {
 	let value: unknown;
 	try {
 		value = JSON.parse(text);
@@ -252,7 +252,7 @@ export function filteredSettingsText(text: string): { text: string; leftBehind: 
 		return { text, leftBehind: [] };
 	}
 	const settings = value as Record<string, unknown>;
-	const { kept, leftBehind } = splitLeftBehindPackages(settings['packages']);
+	const { kept, leftBehind } = splitLeftBehindPackages(settings['packages'], names);
 	if (leftBehind.length === 0) {
 		return { text, leftBehind };
 	}

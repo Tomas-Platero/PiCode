@@ -42,8 +42,16 @@ const {
 } = await import('../src/left-behind-packages.ts');
 const { filteredSettingsText } = await import('../src/profile-import.ts');
 
-test('the blocklist is the two packages the removed integration installed', () => {
-	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], ['gentle-pi', 'gentle-engram']);
+// The mechanism is exercised with a list of its own: the product's list is empty today, because
+// gentle-pi and gentle-engram are pinned packages of the product (ADR-030).
+const NAMES = ['gentle-pi', 'gentle-engram'];
+
+test('the product carries gentle-pi and gentle-engram: nothing is left behind today', () => {
+	assert.deepStrictEqual([...LEFT_BEHIND_PACKAGE_NAMES], []);
+	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi'), false);
+	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.4.2' }), false);
+	const source = JSON.stringify({ packages: ['npm:gentle-pi', 'npm:gentle-engram@0.4.2'] });
+	assert.deepStrictEqual(filteredSettingsText(source), { text: source, leftBehind: [] });
 });
 
 test('a bare name is read as it is written', () => {
@@ -69,19 +77,19 @@ test('a scoped name keeps its leading @ and loses only the version', () => {
 
 test('a name that merely contains a left-behind name is not refused', () => {
 	assert.strictEqual(packageNameOf('gentle-pi-extras'), 'gentle-pi-extras');
-	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi-extras'), false);
-	assert.strictEqual(isLeftBehindPackage('my-gentle-engram'), false);
+	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi-extras', NAMES), false);
+	assert.strictEqual(isLeftBehindPackage('my-gentle-engram', NAMES), false);
 });
 
 test('the string spellings the real profile uses are all refused', () => {
-	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi'), true);
-	assert.strictEqual(isLeftBehindPackage('npm:gentle-engram'), true);
-	assert.strictEqual(isLeftBehindPackage('npm:gentle-engram@0.1.15'), true);
+	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi', NAMES), true);
+	assert.strictEqual(isLeftBehindPackage('npm:gentle-engram', NAMES), true);
+	assert.strictEqual(isLeftBehindPackage('npm:gentle-engram@0.1.15', NAMES), true);
 });
 
 test('the object form is refused through its source', () => {
-	assert.strictEqual(isLeftBehindPackage({ extensions: ['-extensions\\quiet-tools.ts'], source: 'npm:gentle-pi' }), true);
-	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.1.15' }), true);
+	assert.strictEqual(isLeftBehindPackage({ extensions: ['-extensions\\quiet-tools.ts'], source: 'npm:gentle-pi' }, NAMES), true);
+	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.1.15' }, NAMES), true);
 });
 
 test('an entry that names no package is not refused', () => {
@@ -95,9 +103,9 @@ test('an entry that names no package is not refused', () => {
 });
 
 test('the reference a log quotes is what the profile declared, verbatim', () => {
-	assert.strictEqual(leftBehindReference('npm:gentle-engram@0.1.15'), 'npm:gentle-engram@0.1.15');
-	assert.strictEqual(leftBehindReference({ extensions: ['-extensions\\quiet-tools.ts'], source: 'npm:gentle-pi' }), 'npm:gentle-pi');
-	assert.strictEqual(leftBehindReference('npm:some-other-package'), undefined);
+	assert.strictEqual(leftBehindReference('npm:gentle-engram@0.1.15', NAMES), 'npm:gentle-engram@0.1.15');
+	assert.strictEqual(leftBehindReference({ extensions: ['-extensions\\quiet-tools.ts'], source: 'npm:gentle-pi' }, NAMES), 'npm:gentle-pi');
+	assert.strictEqual(leftBehindReference('npm:some-other-package', NAMES), undefined);
 });
 
 test('splitting keeps the survivors in order and quotes the ones refused', () => {
@@ -106,14 +114,14 @@ test('splitting keeps the survivors in order and quotes the ones refused', () =>
 		'npm:gentle-engram',
 		{ extensions: ['-extensions\\quiet-tools.ts'], source: 'npm:gentle-pi' },
 		'npm:gentle-engram@0.1.15',
-	]);
+	], NAMES);
 	assert.deepStrictEqual(kept, ['npm:some-other-package']);
 	assert.deepStrictEqual(leftBehind, ['npm:gentle-engram', 'npm:gentle-pi', 'npm:gentle-engram@0.1.15']);
 });
 
 test('splitting a list that is not a list keeps nothing and refuses nothing', () => {
 	assert.deepStrictEqual(splitLeftBehindPackages(undefined), { kept: [], leftBehind: [] });
-	assert.deepStrictEqual(splitLeftBehindPackages('npm:gentle-pi'), { kept: [], leftBehind: [] });
+	assert.deepStrictEqual(splitLeftBehindPackages('npm:gentle-pi', NAMES), { kept: [], leftBehind: [] });
 });
 
 test('the settings copy removes only the left-behind entries', () => {
@@ -122,7 +130,7 @@ test('the settings copy removes only the left-behind entries', () => {
 		packages: ['npm:some-other-package', 'npm:gentle-engram@0.1.15', { source: 'npm:gentle-pi', extensions: ['-extensions\\quiet-tools.ts'] }],
 		'mcp.servers': { local: { url: 'http://127.0.0.1:3939' } },
 	});
-	const { text, leftBehind } = filteredSettingsText(source);
+	const { text, leftBehind } = filteredSettingsText(source, NAMES);
 	assert.deepStrictEqual(leftBehind, ['npm:gentle-engram@0.1.15', 'npm:gentle-pi']);
 	const copied: { theme?: string; packages?: unknown[]; 'mcp.servers'?: unknown } = JSON.parse(text);
 	assert.strictEqual(copied['theme'], 'Abyss');
@@ -145,13 +153,13 @@ test('the settings copy leaves a file it cannot parse exactly as it is', () => {
 
 test('the settings copy leaves a file whose packages is not a list alone', () => {
 	const source = JSON.stringify({ packages: 'npm:gentle-pi' });
-	const { text, leftBehind } = filteredSettingsText(source);
+	const { text, leftBehind } = filteredSettingsText(source, NAMES);
 	assert.deepStrictEqual(leftBehind, []);
 	assert.strictEqual(text, source);
 });
 
 test('the settings copy keeps every other key, in order, when it must rewrite', () => {
 	const source = JSON.stringify({ theme: 'Abyss', packages: ['npm:gentle-pi'], keepLast: true });
-	const { text } = filteredSettingsText(source);
+	const { text } = filteredSettingsText(source, NAMES);
 	assert.deepStrictEqual(Object.keys(JSON.parse(text)), ['theme', 'packages', 'keepLast']);
 });

@@ -24,7 +24,6 @@ import {
 	shouldAsk,
 } from './permissions';
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
-import { memorySection } from './memory-protocol';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
@@ -743,35 +742,6 @@ function permissionQuestion(toolName: string, input: unknown): vscode.ChatQuesti
 			],
 		},
 	);
-}
-
-/**
- * The inline extension that gives the chat its memory protocol.
- *
- * It writes one section into the system prompt and reads the session's tool list in the same
- * breath: the protocol is offered **only** when the `engram` server actually connected, because
- * telling a model to call `mem_search` in a session that has no such tool is worse than saying
- * nothing. Since the section is re-decided before every prompt, a server that connects late — or
- * one the owner just declared — is picked up on the next turn without a session rebuild.
- *
- * A section that no longer applies is **deleted**, not emptied: pi renders whatever is present as
- * `<memory>…</memory>`, and an empty element in the prompt is paid for and reads as a rule.
- */
-function memoryExtension(): PiInlineExtension {
-	return {
-		name: 'picode-memory',
-		hidden: true,
-		factory: pi => {
-			pi.on('before_agent_start', event => {
-				const section = memorySection(pi.getAllTools().map(tool => tool.name));
-				if (section === undefined) {
-					delete event.systemPromptOptions.sections['memory'];
-				} else {
-					event.systemPromptOptions.sections['memory'] = section;
-				}
-			});
-		},
-	};
 }
 
 /**
@@ -1499,7 +1469,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), memoryExtension()],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log)],
 					},
 				});
 				// pi collects load problems instead of failing the session; one that could not be

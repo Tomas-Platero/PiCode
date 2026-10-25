@@ -108,7 +108,13 @@ test('quoting is for the shell metacharacters, and nothing that needs none is to
 
 test('the environment carries ELECTRON_RUN_AS_NODE only when the editor binary runs npm-cli.js', () => {
 	const node = planNpmRun(['--version'], { npmCli: 'cli.js' });
-	assert.deepStrictEqual(npmRunEnv(node, { A: '1' }), { A: '1', ELECTRON_RUN_AS_NODE: '1' });
+	// The product's own variables ride on every run (`product-env.ts`); the rest is the caller's.
+	const product = {
+		GENTLE_PI_SKIP_GENTLE_AI_INSTALL: '1',
+		DO_NOT_TRACK: '1',
+		GENTLE_AI_TELEMETRY: '0',
+	};
+	assert.deepStrictEqual(npmRunEnv(node, { A: '1' }), { A: '1', ELECTRON_RUN_AS_NODE: '1', ...product });
 	const shim = planNpmRun(['--version'], {});
-	assert.deepStrictEqual(npmRunEnv(shim, { A: '1' }), { A: '1' });
+	assert.deepStrictEqual(npmRunEnv(shim, { A: '1' }), { A: '1', ...product });
 });

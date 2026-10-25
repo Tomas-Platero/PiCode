@@ -45,7 +45,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import * as path from 'node:path';
 import { isSafeNpmInstallSpec, npmInstallSpec } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
+import { withProductEnv } from './product-env';
 import { isLeftBehindPackage } from './left-behind-packages';
+import { PRODUCT_PACKAGES, withProductPackages, type ProductPackage } from './product-packages';
 import { parsePackageSource, parseSettings, type SettingsDocument } from './packages-data';
 
 /** The whitelist this module enforces before any profile-derived spec reaches npm's shell. */
@@ -401,6 +403,8 @@ export interface EnsureProfilePackagesOptions {
 	readonly io?: PackagesFileIo;
 	/** Where the sentences go; the caller decides whether that is a log or a notification. */
 	readonly log?: (line: string) => void;
+	/** The packages the product pins in the profile; the product's own list unless a test says otherwise. */
+	readonly productPackages?: readonly ProductPackage[];
 }
 
 /** The real filesystem. */
@@ -466,17 +470,31 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 	const npmProject = path.join(profileDir, 'npm');
 	const npmRoot = path.join(npmProject, 'node_modules');
 	const gitRoot = path.join(profileDir, 'git');
-	const settings = parseSettings(io.readSettingsText(path.join(profileDir, 'settings.json')));
-	const scan = scanDeclaredPackages(settings, npmRoot, gitRoot, io);
+	const settingsFile = path.join(profileDir, 'settings.json');
 	const lines: string[] = [];
 	const log = (line: string): void => {
 		lines.push(line);
 		options.log?.(line);
 	};
+	// The product's packages are declared at the versions it pins before anything is scanned, so
+	// the scan below installs them like any other declaration.
+	let settingsText = io.readSettingsText(settingsFile);
+	const pinned = withProductPackages(settingsText, options.productPackages ?? PRODUCT_PACKAGES);
+	if (pinned.changed && pinned.text !== undefined) {
+		try {
+			(io.writeText ?? realIo.writeText)!(settingsFile, pinned.text);
+			settingsText = pinned.text;
+			log('This profile now declares the packages PiCode ships, at the versions it ships them.');
+		} catch (error) {
+			log(`The packages PiCode ships could not be declared in this profile (${error instanceof Error ? error.message : String(error)}).`);
+		}
+	}
+	const settings = parseSettings(settingsText);
+	const scan = scanDeclaredPackages(settings, npmRoot, gitRoot, io);
 	let installed = 0;
 	let cloned = 0;
 	let failed = scan.failedBeforeSpawn;
-	const env = { ...process.env, PI_CODING_AGENT_DIR: profileDir };
+	const env = withProductEnv({ ...process.env, PI_CODING_AGENT_DIR: profileDir });
 
 	for (const sentence of scan.rejected) {
 		log(sentence);

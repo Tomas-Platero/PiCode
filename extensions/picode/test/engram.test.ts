@@ -20,6 +20,7 @@ import * as path from 'path';
 import {
 	ENGRAM_DEFAULT_PORT,
 	engramBinaryCandidates,
+	firstEngramBinary,
 	engramBinaryName,
 	engramDataDir,
 	engramDeclarationDecision,
@@ -58,6 +59,13 @@ test('the engine is looked for in the open folders and then where the installati
 test('an absolute path is the owner\'s own answer, used as given and nothing else', () => {
 	const own = path.resolve(process.cwd(), 'D:', 'tools', 'engram.exe');
 	assert.deepEqual(engramBinaryCandidates(own, [process.cwd()], appRoot()), [own]);
+});
+
+test('the engine is found without waiting: the first candidate that exists, or none', () => {
+	const shipped = slashed(path.resolve(process.cwd(), 'install', 'resources', SHIPPED_ENGRAM_FOLDER, engramBinaryName()));
+	const base = { env: {}, home: slashed(path.resolve(process.cwd(), 'home')), appRoot: appRoot(), workspaceFolders: [] as string[] };
+	assert.equal(firstEngramBinary({ ...base, exists: candidate => slashed(candidate) === shipped }), shipped);
+	assert.equal(firstEngramBinary({ ...base, exists: () => false }), undefined);
 });
 
 test('a custom relative folder still ends at the engine the editor ships', () => {
