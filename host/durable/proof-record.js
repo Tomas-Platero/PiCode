@@ -85,8 +85,9 @@ try {
 	console.log(`snapshot entries: ${roles.join(" | ")}`);
 	if (roles.length !== 2) fail(`the snapshot does not carry the two recorded turns (${roles.length})`);
 	if (!roles[0].startsWith("pi.user=") || !roles[1].startsWith("pi.assistant=")) fail("the order or kind of the recorded turns is wrong");
-	// Release the watch: a re-subscribe serves the FRESH snapshot; while held, the new turn
-	// arrives as a live event instead (that is what subscribers are for).
+	// Release the watch before the next step needs a fresh one: a held stream is reused by the next
+	// subscriber (it keeps fanning out events), and its snapshot is only the one taken when the
+	// subscribe asks for it — this step wants its own.
 	await client.request("unsubscribe", { conversationId: id });
 
 	step("4. a second record appends in order");
@@ -98,8 +99,8 @@ try {
 	const count = (again.snapshot?.entries ?? []).filter((entry) => entry.kind === "pi.user" || entry.kind === "pi.assistant").length;
 	if (count !== 3) fail(`the second record did not append (snapshot has ${count} turns)`);
 	console.log("history grew in order: 3 turns");
-	// Release the watch: while it is held, the next subscribe serves the stale snapshot
-	// (the new turn arrives as a live event instead) — and 5b needs a fresh one.
+	// Release the watch: the next subscriber would reuse this stream, and 5b wants a snapshot of the
+	// state as it is now rather than the one this attach took.
 	await client.request("unsubscribe", { conversationId: id });
 
 	step("5. a bad shape is refused with a sentence");

@@ -34,6 +34,7 @@ import { DEFAULT_PROFILE_DIR } from "./profile.js";
 import { armAllMcpFilters, armMcpFilter, closeMcpConnections, connectBridge, mcpBridgeWaitMs, NO_BRIDGE } from "./mcp.js";
 import { parseModelSetting } from "./settings.js";
 import { LineStream, PROTOCOL_VERSION, daemonEndpoint, endpointIsUp } from "./protocol.js";
+import { CachedStreams } from "./streams.js";
 
 /** Resolve `model`/`agent`/`cwd` request parameters against the daemon's own resolved options. */
 export function agentFor(resolved, agents, params) {
@@ -187,7 +188,11 @@ async function serveStorage(resolved, agents, skills) {
 
 	const endpoint = daemonEndpoint();
 	const subscribers = new Map(); // LineStream → Set<conversationId> it subscribed to
-	const streams = new Map(); // conversationId → { stream, refs } (one watchEvents per conversation, fanned out)
+	// conversationId → one watchEvents stream, fanned out, reference counted (lib/streams.js).
+	const streams = new CachedStreams({
+		stop: (stream) => stream.stop(),
+		onStopError: (conversationId, error) => console.error(`[daemon] stopping the stream for ${conversationId} failed: ${error?.message ?? error}`),
+	});
 	const permissionListeners = new Map(); // conversationId → Set<LineStream> that decide guarded calls (ACP)
 	const pendingPermissions = new Map(); // permission requestId → resolve(answer)
 	let nextPermissionId = 1;
@@ -227,15 +232,32 @@ async function serveStorage(resolved, agents, skills) {
 		if (!ids) return;
 		ids.delete(conversationId);
 		if (ids.size === 0) subscribers.delete(line);
-		const holder = streams.get(conversationId);
-		if (!holder) return;
-		holder.refs--;
-		if (holder.refs <= 0) {
-			streams.delete(conversationId);
+		await streams.giveBack(conversationId);
+	}
+
+	/**
+	 * The conversation's snapshot as it is NOW, for a caller that found a stream already cached.
+	 *
+	 * `AgentEventStream.snapshot` is documented as "the `snapshot` event at attachment": the value
+	 * `watchEvents` captured once, when the watch was created, never refreshed. That is exactly
+	 * right for the client whose attach produced it and exactly wrong for everybody after — the
+	 * cached stream is kept for the EVENTS it is there to fan out, so answering a second subscriber
+	 * from it would hand over the state of the moment the first one attached. A run that settled
+	 * long ago would still read as in flight, and the transcript would be the one from before it.
+	 *
+	 * So the answer is built by the library's own snapshot, on a stream of its own that is attached
+	 * and stopped on this line: the shape cannot drift from `watchEvents`'s, and the cached stream
+	 * keeps delivering events to the clients already subscribed, untouched.
+	 */
+	async function snapshotNow(conversationId) {
+		const stream = await watchEvents(harness, conversationId, CTX);
+		try {
+			return stream.snapshot;
+		} finally {
 			try {
-				await holder.stream.stop();
+				await stream.stop();
 			} catch (error) {
-				console.error(`[daemon] stopping the stream for ${conversationId} failed: ${error?.message ?? error}`);
+				console.error(`[daemon] stopping the transient stream for ${conversationId} failed: ${error?.message ?? error}`);
 			}
 		}
 	}
@@ -405,21 +427,37 @@ async function serveStorage(resolved, agents, skills) {
 		/** Subscribe a client to a conversation's live events (plus its snapshot as the response). */
 		async subscribe(params, line) {
 			const conversation = await requireConversation(harness, params.conversationId);
-			let holder = streams.get(conversation.id);
-			if (!holder) {
-				const stream = await watchEvents(harness, conversation.id, CTX);
-				holder = { stream, refs: 0 };
-				streams.set(conversation.id, holder);
-				await stream.start(async (events) => fanOut(conversation.id, events));
+			// The claim is taken by `CachedStreams` before anything is awaited: a client that
+			// unsubscribes while this request is taking its snapshot cannot drop the last reference,
+			// stop the stream, and leave this subscriber attached to a stream that is already closed.
+			const { holder, reused } = await streams.claim(conversation.id, () => watchEvents(harness, conversation.id, CTX));
+			try {
+				if (!reused) {
+					await holder.stream.start(async (events) => fanOut(conversation.id, events));
+				}
+				let snapshot;
+				try {
+					// A stream attached just now answers for now; a cached one answers for its first attach.
+					snapshot = reused ? await snapshotNow(conversation.id) : holder.stream.snapshot;
+				} catch (error) {
+					// A snapshot that cannot be taken is not a reason to lose the subscription: the cached
+					// one is stale but real, and the caller keeps receiving this conversation's events.
+					console.error(`[daemon] the current snapshot of ${conversation.id} could not be taken; answering with the cached one: ${error?.message ?? error}`);
+					snapshot = holder.stream.snapshot;
+				}
+				let ids = subscribers.get(line);
+				if (!ids) {
+					ids = new Set();
+					subscribers.set(line, ids);
+				}
+				ids.add(conversation.id);
+				return { conversationId: conversation.id, snapshot };
+			} catch (error) {
+				// The request died after claiming the stream: give the claim back, or the reference count
+				// would outlive the subscriber and keep the stream (and its memory) up for ever.
+				await streams.giveBack(conversation.id);
+				throw error;
 			}
-			holder.refs++;
-			let ids = subscribers.get(line);
-			if (!ids) {
-				ids = new Set();
-				subscribers.set(line, ids);
-			}
-			ids.add(conversation.id);
-			return { conversationId: conversation.id, snapshot: holder.stream.snapshot };
 		},
 
 		async unsubscribe(params, line) {
@@ -431,7 +469,7 @@ async function serveStorage(resolved, agents, skills) {
 			console.error("[daemon] shutdown requested");
 			setTimeout(async () => {
 				try {
-					for (const holder of streams.values()) await holder.stream.stop();
+					await streams.stopAll();
 				} catch {
 					// the streams may already be gone
 				}
