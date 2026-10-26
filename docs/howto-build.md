@@ -247,7 +247,7 @@ Cosas que hay que saber de este modo, para que no sorprendan:
 - `transpile-client` **no comprueba tipos**. El control salta al construir el producto (y en
   el bucle se puede tener aparte con `npm run gulp watch-client`).
 - El `out/` de desarrollo **nunca se empaqueta**: el build del producto escribe sus propias
-  salidas (`out-build`, `out-vscode-min`) y no se pisa con esto.
+  salidas (`out-build`, `out-picode-min`) y no se pisa con esto.
 - `npm run build-fast` está muerto (heredó referencias a una extensión que VSCodium borró);
   no lo uséis hasta que se limpie.
 

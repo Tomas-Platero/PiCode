@@ -760,7 +760,7 @@ fi
 export PICODE_SKIP_BUNDLE=0
 export PICODE_SKIP_EXTENSIONS=0
 if [[ "${PICODE_FULL_BUILD:-0}" != "1" ]]; then
-  if node build/build-helpers.mjs cache matches app "${KEY_APP}" out-vscode-min/vs; then
+  if node build/build-helpers.mjs cache matches app "${KEY_APP}" out-picode-min/vs; then
     export PICODE_SKIP_BUNDLE=1
     echo "  -- src/ is unchanged: the last build's bundle is reused"
   fi

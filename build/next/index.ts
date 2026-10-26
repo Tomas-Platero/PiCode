@@ -1192,7 +1192,7 @@ Examples:
 	npx tsx build/next/index.ts transpile --out out-build --exclude-tests
 	npx tsx build/next/index.ts bundle
 	npx tsx build/next/index.ts bundle --minify --nls
-	npx tsx build/next/index.ts bundle --nls --out out-vscode-min
+	npx tsx build/next/index.ts bundle --nls --out out-picode-min
 	npx tsx build/next/index.ts bundle --minify --nls --target server --out out-vscode-reh-min
 	npx tsx build/next/index.ts bundle --minify --nls --target server-web --out out-vscode-reh-web-min
 `);

@@ -87,7 +87,7 @@ import { pathToFileURL } from 'node:url';
 		'resources',
 		'out',
 		'out-build',
-		'out-vscode-min',
+		'out-picode-min',
 		'bin',
 		'obj',
 		'node_modules',
@@ -220,7 +220,7 @@ import { pathToFileURL } from 'node:url';
 
 	// Generated trees, dependencies and packed output: never walked, never a gap.
 	const SKIP_DIRS = new Set([
-		'node_modules', 'out', 'out-build', 'out-vscode-min', 'bin', 'obj', 'dist',
+		'node_modules', 'out', 'out-build', 'out-picode-min', 'bin', 'obj', 'dist',
 		'.next', '.vercel', 'target', '__pycache__', '.ruff_cache', '.scratch',
 		'.codegraph', '.atl', '.cache', '.git',
 	]);

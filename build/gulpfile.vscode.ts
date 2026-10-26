@@ -187,7 +187,7 @@ const useCdnSourceMapsForPackagingTasks = isCI;
 const stripSourceMapsInPackagingTasks = isCI;
 const minifyVSCodeTask = task.define('minify-vscode', task.series(
 	bundleVSCodeTask,
-	maybeRimraf('out-vscode-min'),
+	maybeRimraf('out-picode-min'),
 	optimize.minifyTask('out-vscode', `${sourceMappingURLBase}/core`)
 ));
 task.task(minifyVSCodeTask);
@@ -212,7 +212,7 @@ task.task(task.define('core-ci', task.series(
 	task.define('esbuild-out-build', () => runEsbuildTranspile('out-build', false)),
 	// Then bundle for shipping (bundles also write NLS files to out-build)
 	task.parallel(
-		task.define('esbuild-vscode-min', () => runEsbuildBundle('out-vscode-min', true, true, 'desktop', `${sourceMappingURLBase}/core`)),
+		task.define('esbuild-vscode-min', () => runEsbuildBundle('out-picode-min', true, true, 'desktop', `${sourceMappingURLBase}/core`)),
 		task.define('esbuild-vscode-reh-min', () => runEsbuildBundle('out-vscode-reh-min', true, true, 'server', `${sourceMappingURLBase}/core`)),
 		task.define('esbuild-vscode-reh-web-min', () => runEsbuildBundle('out-vscode-reh-web-min', true, true, 'server-web', `${sourceMappingURLBase}/core`)),
 	)
@@ -662,7 +662,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 	const opts = buildTarget.opts;
 
 	const [vscode, vscodeMin] = ['', 'min'].map(minified => {
-		const sourceFolderName = `out-vscode${dashed(minified)}`;
+		const sourceFolderName = minified ? 'out-picode-min' : 'out-vscode';
 		// PiCode: the same `PICODE_PACK_SUFFIX` as `buildPath` in gulpfile.vscode.win32.ts, and
 		// empty unless a side-by-side build asked for its own directory.
 		const destinationFolderName = `PiCode${dashed(platform)}${dashed(arch)}${process.env['PICODE_PACK_SUFFIX'] ?? ''}`;
