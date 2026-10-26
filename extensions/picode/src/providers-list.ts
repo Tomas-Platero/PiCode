@@ -32,6 +32,8 @@ export interface PiProviderRow {
 	readonly models: boolean;
 	/** The profile carries a credential (a sign-in) for it. */
 	readonly credential: boolean;
+	/** That credential is a subscription sign-in (an account), not an API key. */
+	readonly subscription: boolean;
 }
 
 /**
@@ -45,14 +47,15 @@ export function providerInventory(
 	declared: readonly string[],
 	fromModels: readonly string[],
 	fromCredentials: readonly string[],
+	subscriptions: readonly string[] = [],
 ): PiProviderRow[] {
-	const byId = new Map<string, { declared: boolean; models: boolean; credential: boolean }>();
-	const mark = (id: string, what: 'declared' | 'models' | 'credential'): void => {
+	const byId = new Map<string, { declared: boolean; models: boolean; credential: boolean; subscription: boolean }>();
+	const mark = (id: string, what: 'declared' | 'models' | 'credential' | 'subscription'): void => {
 		const trimmed = id.trim();
 		if (trimmed.length === 0) {
 			return;
 		}
-		const entry = byId.get(trimmed) ?? { declared: false, models: false, credential: false };
+		const entry = byId.get(trimmed) ?? { declared: false, models: false, credential: false, subscription: false };
 		entry[what] = true;
 		byId.set(trimmed, entry);
 	};
@@ -64,6 +67,9 @@ export function providerInventory(
 	}
 	for (const id of fromCredentials) {
 		mark(id, 'credential');
+	}
+	for (const id of subscriptions) {
+		mark(id, 'subscription');
 	}
 	return [...byId.entries()]
 		.map(([id, origins]) => ({ id, ...origins }))

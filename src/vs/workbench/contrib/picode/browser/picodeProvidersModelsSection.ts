@@ -57,6 +57,8 @@ interface IProfileProvider {
 	readonly models: boolean;
 	/** The profile carries a credential for it. */
 	readonly credential: boolean;
+	/** The credential is a subscription sign-in (an account), not a key. */
+	readonly subscription?: boolean;
 }
 
 /** The two sub-tabs of this section. */
@@ -278,7 +280,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 				counts.push(localize('picodePm.hasModels', "models"));
 			}
 			if (profile?.credential === true) {
-				counts.push(localize('picodePm.hasCredential', "sign-in stored"));
+				counts.push(profile.subscription === true
+					? localize('picodePm.hasSubscription', "subscription")
+					: localize('picodePm.hasCredential', "sign-in stored"));
 			}
 			append(text, $('span.picode-pm-card-sub')).textContent = counts.length > 0 ? `${detail} · ${counts.join(' · ')}` : detail;
 
@@ -289,7 +293,9 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			const hasKey = (row?.key !== undefined && row.key.length > 0) || profile?.credential === true;
 			const servesModels = profile?.models === true;
 			badge.classList.add(hasKey ? 'ok' : servesModels ? 'info' : 'muted');
-			badge.textContent = hasKey
+			badge.textContent = profile?.subscription === true
+				? localize('picodePm.signedIn', "Signed in")
+				: hasKey
 				? localize('picodePm.keyStored', "Key saved")
 				: servesModels
 					? localize('picodePm.noKeyNeeded', "No key needed")
