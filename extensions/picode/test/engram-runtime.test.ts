@@ -163,7 +163,7 @@ function starterIo(options: FakeOptions & { readonly afterSpawn?: unknown; reado
 	const base = fakeIo(options);
 	const io: EngramProbeIo = {
 		...base,
-		fetchJson: async (url, timeoutMs) => {
+		fetchJson: async (url, _timeoutMs) => {
 			if (url.endsWith('/health')) {
 				return started ? options.afterSpawn : options.health;
 			}

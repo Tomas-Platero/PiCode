@@ -115,7 +115,7 @@ test('a hand-made request that Gentle would reject is refused and writes nothing
 	fs.mkdirSync(path.join(dir, 'agents'));
 	fs.writeFileSync(path.join(dir, 'agents', 'a.md'), '');
 	for (const bad of [undefined, 'a', { agent: 'nobody' }, { agent: 'a', model: 'no spaces/here x' }, { agent: 'a', model: 'bare' }, { agent: 'a', thinking: 'extreme' }, { agent: '../a' }]) {
-		assert.throws(() => setAgentModel(dir, bad), undefined, JSON.stringify(bad));
+		assert.throws(() => setAgentModel(dir, bad), () => true, JSON.stringify(bad));
 	}
 	assert.equal(fs.existsSync(modelsFile(dir)), false);
 });
