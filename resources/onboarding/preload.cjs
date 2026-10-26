@@ -26,6 +26,7 @@ const CHANNELS = {
 	accountCancel: 'picode-onboarding:account-cancel',
 	accountEvent: 'picode-onboarding:account-event',
 	accountState: 'picode-onboarding:account-state',
+	accountSignOut: 'picode-onboarding:account-sign-out',
 	loginStart: 'picode-onboarding:login-start',
 	loginAnswer: 'picode-onboarding:login-answer',
 	loginCancel: 'picode-onboarding:login-cancel',
@@ -52,6 +53,8 @@ contextBridge.exposeInMainWorld('picode', {
 	account: {
 		signIn: () => ipcRenderer.invoke(CHANNELS.accountSignIn),
 		cancel: () => ipcRenderer.invoke(CHANNELS.accountCancel),
+		/** Signs the editor out as well, right now. */
+		signOut: () => ipcRenderer.invoke(CHANNELS.accountSignOut),
 		/** The editor's own auth state, watched from the shared settings file. */
 		onState: listener => {
 			const handler = (_event, message) => listener(message);

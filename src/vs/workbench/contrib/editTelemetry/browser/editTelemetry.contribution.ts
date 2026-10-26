@@ -37,12 +37,14 @@ configurationRegistry.registerConfiguration({
 			markdownDescription: localize('telemetry.editStats.showStatusBar', "Controls whether to show the status bar for edit telemetry."),
 			type: 'boolean',
 			default: false,
+			included: false,
 			tags: ['experimental'],
 		},
 		[EDIT_TELEMETRY_SHOW_DECORATIONS]: {
 			markdownDescription: localize('telemetry.editStats.showDecorations', "Controls whether to show decorations for edit telemetry."),
 			type: 'boolean',
 			default: false,
+			included: false,
 			tags: ['experimental'],
 		},
 	}

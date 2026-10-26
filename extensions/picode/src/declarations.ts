@@ -261,7 +261,8 @@ export function mergeModelsFile(existing: unknown, draft: ProviderDraft, models:
 	const previousEntry: unknown = providers[draft.id];
 	const previous = isRecord(previousEntry) ? previousEntry : undefined;
 	const rowCarriesKey = draft.apiKey !== undefined && draft.apiKey.length > 0;
-	const previousKey = previous !== undefined && typeof previous['apiKey'] === 'string' ? previous['apiKey'] : undefined;
+	// The placeholder is not a key the owner gave: a provider that now has one must not keep it.
+	const previousKey = previous !== undefined && typeof previous['apiKey'] === 'string' && previous['apiKey'] !== NO_KEY_PLACEHOLDER ? previous['apiKey'] : undefined;
 	const apiKey = rowCarriesKey ? draft.apiKey : previousKey;
 	const authHeader = rowCarriesKey ? draft.authHeader === true : draft.authHeader === true || previous?.['authHeader'] === true;
 	// A model the provider already declares may carry fields this bridge does not know about —
@@ -302,6 +303,64 @@ export function authFileWith(existing: unknown, providerId: string, key: string)
 	const root = isRecord(existing) ? { ...existing } : {};
 	root[providerId] = { type: 'api_key', key };
 	return root;
+}
+
+/**
+ * The key written for a provider that needs none.
+ *
+ * pi refuses a model whose provider resolves no credential ("No API key for omni/…"), even when
+ * the endpoint answers without one — its own docs give local servers a dummy key for exactly
+ * this. The endpoint ignores it; pi only needs something to resolve.
+ */
+export const NO_KEY_PLACEHOLDER = 'picode-no-key';
+
+/** Whether a provider's headers already carry a credential of their own. */
+function headersCarryAuth(headers: unknown): boolean {
+	return isRecord(headers) && Object.keys(headers).some(name => ['authorization', 'x-api-key'].includes(name.toLowerCase()));
+}
+
+/**
+ * `models.json` with the placeholder key given to every provider that resolves no credential.
+ *
+ * A provider counts as keyless when its entry names no `apiKey`, no `oauth` flow and no auth
+ * header, and `auth.json` holds nothing for it. Only providers this file adds are touched — they
+ * name a `baseUrl` and an `api`. A built-in provider re-declared to move its address names no
+ * `api`, and its key may come from the environment, which a placeholder here would shadow.
+ * `undefined` when nothing changes, so the caller can skip the write.
+ */
+export function withKeyPlaceholders(models: unknown, auth: unknown): Record<string, unknown> | undefined {
+	if (!isRecord(models) || !isRecord(models['providers'])) {
+		return undefined;
+	}
+	const credentials = isRecord(auth) ? auth : {};
+	const providers = { ...models['providers'] };
+	let changed = false;
+	for (const [id, entry] of Object.entries(providers)) {
+		if (!isRecord(entry) || typeof entry['baseUrl'] !== 'string' || typeof entry['api'] !== 'string') {
+			continue;
+		}
+		const hasKey = typeof entry['apiKey'] === 'string' && entry['apiKey'].length > 0;
+		if (hasKey || entry['oauth'] !== undefined || headersCarryAuth(entry['headers']) || credentials[id] !== undefined) {
+			continue;
+		}
+		providers[id] = { ...entry, apiKey: NO_KEY_PLACEHOLDER };
+		changed = true;
+	}
+	return changed ? { ...models, providers } : undefined;
+}
+
+/**
+ * Gives the profile's keyless providers the placeholder key, so their models can be picked.
+ *
+ * Run at start-up: a provider brought in by an import, or written by hand, never passes through
+ * the projection below.
+ */
+export function fillKeylessProviders(profileDir: string): void {
+	const modelsFile = path.join(profileDir, 'models.json');
+	const filled = withKeyPlaceholders(readJsonObject(modelsFile), readJsonObject(path.join(profileDir, 'auth.json')));
+	if (filled !== undefined) {
+		writeIfChanged(modelsFile, filled);
+	}
 }
 
 /* ------------------------------------------------------------------ *
@@ -408,6 +467,7 @@ export function projectDeclaration(
 		const authFile = path.join(profileDir, 'auth.json');
 		writeIfChanged(authFile, authFileWith(readJsonObject(authFile), declaration.id, declaration.key));
 	}
+	fillKeylessProviders(profileDir);
 }
 
 /**

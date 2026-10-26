@@ -280,31 +280,35 @@ export function memoryDetailMarkdown(detail: MemoryDetail): string {
 export function memoryDoctorMarkdown(report: MemoryDoctorReport): string {
 	const { summary } = report;
 	const failing = report.checks.filter(check => check.result !== 'ok');
+	// Cloud sync is not used here: PiCode's memory never leaves this machine. What the engine says
+	// about it is a leftover, not a fault, so it is told apart from what needs the owner's attention.
+	const cloud = failing.filter(check => check.id.startsWith('sync_'));
+	const real = failing.filter(check => !check.id.startsWith('sync_'));
 	if (failing.length === 0) {
 		return `# Memory check\n\nEverything checked out: ${summary.total} checks, no problems.\n`;
 	}
-	const lines: string[] = [
-		'# Memory check',
-		'',
-		`${failing.length} of ${summary.total} ${summary.total === 1 ? 'check needs' : 'checks need'} attention.`,
-		'',
-	];
-	for (const check of failing) {
-		const mark = check.severity === 'error' ? '❌' : check.severity === 'blocked' ? '⛔' : '⚠️';
-		lines.push(`${mark} **${check.id.replace(/_/g, ' ')}** — ${check.message || 'needs attention'}`);
-		if (check.why !== '') {
-			lines.push('', `> ${check.why}`, '');
+	const lines: string[] = ['# Memory check', ''];
+	if (real.length === 0) {
+		lines.push(`✅ Everything that matters checked out (${report.checks.length - cloud.length} of ${summary.total} checks).`);
+	} else {
+		lines.push(`${real.length} of ${summary.total} ${summary.total === 1 ? 'check needs' : 'checks need'} attention.`, '');
+		for (const check of real) {
+			const mark = check.severity === 'error' ? '❌' : check.severity === 'blocked' ? '⛔' : '⚠️';
+			lines.push(`${mark} **${check.id.replace(/_/g, ' ')}** — ${check.message || 'needs attention'}`);
+			if (check.why !== '') {
+				lines.push('', `> ${check.why}`, '');
+			}
+		}
+		const passed = report.checks.length - failing.length;
+		if (passed > 0) {
+			lines.push(`✅ ${passed} other ${passed === 1 ? 'check' : 'checks'} passed.`);
 		}
 	}
-	const passed = report.checks.length - failing.length;
-	if (passed > 0) {
-		lines.push(`✅ ${passed} other ${passed === 1 ? 'check' : 'checks'} passed.`);
-	}
-	if (failing.every(check => check.id.startsWith('sync_'))) {
+	if (cloud.length > 0) {
 		lines.push(
 			'',
-			'These are about cloud sync. Memory lives on this machine and PiCode keeps its cloud off,',
-			'so there is nothing to fix here.'
+			'☁️ Not used: cloud sync. Memory lives on this machine and PiCode keeps its cloud off, so',
+			"the engine's note about it (leftover sync rows) changes nothing.",
 		);
 	}
 	return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';

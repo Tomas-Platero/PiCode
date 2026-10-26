@@ -9,9 +9,10 @@ import { Button } from '../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Emitter } from '../../../../base/common/event.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
@@ -80,6 +81,25 @@ interface IGentleSettings {
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+/**
+ * The tab a caller asked this panel to open on.
+ *
+ * Chat Settings keeps one panel alive once it was shown, so asking for a tab has two halves: a
+ * panel that already exists switches through the event, and one created afterwards starts on it.
+ */
+const tabRequests = new Emitter<PanelTab>();
+let pendingTab: PanelTab | undefined;
+
+/** Opens Chat Settings on Providers & Models, on the tab asked for (Providers by default). */
+export const OPEN_PROVIDERS_MODELS_COMMAND = 'picode.providersModels.open';
+
+CommandsRegistry.registerCommand(OPEN_PROVIDERS_MODELS_COMMAND, async (accessor, tab?: PanelTab) => {
+	const target: PanelTab = tab === 'models' || tab === 'agents' ? tab : 'providers';
+	pendingTab = target;
+	tabRequests.fire(target);
+	await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.ProvidersModels);
+});
+
 export class PiCodeProvidersModelsSection extends Disposable implements IAICustomizationManagementSectionWidget {
 
 	private readonly root: HTMLElement;
@@ -125,8 +145,19 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		this.body = append(this.root, $('.picode-pm-body'));
 
 		this.activeRef = this.configurationService.getValue<string>('chat.defaultModel') ?? '';
+		if (pendingTab !== undefined) {
+			this.tab = pendingTab;
+			pendingTab = undefined;
+		}
+		if (this.tab === 'agents') {
+			void this.loadAgents();
+		}
 		this.render();
 		void this.loadProfileProviders();
+		this.store.add(tabRequests.event(tab => {
+			pendingTab = undefined;
+			this.selectTab(tab);
+		}));
 
 		this.store.add(this.configurationService.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('chat.defaultModel')) {
@@ -188,6 +219,16 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		void this.configurationService.updateValue(PICODE_PROVIDERS_SETTING, rows);
 	}
 
+	private selectTab(key: PanelTab): void {
+		if (this.tab !== key) {
+			this.tab = key;
+			if (key === 'agents') {
+				void this.loadAgents();
+			}
+			this.render();
+		}
+	}
+
 	private render(): void {
 		clearNode(this.tabsBar);
 		clearNode(this.body);
@@ -199,15 +240,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			button.classList.toggle('active', this.tab === key);
 			button.setAttribute('aria-selected', this.tab === key ? 'true' : 'false');
 			button.setAttribute('role', 'tab');
-			this.store.add(addDisposableListener(button, 'click', () => {
-				if (this.tab !== key) {
-					this.tab = key;
-					if (key === 'agents') {
-						void this.loadAgents();
-					}
-					this.render();
-				}
-			}));
+			this.store.add(addDisposableListener(button, 'click', () => this.selectTab(key)));
 		}
 
 		if (this.tab === 'providers') {

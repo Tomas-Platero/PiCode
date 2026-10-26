@@ -226,6 +226,11 @@
 				"category": "PiCode"
 			},
 			{
+				"command": "picode.usage.show",
+				"title": "Show subscription usage",
+				"category": "PiCode"
+			},
+			{
 				"command": "picode.backupSessions",
 				"title": "Back up pi sessions to the cloud",
 				"category": "PiCode"
@@ -378,14 +383,15 @@
 					"type": "tree",
 					"id": "picode.status.tasks",
 					"name": "Tasks",
-					"icon": "$(tasklist)"
+					"icon": "$(tasklist)",
+					"when": "!config.chat.disableAIFeatures"
 				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",
 					"name": "Memory",
 					"icon": "$(database)",
-					"when": "picode.memory.enabled"
+					"when": "picode.memory.enabled && !config.chat.disableAIFeatures"
 				}
 			]
 		}

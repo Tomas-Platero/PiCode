@@ -75,11 +75,6 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: true,
 			description: localize('picode.memory.enabled', "Keep memory on: remember decisions, conventions and traps across conversations."),
 		},
-		'picode.memory.binary': {
-			type: 'string',
-			default: '',
-			description: localize('picode.memory.binary', "Absolute path to another memory engine. Leave empty to use the one PiCode ships."),
-		},
 
 		[PICODE_PROVIDERS_SETTING]: {
 			type: 'array',
@@ -114,6 +109,9 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			},
 			default: [],
 			scope: ConfigurationScope.APPLICATION,
+			// The providers are managed in Chat Settings › Providers & Models; this key is only where
+			// they are stored, so it has no row of its own in the settings tree.
+			included: false,
 			markdownDescription: localize(
 				'picode.providers',
 				"Model providers for PiCode. Each row is one provider: its name, its address, the dialect it speaks and its key. [Connect a subscription](command:picode.connectProvider) opens the providers pi can log in with your own account (ChatGPT, Claude, Copilot…)."
@@ -134,6 +132,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			],
 			default: 'internal',
 			scope: ConfigurationScope.APPLICATION,
+			order: 1,
 			markdownDescription: localize('picode.pi.runtime', "Which pi answers in the chat. Your machine's pi keeps its own settings, so subscriptions you connect stay with the pi inside PiCode. The choice applies to new conversations, and it is the first step of [Set up PiCode](command:picode.setup)."),
 		},
 		[PICODE_THINKING_LEVEL_SETTING]: {
@@ -150,6 +149,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				localize('picode.pi.thinkingLevel.max', "As much as the model allows. The slowest."),
 			],
 			default: 'default',
+			order: 3,
 			markdownDescription: localize('picode.pi.thinkingLevel', "How hard pi thinks before answering. Its own setting is used when this is left alone."),
 		},
 		[PICODE_REASONING_SETTING]: {
@@ -160,6 +160,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				localize('picode.pi.reasoning.show', "The thinking first, quoted above the answer."),
 			],
 			default: 'show',
+			order: 4,
 			markdownDescription: localize('picode.pi.reasoning', "Whether the model's thinking is written into the chat. It is long, and the answer is usually what is wanted."),
 		},
 		[PICODE_DISABLED_TOOLS_SETTING]: {
@@ -200,6 +201,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 				localize('picode.pi.projectMode.folder', "The first open folder only, whatever else is open beside it."),
 			],
 			default: 'auto',
+			order: 2,
 			// A window is what a workspace area belongs to, and a folder cannot be chosen per editor tab.
 			scope: ConfigurationScope.WINDOW,
 			markdownDescription: localize('picode.pi.projectMode', "How much of your workspace pi works on: only the first folder, or every folder of the workspace area together. A change here applies to new conversations."),

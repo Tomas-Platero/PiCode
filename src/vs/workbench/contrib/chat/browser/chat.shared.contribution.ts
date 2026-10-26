@@ -1566,7 +1566,7 @@ configurationRegistry.registerConfiguration({
 		},
 		[ChatAIDisabledSettingId]: {
 			type: 'boolean',
-			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
+			description: nls.localize('chat.disableAIFeatures', "Turn off all AI in PiCode: the chat, pi, Gentle AI and memory are shut down and hidden. Turn it off again to bring them back (the window reloads)."),
 			default: true,
 			scope: ConfigurationScope.WINDOW,
 		},

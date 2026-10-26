@@ -182,6 +182,8 @@ test('a cloud-only failure is named as such, because the cloud is off here', () 
 			{ check_id: 'sync_target_closed_space', result: 'error', severity: 'error', message: '2 finding(s) detected.', why: 'A row points at a target no pipeline can advance.' }
 		]
 	})!);
-	assert.match(markdown, /about cloud sync/);
-	assert.match(markdown, /nothing to fix here/);
+	// Not a failure: the cloud is not used, so the verdict is clean and the leftover is a quiet note.
+	assert.match(markdown, /Everything that matters checked out/);
+	assert.doesNotMatch(markdown, /❌|need attention/);
+	assert.match(markdown, /Not used: cloud sync/);
 });

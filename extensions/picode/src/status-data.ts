@@ -18,7 +18,7 @@ import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runt
 import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
-import { firstNanProvider, getCachedNanUsage, matchedNanProvider, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
+import { firstNanProvider, getCachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 
 /**
  * The data behind PiCode's status surface.
@@ -313,7 +313,10 @@ async function readSubscription(profileDir: string, model: string | undefined): 
 		return undefined;
 	}
 	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('providers'));
-	const provider = matchedNanProvider(declared, current.provider);
+	// NaN's own pi package registers the provider without any settings line: its id is enough, and
+	// the key is the one pi stored for it.
+	const provider = matchedNanProvider(declared, current.provider)
+		?? (current.provider === NAN_PROVIDER_ID ? { id: NAN_PROVIDER_ID, key: undefined } : undefined);
 	if (provider === undefined) {
 		return undefined;
 	}
@@ -372,7 +375,10 @@ async function readAccountSubscriptions(profileDir: string, model: string | unde
 			}))
 			: []),
 	];
-	const provider = firstNanProvider(refs);
+	// NaN's own pi package registers the provider with no settings line and no model list entry:
+	// the key pi stored for it is what says it is there.
+	const provider = firstNanProvider(refs)
+		?? (storedApiKey(profileDir, NAN_PROVIDER_ID) === undefined ? undefined : { id: NAN_PROVIDER_ID, baseUrl: '', key: undefined });
 	if (provider === undefined) {
 		return undefined;
 	}
@@ -392,6 +398,15 @@ async function readAccountSubscriptions(profileDir: string, model: string | unde
 		.filter(limit => limit.windows.length > 0)
 		.map(limit => toSubscriptionStatus(limit, cached.fresh));
 	return meters.length > 0 ? meters : undefined;
+}
+
+/**
+ * The subscription meter of the model the chat is on — the session's, or the profile default
+ * before the first turn. The status-bar counter reads this; the Status view builds it inline.
+ */
+export async function readCurrentSubscription(distributionRoot: string): Promise<SubscriptionStatus | undefined> {
+	const profileDir = readRuntimeMode() === 'external' ? externalProfileDir() : internalProfileDir(distributionRoot);
+	return readSubscription(profileDir, getSessionUsage()?.model ?? readDefaultModel(profileDir));
 }
 
 /** Builds the one answer the status tree renders, from the profile in force. */
@@ -445,8 +460,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The provider's own quota for the model in use, never the session's totals above.
 		// The model's subscription meter, read the way the Session Usage row used to be: the lookup
 		// and its one-minute cache belong to `usage-data.ts`, and the block draws what it answered.
-		subscription: await readSubscription(profileDir, usage?.model),
-		subscriptions: await readAccountSubscriptions(profileDir, usage?.model),
+		subscription: await readSubscription(profileDir, usage?.model ?? defaultModel),
+		subscriptions: await readAccountSubscriptions(profileDir, usage?.model ?? defaultModel),
 		// What the update check last found, read from where the check stored it: the lookup and its
 		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
 		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),

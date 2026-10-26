@@ -51,7 +51,7 @@ import { secretStorageKey } from '../../platform/secrets/common/secrets.js';
  * what the editor would have written: same key, same scope, same target, same encryption. The
  * editor then finds a session at start instead of asking a browser for one.
  */
-async function storeEditorSession(deps: OnboardingDeps, session: { refreshToken: string; uid: string; email: string }): Promise<void> {
+async function storeEditorSession(deps: OnboardingDeps, session: { refreshToken: string; uid: string; email: string; picture?: string }): Promise<void> {
 	const storage = deps.applicationStorage;
 	const encryption = deps.encryptionService;
 	if (storage === undefined || encryption === undefined) {
@@ -75,6 +75,9 @@ async function storeEditorSession(deps: OnboardingDeps, session: { refreshToken:
 		storage.store(secretStorageKey('picode.account.refreshToken'), encrypted, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		storage.store('picode.account.uid', session.uid, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		storage.store('picode.account.email', session.email, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		if (session.picture) {
+			storage.store('picode.account.picture', session.picture, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		}
 		storage.store('picode.account.scopes', JSON.stringify([]), StorageScope.APPLICATION, StorageTarget.MACHINE);
 		deps.logService.info(`[picode-onboarding] the editor is signed in as ${session.email || session.uid} (written by the setup)`);
 	} catch (error) {
@@ -99,6 +102,8 @@ export { ONBOARDING_VERSION, majorVersion, onboardingReason, readOnboardingFlag,
 export interface EditorApplicationStore {
 	readonly whenReady: Promise<void>;
 	store(key: string, value: unknown, scope: StorageScope, target: StorageTarget): void;
+	get(key: string, scope: StorageScope, fallbackValue?: string): string | undefined;
+	remove(key: string, scope: StorageScope): void;
 }
 
 export interface OnboardingDeps {
@@ -328,13 +333,42 @@ function stopLogin(): void {
  * surfaces read it. Empty (or a file without it) means signed out.
  */
 function readSignedInEmail(deps: OnboardingDeps): string {
+	// The editor's storage is the one place both sides write, so it is the truth. The settings mirror
+	// is only a stand-in for the moment storage is not reachable; trusting it over storage kept a
+	// card saying "signed in" after a sign-out that had already cleared the storage.
+	if (deps.applicationStorage !== undefined) {
+		try {
+			const stored = deps.applicationStorage.get('picode.account.email', StorageScope.APPLICATION);
+			return typeof stored === 'string' ? stored : '';
+		} catch {
+			// Fall through to the mirror below.
+		}
+	}
 	try {
 		const raw: unknown = JSON.parse(readFileSync(join(deps.environmentMainService.userDataPath, 'User', 'settings.json'), 'utf8'));
-		if (typeof raw !== 'object' || raw === null) {
-			return '';
+		const value = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>)['picode.account.sessionEmail'] : undefined;
+		if (typeof value === 'string' && value.length > 0) {
+			return value;
 		}
-		const value = (raw as Record<string, unknown>)['picode.account.sessionEmail'];
-		return typeof value === 'string' ? value : '';
+	} catch {
+		// No settings file yet: the stored session below is still an answer.
+	}
+	// The editor mirrors the session into its settings only once it has started, so a sign-in made
+	// in this window and then closed is not there yet. The session itself is: the setup wrote it to
+	// the editor's own storage, and a sign-out clears it from the same place.
+	try {
+		const stored = deps.applicationStorage?.get('picode.account.email', StorageScope.APPLICATION);
+		return typeof stored === 'string' ? stored : '';
+	} catch {
+		return '';
+	}
+}
+
+/** The signed-in account's avatar address, kept by whichever side signed in, or empty. */
+function readSignedInPicture(deps: OnboardingDeps): string {
+	try {
+		const stored = deps.applicationStorage?.get('picode.account.picture', StorageScope.APPLICATION);
+		return typeof stored === 'string' ? stored : '';
 	} catch {
 		return '';
 	}
@@ -476,15 +510,19 @@ export async function showOnboardingWindow(deps: OnboardingDeps, mode: Onboardin
 	// The editor publishes its auth state in the settings file; watching it is what keeps the two
 	// surfaces in step while both are open — sign out in the editor and the card here says so.
 	const settingsFile = join(deps.environmentMainService.userDataPath, 'User', 'settings.json');
-	let lastEmail = readSignedInEmail(deps);
+	let lastEmail = `${readSignedInEmail(deps)}|${readSignedInPicture(deps)}`;
 	const watcher = setInterval(() => {
 		if (window.isDestroyed()) {
 			return;
 		}
 		const email = readSignedInEmail(deps);
-		if (email !== lastEmail) {
-			lastEmail = email;
-			window.webContents.send(CHANNELS.accountState, { email });
+		const picture = readSignedInPicture(deps);
+		// The avatar is part of the answer: the editor stores it just after the email, and the card
+		// must repaint when it arrives, not only when the email changes.
+		const key = `${email}|${picture}`;
+		if (key !== lastEmail) {
+			lastEmail = key;
+			window.webContents.send(CHANNELS.accountState, { email, picture });
 		}
 	}, 1000);
 	window.on('closed', () => clearInterval(watcher));
@@ -563,6 +601,7 @@ const CHANNELS = {
 	accountCancel: 'picode-onboarding:account-cancel',
 	accountEvent: 'picode-onboarding:account-event',
 	accountState: 'picode-onboarding:account-state',
+	accountSignOut: 'picode-onboarding:account-sign-out',
 	openExternal: 'picode-onboarding:open-external',
 	copyText: 'picode-onboarding:copy-text',
 	loginStart: 'picode-onboarding:login-start',
@@ -662,6 +701,10 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 			platform: process.platform,
 			dataDir: onboardingDataDir(deps),
 			snapshot: state.ok ? state.data : undefined,
+			// Who is signed in right now, so a reopened setup starts on the truth instead of waiting
+			// for a change that never comes.
+			accountEmail: readSignedInEmail(deps),
+			accountPicture: readSignedInPicture(deps),
 			stateError: state.ok ? undefined : state.error,
 		};
 	}));
@@ -791,6 +834,20 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 	 * the page and kept for the editor, which mints its own session from it at start (its token
 	 * lives in secret storage this process does not own), without opening a second browser.
 	 */
+	// Signing out here signs the editor out too, now and not at its next start: the account lives in
+	// the editor's own storage, the editor listens to it, and removing it is what both sides read as
+	// "signed out".
+	ipcMain.handle(CHANNELS.accountSignOut, guard(async () => {
+		const storage = deps.applicationStorage;
+		if (storage === undefined) {
+			return { ok: false, error: 'the editor stores are not reachable' };
+		}
+		for (const key of [secretStorageKey('picode.account.refreshToken'), 'picode.account.uid', 'picode.account.email', 'picode.account.scopes', 'picode.account.picture']) {
+			storage.remove(key, StorageScope.APPLICATION);
+		}
+		return { ok: true };
+	}));
+
 	ipcMain.handle(CHANNELS.accountCancel, guard(async () => {
 		stopAccountSignIn?.();
 		return { ok: true };
@@ -831,7 +888,7 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 		if (result.ok && result.session !== undefined) {
 			// In the background: the window answers as soon as the password is approved, and the
 			// write either lands (storage was open) or is skipped with a line in the log.
-			void storeEditorSession(deps, result.session);
+			void storeEditorSession(deps, { ...result.session, picture: result.picture });
 		}
 		if (result.ok && result.session !== undefined) {
 			// The session travels, not the code: the code was spent by the exchange above and is

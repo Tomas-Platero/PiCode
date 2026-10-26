@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
-import { declarationsFromSetting, isRecord, projectDeclaration } from './declarations';
+import { declarationsFromSetting, fillKeylessProviders, isRecord, projectDeclaration } from './declarations';
 import { memoryEnabled, startMemory, stopStartedMemory } from './engram-activation';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
@@ -59,6 +59,7 @@ import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from '.
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { readDefaultModel, registerStatusDataCommand } from './status-data';
+import { registerUsageStatusBar } from './usage-status-bar';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
@@ -2259,6 +2260,32 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Modules that imported `spawn` by name see the wrapped one.
 	require('node:module').syncBuiltinESMExports();
 	profileUri = context.extensionUri;
+
+	// One switch turns every AI feature off: `chat.disableAIFeatures`. The editor hides the chat with
+	// it; here nothing else starts either — no pi, no Gentle AI, no memory engine, no provider — so
+	// switching it on is a real shutdown and not a hidden panel over running processes. Changing it
+	// while the window is open stops the memory engine at once and offers the reload that finishes it.
+	const aiIsOff = (): boolean => vscode.workspace.getConfiguration('chat').get<boolean>('disableAIFeatures') === true;
+	const aiWasOff = aiIsOff();
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+		if (!event.affectsConfiguration('chat.disableAIFeatures') || aiIsOff() === aiWasOff) {
+			return;
+		}
+		if (aiIsOff()) {
+			stopStartedMemory();
+		}
+		void vscode.window.showInformationMessage(
+			aiIsOff() ? 'PiCode AI is off. Reload the window to finish shutting it down.' : 'PiCode AI is on. Reload the window to start it.',
+			'Reload Window',
+		).then(choice => {
+			if (choice !== undefined) {
+				void vscode.commands.executeCommand('workbench.action.reloadWindow');
+			}
+		});
+	}));
+	if (aiWasOff) {
+		return;
+	}
 	context.subscriptions.push(onDidChangeModels);
 	context.subscriptions.push(vscode.lm.registerLanguageModelChatProvider(VENDOR, provider));
 
@@ -2336,6 +2363,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The MCP servers pi runs are written from the settings row, and followed while the editor is
 	// open: adding one in the form is what makes it available to pi.
 	applyMcpServers(profileDirectory(context.extensionUri));
+	// A provider that needs no key (a local router) gets pi's dummy one, or pi refuses its models.
+	fillKeylessProviders(profileDirectory(context.extensionUri));
 
 	// Memory: pi's engine, declared to this profile and woken for the editor's own surfaces. It is
 	// joined, never restarted, when it already serves this store — the same store another agent on
@@ -2353,7 +2382,7 @@ export function activate(context: vscode.ExtensionContext): void {
 			// The switch, and the engine it points at: both are answered by the same call. Off
 			// takes the declaration and the protocol away; on puts them back and wakes the
 			// engine. The store is never touched, so nothing is lost either way.
-			if (event.affectsConfiguration('picode.memory.enabled') || event.affectsConfiguration('picode.memory.binary')) {
+			if (event.affectsConfiguration('picode.memory.enabled')) {
 				void vscode.commands.executeCommand('setContext', MEMORY_ENABLED_CONTEXT, memoryEnabled());
 				startMemory(profileDirectory(context.extensionUri), line => console.error(`[memory] ${line}`));
 			}
@@ -2439,10 +2468,10 @@ const setupDeps = {
 			? 'The model\'s thinking is now hidden in the chat. New turns will not show it.'
 			: 'The model\'s thinking is now shown in the chat.');
 	}));
-	// The way into the providers' settings page. It used to be one click on the `Providers` row of the
-	// activity-bar tree; that tree is gone, so the Providers card offers it as its own action.
+	// The way into the providers' page: Chat Settings › Providers & Models, on its Providers tab —
+	// where providers are added and signed in, not the raw settings line behind them.
 	context.subscriptions.push(vscode.commands.registerCommand(STATUS_PROVIDER_SETTINGS_COMMAND, () =>
-		vscode.commands.executeCommand('workbench.action.openSettings', 'picode.providers')));
+		vscode.commands.executeCommand('picode.providersModels.open', 'providers')));
 	// The dashboard's actions: the things the status panel used to spell out as text become
 	// buttons here. They run through the connector's own flows (reset + reload, update, cache
 	// drop, profile reveal) so there is one path to each piece of work.
@@ -2527,6 +2556,7 @@ const setupDeps = {
 	// The update check: pi and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.
 	registerUpdateChecks(context);
+	registerUsageStatusBar(context, distributionRoot(context.extensionUri), onPiSessionChanged);
 
 	// The model caches are read the moment the window exists (the subscription catalogue, the slow one
 	// with the external pi, included) and then re-read on a slow rhythm. The picker does not wait for
