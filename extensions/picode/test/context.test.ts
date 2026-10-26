@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentFrame, applyContextMode, contextBlock, contextModeOf, withContext, isSlashCommand } from '../src/context.ts';
+import { agentFrame, applyContextMode, contextBlock, contextModeOf, conversationName, withContext, isSlashCommand } from '../src/context.ts';
 
 test('nothing to say means no block, not an empty header', () => {
 	assert.equal(contextBlock({}), undefined);
@@ -138,4 +138,12 @@ test('a slash command reaches pi first, unframed; any other request keeps its fr
 	assert.equal(withContext('/gentle:status', 'CONTEXT', 'internal'), '/gentle:status');
 	assert.equal(withContext('  /mcp login x ', undefined, 'internal'), '/mcp login x');
 	assert.ok(withContext('hola', 'CONTEXT', 'internal').includes('CONTEXT'));
+});
+
+test('a conversation is named by the first line of its first message', () => {
+	assert.equal(conversationName('hola soy tomás'), 'hola soy tomás');
+	assert.equal(conversationName('  fix the login\nand then the tests  '), 'fix the login');
+	assert.equal(conversationName('a'.repeat(60)), `${'a'.repeat(47)}…`);
+	assert.equal(conversationName('   '), undefined);
+	assert.equal(conversationName('/gentle:models'), undefined);
 });

@@ -1304,3 +1304,23 @@ después. El dueño lo usa en su pi del PATH y lo quiere en el producto.
 **Pendiente de verificar en la app:** que un mensaje entrante abra un turno visible en el chat. Los
 comandos de pi-intercom que pintan paneles del terminal (`/intercom`, `/handover`) no se pueden dibujar en
 el editor (`ui.custom` es nulo). Las herramientas, que son lo que usa el agente, no dependen de eso.
+
+**Adenda 1 (2026-10-26) · Cada chat es su propia conversación de pi**
+
+> *"si hazlo"* (a dar a cada chat del editor su propia conversación de pi)
+
+- **El fallo:** el chat tenía una sola sesión de pi por ventana. Un chat nuevo del editor (el «+») seguía
+  escribiendo en la conversación anterior: el agente recordaba lo que la pantalla no enseñaba, la lista
+  Sessions mostraba una fila para dos chats y pi-intercom veía una sola sesión.
+- **Ahora:** `agent.ts` guarda una conversación por chat, por el `sessionResource` de la petición: su sesión,
+  su transcripción, sus servicios y lo que la construyó. El chat que habló el último es el que leen la vista
+  de estado, la lista de comandos y la de MCP.
+- **Al recargar la ventana,** un chat que el editor restaura sigue en su propio fichero: la relación chat →
+  fichero se guarda en el estado del espacio de trabajo y se reabre con `SessionManager.open`, si el fichero
+  sigue donde ese ámbito los guarda.
+- **Nombre:** cada conversación se llama como la primera línea de su primer mensaje (`conversationName`). Es
+  el nombre con el que otra sesión la encuentra en pi-intercom.
+- **Tope:** como mucho seis chats con sesión viva. El que lleva más tiempo sin usarse suelta su sesión y
+  conserva su fichero: con el siguiente mensaje se reabre.
+- **Siguen de uno en uno:** los turnos de chats distintos esperan su vez, porque la puerta de permisos y el
+  testigo de las herramientas MCP del editor son de la ventana.

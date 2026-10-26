@@ -191,3 +191,12 @@ export function withContext(prompt: string, context: string | undefined, runtime
 	const head = context === undefined ? agentFrame(runtime) : `${agentFrame(runtime)}\n\n${context}`;
 	return `${head}\n\n---\n\n${prompt}`;
 }
+
+/** A conversation's name from its first message: its first line, cut to a readable length. */
+export function conversationName(prompt: string): string | undefined {
+	const line = prompt.trim().split(/\r?\n/, 1)[0]?.trim() ?? '';
+	if (line.length === 0 || isSlashCommand(line)) {
+		return undefined;
+	}
+	return line.length > 48 ? `${line.slice(0, 47).trimEnd()}…` : line;
+}
