@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { channelOfTag, downloadsByChannel } from "../src/lib/downloads.ts";
+import { isStatsCaller } from "../src/lib/stats-auth.ts";
 import {
   feedUrl,
   increments,
@@ -113,4 +114,18 @@ test("downloads keep each channel's newest release", () => {
     ]),
     { beta: { tag: "v0.2.8-beta", downloads: 5 }, stable: { tag: "v0.2.7", downloads: 10 } },
   );
+});
+
+test("only the holder of the stats token may read the stats", () => {
+  assert.equal(isStatsCaller("Bearer s3cret", "s3cret"), true);
+  assert.equal(isStatsCaller("Bearer wrong!", "s3cret"), false);
+  assert.equal(isStatsCaller("Bearer s3cre", "s3cret"), false);
+  assert.equal(isStatsCaller("s3cret", "s3cret"), false);
+  assert.equal(isStatsCaller(null, "s3cret"), false);
+});
+
+test("with no token configured nobody may read the stats", () => {
+  assert.equal(isStatsCaller("Bearer ", undefined), false);
+  assert.equal(isStatsCaller("Bearer anything", undefined), false);
+  assert.equal(isStatsCaller("Bearer anything", ""), false);
 });

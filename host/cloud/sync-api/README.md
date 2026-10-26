@@ -56,6 +56,7 @@ test/                     # pure rules: plans, retention
 | `retention.ts` | Cuántas revisiones por recurso se conservan (20) y qué historial se suelta si la cuota se llena. |
 | `usage.ts` | 📊 Las reglas del uso anónimo: qué ruta del feed es válida, qué contadores suma cada comprobación y el resumen público. Sin Firestore. |
 | `usage-store.ts` | Los contadores diarios en Firestore (`usage/{día}`) y su lectura para el resumen. |
+| `stats-auth.ts` | Quién puede leer `/api/stats`: solo quien lleve `STATS_TOKEN`; sin token configurado, nadie. |
 | `downloads.ts` | Las descargas de la release actual de cada canal, leídas de GitHub. |
 
 ### `src/app/api/` — las rutas
@@ -64,7 +65,7 @@ test/                     # pure rules: plans, retention
 | --- | --- |
 | `health/route.ts` | Liveness: no toca Firebase, sirve para validar el despliegue. |
 | `feed/[...path]/route.ts` | 🔄 La comprobación de actualizaciones del editor: cuenta y redirige al feed en GitHub. |
-| `stats/route.ts` | 📊 El resumen público de uso que enseña la web. |
+| `stats/route.ts` | 📊 El resumen de uso del panel privado de la web (solo con `STATS_TOKEN`). |
 | `v1/manifest/route.ts` | Devuelve el manifiesto con `ETag` y responde `304` si no cambió. |
 | `v1/resource/[r]/route.ts` | Lista las revisiones de un recurso / añade una / las borra. |
 | `v1/resource/[r]/latest/route.ts` | La última revisión de un recurso (`ETag`, `304`). |
@@ -186,7 +187,10 @@ channel, version, package }`, numbers only. The breakdowns count only the first 
 day, so they add up to the day's active installs. Turning updates off in the editor
 (`update.mode: none`) stops the checks, and with them any counting.
 
-`GET /api/stats` is the public summary (CORS `*`, cached an hour at the edge):
+`GET /api/stats` is the summary behind the website's **private** dashboard. It answers only a
+caller that sends `Authorization: Bearer <STATS_TOKEN>` (the secret is set in Vercel, in this
+project and in the website's, and the website's server is the one caller); anyone else gets a
+`404`, and with no `STATS_TOKEN` configured nobody gets in. The response:
 
 ```json
 {
