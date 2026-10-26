@@ -311,3 +311,34 @@
 	border-color: var(--vscode-widget-border, var(--vscode-panel-border));
 	background: transparent;
 }
+
+/* The usage-limit bars: how much of a window is used, in the colours the rest of the panel keeps. */
+.picode-status-meter-model {
+	padding: 10px 0 2px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.picode-status-meter {
+	height: 6px;
+	margin-top: 6px;
+	border-radius: 999px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+}
+
+.picode-status-meter-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: var(--vscode-testing-iconPassed);
+	transition: width 200ms ease;
+}
+
+.picode-status-meter.warn .picode-status-meter-fill {
+	background: var(--vscode-editorWarning-foreground);
+}
+
+.picode-status-meter.danger .picode-status-meter-fill {
+	background: var(--vscode-errorForeground);
+}

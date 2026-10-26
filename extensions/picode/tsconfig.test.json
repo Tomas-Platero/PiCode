@@ -21,6 +21,7 @@
 		"../../src/vscode-dts/vscode.proposed.chatPromptFiles.d.ts",
 		"../../src/vscode-dts/vscode.proposed.chatParticipantAdditions.d.ts",
 		"../../src/vscode-dts/vscode.proposed.languageModelThinkingPart.d.ts",
+		"../../src/vscode-dts/vscode.proposed.languageModelPricing.d.ts",
 		"../../src/vscode-dts/vscode.proposed.chatParticipantPrivate.d.ts",
 		"../../src/vscode-dts/vscode.proposed.chatSessionsProvider.d.ts",
 		"../../src/vscode-dts/vscode.proposed.chatSessionCustomizationProvider.d.ts"
