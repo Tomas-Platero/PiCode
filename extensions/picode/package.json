@@ -226,11 +226,6 @@
 				"category": "PiCode"
 			},
 			{
-				"command": "picode.usage.show",
-				"title": "Show subscription usage",
-				"category": "PiCode"
-			},
-			{
 				"command": "picode.backupSessions",
 				"title": "Back up pi sessions to the cloud",
 				"category": "PiCode"

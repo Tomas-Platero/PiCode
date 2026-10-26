@@ -305,3 +305,10 @@ test('the first NaN provider is found whichever model is active', () => {
 	assert.strictEqual(firstNanProvider([{ id: 'omni', baseUrl: 'http://x/v1' }]), undefined);
 	assert.strictEqual(firstNanProvider([]), undefined);
 });
+
+test('parseNanQuota keeps the billing period start, when the payload names one', () => {
+	const now = Date.parse('2026-10-26T12:00:00Z');
+	const withStart = parseNanQuota({ periodStart: '2026-10-01', models: [{ model: 'mimo-v2.6-flash', tokensUsed: 3, cap: 10, periodEnd: '2026-11-01T00:00:00Z' }] }, now);
+	assert.strictEqual(withStart.periodStart, Date.parse('2026-10-01'));
+	assert.strictEqual(parseNanQuota({ models: [] }, now).periodStart, null);
+});

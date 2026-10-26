@@ -16,6 +16,7 @@ import './picodeMcpSection.js';
 import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';
 import './picodeAgentStatusPill.js';
+import './picodeUsageStatus.js';
 import './picodeSetupCommands.js';
 
 /**

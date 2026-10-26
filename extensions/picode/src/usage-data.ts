@@ -97,6 +97,8 @@ export interface NanUsageLimit {
 export interface NanUsage {
 	readonly limits: NanUsageLimit[];
 	readonly fetchedAt: number;
+	/** When the billing period began (epoch ms), when the payload said. */
+	readonly periodStart?: number | null;
 }
 
 /** What this module needs from a declared provider to recognize NaN. */
@@ -261,7 +263,7 @@ export function parseNanQuota(payload: unknown, now: number): NanUsage {
 			limits.push({ name: model, windows, limitReached: tokensUsed >= allowance });
 		}
 	}
-	return { limits, fetchedAt: now };
+	return { limits, fetchedAt: now, periodStart: timestamp(raw['periodStart']) };
 }
 
 /**

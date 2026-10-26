@@ -58,8 +58,7 @@ import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
-import { readDefaultModel, registerStatusDataCommand } from './status-data';
-import { registerUsageStatusBar } from './usage-status-bar';
+import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
@@ -2556,7 +2555,7 @@ const setupDeps = {
 	// The update check: pi and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.
 	registerUpdateChecks(context);
-	registerUsageStatusBar(context, distributionRoot(context.extensionUri), onPiSessionChanged);
+	context.subscriptions.push(registerUsagePanelCommand(distributionRoot(context.extensionUri)));
 
 	// The model caches are read the moment the window exists (the subscription catalogue, the slow one
 	// with the external pi, included) and then re-read on a slow rhythm. The picker does not wait for

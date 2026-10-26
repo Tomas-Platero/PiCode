@@ -161,6 +161,34 @@ export interface StatusData {
 	error?: string;
 }
 
+/** What the status-bar usage panel reads: the whole NaN account, one row per metered model. */
+export const USAGE_PANEL_COMMAND = 'picode.usage.read';
+
+/** One metered model of the account, as the usage panel draws it. */
+export interface UsagePanelModel {
+	readonly name: string;
+	/** Tokens used and allowed over the billing period. */
+	readonly used: number;
+	readonly cap: number;
+	readonly usedPercent: number;
+	/** When this model's period resets, in epoch ms; `null` when the provider did not say. */
+	readonly resetAt: number | null;
+	/** The rolling window on top of the period, when the model has one. */
+	readonly window?: SubscriptionWindowRow;
+	readonly limitReached: boolean;
+	/** Whether this is the model the chat is on. */
+	readonly current: boolean;
+}
+
+export interface UsagePanelData {
+	/** The models, the one in use first. */
+	readonly models: readonly UsagePanelModel[];
+	readonly periodStart: number | null;
+	/** `false` when the endpoint did not answer and this is the last good reading. */
+	readonly fresh: boolean;
+	readonly fetchedAt: number;
+}
+
 /** The way into the providers' settings page, offered by the Providers card. */
 export const STATUS_PROVIDER_SETTINGS_COMMAND = 'picode.status.openProviderSettings';
 

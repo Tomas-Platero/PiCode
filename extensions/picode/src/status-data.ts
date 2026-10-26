@@ -15,10 +15,10 @@ import { readPiChatSettings } from './piConfig';
 import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
-import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
+import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
-import { firstNanProvider, getCachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
+import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 
 /**
  * The data behind PiCode's status surface.
@@ -353,16 +353,8 @@ function toSubscriptionStatus(limit: NanUsageLimit, fresh: boolean): Subscriptio
 	};
 }
 
-/**
- * The account's whole allowance: every metered model, the one in use first, whichever provider's
- * model is answering right now.
- *
- * NaN's quota belongs to the account, so it is worth seeing while a Claude model is the one in the
- * chat — the case the one-meter rule above leaves empty. The provider is found where the owner may
- * have put it: declared in the settings, or only carried in the profile's own model list. Nothing is
- * drawn when no NaN provider with a key exists, and a read that names no meter says nothing.
- */
-async function readAccountSubscriptions(profileDir: string, model: string | undefined): Promise<readonly SubscriptionStatus[] | undefined> {
+/** NaN's quota for the account the profile holds a key for, or `undefined` when there is none. */
+async function readNanAccount(profileDir: string): Promise<CachedNanUsage | undefined> {
 	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('providers'));
 	const carried = readJsonObject(path.join(profileDir, 'models.json'))?.['providers'];
 	const refs: { id: string; baseUrl: string; key?: string }[] = [
@@ -390,8 +382,21 @@ async function readAccountSubscriptions(profileDir: string, model: string | unde
 	if (apiKey === undefined) {
 		return undefined;
 	}
-	const cached = await getCachedNanUsage(apiKey, Date.now());
-	if (cached.value === undefined) {
+	return getCachedNanUsage(apiKey, Date.now());
+}
+
+/**
+ * The account's whole allowance: every metered model, the one in use first, whichever provider's
+ * model is answering right now.
+ *
+ * NaN's quota belongs to the account, so it is worth seeing while a Claude model is the one in the
+ * chat — the case the one-meter rule above leaves empty. The provider is found where the owner may
+ * have put it: declared in the settings, or only carried in the profile's own model list. Nothing is
+ * drawn when no NaN provider with a key exists, and a read that names no meter says nothing.
+ */
+async function readAccountSubscriptions(profileDir: string, model: string | undefined): Promise<readonly SubscriptionStatus[] | undefined> {
+	const cached = await readNanAccount(profileDir);
+	if (cached?.value === undefined) {
 		return undefined;
 	}
 	const meters = nanAccountMeters(cached.value, currentModelRef(model)?.model)
@@ -401,12 +406,40 @@ async function readAccountSubscriptions(profileDir: string, model: string | unde
 }
 
 /**
- * The subscription meter of the model the chat is on — the session's, or the profile default
- * before the first turn. The status-bar counter reads this; the Status view builds it inline.
+ * The whole NaN account for the status-bar panel: every metered model with its period allowance,
+ * the one the chat is on (the session's model, or the profile default before the first turn) first.
+ * `undefined` when the profile holds no NaN key or the quota has never answered.
  */
-export async function readCurrentSubscription(distributionRoot: string): Promise<SubscriptionStatus | undefined> {
+export async function readUsagePanel(distributionRoot: string): Promise<UsagePanelData | undefined> {
 	const profileDir = readRuntimeMode() === 'external' ? externalProfileDir() : internalProfileDir(distributionRoot);
-	return readSubscription(profileDir, getSessionUsage()?.model ?? readDefaultModel(profileDir));
+	const cached = await readNanAccount(profileDir);
+	if (cached?.value === undefined) {
+		return undefined;
+	}
+	const modelId = currentModelRef(getSessionUsage()?.model ?? readDefaultModel(profileDir))?.model;
+	const models = nanAccountMeters(cached.value, modelId).flatMap((limit): UsagePanelModel[] => {
+		const period = limit.windows.find(window => window.label.length === 0);
+		if (period?.used === undefined || period.budget === undefined) {
+			return [];
+		}
+		const rolling = limit.windows.find(window => window.label.length > 0);
+		return [{
+			name: limit.name,
+			used: period.used,
+			cap: period.budget,
+			usedPercent: period.usedPercent,
+			resetAt: period.resetAt,
+			...(rolling === undefined ? {} : { window: { label: `${spokenWindowLabel(rolling.label)} window`, usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
+			limitReached: limit.limitReached,
+			current: limit.name === modelId,
+		}];
+	});
+	return models.length === 0 ? undefined : { models, periodStart: cached.value.periodStart ?? null, fresh: cached.fresh, fetchedAt: cached.value.fetchedAt };
+}
+
+/** Registers the command the status-bar usage panel reads; the caller collects the disposable. */
+export function registerUsagePanelCommand(distributionRoot: string): vscode.Disposable {
+	return vscode.commands.registerCommand(USAGE_PANEL_COMMAND, () => readUsagePanel(distributionRoot));
 }
 
 /** Builds the one answer the status tree renders, from the profile in force. */
