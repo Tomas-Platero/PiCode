@@ -37,6 +37,14 @@
 	min-width: 0;
 }
 
+/* A Button fills its parent by default; the header action is as wide as its label, top right. */
+.picode-mcp-header > .monaco-button {
+	flex: none;
+	width: auto;
+	padding: 4px 14px;
+	white-space: nowrap;
+}
+
 .picode-mcp-title {
 	margin: 0;
 	font-size: var(--vscode-agents-fontSize-heading2, 16px);
@@ -69,8 +77,11 @@
 
 /* ---------------------------------------------------------------- card */
 
+/* Three fixed columns — server · state · actions — so every card's badge and switch sit in the
+   same place whatever the card says. */
 .picode-mcp-card {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 150px 120px;
 	align-items: center;
 	gap: 12px;
 	padding: 10px 12px;
@@ -132,7 +143,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	flex: none;
+	justify-content: flex-end;
 }
 
 .picode-mcp-badge {
@@ -166,7 +177,16 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	justify-content: flex-end;
+	grid-column: 3;
+}
+
+/* Buttons keep their label on one line and are as wide as it. */
+.picode-mcp-card-actions > .monaco-button {
 	flex: none;
+	width: auto;
+	white-space: nowrap;
+	padding: 4px 12px;
 }
 
 /* The switch: pi stops or starts the server. Small, and the only control on a healthy card. */

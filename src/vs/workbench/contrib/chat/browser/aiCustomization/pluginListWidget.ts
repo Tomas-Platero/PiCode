@@ -52,8 +52,7 @@ const $ = DOM.$;
 const PLUGIN_ITEM_HEIGHT = 36;
 
 /** A table row carries two buttons, so it is a little taller than a plain item row. */
-const PI_PACKAGE_ROW_HEIGHT = 44;
-
+const PI_PACKAGE_ROW_HEIGHT = 68;
 /** Row shape returned by the PiCode package catalog connector (`picode.packages.search`). */
 interface IPackageCatalogRow {
 	readonly name: string;
@@ -88,6 +87,8 @@ interface IPiPackageRow {
 	readonly version?: string;
 	readonly description?: string;
 	readonly path: string;
+	/** The preview the package declares for pi's gallery, when it has one. */
+	readonly image?: string;
 	/** The declaration as pi's settings spell it (`npm:pi-lens`), when one exists. */
 	readonly source?: string;
 	readonly state?: 'enabled' | 'disabled';
@@ -257,14 +258,17 @@ interface IPluginPiPackageRowTemplateData {
 	readonly name: HTMLElement;
 	readonly version: HTMLElement;
 	readonly source: HTMLElement;
+	readonly nameLink: HTMLAnchorElement;
+	readonly thumb: HTMLElement;
 	readonly stateText: HTMLElement;
+	readonly stateLabel: HTMLElement;
 	/** The warning glyph inside the badge (a row whose updates cannot be checked). */
 	readonly warn: HTMLElement;
 	readonly updateHint: HTMLElement;
 	readonly toggleButton: Button;
 	readonly updateButton: Button;
 	readonly uninstallButton: Button;
-	readonly hint: HTMLElement;
+	readonly reinstallButton: Button;
 	readonly disposables: DisposableStore;
 }
 
@@ -309,16 +313,22 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		private readonly onToggle: (row: IPiPackageRow) => void,
 		private readonly onUninstall: (row: IPiPackageRow) => void,
 		private readonly onUpdate: (row: IPiPackageRow) => void,
+		private readonly onReinstall: (row: IPiPackageRow) => void,
+		private readonly onOpenLink: (url: string) => void,
 	) { }
 
 	renderTemplate(container: HTMLElement): IPluginPiPackageRowTemplateData {
 		container.classList.add('pi-package-row');
 
 		const name = DOM.append(container, $('.pi-package-row-name'));
+		// Like pi.dev's catalog: the package's preview on the left, its name — a link to its page — beside it.
+		const thumb = DOM.append(name, $('.pi-package-row-thumb'));
+		const nameLink = DOM.append(name, $('a.pi-package-row-link')) as HTMLAnchorElement;
 		const version = DOM.append(container, $('.pi-package-row-version'));
 		const source = DOM.append(container, $('.pi-package-row-source'));
 		const state = DOM.append(container, $('.pi-package-row-state'));
 		const stateText = DOM.append(state, $('.pi-package-row-state-text'));
+		const stateLabel = DOM.append(stateText, $('span'));
 		// The warning lives inside the badge: a row that cannot be checked says so with a glyph and
 		// a tooltip, not by growing a second line of text.
 		const warn = DOM.append(stateText, $('.pi-package-row-warn'));
@@ -337,27 +347,46 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		const uninstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: uninstallTooltip, ariaLabel: uninstallTooltip });
 		uninstallButton.label = `$(${Codicon.trash.id})`;
 		uninstallButton.element.classList.add('pi-package-row-action');
-		const hint = DOM.append(actions, $('.pi-package-row-hint'));
-		hint.style.display = 'none';
+		const reinstallTooltip = localize('reinstallPackageTooltip', "Install the package again so pi loads it");
+		const reinstallButton = new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: reinstallTooltip, ariaLabel: reinstallTooltip });
+		reinstallButton.label = `$(${Codicon.refresh.id}) ${localize('reinstallPackageAction', "Reinstall")}`;
+		reinstallButton.element.classList.add('pi-package-row-action');
+		reinstallButton.element.style.display = 'none';
 
-		return { container, name, version, source, stateText, warn, updateHint, toggleButton, updateButton, uninstallButton, hint, disposables: new DisposableStore() };
+		return { container, name, nameLink, thumb, version, source, stateText, stateLabel, warn, updateHint, toggleButton, updateButton, uninstallButton, reinstallButton, disposables: new DisposableStore() };
 	}
 
 	renderElement(element: IPluginPiPackageItemEntry, _index: number, templateData: IPluginPiPackageRowTemplateData): void {
 		templateData.disposables.clear();
 		const { row } = element;
-		templateData.name.textContent = formatDisplayName(row.name);
-		templateData.name.title = truncateToFirstLine(row.description ?? '');
+		const pageUrl = `https://pi.dev/packages/${row.name}`;
+		templateData.nameLink.textContent = row.name;
+		templateData.nameLink.href = pageUrl;
+		templateData.nameLink.title = truncateToFirstLine(row.description ?? '') || localize('openPackagePage', "Open the package on pi.dev");
+		templateData.disposables.add(DOM.addDisposableListener(templateData.nameLink, DOM.EventType.CLICK, e => {
+			e.preventDefault();
+			this.onOpenLink(pageUrl);
+		}));
+		// The preview, or the same plain tile the catalog shows for a package without one; a
+		// picture that fails to load falls back to the tile instead of a broken image.
+		DOM.clearNode(templateData.thumb);
+		if (row.image) {
+			const image = DOM.append(templateData.thumb, $('img')) as HTMLImageElement;
+			image.alt = '';
+			image.src = row.image;
+			templateData.disposables.add(DOM.addDisposableListener(image, DOM.EventType.ERROR, () => image.remove()));
+		}
 		templateData.version.textContent = row.version ?? '';
 		templateData.source.textContent = compactSource(row.source);
 		templateData.source.title = row.source ?? '';
 		const disabled = row.state === 'disabled';
 		const declared = row.source !== undefined;
-		templateData.stateText.textContent = disabled
+		// The label has its own span: writing the badge's text would drop the warning glyph.
+		templateData.stateLabel.textContent = disabled
 			? localize('packageStateDisabled', "Disabled")
 			: declared
 				? localize('packageStateEnabled', "Enabled")
-				: localize('packageStateNotDeclared', "Not declared");
+				: localize('packageStateNotLoaded', "Not loaded");
 		templateData.stateText.classList.toggle('disabled', disabled);
 		templateData.container.classList.toggle('disabled', disabled);
 
@@ -384,17 +413,17 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 
 		if (row.source === undefined) {
 			// A package the disk scan found without pi's settings spelling it: pi never loads
-			// it, and there is no spelling for the actions to act on — say so instead of
-			// leaving an empty cell.
+			// it, so the one thing to offer is installing it again.
+			templateData.stateText.title = localize('packageNotLoadedTitle', "On disk, but pi doesn't load it");
 			templateData.toggleButton.element.style.display = 'none';
 			templateData.uninstallButton.element.style.display = 'none';
-			templateData.hint.style.display = '';
-			templateData.hint.textContent = localize('packageNotDeclaredHint', "Installed on disk; pi does not load it. Reinstall it to manage it here.");
+			templateData.reinstallButton.element.style.display = '';
+			templateData.disposables.add(templateData.reinstallButton.onDidClick(() => this.onReinstall(row)));
 			return;
 		}
 		templateData.toggleButton.element.style.display = '';
 		templateData.uninstallButton.element.style.display = '';
-		templateData.hint.style.display = 'none';
+		templateData.reinstallButton.element.style.display = 'none';
 		if (disabled) {
 			templateData.toggleButton.label = localize('enablePackageAction', "Enable");
 			templateData.toggleButton.setTitle(localize('enablePackageTooltip', "Pi loads this package again"));
@@ -412,6 +441,7 @@ class PluginPiPackageRowRenderer implements IListRenderer<IPluginPiPackageItemEn
 		templateData.toggleButton.dispose();
 		templateData.updateButton.dispose();
 		templateData.uninstallButton.dispose();
+		templateData.reinstallButton.dispose();
 	}
 }
 
@@ -893,6 +923,8 @@ export class PluginListWidget extends Disposable {
 			row => { void this.togglePackageState(row); },
 			row => { void this.uninstallPackage(row); },
 			row => { void this.updatePackage(row); },
+			row => { void installPackageViaConnector(this.commandService, this.dialogService, `npm:${row.name}`, row.name, () => { void this.afterPackageChange(); }); },
+			url => { void this.openerService.open(URI.parse(url)); },
 		);
 		const remoteRenderer = new PluginRemoteItemRenderer();
 		const marketplaceRenderer = new GalleryItemRenderer<IPluginMarketplaceItemEntry>(PLUGIN_MARKETPLACE_ITEM_TEMPLATE_ID, new PluginMarketplaceItemProvider(
@@ -1750,11 +1782,12 @@ export class PluginListWidget extends Disposable {
 		}
 		const headerHeight = this.sectionTitleHeader.offsetHeight;
 		this.lastHeaderHeight = headerHeight;
-		// The table's header row sits above the list, so the list gets what it does not use.
-		const tableHeaderHeight = this.tableHeader.offsetHeight;
-		const listHeight = Math.max(0, height - searchBarHeight - headerHeight - tableHeaderHeight);
-
-		this.listContainer.style.height = `${listHeight}px`;
+		// The list takes whatever the column leaves it: the widget is a flex column and the list's
+		// container grows into the free space (`flex: 1`), so margins, paddings and the table header
+		// are accounted for by the browser instead of by sums that miss some of them. The list is then
+		// laid out at the height the container really has, which is what lets its scroll reach the end.
+		this.listContainer.style.height = '';
+		const listHeight = this.listContainer.clientHeight;
 		this.list.layout(listHeight, width);
 	}
 

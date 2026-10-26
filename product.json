@@ -194,7 +194,14 @@
 	},
 	"linkProtectionTrustedDomains": [
 		"https://www.getpicode.app",
-		"https://getpicode.app"
+		"https://getpicode.app",
+		"https://pi.dev",
+		"https://*.pi.dev",
+		"https://www.npmjs.com",
+		"https://github.com",
+		"https://*.github.com",
+		"https://open-vsx.org",
+		"https://vscodethemes.com"
 	],
 	"releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
 	"updateUrl": "https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates",
