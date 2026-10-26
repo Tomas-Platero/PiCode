@@ -8,7 +8,7 @@ check anonymously and redirects here (see *Anonymous usage* in
 ## 🧭 Why it lives here and not in GitHub Releases
 
 With the updater change baked into the source tree (VSCodium's
-`11-update-use-github-release`, now ordinary code in `picode-source/`), the updater asks for
+`11-update-use-github-release`, now ordinary code in `the tree`), the updater asks for
 
 ```text
 <updateUrl>/<quality>/<platform>/<architecture>[/<target>]/latest.json
@@ -19,9 +19,9 @@ where `quality` is `stable` or `insider`, `platform` is `win32`, `linux` or `dar
 packaged, and **the target the editor asks for is the one its own `product.json` resolves
 to**, not the one the release happens to be named after. The GitHub Releases API does not
 answer in that shape, so `updateUrl` points at this directory instead, and
-`dev/update-feed.mjs` writes the document from a published release.
+`build/release.mjs update-feed` writes the document from a published release.
 
-`updateUrl` is set in `distribution/product-delta.json` to
+`updateUrl` is set in `product.json` to
 
 ```text
 https://www.getpicode.app/api/feed/HEAD/updates
@@ -54,7 +54,7 @@ After `gh release create` has uploaded both assets:
 
 ```bash
 # 1. The portable feed (zip)
-node dev/update-feed.mjs \
+node build/release.mjs update-feed \
   --version <set.version> \
   --picode-version <picodeVersion> \
   --commit <the commit the build was made from> \
@@ -64,7 +64,7 @@ node dev/update-feed.mjs \
   --installed <the editor version the previous release shipped>
 
 # 2. The installed feed (setup exe)
-node dev/update-feed.mjs \
+node build/release.mjs update-feed \
   --version <set.version> \
   --picode-version <picodeVersion> \
   --commit <the same commit> \
@@ -84,14 +84,14 @@ mechanism and the reason the generator refuses to write such a feed without `--f
 Two numbers, because they do two jobs:
 
 - **`productVersion`** — the **editor's** number, the one the updater compares against the
-  installed product. It has **one home**: `distribution/product-delta.json → set.version`.
+  installed product. It has **one home**: `product.json → set.version`.
   The build's prepare phase applies that file to the tree before packing, so the compiled
   editor and the released one cannot disagree. Bumping a
   release is editing that one value, and it must be **strictly greater** than the version
   the previous release shipped; the `--installed` check refuses otherwise.
 - **`picodeVersion`** — **PiCode's** own number (`0.1.0-beta`, `0.1.1-beta`, …). It names
   the release and is what the updater UI shows the owner. It comes from
-  `distribution/product-delta.json → set.picodeVersion`.
+  `product.json → set.picodeVersion`.
 
 The major.minor of `productVersion` stay VS Code's on purpose: every extension's
 `engines.vscode` is matched against the product version, so an independent

@@ -1,0 +1,1727 @@
+/*
+ * The setup window's look.
+ *
+ * **The chrome is fixed** — these tokens are the product's, not the theme's. Three surfaces
+ * (canvas, rail, card), three text weights (primary, secondary, disabled), one blue for the
+ * action and one green for "this worked". The point of the split is depth: a card that is a
+ * slightly lighter blue than the canvas, with a border, reads as raised; blue-grey text on a
+ * blue-grey card reads as nothing at all.
+ *
+ * A theme is previewed **where it belongs** — inside the code sample on its card — so browsing
+ * themes never repaints the interface somebody is trying to read. Everything here is spacing,
+ * type and states: no images, no webfonts, nothing to load.
+ */
+
+:root {
+	/* Surfaces, from the canvas up */
+	--bg: #0B0F19;
+	--sidebar: #111625;
+	--panel: #182030;
+	--line: #2A364F;
+
+	/* Text, three weights */
+	--fg: #F3F4F6;
+	--comment: #9CA3AF;
+	--fg-disabled: #6B7280;
+
+	/* Interaction */
+	--accent: #2563EB;
+	--accent-hover: #1D4ED8;
+	--accent-ink: #FFFFFF;
+	--ok: #10B981;
+	--info: #06B6D4;
+	--line-strong: #374151;
+
+	--radius: 10px;
+	--gap: 16px;
+	--rail: 232px;
+	--speed: 120ms;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+/*
+ * `display` on our own rules beats the browser's `[hidden]`, so a `.panel { display: flex }`
+ * stayed in the layout while "hidden" — which is exactly the empty box that appeared in the
+ * middle of the model step. One rule, and `hidden` means hidden again.
+ */
+[hidden] {
+	display: none !important;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--bg);
+	color: var(--fg);
+	font: 13px/1.5 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.shell {
+	display: grid;
+	grid-template-columns: var(--rail) 1fr;
+	height: 100vh;
+}
+
+/* ---------------------------------------------------------------- rail */
+
+.rail {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+	padding: 26px 18px 18px;
+	background: var(--sidebar);
+	border-right: 1px solid var(--line);
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.brand-mark {
+	width: 26px;
+	height: 26px;
+	filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+
+.brand-text {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.1;
+}
+
+.brand-text strong {
+	font-size: 15px;
+	letter-spacing: 0.2px;
+}
+
+.brand-text span {
+	font-size: 11px;
+	color: var(--comment);
+}
+
+.steps {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.step-link {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--comment);
+	text-align: left;
+	cursor: pointer;
+	transition: background var(--speed), color var(--speed);
+}
+
+.step-link:hover:enabled {
+	background: color-mix(in srgb, var(--fg) 6%, transparent);
+	color: var(--fg);
+}
+
+.step-link:disabled {
+	cursor: default;
+	color: var(--fg-disabled);
+}
+
+.step-link.current {
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	color: var(--fg);
+}
+
+.step-link.done .step-index {
+	background: color-mix(in srgb, var(--ok) 26%, transparent);
+	color: var(--ok);
+}
+
+.step-index {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	flex: none;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--fg) 10%, transparent);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.step-link.current .step-index {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+
+.step-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.rail-foot {
+	margin-top: auto;
+}
+
+.language {
+	width: 100%;
+	padding: 6px 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--comment);
+	cursor: pointer;
+	transition: color var(--speed), border-color var(--speed);
+}
+
+.language:hover {
+	color: var(--fg);
+	border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+/* ------------------------------------------------------------- content */
+
+/*
+ * Three bands: the steps scroll, the footer does not.
+ *
+ * The footer used to be `sticky` inside the scrolling column, which is a promise it cannot keep
+ * for tall content: a step that grows past the window slides under it. Splitting the column in
+ * two — a scroll area and a fixed footer — is the difference between "usually works" and "cannot
+ * happen".
+ */
+.content {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+	padding: 0;
+}
+
+.steps-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 32px 44px 8px;
+	/*
+	 * `both-edges` matters more than it looks: with the gutter reserved on the right only, every
+	 * centred block sat 15 px off centre. Reserving it on both edges keeps the column symmetrical
+	 * whether or not the step scrolls.
+	 */
+	scrollbar-gutter: stable both-edges;
+}
+
+.notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0 0 18px;
+	padding: 10px 12px 10px 14px;
+	border-radius: var(--radius);
+	border: 1px solid color-mix(in srgb, var(--info) 45%, var(--line));
+	background: color-mix(in srgb, var(--info) 12%, transparent);
+	font-size: 12.5px;
+}
+
+/* A banner you can close, and one that leaves on its own: an alert that follows somebody from
+ * screen to screen is not an alert any more, it is furniture. */
+.notice-text {
+	flex: 1;
+}
+
+.notice-close {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: inherit;
+	opacity: 0.7;
+	cursor: pointer;
+	line-height: 1;
+}
+
+.notice-close:hover {
+	opacity: 1;
+	background: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+
+.notice.error {
+	border-color: color-mix(in srgb, #f87171 55%, var(--line));
+	background: color-mix(in srgb, #f87171 16%, transparent);
+}
+
+.step {
+	display: none;
+	flex-direction: column;
+	gap: 14px;
+	max-width: 780px;
+	padding-bottom: 24px;
+	animation: enter var(--speed) ease-out;
+}
+
+.step.active {
+	display: flex;
+}
+
+@keyframes enter {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.step {
+		animation: none;
+	}
+}
+
+h1 {
+	margin: 0;
+	font-size: 26px;
+	letter-spacing: -0.2px;
+}
+
+h2 {
+	margin: 0;
+	font-size: 19px;
+	letter-spacing: -0.1px;
+}
+
+.lead {
+	margin: 0;
+	max-width: 62ch;
+	color: var(--comment);
+}
+
+.hint {
+	margin: 0;
+	font-size: 12px;
+	color: var(--comment);
+}
+
+.hint.error {
+	color: #f87171;
+}
+
+/* ------------------------------------------------------------- welcome */
+
+.welcome {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 14px;
+	padding-top: 28px;
+}
+
+.welcome-mark {
+	width: 72px;
+	height: 72px;
+	filter: drop-shadow(0 6px 22px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+.welcome-facts {
+	display: flex;
+	gap: 10px;
+	margin-top: 12px;
+	flex-wrap: wrap;
+}
+
+.fact {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 132px;
+	padding: 10px 14px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+}
+
+.fact-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	color: var(--comment);
+}
+
+.fact-value {
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- cards */
+
+.cards {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--gap);
+}
+
+.card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 16px 18px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed), transform var(--speed);
+}
+
+.card:hover:enabled {
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+	transform: translateY(-1px);
+}
+
+.card.chosen {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.card.muted {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.card-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.card-title {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.card-why {
+	margin: 0;
+	color: var(--comment);
+}
+
+.card-detail {
+	margin: 0;
+	font-size: 12px;
+	color: var(--comment);
+}
+
+.badge {
+	padding: 1px 7px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	font-size: 10.5px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--comment);
+}
+
+.badge.ok {
+	border-color: color-mix(in srgb, var(--ok) 60%, var(--line));
+	color: var(--ok);
+}
+
+/* -------------------------------------------------------------- panels */
+
+.panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 18px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+}
+
+.panels {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gap);
+}
+
+.panel-head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.panel-title {
+	font-size: 13.5px;
+	font-weight: 600;
+}
+
+.panel-hint {
+	font-size: 12px;
+	color: var(--comment);
+}
+
+.panel-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.checks {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px 18px;
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 0;
+	cursor: pointer;
+}
+
+.check input {
+	width: 15px;
+	height: 15px;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+.check-label {
+	flex: 1;
+}
+
+.check-count {
+	font-size: 11.5px;
+	color: var(--comment);
+	font-variant-numeric: tabular-nums;
+}
+
+.credentials {
+	padding-top: 8px;
+	border-top: 1px dashed var(--line);
+}
+
+.report {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+
+.report-row {
+	display: grid;
+	grid-template-columns: 120px 120px 1fr;
+	gap: 10px;
+	font-size: 12px;
+	padding: 3px 0;
+}
+
+.report-item {
+	color: var(--fg);
+}
+
+.report-status {
+	text-transform: uppercase;
+	font-size: 10.5px;
+	letter-spacing: 0.5px;
+}
+
+.report-row.copied .report-status {
+	color: var(--ok);
+}
+
+.report-row.overwritten .report-status {
+	color: var(--info);
+}
+
+.report-row.absent .report-status,
+.report-row.declined .report-status {
+	color: var(--comment);
+}
+
+.report-row.failed .report-status {
+	color: #f87171;
+}
+
+.report-why {
+	color: var(--comment);
+}
+
+
+/* -------------------------------------------------- fields, inputs, presets */
+
+/*
+ * These were lost with the old vertical route cards (the block was deleted as one piece). The
+ * symptom was unmistakable once measured: the preset pills painted `rgb(240,240,240)` and the key
+ * field `rgb(255,255,255)` — the browser's own colours, because no rule was reaching them any
+ * more. Every control below sets its own background and colour instead of trusting an ancestor.
+ */
+
+.fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px 14px;
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.field-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--comment);
+}
+
+input[type='text'],
+input[type='password'],
+input[type='search'],
+select {
+	padding: 7px 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--bg);
+	color: var(--fg);
+	font: inherit;
+	transition: border-color var(--speed);
+}
+
+input::placeholder {
+	color: var(--fg-disabled);
+}
+
+input:focus,
+select:focus {
+	border-color: var(--accent);
+	outline: none;
+}
+
+.presets {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.preset {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px 6px 6px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: var(--bg);
+	color: var(--fg);
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed);
+}
+
+.preset:hover {
+	border-color: var(--accent);
+}
+
+.preset.chosen {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.preset-mark {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--fg) 12%, transparent);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+	color: var(--fg);
+}
+
+/* The model step is a tab bar: no vertical route cards. */
+
+/* -------------------------------------------------------------- themes */
+
+.theme-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+	gap: var(--gap);
+}
+
+.theme-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+	cursor: pointer;
+	transition: border-color var(--speed), transform var(--speed);
+}
+
+.theme-card:hover {
+	transform: translateY(-1px);
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.theme-card.chosen {
+	border-color: var(--accent);
+}
+
+.theme-preview {
+	padding: 10px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	font: 10.5px/1.55 'Cascadia Code', 'Consolas', monospace;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.theme-name {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 12px;
+	padding: 0 2px 2px;
+}
+
+/* -------------------------------------------------------------- extras */
+
+.switch {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 8px 0;
+	cursor: pointer;
+}
+
+.switch + .switch {
+	border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.switch-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.switch-why {
+	font-size: 12px;
+	color: var(--comment);
+}
+
+.switch input {
+	appearance: none;
+	width: 38px;
+	height: 20px;
+	flex: none;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--fg) 18%, transparent);
+	position: relative;
+	cursor: pointer;
+	transition: background var(--speed);
+}
+
+.switch input::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--fg);
+	transition: transform var(--speed);
+}
+
+.switch input:checked {
+	background: var(--accent);
+}
+
+.switch input:checked::after {
+	transform: translateX(18px);
+	background: var(--accent-ink);
+}
+
+.search {
+	display: flex;
+	gap: 8px;
+}
+
+.search input {
+	flex: 1;
+}
+
+.results {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.result {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	grid-template-areas: 'name action' 'why action';
+	gap: 2px 12px;
+	align-items: center;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.result-name {
+	grid-area: name;
+	font-size: 12.5px;
+}
+
+.result-why {
+	grid-area: why;
+	font-size: 11.5px;
+	color: var(--comment);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.result button {
+	grid-area: action;
+}
+
+.chosen-list {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+
+.chosen-title {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--comment);
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 4px 2px 10px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	font-size: 11.5px;
+}
+
+.chip-x {
+	width: 18px;
+	height: 18px;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--comment);
+	cursor: pointer;
+	line-height: 1;
+}
+
+.chip-x:hover {
+	background: color-mix(in srgb, var(--fg) 12%, transparent);
+	color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- done */
+
+.summary {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+.summary-row {
+	display: grid;
+	grid-template-columns: 110px 1fr;
+	gap: 14px;
+	padding: 9px 14px;
+	background: var(--panel);
+}
+
+.summary-row:nth-child(even) {
+	background: var(--panel);
+}
+
+.summary-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: var(--comment);
+	align-self: center;
+}
+
+.summary-value {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.start-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.clone {
+	display: flex;
+	gap: 8px;
+}
+
+.clone input {
+	flex: 1;
+}
+
+.pro {
+	margin: 4px 0 0;
+	font-size: 11.5px;
+	color: var(--comment);
+}
+
+/* -------------------------------------------------------------- footer */
+
+.footer {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex: none;
+	padding: 14px 44px 18px;
+	border-top: 1px solid var(--line);
+	background: var(--bg);
+}
+
+.footer-left {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+/* In the footer, the language is a quiet text button, not a box in the rail */
+.footer-left .language {
+	width: auto;
+	padding: 4px 0;
+	border: 0;
+	background: transparent;
+	color: var(--comment);
+	font-size: 12px;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--comment) 40%, transparent);
+	text-underline-offset: 3px;
+}
+
+.footer-left .language:hover {
+	color: var(--fg);
+}
+
+.footer-right {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+button.primary {
+	padding: 8px 18px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--accent);
+	color: var(--accent-ink);
+	font-weight: 600;
+	cursor: pointer;
+	transition: background var(--speed), opacity var(--speed);
+}
+
+button.primary:hover:enabled {
+	background: var(--accent-hover);
+}
+
+button.primary:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+button.secondary {
+	padding: 7px 14px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--fg);
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed);
+}
+
+button.secondary:hover:enabled {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+button.secondary:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.link {
+	padding: 6px 0;
+	border: 0;
+	background: transparent;
+	color: var(--comment);
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--comment) 45%, transparent);
+	text-underline-offset: 3px;
+}
+
+.link:hover {
+	color: var(--fg);
+}
+
+.skip[hidden] {
+	display: none;
+}
+
+.busy {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--comment);
+}
+
+.busy[hidden] {
+	display: none;
+}
+
+.spinner {
+	width: 12px;
+	height: 12px;
+	border: 2px solid color-mix(in srgb, var(--fg) 20%, transparent);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ------------------------------------------------------- test of connection */
+
+.probe {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 12.5px;
+	padding: 7px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.probe.ok {
+	border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+	color: var(--ok);
+}
+
+.probe.bad {
+	border-color: color-mix(in srgb, #f87171 55%, var(--line));
+	color: #f87171;
+}
+
+.dot {
+	width: 9px;
+	height: 9px;
+	flex: none;
+	border-radius: 50%;
+	background: var(--comment);
+}
+
+.dot.ok {
+	background: var(--ok);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.dot.bad {
+	background: #f87171;
+	box-shadow: 0 0 0 3px color-mix(in srgb, #f87171 22%, transparent);
+}
+
+/* ------------------------------------------------------------- small parts */
+
+.link.small {
+	font-size: 11.5px;
+	text-decoration: none;
+	margin-left: auto;
+}
+
+.link.small::after {
+	content: ' ↗';
+}
+
+.picks {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding-top: 4px;
+}
+
+.pick {
+	padding: 4px 10px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--fg);
+	font-size: 11.5px;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed);
+}
+
+.pick:hover {
+	border-color: var(--accent);
+}
+
+.pick.chosen {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.check-why {
+	display: block;
+	font-size: 11px;
+	color: var(--comment);
+	line-height: 1.35;
+}
+
+.hint.lock {
+	display: flex;
+	gap: 7px;
+	align-items: flex-start;
+	padding-top: 6px;
+	line-height: 1.45;
+}
+
+.lock-mark {
+	flex: none;
+	font-size: 11px;
+	opacity: 0.8;
+}
+
+/* ------------------------------------------------------- context mode picker */
+
+.modes {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 8px;
+	padding-top: 6px;
+}
+
+.mode {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 10px 12px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: var(--panel);
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed), opacity var(--speed);
+}
+
+.mode:hover:enabled {
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.mode.chosen {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.mode:disabled {
+	opacity: 0.45;
+	cursor: default;
+	color: var(--fg-disabled);
+}
+
+.mode strong {
+	font-size: 12px;
+}
+
+.mode-why {
+	font-size: 11px;
+	color: var(--comment);
+	line-height: 1.35;
+}
+
+/* ------------------------------------------------------------ starter prompts */
+
+.starters {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.starter {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 9px 12px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: var(--panel);
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed);
+}
+
+.starter:hover {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.starter.done {
+	border-color: color-mix(in srgb, var(--ok) 60%, var(--line));
+}
+
+.starter-mark {
+	color: var(--accent);
+	font-size: 11px;
+}
+
+.starters-note.ok {
+	color: var(--ok);
+}
+
+.starters-note.error {
+	color: #f87171;
+}
+
+/* ---------------------------------------------------- welcome, as shortcuts */
+
+/* The facts are buttons now: they were a read-only list of things "not set yet". */
+button.fact {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	padding: 14px 16px;
+	text-align: center;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed), transform var(--speed);
+}
+
+button.fact:hover {
+	border-color: var(--accent);
+	background: var(--panel);
+	transform: translateY(-1px);
+}
+
+button.fact:hover .fact-value {
+	color: var(--fg);
+}
+
+/* ------------------------------------------------------------- where to start */
+
+.start-cards {
+	grid-template-columns: 1fr 1fr 1fr;
+}
+
+.start-card {
+	padding: 14px 16px;
+}
+
+.start-mark {
+	font-size: 16px;
+	line-height: 1;
+}
+
+@media (max-width: 980px) {
+	.start-cards {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* ------------------------------------------------------- subscription sign-in */
+
+.providers {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.provider-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	background: var(--panel);
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed);
+}
+
+.provider-row:hover:enabled {
+	border-color: var(--accent);
+}
+
+.provider-row:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.provider-name {
+	font-size: 12.5px;
+}
+
+.provider-go {
+	font-size: 11.5px;
+	color: var(--accent);
+}
+
+.provider-go.ok {
+	color: var(--ok);
+	font-weight: 600;
+}
+
+.signin {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
+
+.signin-state {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--comment);
+}
+
+.dot.pending {
+	background: var(--info);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 22%, transparent);
+	animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.signin-code {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin: 0;
+}
+
+.signin-code code {
+	padding: 4px 10px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--bg);
+	font: 13px/1.4 'Cascadia Code', 'Consolas', monospace;
+	letter-spacing: 1px;
+}
+
+/* ------------------------------------------------------------------- tabs */
+
+.tabs {
+	display: flex;
+	gap: 6px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--line);
+	flex-wrap: wrap;
+}
+
+.tab {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 14px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--comment);
+	font-size: 12.5px;
+	cursor: pointer;
+	transition: color var(--speed), background var(--speed), border-color var(--speed);
+}
+
+.tab:hover {
+	color: var(--fg);
+	background: var(--panel);
+}
+
+.tab.chosen {
+	color: var(--fg);
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tab-mark {
+	font-size: 14px;
+	line-height: 1;
+}
+
+.tab-count {
+	padding: 0 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--fg) 14%, transparent);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+/* the one line that says what is already connected, whichever tab you are on */
+.model-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line));
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--ok) 10%, transparent);
+	font-size: 12.5px;
+}
+
+/* subscriptions: two columns, so nine providers do not become a wall */
+.providers {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 10px;
+}
+
+@media (max-width: 900px) {
+	.providers {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* advanced options in the API key form */
+.advanced-toggle {
+	align-self: flex-start;
+	font-size: 11.5px;
+}
+
+.provider-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.provider-note {
+	font-size: 11px;
+	color: var(--comment);
+}
+
+/* --------------------------------------------------- context mode radio cards */
+
+.mode-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.mode-mark {
+	font-size: 14px;
+	line-height: 1;
+}
+
+.mode-check {
+	margin-left: auto;
+	color: var(--accent);
+	font-weight: 700;
+}
+
+/* The chosen card: cobalt border and a lifted blue surface, per the palette. */
+.mode.chosen {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+}
+
+.mode.chosen strong {
+	color: var(--fg);
+}
+
+.modes {
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 760px) {
+	.modes {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+/* -------------------------------------------- welcome: quick cards and centring */
+
+/*
+ * The welcome is the one screen with no work in it, so it is centred instead of sitting in the
+ * left third of a wide window.
+ *
+ * **One width for everything.** The mark, the sentence, the three cards and the account card all
+ * live inside one column of 720 px: the three cards share a grid of equal thirds that spans that
+ * whole width, and the account card takes the same width. Before this, each card sized itself to
+ * its own text (132 px minimum) and the account card capped at 520 px, so three different widths
+ * met in a column that looked, correctly, off-centre.
+ */
+.step[data-step='welcome'] {
+	min-height: 100%;
+	justify-content: center;
+}
+
+.step[data-step='welcome'] .welcome {
+	align-items: center;
+	text-align: center;
+	margin: 0 auto;
+	width: 100%;
+	max-width: 720px;
+}
+
+.step[data-step='welcome'] .lead {
+	margin: 0 auto;
+}
+
+.welcome-facts {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--gap);
+	width: 100%;
+}
+
+@media (max-width: 760px) {
+	.welcome-facts {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* A quick card: icon and label on one line, the value underneath in bright white. */
+.fact-head {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.fact-mark {
+	font-size: 13px;
+	line-height: 1;
+}
+
+.fact-value {
+	max-width: 100%;
+	color: var(--fg);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+button.fact:hover .fact-value {
+	color: #FFFFFF;
+}
+
+/* The account card: narrow, under the cards, and never wider than the block above it. */
+.account-card {
+	width: 100%;
+	text-align: center;
+}
+
+.account-card .panel-head {
+	justify-content: center;
+}
+
+.account-card .panel-actions {
+	justify-content: center;
+}
+
+.account-line {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--comment);
+}
+
+.badge.optional {
+	border-color: color-mix(in srgb, var(--info) 55%, var(--line));
+	color: var(--info);
+	background: color-mix(in srgb, var(--info) 12%, transparent);
+}
+
+.account-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.account-mark {
+	font-size: 13px;
+	line-height: 1;
+}
+
+/* The queued sign-in reads as done, not as another grey note. */
+.account-line.ok {
+	color: var(--ok);
+}
+
+/* The second welcome line: quieter than the first, so the pair reads as one thought. */
+.lead-sub {
+	margin: 0 auto;
+	max-width: 60ch;
+	color: var(--comment);
+	font-size: 13px;
+}
+
+/* The credentials block inside the import card: a card of its own, with its badge. */
+.credentials-block {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--bg);
+}
+
+/* The account card's live states: waiting in the browser, signed in, failed. */
+.account-line.waiting {
+	color: var(--info);
+}
+
+.account-line.error {
+	color: #F87171;
+}
+
+/* The account card: everything on one centre line, and a profile once signed in. */
+.account-head {
+	justify-content: center;
+}
+
+.account-subtitle {
+	text-align: center;
+}
+
+.account-hint {
+	text-align: center;
+}
+
+.account-actions {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.account-sep {
+	color: var(--fg-disabled);
+}
+
+/* The signed-in profile: picture (or initials) beside the name. */
+.account-profile {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: 4px 0 2px;
+}
+
+.account-avatar {
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	flex: none;
+	border-radius: 50%;
+	border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+	background: color-mix(in srgb, var(--accent) 18%, transparent);
+	color: var(--fg);
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	object-fit: cover;
+}
+
+.account-identity {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+}
+
+.account-name {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fg);
+}
+
+.account-sub {
+	font-size: 11.5px;
+	color: var(--ok);
+}

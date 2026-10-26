@@ -16,16 +16,16 @@ Conventions: **verified** means a repository file, an upstream file, or a read-o
 
 PiCode is **an editor compiled from its own source tree**:
 
-- `picode-source/` is the source, versioned in this repository — the VSCodium changes,
+- `the tree` is the source, versioned in this repository — the VSCodium changes,
   PiCode's own work and the product identity already baked in. Nothing is fetched or patched
   on a build.
-- `distribution/product-delta.json` is the product **as data**, applied to
-  `picode-source/product.json` **before** packing, so the compiled editor and the released one
-  cannot disagree.
-- `dev/build.sh` is the five-phase build: prepare (source check, identity, dependencies),
+- `product.json`, at the tree root, is the product **as data**: the single home of
+  the identity and of both version numbers, committed, so the compiled editor and the
+  released one cannot disagree.
+- `build/build.sh` is the five-phase build: prepare (source check, identity, dependencies),
   connector, compile, pack, stage.
 
-Because the product is applied before compiling, keys can be **deleted**, not only overridden,
+Because the product is part of the tree, keys can be **deleted**, not only overridden,
 and the `checksums` map is computed over the finished product — the limit that made a minified
 bundle untouchable on the old binary path no longer exists here. A behaviour change is
 TypeScript in the tree, compiled.
@@ -36,14 +36,13 @@ TypeScript in the tree, compiled.
 
 | # | Layer | Artifact | Applied by |
 | --- | --- | --- | --- |
-| 1 | Editor | `picode-source/`, compiled by `dev/build.sh` | the build |
-| 2 | Product delta | `distribution/product-delta.json` → `picode-source/product.json` | `distribution/apply-product-delta.mjs`, phase 1 |
-| 3 | Portable profile | `data/{user-data,extensions,tmp}` | `dev/stage-distribution.sh` |
-| 4 | Defaults | `distribution/settings.json` → `data/user-data/User/settings.json` | `dev/stage-distribution.sh`, only when absent |
-| 5 | Agent runtime | pi, pinned in `distribution/runtime.json` | `dev/pi-runtime.sh` |
-| 6 | Durable agent | `picode-source/durable` → `resources/durable` | `dev/durable-runtime.sh` |
+| 1 | Editor | `the tree`, compiled by `build/build.sh` | the build |
+| 2 | Identity | `product.json` | in the tree; verified by `build/build.sh`, phase 1 |
+| 3 | Portable profile | `data/{user-data,extensions,tmp}` | `build/stage-distribution.sh` |
+| 4 | Defaults | `build/distribution/settings.json` → `data/user-data/User/settings.json` | `build/stage-distribution.sh`, only when absent |
+| 5 | Agent runtime | pi, pinned in `build/distribution/runtime.json` | `build/pi-runtime.sh` |
 
-Staging is `dev/stage-distribution.sh [pack-dir]`, default `./PiCode-Win32-x64`. It is
+Staging is `build/stage-distribution.sh [pack-dir]`, default `./PiCode-Win32-x64`. It is
 idempotent — a second run reports every step as already current. The retired
 `apply-picode.ps1` did the same against an owned VSCodium archive; it was removed on
 2026-09-29 and remains in git history.
@@ -51,35 +50,32 @@ idempotent — a second run reports every step as already current. The retired
 The extension-era agent panel is gone: the `extensions/` folder was deleted on 2026-09-27 by
 the owner's decision ("pi lives in the core"), and the panel returns as core code.
 
-## 🎛️ 3. The product delta
+## 🎛️ 3. The identity, as data
 
-The delta is **data**, and the mechanism is a script. Four sections: `set`, `unset`,
-`unsetNested`, `unsetArrayEntries`. It is applied by a Node program because Windows
-PowerShell 5.1 caps `ConvertTo-Json` depth at 2 and escapes non-ASCII, which would corrupt a
-77-key product carrying an 8 KB nested object.
+`product.json` at the tree root is the product **as data**: one committed file, edited by hand
+when something about the identity changes. It is the single home of the product identity and
+of **both version numbers** — the declared editor version (`version`, the one extensions
+validate against) and PiCode's own (`picodeVersion`, what the updater shows). See ADR-016 for
+why the declared version may lead the tree's upstream base. The build never rewrites it: it
+seals the channel into a copy for the pack and puts it back.
 
-It is the single home of the product identity and of **both version numbers** — the declared
-editor version (`set.version`, the one extensions validate against) and PiCode's own
-(`set.picodeVersion`, what the updater shows). See ADR-016 for why the declared version may
-lead the tree's upstream base.
-
-**Two findings shaped it, and both came from running the build rather than reading the
-diff.** They are the first thing to read before changing the delta:
+**Two findings shaped what it contains, and both came from running the build rather than
+reading the file.** They are the first thing to read before editing it:
 
 1. **A key that is iterated must be empty, not absent.** The extension service calls
-   `.some()` on `builtInExtensionsEnabledWithAutoUpdates` without a guard; deleting the
-   key crashed `--list-extensions` with `is not iterable`.
+   `.some()` on `builtInExtensionsEnabledWithAutoUpdates` without a guard; removing the
+   key crashed `--list-extensions` with `is not iterable`. The file carries it as `[]`.
 2. **A nested object that is dereferenced must be pruned, not deleted.**
-   `defaultChatAgent` is read without a guard in a startup path; deleting it produced a
+   `defaultChatAgent` is read without a guard in a startup path; removing it produced a
    grey, blocked window with `Cannot read properties of undefined (reading
-   'chatExtensionId')`. Its fourteen endpoint keys are removed individually, which
+   'chatExtensionId')`. Its fourteen endpoint keys are absent individually, which
    removes every `api.github.com` and `aka.ms` endpoint while keeping the shape.
 
 Both states are valid JSON, which is why neither is visible in review.
 
 **Residual, documented rather than hidden.** The bundle carries a hardcoded `code-oss`
-default product that still declares `defaultChatAgent: GitHub.copilot`; deleting the
-product key cannot remove it, because it lives in minified core. `chat.disableAIFeatures` is
+default product that still declares `defaultChatAgent: GitHub.copilot`; leaving the
+key undeclared cannot remove it, because it lives in minified core. `chat.disableAIFeatures` is
 the effective switch for the surface.
 
 ## 🗂️ 4. The portable profile
@@ -92,13 +88,13 @@ Two paths are easy to confuse, so both are stated: the **user data** directory i
 extensions live in `<userHome>/<dataFolderName>/extensions`.
 
 The profile is disposable by design: deleting `data/` yields a clean PiCode. It is also the
-unit the paid cloud sync is meant to move as one block (see `cloud/sync-api/`), never a
+unit the paid cloud sync is meant to move as one block (see `host/cloud/sync-api/`), never a
 per-setting copy.
 
 ## 🤖 5. The agent runtime
 
-pi is **pinned in one place**, `distribution/runtime.json` (pi **1.3.0** today), and
-`dev/pi-runtime.sh` installs it into the pack during the build, so a freshly built editor is
+pi is **pinned in one place**, `build/distribution/runtime.json` (pi **1.4.0** today), and
+`build/pi-runtime.sh` installs it into the pack during the build, so a freshly built editor is
 born working and nobody has to install or configure it.
 
 It is **used as an in-process SDK** by the connector (ADR-014: `createAgentSessionServices` /
@@ -106,16 +102,11 @@ It is **used as an in-process SDK** by the connector (ADR-014: `createAgentSessi
 active runtime covers what the SDK does not expose — package management. The pin is not a
 lock-in: `picode.pi.runtime` lets a user choose a different pi.
 
-`dev/durable-runtime.sh` stages the durable agent PiCode's own source carries
-(`picode-source/durable`) and the chat's bridge into `resources/durable`; its own
-dependencies travel with it (~116 MB) and nothing else does — no proofs, no `.data/`, no
-credentials. The proof log is `picode-source/durable/README.md`.
-
 ## ⬆️ 6. Updating VS Code
 
-A newer VS Code is a **merge against `picode-source/`**, not a download: see
+A newer VS Code is a **merge against `the tree`**, not a download: see
 [`howto-build.md`](howto-build.md). There is no archive to extract and no script to re-run —
-the tree is the source, and the identity is applied by the build.
+the tree is the source, and the identity is committed beside it.
 
 The pin `upstream/stable.json` records where the tree descends from (VS Code 1.135.0) and is
 reviewed **by hand** — there is no automated pin watcher ([`CI.md`](CI.md) records that).
@@ -123,13 +114,13 @@ reviewed **by hand** — there is no automated pin watcher ([`CI.md`](CI.md) rec
 **Read the machine type of a reference archive before building on it.** The first archive here
 was the Windows **ARM64** build on an x64 machine: every binary was `0xaa64` and the editor
 failed at the OS loader before any PiCode code ran. Usefully, the x64 and ARM64 `product.json`
-are byte-identical, so an architecture swap does not change the delta.
+are byte-identical, so an architecture swap does not change `product.json`.
 
 ## 📡 7. The update feed
 
 The editor's updater reads a **static JSON document** per platform from this repository's
-channel branch, not the GitHub Releases API. `dev/build.sh` seals the channel into
-`product.json` (`quality`) and rewrites the `updateUrl` branch; `dev/update-feed.mjs` writes
+channel branch, not the GitHub Releases API. `build/build.sh` seals the channel into
+`product.json` (`quality`) and rewrites the `updateUrl` branch; `build/release.mjs update-feed` writes
 the document after a release. The layout, the URL template, the two Windows feeds (portable
 zip vs installed setup) and the version-numbering rules live in
 [`updates/README.md`](../updates/README.md); the channel policy is ADR-015.
@@ -145,15 +136,15 @@ Machine-checkable, in the order that catches the most:
 
 | What | How |
 | --- | --- |
-| Source and identity | `./dev/build.sh -o` — seconds, nothing installed or compiled |
+| Source and identity | `build/build.sh -o` — seconds, nothing installed or compiled |
 | Branding | `bin/picode.cmd --help` prints `PiCode — Agentic Code Editor <version>` and a usage line reading `picode.exe` |
 | Icons | the window and task bar show the PiCode mark, and the left bar shows `media/picode.svg` |
 | Portable profile | the newest log directory is under `data/user-data/logs/`, and `%APPDATA%` is untouched |
 | Extension activated | `_doActivateExtension picode.picode` in `window1/exthost/exthost.log` |
 | Runtime in use | the PiCode output channel prints `[pi] starting from <mode> runtime: <path>` |
 | No renderer errors | no `Uncaught` or `TypeError` with `ELECTRON_ENABLE_LOGGING=1` |
-| Connector logic | `node --test picode-source/extensions/picode/test/*.test.ts` — the connector's hermetic suites, no editor needed |
-| MCP entries pi accepts | `node dev/check-mcp-entries.mjs` — through pi's own validator |
+| Connector logic | `node --test extensions/picode/test/*.test.ts` — the connector's hermetic suites, no editor needed |
+| MCP entries pi accepts | `node build/checks.mjs check-mcp` — through pi's own validator |
 | Update feed | the release workflow fetches it from `raw.githubusercontent.com` until it is live |
 | Protocol and CLI | nothing automated: a login or an MCP sign-in is exercised by hand |
 
@@ -173,7 +164,7 @@ One branch per channel; the feed lives on the channel's own branch (ADR-015):
 
 Each channel installs **beside** the others: its own folder, its own profile and its own
 AppId, so removing one leaves the rest untouched. The per-channel release notes are in
-[`dev/release-notes/`](../dev/release-notes/).
+[`build/release-notes/`](../build/release-notes/).
 
 ## 🏷️ 10. What is PiCode's, and what is not
 
@@ -198,8 +189,8 @@ published ([`CONTRIBUTING.md`](../CONTRIBUTING.md)).
 The Windows icon is decided **at pack time** — `build/lib/electron.ts` declares
 `winIcon: 'resources/win32/code.ico'` and the Windows pack applies it with `rcedit`, so
 replacing a copy afterwards changes nothing. The branded file is committed in the tree
-(`picode-source/resources/win32/`); change it there and pack again. Verified by parsing the PE
-resource directory: the seven frames of `distribution/picode.ico` (16–256) are present in
+(`resources/win32/`); change it there and pack again. Verified by parsing the PE
+resource directory: the seven frames of `build/distribution/picode.ico` (16–256) are present in
 `PiCode.exe` byte for byte. Measure it that way: `System.Drawing.Icon` cannot read
 `picode.ico` (its frames are PNG-compressed) and `ExtractAssociatedIcon` returns a rescaled
 bitmap, so both compare "different" against a correct icon.
@@ -218,7 +209,7 @@ bitmap, so both compare "different" against a correct icon.
 
 - Patching a minified core: changes are made in the source tree and compiled.
 - A custom language server for pi.
-- Shipping weight without a user-facing reason: a folder under `picode-source/extensions/`
+- Shipping weight without a user-facing reason: a folder under `extensions/`
   needs a justification to exist (the lightweight cut is doctrine).
 - Reimplementing what pi already brings: providers, OAuth, skills and the orchestrator are
   pi's, and PiCode teaches them to the editor.

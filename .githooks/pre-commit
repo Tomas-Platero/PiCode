@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Pre-commit hook: documentation and MCP checks.
+set -e
+node build/docs.mjs check
+node build/checks.mjs check-mcp

@@ -16,8 +16,8 @@ body:
     attributes:
       label: Where did it fail
       options:
-        - Local `./dev/build.sh`
-        - The `builder/` app
+        - Local `build/build.sh`
+        - The `build/build-window.cmd` window
         - GitHub Actions — CI workflow
         - GitHub Actions — Release workflow
         - A downloaded release artifact behaves wrong
@@ -68,12 +68,12 @@ body:
       label: Things already ruled out
       options:
         - label: >-
-            `./dev/build.sh -o` (check mode, no compile)
+            `build/build.sh -o` (check mode, no compile)
             reproduces it
         - label: >-
             The dependencies are right — `node --version` matches
             `.nvmrc`, Python, Rust and the Spectre libraries are present
         - label: >-
-            The working tree is clean and `picode-source/` has not
+            The working tree is clean and `the tree` has not
             been edited by hand
         - label: I checked the build section of the wiki

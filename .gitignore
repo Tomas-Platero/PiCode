@@ -27,6 +27,10 @@
 # product and is versioned.
 /.vscode
 /data/
+# What `npm run dev` links into the tree from the pack: the built pi runtime. It is an output,
+# It belongs to a build, and linking is how the editor finds it
+# where a source tree expects it (`<root>/resources/...`).
+/resources/pi-runtime
 # Electron / Chromium runtime artifacts at the distribution root.
 # Matched by extension, not by name: Step 5 renames the executable and its Start Menu
 # manifest, and an ignore rule written with the VSCodium names left 222 MB exposed after
@@ -55,10 +59,13 @@
 /codium
 
 # Runtime directories owned by the VSCodium archive.
+# NOT `/resources/`: since the editor source became the repository root (2026-10-19),
+# `resources/` is the editor's own tree — the Windows icon the packer reads, the
+# linux/darwin launchers, the server shims — plus our brand art under
+# `resources/picode/`. It is source and it is versioned.
 /bin/
 /locales/
 /policies/
-/resources/
 
 # Node tooling: the extension has its own nested ignore file, and this covers a stray
 # `npm install` at the distribution root.
@@ -71,14 +78,12 @@ Thumbs.db
 desktop.ini
 
 # Source-build pipeline (VSCodium-era). The build outputs live beside the source and are
-# never versioned. Since 2026-09-27 the source itself IS versioned: `picode-source/` is the
-# product's own tree, committed in this repository. Its build artifacts (node_modules, out*/,
-# .build/) stay out because the .gitignore tracked INSIDE that folder is what governs them.
-# `/assets/` is deliberately NOT here: nothing in the pipeline writes it, and the
-# repository's own assets (the README banner) live in that directory.
+# never versioned. Since 2026-09-27 the source itself IS versioned: the editor's tree is the
+# repository root, committed here. Its build artifacts (node_modules, out*/,
+# .build/) stay out because the .gitignore tracked INSIDE the tree is what governs them.
 # The pack output, by its real names. NOT `/PiCode-*/`: on a case-insensitive filesystem that
-# glob also matches `picode-source/` — the source folder — and would silently exclude the whole
-# tree from the repository. It bit exactly there on 2026-09-27.
+# glob also matches a folder named like the source root and would silently exclude the whole
+# tree. It bit exactly there on 2026-09-27.
 /PiCode-Win32-*/
 /PiCode-linux-*/
 /PiCode-darwin*/
@@ -112,7 +117,6 @@ desktop.ini
 /builder/dist*/
 /builder/PiCodeBuilder.zip
 /builder/obj*/
-/.vscode
 
 # Local environment and credential files (defense in depth; cloud/sync-api has its own).
 # None of them may ever reach the repository, not even by accident.
@@ -134,3 +138,60 @@ repomix-output.txt
 repomix-output.*
 repomix*.xml
 repomix*.md
+
+# --- from former picode-source/.gitignore ---
+.cache
+npm-debug.log
+node_modules/
+.tmp/
+.build/
+/extensionsCG/
+extensions/**/dist/
+src/vs/base/browser/ui/codicons/codicon/codicon.ttf
+/out*/
+/extensions/**/out/
+build/node_modules
+build/darwin/.dmgbuild
+coverage/
+!/src/vs/platform/agentHost/test/node/e2e/coverage/
+test_data/
+test-results/
+test-results.xml
+vscode.lsif
+vscode.db
+/.profile-oss
+/cli/target
+/cli/openssl
+product.overrides.json
+*.snap.actual
+.vscode-test
+.chat-simulation-data
+vscode-telemetry-docs/
+test-output.json
+test/componentFixtures/.screenshots/*
+!test/componentFixtures/.screenshots/baseline/
+dist
+.playwright-cli
+.playwright-mcp
+.claude/
+.agents/agents/*.local.md
+.github/agents/*.local.md
+.agents/agents/*.local.agent.md
+.github/agents/*.local.agent.md
+.agents/hooks/*.local.json
+.github/hooks/*.local.json
+.agents/instructions/*.local.instructions.md
+.github/instructions/*.local.instructions.md
+.agents/prompts/*.local.prompt.md
+.github/prompts/*.local.prompt.md
+.agents/skills/.local/
+.github/skills/.local/
+
+# Throwaway Code OSS dev profiles created by the launch skill
+.v[0-9]*/
+# Local agent validation evidence
+.agent-validation/
+picode-url-handler.cmd
+picode-url-handler.ps1
+# Throwaway scratch work: icons for the executable, dev stdout, one-off scripts
+scratchpad/

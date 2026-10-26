@@ -42,6 +42,16 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 ---
 
+### El texto del editor es funcional, no técnico
+>
+> *"todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario"*
+
+* **Carácter funcional:** Todo texto que aparece en el editor (etiquetas, mensajes, tooltips, notificaciones, filas del panel, botones) se redacta para el usuario: qué hay, qué puedes hacer, qué cambió. Sin nombres de código, rutas, banderas ni detalles de la maquinaria interna.
+* **Una sola voz:** El mismo concepto se dice igual en todas partes; si un dato necesita explicación técnica, esa explicación va a `docs/` o a los ficheros de tareas, no a la pantalla.
+* **Acción = botón:** Si el texto pide hacer algo, se convierte en acción ejecutable (ver «Acciones directas» arriba); no se deja como instrucción de texto.
+
+---
+
 ## 2. Marca e Iconografía
 
 ### Los iconos
@@ -49,7 +59,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 > *"lo de la rosa cambialo por el de picode"* — 2026-10-01
 
 * **Barra de actividad:** Usa **la marca de PiCode** (`extensions/picode/media/picode-status.svg`, el icono del contenedor).
-* **La marca vive en el conector** (`picode-source/extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
+* **Variante para 24 px (2026-10-19):** la barra de actividad usa `media/picode-activity.svg`, derivada de esa misma marca (cabeza, ojos y chevrones; sin la barra horizontal y con trazos más gruesos), porque a 24 px y en máscara la marca completa se leía como una hoja de papel. La marca completa sigue en `picode-status.svg` para el título de la vista de estado, que la pinta a su tamaño.
+* **2026-10-21:** la barra de actividad usa **el mismo dibujo** que el título de la vista de estado (`picode-status.svg`), copiado tal cual a `picode-activity.svg`. El dueño pidió que la extensión y la app lleven el mismo icono; las dos variantes se leían como dos marcas distintas. Si a 24 px la barra horizontal vuelve a parecer una hoja de papel, se retoca entonces, pero partiendo del mismo dibujo.
+* **La marca vive en el conector** (`extensions/picode/media/`) y lleva su **pareja claro/oscuro**: el icono de una fila del árbol se pinta como **imagen** (no como máscara), así que una sola tinta desaparece en uno de los dos temas.
 * **Tratamiento como máscara:** La barra de actividad usa el icono como máscara (solo cuenta la silueta). No incluir fondos rellenos en el lienzo para evitar cuadrados macizos.
 
 > *"El logo que cambiamos en el centro de la pantalla... no uses el png usa el svg"*
@@ -112,12 +124,24 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Requisito de producto:** cuando el HOST conectado es el externo (PATH), los botones de actualizar Pi y Packages deben actuar sobre ese externo, no sobre el interno.
 
 ### pi durable ya no es experimental
+
+> ⚠️ **Sustituido el 2026-10-25** por «Durable sale del producto» (abajo). Se conserva la frase original.
+
 >
 > *"Vamos a dejar de poner como algo experimental a pi durable, quiero que esté ya en nuestro source de picode, no lo quiero a parte en "experimental", tratalo como algo ya que vive en picode."* — 2026-10-09
 
-* **Residencia:** el agente durable vive en el propio árbol del editor (`picode-source/durable`, con su puente de chat en `picode-source/durable-bridge` y su cliente de prueba ACP en `picode-source/durable-acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
+* **Residencia:** el agente durable vive en el propio árbol del editor (`host/durable`, con su puente de chat en `host/durable/bridge/` y su cliente de prueba ACP en `host/durable/acp-client`). La carpeta `experimental/` no vuelve a ser su casa.
 * **Nombre:** en todo lo que ve el dueño es **Durable agent**, a secas. Ninguna UI, ajuste o documento vivo lo presenta como experimental.
 * **Build:** viaja dentro de la instalación (`resources/durable`), como ya hacía; solo cambia el nombre de la carpeta destino.
+
+### Durable sale del producto: Pi + Gentle AI
+>
+> *"Lo primero - Quiero quitar todo durable. ya que impacta con Gentle en ciertas cosas. Este cambio será gordo pero necesario, quiero que sea Pi + Gentle AI (gentle pi y engram)."* — 2026-10-25
+
+* **Fuera durable entero:** el programa, su puente, sus comandos y ajustes, el interruptor del primer arranque, la tarjeta de estado y el paso del build.
+* **Las conversaciones son las de pi:** la lista única del panel son los transcríptos que pi escribe en el perfil, y se continúan en el sitio. Lo que solo guardaba durable no se migra.
+* **Tasks:** muestra los trabajos del chat y los subagentes de gentle-pi (ADR-032), los que siguen y los últimos que acabaron.
+* **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` ya está levantado y los dos entran fijados (ADR-031). El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
 
@@ -180,9 +204,9 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 >
 > *"recuerda añadir tu siempre el texto de la release mejorado y con el changelog"* — 2026-10-16
 
-* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `dev/release-notes.mjs` a partir de los commits del rango y el pipeline lo inserta solo.
+* Toda release lleva, sobre el changelog crudo, **un resumen agrupado por tipo de cambio** (novedades, arreglos, rendimiento, editor, seguridad, resto) con iconos — lo genera `build/release.mjs release-notes` a partir de los commits del rango y el pipeline lo inserta solo.
 * Los commits de feed y housekeeping no aparecen: no le dicen nada a quien lee la página.
-* Siempre conserva: la descripción del canal encima (`dev/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
+* Siempre conserva: la descripción del canal encima (`build/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
 
 ### Idioma del proyecto y del producto
 >
@@ -222,13 +246,13 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 
 * **Toda carpeta nueva lleva su `README.md`:** una frase de qué hace esa carpeta y qué hay
   dentro, escrito al lado del código. Si no lo trae, CI lo avisa y el PR se detiene
-  (`dev/check-docs.mjs`; las excepciones se apuntan en `.docsignore`).
+  (`build/docs.mjs check`; las excepciones se apuntan en `.docsignore`).
 * **El mapa se genera, no se escribe:** `docs/MAPA.md` sale de esos README con
-  `node dev/map-docs.mjs` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
+  `node build/docs.mjs map` y **nunca se edita a mano**. Solo se refleja lo versionado: restos
   locales y salidas de build no entran.
 * **Nivel fichero solo cuando el nombre miente:** si el nombre ya explica el fichero, no se
   documenta; si no, dos líneas de cabecera con el porqué.
-* **La zona upstream no se documenta fichero a fichero:** `picode-source/src`, `cli`, `build`,
+* **La zona upstream no se documenta fichero a fichero:** `src`, `cli`, `build`,
   `scripts`, `resources`, `remote` y las extensiones built-in llevan un solo aviso de que no
   son nuestras (ahí está casi todo el código y detallarlo es trabajo que se pudre).
 * **Dónde mirar primero:** `docs/MAPA.md` (árbol con una frase por carpeta) y, para saber quién
@@ -247,6 +271,62 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **El panel es estado real, no decoración:** no se eliminan las fases ya hechas y cada cambio de fase se refleja en el panel en el mismo turno.
 * **Sin ruido:** trabajos triviales de un solo paso no llevan plan.
 
+## 9. La memoria: pi, durable y engram
+
+> ⚠️ **Sustituido en parte el 2026-10-25:** durable sale del producto (sección 4). Pi y engram siguen como están descritos; lo que aquí se dice de durable es historia.
+
+### Tres papeles, y ninguno repite al otro
+>
+> *"Pi es el agente | Durable las sesiones y el registro | Engram la memoria"*
+>
+> *"La idea es integrar a engram en picode, que funcione con pi y pi durable."*
+
+* **Pi piensa.** Es el único que ejecuta: modelo, herramientas, permisos, pantalla.
+* **Durable recuerda lo que pasó.** Las sesiones, el registro palabra por palabra y el trabajo
+  largo que sigue sin el dueño delante. No piensa y no decide.
+* **Engram recuerda lo que importa.** Conocimiento curado (decisiones, convenciones, porqués)
+  que sobrevive a todo y que **es lo único que ve otro agente** de la misma máquina.
+* **Las flechas van en un solo sentido:** pi escribe en los dos. Durable no lee la memoria y
+  engram no lee las conversaciones; se cruzan solo a través de pi.
+* **No son dos agentes:** el pi del chat y el pi durable son el mismo pi. Durable es dónde
+  apunta y a dónde manda lo largo.
+
+### Engram vive en el producto
+>
+> *"Yo quiero a engram en el producto, osea quiero que se ejecute con pi. ¿esto sería así?, si un usuario escribe engram tiene que funcionar."*
+
+* Engram **viaja dentro de PiCode**, como durable: no se instala aparte.
+* **Una sola declaración** en el perfil sirve a los dos motores.
+* Escribir **`engram`** en el terminal integrado tiene que hacer algo de verdad.
+* ~~El paquete `gentle-engram` de pi **no entra**: el protocolo de memoria se escribe aquí.
+  Sigue valiendo la lista de `left-behind-packages.ts`.~~ **Sustituido el 2026-10-25:** gentle-engram entra, fijado por el producto (ADR-031). La lista de `left-behind-packages.ts` queda vacía.
+
+### Su memoria es del usuario, no del perfil
+>
+> *"Luego donde gestiona él su memoria que será .engram es otro tema, el puede leer si ya hay algo existente o crearlo en el pc del usuario"*
+
+* El almacén vive en **`~/.engram`** y **se comparte** con cualquier otro agente de la máquina.
+* **Se mira primero:** si ya hay almacén se reutiliza **tal cual**; si no, se crea. Nunca se
+  mueve, ni se migra, ni se pisa.
+* **Consecuencia aceptada:** la memoria **no viaja con el perfil en la nube**. Queda apuntado
+  como deuda, no se esconde.
+* Si ya hay un engram sirviendo, PiCode **se engancha a ese**; no abre otro sobre la misma base.
+
+### Lo que enseña el TUI, se enseña en el editor
+>
+> *"Recuerda que tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE"*
+
+* Se porta **lo que muestra** (datos y acciones), no el TUI: ni sus teclas, ni su tema, ni su
+  terminal.
+* Todo vive en **superficies que ya existen** (la vista del contenedor, una pestaña del editor y
+  Ajustes). No se inventa panel, pestaña ni página de ajustes propia.
+* **Las «sesiones» de engram no se pintan como sesiones:** son registros de atribución, y las
+  sesiones de verdad son las de durable. Aparecen como *«de dónde salió»* dentro del detalle.
+* La interfaz habla nuestro idioma: inglés, iconos, sin rutas ni nombres internos.
+
+> 📋 El detalle punto por punto, con lo hecho y lo que falta, vive en
+> [`docs/ENGRAM.md`](docs/ENGRAM.md).
+
 ## Registro de Cambios
 
 * **2026-09-23** · Creado con las frases iniciales de la sesión de trabajo.
@@ -257,16 +337,26 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-09-24** · Confirmado que **no existe extensión propia**: todo el desarrollo va dentro del núcleo del editor.
 * **2026-09-25** · Regla de UI: La pantalla muestra acciones y estados (*Built*, *Stop build*), no explicaciones de funcionamiento interno.
 * **2026-09-25** · Definición del idioma: El producto habla **inglés** para el usuario; la comunicación con el dueño y la documentación interna se mantienen en **español**.
-* **2026-09-27** · Regla de los iconos: la marca de agua cambia de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasa al núcleo (`picode-source/.../contrib/picode/browser/media/`). El dibujo de trazos del editor vacío no cambia.
+* **2026-09-27** · Regla de los iconos: la marca de agua cambia de hogar al borrarse la carpeta `extensions/` por decisión del dueño («pues borrala»); pasa al núcleo (`.../contrib/picode/browser/media/`). El dibujo de trazos del editor vacío no cambia.
 * **2026-09-27** · Añadida la regla de la ventana de gestión del chat: datos de pi (agents, skills, mcp, packages) y eliminadas Instructions, Prompts y Hooks.
 * **2026-10-01** · Icono de la barra de actividad: es **la marca de PiCode**, no la rosa («lo de la rosa cambialo por el de picode»). Esa marca lleva pareja claro/oscuro, porque un icono de fila se pinta como imagen y una sola tinta desaparece en uno de los dos temas.
 * **2026-10-01** · Regla de estilo visual: iconos y emoji siempre («añade siempre iconos, de marcas, de emojis etc»), con marcas reales y comprobadas; sin badge que no lleve a ningún sitio.
-* **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `picode-source/durable` y en la UI se llama Durable agent, sin el "(experimental)".
+* **2026-10-09** · pi durable deja de ser experimental: vive en el source de PiCode («tratalo como algo ya que vive en picode»). Su casa es `durable` y en la UI se llama Durable agent, sin el "(experimental)".
 * **2026-10-13** · Regla de fases visibles: el trabajo por fases se muestra en el panel de pi (`set_plan`, widget de pi-plan-widget) («tengo una lista con fases y no se ven»). Confirmado funcionando por el dueño.
 * **2026-10-14** · Builds sin instalador por defecto: solo pack portable; el instalador solo a petición explícita («Generame solo la build portable luego y no el instalador»). 
 * **2026-10-16** · Una sola release por canal: al publicar una release nueva, el pipeline borra la anterior del mismo canal («recuerda borrar la release anterior siempre»). 
 * **2026-10-16** · Página de release: resumen agrupado por tipo de cambio + changelog, siempre («recuerda añadir tu siempre el texto de la release mejorado y con el changelog»).
 * **2026-10-16** · `odd/tasks/` deja de usarse: la carpeta se retira por decisión del dueño («odd ya no lo usamos») y el detalle técnico queda en `docs/`.
-* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`picode-source/extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
-* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `dev/map-docs.mjs` y CI vigila que no aparezcan carpetas sin ficha (`dev/check-docs.mjs`) («deja avisado algo en el agents.md no? de usar esto»).
+* **2026-10-16** · Aclaración a «no existe extensión propia»: el conector (`extensions/picode`) es código del núcleo, viaja en el árbol y se empaqueta con el editor — no es una extensión aparte que se instala.
+* **2026-10-16** · Documentación por carpeta: cada carpeta lleva su `README.md` al lado del código, el mapa `docs/MAPA.md` se **genera** con `build/docs.mjs map` y CI vigila que no aparezcan carpetas sin ficha (`build/docs.mjs check`) («deja avisado algo en el agents.md no? de usar esto»).
 * **2026-10-16** · El pi del PATH: **nunca** se toca a mano («esto no lo toques NUNCA, es el pi que estamos corriendo ahora mismo»), pero **sí vía la app** — si el HOST conectado es el externo (PATH), el producto debe poder actualizar su Pi y sus Packages («si conectamos el HOST que sea el Externo (PATH) debería poder actualizar Pi y Packages del externo»).
+* **2026-10-20** · Memoria del producto: **pi piensa, durable recuerda lo que pasó, engram recuerda lo que importa** («Pi es el agente | Durable las sesiones y el registro | Engram la memoria»). Engram viaja dentro de PiCode y sirve a los dos motores («quiero a engram en el producto… si un usuario escribe engram tiene que funcionar»). Su almacén vive en `~/.engram`, se reutiliza si existe y se comparte con otros agentes — con su coste aceptado: no viaja con el perfil («él puede leer si ya hay algo existente o crearlo en el pc del usuario»). Todo lo que su TUI muestra se muestra en el editor, en superficies que ya existen («tienes que añadir todo lo que engram muestra en el TUI en el Editor de PICODE»). Registro punto por punto en [`docs/ENGRAM.md`](docs/ENGRAM.md).
+* **2026-10-22** · Texto del editor: **todo texto que va en el editor se escribe con carácter funcional para el usuario** («todo texto que va en el editor en su mayoría son escrito con carácter funcional para el usuario»). Etiquetas, mensajes, tooltips, notificaciones y filas del panel hablan de qué hay y qué se puede hacer, sin nombres de código, rutas ni detalles de la maquinaria interna.
+* **2026-10-25** · Durable sale del producto: **el producto es Pi + Gentle AI** («quiero quitar todo durable, ya que impacta con Gentle»). La lista del panel pasa a ser la de los transcríptos de pi; ADR-030 sustituye a ADR-018, 020 y 021. Siguen: entrada de gentle-pi y gentle-engram.
+* **2026-10-25** · gentle-pi y gentle-engram entran como paquetes fijados del producto, sin su terminal, con la telemetría apagada y sin descargar el programa auxiliar (ADR-031). La memoria de pi pasa a ser la de gentle-engram.
+* **2026-10-25** · El panel Tasks enseña los subagentes de gentle-pi, a partir de lo que gentle-pi ya publica (ADR-032).
+* **2026-10-25** · Los modelos de los agentes de gentle se eligen desde el editor, con `/gentle:models` o la vista de estado («quiero poder los modelos que yo quiera a cada uno»; ADR-031, adenda 4).
+* **2026-10-25** · Lo de gentle-pi se queda dentro del perfil de PiCode (nada en `~/.pi`), y el paquete `@earendil-works/pi-durable` se deja atrás en las importaciones y no se ofrece actualizar (ADR-031, adenda).
+* **2026-10-25** · Un solo sistema de subagentes y una sola memoria: los de gentle («¿no debería siempre elegir el de gentle?»). Los paquetes que hacen lo mismo (`@tintinweb/pi-subagents`, `pi-interactive-subagents`, `pi-memory`) se dejan atrás en las importaciones y se apagan en el perfil (ADR-031, adenda 2).
+* **2026-10-25** · Los subagentes de gentle-pi arrancan el pi que lleva el editor (antes fallaban con «spawn pi ENOENT»), y el panel Tasks ya los enseña (ADR-031, adenda 3). Sus agentes `review-*` solo funcionan dentro de la revisión nativa, que necesita el programa auxiliar que el producto no instala.
+* **2026-10-26** · Engram al cerrar: la **última ventana** de PiCode que se cierra apaga el engram **que PiCode arrancó** («engram debería cerrarse si se cierra picode no?», «que sea el último proceso de picode el que cierre engram»); uno que ya estaba sirviendo de otro agente no se toca nunca. Antes quedaba suelto y retenía archivos de la carpeta de PiCode.

@@ -7,23 +7,19 @@ upstream merges cheap and the product layers replaceable:
 
 | Path | Role |
 | --- | --- |
-| `picode-source/` | **Layer 1 — the editor.** PiCode's own source tree: the VS Code-derived editor with the PiCode changes and identity committed in its history. Upstream merges land here, and only here. |
-| `distribution/` | **Layer 4 — the product as data.** The product delta (the single home of identity and version), first-run defaults, the pinned pi runtime and the brand assets. |
-| `dev/` | The build engine: the five-phase build, staging, the update feed, the pi runtime installer. |
-| `builder/` | The C#/WinUI 3 front-end that drives the same pipeline with one button. |
+| `./` (the tree root) | **Layer 1 — the editor.** PiCode's own source tree: the VS Code-derived editor with the PiCode changes and identity committed in its history. Upstream merges land here, and only here. |
+| `product.json` | **The identity.** The single home of the name, the version and the release URLs, committed at the tree root. |
+| `build/` | The build engine: the five-phase build, staging, the update feed, the pi runtime installer. |
+| `build/distribution/` | **Layer 4 — the product as data.** First-run defaults, the pinned pi runtime (`runtime.json`) and the brand art. |
+| `resources/picode/` | Our brand images (the mark, the banner) beside the editor's own `resources/`. |
 | `upstream/` | The pin file: the VS Code version the tree descends from. |
 | `docs/` | Internal papers: this document, distribution, CI, decisions, the task board. |
-| `assets/` | Brand images of the repository itself. |
 | `updates/` | The static update feeds, one tree per channel (layout in `updates/README.md`). |
-| `cloud/` | The PiCode Account and cloud-sync API (ADR-017). |
+| `host/cloud/` | The PiCode Account and cloud-sync API (ADR-017). |
 | `.github/workflows/` | CI and release pipelines ([`CI.md`](CI.md)). |
 
-Nothing of ours lives inside `picode-source/` except code the editor itself runs: the
-PiCode changes to the editor, and beside them the **durable agent**
-(`picode-source/durable`, its chat bridge in `picode-source/durable-bridge` and its ACP
-proof client in `picode-source/durable-acp-client`), which the editor carries and spawns as
-its own program. The identity, defaults and release data stay outside the tree, applied onto
-it — that is why bringing a newer VS Code is a merge against `picode-source/` and nothing
+Nothing of ours lives outside the editor except code the editor itself runs: the
+PiCode changes to the editor. That is why bringing a newer VS Code is a merge against the tree and nothing
 else has to move.
 
 ## 🧱 The layered model
@@ -41,22 +37,22 @@ else has to move.
 │ 2. Extension layer    the agent runtime (pi), the                │
 │                       trimmed built-in extensions, Open VSX      │
 ├──────────────────────────────────────────────────────────────────┤
-│ 1. Editor layer       the owned source tree in picode-source/    │
+│ 1. Editor layer       the owned source tree (this repo)      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Layer 1 — Editor: the owned source tree
 
-`picode-source/` is not a vendored archive: it is **PiCode's source**, versioned in this
-repository. The packer collects every extension under `picode-source/extensions/`, the
-identity is applied to `picode-source/product.json` before compilation, and the checksums
+The tree is not a vendored archive: it is **PiCode's source**, versioned in this
+repository. The packer collects every extension under `extensions/`, the
+identity is read from `product.json` at the tree root, and the checksums
 are computed over the result — so a behaviour change is written in TypeScript, in the
 tree itself, never patched onto a minified bundle.
 
-The build is `dev/build.sh` in five phases: prepare (source check, identity, dependencies),
-the connector, compile, pack, stage. `builder/` drives the same pipeline
-through a GUI. CI (`.github/workflows/ci.yml`) builds on push; the release workflow reads
-the version from `distribution/product-delta.json` before tagging.
+The build is `build/build.sh` in five phases: prepare (source check, identity, dependencies),
+the connector, compile, pack, stage. `build/build-window.cmd` drives the same pipeline
+through a small window. CI (`.github/workflows/ci.yml`) builds on push; the release workflow reads
+the version from `product.json` before tagging.
 
 **The lightweight cut (2026-09-29)** is a standing property of this layer, not a one-off:
 the product ships what an agent-driven code editor needs, nothing else. Ten extension
@@ -74,8 +70,8 @@ Two properties of the layer shape everything above it:
 
 ### Layer 2 — Extensions
 
-- **The agent runtime**: `pi` is pinned in `distribution/runtime.json` and installed into
-  the pack by `dev/pi-runtime.sh`. It is an executable the agent layer talks to, decoupled
+- **The agent runtime**: `pi` is pinned in `build/distribution/runtime.json` and installed into
+  the pack by `build/pi-runtime.sh`. It is an executable the agent layer talks to, decoupled
   from the editor so it updates independently. Which one runs is the owner's choice
   (`picode.pi.runtime`).
 - **The built-in extensions**: the trimmed set the source tree ships (language
@@ -90,19 +86,14 @@ The first agent surface was a standalone extension (`extensions/picode-pi-chat`)
 retired on 2026-09-27 and its replacement is **the native chat modified in the core**
 (`src/vs/workbench/contrib/chat/**` carries the PiCode changes: the model selector, the
 removal of the Copilot paywall, sessions). The editor's multi-agent host (`src/vs/platform/agentHost/`) exists in the tree, but PiCode's own bridge to it (`node/pi/`) is prepared and not wired yet (see `HARNESS.md`, Part 1 §5). Meanwhile
-`picode-source/extensions/picode` — the connector, compiled by phase 2 — contributes the
+`extensions/picode` — the connector, compiled by phase 2 — contributes the
 providers and models surface.
 
 **Who runs the chat (ADR-020).** The chat's agent is **pi**, in process: `agent.ts` registers
 the `@pi` chat participant, which owns the model, the agent profile and the tools, and streams
-the answer into the panel. `durable` is the **backend**, not a harness: pi reaches it through
-its own tools (the `durable_send` / `durable_list` / `durable_read` bridge in
-`picode-source/durable-bridge`, plus MCP), and durable keeps in its own SQLite the
-conversations it is handed — every session, per ADR-021. The durable `chatSessions` contribution stays declared but disabled
-(`"when": "false"`): a `chatSessions` type is a session **provider**, and the CHAT panel runs
-**agents** — selecting it made the panel call `invokeAgent('durable')`, which has no
-implementation, and the chat answered `No activated agent with id "durable"`. The panel's
-harness is pi's own, and Local is its session.
+the answer into the panel. Conversations are pi's own transcripts (ADR-030): the files pi writes under the profile's
+`sessions/` folder are the panel's one list, and opening one continues it in place. There is no
+second runtime beside pi; the panel's harness is pi's own.
 
 pi is reached two ways. The **in-process SDK** owns the chat's session: `piSdk.ts` loads
 `@earendil-works/pi-coding-agent` at runtime
@@ -113,7 +104,7 @@ does not expose — package management (`pi install`, `remove`, `update`, `list`
 
 **The editor travels with every turn.** `editor-context.ts` reads the folder (or the area),
 the open file, the selection, its errors and warnings, and the message's own references, and
-`context.ts` writes them into the prompt. Both the in-process chat and the durable turn go
+`context.ts` writes them into the prompt. Every turn goes
 through it, so the agent answers about the screen the owner is looking at (ADR-019).
 
 Until October 2026 the integration used `pi --mode rpc` as a child process (ADR-003, with
@@ -146,12 +137,12 @@ separators (`U+2028`, `U+2029`) are legal inside JSON strings, so Node's `readli
 
 ### Layer 4 — Experience
 
-`distribution/product-delta.json` carries the identity and version — one home, applied
-by the build so the compiled editor and the released one cannot disagree.
-`distribution/settings.json` are the first-run defaults, copied only when the user has
+`product.json` carries the identity and version — one home, committed at the tree
+root, so the compiled editor and the released one cannot disagree.
+`build/distribution/settings.json` are the first-run defaults, copied only when the user has
 no settings of their own. The profile is portable and disposable. The updater reads the
-static feed produced by `dev/update-feed.mjs` (layout in `updates/README.md`) from the
-build's own channel branch, sealed into `product.json` by `dev/build.sh`; each channel reads
+static feed produced by `build/release.mjs update-feed` (layout in `updates/README.md`) from the
+build's own channel branch, sealed into `product.json` by `build/build.sh`; each channel reads
 only its own feed (ADR-015).
 
 ## 🧪 Testing

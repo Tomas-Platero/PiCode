@@ -24,7 +24,7 @@ Hay dos workflows:
 
 - **Cachés**: `node_modules` + caché de npm (cubierto también el runtime de pi)
   y el binario de electron, con clave por `package-lock.json`. Con árbol
-  caliente, `dev/deps-current.mjs` salta `npm ci` entero — es el paso que
+  caliente, `build/build-helpers.mjs deps-current` salta `npm ci` entero — es el paso que
   costaba 5-8 min frío.
 - **Ruta esbuild**: la compilación del producto usa la ruta de fábrica de
   Microsoft reactivada en `build-veloz` (compilar `src/` en segundos, no
@@ -38,15 +38,15 @@ Hay dos workflows:
 La guía `picode-release` (skill) documenta el procedimiento y sus reglas. El
 workflow las lleva dentro para que no puedan ejecutarse mal:
 
-1. La versión del **editor** vive en `distribution/product-delta.json →
-   set.version`; la de **PiCode** (la que nombra la release y muestra el
-   updater) en el mismo fichero, `set.picodeVersion`. El tag debe coincidir con
-   `v<picodeVersion>`, y `set.version` debe ser estrictamente mayor que el del
+1. La versión del **editor** vive en `product.json →
+   version`; la de **PiCode** (la que nombra la release y muestra el
+   updater) en el mismo fichero, `picodeVersion`. El tag debe coincidir con
+   `v<picodeVersion>`, y `version` debe ser estrictamente mayor que el del
    feed anterior.
 2. La `picodeVersion` nueva debe ser **estrictamente mayor** que la última
    release publicada (comparación numérica por segmentos, sin el sufijo).
 3. El commit del feed se lee del `product.json` **construido**, no de HEAD.
-4. El feed se genera **dos veces** con `dev/update-feed.mjs --platform win32
+4. El feed se genera **dos veces** con `build/release.mjs update-feed --platform win32
    --arch x64` y `--installed <versión anterior del editor>`, una por destino:
    `--target archive` (zip portable) y `--target user` (el `.exe` del `user-setup` de
    Inno, que es el destino que el producto instalado lleva inyectado). Ambas llevan
@@ -68,8 +68,8 @@ descargar la release.
 
 ## 🚀 Cómo se publica una release
 
-1. Bump de versión en `distribution/product-delta.json`: `set.picodeVersion`
-   (el nombre de la release, `0.1.1-beta`) y `set.version` (el número del
+1. Bump de versión en `product.json`: `picodeVersion`
+   (el nombre de la release, `0.1.1-beta`) y `version` (el número del
    editor, estrictamente mayor que el del feed anterior).
 2. Commit, **pull request y merge** (las ramas no aceptan push directo
    salvo para el rol Admin),
@@ -107,6 +107,12 @@ La **vía manual** de la skill `picode-release` sigue válida como reserva
 - **`zip` no existe en los runners de Windows**: el zip del release se hace
   con 7-Zip (`7z a -tzip`), preinstalado ahí; el binario de la release local
   sigue la misma regla de excluir `data/`.
+- **El CLI de Rust pide Perl, no OpenSSL instalado**: `cli/Cargo.toml` enciende
+  `vendored-openssl`, así que OpenSSL se compila dentro del build y el binario lo
+  lleva dentro. Lo único que hace falta es un Perl completo (Strawberry); el que
+  trae Git está recortado y no sirve, pero los runners de Windows ya lo traen.
+  CI cachea `cli/target` (en frío son ~13 min, en caliente ~4) y
+  `PICODE_REQUIRE_CLI=1` impide publicar una release sin el binario.
 
 ## 📌 El pin, sin vigilancia automática
 
