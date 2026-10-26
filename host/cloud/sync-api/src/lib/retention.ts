@@ -60,6 +60,71 @@ export function planWrite(
   };
 }
 
+/** A revision dropped from any resource, not only the one being written. */
+export interface DroppedRef extends RetainedRef {
+  resource: string;
+}
+
+export interface QuotaFitPlan {
+  /** Every resource's kept list after the write, newest first. */
+  readonly revisions: Record<string, RetainedRef[]>;
+  /** Everything the store deletes, across resources. */
+  readonly dropped: DroppedRef[];
+  /** The user's new stored-byte total. */
+  readonly usedBytes: number;
+  /** False when even the latest revision of every resource does not fit the ceiling. */
+  readonly fits: boolean;
+}
+
+/**
+ * One appended revision, made to fit the user's quota by giving up history before data.
+ *
+ * A full quota used to refuse the upload outright, which froze the user's sync on whatever the
+ * cloud last held. History is the cheap part to lose: the latest revision of every resource is
+ * the user's actual data, the older ones are only the undo trail. So when the write would cross
+ * `limitBytes`, old revisions are dropped first, oldest end of the resource with the heaviest
+ * history first, until it fits. The latest revision of a resource (the head of its list, which
+ * includes the incoming one) is never dropped. Only when every resource is down to its latest and
+ * the total still does not fit is the write refused (`fits: false`).
+ */
+export function planWriteWithinQuota(
+  all: Record<string, readonly RetainedRef[] | undefined> | undefined,
+  resource: string,
+  incoming: RetainedRef,
+  usedBytes: number,
+  limitBytes: number,
+  cap: number = RETENTION_PER_RESOURCE,
+): QuotaFitPlan {
+  const base = planWrite(all?.[resource], incoming, usedBytes, cap);
+  const revisions: Record<string, RetainedRef[]> = {};
+  for (const [name, list] of Object.entries(all ?? {})) {
+    revisions[name] = [...(list ?? [])];
+  }
+  revisions[resource] = [...base.revisions];
+  const dropped: DroppedRef[] = base.dropped.map((entry) => ({ ...entry, resource }));
+  let used = base.usedBytes;
+
+  while (used > limitBytes) {
+    let heaviest: string | undefined;
+    let heaviestBytes = 0;
+    for (const [name, list] of Object.entries(revisions)) {
+      const historyBytes = sumBytes(list.slice(1));
+      if (list.length > 1 && (heaviest === undefined || historyBytes > heaviestBytes)) {
+        heaviest = name;
+        heaviestBytes = historyBytes;
+      }
+    }
+    if (heaviest === undefined) {
+      break;
+    }
+    const oldest = revisions[heaviest]?.pop() as RetainedRef;
+    dropped.push({ ...oldest, resource: heaviest });
+    used = Math.max(0, used - sumBytes([oldest]));
+  }
+
+  return { revisions, dropped, usedBytes: used, fits: used <= limitBytes };
+}
+
 /** The list and the total after one revision is removed by ref. */
 export function planRemoveRef(
   current: readonly RetainedRef[] | undefined,

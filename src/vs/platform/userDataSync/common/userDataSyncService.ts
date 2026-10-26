@@ -911,7 +911,9 @@ function canBailout(e: unknown): boolean {
 			// A plan that does not include sync will not include it for the next resource either:
 			// bail out instead of collecting the same 402 once per synced resource.
 			case UserDataSyncErrorCode.PaymentRequired:
-			case UserDataSyncErrorCode.TooLarge:
+			// TooLarge is NOT here on purpose: it belongs to one resource (a pi profile bundle too big
+			// for the store, or a full quota), and stopping the run there would also stop settings,
+			// keybindings and everything small behind it. It is collected like any per-resource error.
 			case UserDataSyncErrorCode.TooManyRequests:
 			case UserDataSyncErrorCode.TooManyRequestsAndRetryAfter:
 			case UserDataSyncErrorCode.LocalTooManyRequests:

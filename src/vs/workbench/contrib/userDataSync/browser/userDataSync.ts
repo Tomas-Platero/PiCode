@@ -268,11 +268,7 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 				});
 				break;
 			case UserDataSyncErrorCode.TooLarge:
-				if (error.resource === SyncResource.Keybindings || error.resource === SyncResource.Settings || error.resource === SyncResource.Tasks) {
-					this.disableSync(error.resource);
-					const sourceArea = getSyncAreaLabel(error.resource);
-					this.handleTooLargeError(error.resource, localize('too large', "Disabled syncing {0} because size of the {1} file to sync is larger than {2}. Please open the file and reduce the size and enable sync", sourceArea.toLowerCase(), sourceArea.toLowerCase(), '100kb'), error);
-				}
+				this.onTooLargeError(error);
 				break;
 			case UserDataSyncErrorCode.LocalTooManyProfiles:
 				this.disableSync(SyncResource.Profiles);
@@ -370,6 +366,26 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		}
 	}
 
+	private readonly tooLargeNotified = new Set<SyncResource>();
+	private onTooLargeError(error: UserDataSyncError): void {
+		if (error.resource === SyncResource.Keybindings || error.resource === SyncResource.Settings || error.resource === SyncResource.Tasks) {
+			this.disableSync(error.resource);
+			const sourceArea = getSyncAreaLabel(error.resource);
+			this.handleTooLargeError(error.resource, localize('too large', "Disabled syncing {0} because size of the {1} file to sync is larger than {2}. Please open the file and reduce the size and enable sync", sourceArea.toLowerCase(), sourceArea.toLowerCase(), '100kb'), error);
+			return;
+		}
+		// Anything else (the pi profile, extensions...) keeps its local copy and the rest keeps
+		// syncing; say it once per window rather than on every automatic sync.
+		if (!error.resource || this.tooLargeNotified.has(error.resource)) {
+			return;
+		}
+		this.tooLargeNotified.add(error.resource);
+		this.notificationService.notify({
+			severity: Severity.Warning,
+			message: localize('too large to store', "{0} could not be saved to the cloud: it does not fit in your sync storage. Everything else keeps syncing, and nothing on this device was changed.", getSyncAreaLabel(error.resource)),
+		});
+	}
+
 	private handleTooLargeError(resource: SyncResource, message: string, error: UserDataSyncError): void {
 		const operationId = error.operationId ? localize('operationId', "Operation Id: {0}", error.operationId) : undefined;
 		this.notificationService.notify({
@@ -392,6 +408,9 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 				switch (error.code) {
 					case UserDataSyncErrorCode.LocalInvalidContent:
 						this.handleInvalidContentError({ profile, syncResource: resource });
+						break;
+					case UserDataSyncErrorCode.TooLarge:
+						this.onTooLargeError(error);
 						break;
 					default: {
 						const key = `${profile.id}:${resource}`;

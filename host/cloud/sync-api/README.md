@@ -47,12 +47,13 @@ test/                     # pure rules: plans, retention
 | `firebase-admin.ts` | La única inicialización del SDK de Firebase Admin (una app, no una por request). |
 | `auth.ts` | Verifica el token de Firebase de cada petición (cabeceras de sincronización). |
 | `contract.ts` | Los tipos del contrato REST que el cliente de sincronización espera (extraídos del editor). |
+| `errors.ts` | El error que las rutas convierten en respuesta (sin Next.js, para poder probarlo solo). |
 | `http.ts` | Helpers de respuesta: el `x-operation-id` (UUID) que lleva toda respuesta. |
 | `store.ts` | El modelo de datos en Firestore (rutas alternando colección/documento) y sus transacciones. |
-| `crypto.ts` | Cifrado en reposo: AES-256-GCM + gzip del contenido antes de escribir. |
+| `crypto.ts` | Cifrado en reposo: brotli + AES-256-GCM en binario antes de escribir (lee también los formatos viejos). |
 | `plans.ts` | Qué plan declara el perfil (lo no reconocido es `free`). Sin Firestore. |
 | `quota.ts` | Lee el plan del usuario y lo memoriza un momento (la política vive en `plans.ts`). |
-| `retention.ts` | Cuántas revisiones por recurso se conservan (20). |
+| `retention.ts` | Cuántas revisiones por recurso se conservan (20) y qué historial se suelta si la cuota se llena. |
 
 ### `src/app/api/` — las rutas
 
@@ -94,21 +95,14 @@ return an `x-operation-id` header (UUID) for diagnostics.
 
 The request body cap is 4 MiB, but it is only a buffering guard: it bounds what
 the server is willing to read, not what the store accepts. What is stored is
-`content`, an encrypted envelope that costs about **1.78x** the plaintext when
-the payload does not compress, and Firestore rejects any document over
+`content`, a binary envelope (brotli, then AES-256-GCM, plus 32 bytes of header)
+in a Firestore Bytes field, and Firestore rejects any document over
 1,048,487 bytes.
 
 The limit that matters is therefore the stored envelope, checked after
 compression in `writeResource`; the API answers `413 TooLarge` when a revision
-would not fit the store.
-
-Practical consequence:
-
-- Compressible JSON bundles can use the full 4 MiB request cap.
-- Content that does not compress (already-compressed or binary payloads)
-  tops out at about **576 KiB**: the largest body measured to still fit is
-  589,230 bytes (a 589,518-byte body stores 1,048,485 bytes, just over the
-  reserved limit).
+would not fit the store. Compressible JSON (everything the editor syncs) fits
+the full 4 MiB request cap; incompressible content tops out just under 1 MiB.
 
 Error mapping follows the client contract: 401 Unauthorized, 403 Forbidden
 (disallowed `X-Client-Name`), 404 NotFound, 405 MethodNotFound, 409 Conflict,
@@ -130,9 +124,13 @@ answers `402 PaymentRequired` for any account whose `users/{uid}.plan` is not
 `pro`, so a free account can sign up and link the editor but stores nothing:
 its quota is 0 on purpose and `PICODE_QUOTA_FREE_BYTES` is ignored.
 
-The Pro quota is `PICODE_QUOTA_PRO_BYTES` (default 50 MiB) and is enforced
-inside the write transaction: a revision that would push the stored total over
-the ceiling answers `413 TooLarge` and nothing is written.
+The Pro quota is `PICODE_QUOTA_PRO_BYTES` (default 50 MiB), counted on stored
+bytes and enforced inside the write transaction. A full quota costs **history,
+not data**: before refusing a write, the oldest revisions are dropped (the
+resource with the heaviest history first), and the latest revision of every
+resource is never dropped. Only when every resource is down to its latest and
+the write still does not fit does the API answer `413 TooLarge`, and the editor
+then keeps syncing every other resource (`TooLarge` no longer stops the run).
 
 ## 🔐 Data encryption at rest
 
@@ -144,17 +142,19 @@ exposes synced data in readable form.
 
 - **What is encrypted:** every resource revision's `content`. The manifest
   (which only holds refs) and collection ids are not encrypted.
-- **Algorithm:** AES-256-GCM per value, with a random 12-byte IV and the
-  16-byte auth tag stored alongside the ciphertext.
-- **Stored format:** `picode-enc:v1:<base64url JSON { iv, tag, d }>` — the
-  prefix makes encrypted values unambiguous.
+- **Algorithm:** brotli (quality 9), then AES-256-GCM with a random 12-byte IV
+  and the 16-byte auth tag stored alongside the ciphertext.
+- **Stored format (v3, written now):** a Bytes field,
+  `"PCE3" | iv | tag | ciphertext`. It costs about half of the old text
+  envelopes (`picode-enc:v1:` / `v2:`, base64 inside base64, ~1.78x their
+  payload), which are still read so nothing has to be migrated.
 - **Key:** the `PICODE_ENCRYPTION_KEY` environment variable must hold a
   32-byte key, base64-encoded (generate one with `openssl rand -base64 32`).
   Set it in Vercel like the Firebase credentials; never commit it.
-- **When the key is unset:** encryption is bypassed and content is stored in
-  plaintext, so development works with zero configuration; the API logs a
-  warning once per process. Setting the key later encrypts new writes, while
-  previously stored plaintext values keep being served unchanged.
+- **When the key is unset:** encryption is bypassed and content is stored
+  compressed but readable (`"PCZ3" | brotli`), so development works with zero
+  configuration; the API logs a warning once per process. Setting the key later
+  encrypts new writes, while previously stored values keep being served.
 - **Client impact:** none. Reads always return plaintext; a value that cannot
   be decrypted (wrong key or corrupt data) answers `500 DecryptionFailed`
   instead of ever returning garbage.

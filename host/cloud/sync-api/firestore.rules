@@ -1,29 +1,28 @@
 rules_version = '2';
 
-// PiCode Cloud Sync (project picode-7f24f)
-// These rules protect direct client access to Firestore. The sync API in
-// cloud/sync-api/ uses the Admin SDK, which bypasses rules by design — so the
-// API keeps working while user-level direct access stays locked to the owner
-// of each document.
+// PiCode Firestore rules (project picode-7f24f). The deployed copy lives in
+// the PiCode-Website repository; keep both files identical.
+//
+// Every write goes through the Firebase Admin SDK on trusted infrastructure
+// (session upserts, plan updates from the Stripe webhook, the editor sync
+// API), and Admin bypasses these rules by design. No browser or editor code
+// writes Firestore directly, so clients get read access to their own data
+// and nothing else: a client-writable profile would let any signed-in user
+// set their own `plan` to "pro".
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // A user may only ever touch their own sync tree:
-    //   users/{uid}/sync/manifest
-    //   users/{uid}/sync/resources/{resource}/{ref}
-    //   users/{uid}/collections/{id}
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-
-      match /sync/{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
-      }
-
-      match /collections/{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
-      }
+    // User profile and everything under it (rules v2: `**` also matches the
+    // profile document itself): owner may read, nobody may write.
+    match /users/{uid}/{document=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
-    // Everything else is denied by default (no rule = deny).
+    // Editor one-time auth codes (code <-> customToken exchange).
+    // Written and consumed ONLY by the Admin SDK; clients are denied outright.
+    match /editorAuthCodes/{code} {
+      allow read, write: if false;
+    }
   }
 }

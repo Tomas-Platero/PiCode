@@ -60,11 +60,8 @@ const REF_DOC_FIELD_RESERVE_BYTES = 512;
 /**
  * Ceiling for the stored `content` envelope, checked in `store.writeResource`
  * AFTER compression — compression, not the request size, decides what lands in
- * Firestore. The envelope is `base64url(JSON{iv,tag,d})` over
- * `base64(gzip(plaintext))`, so it is ~1.78x the plaintext when the payload
- * does NOT compress: measured 1,048,485 bytes stored for a 589,518-byte body.
- * That is why MAX_BODY_BYTES cannot express this limit on its own — a small
- * incompressible body can fail here, and a large compressible one can pass.
+ * Firestore. The envelope is binary (brotli + AES-GCM + a 32-byte header), so a
+ * large compressible body passes and an incompressible one fails just under 1 MiB.
  */
 export const MAX_STORED_CONTENT_BYTES =
   FIRESTORE_DOC_LIMIT_BYTES - REF_DOC_FIELD_RESERVE_BYTES;

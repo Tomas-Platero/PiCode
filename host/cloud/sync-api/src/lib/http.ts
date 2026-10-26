@@ -12,18 +12,8 @@ export interface ErrorBody {
   message: string;
 }
 
-/** Thrown by store helpers; caught and mapped by route handlers. */
-export class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly retryAfterSeconds?: number,
-  ) {
-    super(message);
-    this.name = "HttpError";
-  }
-}
+export { HttpError } from "./errors";
+import { HttpError } from "./errors";
 
 export function operationIdHeaders(): Record<string, string> {
   return { "x-operation-id": randomUUID() };
