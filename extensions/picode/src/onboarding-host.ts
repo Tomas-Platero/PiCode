@@ -435,6 +435,17 @@ export interface SubscriptionChoice {
 	readonly name: string;
 	/** What the subscription is, in the words the editor uses (`ChatGPT Plus or Pro`, …). */
 	readonly note?: string;
+	/** Whether a subscription sign-in is already stored for it in the profile. */
+	readonly signedIn?: boolean;
+}
+
+/** One provider that can run models right now, with the models it offers. */
+export interface AvailableProvider {
+	readonly id: string;
+	readonly name: string;
+	readonly models: readonly string[];
+	/** Signed in with a subscription, as opposed to a key or no credential at all. */
+	readonly subscription: boolean;
 }
 
 /**
@@ -497,7 +508,30 @@ export async function subscriptionChoices(paths: SetupPaths): Promise<Subscripti
 			id: provider.id,
 			name: provider.name,
 			note: FEATURED_SUBSCRIPTIONS.find(featured => featured.id === provider.id)?.note,
+			signedIn: runtime.isUsingOAuth(provider.id),
 		}))
+		.sort((left, right) => rankOf(left.id) - rankOf(right.id) || left.name.localeCompare(right.name));
+}
+
+/**
+ * The providers that can run models right now, as pi itself sees them.
+ *
+ * Asked of pi's own model registry, not read from `models.json`: a provider that arrives with a
+ * package (NAN) and one that is signed in with a subscription (Anthropic) are not declared in that
+ * file, and a model id's prefix is not a provider. Each provider is listed once, with its own models.
+ */
+export async function availableProviders(paths: SetupPaths): Promise<AvailableProvider[]> {
+	const runtime = await loginRuntime(paths);
+	const models = typeof runtime.getAvailable === 'function' ? await runtime.getAvailable() : [];
+	const names = new Map(runtime.getProviders().map(provider => [provider.id, provider.name] as const));
+	const grouped = new Map<string, string[]>();
+	for (const model of models) {
+		const list = grouped.get(model.provider) ?? [];
+		list.push(model.id);
+		grouped.set(model.provider, list);
+	}
+	return [...grouped.entries()]
+		.map(([id, ids]) => ({ id, name: names.get(id) ?? id, models: ids, subscription: runtime.isUsingOAuth(id) }))
 		.sort((left, right) => rankOf(left.id) - rankOf(right.id) || left.name.localeCompare(right.name));
 }
 
@@ -545,7 +579,8 @@ export type HostCommand =
 	| 'clearPendingSession'
 	| 'clearPendingCode'
 	| 'searchPackages'
-	| 'subscriptions';
+	| 'subscriptions'
+	| 'availableProviders';
 
 /**
  * What one command answers.
@@ -565,6 +600,7 @@ export type HostAnswer =
 	| EndpointProbe
 	| readonly PackageSearchRow[]
 	| readonly SubscriptionChoice[]
+	| readonly AvailableProvider[]
 	| { readonly snapshot: SetupSnapshot };
 
 /** One round trip: a command name and its JSON payload, answered with a JSON value. */
@@ -649,6 +685,8 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			};
 		case 'subscriptions':
 			return subscriptionChoices(paths);
+		case 'availableProviders':
+			return availableProviders(paths);
 		case 'searchPackages': {
 			const query = stringOf(payload['query']).trim();
 			return query.length === 0 ? [] : await searchPackages(query);

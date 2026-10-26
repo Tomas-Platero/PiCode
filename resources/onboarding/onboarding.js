@@ -28,7 +28,7 @@ const STRINGS = {
 		railSubtitle: 'Setup',
 		steps: {
 			welcome: 'Welcome',
-			pi: 'Your pi',
+			pi: 'Agent',
 			model: 'Model',
 			theme: 'Theme',
 			extras: 'Extras',
@@ -58,12 +58,12 @@ const STRINGS = {
 		welcomeHow: 'Choose your agent, pick a model, and set your theme in three steps. Then you start coding.',
 		welcomeUpdate: 'PiCode tiene versión nueva. Todo está ya configurado: revísalo, cambia lo que quieras y sigue.',
 		welcomeSetup: 'Change anything about your setup. Nothing is touched unless you say so.',
-		welcomeFactsPi: 'pi',
+		welcomeFactsPi: 'Agent',
 		welcomeFactsModel: 'Model',
 		welcomeFactsTheme: 'Theme',
 		welcomeNotSet: 'not set yet',
 		getStarted: 'Get started',
-		piTitle: 'Your Pi Agent',
+		piTitle: 'Choose your agent',
 		piLead: 'Pi is the background agent powering your editor. Use the built-in version or connect an existing environment.',
 		piInternal: 'Built-in Pi',
 		piInternalRecommended: 'RECOMMENDED',
@@ -103,10 +103,12 @@ const STRINGS = {
 		subTitle: 'Sign in with your Subscription',
 		subLead: 'Authenticate via your browser to link your account. If prompted, simply paste the authorization code provided by Pi.',
 		subSignIn: 'Sign in',
+		subSignedIn: 'Signed in',
 		subOpen: 'Open the page',
 		subCode: 'Your code',
 		subWaiting: 'Waiting for you to finish in the browser…',
 		subCancel: 'Cancel',
+		subChoose: 'Choose how to sign in…',
 		subDone: 'Signed in',
 		subCancelled: 'The sign-in was cancelled.',
 		subFailed: 'The sign-in did not finish',
@@ -207,7 +209,7 @@ const STRINGS = {
 		railSubtitle: 'Configuración',
 		steps: {
 			welcome: 'Bienvenida',
-			pi: 'Tu pi',
+			pi: 'Agente',
 			model: 'Modelo',
 			theme: 'Tema',
 			extras: 'Extras',
@@ -237,7 +239,7 @@ const STRINGS = {
 		welcomeHow: 'Elige tu agente, escoge un modelo y pon tu tema en tres pasos. Y a programar.',
 		welcomeUpdate: 'PiCode ha subido de versión. Ya está todo configurado: revísalo, cambia lo que quieras y omite en un clic.',
 		welcomeSetup: 'Cambia lo que quieras de tu configuración. No se toca nada que no pidas.',
-		welcomeFactsPi: 'pi',
+		welcomeFactsPi: 'Agente',
 		welcomeFactsModel: 'Modelo',
 		factHint: 'Pulsa para cambiar',
 		startTitle: '¿Dónde quieres empezar?',
@@ -250,7 +252,7 @@ const STRINGS = {
 		welcomeFactsTheme: 'Tema',
 		welcomeNotSet: 'sin definir',
 		getStarted: 'Empezar',
-		piTitle: 'Tu agente Pi',
+		piTitle: 'Elige tu agente',
 		piLead: 'Pi es el agente que da vida a tu editor por dentro. Usa el que viene incluido o conecta uno que ya tengas.',
 		piInternal: 'Pi incluido',
 		piInternalRecommended: 'RECOMENDADO',
@@ -290,10 +292,12 @@ const STRINGS = {
 		subTitle: 'Entra con tu suscripción',
 		subLead: 'Te autenticas en el navegador y quedas vinculado. Si te lo pide, pega el código de autorización que te dé Pi.',
 		subSignIn: 'Entrar',
+		subSignedIn: 'Sesión iniciada',
 		subOpen: 'Abrir la página',
 		subCode: 'Tu código',
 		subWaiting: 'Esperando a que termines en el navegador…',
 		subCancel: 'Cancelar',
+		subChoose: 'Elige cómo iniciar sesión…',
 		subDone: 'Sesión iniciada',
 		subCancelled: 'Has cancelado el inicio de sesión.',
 		subFailed: 'El inicio de sesión no terminó',
@@ -571,7 +575,7 @@ function snapshot() {
 
 /** Every model the profile declares, as `provider/model`. */
 function modelRefs() {
-	return snapshot().providers.flatMap(provider => provider.models.map(model => `${provider.id}/${model}`));
+	return providerList().flatMap(provider => provider.models.map(model => `${provider.id}/${model}`));
 }
 
 /** True when a usable model is recorded. */
@@ -1183,7 +1187,56 @@ function renderImportReport(report) {
  * makes "one thing at a time" structural instead of a promise — every panel is shown by exactly
  * one tab, and switching closes the other.
  */
+/**
+ * The providers that can run models, as pi itself reports them once it has loaded.
+ *
+ * Until that answer arrives the ones the profile declares are shown. pi's answer is the truth: it
+ * includes the providers a package brings (NAN) and the ones signed in with a subscription
+ * (Anthropic), which no file declares, and it keeps each provider apart instead of reading a
+ * model id's prefix as if it were one.
+ */
+function providerList() {
+	const declared = snapshot().providers.map(provider => ({ ...provider, name: provider.id, subscription: false }));
+	if (state.liveProviders === undefined) {
+		return declared;
+	}
+	const live = state.liveProviders.map(provider => ({
+		id: provider.id,
+		name: provider.name ?? provider.id,
+		models: provider.models,
+		hasKey: true,
+		subscription: provider.subscription === true,
+	}));
+	// pi only lists a provider that can run right now. One the profile declares (omni, a local
+	// router that needs no key) is still the owner's provider, with its own models, so it stays.
+	const seen = new Set(live.map(provider => provider.id));
+	return [...live, ...declared.filter(provider => !seen.has(provider.id))];
+}
+
+/** Asks pi which providers can run models right now, once per change. */
+async function loadProviders() {
+	if (state.liveProviders !== undefined || state.liveProvidersLoading === true) {
+		return;
+	}
+	state.liveProvidersLoading = true;
+	try {
+		const answer = await window.picode.command('availableProviders', {});
+		if (Array.isArray(answer?.data)) {
+			state.liveProviders = answer.data;
+		}
+	} catch {
+		// The declared providers stay on screen; nothing is lost by pi not answering.
+	} finally {
+		state.liveProvidersLoading = false;
+		renderModel();
+		renderFooter();
+	}
+}
+
 function renderModel() {
+	if (state.liveProviders === undefined && state.liveProvidersLoading !== true) {
+		void loadProviders();
+	}
 	$('model-title').textContent = t('modelTitle');
 	$('model-lead').textContent = t('modelLead');
 
@@ -1231,7 +1284,7 @@ function renderTabs(localCount) {
 /** What is already connected, on whichever tab you are standing. */
 function renderStatus(localCount) {
 	const node = $('model-status');
-	const providers = snapshot().providers.filter(provider => provider.models.length > 0);
+	const providers = providerList().filter(provider => provider.models.length > 0);
 	if (providers.length === 0) {
 		node.hidden = true;
 		node.replaceChildren();
@@ -1241,7 +1294,7 @@ function renderStatus(localCount) {
 	fill(node,
 		el('span', { class: 'dot ok' }),
 		el('span', {
-			text: `${t('modelConnected')} · ${countOf(localCount)} ${t('modelConnectedVia')} ${providers.map(provider => provider.id).join(', ')}`,
+			text: `${t('modelConnected')} · ${countOf(localCount)} ${t('modelConnectedVia')} ${providers.map(provider => provider.name).join(', ')}`,
 		}),
 	);
 }
@@ -1387,7 +1440,7 @@ function renderSubscriptions() {
 			el('span', { class: 'provider-name', text: provider.name }),
 			provider.note === undefined ? undefined : el('span', { class: 'provider-note', text: provider.note }),
 		),
-		el('span', { class: 'provider-go', text: t('subSignIn') }),
+		el('span', { class: provider.signedIn === true ? 'provider-go ok' : 'provider-go', text: provider.signedIn === true ? `✓ ${t('subSignedIn')}` : t('subSignIn') }),
 	));
 
 	const live = running === undefined ? undefined : el('div', { class: 'signin' },
@@ -1425,12 +1478,23 @@ function renderSubscriptions() {
 
 /** One of pi's questions, as a field the page can answer. */
 function renderPrompt(prompt) {
-	const send = value => window.picode.signIn.answer(prompt.id, value);
+	const send = value => {
+		void window.picode.signIn.answer(prompt.id, value);
+		// Answered: the question leaves the panel, so only what pi says next is left to wait on.
+		if (state.signIn?.prompt?.id === prompt.id) {
+			state.signIn = { ...state.signIn, prompt: undefined };
+			renderSubscriptions();
+		}
+	};
 	if (prompt.type === 'select') {
 		return el('label', { class: 'field' },
 			el('span', { class: 'field-label', text: prompt.message }),
-			el('select', { onchange: event => send(event.target.value) },
-				(prompt.options ?? []).map(option => el('option', { value: option.id, text: option.label }))),
+			// A select that already shows its first option never fires `change` when the owner picks
+			// that same option, so pi would wait forever for an answer. A blank first entry keeps every
+			// real option, the default included, one choice away from sending.
+			el('select', { onchange: event => { if (event.target.value !== '') { send(event.target.value); } } },
+				[el('option', { value: '', text: t('subChoose'), selected: true, disabled: true }),
+					...(prompt.options ?? []).map(option => el('option', { value: option.id, text: option.label }))]),
 		);
 	}
 	return el('div', { class: 'field' },
@@ -1480,6 +1544,17 @@ async function startSignIn(providerId) {
 			return;
 		}
 		if (message.type === 'prompt') {
+			// "How do you want to sign in?" always has an answer already: the browser one, which pi
+			// marks as its default. Nobody should have to pick it, so it is sent straight away and
+			// the question never reaches the screen.
+			const options = message.prompt?.options ?? [];
+			const preferred = message.prompt?.type === 'select'
+				? (options.find(option => /\(default\)/i.test(option.label ?? '')) ?? options.find(option => /browser/i.test(option.label ?? '')))
+				: undefined;
+			if (preferred !== undefined) {
+				void window.picode.signIn.answer(message.id, preferred.id);
+				return;
+			}
 			state.signIn = { ...current, prompt: { id: message.id, ...message.prompt } };
 			renderSubscriptions();
 			return;
@@ -1511,6 +1586,9 @@ async function startSignIn(providerId) {
 
 /** After a sign-in the profile has new models: ask again, and offer them. */
 async function refreshAfterSignIn() {
+	// A sign-in changes both lists: which providers can run models, and which rows say "Signed in".
+	state.liveProviders = undefined;
+	state.subscriptions = undefined;
 	await withBusy('', async () => {
 		const answer = await window.picode.command('state', {});
 		if (answer?.data) {
@@ -1519,35 +1597,6 @@ async function refreshAfterSignIn() {
 	});
 	renderModel();
 	renderFooter();
-}
-
-/**
- * The models of one provider, grouped so a family can be found without scrolling.
- *
- * A hundred and sixty five entries in one flat list puts the owner's own models at position 48 —
- * present, and invisible. The grouping uses what the ids already say (`NAN-…`, `nan-providers/…`,
- * `auto/…`, `nvidia/…`), and the groups whose name mentions `nan` go first: they are the ones
- * somebody is looking for. Nothing is renamed — the ids stay exactly what pi reports.
- */
-function groupModels(models, providerId) {
-	const groups = new Map();
-	for (const model of models) {
-		const id = typeof model === 'string' ? model : String(model);
-		const slash = id.indexOf('/');
-		const head = slash === -1 ? id.split(/[-_]/)[0] : id.slice(0, slash);
-		const name = head.length === 0 ? 'other' : head;
-		if (!groups.has(name)) {
-			groups.set(name, []);
-		}
-		groups.get(name).push(id);
-	}
-	return [...groups.entries()]
-		.map(([name, entries]) => ({ name, models: entries.toSorted((left, right) => left.localeCompare(right)) }))
-		.sort((left, right) => {
-			const leftNan = /nan/i.test(left.name) ? 0 : 1;
-			const rightNan = /nan/i.test(right.name) ? 0 : 1;
-			return leftNan - rightNan || left.name.localeCompare(right.name);
-		});
 }
 
 /**
@@ -1577,7 +1626,7 @@ function renderLocal(refs) {
 	// A default model whose provider is not in the profile is a model the editor cannot run. It is
 	// not this window's job to choose one, but it is its job to say so instead of showing a list
 	// that never mentions it.
-	const allRefs = entries.length > 0 ? entries[0] === undefined ? [] : snapshot().providers.flatMap(provider => provider.models.map(model => `${provider.id}/${model}`)) : [];
+	const allRefs = entries.length > 0 ? entries[0] === undefined ? [] : providerList().flatMap(provider => provider.models.map(model => `${provider.id}/${model}`)) : [];
 	state.staleModel = typeof current === 'string' && current.length > 0 && !allRefs.includes(current)
 		? t('modelStale')(current)
 		: undefined;
@@ -1645,41 +1694,25 @@ function countOf(models) {
 }
 
 /**
- * The provider dropdown's entries: the provider, and each of its families as a **root name**.
+ * The provider dropdown's entries: one per provider, with the models it really offers.
  *
- * The profile in front of me declares one provider (`omni`) whose 165 model ids carry their own
- * namespaces (`NAN-…`, `nan-providers/…`, `auto/…`, `nvidia/…`). Listing that as `omni › NAN`,
- * `omni › auto`… is a wall of repeated prefixes; the first dropdown shows the family name alone
- * (`NAN · 6 models`, `auto · 47 models`) and the plain provider entry stays first, because "all of
- * omni" is still a thing somebody wants. Nothing is renamed: the family name is the namespace the
- * ids already have, and the second dropdown holds exactly that family's models.
+ * A provider is what pi reports as one. A model id's prefix (`NAN-…`, `auto/…`) is not a provider,
+ * so omni lists only omni's models, NAN appears when the NAN package brings it, and a subscription
+ * (Anthropic) appears once it is signed in.
  */
 function providerEntries() {
-	const entries = [];
-	for (const provider of snapshot().providers.filter(candidate => candidate.models.length > 0)) {
-		const models = provider.models.map(model => (typeof model === 'string' ? model : String(model)));
-		// The credential note belongs to the provider, not to each of its families.
-		const suffix = provider.hasKey ? '' : ` · ${t('modelNoKey')}`;
-		entries.push({
-			key: provider.id,
-			provider: provider.id,
-			label: `${provider.id} · ${countOf(models.length)}${suffix}`,
-			models,
-		});
-		for (const group of groupModels(models)) {
-			// A family that is the whole provider would be the same row twice.
-			if (group.models.length === models.length) {
-				continue;
-			}
-			entries.push({
-				key: `${provider.id}§${group.name}`,
+	return providerList()
+		.filter(candidate => candidate.models.length > 0)
+		.map(provider => {
+			const models = provider.models.map(model => (typeof model === 'string' ? model : String(model)));
+			const note = provider.subscription ? ` · ${t('subSignedIn')}` : provider.hasKey ? '' : ` · ${t('modelNoKey')}`;
+			return {
+				key: provider.id,
 				provider: provider.id,
-				label: `${group.name} · ${countOf(group.models.length)}`,
-				models: group.models,
-			});
-		}
-	}
-	return entries;
+				label: `${provider.name} · ${countOf(models.length)}${note}`,
+				models,
+			};
+		});
 }
 
 /* -- step 4: theme ------------------------------------------------- */

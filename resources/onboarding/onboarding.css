@@ -1338,6 +1338,11 @@ button.fact:hover .fact-value {
 	color: var(--accent);
 }
 
+.provider-go.ok {
+	color: var(--ok);
+	font-weight: 600;
+}
+
 .signin {
 	display: flex;
 	flex-direction: column;

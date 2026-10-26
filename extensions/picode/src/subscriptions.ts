@@ -87,6 +87,8 @@ export interface PiModelRuntime {
 	isUsingSubscription(providerId: string): boolean;
 	hasConfiguredAuth(providerId: string): boolean;
 	login?(providerId: string, type: PiAuthType, interaction: PiAuthInteraction): Promise<unknown>;
+	/** The models that can run right now: their provider has a credential or needs none. */
+	getAvailable?(providerId?: string): Promise<readonly { readonly id: string; readonly provider: string }[]>;
 }
 
 /** The SDK slice: the one step that builds a runtime over PiCode's own profile. */

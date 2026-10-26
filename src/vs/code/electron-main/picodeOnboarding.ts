@@ -594,10 +594,22 @@ const OPENABLE_HOSTS: readonly string[] = [
 	'picode.dev',
 ];
 
+/**
+ * The sign-in addresses pi itself announced during the sign-in now running.
+ *
+ * A provider's own sign-in page (claude.ai, auth.openai.com, a device-code page...) is not one of
+ * the hosts above and cannot be: pi picks it. It is safe to open because it came from pi's own
+ * process, not from the page, and only that exact address is allowed.
+ */
+const announcedSignInAddresses = new Set<string>();
+
 /** Whether an address is https and its host is on the list above. */
 export function isOpenableAddress(raw: unknown): boolean {
 	if (typeof raw !== 'string') {
 		return false;
+	}
+	if (announcedSignInAddresses.has(raw)) {
+		return true;
 	}
 	try {
 		const url = new URL(raw);
@@ -691,6 +703,7 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 			return { ok: false, error: 'a sign-in needs a provider' };
 		}
 		stopLogin();
+		announcedSignInAddresses.clear();
 		const script = join(options.resources, 'host.cjs');
 		const env: NodeJS.ProcessEnv = {
 			...process.env,
@@ -725,7 +738,15 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 					continue;
 				}
 				try {
-					emit(JSON.parse(line.slice(PROTOCOL_MARK.length)) as Record<string, unknown>);
+					const message = JSON.parse(line.slice(PROTOCOL_MARK.length)) as Record<string, unknown>;
+					// The page may open exactly the sign-in address pi just announced, and no other.
+					const announced = message['event'] as { type?: unknown; url?: unknown; verificationUri?: unknown } | undefined;
+					for (const address of [announced?.url, announced?.verificationUri]) {
+						if (typeof address === 'string' && address.startsWith('https://')) {
+							announcedSignInAddresses.add(address);
+						}
+					}
+					emit(message);
 				} catch {
 					// A line that cannot be read is not a reason to end somebody's sign-in.
 				}
