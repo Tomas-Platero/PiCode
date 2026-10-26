@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// PiCode Firestore rules (project picode-7f24f). The deployed copy lives in
+// the PiCode-Website repository; keep both files identical.
+//
+// Every write goes through the Firebase Admin SDK on trusted infrastructure
+// (session upserts, plan updates from the Stripe webhook, the editor sync
+// API), and Admin bypasses these rules by design. No browser or editor code
+// writes Firestore directly, so clients get read access to their own data
+// and nothing else: a client-writable profile would let any signed-in user
+// set their own `plan` to "pro".
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User profile and everything under it (rules v2: `**` also matches the
+    // profile document itself): owner may read, nobody may write.
+    match /users/{uid}/{document=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Editor one-time auth codes (code <-> customToken exchange).
+    // Written and consumed ONLY by the Admin SDK; clients are denied outright.
+    match /editorAuthCodes/{code} {
+      allow read, write: if false;
+    }
+  }
+}

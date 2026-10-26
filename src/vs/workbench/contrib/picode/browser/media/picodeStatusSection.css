@@ -1,0 +1,313 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * The Status section of the Agent Customizations page (picodeStatusSection.ts).
+ *
+ * Every rule here exists to keep the page readable in a panel as narrow as ~500px: the text column
+ * always flexes (`minmax(0, 1fr)`), the button column never shrinks (`auto`), and no child of a grid
+ * cell is allowed to push its cell wider than the panel. Colours come from `--vscode-*` only, so the
+ * page follows whatever theme is in force instead of imposing one.
+ */
+
+.picode-status-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 16px;
+	/*
+	 * The page hands this section a bounded height and clips whatever leaves it, so the section owns
+	 * its own scrolling: without this, the last cards (Actions among them) were simply unreachable.
+	 * `height: 100%` fills that box; `min-height: 0` lets the flex item actually shrink to it.
+	 */
+	height: 100%;
+	min-height: 0;
+	box-sizing: border-box;
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+/* The workbench styles its own scrollbars, not a plain div's: themed here so it follows the theme. */
+.picode-status-section::-webkit-scrollbar {
+	width: 10px;
+}
+
+.picode-status-section::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.picode-status-section::-webkit-scrollbar-thumb {
+	background: var(--vscode-scrollbarSlider-background);
+	border-radius: 5px;
+}
+
+.picode-status-section::-webkit-scrollbar-thumb:hover {
+	background: var(--vscode-scrollbarSlider-hoverBackground, var(--vscode-scrollbarSlider-background));
+}
+
+.picode-status-section::-webkit-scrollbar-thumb:active {
+	background: var(--vscode-scrollbarSlider-activeBackground, var(--vscode-scrollbarSlider-background));
+}
+
+/* The scroll container is a flex column: nothing inside may shrink, or the cards would be squeezed
+   to fit instead of pushing the list past the edge and scrolling. */
+.picode-status-section > * {
+	flex: 0 0 auto;
+}
+
+.picode-status-section-description {
+	color: var(--vscode-descriptionForeground);
+	margin: 0 0 2px;
+}
+
+.picode-status-cards {
+	display: flex;
+	flex-direction: column;
+}
+
+/* The filter narrows what the status says; a card that does not carry the word steps aside. */
+.picode-status-filter {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 4px;
+	background: var(--vscode-input-background);
+}
+
+.picode-status-filter-icon {
+	color: var(--vscode-input-placeholderForeground);
+	font-size: 12px;
+}
+
+.picode-status-filter-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--vscode-input-foreground);
+	font-size: 12px;
+	font-family: inherit;
+}
+
+.picode-status-filter-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.picode-status-filtered-out {
+	display: none;
+}
+
+.picode-status-empty {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.picode-status-card {
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+	border-radius: 6px;
+	margin-bottom: 10px;
+	overflow: hidden;
+	min-width: 0;
+}
+
+.card-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	font-weight: 600;
+	min-width: 0;
+	border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.card-head .grow {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-status-card-icon {
+	display: flex;
+	align-items: center;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+
+/* ------------------------------------------------------------------- host */
+
+/* Label above, value below, three fields side by side. Content-sized, not equal columns:
+   "Internal (bundled)" needs more room than "1.4.0", and the profile takes what is left. */
+.kv {
+	display: grid;
+	grid-template-columns: auto auto minmax(0, 1fr);
+	min-width: 0;
+}
+
+.kv > div {
+	padding: 10px 18px;
+	min-width: 0;
+	border-right: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.kv > div:last-child {
+	border-right: 0;
+}
+
+.kv small {
+	display: block;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	margin-bottom: 2px;
+	white-space: nowrap;
+}
+
+.kv .val {
+	display: block;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--vscode-foreground);
+}
+
+/* ------------------------------------------------------------------- rows */
+
+/* Text flexes, the button keeps its width. This is the rule that ends the squeezed description
+   and the button running out of the panel. */
+.row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 16px;
+	padding: 10px 14px;
+	min-width: 0;
+	border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.card-head + .row,
+.kv + .row {
+	border-top: 0;
+}
+
+.row .text {
+	min-width: 0;
+}
+
+.row .text b {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-weight: 600;
+}
+
+.row .text b > span:last-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-status-row-icon {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	font-size: 13px;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+
+.picode-status-row-text {
+	display: block;
+	margin-top: 2px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+/* A fact's answer: one line, ellipsis, the whole sentence in the tooltip. */
+.row .value {
+	justify-self: end;
+	min-width: 0;
+	max-width: 46ch;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--vscode-foreground);
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+/* The connector's buttons are workbench Buttons (monaco-button): fixed minimum width, natural
+   width, never 100%, so a column of them lines up without touching the panel's edges. */
+.picode-status-btn.monaco-button {
+	min-width: 116px;
+	width: auto;
+	height: 28px;
+	padding: 0 12px;
+	font-size: 12px;
+	border-radius: 4px;
+	justify-content: center;
+	white-space: nowrap;
+}
+
+/* The only destructive action of the page. */
+.picode-status-btn.monaco-button.danger {
+	color: var(--vscode-errorForeground);
+	border: 1px solid var(--vscode-errorForeground);
+}
+
+.picode-status-btn.monaco-button.danger:hover {
+	background: var(--vscode-inputValidation-errorBackground, var(--vscode-button-secondaryHoverBackground));
+}
+
+/* ------------------------------------------------------------------ pills */
+
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: 0 0 auto;
+	font-size: 11px;
+	font-weight: 400;
+	padding: 2px 8px;
+	border-radius: 999px;
+	border: 1px solid transparent;
+	white-space: nowrap;
+}
+
+.pill .dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+	flex: 0 0 auto;
+}
+
+.pill.ok {
+	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+	border-color: currentColor;
+	background: transparent;
+}
+
+.pill.warn {
+	color: var(--vscode-testing-iconQueued, var(--vscode-charts-orange));
+	border-color: currentColor;
+	background: transparent;
+}
+
+.pill.off {
+	color: var(--vscode-descriptionForeground);
+	border-color: var(--vscode-widget-border, var(--vscode-panel-border));
+	background: transparent;
+}

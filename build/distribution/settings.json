@@ -1,0 +1,101 @@
+// PiCode — default settings of a new install.
+//
+// This file is copied to `<install>/data/user-data/User/settings.json` while packing
+// (`build/stage-distribution.sh`), so it only affects new installs: an existing one keeps
+// whatever its owner has written.
+//
+// It is written as JSONC (comments allowed): the editor reads `settings.json` as JSON with
+// comments, and a reason beside a value is worth more than the value alone.
+//
+// Rule: only keys that exist in the schema. An invented key does nothing and also raises the
+// *Unknown Configuration Setting* warning — the editor scolding for a key it wrote itself.
+{
+	// ---------------------------------------------------------------- editor
+	"files.autoSave": "off",
+	"editor.fontFamily": "'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace",
+	"editor.fontLigatures": true,
+	"editor.fontSize": 13,
+	"editor.lineHeight": 1.5,
+	"editor.tabSize": 2,
+	"editor.insertSpaces": true,
+	"editor.formatOnSave": false,
+	"editor.minimap.enabled": false,
+	"editor.renderWhitespace": "selection",
+	"files.trimTrailingWhitespace": true,
+	"files.insertFinalNewline": true,
+	"files.eol": "\n",
+
+	// Inline suggestions belong to the editor, not to one particular assistant: the day PiCode
+	// offers one, this switch is already on and nothing has to be migrated from Copilot.
+	"editor.inlineSuggest.enabled": true,
+
+	// --------------------------------------------------------------- privacy
+	// Nothing leaves the machine. `telemetry.telemetryLevel` is the key that rules today; the other
+	// two are the old ones the editor still understands, and they are turned off as well in case an
+	// extension reads them. (`crashReporter.enabled` does not exist in this editor: its real
+	// equivalent is `telemetry.enableCrashReporter`.)
+	"telemetry.telemetryLevel": "off",
+	"telemetry.enableTelemetry": false,
+	"telemetry.enableCrashReporter": false,
+
+	// ------------------------------------------------------------- appearance
+	"workbench.colorTheme": "PiCode Dark",
+	"terminal.integrated.defaultProfile.windows": "PowerShell",
+	"security.workspace.trust.enabled": true,
+
+	// --------------------------------------------------------------------- chat
+	// The chat engine is PiCode's own; the editor's "AI disabled" switch stays off because the
+	// product *is* the agent.
+	"chat.disableAIFeatures": false,
+
+
+	// --- MCP Servers -----------------------------------------------------------------------------
+	// `access: all` lets the chat use the configured servers (the actual list is edited on the MCP
+	// Servers page, which writes pi's `mcp.json`).
+	// `autostart` stays at `never` on purpose: starting third-party servers without anybody asking
+	// is the owner's decision, not a default value. The possible values are
+	// `never` | `onlyNew` | `newAndOutdated`.
+	"chat.mcp.access": "all",
+	"chat.mcp.autostart": "never",
+
+	// --- Packages & Skills: persistent memory ----------------------------------------------------
+	// PiCode ships its own memory engine; this switch turns it on. The `pi-memory` package is the
+	// other half (the profile declares it), and it is not installed from here.
+	"picode.memory.enabled": true,
+
+	// --- Tools & Security: what the agent may do without asking ---------------------------------
+	// Reads and tests: approved on their own (they change nothing).
+	"chat.tools.terminal.autoApprove": {
+		"/^cd\\b/": true,
+		"/^ls\\b/": true,
+		"/^cat\\b/": true,
+		"/^git status\\b/": true,
+		"/^git log\\b/": true,
+		"/^git diff\\b/": true,
+		"/^npm (test|run test)\\b/": true,
+		"/^yarn (test|run test)\\b/": true,
+		"/^pnpm (test|run test)\\b/": true,
+		// What deletes or goes out to the network **always** asks, even when a general rule allows it.
+		"/^rm\\b/": false,
+		"/^curl\\b/": false,
+		"/^wget\\b/": false,
+		// `cat` on a secret stops being innocent: any `.env` needs confirmation.
+		"/^cat\\b.*\\.env/": false
+	},
+
+	// Edits: approved in general (the agent works), and the files that can break the project or leak
+	// secrets need an explicit confirmation.
+	"chat.tools.edits.autoApprove": {
+		"**/*": true,
+		"**/.git/**": false,
+		"**/{package.json,package-lock.json,pnpm-lock.yaml,yarn.lock,Cargo.toml,Cargo.lock}": false,
+		"**/*.lock": false,
+		"**/.env*": false,
+		"**/.vscode/*.json": false
+	},
+
+	// --- Overview / Status: what context travels with every message ------------------------------
+	// `project` sends the folder, the open file and the selection; `file` and `selection` are the
+	// narrow versions (see Settings › Chat › Settings).
+	"picode.context.mode": "project"
+}

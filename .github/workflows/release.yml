@@ -2,10 +2,10 @@
 # feed on the release's own channel branch, and verify it live.
 #
 # Hard rules this workflow enforces:
-# - The release version lives ONLY in distribution/product-delta.json
-#   (set.version). The tag must agree with it, and it must be strictly
-#   newer than the previous release.
-# - `--force` is never passed to dev/update-feed.mjs: if the generator
+# - The release version lives ONLY in product.json (version, and picodeVersion
+#   for the name the tag carries). The tag must agree with it, and it must be
+#   strictly newer than the previous release.
+# - `--force` is never passed to build/release.mjs update-feed: if the generator
 #   refuses, the release stops. That refusal is the guard that keeps the
 #   editor from being offered an update that is not one.
 # - The feed is served from raw.githubusercontent.com against the DEFAULT
@@ -42,7 +42,8 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
-    timeout-minutes: 40
+    # A cold Rust CLI build (OpenSSL included) is ~13 minutes on top of the rest.
+    timeout-minutes: 60
     steps:
       # fetch-depth 0 because the feed branch is rebuilt from the channel
       # branch below (and the pull request merge walks that history);
@@ -60,10 +61,10 @@ jobs:
       - name: Cache node_modules and npm cache
         uses: actions/cache@v6
         env:
-          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+          LOCK: ${{ hashFiles('package-lock.json') }}
         with:
           path: |
-            picode-source/node_modules
+            node_modules
             ~\AppData\Local\npm-cache
           key: picode-nm-${{ runner.os }}-${{ env.LOCK }}
           restore-keys: picode-nm-${{ runner.os }}-
@@ -71,7 +72,7 @@ jobs:
       - name: Cache electron binary
         uses: actions/cache@v6
         env:
-          LOCK: ${{ hashFiles('picode-source/package-lock.json') }}
+          LOCK: ${{ hashFiles('package-lock.json') }}
         with:
           path: ~\AppData\Local\electron\Cache
           key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
@@ -85,10 +86,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(node -p \
-            "require('./distribution/product-delta.json').set.version")
+            "require('./product.json').version")
           if [ -z "${VERSION}" ]; then
-            echo "error: set.version is empty in" >&2
-            echo "distribution/product-delta.json." >&2
+            echo "error: version is empty in" >&2
+            echo "product.json." >&2
             exit 1
           fi
           # PiCode's own version: what a release is named after, and what moves
@@ -97,10 +98,10 @@ jobs:
           # `set.version`: that number is the editor's, it tracks VS Code —
           # extensions are validated against it — and the updater compares it.
           PICODE_VERSION=$(node -p \
-            "require('./distribution/product-delta.json').set.picodeVersion")
+            "require('./product.json').picodeVersion")
           if [ -z "${PICODE_VERSION}" ]; then
             echo "error: set.picodeVersion is empty in" >&2
-            echo "distribution/product-delta.json." >&2
+            echo "product.json." >&2
             exit 1
           fi
           # The channel is the tag's suffix, and each channel keeps its feed
@@ -126,7 +127,7 @@ jobs:
             echo "error: tag '${GITHUB_REF_NAME}' does not match" >&2
             echo "v${PICODE_VERSION}." >&2
             echo "PiCode's own version lives in" >&2
-            echo "distribution/product-delta.json (set.picodeVersion);" >&2
+            echo "product.json (picodeVersion);" >&2
             echo "re-tag or bump the file so both agree." >&2
             exit 1
           fi
@@ -164,8 +165,8 @@ jobs:
           if [ -n "${PREV_TAG}" ] \
              && ver_le "${PICODE_VERSION}" "${PREV_TAG#v}"; then
             echo "error: ${PICODE_VERSION} is not newer than the last" >&2
-            echo "release ${PREV_TAG}. Bump set.picodeVersion in" >&2
-            echo "distribution/product-delta.json before tagging." >&2
+            echo "release ${PREV_TAG}. Bump picodeVersion in" >&2
+            echo "product.json before tagging." >&2
             exit 1
           fi
           # The editor's number is what the updater compares, so it has to move
@@ -221,6 +222,18 @@ jobs:
           echo "vs2022_install=${VS_PATH}" >> "$GITHUB_ENV"
           echo "C++ toolchain: ${VS_PATH}"
 
+      # Same reason as in CI: the released editor must carry the Rust CLI. The vendored OpenSSL in
+      # `cli/Cargo.toml` means the runner needs no SDK, only the toolchain.
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache the Rust CLI build
+        uses: actions/cache@v6
+        with:
+          path: cli/target
+          key: picode-cli-${{ runner.os }}-${{ hashFiles('cli/Cargo.lock', 'cli/Cargo.toml') }}
+          restore-keys: picode-cli-${{ runner.os }}-
+
       - name: Build
         shell: bash
         env:
@@ -234,14 +247,16 @@ jobs:
           # A local build is portable-only; the release is the one caller
           # that also ships the Inno Setup installer, so it asks for it.
           PICODE_SKIP_INSTALLER: "no"
-        run: ./dev/build.sh
+          # A published editor without the CLI is a promise the product does not keep.
+          PICODE_REQUIRE_CLI: 1
+        run: ./build/build.sh
 
       - name: Read the built identity
         shell: bash
         run: |
           # build.sh names the pack folder after the channel: stable keeps
           # the plain `PiCode-Win32-x64`, every other channel appends its
-          # own name (dev/build.sh, "the channel names the PACK FOLDER"),
+          # own name (build/build.sh, "the channel names the PACK FOLDER"),
           # so an experimental tag never looks for a folder that build
           # does not produce.
           PACK="PiCode-Win32-x64"
@@ -360,7 +375,7 @@ jobs:
           # channel, so it is edited like any other text instead of hiding in
           # this file. The release's own title already carries the version, and
           # the project's rule is that a datum appears once.
-          DESCRIPTION="dev/release-notes/${CHANNEL}.md"
+          DESCRIPTION="build/release-notes/${CHANNEL}.md"
           if [ ! -f "${DESCRIPTION}" ]; then
             echo "error: channel ${CHANNEL} has no description at" >&2
             echo "${DESCRIPTION}" >&2
@@ -370,7 +385,7 @@ jobs:
           # this one. Repointed at this tag's own commits: a link that goes
           # nowhere is the one thing these notes must not carry.
           # Above it sits the page's own summary: the release's commits, grouped
-          # by kind of change (dev/release-notes.mjs). With no previous tag to
+          # by kind of change (build/release.mjs release-notes). With no previous tag to
           # compare against, the script stays silent and the generated
           # changelog carries the page alone.
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
@@ -378,9 +393,9 @@ jobs:
           SED="s#https://github.com/[^ ]*/compare/[^ ]*#${COMMITS_URL}#"
           EXE="PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
           ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
-          WHAT_CHANGED="dev/release-notes/what-changed.md"
+          WHAT_CHANGED="build/release-notes/what-changed.md"
           if [ -n "${PREV_TAG}" ]; then
-            node dev/release-notes.mjs --from "${PREV_TAG}" \
+            node build/release.mjs release-notes --from "${PREV_TAG}" \
               --to "v${PICODE_VERSION}" > "${WHAT_CHANGED}"
           else
             : > "${WHAT_CHANGED}"
@@ -435,13 +450,13 @@ jobs:
           else
             INSTALLED=()
           fi
-          node dev/update-feed.mjs --version "${VERSION}" \
+          node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_ZIP}" --sha256 "${SHA}" \
             --picode-version "${PICODE_VERSION}" \
             --quality "${CHANNEL}" \
             --platform win32 --arch x64 --target archive \
             "${INSTALLED[@]}"
-          node dev/update-feed.mjs --version "${VERSION}" \
+          node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
             --picode-version "${PICODE_VERSION}" \
             --quality "${CHANNEL}" \
