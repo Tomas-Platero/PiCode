@@ -25,6 +25,7 @@ import { Architecture, AvailableForDownload, DisablementReason, IUpdate, IUpdate
 import * as semver from 'semver';
 
 const LAST_KNOWN_VERSION_STORAGE_KEY = 'abstractUpdateService/lastKnownVersion';
+const LAST_ACTIVE_DAY_STORAGE_KEY = 'abstractUpdateService/lastActiveDay';
 
 export interface IUpdateURLOptions {
 	readonly background?: boolean;
@@ -66,6 +67,28 @@ export function getUpdateRequestHeaders(productVersion: string, productName: str
 	}
 
 	return undefined;
+}
+
+/**
+ * The periods (UTC day, Monday-based week, month) in which this is the first update check, as the
+ * `X-PiCode-Active` header value: `day,week,month`, any subset, or '' when none. The update server
+ * counts active installs from it, so no id ever has to leave the machine.
+ */
+export function activePeriods(lastActiveDay: string | undefined, now: Date): string {
+	const today = now.toISOString().slice(0, 10);
+	if (lastActiveDay === today) {
+		return '';
+	}
+	const week = (day: string) => Math.floor((Date.parse(`${day}T00:00:00Z`) / 86_400_000 + 3) / 7);
+	const last = lastActiveDay && /^\d{4}-\d{2}-\d{2}$/.test(lastActiveDay) ? lastActiveDay : undefined;
+	const periods = ['day'];
+	if (!last || week(last) !== week(today)) {
+		periods.push('week');
+	}
+	if (!last || last.slice(0, 7) !== today.slice(0, 7)) {
+		periods.push('month');
+	}
+	return periods.join(',');
 }
 
 export type UpdateErrorClassification = {
@@ -673,8 +696,26 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 			});
 	}
 
+	/**
+	 * Headers for an update check: the platform ones, plus what the update server counts
+	 * anonymously (the PiCode version and the first-check-of-the-period flags).
+	 */
+	protected updateCheckHeaders(): Record<string, string> {
+		const headers: Record<string, string> = { ...getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode') };
+		if (this.productService.picodeVersion) {
+			headers['X-PiCode-Version'] = this.productService.picodeVersion;
+		}
+		const now = new Date();
+		const active = activePeriods(this.applicationStorageMainService.get(LAST_ACTIVE_DAY_STORAGE_KEY, StorageScope.APPLICATION), now);
+		if (active) {
+			headers['X-PiCode-Active'] = active;
+			this.applicationStorageMainService.store(LAST_ACTIVE_DAY_STORAGE_KEY, now.toISOString().slice(0, 10), StorageScope.APPLICATION, StorageTarget.MACHINE);
+		}
+		return headers;
+	}
+
 	protected async _isLatestVersion(url: string, explicit: boolean, pendingVersion?: string, token: CancellationToken = CancellationToken.None): Promise<{lastest: boolean, update: IUpdate} | undefined> {
-		const headers = getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode');
+		const headers = this.updateCheckHeaders();
 		this.logService.trace('update#isLatestVersion() - checking update server', { url, headers });
 
 		return this.requestService.request({ url, headers, callSite: NO_FETCH_TELEMETRY }, CancellationToken.None)
