@@ -311,6 +311,24 @@ export function nanModelUsage(usage: NanUsage, modelId: string | undefined): Nan
 	return usage.limits.length === 1 ? usage.limits[0] : undefined;
 }
 
+/**
+ * Every meter the account has, the model in use first.
+ *
+ * The quota is the **account's**, not the session's: it is worth seeing while another provider's
+ * model is the one answering, which is exactly when the one-meter-per-session rule above leaves the
+ * panel empty. The rest follow in the provider's own order, so the list does not reshuffle between
+ * refreshes.
+ */
+export function nanAccountMeters(usage: NanUsage, modelId: string | undefined): NanUsageLimit[] {
+	const active = modelId === undefined || modelId.length === 0 ? undefined : usage.limits.find(limit => limit.name === modelId);
+	return active === undefined ? [...usage.limits] : [active, ...usage.limits.filter(limit => limit !== active)];
+}
+
+/** The first declared provider that is NaN's, whichever model the session is on. */
+export function firstNanProvider<T extends NanProviderRef>(refs: readonly T[]): T | undefined {
+	return refs.find(isNanProvider);
+}
+
 /** Whether a declared provider is NaN's: by id, or by the address it points at. */
 export function isNanProvider(ref: NanProviderRef): boolean {
 	return ref.id === NAN_PROVIDER_ID || ref.baseUrl.includes(NAN_ENDPOINT_MARKER);

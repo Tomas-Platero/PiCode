@@ -72,6 +72,7 @@ import { listProjectSessionFiles } from './sessions-provider';
 import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
+import { acceptsImages, modelPricing, type PiModelCost } from './model-info';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -143,6 +144,8 @@ interface PiModelEntry {
 	readonly contextWindow?: number;
 	readonly maxTokens?: number;
 	readonly reasoning?: boolean;
+	readonly cost?: PiModelCost;
+	readonly input?: readonly string[];
 }
 
 /** One provider as pi's `models.json` declares it. */
@@ -193,7 +196,8 @@ function toChatInformation(models: PiModelsFile): vscode.LanguageModelChatInform
 				maxInputTokens: model.contextWindow ?? 128000,
 				maxOutputTokens: model.maxTokens ?? 16384,
 				detail: providerId,
-				capabilities: { toolCalling: true },
+				capabilities: { toolCalling: true, ...(acceptsImages(model.input) ? { imageInput: true } : {}) },
+				...modelPricing(model.cost),
 			});
 		}
 	}
@@ -1440,6 +1444,8 @@ interface PiRuntimeModel {
 	readonly name?: string;
 	readonly contextWindow?: number;
 	readonly maxTokens?: number;
+	readonly cost?: PiModelCost;
+	readonly input?: readonly string[];
 }
 
 interface PiRuntimeProvider {
@@ -1668,7 +1674,8 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 				maxInputTokens: model.contextWindow ?? 128000,
 				maxOutputTokens: model.maxTokens ?? 16384,
 				detail: provider.id,
-				capabilities: { toolCalling: true },
+				capabilities: { toolCalling: true, ...(acceptsImages(model.input) ? { imageInput: true } : {}) },
+				...modelPricing(model.cost),
 			});
 		}
 	}

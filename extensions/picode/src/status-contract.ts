@@ -140,6 +140,12 @@ export interface StatusData {
 	 */
 	subscription?: SubscriptionStatus;
 	/**
+	 * Every meter of the account's subscription, the model in use first (`usage-data.ts`). The
+	 * quota is the account's, so this is present while another provider's model is the one
+	 * answering — the case `subscription` above, which follows the session's model, leaves empty.
+	 */
+	subscriptions?: readonly SubscriptionStatus[];
+	/**
 	 * The chat's background jobs still running (`background-jobs.ts`), the same answer the pill
 	 * above the chat input reads. Each leaves when its completion message closes it, so a job
 	 * that failed or finished is not listed: the card is work still out, and a finished
