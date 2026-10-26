@@ -134,7 +134,10 @@ the document after a release. The layout, the URL template, the two Windows feed
 zip vs installed setup) and the version-numbering rules live in
 [`updates/README.md`](../updates/README.md); the channel policy is ADR-015.
 
-There is no update server to run: `raw.githubusercontent.com` serves the files directly.
+`raw.githubusercontent.com` serves the files. The editor does not ask it directly: it asks
+`https://www.getpicode.app/api/feed/<branch>/updates/...`, which adds one to an anonymous counter
+and redirects to the same document on GitHub (see *Anonymous usage* in
+[`cloud/sync-api/README.md`](../cloud/sync-api/README.md)).
 
 ## ✅ 8. Verification
 
