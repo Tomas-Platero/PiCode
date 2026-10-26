@@ -1276,3 +1276,31 @@ play. Unverified in a running editor.
   formato, así que lo que cambia uno lo lee el otro. Un fichero de permisos que gentle no puede leer no se
   reemplaza: se avisa y el control queda apagado. Cada cambio reinicia la sesión del chat. Los permisos de
   *esta* conversación siguen cambiándose con `/gentle:mode`.
+
+## ADR-033 — pi-intercom viene de serie: las sesiones de pi hablan entre sí
+
+**Estado:** aceptada (2026-10-26).
+
+> *"Haz que venga de serie"* (sobre pi-intercom, el paquete que deja hablar a las sesiones de pi)
+
+**Contexto:** sin pi-intercom, dos sesiones de PiCode no pueden mandarse mensajes. Los subagentes de
+gentle-pi hablan con quien los lanzó, dentro de la misma conversación, y engram solo deja notas para
+después. El dueño lo usa en su pi del PATH y lo quiere en el producto.
+
+**Decisión:**
+
+- `pi-intercom@0.18.1` entra en `PRODUCT_PACKAGES` (`product-packages.ts`), fijado como gentle-pi y
+  gentle-engram, entero (sin filtro): sus herramientas y su skill.
+- **Sus datos se quedan en el perfil:** pi-intercom guarda su estado en `<carpeta de agente>/intercom`, y
+  esa carpeta es la que PiCode fija con `PI_CODING_AGENT_DIR`. Nada va a `~/.pi`.
+- **Su intermediario arranca sin Node instalado:** pi-intercom levanta un proceso intermediario con `node`
+  cuando el proceso actual no es Node, y el editor no lo es. `intercom-config.ts` escribe en
+  `<perfil>/intercom/config.json` solo `brokerCommand` (el ejecutable del editor) y `brokerArgs` (`--import`
+  y el cargador de tsx del perfil). El editor arranca como Node porque `ELECTRON_RUN_AS_NODE` ya está puesto
+  para los procesos hijos (ADR-031, adenda 3). El resto del fichero es del dueño y no se toca. Solo con el pi
+  que lleva el editor: un pi externo tiene su propio Node y sus propios ficheros.
+- El intermediario se cierra solo unos segundos después de que se desconecte la última sesión.
+
+**Pendiente de verificar en la app:** que un mensaje entrante abra un turno visible en el chat. Los
+comandos de pi-intercom que pintan paneles del terminal (`/intercom`, `/handover`) no se pueden dibujar en
+el editor (`ui.custom` es nulo). Las herramientas, que son lo que usa el agente, no dependen de eso.

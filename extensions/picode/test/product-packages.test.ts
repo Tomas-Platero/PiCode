@@ -31,8 +31,8 @@ const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
-test('the product pins gentle-pi and gentle-engram at exact versions', () => {
-	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.3.0', 'gentle-engram@0.4.2']);
+test('the product pins gentle-pi, gentle-engram and pi-intercom at exact versions', () => {
+	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.3.0', 'gentle-engram@0.4.2', 'pi-intercom@0.18.1']);
 	for (const pkg of PRODUCT_PACKAGES) {
 		assert.match(pkg.version, /^\d+\.\d+\.\d+$/, `${pkg.name} is pinned exactly, never a range`);
 	}
@@ -49,10 +49,10 @@ test('gentle-pi loses its terminal experience and keeps the rest; gentle-engram 
 	assert.ok(GENTLE_PI_TERMINAL_EXTENSIONS.every(pattern => pattern.startsWith('!')));
 });
 
-test('a profile with no settings gets both packages declared', () => {
+test('a profile with no settings gets every product package declared', () => {
 	const result = withProductPackages(undefined);
 	assert.equal(result.changed, true);
-	assert.deepEqual(JSON.parse(result.text!), { packages: [GENTLE_PI, 'npm:gentle-engram@0.4.2'] });
+	assert.deepEqual(JSON.parse(result.text!), { packages: [GENTLE_PI, 'npm:gentle-engram@0.4.2', 'npm:pi-intercom@0.18.1'] });
 });
 
 test('other entries and other keys stay exactly where they were', () => {
@@ -60,24 +60,24 @@ test('other entries and other keys stay exactly where they were', () => {
 	const result = withProductPackages(source);
 	const parsed = JSON.parse(result.text!);
 	assert.deepEqual(Object.keys(parsed), ['theme', 'packages', 'keepLast']);
-	assert.deepEqual(parsed.packages, ['npm:pi-lens', { source: 'npm:other', extensions: ['x.ts'] }, GENTLE_PI, 'npm:gentle-engram@0.4.2']);
+	assert.deepEqual(parsed.packages, ['npm:pi-lens', { source: 'npm:other', extensions: ['x.ts'] }, GENTLE_PI, 'npm:gentle-engram@0.4.2', 'npm:pi-intercom@0.18.1']);
 });
 
 test('a ranged, unpinned or differently filtered declaration is put back as the product pins it, in place', () => {
 	const source = JSON.stringify({ packages: ['npm:gentle-pi', 'npm:pi-lens', { source: 'npm:gentle-engram@^0.1.0', extensions: [] }] });
 	const result = withProductPackages(source);
 	assert.equal(result.changed, true);
-	assert.deepEqual(JSON.parse(result.text!).packages, [GENTLE_PI, 'npm:pi-lens', 'npm:gentle-engram@0.4.2']);
+	assert.deepEqual(JSON.parse(result.text!).packages, [GENTLE_PI, 'npm:pi-lens', 'npm:gentle-engram@0.4.2', 'npm:pi-intercom@0.18.1']);
 });
 
 test('a duplicate declaration is dropped', () => {
 	const source = JSON.stringify({ packages: ['npm:gentle-engram@0.1.15', 'npm:gentle-engram', 'npm:gentle-pi@4.2.0'] });
 	const parsed = JSON.parse(withProductPackages(source).text!);
-	assert.deepEqual(parsed.packages, ['npm:gentle-engram@0.4.2', GENTLE_PI]);
+	assert.deepEqual(parsed.packages, ['npm:gentle-engram@0.4.2', GENTLE_PI, 'npm:pi-intercom@0.18.1']);
 });
 
 test('a profile that already declares them as pinned is left byte for byte alone', () => {
-	const source = `${JSON.stringify({ packages: [GENTLE_PI, 'npm:gentle-engram@0.4.2'] }, undefined, '\t')}\n`;
+	const source = `${JSON.stringify({ packages: [GENTLE_PI, 'npm:gentle-engram@0.4.2', 'npm:pi-intercom@0.18.1'] }, undefined, '\t')}\n`;
 	const result = withProductPackages(source);
 	assert.equal(result.changed, false);
 	assert.equal(result.text, source);
@@ -86,7 +86,7 @@ test('a profile that already declares them as pinned is left byte for byte alone
 test('a name that merely contains a product name is not the product package', () => {
 	const source = JSON.stringify({ packages: ['npm:gentle-pi-extras', 'git:github.com/someone/gentle-pi'] });
 	const parsed = JSON.parse(withProductPackages(source).text!);
-	assert.deepEqual(parsed.packages, ['npm:gentle-pi-extras', 'git:github.com/someone/gentle-pi', GENTLE_PI, 'npm:gentle-engram@0.4.2']);
+	assert.deepEqual(parsed.packages, ['npm:gentle-pi-extras', 'git:github.com/someone/gentle-pi', GENTLE_PI, 'npm:gentle-engram@0.4.2', 'npm:pi-intercom@0.18.1']);
 });
 
 test('a settings file that is not a JSON object is never replaced by a guess', () => {

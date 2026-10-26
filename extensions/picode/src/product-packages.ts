@@ -7,7 +7,8 @@
  * The packages the product itself puts in PiCode's profile, at the versions it ships.
  *
  * PiCode is pi plus Gentle AI (ADR-030): gentle-pi brings the method, the roles and the review
- * tools; gentle-engram brings pi its memory. They are declared here at **exact versions**, so a
+ * tools; gentle-engram brings pi its memory; pi-intercom lets pi sessions talk to each other
+ * (`intercom-config.ts` starts its broker on the editor's binary). They are declared here at **exact versions**, so a
  * profile can never float to a release nobody tried, and every run of the package installer
  * puts the declaration back the way the product pins it — an import, an old profile or a hand
  * edit cannot leave it ranged, unpinned or filtered differently.
@@ -81,6 +82,7 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
 	{ name: 'gentle-pi', version: '4.3.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.4.2' },
+	{ name: 'pi-intercom', version: '0.18.1' },
 ];
 
 /** The `packages` entry for one pinned package: a plain spec, or the filtered object form. */

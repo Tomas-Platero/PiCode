@@ -51,6 +51,7 @@ import { listModels, registerWizardModelCommands } from './wizard-models';
 import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
 import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
+import { applyIntercomBroker } from './intercom-config';
 import { traceChildPi } from './child-trace';
 import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
@@ -2364,6 +2365,11 @@ export function activate(context: vscode.ExtensionContext): void {
 	applyMcpServers(profileDirectory(context.extensionUri));
 	// A provider that needs no key (a local router) gets pi's dummy one, or pi refuses its models.
 	fillKeylessProviders(profileDirectory(context.extensionUri));
+	// pi-intercom's broker runs on the editor's binary as Node, so sessions can talk with no Node
+	// installed. Only for the pi this editor carries: an external pi has its own Node and its own files.
+	if (readRuntimeMode() === 'internal' && process.env['ELECTRON_RUN_AS_NODE'] === '1') {
+		applyIntercomBroker(profileDirectory(context.extensionUri), process.execPath);
+	}
 
 	// Memory: pi's engine, declared to this profile and woken for the editor's own surfaces. It is
 	// joined, never restarted, when it already serves this store — the same store another agent on
