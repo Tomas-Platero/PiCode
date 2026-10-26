@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { gzipSync, gunzipSync } from "node:zlib";
-import { HttpError } from "./http";
+import { brotliCompressSync, brotliDecompressSync, constants, gunzipSync } from "node:zlib";
+import { HttpError } from "./errors";
 
 /**
  * Server-side at-rest encryption for synced resource content.
@@ -15,6 +15,17 @@ import { HttpError } from "./http";
  *
  * where `iv` (12 bytes), `tag` (16 bytes) and `d` (ciphertext) are base64.
  * The `picode-enc:v1:` prefix makes envelope detection deterministic.
+ *
+ * That is the format of v1 and v2, which are still READ. What is written now
+ * (v3) is binary, stored as a Firestore Bytes field:
+ *
+ *   "PCE3" | iv (12) | tag (16) | AES-256-GCM(brotli(plaintext))
+ *
+ * The text envelope cost ~1.78x its payload (base64 inside base64) and that
+ * overhead counted against the user's quota; bytes cost 1x, and brotli shrinks
+ * synced JSON ~10% more than gzip. Measured on a real pi profile bundle: 389 KB
+ * stored as v2, 194 KB as v3. Without a key the content is still compressed
+ * ("PCZ3" | brotli), just not encrypted.
  *
  * The master key comes from PICODE_ENCRYPTION_KEY (32 bytes, base64-encoded;
  * e.g. `openssl rand -base64 32`). When the variable is unset, encryption is
@@ -71,31 +82,67 @@ export function isEncrypted(stored: string): boolean {
   return stored.startsWith(ENCRYPTION_MARKER) || stored.startsWith(ENCRYPTION_MARKER_V2);
 }
 
-/** Encrypt plaintext into the `picode-enc:v1:` envelope (or pass through). */
-export function encrypt(plaintext: string): string {
+const MAGIC_ENCRYPTED = Buffer.from("PCE3", "latin1");
+const MAGIC_COMPRESSED = Buffer.from("PCZ3", "latin1");
+const TAG_LENGTH_BYTES = 16;
+
+/*
+ * Quality 9, not 11: on a 660 KB profile bundle 11 saves another 8% but takes
+ * ~1 s of CPU against ~50 ms, and this runs on every upload.
+ */
+function compress(plaintext: string): Buffer {
+  const input = Buffer.from(plaintext, "utf8");
+  return brotliCompressSync(input, {
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: 9,
+      [constants.BROTLI_PARAM_MODE]: constants.BROTLI_MODE_TEXT,
+      [constants.BROTLI_PARAM_SIZE_HINT]: input.length,
+    },
+  });
+}
+
+/** Compress and encrypt plaintext into the binary v3 envelope (compress only without a key). */
+export function encrypt(plaintext: string): Buffer {
+  const packed = compress(plaintext);
   const key = masterKey();
   if (key === null) {
-    return plaintext;
+    return Buffer.concat([MAGIC_COMPRESSED, packed]);
   }
-  // v2: gzip before encrypting, because the envelope costs ~1.78x the
-  // plaintext (base64 inside base64) and an uncompressed 900 KB bundle would
-  // store ~1.64 MB, over Firestore's 1 MiB document limit. Compression saves
-  // the common case — compressible JSON — and only that case: gzip cannot
-  // shrink an already compressed or incompressible payload, which is why the
-  // caller checks the envelope size afterwards (store.writeResource).
-  const gz = gzipSync(Buffer.from(plaintext, "utf8"));
   const iv = randomBytes(IV_LENGTH_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([cipher.update(gz), cipher.final()]);
-  const envelope: EncryptionEnvelope = {
-    iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-    d: ciphertext.toString("base64"),
-  };
-  const envelopeJson = JSON.stringify(envelope);
-  return (
-    ENCRYPTION_MARKER_V2 + Buffer.from(envelopeJson, "utf8").toString("base64url")
-  );
+  const ciphertext = Buffer.concat([cipher.update(packed), cipher.final()]);
+  return Buffer.concat([MAGIC_ENCRYPTED, iv, cipher.getAuthTag(), ciphertext]);
+}
+
+/** What a stored value costs, whichever format it is in. */
+export function storedByteLength(stored: unknown): number {
+  if (Buffer.isBuffer(stored) || stored instanceof Uint8Array) {
+    return stored.byteLength;
+  }
+  return typeof stored === "string" ? Buffer.byteLength(stored, "utf8") : 0;
+}
+
+function decryptBinary(stored: Buffer): string {
+  const magic = stored.subarray(0, 4);
+  if (magic.equals(MAGIC_COMPRESSED)) {
+    return brotliDecompressSync(stored.subarray(4)).toString("utf8");
+  }
+  if (!magic.equals(MAGIC_ENCRYPTED)) {
+    throw new Error("Unknown binary envelope.");
+  }
+  const key = masterKey();
+  if (key === null) {
+    throw new Error("PICODE_ENCRYPTION_KEY is not configured.");
+  }
+  const iv = stored.subarray(4, 4 + IV_LENGTH_BYTES);
+  const tag = stored.subarray(4 + IV_LENGTH_BYTES, 4 + IV_LENGTH_BYTES + TAG_LENGTH_BYTES);
+  const ciphertext = stored.subarray(4 + IV_LENGTH_BYTES + TAG_LENGTH_BYTES);
+  if (tag.length !== TAG_LENGTH_BYTES) {
+    throw new Error("Malformed encryption envelope.");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return brotliDecompressSync(Buffer.concat([decipher.update(ciphertext), decipher.final()])).toString("utf8");
 }
 
 /**
@@ -104,7 +151,17 @@ export function encrypt(plaintext: string): string {
  * — wrong key, corrupt data, bad tag — surfaces as a 500 DecryptionFailed
  * error; garbage is never returned to a client.
  */
-export function decrypt(stored: string): string {
+export function decrypt(stored: unknown): string {
+  if (Buffer.isBuffer(stored) || stored instanceof Uint8Array) {
+    try {
+      return decryptBinary(Buffer.from(stored.buffer, stored.byteOffset, stored.byteLength));
+    } catch (error) {
+      throw decryptionFailed(error);
+    }
+  }
+  if (typeof stored !== "string") {
+    throw decryptionFailed(new Error("Stored content has an unexpected type."));
+  }
   if (!isEncrypted(stored)) {
     return stored;
   }
@@ -130,12 +187,16 @@ export function decrypt(stored: string): string {
     const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return (isV2 ? gunzipSync(plain) : plain).toString("utf8");
   } catch (error) {
-    throw new HttpError(
-      500,
-      "DecryptionFailed",
-      `Stored content could not be decrypted: ${
-        error instanceof Error ? error.message : "unknown error"
-      }`,
-    );
+    throw decryptionFailed(error);
   }
+}
+
+function decryptionFailed(error: unknown): HttpError {
+  return new HttpError(
+    500,
+    "DecryptionFailed",
+    `Stored content could not be decrypted: ${
+      error instanceof Error ? error.message : "unknown error"
+    }`,
+  );
 }

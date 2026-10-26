@@ -12,7 +12,7 @@
  *
  * Imported from `plans.ts`, which has no Firestore in it, so this runs with no credentials.
  *
- *   node --experimental-strip-types --test test/*.test.ts
+ *   node --experimental-transform-types --test test/*.test.ts
  */
 
 import assert from "node:assert/strict";

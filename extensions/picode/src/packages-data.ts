@@ -48,6 +48,8 @@ export interface PiPackage {
 	readonly name: string;
 	readonly version?: string;
 	readonly description?: string;
+	/** The preview the package declares for pi's gallery (`pi.image`), when it is a web address. */
+	readonly image?: string;
 	/** The directory pi loaded it from. */
 	readonly path: string;
 }
@@ -262,11 +264,15 @@ function packageAt(dir: string, read: FsReader): PiPackage | undefined {
 	const id = declaredName.length > 0 ? declaredName : dir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? dir;
 	const version = typeof manifest['version'] === 'string' ? manifest['version'] : undefined;
 	const description = typeof manifest['description'] === 'string' ? manifest['description'] : undefined;
+	const piField = manifest['pi'];
+	const declaredImage = isRecord(piField) ? piField['image'] : undefined;
+	const image = typeof declaredImage === 'string' && /^https:\/\//i.test(declaredImage) ? declaredImage : undefined;
 	return {
 		id,
 		name: id,
 		...(version === undefined ? {} : { version }),
 		...(description === undefined ? {} : { description }),
+		...(image === undefined ? {} : { image }),
 		path: dir,
 	};
 }

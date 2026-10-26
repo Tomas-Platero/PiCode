@@ -11,15 +11,16 @@
  *     memory tools. It does not wait for the engine to be awake: pi reads `mcp.json` when a
  *     session starts, and the session's own `engram mcp` process opens the store by itself.
  *  2. **The wake-up**, because the editor's own surfaces read over HTTP and need somebody serving.
- *     It runs detached and outlives the window: the store is the user's and is shared with
- *     whatever other agent on the machine points at it, so a server left serving is the normal
- *     state, not a leak. The next start joins it instead of opening another.
+ *     The store is the user's and is shared with whatever other agent on the machine points at
+ *     it, so a server that was already serving is joined and never stopped. One this editor
+ *     started itself is its own: the last window of the editor to close stops it, so closing
+ *     PiCode leaves nothing running behind it (`engram-leases.ts`).
  *
  * Nothing here can break a turn. Every failure is one line in the log and a state the surfaces
  * read; the chat keeps answering without memory, which is the whole point of memory being support.
  */
 
-import { spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -34,6 +35,7 @@ import {
 	SHIPPED_ENGRAM_FOLDER,
 	type EngramProbeIo
 } from './engram';
+import { leaveEngine, markEngineStarted, takeLease } from './engram-leases';
 import { mcpServersTextWithRemoved, serverEntry } from './mcp-add';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
@@ -67,7 +69,10 @@ function readServersFile(file: string): Record<string, unknown> | undefined {
 	}
 }
 
-/** Runs the engine detached, so it serves this store while the window is open and after it closes. */
+/** Where the engine and this editor's bookkeeping live; known once the engine's binary is. */
+let memoryDir: string | undefined;
+
+/** Runs the engine for this store and records that PiCode started it, so the last window out can stop it. */
 function spawnDetached(binary: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>): void {
 	const child = spawn(binary, [...args], {
 		detached: true,
@@ -76,6 +81,41 @@ function spawnDetached(binary: string, args: readonly string[], env: Readonly<Re
 		env: { ...env } as NodeJS.ProcessEnv
 	});
 	child.unref();
+	if (child.pid !== undefined) {
+		markEngineStarted(path.dirname(binary), child.pid);
+	}
+}
+
+/** Whether a process id still belongs to the memory engine, so a recycled id is never signalled. */
+function isEngineProcess(pid: number): boolean {
+	try {
+		const answer = process.platform === 'win32'
+			? execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true })
+			: execFileSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8' });
+		return answer.toLowerCase().includes('engram');
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * This window is closing: the last one out stops the engine, if PiCode is the one that started it.
+ *
+ * Other windows keep the engine alive (each holds a lease), and an engine somebody else started has
+ * no marker, so it is left running whatever happens here (`engram-leases.ts`).
+ */
+export function stopStartedMemory(): void {
+	if (memoryDir === undefined) {
+		return;
+	}
+	const enginePid = leaveEngine(memoryDir, process.pid);
+	if (enginePid !== undefined && isEngineProcess(enginePid)) {
+		try {
+			process.kill(enginePid);
+		} catch {
+			// Already gone: nothing is left to stop.
+		}
+	}
 }
 
 /**
@@ -196,6 +236,14 @@ export function startMemory(profileDir: string, log: (line: string) => void): vo
 	const binary = firstEngramBinary(io);
 	if (binary !== undefined) {
 		process.env['ENGRAM_BIN'] = binary;
+		// This window is open and uses the engine: taken before anything may start it, so a window
+		// closing at the same moment cannot decide it was the last one.
+		memoryDir = path.dirname(binary);
+		try {
+			takeLease(memoryDir, process.pid);
+		} catch (error) {
+			log(`memory: this window could not be recorded as using the engine (${error instanceof Error ? error.message : String(error)})`);
+		}
 	}
 	void (async () => {
 		const settled = await ensureEngramServer(io, { spawn: spawnDetached });

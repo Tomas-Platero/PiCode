@@ -6,7 +6,7 @@
  * total drift away from reality. Neither needs Firestore to catch — it is arithmetic — so it is
  * tested as arithmetic, before any store touches it.
  *
- *   node --experimental-strip-types --test test/*.test.ts
+ *   node --experimental-transform-types --test test/*.test.ts
  */
 
 import assert from "node:assert/strict";
@@ -19,6 +19,7 @@ import {
   sumBytes,
   totalUsed,
   planWrite,
+  planWriteWithinQuota,
   type RetainedRef,
 } from "../src/lib/retention.ts";
 
@@ -119,4 +120,34 @@ test("a whole manifest adds up across resources", () => {
   );
   assert.equal(totalUsed(undefined), 0);
   assert.equal(totalUsed({ empty: undefined }), 0);
+});
+
+test("a full quota gives up history before refusing a write", () => {
+  const all = {
+    piProfile: [ref("p3", 100), ref("p2", 100), ref("p1", 100)],
+    settings: [ref("s2", 10), ref("s1", 10)],
+  };
+  const plan = planWriteWithinQuota(all, "settings", ref("s3", 10), 320, 250);
+  assert.equal(plan.fits, true);
+  // The heaviest history (piProfile) loses its oldest revisions first.
+  assert.deepEqual(plan.dropped.map((r) => r.ref), ["p1"]);
+  assert.deepEqual(plan.revisions.piProfile?.map((r) => r.ref), ["p3", "p2"]);
+  assert.deepEqual(plan.revisions.settings?.map((r) => r.ref), ["s3", "s2", "s1"]);
+  assert.equal(plan.usedBytes, 230);
+});
+
+test("the latest revision of every resource is never dropped", () => {
+  const all = { piProfile: [ref("p2", 100), ref("p1", 100)], settings: [ref("s1", 10)] };
+  const plan = planWriteWithinQuota(all, "settings", ref("s2", 10), 210, 50);
+  assert.equal(plan.fits, false);
+  assert.deepEqual(plan.revisions.piProfile?.map((r) => r.ref), ["p2"]);
+  assert.deepEqual(plan.revisions.settings?.map((r) => r.ref), ["s2"]);
+});
+
+test("a write that fits drops nothing beyond the retention cap", () => {
+  const all = { settings: [ref("s1", 10)] };
+  const plan = planWriteWithinQuota(all, "settings", ref("s2", 10), 10, 1000);
+  assert.equal(plan.fits, true);
+  assert.deepEqual(plan.dropped, []);
+  assert.equal(plan.usedBytes, 20);
 });

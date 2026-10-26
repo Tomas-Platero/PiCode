@@ -164,3 +164,10 @@ test('with no pi runtime at that path nothing is touched', () => {
 	assert.deepEqual(proc.argv, ['editor', '/ext-host.js']);
 	assert.deepEqual(proc.env, {});
 });
+
+test('a profile that still declares the durable agent loses that declaration and keeps the rest', () => {
+	const before = JSON.stringify({ packages: ['npm:pi-lens', 'npm:@earendil-works/pi-durable@1.4.0', { source: 'npm:@earendil-works/pi-durable' }] });
+	const result = withProductPackages(before, []);
+	assert.equal(result.changed, true);
+	assert.deepEqual(JSON.parse(result.text ?? '{}').packages, ['npm:pi-lens']);
+});

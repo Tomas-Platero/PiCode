@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
 import { declarationsFromSetting, isRecord, projectDeclaration } from './declarations';
-import { memoryEnabled, startMemory } from './engram-activation';
+import { memoryEnabled, startMemory, stopStartedMemory } from './engram-activation';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
@@ -2566,4 +2566,6 @@ const setupDeps = {
 
 export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
+	// The memory engine this editor started goes with it; one that was already serving stays.
+	stopStartedMemory();
 }

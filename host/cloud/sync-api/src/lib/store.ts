@@ -13,13 +13,13 @@ import { quotaBytesFor, type PlanId } from "./quota";
 import {
   planRemoveRef,
   planRemoveResource,
-  planWrite,
+  planWriteWithinQuota,
   RETENTION_PER_RESOURCE,
   totalUsed,
   type RetainedRef,
 } from "./retention";
-import { HttpError } from "./http";
-import { decrypt, encrypt } from "./crypto";
+import { HttpError } from "./errors";
+import { decrypt, encrypt, storedByteLength } from "./crypto";
 
 /**
  * Firestore data model (per authenticated user).
@@ -61,7 +61,8 @@ interface ManifestDoc {
 }
 
 interface RefDoc {
-  content: string;
+  /** v3 envelope (Bytes); v1/v2 envelopes and legacy plaintext are strings. */
+  content: Buffer | string;
   machineId?: string;
   version: number;
   created: number;
@@ -180,8 +181,7 @@ async function ensureCounter(uid: string, manifest: ManifestDoc): Promise<Manife
     const snapshot = await subcollection.orderBy("created", "desc").get();
     const kept: RetainedRef[] = [];
     snapshot.docs.forEach((doc, index) => {
-      const content = doc.get("content");
-      const bytes = typeof content === "string" ? Buffer.byteLength(content, "utf8") : 0;
+      const bytes = storedByteLength(doc.get("content"));
       if (index < RETENTION_PER_RESOURCE) {
         kept.push({ ref: doc.id, bytes });
       } else {
@@ -266,7 +266,9 @@ export async function listResourceRefs(
   resource: string,
   buildUrl: (ref: string) => string,
 ): Promise<SyncRefEntry[]> {
-  const snapshot = await refsCol(uid, resource).orderBy("created", "asc").get();
+  // Only `created` is needed: reading the whole docs pulled every revision's content (up to a
+  // megabyte each) just to list dates.
+  const snapshot = await refsCol(uid, resource).orderBy("created", "asc").select("created").get();
   return snapshot.docs.map((doc) => ({
     url: buildUrl(doc.id),
     created: (doc.data() as RefDoc).created,
@@ -319,9 +321,9 @@ export async function readResourceRef(
  * (PreconditionFailed) and a ref that does not exist at all answers 409
  * (Conflict). Returns the new server-minted ref.
  *
- * The plan's quota is checked HERE, inside the transaction, and throws 413 with the same body the
- * route used to build: if it does not fit, the transaction writes nothing and the counter cannot
- * drift. The total it compares against is the manifest's own running number — a document this
+ * The plan's quota is checked HERE, inside the transaction. A write that would cross it first gives
+ * up old revisions of any resource (never the latest of one), and throws 413 only when even that
+ * is not enough: then the transaction writes nothing and the counter cannot drift. The total it compares against is the manifest's own running number — a document this
  * transaction had already read — so the check costs nothing on top of the write it guards. It used
  * to read every stored revision of the user (211 of them, and rising) before the transaction even
  * opened, which is where this project's sync budget was going.
@@ -338,7 +340,7 @@ export async function writeResource(
   // this check an incompressible payload slips past MAX_BODY_BYTES and dies
   // inside Firestore with an opaque 500 instead of a clean 413.
   const content = encrypt(payload.content);
-  const storedBytes = Buffer.byteLength(content, "utf8");
+  const storedBytes = content.byteLength;
   if (storedBytes > MAX_STORED_CONTENT_BYTES) {
     throw new HttpError(
       413,
@@ -379,14 +381,17 @@ export async function writeResource(
       );
     }
 
-    const revisions = current.revisions ?? {};
     const usedBytes = current.usedBytes ?? 0;
-    const revisionPlan = planWrite(
-      revisions[resource],
+    // A full quota costs history, not data: old revisions are given up (heaviest history first)
+    // before the write is refused, and the latest revision of every resource always stays.
+    const revisionPlan = planWriteWithinQuota(
+      current.revisions,
+      resource,
       { ref: "", bytes: storedBytes },
       usedBytes,
+      limitBytes,
     );
-    if (revisionPlan.usedBytes > limitBytes) {
+    if (!revisionPlan.fits) {
       throw new HttpError(
         413,
         "TooLarge",
@@ -409,17 +414,21 @@ export async function writeResource(
     tx.set(refsCol(uid, resource).doc(newRef), refData);
     for (const expired of revisionPlan.dropped) {
       if (expired.ref !== "") {
-        tx.delete(refsCol(uid, resource).doc(expired.ref));
+        tx.delete(refsCol(uid, expired.resource).doc(expired.ref));
+      }
+    }
+    const revisions = revisionPlan.revisions;
+    revisions[resource] = (revisions[resource] ?? []).map((entry) =>
+      entry.ref === "" ? { ref: newRef, bytes: entry.bytes } : entry,
+    );
+    for (const [name, list] of Object.entries(revisions)) {
+      if (list.length === 0) {
+        delete revisions[name];
       }
     }
     setManifest(tx, uid, current, {
       latest: { ...current.latest, [resource]: newRef },
-      revisions: {
-        ...revisions,
-        [resource]: revisionPlan.revisions.map((entry) =>
-          entry.ref === "" ? { ref: newRef, bytes: entry.bytes } : entry,
-        ),
-      },
+      revisions,
       usedBytes: revisionPlan.usedBytes,
     });
     return newRef;

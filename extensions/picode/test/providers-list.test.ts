@@ -19,7 +19,7 @@ test('a provider carried by pi is a row, and it is not declared', () => {
 	const rows = providerInventory(['omni'], ['omni'], ['nan']);
 
 	assert.deepStrictEqual(rows.map(row => row.id), ['nan', 'omni']);
-	assert.deepStrictEqual(rows[0], { id: 'nan', declared: false, models: false, credential: true });
+	assert.deepStrictEqual(rows[0], { id: 'nan', declared: false, models: false, credential: true, subscription: false });
 	// Which is the answer the panel has to give: why one can be edited where the other cannot.
 	assert.strictEqual(rows[1].declared, true);
 	assert.strictEqual(rows[1].models, true);
@@ -30,15 +30,20 @@ test('one provider in several sources is one row, not three', () => {
 	// A declaration writes models **and** a key, so the common case is all three at once.
 	const rows = providerInventory(['omni'], ['omni'], ['omni']);
 	assert.strictEqual(rows.length, 1);
-	assert.deepStrictEqual(rows[0], { id: 'omni', declared: true, models: true, credential: true });
+	assert.deepStrictEqual(rows[0], { id: 'omni', declared: true, models: true, credential: true, subscription: false });
 });
 
 test('ids are trimmed, blanks are not providers, and the order is by name', () => {
 	const rows = providerInventory(['  zeta  '], [], ['', '   ', 'alpha']);
 	assert.deepStrictEqual(rows.map(row => row.id), ['alpha', 'zeta']);
-	assert.deepStrictEqual(rows[1], { id: 'zeta', declared: true, models: false, credential: false });
+	assert.deepStrictEqual(rows[1], { id: 'zeta', declared: true, models: false, credential: false, subscription: false });
 });
 
 test('nothing anywhere is an empty list, not a row without an id', () => {
 	assert.deepStrictEqual(providerInventory([], [], []), []);
+});
+
+test('a subscription sign-in is a row marked as a subscription, a key is not', () => {
+	const rows = providerInventory([], [], ['anthropic', 'nan'], ['anthropic']);
+	assert.deepStrictEqual(rows.map(row => [row.id, row.subscription]), [['anthropic', true], ['nan', false]]);
 });

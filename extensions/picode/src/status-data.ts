@@ -86,7 +86,7 @@ function readJsonObject(file: string): Record<string, unknown> | undefined {
  * disagreement as a missing provider; the panel now answers *which* two and why
  * (`providers-list.ts`, which owns the rule and is tested).
  */
-function providerSources(profileDir: string): { declared: string[]; models: string[]; credentials: string[] } {
+function providerSources(profileDir: string): { declared: string[]; models: string[]; credentials: string[]; subscriptions: string[] } {
 	const configuration = vscode.workspace.getConfiguration('picode');
 	const declared = declarationsFromSetting(configuration.get('providers') ?? configuration.get('pi.providers'))
 		.map(declaration => declaration.id);
@@ -98,6 +98,8 @@ function providerSources(profileDir: string): { declared: string[]; models: stri
 		declared,
 		models: isRecord(models) ? Object.keys(models) : [],
 		credentials: auth === undefined ? [] : Object.keys(auth),
+		// A subscription sign-in is stored as an `oauth` credential; a key is `api_key`.
+		subscriptions: auth === undefined ? [] : Object.entries(auth).flatMap(([id, value]) => isRecord(value) && value['type'] === 'oauth' ? [id] : []),
 	};
 }
 
@@ -420,7 +422,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	return {
 		runtime,
 		piVersion: await readPiVersion(runtime, deps.distributionRoot),
-		providers: providerInventory(sources.declared, sources.models, sources.credentials),
+		providers: providerInventory(sources.declared, sources.models, sources.credentials, sources.subscriptions),
 		defaultModel,
 		mcpServers,
 		gitBranch: gitInfo.branch,

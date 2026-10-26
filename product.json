@@ -194,10 +194,17 @@
 	},
 	"linkProtectionTrustedDomains": [
 		"https://www.getpicode.app",
-		"https://getpicode.app"
+		"https://getpicode.app",
+		"https://pi.dev",
+		"https://*.pi.dev",
+		"https://www.npmjs.com",
+		"https://github.com",
+		"https://*.github.com",
+		"https://open-vsx.org",
+		"https://vscodethemes.com"
 	],
 	"releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
-	"updateUrl": "https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates",
+	"updateUrl": "https://www.getpicode.app/api/feed/HEAD/updates",
 	"downloadUrl": "https://github.com/Tomas-Platero/PiCode/releases",
 	"quality": "stable",
 	"win32AppId": "{{763CBF88-25C6-4B10-952F-326AE657F16B}",
@@ -748,5 +755,5 @@
 		}
 	},
 	"version": "1.142.1",
-	"picodeVersion": "0.2.8-experimental"
+	"picodeVersion": "0.3.0-experimental"
 }

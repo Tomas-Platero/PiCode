@@ -61,7 +61,7 @@ test('a permissions file gentle could not read is reported and never replaced', 
 test('a request for anything else is refused and writes nothing', () => {
 	const dir = profile();
 	for (const bad of [undefined, 'persona', { key: 'persona', value: 'loud' }, { key: 'permissions', value: 'god' }, { key: 'review', value: 'on' }, { value: 'neutral' }]) {
-		assert.throws(() => setGentleSetting(dir, bad), undefined, JSON.stringify(bad));
+		assert.throws(() => setGentleSetting(dir, bad), () => true, JSON.stringify(bad));
 	}
 	assert.equal(fs.existsSync(path.join(dir, 'gentle-ai')), false);
 });

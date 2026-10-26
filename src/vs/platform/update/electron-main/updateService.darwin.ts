@@ -18,7 +18,7 @@ import { IApplicationStorageMainService } from '../../storage/electron-main/stor
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, IUpdate, State, StateType, UpdateType } from '../common/update.js';
 import { IMeteredConnectionService } from '../../meteredConnection/common/meteredConnection.js';
-import { AbstractUpdateService, createUpdateURL, getUpdateRequestHeaders, IUpdateURLOptions, UpdateErrorClassification } from './abstractUpdateService.js';
+import { AbstractUpdateService, createUpdateURL, IUpdateURLOptions, UpdateErrorClassification } from './abstractUpdateService.js';
 
 export class DarwinUpdateService extends AbstractUpdateService implements IRelaunchHandler {
 
@@ -166,7 +166,7 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 	 * @param canInstall When false, signals that the update cannot be installed from this app.
 	 */
 	private async checkForUpdateNoDownload(url: string, canInstall?: boolean): Promise<void> {
-		const headers = getUpdateRequestHeaders(this.productService.version, this.productService.nameShort ?? 'PiCode');
+		const headers = this.updateCheckHeaders();
 		this.logService.trace('update#checkForUpdateNoDownload - checking update server', { url, headers });
 
 		try {

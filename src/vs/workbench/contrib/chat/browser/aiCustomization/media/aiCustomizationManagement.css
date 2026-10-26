@@ -2148,7 +2148,9 @@ pane is first mounted. View switches inside the modal are not animated. */
 .pi-packages-table-header,
 .mcp-list-widget .pi-package-row {
 	display: grid;
-	grid-template-columns: minmax(100px, 2fr) minmax(64px, 96px) minmax(120px, 2fr) minmax(80px, 110px) minmax(150px, auto);
+	/* Every column has a fixed or fractional width — never `auto` — so each row (its own grid)
+	   lands on the same columns as the header whatever its buttons are. */
+	grid-template-columns: minmax(120px, 3fr) 80px minmax(100px, 2fr) 100px 200px;
 	gap: 8px;
 	box-sizing: border-box;
 }
@@ -2169,8 +2171,9 @@ pane is first mounted. View switches inside the modal are not animated. */
 /* Same shape as the Skills cards: a border you can see, corners, and a hover that lights the
    border. The columns stay a grid so Name · Version · Source · State · Actions keep lining up —
    this is the table becoming cards, not a different table. */
-.mcp-list-widget .monaco-list-row {
-	padding: 2px 4px;
+.mcp-list-widget .monaco-list-row:has(.pi-package-row) {
+	/* 7px above and below: 14px of air between two cards. */
+	padding: 7px 4px;
 	box-sizing: border-box;
 }
 
@@ -2222,6 +2225,49 @@ pane is first mounted. View switches inside the modal are not animated. */
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	line-height: 18px;
+}
+
+.pi-package-row .pi-package-row-name {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+/* The preview square: the package's picture, or the plain grid tile when it declares none. */
+.pi-package-row .pi-package-row-thumb {
+	flex: none;
+	width: 36px;
+	height: 36px;
+	border-radius: 6px;
+	overflow: hidden;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.22));
+	background-color: var(--vscode-editor-background, transparent);
+	background-image:
+		linear-gradient(var(--vscode-widget-border, rgba(128, 128, 128, 0.18)) 1px, transparent 1px),
+		linear-gradient(90deg, var(--vscode-widget-border, rgba(128, 128, 128, 0.18)) 1px, transparent 1px);
+	background-size: 6px 6px;
+	box-sizing: border-box;
+}
+
+.pi-package-row .pi-package-row-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.pi-package-row .pi-package-row-link {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: inherit;
+	text-decoration: none;
+}
+
+.pi-package-row .pi-package-row-link:hover {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: underline;
 }
 
 .pi-package-row .pi-package-row-version,
@@ -2415,8 +2461,10 @@ pane is first mounted. View switches inside the modal are not animated. */
 .pi-packages-table-header {
 	display: grid;
 	align-items: center;
+	flex: none;
+	/* Same inset as a row (list-row padding + card padding) so the titles sit over their cells. */
 	margin: 0 4px 6px;
-	padding: 6px 12px;
+	padding: 6px 10px;
 	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.22));
 	border-radius: 8px;
 	background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.06));
@@ -2443,10 +2491,14 @@ pane is first mounted. View switches inside the modal are not animated. */
 }
 
 .pi-package-row .pi-package-row-action {
+	/* A text button fills its parent by default; here each one is as wide as its label. */
+	width: auto;
+	flex: 0 0 auto;
 	min-width: 0;
 	height: 24px;
 	padding: 0 10px;
 	box-sizing: border-box;
+	white-space: nowrap;
 }
 
 /* The trash is an icon button: square, so its padding is symmetric. */
@@ -2457,7 +2509,3 @@ pane is first mounted. View switches inside the modal are not animated. */
 	justify-content: center;
 }
 
-.pi-package-row .pi-package-row-hint {
-	font-size: var(--vscode-agents-fontSize-label2, 11px);
-	color: var(--vscode-descriptionForeground);
-}

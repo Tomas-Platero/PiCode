@@ -1,7 +1,9 @@
 # Update feed
 
-The static documents the editor's updater reads. They are served directly from this
-directory by `raw.githubusercontent.com`, which is why there is no update server to run.
+The static documents the editor's updater reads. They are served from this directory by
+`raw.githubusercontent.com`; the editor reaches them through PiCode's own API, which counts the
+check anonymously and redirects here (see *Anonymous usage* in
+[`cloud/sync-api/README.md`](../cloud/sync-api/README.md)). The documents themselves only live here.
 
 ## 🧭 Why it lives here and not in GitHub Releases
 
@@ -22,8 +24,11 @@ answer in that shape, so `updateUrl` points at this directory instead, and
 `updateUrl` is set in `product.json` to
 
 ```text
-https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates
+https://www.getpicode.app/api/feed/HEAD/updates
 ```
+
+which answers every request with a redirect to the same path under
+`https://raw.githubusercontent.com/Tomas-Platero/PiCode/<branch>/updates`.
 
 ## 🧩 The two Windows feeds (why there are two)
 

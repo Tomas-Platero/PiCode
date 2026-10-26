@@ -100,7 +100,7 @@ in full.
 | 1 | prepare | The three things that leave the tree ready to compile, in one phase because they are one job. **The source**: verifies the tree is the PiCode source — `product.json`'s name is a PiCode name, `build/lib/electron.ts` carries the PiCode company name, the Windows icon the packer reads is there, the server manifest is PiCode's, and the connector is present. Any of these failing quietly would ship a broken or mislabelled editor. **The identity**: `product.json` is its single home; the build seals the channel into it for the pack (and puts it back afterwards) and writes `product.json`'s version into `package.json`, so the packer's two sources agree. **The dependencies**: `npm ci`, **only** when `build/build-helpers.mjs deps-current` says the state VS Code recorded does not match the tree; anything else — no record, a different node, an unreadable state — is a no, and the install runs. Only the install can be long, and only the first time. |
 | 2 | connector | `build/build-connector.sh`: `tsc` over `extensions/picode`. The packer collects extensions but does not compile them, so this has to happen first. |
 | 3 | compile | `gulp vscode-min-prepack`: the headless type check (`tsgo --noEmit`, ~14 s; skipped by `build-fast.sh`), codicons, and the built-in extensions. With esbuild restored to upstream's default this phase no longer transpiles — the bundler does that from source in phase 4, in one pass. Then the group-policy DTO copy and the policy generator for the platform being packed. |
-| 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-vscode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
+| 4 | pack | `gulp vscode-<platform>-<arch>-min-packing`: esbuild bundles `src/` straight to `out-picode-min` with NLS and minification (~100 s), builds the native extensions, and assembles the archive. |
 | 5 | stage | `build/pi-runtime.sh` (installs the pinned pi into the pack), `build/engram-runtime.sh` (the memory engine) and `build/stage-distribution.sh` (portable profile, settings, icons, names). |
 
 `-o` stops inside phase 1 with exit code 0: after the source and the identity are
@@ -266,7 +266,7 @@ Nothing is lost that a repository should hold:
 ## 🔒 What the build never writes
 
 The build writes only where a build belongs: `out-build/`, `out-vscode/`,
-`out-vscode-min/`, the pack `PiCode-*/` and `node_modules/`. It never writes
+`out-picode-min/`, the pack `PiCode-*/` and `node_modules/`. It never writes
 `build/distribution/**`, and `extensions/**` is read, not rewritten. The
 identity it does touch — `product.json` for the pack's copy, `package.json` for
 the version — is put back the way it was.

@@ -20,7 +20,7 @@
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
-import { packageNameOf } from './left-behind-packages';
+import { isLeftBehindPackage, packageNameOf } from './left-behind-packages';
 
 /** One package the product pins. */
 export interface ProductPackage {
@@ -64,6 +64,17 @@ export const DISPLACED_PACKAGE_NAMES: readonly string[] = [
 	'@tintinweb/pi-subagents',
 	'github.com/HazAT/pi-interactive-subagents',
 	'pi-memory',
+];
+
+/**
+ * Packages that left the product and are taken out of the profile's declarations.
+ *
+ * The durable agent left (ADR-030): a profile created before that still declares its package, and
+ * pi would keep loading it next to Gentle AI. Unlike a displaced package, nothing here is kept
+ * declared — the entry is removed, so the package list and pi both stop seeing it.
+ */
+export const REMOVED_PACKAGE_NAMES: readonly string[] = [
+	'@earendil-works/pi-durable',
 ];
 
 /** What the product pins, in the order it declares them. */
@@ -128,8 +139,9 @@ export function withProductPackages(
 	settingsText: string | undefined,
 	products: readonly ProductPackage[] = PRODUCT_PACKAGES,
 	displaced: readonly string[] = DISPLACED_PACKAGE_NAMES,
+	removed: readonly string[] = REMOVED_PACKAGE_NAMES,
 ): ProductPackagesResult {
-	if (products.length === 0 && displaced.length === 0) {
+	if (products.length === 0 && displaced.length === 0 && removed.length === 0) {
 		return { text: settingsText, changed: false };
 	}
 	let settings: Record<string, unknown>;
@@ -151,6 +163,9 @@ export function withProductPackages(
 	const placed = new Set<string>();
 	const next: unknown[] = [];
 	for (const entry of declared) {
+		if (isLeftBehindPackage(entry, removed)) {
+			continue;
+		}
 		const name = npmNameOf(entry);
 		if (name === undefined || !wanted.has(name)) {
 			next.push(typeof entry === 'string' && displaced.includes(packageNameOf(entry)) ? switchedOff(entry) : entry);
