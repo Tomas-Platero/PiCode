@@ -33,7 +33,7 @@
 		"releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
 		"reportIssueUrl": "https://github.com/Tomas-Platero/PiCode/issues/new",
 		"downloadUrl": "https://github.com/Tomas-Platero/PiCode/releases",
-		"updateUrl": "https://raw.githubusercontent.com/Tomas-Platero/PiCode/HEAD/updates",
+		"updateUrl": "https://www.getpicode.app/api/feed/HEAD/updates",
 		"builtInExtensionsEnabledWithAutoUpdates": [],
 		"defaultChatAgent": null
 	},

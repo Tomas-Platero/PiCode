@@ -21,7 +21,7 @@ import { IRequestService } from '../../../request/common/request.js';
 import { IApplicationStorageMainService } from '../../../storage/electron-main/storageMainService.js';
 import { NullTelemetryService } from '../../../telemetry/common/telemetryUtils.js';
 import { DisablementReason, IUpdate, State, StateType } from '../../common/update.js';
-import { AbstractUpdateService, IUpdateURLOptions } from '../../electron-main/abstractUpdateService.js';
+import { AbstractUpdateService, activePeriods, IUpdateURLOptions } from '../../electron-main/abstractUpdateService.js';
 
 class TestMeteredConnectionService extends Disposable implements IMeteredConnectionService {
 	declare readonly _serviceBrand: undefined;
@@ -567,5 +567,36 @@ suite('AbstractUpdateService', () => {
 
 		assert.deepStrictEqual(service.state, { type: StateType.Disabled, reason: DisablementReason.ManuallyDisabled });
 		assert.deepStrictEqual(states, [StateType.Disabled], 'should go straight to Disabled without a Cancelling flash');
+	});
+});
+
+suite('activePeriods', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+
+	const at = (day: string) => new Date(`${day}T12:00:00Z`);
+
+	test('the first check ever opens every period', () => {
+		assert.strictEqual(activePeriods(undefined, at('2026-10-26')), 'day,week,month');
+	});
+
+	test('a second check on the same day sends nothing', () => {
+		assert.strictEqual(activePeriods('2026-10-26', at('2026-10-26')), '');
+	});
+
+	test('a new day in the same week and month is a day only', () => {
+		// 2026-10-26 is a Monday; Wednesday is the same week
+		assert.strictEqual(activePeriods('2026-10-26', at('2026-10-28')), 'day');
+	});
+
+	test('weeks start on Monday', () => {
+		assert.strictEqual(activePeriods('2026-10-25', at('2026-10-26')), 'day,week');
+	});
+
+	test('a new month in the same week', () => {
+		assert.strictEqual(activePeriods('2026-10-31', at('2026-11-01')), 'day,month');
+	});
+
+	test('a malformed stored day counts as none', () => {
+		assert.strictEqual(activePeriods('garbage', at('2026-10-26')), 'day,week,month');
 	});
 });

@@ -53,12 +53,17 @@ test/                     # pure rules: plans, retention
 | `plans.ts` | Qué plan declara el perfil (lo no reconocido es `free`). Sin Firestore. |
 | `quota.ts` | Lee el plan del usuario y lo memoriza un momento (la política vive en `plans.ts`). |
 | `retention.ts` | Cuántas revisiones por recurso se conservan (20). |
+| `usage.ts` | 📊 Las reglas del uso anónimo: qué ruta del feed es válida, qué contadores suma cada comprobación y el resumen público. Sin Firestore. |
+| `usage-store.ts` | Los contadores diarios en Firestore (`usage/{día}`) y su lectura para el resumen. |
+| `downloads.ts` | Las descargas de la release actual de cada canal, leídas de GitHub. |
 
 ### `src/app/api/` — las rutas
 
 | Ruta | Qué hace |
 | --- | --- |
 | `health/route.ts` | Liveness: no toca Firebase, sirve para validar el despliegue. |
+| `feed/[...path]/route.ts` | 🔄 La comprobación de actualizaciones del editor: cuenta y redirige al feed en GitHub. |
+| `stats/route.ts` | 📊 El resumen público de uso que enseña la web. |
 | `v1/manifest/route.ts` | Devuelve el manifiesto con `ETag` y responde `304` si no cambió. |
 | `v1/resource/[r]/route.ts` | Lista las revisiones de un recurso / añade una / las borra. |
 | `v1/resource/[r]/latest/route.ts` | La última revisión de un recurso (`ETag`, `304`). |
@@ -158,6 +163,44 @@ exposes synced data in readable form.
 - **Client impact:** none. Reads always return plaintext; a value that cannot
   be decrypted (wrong key or corrupt data) answers `500 DecryptionFailed`
   instead of ever returning garbage.
+
+## 📊 Anonymous usage
+
+The editor's `updateUrl` is `https://www.getpicode.app/api/feed/HEAD/updates` (the build seals
+the branch per channel). Every update check therefore passes through
+`GET /api/feed/<branch>/updates/<quality>/<platform>/<arch>[/<target>]/latest.json`, which
+answers `302` to the same path on `raw.githubusercontent.com/Tomas-Platero/PiCode` — GitHub
+stays the only home of the feed — and adds to that UTC day's counters on the way. A failed
+count is logged and ignored, and counting never holds the answer more than 1.5 s.
+
+What is read, and nothing else:
+
+- **The path:** channel (from the branch), OS, architecture and package (`user`, `archive`…).
+- **`X-PiCode-Version`:** PiCode's own version (`picodeVersion`).
+- **`X-PiCode-Active`:** `day,week,month` — which periods this is the install's first check
+  in. The editor works it out from the last day it checked (stored locally), so active
+  installs are counted with **no id, no IP and no stored request**.
+
+Firestore layout: `usage/{YYYY-MM-DD}` → `{ checks, active: { day, week, month }, os, arch,
+channel, version, package }`, numbers only. The breakdowns count only the first check of the
+day, so they add up to the day's active installs. Turning updates off in the editor
+(`update.mode: none`) stops the checks, and with them any counting.
+
+`GET /api/stats` is the public summary (CORS `*`, cached an hour at the edge):
+
+```json
+{
+  "days": [{ "date": "2026-10-26", "active": 0 }],
+  "activeToday": 0, "activeLast7Days": 0, "activeLast30Days": 0,
+  "os": {}, "channel": {}, "version": {}, "package": {},
+  "downloads": { "stable": { "tag": "v0.2.7", "downloads": 0 } }
+}
+```
+
+`days` is the last 30 days; the 7- and 30-day figures sum the first-check-of-the-week/month
+flags, so they are estimates (an install used across a week or month boundary can count
+twice). The mix (`os`, `version`…) is the last whole day's. `downloads` is each channel's
+current release only, because the pipeline keeps one release per channel.
 
 ## 🚀 Deploy (Vercel, free plan)
 
