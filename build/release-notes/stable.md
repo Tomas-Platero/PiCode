@@ -11,3 +11,5 @@ exactly as they do anywhere else.
 `updates/stable/win32/x64/<target>/latest.json`. Updates roll out gradually: the updater's
 `update.minReleaseAge` defaults to 120 h, so a release can take up to five days to reach you.
 That delay is deliberate, not a fault.
+
+**Powered by Gentle AI:** PiCode ships [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) and its [Engram](https://github.com/Gentleman-Programming/engram) memory, both MIT, by [Gentleman Programming](https://github.com/Gentleman-Programming).

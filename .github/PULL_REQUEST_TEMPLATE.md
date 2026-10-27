@@ -27,7 +27,7 @@ of leaving it implied.
 
 ## Which layer
 
-- [ ] The editor itself (`the tree`)
+- [ ] The editor itself (the tree)
 - [ ] The product layer (`product.json`, `build/distribution/`, `build/`)
 - [ ] Agent integration (chat, connector, agent host)
 - [ ] Build pipeline or `.github/workflows/`
@@ -36,7 +36,7 @@ of leaving it implied.
 ## Review workload
 
 - Approx. lines changed: ______
-- Does the VS Code pin move? If `upstream/stable.json` is touched, say so
+- Does the VS Code pin move? If `host/upstream/stable.json` is touched, say so
   and point at the merge that produced the tree.
 - Anything a reviewer should run before reading: `build/build.sh -o`,
   `npm test` in the connector, etc.

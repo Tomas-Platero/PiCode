@@ -356,6 +356,7 @@
 │   ├── howto-build.md
 │   ├── MAPA.md
 │   ├── README.md
+│   ├── RELEASES.md
 │   ├── SETTINGS.md
 │   ├── TAREAS.md
 │   └── VISION.md
@@ -571,7 +572,7 @@
 │   │   │   ├── README.md
 │   │   │   └── tsconfig.json
 │   │   └── README.md
-│   ├── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende the tree.
+│   ├── upstream/ — Un único fichero que dice de dónde viene el árbol: la versión y el commit exacto de VS Code del que desciende el árbol.
 │   │   ├── README.md
 │   │   └── stable.json
 │   └── README.md
@@ -584,7 +585,7 @@
 │   │   └── vscodium.svg
 │   └── … and 4 upstream built-in extensions (only picode/ is ours)
 ├── scripts/ · ⬆️ upstream, no breakdown
-├── src/ — Carpeta upstream: aquí no se documenta fichero a fichero. Son los 9.400 ficheros del editor de VS Code tal como descienden de upstream/stable.json… · ⬆️ upstream, no breakdown
+├── src/ — Carpeta upstream: aquí no se documenta fichero a fichero. Son los 9.400 ficheros del editor de VS Code tal como descienden de… · ⬆️ upstream, no breakdown
 ├── updates/ — The static documents the editor's updater reads. They are served from this directory by raw.githubusercontent.com; the editor reaches them through…
 │   ├── experimental/ — Los documentos estáticos que lee el actualizador del editor para el canal experimental, servidos tal cual desde raw.githubusercontent.com (por eso no…
 │   │   ├── win32/

@@ -3,7 +3,7 @@
 > Cómo ha de ser el producto, hasta donde sabemos hoy. Las frases del dueño viven en
 > `AGENTS.md`; su visión completa, en `docs/VISION.md`. Este documento dice **cómo se junta
 > todo**. Los `patch` que aparecen en documentos históricos ya no existen: el árbol vive en
-> `the tree`.
+> el árbol.
 
 ## 💡 Qué es PiCode, en una frase
 
@@ -14,7 +14,7 @@ hubiera sido así.
 ## 🧱 Las capas
 
 ```text
-  Fuente de VS Code 1.135.0   (upstream/stable.json — el pin de procedencia)
+  Fuente de VS Code 1.135.0   (host/upstream/stable.json — el pin de procedencia)
         │
         │  el árbol propio:   ← los cambios de VSCodium y los nuestros, ya dentro
         │
@@ -35,7 +35,7 @@ hubiera sido así.
 ### 1. La fuente propia y el delta de producto
 
 El árbol de VS Code **ya no se clona ni se parchea en cada build**: desde el 2026-09-27
-`the tree` **es la fuente de PiCode**, versionada en este repositorio, con los cambios
+el árbol **es la fuente de PiCode**, versionada en este repositorio, con los cambios
 de VSCodium y los propios ya dentro. El build no descarga ni aplica parches; compila ese
 árbol.
 
@@ -43,7 +43,7 @@ El producto vive en `product.json`, en la raíz del repositorio: nombre, icono, 
 datos propia, galería y el **número** que leen las extensiones, todo versionado.
 `build/distribution/` aporta los ajustes de primer arranque, el pi fijado y la marca.
 
-**Procedencia y número no son lo mismo.** El pin `upstream/stable.json` registra de qué VS
+**Procedencia y número no son lo mismo.** El pin `host/upstream/stable.json` registra de qué VS
 Code desciende el árbol (1.135.0); el número declarado (`set.version`, por delante del pin) se sube
 para que las extensiones que piden `engines.vscode: ^1.142.0` sigan instalándose. Es una
 decisión medida, no un rebase: ver ADR-016.

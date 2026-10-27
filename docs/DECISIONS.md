@@ -419,7 +419,7 @@ artefact. On 2026-09-27 the owner reversed the frame: *"lo que si OLVIDATE de un
 todo ha de vivir en el núcleo"* and the prepared tree stopped being an artefact. It is now
 PiCode's source.
 
-**Decision:** `the tree` is PiCode's own, versioned source tree — the VSCodium changes,
+**Decision:** the tree is PiCode's own, versioned source tree — the VSCodium changes,
 PiCode's work and the product identity already baked in. Nothing is fetched or patched per
 build; `build/build.sh` compiles it in five phases, and the product delta is applied to
 `product.json` **before** packing.
@@ -427,7 +427,7 @@ build; `build/build.sh` compiles it in five phases, and the product delta is app
 **Consequences:** A core behaviour change is TypeScript in the tree, compiled, with the
 checksums computed over the finished product — the `checksums` map that made the minified
 bundle untouchable (ADR-011) no longer bounds us. A newer VS Code becomes a **merge against
-`the tree`** instead of an archive swap. The trade-off accepted: the repository carries
+the tree** instead of an archive swap. The trade-off accepted: the repository carries
 Microsoft's MIT-licensed source and must keep its attribution, and the tree is large, so the
 first build installs its dependencies once.
 

@@ -8,3 +8,5 @@ own profile.
 
 **How it updates:** it reads `updates/experimental/win32/x64/<target>/latest.json`, so it only
 ever receives its own channel's releases.
+
+**Powered by Gentle AI:** PiCode ships [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) and its [Engram](https://github.com/Gentleman-Programming/engram) memory, both MIT, by [Gentleman Programming](https://github.com/Gentleman-Programming).

@@ -16,7 +16,7 @@ Conventions: **verified** means a repository file, an upstream file, or a read-o
 
 PiCode is **an editor compiled from its own source tree**:
 
-- `the tree` is the source, versioned in this repository — the VSCodium changes,
+- the tree is the source, versioned in this repository — the VSCodium changes,
   PiCode's own work and the product identity already baked in. Nothing is fetched or patched
   on a build.
 - `product.json`, at the tree root, is the product **as data**: the single home of
@@ -36,7 +36,7 @@ TypeScript in the tree, compiled.
 
 | # | Layer | Artifact | Applied by |
 | --- | --- | --- | --- |
-| 1 | Editor | `the tree`, compiled by `build/build.sh` | the build |
+| 1 | Editor | the tree, compiled by `build/build.sh` | the build |
 | 2 | Identity | `product.json` | in the tree; verified by `build/build.sh`, phase 1 |
 | 3 | Portable profile | `data/{user-data,extensions,tmp}` | `build/stage-distribution.sh` |
 | 4 | Defaults | `build/distribution/settings.json` → `data/user-data/User/settings.json` | `build/stage-distribution.sh`, only when absent |
@@ -104,11 +104,11 @@ lock-in: `picode.pi.runtime` lets a user choose a different pi.
 
 ## ⬆️ 6. Updating VS Code
 
-A newer VS Code is a **merge against `the tree`**, not a download: see
+A newer VS Code is a **merge against the tree**, not a download: see
 [`howto-build.md`](howto-build.md). There is no archive to extract and no script to re-run —
 the tree is the source, and the identity is committed beside it.
 
-The pin `upstream/stable.json` records where the tree descends from (VS Code 1.135.0) and is
+The pin `host/upstream/stable.json` records where the tree descends from (VS Code 1.135.0) and is
 reviewed **by hand** — there is no automated pin watcher ([`CI.md`](CI.md) records that).
 
 **Read the machine type of a reference archive before building on it.** The first archive here
@@ -128,7 +128,7 @@ zip vs installed setup) and the version-numbering rules live in
 `raw.githubusercontent.com` serves the files. The editor does not ask it directly: it asks
 `https://www.getpicode.app/api/feed/<branch>/updates/...`, which adds one to an anonymous counter
 and redirects to the same document on GitHub (see *Anonymous usage* in
-[`cloud/sync-api/README.md`](../cloud/sync-api/README.md)).
+[`cloud/sync-api/README.md`](../host/cloud/sync-api/README.md)).
 
 ## ✅ 8. Verification
 
@@ -183,6 +183,14 @@ VSCodium change set. Upstream licences and notices ship with the editor and must
 removed; the repository's own licence is [`LICENSE`](../LICENSE). Microsoft's source is
 published here under that licence, and it is the owner who decides where this repository is
 published ([`CONTRIBUTING.md`](../CONTRIBUTING.md)).
+
+**Gentle AI and Engram** (MIT, by [Gentleman Programming](https://github.com/Gentleman-Programming))
+travel with the editor: the `gentle-pi` and `gentle-engram` pi packages, pinned in the profile, and
+the Engram program under `resources/memory`. Their licence text ships next to what they provide
+(`gentle-pi` carries its own `LICENSE`; the `gentle-engram` package declares MIT but ships no licence
+file, so the Engram licence travels as `LICENSE-engram.txt` beside the program), and they are
+credited by name and link in the README, the wiki and the release pages. Their names and logos are theirs: PiCode
+says it *uses* their software and never presents any surface as their product.
 
 ### 🖼️ The icon in the executable
 

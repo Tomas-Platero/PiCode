@@ -168,7 +168,7 @@ profile of its own; the portable profile stays with the portable pack.
 
 ## 🧰 Requirements
 
-- `git`, `node` (`.nvmrc`: 24.19.0 — `npm ci` and the gulp tasks need the
+- `git`, `node` (`.nvmrc`: 24.20.0 — `npm ci` and the gulp tasks need the
   repository's Node version), `npm`.
 - Windows: **Git Bash**. `OS_NAME` comes from `OSTYPE`; an `OSTYPE` that yields
   neither `windows`, `osx` nor `linux` is a hard error.
@@ -196,12 +196,12 @@ Nothing is lost that a repository should hold:
 
 - **What the changes were** is the source itself — they are committed.
 - **Which VS Code the tree descends from** is the one remaining pin,
-  `upstream/stable.json`. Diffing against pristine VS Code means fetching that
+  `host/upstream/stable.json`. Diffing against pristine VS Code means fetching that
   public commit, and `docs/howto-build.md` ("Traer una versión nueva de VS Code")
   is the plan.
 - The full pristine-to-prepared history lived in a local git bundle that is **no
   longer in the repository** (it was never versioned): the permanent record is
-  `upstream/stable.json` plus this repository's history, and
+  `host/upstream/stable.json` plus this repository's history, and
   `docs/howto-build.md` is the merge plan.
 
 ## 🏷️ Where PiCode's identity lives

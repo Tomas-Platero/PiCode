@@ -16,7 +16,7 @@ Three things to read before anything else:
 | --- | --- | --- |
 | Use PiCode | nothing — download a release | [Releases](https://github.com/Tomas-Platero/PiCode/releases) |
 | Change branding, defaults, or what is removed from the product | `product.json` and the apply scripts | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) |
-| Change editor behaviour | `the tree` — the TypeScript itself | [docs/howto-build.md](docs/howto-build.md) |
+| Change editor behaviour | the tree — the TypeScript itself | [docs/howto-build.md](docs/howto-build.md) |
 | Change the agent integration | the core connector and agent host under `extensions/picode/` | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Fix the pipeline | `build/` (bash) and `.github/workflows/` | [docs/CI.md](docs/CI.md) |
 
@@ -30,7 +30,7 @@ build/build.sh -o       # check the source only: seconds, nothing installed or c
 build/build.sh -i       # install the dependencies even when the recorded state still matches
 ```
 
-`./the tree` is PiCode's own source, not a download: it already carries the VSCodium
+the tree is PiCode's own source, not a download: it already carries the VSCodium
 changes, PiCode's own work and the PiCode product identity, and it is committed **in this
 repository** — a plain tracked folder, no submodule and no nested repository. Building is
 therefore local work on the tree: there is no fetch and no patch step to wait for, and the
@@ -46,7 +46,7 @@ written by node.
 Prefer buttons? `build/build-window.cmd` opens a small window that drives the same pipeline
 (nothing to install beyond PowerShell and WPF).
 
-`the tree` is **not** a build output any more: it is the source, and it is versioned in
+the tree is **not** a build output any more: it is the source, and it is versioned in
 this repository (decided by the owner on 2026-09-27: one clone carries everything). `PiCode-*`
 still is a build output and is ignored. Because Microsoft's MIT-licensed source now lives in
 this tree, the upstream licence and attribution notices travel with it and must never be
@@ -56,7 +56,7 @@ it to another remote, or lifts its `.gitignore` fences.
 
 ## 📌 The pin
 
-`upstream/stable.json` records the VS Code commit the tree descends from (`08d4889f`, 1.135.0).
+`host/upstream/stable.json` records the VS Code commit the tree descends from (`08d4889f`, 1.135.0).
 It no longer drives the build — nothing is fetched or patched any more, and the VSCodium patch
 machinery was deleted on 2026-09-27 — but it is the provenance of the tree and the starting
 point for the day a newer VS Code is brought in. That day is a **merge**, and

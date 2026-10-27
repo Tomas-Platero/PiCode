@@ -2,6 +2,7 @@
 
 > Documento de arquitectura. Revisado el 2026-10-16 en la rama experimental (pack
 > **0.2.6-experimental**, número declarado 1.142.0, árbol de VS Code 1.135.0, pi 1.4.0).
+> ⚠️ **Sustituido en parte el 2026-10-25:** durable salió del producto (ADR-030) y la capa de agentes la pone Gentle AI (ADR-031); lo que aquí se dice de durable es historia. Pi 1.4.0 y la versión 0.2.6 son las de entonces.
 > Fechas y commits citados. Si este papel y el código discrepan, gana el código — y este
 > papel se corrige.
 
