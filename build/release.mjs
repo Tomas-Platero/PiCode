@@ -261,7 +261,7 @@ import { pathToFileURL } from 'node:url';
 	const FALLBACK = { match: /.*/, title: '🔧 Other changes' };
 
 	/** Feed-and-housekeeping commits never tell a user anything. */
-	const NOISE = /^(release:|chore\(release\)|release: feed)/i;
+	const NOISE = /^(release|chore|ci|docs|test|style|merge)(\(|:)/i;
 
 	const seen = new Set();
 	const groups = new Map();
@@ -278,7 +278,9 @@ import { pathToFileURL } from 'node:url';
 	if (seen.size === 0) process.exit(0);
 
 	const lines = ['## What changed', ''];
-	for (const [title, entries] of groups) {
+	for (const { title } of [...GROUPS, FALLBACK]) {
+		const entries = groups.get(title);
+		if (!entries) continue;
 		lines.push(`### ${title}`, '');
 		for (const entry of entries) lines.push(`- ${entry}`);
 		lines.push('');
