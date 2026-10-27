@@ -498,12 +498,20 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	 */
 	private async prepareArchiveUpdate(packagePath: string): Promise<void> {
 		const appDir = path.dirname(process.execPath);
-		const stagingDir = `${appDir}.update`;
-		const scriptPath = path.join(stagingDir, 'update.cmd');
+		let stagingDir = `${appDir}.update`;
 		try {
 			// A staging left behind by a cancelled or failed update is the stale
-			// version's contents; the new extraction must start from nothing.
-			await pfs.Promises.rm(stagingDir);
+			// version's contents; the new extraction must start from nothing. If
+			// something still holds files in it (EBUSY: a process started from that
+			// stale copy, antivirus), stage in a fresh sibling folder instead of
+			// failing the whole update.
+			try {
+				await pfs.Promises.rm(stagingDir);
+			} catch (error) {
+				this.logService.warn(`update#prepareArchiveUpdate: the previous staging is locked, using a fresh folder`, error);
+				stagingDir = `${appDir}.update-${Date.now()}`;
+			}
+			const scriptPath = path.join(stagingDir, 'update.cmd');
 			// Electron's fs intercepts every path whose last segment ends in
 			// `.asar` and treats it as an archive — the staged pack carries
 			// `node_modules.asar`, and writing it extracted needs the real

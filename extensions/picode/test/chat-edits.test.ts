@@ -159,3 +159,47 @@ test('the before-scheme provider can still serve a kept snapshot', async () => {
 	await whenEditsSettled();
 	assert.strictEqual(beforeContentFor('/w/keep.ts'), 'old\n');
 });
+
+import { undoEdits, rememberTurnForUndo, undoableTurn, forgetUndoableTurn, type TurnFileEdit, type UndoIo } from '../src/chat-edits.ts';
+
+function fakeDisk(files: Record<string, string>): UndoIo & { files: Record<string, string> } {
+	return {
+		files,
+		read: async p => files[p],
+		write: async (p, c) => { files[p] = c; },
+		remove: async p => { delete files[p]; },
+	};
+}
+
+test('undo puts back the snapshot and removes what the turn created', async () => {
+	const disk = fakeDisk({ '/a': 'new a', '/b': 'created' });
+	const edits: TurnFileEdit[] = [
+		{ path: '/a', before: 'old a', after: 'new a', added: 1, removed: 1, isNew: false },
+		{ path: '/b', after: 'created', added: 1, removed: 0, isNew: true },
+	];
+	const results = await undoEdits(edits, disk);
+	assert.deepStrictEqual(results.map(r => r.outcome), ['restored', 'removed']);
+	assert.deepStrictEqual(disk.files, { '/a': 'old a' });
+});
+
+test('undo leaves a file alone when it changed after the turn', async () => {
+	const disk = fakeDisk({ '/a': 'owner edited this' });
+	const results = await undoEdits([{ path: '/a', before: 'old', after: 'new', added: 1, removed: 1, isNew: false }], disk);
+	assert.strictEqual(results[0].outcome, 'changed-since');
+	assert.strictEqual(disk.files['/a'], 'owner edited this');
+});
+
+test('undo reports a failing write instead of throwing', async () => {
+	const disk = fakeDisk({ '/a': 'new' });
+	disk.write = async () => { throw new Error('read-only'); };
+	const results = await undoEdits([{ path: '/a', before: 'old', after: 'new', added: 1, removed: 1, isNew: false }], disk);
+	assert.strictEqual(results[0].outcome, 'failed');
+});
+
+test('only the last turns stay undoable, and an undone turn is forgotten', () => {
+	const keys = Array.from({ length: 7 }, () => rememberTurnForUndo([]));
+	assert.strictEqual(undoableTurn(keys[0]), undefined);
+	assert.notStrictEqual(undoableTurn(keys[6]), undefined);
+	forgetUndoableTurn(keys[6]);
+	assert.strictEqual(undoableTurn(keys[6]), undefined);
+});

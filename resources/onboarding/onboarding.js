@@ -90,8 +90,6 @@ const STRINGS = {
 		settings: 'Settings and packages',
 		mcp: 'MCP servers',
 		skills: 'Skills',
-		memory: 'Memory',
-		sessions: 'Conversations',
 		modelTitle: 'Select an AI Model',
 		modelConnectedVia: 'available via',
 		piExternalReadOnly: 'READ-ONLY',
@@ -195,7 +193,6 @@ const STRINGS = {
 		modelsWord: 'models',
 		mcpWhy: 'Servers the agent may call: your database, an API, your own tools.',
 		skillsWhy: 'Instructions the agent follows when it works in this folder.',
-		memoryWhy: 'Facts and preferences it keeps between sessions.',
 		credentialsNote: 'Kept in your pi profile on this machine. PiCode never sends them anywhere; pi uses them only against the provider you configured.',
 		contextTitle: 'AI Code Context & Privacy',
 		contextOffNote: 'The context is currently off in Settings. Choosing any option turns it back on.',
@@ -293,8 +290,6 @@ const STRINGS = {
 		settings: 'Ajustes y paquetes',
 		mcp: 'Servidores MCP',
 		skills: 'Habilidades',
-		memory: 'Memoria',
-		sessions: 'Conversaciones',
 		modelTitle: 'Elige un modelo de IA',
 		modelConnectedVia: 'disponibles vía',
 		piExternalReadOnly: 'SOLO LECTURA',
@@ -396,7 +391,6 @@ const STRINGS = {
 		modelsWord: 'modelos',
 		mcpWhy: 'Servidores que el agente puede usar: tu base de datos, una API, tus herramientas.',
 		skillsWhy: 'Instrucciones que el agente sigue cuando trabaja en esta carpeta.',
-		memoryWhy: 'Datos y preferencias que conserva entre sesiones.',
 		credentialsNote: 'Se guardan en tu perfil de pi, en esta máquina. PiCode no los envía a ningún sitio; pi solo los usa contra el proveedor que hayas configurado.',
 		contextTitle: 'Contexto de código para la IA',
 		contextOffNote: 'El contexto está apagado ahora mismo en Ajustes. Al elegir cualquier opción se vuelve a activar.',
@@ -509,7 +503,7 @@ const state = {
 	scanRunning: false,
 	scanError: undefined,
 	/** The items the owner ticked in the import card; credentials are their own flag. */
-	importItems: new Set(['settings', 'models', 'mcp', 'skills', 'memory', 'sessions']),
+	importItems: new Set(['settings', 'models', 'mcp', 'skills']),
 	importCredentials: false,
 	importReport: undefined,
 	/** The provider form's current values. */
@@ -1104,10 +1098,8 @@ function renderImport() {
 		['models', t('models'), preview.providers],
 		['mcp', t('mcp'), preview.mcpServers],
 		['skills', t('skills'), preview.skills],
-		['memory', t('memory'), preview.memory],
-		['sessions', t('sessions'), preview.sessions],
 	];
-	const why = { mcp: t('mcpWhy'), skills: t('skillsWhy'), memory: t('memoryWhy') };
+	const why = { mcp: t('mcpWhy'), skills: t('skillsWhy') };
 	const rows = categories.map(([key, label, count]) => el('label', { class: 'check' },
 		el('input', {
 			type: 'checkbox',
