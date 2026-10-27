@@ -21,12 +21,12 @@ tocar el externo.
 ### 2. Compilación propia, no binario ajeno
 
 En vez de partir de un VSCodium ya compilado, el árbol propio vive versionado en este
-repositorio — `the tree` — y se compila desde ahí con `build/build.sh`. Así los
+repositorio — el árbol — y se compila desde ahí con `build/build.sh`. Así los
 colaboradores pueden auditar y recompilar sin depender de un binario opaco.
 
 > **Actualización (2026-09-27).** Los `patches/vscodium/` + `patches/picode/` que describía
-> esta frase **se retiraron**: sus cambios son ya el código de `the tree`. El pin
-> `upstream/stable.json` (1.135.0) sigue siendo la procedencia, y el número que declara el
+> esta frase **se retiraron**: sus cambios son ya el código de el árbol. El pin
+> `host/upstream/stable.json` (1.135.0) sigue siendo la procedencia, y el número que declara el
 > producto se sube aparte para que las extensiones no queden fuera del catálogo.
 
 ### 3. Quitar a Copilot, poner a pi (el bloque grande, en curso)

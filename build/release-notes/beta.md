@@ -10,3 +10,5 @@ leaves the other untouched.
 **How it updates:** a beta install reads its own feed at
 `updates/beta/win32/x64/<target>/latest.json`, so it is never handed a stable release — and a
 stable install is never handed this one.
+
+**Powered by Gentle AI:** PiCode ships [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) and its [Engram](https://github.com/Gentleman-Programming/engram) memory, both MIT, by [Gentleman Programming](https://github.com/Gentleman-Programming).

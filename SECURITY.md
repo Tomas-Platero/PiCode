@@ -22,7 +22,7 @@ Report it privately through GitHub:
   enabled.
 
 Please include: what version and platform, what you did, what you observed, and (if it is a
-build or distribution issue) which layer is involved — `the tree` for the editor itself,
+build or distribution issue) which layer is involved — the tree for the editor itself,
 `build/distribution/` for the product identity or `build/` for the pipeline. A `build/build.sh -o` run
 is usually enough for the maintainer to reproduce.
 
@@ -30,11 +30,11 @@ We aim to acknowledge private reports within **5 business days**.
 
 ## 📡 Upstream advisories
 
-The VS Code pin (`upstream/stable.json`) is reviewed **by hand**: the automated `pin-watch`
+The VS Code pin (`host/upstream/stable.json`) is reviewed **by hand**: the automated `pin-watch`
 workflow was removed with the earlier CI, and [`docs/CI.md`](docs/CI.md) records that. When an
 advisory is published for `microsoft/vscode` after the pinned version:
 
-- If upstream has published a fix, it is brought into `the tree` (merge or backport) in a
+- If upstream has published a fix, it is brought into the tree (merge or backport) in a
   `fix(security)` PR, labelled `security`, and merged **within days** — security updates are treated as urgent.
 - If Microsoft has not yet published a fix, a tracked issue labelled `security` is opened
   until the correction ships.
