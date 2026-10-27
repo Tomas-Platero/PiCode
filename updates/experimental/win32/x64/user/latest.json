@@ -1,8 +1,9 @@
 {
-  "version": "247668748ec111989e32ef72b1ad27626781be53",
-  "productVersion": "1.142.3",
-  "picodeVersion": "0.4.0-experimental",
-  "timestamp": 1793116056555,
-  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.4.0-experimental/PiCode-win32-x64-0.4.0-experimental-setup.exe",
-  "sha256hash": "8f7dfaa1cb7d00b876ed8b35e94dffd1aa7c9ae0684fdaf33df9dd37984ec7b7"
+  "version": "befa32d28017502edaba454b4073d6920d559c61",
+  "productVersion": "1.142.4",
+  "picodeVersion": "0.5.0-experimental",
+  "kind": "release",
+  "timestamp": 1793118312177,
+  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.5.0-experimental/PiCode-win32-x64-0.5.0-experimental-setup.exe",
+  "sha256hash": "a62edabe161e58cc2a1248db83a4b203182ca5f5644a3a79e68dc73ed3f13304"
 }
