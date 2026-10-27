@@ -29,10 +29,10 @@ registerHooks({
 const { pointChildPiAtThisPi } = await import('../src/product-env.ts');
 const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, switchedOff, withProductPackages } = await import('../src/product-packages.ts');
 
-const GENTLE_PI = { source: 'npm:gentle-pi@4.3.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
+const GENTLE_PI = { source: 'npm:gentle-pi@4.4.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
 test('the product pins gentle-pi, gentle-engram and pi-intercom at exact versions', () => {
-	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.3.0', 'gentle-engram@0.4.2', 'pi-intercom@0.18.1']);
+	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.4.0', 'gentle-engram@0.4.2', 'pi-intercom@0.18.1']);
 	for (const pkg of PRODUCT_PACKAGES) {
 		assert.match(pkg.version, /^\d+\.\d+\.\d+$/, `${pkg.name} is pinned exactly, never a range`);
 	}
@@ -41,7 +41,7 @@ test('the product pins gentle-pi, gentle-engram and pi-intercom at exact version
 test('gentle-pi loses its terminal experience and keeps the rest; gentle-engram is whole', () => {
 	assert.deepEqual(productEntry(PRODUCT_PACKAGES[0]!), GENTLE_PI);
 	assert.equal(productEntry(PRODUCT_PACKAGES[1]!), 'npm:gentle-engram@0.4.2');
-	for (const name of ['startup-banner', 'gentle-notifications', 'pi-pretty', 'gentle-herdr-activity', 'gentle-stats', 'gentle-shell', 'runtime-metrics']) {
+	for (const name of ['startup-banner', 'gentle-notifications', 'pi-pretty', 'gentle-herdr-activity', 'gentle-stats', 'gentle-shell', 'runtime-metrics', 'gentle-music', 'gentle-voice', 'gentle-design']) {
 		assert.ok(GENTLE_PI_TERMINAL_EXTENSIONS.includes(`!extensions/${name}.ts`), `${name} is excluded`);
 	}
 	assert.ok(GENTLE_PI_TERMINAL_EXTENSIONS.includes('!extensions/history/**'));

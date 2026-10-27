@@ -1393,3 +1393,10 @@ También llama a `tasklist`, `find` y `taskkill` por su ruta de Windows: con Git
   zip pequeño (no se ha mirado qué hay dentro de `resources/pi-runtime`).
 - La prueba de arranque no es una prueba funcional.
 - Detalle y uso: [`HOTFIX.md`](HOTFIX.md).
+
+### ADR-031, adenda 5 (2026-10-27): gentle-pi 4.4.0
+
+- `product-packages.ts` pins **gentle-pi 4.4.0**. The release adds three extensions that have no place in the editor, excluded through the same package filter: `gentle-music` (hands the whole terminal to a player), `gentle-voice` (microphone dictation, downloads components on request) and `gentle-design` (a local canvas server that opens a browser tab). Its new `design` skill still loads; without the extension it has no tools behind it.
+- It is a pin in `extensions/picode`, so it fits a hotfix or minor update (ADR-034); gentle-pi is installed in the profile from npm, not shipped in `resources/pi-runtime`.
+- The package row no longer offers Update for a pinned package: the pin put the old version back, so the button only ended in a refusal.
+
