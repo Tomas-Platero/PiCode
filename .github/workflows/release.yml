@@ -188,10 +188,26 @@ jobs:
               exit 1
             fi
           fi
+          # The release page's "what changed" walks the commits since the
+          # previous release, so pin that release's commit NOW: the checkout
+          # does not carry the other tags, and the step that publishes this
+          # release deletes the previous one, tag included, before the notes
+          # are written. Without this the summary silently goes missing.
+          PREV_SHA=""
+          if [ -n "${PREV_TAG}" ]; then
+            git fetch --quiet --force origin \
+              "refs/tags/${PREV_TAG}:refs/tags/${PREV_TAG}" || true
+            PREV_SHA=$(git rev-parse --quiet --verify \
+              "${PREV_TAG}^{commit}" 2>/dev/null || true)
+            if [ -z "${PREV_SHA}" ]; then
+              echo "::warning::${PREV_TAG} not found; the page goes out without its summary."
+            fi
+          fi
           {
             echo "VERSION=${VERSION}"
             echo "PICODE_VERSION=${PICODE_VERSION}"
             echo "PREV_TAG=${PREV_TAG}"
+            echo "PREV_SHA=${PREV_SHA}"
             echo "FEED_VERSION=${FEED_VERSION}"
             echo "CHANNEL=${CHANNEL}"
             echo "FEED_BRANCH=${FEED_BRANCH}"
@@ -394,9 +410,9 @@ jobs:
           EXE="PiCode-win32-x64-${PICODE_VERSION}-setup.exe"
           ZIP="PiCode-win32-x64-${PICODE_VERSION}.zip"
           WHAT_CHANGED="build/release-notes/what-changed.md"
-          if [ -n "${PREV_TAG}" ]; then
-            node build/release.mjs release-notes --from "${PREV_TAG}" \
-              --to "v${PICODE_VERSION}" > "${WHAT_CHANGED}"
+          if [ -n "${PREV_SHA}" ]; then
+            node build/release.mjs release-notes --from "${PREV_SHA}" \
+              --to "${GITHUB_SHA}" > "${WHAT_CHANGED}"
           else
             : > "${WHAT_CHANGED}"
           fi
