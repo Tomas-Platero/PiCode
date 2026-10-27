@@ -55,6 +55,7 @@ export interface BackgroundJobStatus {
 	readonly jobNumber: string;
 	readonly label?: string;
 	readonly command?: string;
+	readonly outputPath?: string;
 	readonly startedAt: number;
 }
 

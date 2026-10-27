@@ -7,6 +7,8 @@ import * as vscode from 'vscode';
 import { withContext } from './context';
 import { contextBlockFor } from './editor-context';
 import { readPiChatSettings } from './piConfig';
+import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
+import { listModels } from './wizard-models';
 import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -32,12 +34,16 @@ import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type Bac
 import {
 	beforeUriPathOf,
 	clearTurnEdits,
+	forgetUndoableTurn,
 	isFileMutationTool,
 	mutatedPathOf,
 	PICODE_BEFORE_SCHEME,
 	recordAfter,
+	rememberTurnForUndo,
 	snapshotBefore,
 	turnFileEdits,
+	undoableTurn,
+	undoEdits,
 	whenEditsSettled,
 } from './chat-edits';
 import {
@@ -498,6 +504,35 @@ function recordToolResult(toolName: string, args: unknown, isError: boolean | un
 /** The title the multi-diff editor opens with; the card's own header is the renderer's. */
 const TURN_EDITS_TITLE = 'Changed files';
 
+/** The button under the change card: puts the turn's files back as they were. */
+/** Opens the model comparison from the palette. */
+const COMPARE_MODELS_COMMAND_ID = 'picode.compareModels';
+
+export const UNDO_TURN_EDITS_COMMAND_ID = 'picode.undoTurnEdits';
+
+/** Runs the card's undo and tells the owner what happened, in the words they care about. */
+export async function undoTurnEditsCommand(key: unknown): Promise<void> {
+	const edits = typeof key === 'string' ? undoableTurn(key) : undefined;
+	if (edits === undefined) {
+		void vscode.window.showInformationMessage('These changes can no longer be undone.');
+		return;
+	}
+	const results = await undoEdits(edits, {
+		read: async absolutePath => fs.promises.readFile(absolutePath, 'utf8').catch(() => undefined),
+		write: async (absolutePath, content) => fs.promises.writeFile(absolutePath, content, 'utf8'),
+		remove: async absolutePath => fs.promises.rm(absolutePath, { force: true }),
+	});
+	forgetUndoableTurn(key as string);
+	const undone = results.filter(r => r.outcome === 'restored' || r.outcome === 'removed').length;
+	const skipped = results.length - undone;
+	const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`;
+	void vscode.window.showInformationMessage(
+		skipped === 0
+			? `Undid the changes in ${files(undone)}.`
+			: `Undid ${files(undone)}. ${files(skipped)} changed since and were left as they are.`,
+	);
+}
+
 /**
  * Pushes the turn's change card — "Changed N files", one row per file with its +N/−M, and
  * the button that opens every diff at once. One card per turn, at its very end: the row
@@ -529,6 +564,7 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 			};
 		});
 		stream.push(new vscode.ChatResponseMultiDiffPart(entries, TURN_EDITS_TITLE));
+		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: 'Undo these changes', arguments: [rememberTurnForUndo(edits)] });
 	} catch (error) {
 		log(`turn edits card failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
@@ -640,6 +676,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 							jobNumber: tracked.jobNumber,
 							...(label === undefined ? {} : { label }),
 							...(call.command === undefined ? {} : { command: call.command }),
+							...(tracked.outputPath === undefined ? {} : { outputPath: tracked.outputPath }),
 						}, Date.now());
 						notifyAgentStatus();
 					}
@@ -1732,6 +1769,92 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		}
 		return {};
 	};
+
+	// "Compare models": the same question to several models, answers side by side. Each model gets a
+	// throwaway session with read-only tools, so a comparison never touches the project or the
+	// conversation list.
+	context.subscriptions.push(vscode.commands.registerCommand(COMPARE_MODELS_COMMAND_ID, async (presetQuestion?: unknown) => {
+		const loaded = await loadSdk(deps.distributionRoot, deps.log);
+		if (loaded === undefined) {
+			void vscode.window.showInformationMessage('PiCode has no agent to compare models with yet. Set up PiCode first.');
+			return;
+		}
+		const catalogue = await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: 'Looking for models…' },
+			() => listModels({ distributionRoot: deps.distributionRoot, profileDir: internalProfileDir(deps.distributionRoot), refreshModels: () => undefined }).catch(() => ({ models: [] })),
+		);
+		if (catalogue.models.length < MIN_COMPARED_MODELS) {
+			void vscode.window.showInformationMessage('Connect at least two models to compare them.');
+			return;
+		}
+		const chosen = await vscode.window.showQuickPick(
+			catalogue.models.map(model => ({ label: model.model, description: model.provider, ref: model.ref })),
+			{ canPickMany: true, title: 'Compare models', placeHolder: `Pick ${MIN_COMPARED_MODELS} to ${MAX_COMPARED_MODELS} models`, matchOnDescription: true },
+		);
+		if (chosen === undefined) {
+			return;
+		}
+		if (chosen.length < MIN_COMPARED_MODELS || chosen.length > MAX_COMPARED_MODELS) {
+			void vscode.window.showInformationMessage(`Pick between ${MIN_COMPARED_MODELS} and ${MAX_COMPARED_MODELS} models.`);
+			return;
+		}
+		const question = typeof presetQuestion === 'string' && presetQuestion.trim().length > 0
+			? presetQuestion
+			: await vscode.window.showInputBox({ title: 'Compare models', prompt: 'What should they answer?', ignoreFocusOut: true });
+		if (question === undefined || question.trim().length === 0) {
+			return;
+		}
+		const cwd = resolveSessionCwd(resolveProjectScope().folders, os.homedir()).cwd;
+		const agentDir = chatAgentDir(deps.distributionRoot);
+		const answers = await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: `Asking ${chosen.length} models…`, cancellable: true },
+			async (_progress, token) => {
+				const controller = new AbortController();
+				token.onCancellationRequested(() => controller.abort());
+				pinAgentDir(agentDir);
+				const services = await loaded.sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
+				return compareModels(chosen.map(item => item.ref), async (ref, signal) => {
+					const slash = ref.indexOf('/');
+					const model = services.modelRuntime.getModel(ref.slice(0, slash), ref.slice(slash + 1));
+					if (model === undefined) {
+						throw new Error('This model is not available.');
+					}
+					const created = await loaded.sdk.createAgentSessionFromServices({
+						services,
+						sessionManager: loaded.sdk.SessionManager.inMemory(cwd),
+						model,
+						tools: ['read', 'grep', 'find', 'ls'],
+					});
+					const session = created.session;
+					// The answer is the last assistant message: each new message starts the text over.
+					let text = '';
+					const stop = session.subscribe(event => {
+						if (event.type === 'message_start') {
+							text = '';
+						} else if (event.type === 'message_update') {
+							const delta = event.assistantMessageEvent;
+							if (delta?.type === 'text_delta' && typeof delta.delta === 'string') {
+								text += delta.delta;
+							}
+						}
+					});
+					const onAbort = (): void => { void session.abort(); };
+					signal.addEventListener('abort', onAbort);
+					try {
+						await session.prompt(question);
+					} finally {
+						signal.removeEventListener('abort', onAbort);
+						stop();
+						session.dispose();
+					}
+					return text;
+				}, controller.signal);
+			},
+		);
+		const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: renderComparison(question, answers) });
+		await vscode.window.showTextDocument(document, { preview: false });
+		await vscode.commands.executeCommand('markdown.showPreviewToSide');
+	}));
 
 	const participant = vscode.chat.createChatParticipant(PI_PARTICIPANT, handler);
 	// The answer header's avatar is the participant's icon: the host turns `iconPath` into the

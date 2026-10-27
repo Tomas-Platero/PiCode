@@ -140,6 +140,12 @@
 				"icon": "$(folder-opened)"
 			},
 			{
+				"command": "picode.compareModels",
+				"title": "Compare Models",
+				"category": "PiCode",
+				"icon": "$(diff-multiple)"
+			},
+			{
 				"command": "picode.cancelQueuedTurns",
 				"title": "Cancel Queued Turns",
 				"category": "PiCode"
