@@ -1825,6 +1825,48 @@ begin
 end;
 #endif
 
+// inno_updater swaps versions by deleting every top-level entry of {app} except `_`, `tools`,
+// `unins*`, `appx` and `bootstrap` (it opens each file first, so a path past MAX_PATH aborts it),
+// then moving the contents of `_` up. PiCode keeps pi's profile in {app}\data, so the folder is
+// parked inside `_` for the swap and rides back to {app}\data with the new version.
+function StashDataFolder(): Boolean;
+var
+  DataDir, StashDir: String;
+begin
+  DataDir := ExpandConstant('{app}\data');
+  StashDir := ExpandConstant('{app}\_\data');
+  if not DirExists(DataDir) then begin
+    // Nothing to keep, or a previous run already parked it and never got to the swap.
+    Result := True;
+    exit;
+  end;
+  if DirExists(StashDir) then begin
+    Log('Both data folders exist, refusing to choose one: ' + StashDir);
+    Result := False;
+    exit;
+  end;
+  Result := RenameFile(DataDir, StashDir);
+  if Result then
+    Log('Data folder parked in the update folder')
+  else
+    Log('Could not park the data folder in the update folder');
+end;
+
+// The swap did not happen (inno_updater failed or was cancelled): the profile goes back.
+procedure RestoreDataFolder();
+var
+  DataDir, StashDir: String;
+begin
+  DataDir := ExpandConstant('{app}\data');
+  StashDir := ExpandConstant('{app}\_\data');
+  if DirExists(StashDir) and not DirExists(DataDir) then begin
+    if RenameFile(StashDir, DataDir) then
+      Log('Data folder restored after an unfinished update')
+    else
+      Log('Could not restore the data folder from the update folder');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdateResultCode: Integer;
@@ -1866,10 +1908,16 @@ begin
       end;
       Log('Application appears not to be running.');
 
-      if not SessionEndFileExists() and not CancelFileExists() then begin
+      if not IsVersionedUpdate() and not StashDataFolder() then begin
+        // Without the data folder out of the way the swap would delete pi's profile: keep the
+        // current version, and the next update tries again.
+        Log('Skipping inno_updater.exe call because the data folder could not be set aside');
+        DeleteFile(ExpandConstant('{app}\updating_version'));
+      end else if not SessionEndFileExists() and not CancelFileExists() then begin
         StopTunnelServiceIfNeeded();
         Log('Invoking inno_updater for background update');
         Exec(ExpandConstant('{app}\{#VersionedResourcesFolder}\tools\inno_updater.exe'), ExpandConstant('"{app}\{#ExeBasename}.exe" ' + BoolToStr(LockFileExists()) + ' "{cm:UpdatingVisualStudioCode}"'), '', SW_SHOW, ewWaitUntilTerminated, UpdateResultCode);
+        RestoreDataFolder();
         DeleteFile(ExpandConstant('{app}\updating_version'));
         Log('inno_updater completed successfully');
         #if "system" == InstallTarget
@@ -1881,6 +1929,7 @@ begin
           end;
         #endif
       end else begin
+        RestoreDataFolder();
         Log('Skipping inno_updater.exe call because OS session is ending or cancel was requested');
       end;
     end else begin

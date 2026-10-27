@@ -12,7 +12,7 @@ import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
 import { fileNameOf, piCommandsOfRunner, promptFileText, type PiCommand } from './command-registry';
-import { bindSessionExtensions, type PiSession } from './agent';
+import { bindSessionExtensions, pinAgentDir, type PiSession } from './agent';
 import { listAgents } from './gentle-models';
 
 /**
@@ -106,6 +106,11 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		// (hidden, one run) so pi's loader never installs one itself — its per-package installs
 		// each flashed a console window on Windows.
 		await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
+		// Pinned where pi's own code looks (as the chat's session does): Gentle writes its agent files
+		// to the directory that variable names, and with nothing pinned that is the machine's own
+		// `~/.pi/agent` — which this editor never writes to — instead of PiCode's profile, where the
+		// Agents page looks.
+		pinAgentDir(agentDir);
 		const services = await sdk.createAgentSessionServices({
 			cwd,
 			...(agentDir === undefined ? {} : { agentDir }),

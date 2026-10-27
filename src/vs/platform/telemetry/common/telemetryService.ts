@@ -278,6 +278,9 @@ configurationRegistry.registerConfiguration({
 		'telemetry.feedback.enabled': {
 			type: 'boolean',
 			default: true,
+			// PiCode sends no telemetry and has no feedback surveys: there is nothing here to switch, so
+			// the row (and with it the Telemetry page) is not shown. The key stays for what still reads it.
+			included: false,
 			description: localize('telemetry.feedback.enabled', "Enable feedback mechanisms such as the issue reporter, surveys, and other feedback options."),
 			policy: {
 				name: 'EnableFeedback',

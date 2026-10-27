@@ -61,6 +61,12 @@ export function piToolsFromEditor(token: ToolTokenHolder): PiCustomTools {
 	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token)) as unknown as PiCustomTools;
 }
 
+/** The editor's own pi tools as `customTools`; the same `details` gap as `piToolsFromEditor`. */
+export function asPiCustomTools(tools: readonly PiToolDefinition[]): PiCustomTools {
+	// SAFETY: see `piToolsFromEditor` — pi reads `content` only.
+	return tools as unknown as PiCustomTools;
+}
+
 /** What a pi tool answers with: the text the model reads, and nothing else. The array is mutable because pi's own result type declares it mutable — the element shape is pi's `TextContent`. */
 export interface PiToolResult {
 	content: { readonly type: 'text'; readonly text: string }[];

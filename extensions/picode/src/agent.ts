@@ -14,7 +14,9 @@ import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
 import { resolveSessionCwd } from './session-cwd';
-import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { windowPastConversationTools } from './past-conversations-window';
+import { mcpNotice } from './mcp-notice';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -58,7 +60,7 @@ import { piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
-import { isSlashCommand } from './context';
+import { conversationName, isSlashCommand } from './context';
 import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice } from './extension-notices';
 
@@ -212,6 +214,8 @@ export interface PiSession {
 	 * discovered — servers no file declares, brought in by pi extensions and plugins.
 	 */
 	getAllTools?(): ReadonlyArray<{ readonly name: string }>;
+	/** Names the conversation: what pi-intercom calls the session, and what its transcript records. */
+	setSessionName?(name: string): void;
 	dispose(): void;
 }
 
@@ -834,6 +838,11 @@ function trimExtensionText(text: string): string {
  * no shape pass through untouched — the notice stays the extension's words. The card
  * itself (color, icon) comes from the stream's `warning()`, not from this string.
  */
+/** `SIGN_IN_MCP_SERVER_COMMAND` in `extension.ts`, which this module cannot import without a cycle. */
+const SIGN_IN_MCP_SERVER_COMMAND_ID = 'picode.mcp.signInServer';
+/** The editor's customizations page; with no argument it opens on MCP Servers. */
+const OPEN_MCP_SERVERS_COMMAND_ID = 'aiCustomization.openManagementEditor';
+
 function styledExtensionNotice(message: string): string {
 	const lines = message.split('\n').map(line => line.trim()).filter(line => line !== '');
 	if (lines.length <= 1) {
@@ -996,6 +1005,18 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			}
 			// Expected by the product, and written in terms of files and variables: not shown.
 			if (isExpectedHelperNotice(message)) {
+				return;
+			}
+			const mcp = mcpNotice(message.trim());
+			if (mcp !== undefined) {
+				try {
+					stream.warning(`\n${mcp.markdown}\n`);
+					// The fixes as buttons, instead of pi's "Run /mcp to fix.".
+					for (const row of mcp.rows.filter(entry => entry.needsSignIn)) {
+						stream.button({ command: SIGN_IN_MCP_SERVER_COMMAND_ID, title: `Sign in to ${row.server}`, arguments: [row.server] });
+					}
+					stream.button({ command: OPEN_MCP_SERVERS_COMMAND_ID, title: 'Manage MCP servers' });
+				} catch { /* a stream that already closed is not an error to report */ }
 				return;
 			}
 			const styled = styledExtensionNotice(message.trim());
@@ -1288,11 +1309,41 @@ export function liveSessionMcpServers(): readonly string[] | undefined {
 	return sessionMcpProvider?.();
 }
 
+/** How many chats keep a live pi session at once; the rest reopen their transcript on their next message. */
+const MAX_LIVE_CHATS = 6;
+
+/** One chat's pi conversation: its session, the transcript it writes and what it was built against. */
+interface ChatPi {
+	readonly key: string;
+	session?: PiSession;
+	sessionManager?: ReturnType<OfficialSdk['SessionManager']['create']>;
+	/** pi's runtime for this chat's folder: what resolves a model id into the model pi runs. */
+	services?: PiServices;
+	sessionFolder?: string;
+	/** The project scope the session was built against, so a mode or folder change rebuilds it. */
+	sessionScopeKey?: string;
+	/** The profile the session was built against, so a runtime switch rebuilds it. */
+	sessionAgentDir?: string;
+	/** The MCP tool set the session was built with. */
+	mcpSignature: string;
+	/** The disabled tools the session was built with, so a change rebuilds it. */
+	disabledToolsKey: string;
+	lastUsed: number;
+}
+
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	// The setup bridge needs to drop the live session when the profile's packages change:
 	// what they load (agents, skills, commands) registers when pi's session is created.
-	sessionResetter = () => { session?.dispose(); gentleAgents.clear(); session = undefined; services = undefined; backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire(); };
+	sessionResetter = () => {
+		for (const chat of chats.values()) {
+			chat.session?.dispose();
+			chat.session = undefined;
+			chat.services = undefined;
+		}
+		gentleAgents.clear(); backgroundJobs.clear(); notifyAgentStatus(); sessionChangedEmitter.fire();
+	};
 	sessionUsageProvider = () => {
+		const sessionManager = active?.sessionManager;
 		if (sessionManager === undefined) {
 			return undefined;
 		}
@@ -1365,6 +1416,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	// `chatTitleActions.ts`). Set once for the window — the panel's chat is pi's.
 	void vscode.commands.executeCommand('setContext', CHAT_ACTIVE_CONTEXT, true);
 	sessionCommandsProvider = () => {
+		const session = active?.session;
+		const sessionFolder = active?.sessionFolder;
 		if (session === undefined || sessionFolder === undefined) {
 			return undefined;
 		}
@@ -1373,6 +1426,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: piCommandsOfRunner(session) };
 	};
 	sessionMcpProvider = () => {
+		const session = active?.session;
 		if (session === undefined || typeof session.getAllTools !== 'function') {
 			return undefined;
 		}
@@ -1390,35 +1444,61 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			return undefined;
 		}
 	};
-	let session: PiSession | undefined;
-	let sessionFolder: string | undefined;
-	/** The project scope the live session was built against, so a mode or folder change rebuilds it. */
-	let sessionScopeKey: string | undefined;
-	/** The profile the live session was built against, so a runtime switch rebuilds it. */
-	let sessionAgentDir: string | undefined;
-	/** pi's runtime for the current folder: what resolves a model id into the model pi runs. */
-	let services: PiServices | undefined;
 	/**
-	 * The session's store, kept across a rebuild so the conversation survives one.
+	 * One pi conversation per chat of the editor, keyed by the chat's own resource.
 	 *
-	 * A rebuild happens when the editor's MCP servers change, because pi registers custom tools
-	 * when a session is created and cannot add one later. Reusing the manager is what makes that
-	 * rebuild invisible: the transcript is in the manager, not in the session.
+	 * Each chat the owner opens is its own conversation: its own pi session, its own transcript and
+	 * its own row in Sessions. With one session per window, a new chat kept writing into the previous
+	 * conversation — the agent remembered what the screen did not show, and pi-intercom saw a single
+	 * session however many chats were open. What a chat holds survives a rebuild: the transcript is in
+	 * the manager, not in the session.
 	 */
-	let sessionManager: ReturnType<OfficialSdk['SessionManager']['create']> | undefined;
-	/** The MCP tool set the running session was built with. */
-	let mcpSignature = '';
-	/** The disabled tools the running session was built with, so a change rebuilds it. */
-	let disabledToolsKey = '';
+	const chats = new Map<string, ChatPi>();
+	/** The chat that spoke last: what the status view, the slash list and the MCP list read. */
+	let active: ChatPi | undefined;
+	/** Which transcript each chat writes, so a chat the editor restores goes on where it was. */
+	const TRANSCRIPTS_KEY = 'picode.chatTranscripts';
+	const transcriptOf = (key: string): string | undefined => context.workspaceState.get<Record<string, string>>(TRANSCRIPTS_KEY)?.[key];
+	const rememberTranscript = (key: string, file: string | undefined): void => {
+		if (file === undefined) {
+			return;
+		}
+		const known = context.workspaceState.get<Record<string, string>>(TRANSCRIPTS_KEY) ?? {};
+		if (known[key] !== file) {
+			void context.workspaceState.update(TRANSCRIPTS_KEY, { ...known, [key]: file });
+		}
+	};
+	/** The chat a request belongs to, made on its first message. */
+	const chatFor = (request: vscode.ChatRequest): ChatPi => {
+		// SAFETY: `sessionResource` is the proposed chatParticipantPrivate field this manifest enables;
+		// an editor without it gives one key for every chat, which is the old one-per-window behaviour.
+		const key = (request as { sessionResource?: vscode.Uri }).sessionResource?.toString() ?? 'window';
+		let chat = chats.get(key);
+		if (chat === undefined) {
+			chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: 0 };
+			chats.set(key, chat);
+		}
+		chat.lastUsed = Date.now();
+		active = chat;
+		return chat;
+	};
+	/** Drops the live sessions of the chats unused longest, keeping their transcripts for later. */
+	const trimLiveChats = (keep: ChatPi): void => {
+		const live = [...chats.values()].filter(chat => chat.session !== undefined && chat !== keep).toSorted((a, b) => b.lastUsed - a.lastUsed);
+		for (const chat of live.slice(MAX_LIVE_CHATS - 1)) {
+			chat.session?.dispose();
+			chat.session = undefined;
+			chat.services = undefined;
+		}
+	};
 
 	/**
 	 * The turns of this window, one at a time, and how many are waiting for their slot.
 	 *
-	 * There is **one** pi session per window (see `session` above): every chat session the owner has
-	 * open drives the same agent. Sending a message in a second one while the first is still
-	 * streaming makes pi refuse the prompt — «Agent is already processing. Specify streamingBehavior
-	 * ('steer' or 'followUp') to queue the message.» — and that is what the owner saw as soon as he
-	 * opened more than one session: the turn never started, and the chat said so.
+	 * Each chat has its own pi session (see `chats` above), but their turns still take turns: the
+	 * permission gate answers into the stream of the turn in flight (`turnContext`) and an editor MCP
+	 * call takes that turn's invocation token (`toolToken`), and both are the window's. Two turns at
+	 * once would ask the owner's questions in the wrong chat.
 	 *
 	 * Queued **here**, not through pi's `streamingBehavior`: `followUp` would hand the second message
 	 * to pi to run after the current turn, and the event that ends a turn (`agent_settled`) would then
@@ -1437,6 +1517,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	const toolToken: ToolTokenHolder = {};
 
 const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
+		const chat = chatFor(request);
 		toolToken.current = request.toolInvocationToken;
 		// The picker's two positions name the four level names the host has shipped; see
 		// `permissions.ts`. The setting covers a request that arrives without a level.
@@ -1482,14 +1563,14 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			// servers do, and when the chosen pi's profile changes, which is the same
 			// conversation pointed at a different pi.
 			const scopeKey = `${scope.mode}\u0000${cwd}\u0000${scope.folders.join('\u0000')}\u0000${scope.area?.slug ?? ''}`;
-			const scopeChanged = sessionScopeKey !== scopeKey;
-			const toolsChanged = signature !== mcpSignature;
-			const profileChanged = sessionAgentDir !== agentDir;
+			const scopeChanged = chat.sessionScopeKey !== scopeKey;
+			const toolsChanged = signature !== chat.mcpSignature;
+			const profileChanged = chat.sessionAgentDir !== agentDir;
 			// The disabled tools reshape the session like the MCP tools do: changing them rebuilds.
-			const disabledChanged = disabledToolsKey !== settings.disabledTools.join('\u0000');
-			disabledToolsKey = settings.disabledTools.join('\u0000');
-			if (session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
-				session?.dispose();
+			const disabledChanged = chat.disabledToolsKey !== settings.disabledTools.join('\u0000');
+			chat.disabledToolsKey = settings.disabledTools.join('\u0000');
+			if (chat.session === undefined || scopeChanged || toolsChanged || profileChanged || disabledChanged) {
+				chat.session?.dispose();
 				// The agents the old session published are gone with it.
 				gentleAgents.clear();
 				// The profile is pinned in the environment *before* anything pi loads can resolve it. pi's built-in
@@ -1511,7 +1592,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// never installs one itself — its per-package installs each flashed a console window.
 				await ensureProfilePackages({ profileDir: internalProfileDir(deps.distributionRoot), runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli(), log: deps.log });
 				pinAgentDir(agentDir);
-				services = await loaded.sdk.createAgentSessionServices({
+				chat.services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
@@ -1520,7 +1601,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				});
 				// pi collects load problems instead of failing the session; one that could not be
 				// loaded is said here, and the turn still runs without it.
-				for (const diagnostic of services.diagnostics ?? []) {
+				for (const diagnostic of chat.services.diagnostics ?? []) {
 					if (diagnostic.type === 'error' || diagnostic.type === 'warning') {
 						deps.log(`pi resources (${diagnostic.type}): ${diagnostic.message}`);
 					}
@@ -1528,10 +1609,10 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// `services.diagnostics` carries provider registrations, not extension load
 				// failures: pi collects those in the loader's own `errors`, which nothing read,
 				// so a bridge with a broken import graph disappeared without a single line.
-				for (const { path: failedPath, error } of services.resourceLoader.getExtensions().errors) {
+				for (const { path: failedPath, error } of chat.services.resourceLoader.getExtensions().errors) {
 					deps.log(`pi extension failed to load (${failedPath}): ${error}`);
 				}
-				if (scopeChanged || sessionManager === undefined || profileChanged) {
+				if (scopeChanged || chat.sessionManager === undefined || profileChanged) {
 					// pi's own session home: the per-project folder under the profile's `sessions/`,
 					// the same shape `getDefaultSessionDirPath` builds (replicated by `piProjectSlug`,
 					// which the Sessions listing matches against). In workspace mode the session is a
@@ -1546,49 +1627,59 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// could only ever replay the CLI's older transcripts. Filing under the project
 					// slug puts the chat's sessions where pi's own live, and the listing — and the
 					// click that replays one — sees them.
-					sessionManager = loaded.sdk.SessionManager.create(
-						cwd,
-						agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(cwd)),
-					);
+					const sessionDir = agentDir === undefined ? undefined : path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(cwd));
+					// A chat the editor restored after a reload goes on in its own transcript, when it is
+					// still where this scope files them; anything else starts a new one.
+					const known = chat.sessionManager === undefined ? transcriptOf(chat.key) : undefined;
+					const reopen = known !== undefined && sessionDir !== undefined && path.dirname(known) === sessionDir && fs.existsSync(known);
+					chat.sessionManager = reopen
+						? loaded.sdk.SessionManager.open(known, sessionDir, cwd)
+						: loaded.sdk.SessionManager.create(cwd, sessionDir);
 				}
-				const model = selected === undefined ? undefined : services.modelRuntime.getModel(selected.providerId, selected.modelId);
+				const model = selected === undefined ? undefined : chat.services.modelRuntime.getModel(selected.providerId, selected.modelId);
 				// The tools the owner turned off, read at session build: a change rebuilds the session
 				// with everything else that reshapes it. What pi keeps is a **denial, not a wall** —
 				// its commands still ask before they run.
 				const disabledTools = settings.disabledTools;
 				const created = await loaded.sdk.createAgentSessionFromServices({
-					services,
-					sessionManager,
+					services: chat.services,
+					sessionManager: chat.sessionManager,
 					// pi's own default when the chat is on a model that is not ours: better pi's choice
 					// than a guess at one of ours.
 					...(model === undefined ? {} : { model }),
 					...(settings.thinkingLevel === undefined ? {} : { thinkingLevel: settings.thinkingLevel }),
 					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
 					// because a server added a minute ago has to be there on the next message.
-					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
+					// The owner's earlier conversations ride along, read only (see `past-conversations.ts`).
+					customTools: [
+						...(mcpEnabled() ? piToolsFromEditor(toolToken) : []),
+						...asPiCustomTools(windowPastConversationTools(agentDir, () => chat.sessionManager?.getSessionFile())),
+					],
 					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
 				});
-				session = created.session;
+				chat.session = created.session;
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
-				await bindSessionExtensions(session, deps.log);
-				sessionFolder = cwd;
-				sessionScopeKey = scopeKey;
-				sessionAgentDir = agentDir;
-				mcpSignature = signature;
+				await bindSessionExtensions(chat.session, deps.log);
+				chat.sessionFolder = cwd;
+				chat.sessionScopeKey = scopeKey;
+				chat.sessionAgentDir = agentDir;
+				chat.mcpSignature = signature;
+				rememberTranscript(chat.key, chat.sessionManager.getSessionFile());
+				trimLiveChats(chat);
 				sessionChangedEmitter.fire();
 			} else {
 				// The model picked in the chat between two turns is followed here: a session that
 				// answered with the previous model while the picker said otherwise is the defect this
 				// closes.
 				if (selected !== undefined) {
-					const model = services?.modelRuntime.getModel(selected.providerId, selected.modelId);
-					if (model !== undefined && session.model !== model) {
-						await session.setModel(model);
+					const model = chat.services?.modelRuntime.getModel(selected.providerId, selected.modelId);
+					if (model !== undefined && chat.session.model !== model) {
+						await chat.session.setModel(model);
 					}
 				}
-				if (settings.thinkingLevel !== undefined && session.thinkingLevel !== settings.thinkingLevel) {
-					session.setThinkingLevel(settings.thinkingLevel);
+				if (settings.thinkingLevel !== undefined && chat.session.thinkingLevel !== settings.thinkingLevel) {
+					chat.session.setThinkingLevel(settings.thinkingLevel);
 				}
 			}
 
@@ -1616,8 +1707,16 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// Cancelled while waiting: the turn this request would have run must not start.
 					return {};
 				}
+				// A conversation is called by what it was opened with, as the Sessions list calls it: that is
+				// the name another session addresses it by through pi-intercom.
+				if (chat.sessionManager?.getSessionName() === undefined) {
+					const name = conversationName(request.prompt);
+					if (name !== undefined) {
+						chat.session.setSessionName?.(name);
+					}
+				}
 				const framed = withContext(request.prompt, context, readRuntimeMode());
-				await runTurn(session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd);
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;
@@ -1642,9 +1741,11 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 	context.subscriptions.push(
 		participant,
 		new vscode.Disposable(() => {
-			session?.dispose();
+			for (const chat of chats.values()) {
+				chat.session?.dispose();
+				chat.session = undefined;
+			}
 			gentleAgents.clear();
-			session = undefined;
 		}),
 	);
 	return participant;

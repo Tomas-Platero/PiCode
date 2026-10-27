@@ -51,6 +51,8 @@ const PICODE_PENDING_CODE_KEY = 'picode.account.pendingCode';
 /** Application-scope storage keys caching who is signed in, so sessions can be rebuilt without a network round-trip. */
 export const PICODE_UID_STORAGE_KEY = 'picode.account.uid';
 export const PICODE_EMAIL_STORAGE_KEY = 'picode.account.email';
+/** The avatar's address, kept so the setup window can show it without signing in again. */
+export const PICODE_PICTURE_STORAGE_KEY = 'picode.account.picture';
 export const PICODE_SCOPES_STORAGE_KEY = 'picode.account.scopes';
 
 /** Firebase ID tokens live for one hour; treat them as stale a little earlier so a refresh happens before they expire. */
@@ -95,6 +97,8 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 
 	private _cachedIdToken: { readonly token: string; readonly expiresAt: number } | undefined;
 	private _lastPicture: string | undefined;
+	/** The account the Accounts menu was last told about, so a change made elsewhere is announced once. */
+	private _announcedUid = '';
 	private _refreshing: Promise<string | undefined> | undefined;
 
 	constructor(
@@ -110,6 +114,32 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		@ICommandService private readonly _commandService: ICommandService,
 	) {
 		super();
+		// The setup window and any other window write the same account into this storage. A change made
+		// there is not a call to this provider, so without listening the Accounts menu, the sync engine
+		// and everything reading the session would keep showing the old state until a restart.
+		this._announcedUid = this._storageService.get(PICODE_UID_STORAGE_KEY, StorageScope.APPLICATION) ?? '';
+		this._register(this._storageService.onDidChangeValue(StorageScope.APPLICATION, PICODE_UID_STORAGE_KEY, this._store)(() => {
+			void this._announceStoredAccount();
+		}));
+	}
+
+	/** Tells the rest of the editor about an account change made outside this provider's own calls. */
+	private async _announceStoredAccount(): Promise<void> {
+		const uid = this._storageService.get(PICODE_UID_STORAGE_KEY, StorageScope.APPLICATION) ?? '';
+		if (uid === this._announcedUid) {
+			return;
+		}
+		const previous = this._announcedUid;
+		this._announcedUid = uid;
+		this._cachedIdToken = undefined;
+		if (uid === '') {
+			this._onDidChangeSessions.fire({ added: [], changed: [], removed: [this._createSession(previous, '', this._storedScopes(), '')] });
+			return;
+		}
+		const session = await this._buildCurrentSession();
+		if (session) {
+			this._onDidChangeSessions.fire({ added: [session], changed: [], removed: [] });
+		}
 	}
 
 	override dispose(): void {
@@ -156,12 +186,15 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 			throw new Error(localize('picode.account.signInFailed', "Sign-in could not be completed. Please try again."));
 		}
 		const email = identity.email ?? '';
+		// This provider's own write: marked first, so the storage listener does not announce it twice.
+		this._announcedUid = uid;
 		await this._secretStorageService.set(PICODE_REFRESH_TOKEN_SECRET_KEY, minted.json.refreshToken);
 		this._storageService.store(PICODE_UID_STORAGE_KEY, uid, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		this._storageService.store(PICODE_EMAIL_STORAGE_KEY, email, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		this._storageService.store(PICODE_SCOPES_STORAGE_KEY, JSON.stringify(scopes), StorageScope.APPLICATION, StorageTarget.MACHINE);
 		this._cachedIdToken = { token: idToken, expiresAt: Date.now() + ID_TOKEN_STALENESS_MS };
 		this._lastPicture = identity.picture;
+		this._rememberPicture(identity.picture);
 		const session = this._createSession(uid, email, scopes, idToken);
 		// The Accounts icon repaints from these events — AuthenticationService.createSession
 		// does not fire one itself, so without this the avatar would only appear after a restart.
@@ -237,11 +270,22 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 	}
 
 	private async _forgetAccount(): Promise<void> {
+		this._announcedUid = '';
 		await this._secretStorageService.delete(PICODE_REFRESH_TOKEN_SECRET_KEY);
 		this._storageService.remove(PICODE_UID_STORAGE_KEY, StorageScope.APPLICATION);
 		this._storageService.remove(PICODE_EMAIL_STORAGE_KEY, StorageScope.APPLICATION);
 		this._storageService.remove(PICODE_SCOPES_STORAGE_KEY, StorageScope.APPLICATION);
+		this._storageService.remove(PICODE_PICTURE_STORAGE_KEY, StorageScope.APPLICATION);
 		this._cachedIdToken = undefined;
+	}
+
+	/** Keeps the avatar's address beside the email; nothing is kept when the account has none. */
+	private _rememberPicture(picture: string | undefined): void {
+		if (picture) {
+			this._storageService.store(PICODE_PICTURE_STORAGE_KEY, picture, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		} else {
+			this._storageService.remove(PICODE_PICTURE_STORAGE_KEY, StorageScope.APPLICATION);
+		}
 	}
 
 	/**
@@ -293,6 +337,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 			}
 		}
 		this._lastPicture = identity.picture;
+		this._rememberPicture(identity.picture);
 		return id_token;
 	}
 

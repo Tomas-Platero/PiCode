@@ -26,6 +26,7 @@
 		"chatParticipantAdditions",
 		"chatParticipantPrivate",
 		"languageModelThinkingPart",
+		"languageModelPricing",
 		"chatSessionCustomizationProvider"
 	],
 	"activationEvents": [
@@ -377,14 +378,15 @@
 					"type": "tree",
 					"id": "picode.status.tasks",
 					"name": "Tasks",
-					"icon": "$(tasklist)"
+					"icon": "$(tasklist)",
+					"when": "!config.chat.disableAIFeatures"
 				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",
 					"name": "Memory",
 					"icon": "$(database)",
-					"when": "picode.memory.enabled"
+					"when": "picode.memory.enabled && !config.chat.disableAIFeatures"
 				}
 			]
 		}

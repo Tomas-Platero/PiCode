@@ -12,6 +12,7 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
 | [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
+| [RELEASES.md](RELEASES.md) | 🚀 El viaje de una release de experimental a beta y a stable, con gráficos | ES |
 | [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las capas de pi | ES |
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
 | [SETTINGS.md](SETTINGS.md) | ⚙️ El inventario de **todas** las opciones: clave, para qué, dónde aparece y dónde debe aparecer, con lo que se oculta y lo que no se toca | ES |

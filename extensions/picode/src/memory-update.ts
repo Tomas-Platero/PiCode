@@ -95,39 +95,85 @@ export function sha256File(file: string): string {
 	return hash.digest('hex');
 }
 
-/** Asks GitHub what the newest release is. `undefined` means "could not ask". */
-export async function fetchLatestRelease(): Promise<EngineRelease | undefined> {
+/**
+ * Asks GitHub what the newest release is. `undefined` means "could not ask"; `report` says why.
+ *
+ * The API answers first. When it does not (a rate limit, a proxy that only lets pages through, a
+ * network that blocks `api.github.com`), the release page's own redirect names the same tag and the
+ * download address follows from it, so the update does not depend on one door being open.
+ */
+export async function fetchLatestRelease(report?: (reason: string) => void): Promise<EngineRelease | undefined> {
+	const fromApi = await releaseFromApi(report);
+	if (fromApi !== undefined) {
+		return fromApi;
+	}
+	return releaseFromPage(report);
+}
+
+async function releaseFromApi(report?: (reason: string) => void): Promise<EngineRelease | undefined> {
 	try {
 		const response = await fetch(API, { headers: { 'User-Agent': 'PiCode', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000) });
 		if (!response.ok) {
+			report?.(`the release API answered ${response.status}`);
 			return undefined;
 		}
 		const body = await response.json() as { tag_name?: unknown; assets?: unknown };
 		const tag = typeof body.tag_name === 'string' ? body.tag_name : '';
 		const version = tag.replace(/^v/i, '');
 		if (version === '') {
+			report?.('the release API named no version');
 			return undefined;
 		}
 		const assets = Array.isArray(body.assets) ? body.assets as Array<{ name?: unknown; browser_download_url?: unknown }> : [];
 		const asset = assetNameFor(version, process.platform, process.arch);
 		if (asset === undefined) {
+			report?.('there is no memory engine download for this system');
 			return undefined;
 		}
 		const found = assets.find(item => item.name === asset);
 		const url = typeof found?.browser_download_url === 'string' ? found.browser_download_url : '';
 		if (url === '') {
+			report?.(`the release has no ${asset}`);
 			return undefined;
 		}
-		return {
-			tag,
-			version,
-			asset,
-			url,
-			checksumsUrl: `https://github.com/${REPO}/releases/download/${tag}/checksums.txt`,
-		};
-	} catch {
+		return releaseFor(tag, version, asset, url);
+	} catch (error) {
+		report?.(`the release API could not be reached (${error instanceof Error ? error.message : String(error)})`);
 		return undefined;
 	}
+}
+
+/** The release page redirects `/releases/latest` to `/releases/tag/<tag>`: that names the newest tag. */
+async function releaseFromPage(report?: (reason: string) => void): Promise<EngineRelease | undefined> {
+	try {
+		const response = await fetch(`https://github.com/${REPO}/releases/latest`, { redirect: 'manual', headers: { 'User-Agent': 'PiCode' }, signal: AbortSignal.timeout(15_000) });
+		const location = response.headers.get('location') ?? (response.url.includes('/releases/tag/') ? response.url : '');
+		const tag = decodeURIComponent(location.split('/releases/tag/')[1] ?? '').split(/[?#]/)[0];
+		const version = tag.replace(/^v/i, '');
+		if (version === '') {
+			report?.(`the release page did not name a version (it answered ${response.status})`);
+			return undefined;
+		}
+		const asset = assetNameFor(version, process.platform, process.arch);
+		if (asset === undefined) {
+			report?.('there is no memory engine download for this system');
+			return undefined;
+		}
+		return releaseFor(tag, version, asset, `https://github.com/${REPO}/releases/download/${tag}/${asset}`);
+	} catch (error) {
+		report?.(`the release page could not be reached (${error instanceof Error ? error.message : String(error)})`);
+		return undefined;
+	}
+}
+
+function releaseFor(tag: string, version: string, asset: string, url: string): EngineRelease {
+	return {
+		tag,
+		version,
+		asset,
+		url,
+		checksumsUrl: `https://github.com/${REPO}/releases/download/${tag}/checksums.txt`,
+	};
 }
 
 /** Runs the engine and reads the version it reports. `undefined` means it did not answer. */
@@ -160,9 +206,10 @@ export async function updateEngine(options: {
 	const { home, currentVersion, confirm, progress } = options;
 
 	progress('Checking for a newer memory engine…');
-	const release = await fetchLatestRelease();
+	const reasons: string[] = [];
+	const release = await fetchLatestRelease(reason => reasons.push(reason));
 	if (release === undefined) {
-		return { ok: false, message: 'Could not reach the release page. Nothing was changed.' };
+		return { ok: false, message: `Could not reach the release page${reasons.length > 0 ? ` (${reasons[reasons.length - 1]})` : ''}. Nothing was changed.` };
 	}
 	if (currentVersion !== undefined && compareVersions(release.version, currentVersion) <= 0) {
 		return { ok: true, message: `Already up to date (${currentVersion}).` };

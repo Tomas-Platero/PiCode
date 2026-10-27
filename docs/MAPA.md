@@ -367,11 +367,14 @@
 │   │   │   ├── picode-status.svg
 │   │   │   └── picode.svg
 │   │   ├── src/
+│   │   │   ├── agent-transcript-panel.ts
+│   │   │   ├── agent-transcript.ts
 │   │   │   ├── agent.ts
 │   │   │   ├── agents.ts
 │   │   │   ├── background-cards.ts
 │   │   │   ├── background-jobs.ts
 │   │   │   ├── chat-edits.ts
+│   │   │   ├── child-trace.ts
 │   │   │   ├── command-registry.ts
 │   │   │   ├── commands.ts
 │   │   │   ├── context.ts
@@ -381,15 +384,21 @@
 │   │   │   ├── editor-context.ts
 │   │   │   ├── endpoint.ts
 │   │   │   ├── engram-activation.ts
+│   │   │   ├── engram-leases.ts
 │   │   │   ├── engram.ts
 │   │   │   ├── extension-notices.ts
 │   │   │   ├── extension.ts
 │   │   │   ├── gentle-agents-store.ts
+│   │   │   ├── gentle-models-ui.ts
+│   │   │   ├── gentle-models.ts
+│   │   │   ├── gentle-settings.ts
 │   │   │   ├── import-project.ts
+│   │   │   ├── intercom-config.ts
 │   │   │   ├── left-behind-packages.ts
 │   │   │   ├── login.ts
 │   │   │   ├── mcp-add.ts
 │   │   │   ├── mcp-cwd.ts
+│   │   │   ├── mcp-notice.ts
 │   │   │   ├── mcp-provider.ts
 │   │   │   ├── mcp-scopes.ts
 │   │   │   ├── mcp.ts
@@ -399,6 +408,7 @@
 │   │   │   ├── memory-client.ts
 │   │   │   ├── memory-update.ts
 │   │   │   ├── memory-view.ts
+│   │   │   ├── model-info.ts
 │   │   │   ├── models-cache.ts
 │   │   │   ├── npm-run.ts
 │   │   │   ├── onboarding-host.ts
@@ -409,6 +419,8 @@
 │   │   │   ├── packages-manage.ts
 │   │   │   ├── packages-registry.ts
 │   │   │   ├── packages-updates.ts
+│   │   │   ├── past-conversations-window.ts
+│   │   │   ├── past-conversations.ts
 │   │   │   ├── permissions.ts
 │   │   │   ├── piConfig.ts
 │   │   │   ├── piLocate.ts
@@ -440,31 +452,39 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 73 files in total
+│   │   │   └── … 85 files in total
 │   │   ├── test/
+│   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
 │   │   │   ├── background-jobs.test.ts
 │   │   │   ├── chat-edits.test.ts
+│   │   │   ├── child-trace.test.ts
 │   │   │   ├── command-registry.test.ts
 │   │   │   ├── context.test.ts
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
 │   │   │   ├── disabled-tools.test.ts
 │   │   │   ├── distribution-root.test.ts
+│   │   │   ├── engram-leases.test.ts
 │   │   │   ├── engram-runtime.test.ts
 │   │   │   ├── engram.test.ts
 │   │   │   ├── extension-notices.test.ts
 │   │   │   ├── gentle-agents-store.test.ts
+│   │   │   ├── gentle-models.test.ts
+│   │   │   ├── gentle-settings.test.ts
+│   │   │   ├── intercom-config.test.ts
 │   │   │   ├── left-behind-packages.test.ts
 │   │   │   ├── mcp-add.test.ts
 │   │   │   ├── mcp-cwd.test.ts
 │   │   │   ├── mcp-discovered.test.ts
+│   │   │   ├── mcp-notice.test.ts
 │   │   │   ├── mcp-provider.test.ts
 │   │   │   ├── mcp-signin-scope.test.ts
 │   │   │   ├── mcp-signin.test.ts
 │   │   │   ├── memory-cards.test.ts
 │   │   │   ├── memory-client.test.ts
+│   │   │   ├── model-info.test.ts
 │   │   │   ├── models-cache.test.ts
 │   │   │   ├── npm-run.test.ts
 │   │   │   ├── onboarding-settings.test.ts
@@ -473,6 +493,7 @@
 │   │   │   ├── packages-manage.test.ts
 │   │   │   ├── packages-registry.test.ts
 │   │   │   ├── packages-updates.test.ts
+│   │   │   ├── past-conversations.test.ts
 │   │   │   ├── permissions.test.ts
 │   │   │   ├── pi-locate.test.ts
 │   │   │   ├── pi-sdk-builtins.test.ts
@@ -494,7 +515,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 52 files in total
+│   │   │   └── … 61 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
@@ -516,21 +537,30 @@
 │   │   │   ├── src/
 │   │   │   │   ├── app/
 │   │   │   │   │   └── api/
+│   │   │   │   │       ├── feed/
 │   │   │   │   │       ├── health/
+│   │   │   │   │       ├── stats/
 │   │   │   │   │       └── v1/
 │   │   │   │   └── lib/
 │   │   │   │       ├── auth.ts
 │   │   │   │       ├── contract.ts
 │   │   │   │       ├── crypto.ts
+│   │   │   │       ├── downloads.ts
+│   │   │   │       ├── errors.ts
 │   │   │   │       ├── firebase-admin.ts
 │   │   │   │       ├── http.ts
 │   │   │   │       ├── plans.ts
 │   │   │   │       ├── quota.ts
 │   │   │   │       ├── retention.ts
-│   │   │   │       └── store.ts
+│   │   │   │       ├── stats-auth.ts
+│   │   │   │       ├── store.ts
+│   │   │   │       ├── usage-store.ts
+│   │   │   │       └── usage.ts
 │   │   │   ├── test/
+│   │   │   │   ├── crypto.test.ts
 │   │   │   │   ├── plans.test.ts
-│   │   │   │   └── retention.test.ts
+│   │   │   │   ├── retention.test.ts
+│   │   │   │   └── usage.test.ts
 │   │   │   ├── firebase.json
 │   │   │   ├── firestore.indexes.json
 │   │   │   ├── firestore.rules
@@ -555,7 +585,7 @@
 │   └── … and 4 upstream built-in extensions (only picode/ is ours)
 ├── scripts/ · ⬆️ upstream, no breakdown
 ├── src/ — Carpeta upstream: aquí no se documenta fichero a fichero. Son los 9.400 ficheros del editor de VS Code tal como descienden de upstream/stable.json… · ⬆️ upstream, no breakdown
-├── updates/ — The static documents the editor's updater reads. They are served directly from this directory by raw.githubusercontent.com, which is why there is no…
+├── updates/ — The static documents the editor's updater reads. They are served from this directory by raw.githubusercontent.com; the editor reaches them through…
 │   ├── experimental/ — Los documentos estáticos que lee el actualizador del editor para el canal experimental, servidos tal cual desde raw.githubusercontent.com (por eso no…
 │   │   ├── win32/
 │   │   │   └── x64/

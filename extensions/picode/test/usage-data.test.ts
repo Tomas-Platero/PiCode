@@ -15,9 +15,11 @@ import assert from 'assert';
 import { test } from 'node:test';
 import {
 	fetchNanUsage,
+	firstNanProvider,
 	getCachedNanUsage,
 	isNanProvider,
 	matchedNanProvider,
+	nanAccountMeters,
 	nanModelUsage,
 	nanUsageSummary,
 	parseNanQuota,
@@ -275,4 +277,38 @@ test('a fetch that outlives its budget resolves without a value', async () => {
 
 	const cached: NanUsage | undefined = (await getCachedNanUsage('timeout-key', NOW, hanging)).value;
 	assert.strictEqual(cached, undefined);
+});
+
+test('the account meters list every metered model, the one in use first', () => {
+	const usage: NanUsage = {
+		fetchedAt: 0,
+		limits: [
+			{ name: 'a-model', windows: [], limitReached: false },
+			{ name: 'b-model', windows: [], limitReached: false },
+			{ name: 'c-model', windows: [], limitReached: false },
+		],
+	};
+	assert.deepStrictEqual(nanAccountMeters(usage, 'b-model').map(limit => limit.name), ['b-model', 'a-model', 'c-model']);
+	// A model with no meter of its own (another provider's) leaves the provider's order alone.
+	assert.deepStrictEqual(nanAccountMeters(usage, 'claude-sonnet-5').map(limit => limit.name), ['a-model', 'b-model', 'c-model']);
+	assert.deepStrictEqual(nanAccountMeters(usage, undefined).map(limit => limit.name), ['a-model', 'b-model', 'c-model']);
+	assert.deepStrictEqual(nanAccountMeters({ fetchedAt: 0, limits: [] }, 'b-model'), []);
+});
+
+test('the first NaN provider is found whichever model is active', () => {
+	const refs = [
+		{ id: 'omni', baseUrl: 'http://192.168.1.5:20128/v1' },
+		{ id: 'work', baseUrl: 'https://api.nan.builders/v1' },
+		{ id: 'nan', baseUrl: '' },
+	];
+	assert.strictEqual(firstNanProvider(refs)?.id, 'work');
+	assert.strictEqual(firstNanProvider([{ id: 'omni', baseUrl: 'http://x/v1' }]), undefined);
+	assert.strictEqual(firstNanProvider([]), undefined);
+});
+
+test('parseNanQuota keeps the billing period start, when the payload names one', () => {
+	const now = Date.parse('2026-10-26T12:00:00Z');
+	const withStart = parseNanQuota({ periodStart: '2026-10-01', models: [{ model: 'mimo-v2.6-flash', tokensUsed: 3, cap: 10, periodEnd: '2026-11-01T00:00:00Z' }] }, now);
+	assert.strictEqual(withStart.periodStart, Date.parse('2026-10-01'));
+	assert.strictEqual(parseNanQuota({ models: [] }, now).periodStart, null);
 });

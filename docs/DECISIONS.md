@@ -1276,3 +1276,73 @@ play. Unverified in a running editor.
   formato, así que lo que cambia uno lo lee el otro. Un fichero de permisos que gentle no puede leer no se
   reemplaza: se avisa y el control queda apagado. Cada cambio reinicia la sesión del chat. Los permisos de
   *esta* conversación siguen cambiándose con `/gentle:mode`.
+
+## ADR-033 — pi-intercom viene de serie: las sesiones de pi hablan entre sí
+
+**Estado:** aceptada (2026-10-26).
+
+> *"Haz que venga de serie"* (sobre pi-intercom, el paquete que deja hablar a las sesiones de pi)
+
+**Contexto:** sin pi-intercom, dos sesiones de PiCode no pueden mandarse mensajes. Los subagentes de
+gentle-pi hablan con quien los lanzó, dentro de la misma conversación, y engram solo deja notas para
+después. El dueño lo usa en su pi del PATH y lo quiere en el producto.
+
+**Decisión:**
+
+- `pi-intercom@0.18.1` entra en `PRODUCT_PACKAGES` (`product-packages.ts`), fijado como gentle-pi y
+  gentle-engram, entero (sin filtro): sus herramientas y su skill.
+- **Sus datos se quedan en el perfil:** pi-intercom guarda su estado en `<carpeta de agente>/intercom`, y
+  esa carpeta es la que PiCode fija con `PI_CODING_AGENT_DIR`. Nada va a `~/.pi`.
+- **Su intermediario arranca sin Node instalado:** pi-intercom levanta un proceso intermediario con `node`
+  cuando el proceso actual no es Node, y el editor no lo es. `intercom-config.ts` escribe en
+  `<perfil>/intercom/config.json` solo `brokerCommand` (el ejecutable del editor) y `brokerArgs` (`--import`
+  y el cargador de tsx del perfil). El editor arranca como Node porque `ELECTRON_RUN_AS_NODE` ya está puesto
+  para los procesos hijos (ADR-031, adenda 3). El resto del fichero es del dueño y no se toca. Solo con el pi
+  que lleva el editor: un pi externo tiene su propio Node y sus propios ficheros.
+- El intermediario se cierra solo unos segundos después de que se desconecte la última sesión.
+
+**Pendiente de verificar en la app:** que un mensaje entrante abra un turno visible en el chat. Los
+comandos de pi-intercom que pintan paneles del terminal (`/intercom`, `/handover`) no se pueden dibujar en
+el editor (`ui.custom` es nulo). Las herramientas, que son lo que usa el agente, no dependen de eso.
+
+**Adenda 1 (2026-10-26) · Cada chat es su propia conversación de pi**
+
+> *"si hazlo"* (a dar a cada chat del editor su propia conversación de pi)
+
+- **El fallo:** el chat tenía una sola sesión de pi por ventana. Un chat nuevo del editor (el «+») seguía
+  escribiendo en la conversación anterior: el agente recordaba lo que la pantalla no enseñaba, la lista
+  Sessions mostraba una fila para dos chats y pi-intercom veía una sola sesión.
+- **Ahora:** `agent.ts` guarda una conversación por chat, por el `sessionResource` de la petición: su sesión,
+  su transcripción, sus servicios y lo que la construyó. El chat que habló el último es el que leen la vista
+  de estado, la lista de comandos y la de MCP.
+- **Al recargar la ventana,** un chat que el editor restaura sigue en su propio fichero: la relación chat →
+  fichero se guarda en el estado del espacio de trabajo y se reabre con `SessionManager.open`, si el fichero
+  sigue donde ese ámbito los guarda.
+- **Nombre:** cada conversación se llama como la primera línea de su primer mensaje (`conversationName`). Es
+  el nombre con el que otra sesión la encuentra en pi-intercom.
+- **Tope:** como mucho seis chats con sesión viva. El que lleva más tiempo sin usarse suelta su sesión y
+  conserva su fichero: con el siguiente mensaje se reabre.
+- **Siguen de uno en uno:** los turnos de chats distintos esperan su vez, porque la puerta de permisos y el
+  testigo de las herramientas MCP del editor son de la ventana.
+
+### Adenda 2 (2026-10-27) · El chat puede leer las conversaciones anteriores
+
+**Contexto.** pi-intercom solo llega a las conversaciones que están en marcha, y la memoria solo guarda lo que
+se guardó a propósito. Una conversación de ayer, o de antes de cerrar PiCode, quedaba fuera de alcance: el dueño
+preguntó «¿cómo me llamo en la otra sesión?» y el chat no tenía forma de mirarlo («sí, haz que pi pueda buscar y
+leer mis conversaciones anteriores de la lista Sessions»).
+
+**Decisión.** Cada sesión de pi del editor lleva dos herramientas propias, de solo lectura
+(`extensions/picode/src/past-conversations.ts`):
+
+- **`past_conversations`**: la lista de conversaciones de la ventana, la misma que enseña Sessions, de la más
+  nueva a la más vieja; con `query`, solo las que contienen ese texto, con un trozo alrededor de cada acierto.
+- **`read_past_conversation`**: los mensajes de una, por su id, a páginas de 24 000 caracteres.
+
+- **La misma lista que Sessions:** se lee en cada llamada, así que una conversación acabada hace un minuto ya
+  está. Los transcríptos de subagentes no entran, igual que en el panel.
+- **Lo que se lee es lo que se dijo:** el texto del usuario sin el marco que el editor añade y las respuestas,
+  sin pensamiento ni resultados de herramientas.
+- **El id va entero:** los ids de pi empiezan por la hora, y dos conversaciones del mismo minuto comparten los
+  primeros caracteres.
+- **Solo el pi interno:** con el pi externo no se dan; su historia no es de PiCode.

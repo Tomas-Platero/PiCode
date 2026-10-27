@@ -562,6 +562,7 @@ export function registerMemoryView(): vscode.Disposable {
 				provider.showMore(project);
 			}
 		}),
+		vscode.commands.registerCommand(MEMORY_CHECK_COMMAND, () => provider.openDoctor()),
 		vscode.commands.registerCommand(MEMORY_UPDATE_COMMAND, () => provider.updateEngine()),
 		vscode.commands.registerCommand(MEMORY_COPY_COMMAND, (row: MemoryRow | undefined) => {
 			if (row !== undefined && typeof row.id === 'number') {

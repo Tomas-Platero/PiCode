@@ -9,9 +9,10 @@ import { Button } from '../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Emitter } from '../../../../base/common/event.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
@@ -80,6 +81,25 @@ interface IGentleSettings {
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+/**
+ * The tab a caller asked this panel to open on.
+ *
+ * Chat Settings keeps one panel alive once it was shown, so asking for a tab has two halves: a
+ * panel that already exists switches through the event, and one created afterwards starts on it.
+ */
+const tabRequests = new Emitter<PanelTab>();
+let pendingTab: PanelTab | undefined;
+
+/** Opens Chat Settings on Providers & Models, on the tab asked for (Providers by default). */
+export const OPEN_PROVIDERS_MODELS_COMMAND = 'picode.providersModels.open';
+
+CommandsRegistry.registerCommand(OPEN_PROVIDERS_MODELS_COMMAND, async (accessor, tab?: PanelTab) => {
+	const target: PanelTab = tab === 'models' || tab === 'agents' ? tab : 'providers';
+	pendingTab = target;
+	tabRequests.fire(target);
+	await accessor.get(ICommandService).executeCommand('aiCustomization.openManagementEditor', AICustomizationManagementSection.ProvidersModels);
+});
+
 export class PiCodeProvidersModelsSection extends Disposable implements IAICustomizationManagementSectionWidget {
 
 	private readonly root: HTMLElement;
@@ -125,8 +145,19 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		this.body = append(this.root, $('.picode-pm-body'));
 
 		this.activeRef = this.configurationService.getValue<string>('chat.defaultModel') ?? '';
+		if (pendingTab !== undefined) {
+			this.tab = pendingTab;
+			pendingTab = undefined;
+		}
+		if (this.tab === 'agents') {
+			void this.loadAgents();
+		}
 		this.render();
 		void this.loadProfileProviders();
+		this.store.add(tabRequests.event(tab => {
+			pendingTab = undefined;
+			this.selectTab(tab);
+		}));
 
 		this.store.add(this.configurationService.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('chat.defaultModel')) {
@@ -188,6 +219,16 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		void this.configurationService.updateValue(PICODE_PROVIDERS_SETTING, rows);
 	}
 
+	private selectTab(key: PanelTab): void {
+		if (this.tab !== key) {
+			this.tab = key;
+			if (key === 'agents') {
+				void this.loadAgents();
+			}
+			this.render();
+		}
+	}
+
 	private render(): void {
 		clearNode(this.tabsBar);
 		clearNode(this.body);
@@ -199,15 +240,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			button.classList.toggle('active', this.tab === key);
 			button.setAttribute('aria-selected', this.tab === key ? 'true' : 'false');
 			button.setAttribute('role', 'tab');
-			this.store.add(addDisposableListener(button, 'click', () => {
-				if (this.tab !== key) {
-					this.tab = key;
-					if (key === 'agents') {
-						void this.loadAgents();
-					}
-					this.render();
-				}
-			}));
+			this.store.add(addDisposableListener(button, 'click', () => this.selectTab(key)));
 		}
 
 		if (this.tab === 'providers') {
@@ -638,7 +671,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			const onlyTools = toolsChip.getAttribute('aria-pressed') === 'true';
 			const onlyVision = visionChip.getAttribute('aria-pressed') === 'true';
 
-			type Row = { ref: string; name: string; provider: string; context: string; tools: boolean; vision: boolean };
+			type Row = { ref: string; name: string; provider: string; context: string; output: string; price: string | undefined; priceTitle: string | undefined; tools: boolean; vision: boolean };
 			const rows: Row[] = [];
 			for (const modelId of this.languageModelsService.getLanguageModelIds()) {
 				const metadata = this.languageModelsService.lookupLanguageModel(modelId);
@@ -655,7 +688,10 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 					ref: metadata.id,
 					name: metadata.name,
 					provider,
-					context: metadata.maxInputTokens >= 1000 ? `${Math.round(metadata.maxInputTokens / 1000)}k` : String(metadata.maxInputTokens),
+					context: formatTokenCount(metadata.maxInputTokens),
+					output: formatTokenCount(metadata.maxOutputTokens),
+					price: priceChip(metadata.inputCost, metadata.outputCost),
+					priceTitle: metadata.pricing,
 					tools: metadata.capabilities?.toolCalling === true,
 					vision: metadata.capabilities?.vision === true,
 				});
@@ -714,7 +750,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	 * a list instead of a wall of buttons. A card per model looked tidy with six of them and became
 	 * unusable with a hundred.
 	 */
-	private renderModelCard(row: { ref: string; name: string; provider: string; context: string; tools: boolean; vision: boolean }, activeRef: string): HTMLElement {
+	private renderModelCard(row: { ref: string; name: string; provider: string; context: string; output: string; price: string | undefined; priceTitle: string | undefined; tools: boolean; vision: boolean }, activeRef: string): HTMLElement {
 		const line = $('.picode-pm-model');
 
 		const left = append(line, $('.picode-pm-model-left'));
@@ -729,7 +765,19 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		}
 
 		const facts = append(line, $('.picode-pm-model-facts'));
-		append(facts, $('span.picode-pm-fact')).textContent = row.context;
+		// What goes in, what comes out, and what it costs: the three numbers that decide which model
+		// to pick. A fact the provider did not report is not drawn.
+		const contextFact = append(facts, $('span.picode-pm-fact'));
+		contextFact.textContent = localize('picodePm.factContext', "{0} in", row.context);
+		contextFact.title = localize('picodePm.factContextTooltip', "The most the model can read at once: your conversation, files and instructions together.");
+		const outputFact = append(facts, $('span.picode-pm-fact'));
+		outputFact.textContent = localize('picodePm.factOutput', "{0} out", row.output);
+		outputFact.title = localize('picodePm.factOutputTooltip', "The most the model can write in one answer.");
+		if (row.price !== undefined) {
+			const priceFact = append(facts, $('span.picode-pm-fact.picode-pm-fact-price'));
+			priceFact.textContent = row.price;
+			priceFact.title = row.priceTitle ?? localize('picodePm.factPriceTooltip', "Price per million tokens, in and out.");
+		}
 		if (row.tools) {
 			append(facts, $('span.picode-pm-fact')).textContent = localize('picodePm.factTools', "Tools");
 		}
@@ -784,3 +832,35 @@ const contribution: IAICustomizationManagementSectionContribution = {
 };
 
 aiCustomizationManagementSectionRegistry.register(contribution);
+
+/** Token counts the way people say them: 200k, 1M. */
+function formatTokenCount(tokens: number): string {
+	if (tokens >= 1_000_000) {
+		return `${Number((tokens / 1_000_000).toFixed(1))}M`;
+	}
+	if (tokens >= 1000) {
+		return `${Math.round(tokens / 1000)}k`;
+	}
+	return String(tokens);
+}
+
+/** A price in dollars with only the digits that matter: $3, $0.25, $0.075. */
+function formatDollars(dollars: number): string {
+	return `$${Number(dollars.toFixed(dollars >= 1 ? 2 : 3))}`;
+}
+
+/**
+ * The price chip of a model: what a million tokens in and out cost. Nothing at all when the
+ * provider reported no price — an absent price is not a free model.
+ */
+function priceChip(input: number | undefined, output: number | undefined): string | undefined {
+	if (input === undefined && output === undefined) {
+		return undefined;
+	}
+	if (input !== undefined && output !== undefined) {
+		return localize('picodePm.factPrice', "{0} in · {1} out", formatDollars(input), formatDollars(output));
+	}
+	return input !== undefined
+		? localize('picodePm.factPriceIn', "{0} in", formatDollars(input))
+		: localize('picodePm.factPriceOut', "{0} out", formatDollars(output as number));
+}

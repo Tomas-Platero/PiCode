@@ -340,8 +340,11 @@ export class Extension implements IExtension {
 			if (!this.gallery || !this.local) {
 				return false;
 			}
-			// Do not allow updating system extensions in stable
-			if (this.type === ExtensionType.System && this.productService.quality === 'stable' && !this.productService.builtInExtensionsEnabledWithAutoUpdates?.some(id => id.toLowerCase() === this.identifier.id.toLowerCase())) {
+			// Do not allow updating system extensions, in any channel. PiCode ships its built-in extensions
+			// with the product and the install refuses to replace them outside stable too ("not allowed to
+			// be updated in the current product quality"), so offering an Update button here only led to
+			// that refusal.
+			if (this.type === ExtensionType.System && !this.productService.builtInExtensionsEnabledWithAutoUpdates?.some(id => id.toLowerCase() === this.identifier.id.toLowerCase())) {
 				return false;
 			}
 			if (!this.local.preRelease && this.gallery.properties.isPreReleaseVersion) {
