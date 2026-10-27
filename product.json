@@ -755,5 +755,5 @@
 		}
 	},
 	"version": "1.142.3",
-	"picodeVersion": "0.3.2-experimental"
+	"picodeVersion": "0.4.0-experimental"
 }
