@@ -235,6 +235,11 @@ export async function checkPackageUpdates(rows: readonly PackageUpdateRowInput[]
 		if (checkable.kind === 'uncheckable') {
 			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: checkable.reason };
 		}
+		// A pinned package cannot be updated from its row (the pin would put the old version back),
+		// so it is never offered an Update button.
+		if (checkable.pin !== undefined) {
+			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: 'Its version is fixed' };
+		}
 		const latest = await npmLatestFor(checkable.name, deps, cache, flights);
 		return { path: row.path, name: row.name, ...updateStatusFor(row.version, latest, checkable) };
 	}));
