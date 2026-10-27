@@ -379,13 +379,19 @@ export class UpdateTooltip extends Disposable {
 		this.titleNode.textContent = title;
 
 		// Latest version
-		const version = update?.picodeVersion ?? update?.productVersion;
-		if (version !== undefined && update !== undefined) {
+		const versionNumber = update?.picodeVersion ?? update?.productVersion;
+		if (versionNumber !== undefined && update !== undefined) {
+			// "Minor update 0.5.0": the kind is part of what the person reads, the number is not enough.
+			const kind = update.kind === 'hotfix' ? localize('updateTooltip.kindHotfix', "Hotfix")
+				: update.kind === 'minor' ? localize('updateTooltip.kindMinor', "Minor update")
+					: update.kind === 'release' ? localize('updateTooltip.kindRelease', "Release")
+						: undefined;
+			const version = kind ? `${kind} ${versionNumber}` : versionNumber;
 			const updateCommitId = update.version?.substring(0, 7);
 			this.latestVersionNode.textContent = updateCommitId
 				? localize('updateTooltip.latestVersionLabelWithCommit', "Latest Version: {0} ({1})", version, updateCommitId)
 				: localize('updateTooltip.latestVersionLabel', "Latest Version: {0}", version);
-			this.latestVersionCopyValue.value = updateCommitId ? `${version} (${update.version})` : version;
+			this.latestVersionCopyValue.value = updateCommitId ? `${versionNumber} (${update.version})` : versionNumber;
 			this.latestVersionNode.parentElement!.style.display = '';
 			this.latestVersionCopyButton.tabIndex = 0;
 		} else {
@@ -403,7 +409,7 @@ export class UpdateTooltip extends Disposable {
 		}
 
 		// Release notes button
-		this.releaseNotesVersion = version ?? this.productService.version;
+		this.releaseNotesVersion = versionNumber ?? this.productService.version;
 		this.releaseNotesButton.style.display = this.releaseNotesVersion ? '' : 'none';
 		this.releaseNotesButton.tabIndex = this.releaseNotesVersion ? 0 : -1;
 		this.releaseNotesButton.style.marginRight = this.releaseNotesVersion ? 'auto' : '';

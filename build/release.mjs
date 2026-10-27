@@ -91,7 +91,7 @@ import { pathToFileURL } from 'node:url';
 	  if (message) {
 	    console.error(`error: ${message}`);
 	  }
-	  console.error("usage: node build/release.mjs update-feed --version <v> --commit <sha> --url <asset> --sha256 <hex> --platform <p> --arch <a> [--target <t>] [--picode-version <v>] [--quality stable] [--installed <v>] [--out updates] [--force]");
+	  console.error("usage: node build/release.mjs update-feed --version <v> --commit <sha> --url <asset> --sha256 <hex> --platform <p> --arch <a> [--target <t>] [--picode-version <v>] [--quality stable] [--kind hotfix|minor|release] [--delta-url <u> --delta-sha256 <hex> --delta-from <picodeVersion>] [--installed <v>] [--out updates] [--force]");
 	  process.exit(2);
 	}
 
@@ -188,13 +188,34 @@ import { pathToFileURL } from 'node:url';
 	  }
 
 	  const directory = [out, quality, platform, architecture, ...(flags.target ? [flags.target] : [])];
+	  // What kind of update this is, and whether a small package exists for people on the
+	  // previous release (the three delta flags go together or not at all).
+	  const KINDS = new Set(["hotfix", "minor", "release"]);
+	  if (flags.kind !== undefined && !KINDS.has(flags.kind)) {
+	    usage(`--kind must be one of ${[...KINDS].join(", ")}`);
+	  }
+	  const deltaFlags = ["delta-url", "delta-sha256", "delta-from"].filter((name) => flags[name] !== undefined);
+	  if (deltaFlags.length !== 0 && deltaFlags.length !== 3) {
+	    usage("--delta-url, --delta-sha256 and --delta-from go together");
+	  }
+	  if (deltaFlags.length === 3 && !/^[0-9a-f]{64}$/i.test(flags["delta-sha256"])) {
+	    usage("--delta-sha256 must be 64 hexadecimal characters");
+	  }
+	  if (deltaFlags.length === 3 && (flags.kind === undefined || flags.kind === "release")) {
+	    usage("a small package needs --kind hotfix or minor");
+	  }
+
 	  const feed = {
 	    version: commit,
 	    productVersion: version,
 	    ...(flags["picode-version"] === undefined ? {} : { picodeVersion: flags["picode-version"].trim() }),
+	    ...(flags.kind === undefined ? {} : { kind: flags.kind }),
 	    timestamp: Date.now(),
 	    url,
 	    sha256hash: sha256,
+	    ...(deltaFlags.length === 3
+	      ? { delta: { url: flags["delta-url"], sha256hash: flags["delta-sha256"].toLowerCase(), from: flags["delta-from"].trim() } }
+	      : {}),
 	  };
 
 	  const target = path.join(...directory, "latest.json");
@@ -206,6 +227,58 @@ import { pathToFileURL } from 'node:url';
 	}
 
 	main();
+	}
+
+	// kind -- what to call an update: hotfix, minor update or release
+	/*
+	 * Names the update from what it carries, so nobody has to remember to.
+	 *
+	 *   - no small package possible (it touches something a small update may not)  -> release
+	 *   - the commits include a new feature                                         -> minor
+	 *   - otherwise (fixes, speed, housekeeping)                                    -> hotfix
+	 *
+	 * The label is not the download: a minor update can still arrive as a small package, and a
+	 * hotfix as a full one. An explicit `--override` wins, for the day the owner disagrees.
+	 *
+	 * Usage: node build/release.mjs kind --delta yes|no [--from <tag> --to <tag>] [--override <kind>]
+	 */
+	async function cmdKind(cli) {
+	const { execFileSync } = await import('node:child_process');
+	const arg = (name, fallback) => {
+		const i = cli.indexOf(`--${name}`);
+		return i >= 0 && cli[i + 1] !== undefined ? cli[i + 1] : fallback;
+	};
+	const override = arg('override');
+	if (override) {
+		if (!['hotfix', 'minor', 'release'].includes(override)) {
+			console.error('error: --override must be hotfix, minor or release');
+			process.exit(2);
+		}
+		console.log(override);
+		return;
+	}
+	if (arg('delta', 'no') !== 'yes') {
+		console.log('release');
+		return;
+	}
+	const from = arg('from');
+	const to = arg('to');
+	let subjects = [];
+	if (from && to) {
+		try {
+			subjects = execFileSync('git', ['log', `${from}..${to}`, '--no-merges', '--pretty=%s'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+				.split('\n').map(line => line.trim()).filter(Boolean);
+		} catch {
+			subjects = [];
+		}
+	}
+	// Without a readable history there is nothing to say it is only fixes: a small
+	// package that cannot be classified is the safer, bigger label.
+	if (subjects.length === 0) {
+		console.log('minor');
+		return;
+	}
+	console.log(subjects.some(subject => /^feat(\(|:)/.test(subject)) ? 'minor' : 'hotfix');
 	}
 
 	// release-notes -- was build/release-notes.mjs
@@ -289,7 +362,7 @@ import { pathToFileURL } from 'node:url';
 	}
 
 
-const USAGE = `usage: node build/release.mjs <update-feed|release-notes>\n`;
+const USAGE = `usage: node build/release.mjs <update-feed|release-notes|kind>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -298,6 +371,8 @@ async function dispatch() {
 			return cmdUpdateFeed(cli.slice(1));
 		case 'release-notes':
 			return cmdReleaseNotes(cli.slice(1));
+		case 'kind':
+			return cmdKind(cli.slice(1));
 		default:
 			process.stderr.write(USAGE);
 			return process.exit(2);

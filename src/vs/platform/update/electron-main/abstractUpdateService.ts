@@ -27,6 +27,9 @@ import * as semver from 'semver';
 const LAST_KNOWN_VERSION_STORAGE_KEY = 'abstractUpdateService/lastKnownVersion';
 const LAST_ACTIVE_DAY_STORAGE_KEY = 'abstractUpdateService/lastActiveDay';
 
+/** How long a hotfix waits after publication before it is offered (a normal update waits `update.minReleaseAge`). */
+const HOTFIX_MIN_RELEASE_AGE_HOURS = 6;
+
 export interface IUpdateURLOptions {
 	readonly background?: boolean;
 	readonly internalOrg?: string;
@@ -744,7 +747,10 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 
 				const lastest = semver.compareBuild(currentVersion, fetchedVersion) >= 0;
 
-				const minReleaseAge = this.configurationService.getValue<number>('update.minReleaseAge');
+				// A hotfix is the answer to something broken: it does not wait the whole period a
+				// feature release does (the feed's date is never touched; only the wait differs).
+				const configuredAge = this.configurationService.getValue<number>('update.minReleaseAge');
+				const minReleaseAge = update.kind === 'hotfix' ? Math.min(configuredAge, HOTFIX_MIN_RELEASE_AGE_HOURS) : configuredAge;
 
 				if(minReleaseAge === 0) {
 					return Promise.resolve({ lastest, update });

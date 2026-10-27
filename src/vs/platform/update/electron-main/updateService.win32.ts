@@ -6,7 +6,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { app } from 'electron';
 import { unlinkSync, writeFileSync } from 'fs';
-import { mkdir, readFile, unlink } from 'fs/promises';
+import { cp, mkdir, mkdtemp, readFile, unlink } from 'fs/promises';
 import { release, tmpdir } from 'os';
 import { Delayer, ProcessTimeRunOnceScheduler, timeout } from '../../../base/common/async.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
@@ -25,7 +25,7 @@ import { getWindowsRelease } from '../../../base/node/windowsVersion.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { IFileService } from '../../files/common/files.js';
-import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
+import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions, LifecycleMainPhase } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
 import { IMeteredConnectionService } from '../../meteredConnection/common/meteredConnection.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
@@ -34,8 +34,10 @@ import { IRequestService, NO_FETCH_TELEMETRY } from '../../request/common/reques
 import { IApplicationStorageMainService } from '../../storage/electron-main/storageMainService.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, DisablementReason, IUpdate, State, StateType, Target, UpdateType } from '../common/update.js';
+import { applyDelta, DeltaError, readManifest } from '../node/deltaPackage.js';
 import { AbstractUpdateService, createUpdateURL, IUpdateURLOptions } from './abstractUpdateService.js';
 import { getRelaunchArguments } from './updateRelaunchArguments.js';
+import { archiveSwapScript } from './archiveSwapScript.js';
 import { isInnoSetupInstall } from './win32UpdateType.js';
 
 interface IAvailableUpdate {
@@ -64,73 +66,6 @@ function getUpdateType(): UpdateType {
 	}
 
 	return _updateType;
-}
-
-/**
- * The batch script that swaps a staged portable build into place once the
- * running one has quit. Everything is baked in: the folder being replaced, the
- * staged copy beside it, the executable's name and the process to wait for.
- *
- * The portable profile (`data/`) moves across, so nothing the owner keeps is
- * still in the old folder when it is deleted. The script leaves itself in the
- * new folder — the next update's staging removes it with the rest.
- */
-function archiveSwapScript(appDir: string, stagingDir: string, exeName: string, pid: number): string {
-	return [
-		'@echo off',
-		'rem PiCode portable self-update: waits for the editor to quit, moves the',
-		'rem staged build into place (the portable profile moves across) and starts it.',
-		'setlocal enabledelayedexpansion',
-		`set "OLD=${appDir}"`,
-		`set "NEW=${stagingDir}"`,
-		`set "PID=${pid}"`,
-		`set "EXE=${exeName}"`,
-		':wait',
-		'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul',
-		'if not errorlevel 1 (',
-		'  ping -n 2 127.0.0.1 >nul',
-		'  goto wait',
-		')',
-		'set /a TRIES=0',
-		':swap',
-		'move /y "%OLD%" "%OLD%.old" >nul 2>&1',
-		'if errorlevel 1 (',
-		'  set /a TRIES+=1',
-		'  if !TRIES! lss 30 (',
-		'    ping -n 2 127.0.0.1 >nul',
-		'    goto swap',
-		'  )',
-		'  goto fail',
-		')',
-		'move /y "%NEW%" "%OLD%" >nul 2>&1',
-		'if errorlevel 1 (',
-		'  move /y "%OLD%.old" "%OLD%" >nul 2>&1',
-		'  goto fail',
-		')',
-		// The profile is the one thing that must arrive: a child process outliving
-		// the editor (a crashpad, a GPU helper killed with it) holds a file inside
-		// data/ for a while, so this move retries as patiently as the swap does.
-		'set /a DTRIES=0',
-		':data',
-		'if exist "%OLD%.old\\data" (',
-		'  move /y "%OLD%.old\\data" "%OLD%\\data" >nul 2>&1',
-		'  if errorlevel 1 (',
-		'    set /a DTRIES+=1',
-		'    if !DTRIES! lss 30 (',
-		'      ping -n 2 127.0.0.1 >nul',
-		'      goto data',
-		'    )',
-		'  )',
-		')',
-		'start "" "%OLD%\\%EXE%"',
-		'rd /s /q "%OLD%.old" >nul 2>&1',
-		'exit /b 0',
-		':fail',
-		'rem Everything stays as it was: the old build is back where it was.',
-		'if not exist "%OLD%\\%EXE%" move /y "%OLD%.old" "%OLD%" >nul 2>&1',
-		'exit /b 1',
-		'',
-	].join('\r\n');
 }
 
 export class Win32UpdateService extends AbstractUpdateService implements IRelaunchHandler {
@@ -181,6 +116,10 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		this.setupMutexName = `${productService.win32MutexName}setup`;
 
 		lifecycleMainService.setRelaunchHandler(this);
+
+		if (getUpdateType() === UpdateType.Archive) {
+			void this.confirmUpdateStarted();
+		}
 	}
 
 	handleRelaunch(options?: IRelaunchOptions): boolean {
@@ -376,7 +315,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 				const startTime = Date.now();
 				this.setState(State.Downloading(update, explicit, this._overwrite, 0, undefined, startTime));
 
-				return this.cleanup(update.version).then(() => {
+				const downloadFull = () => this.cleanup(update.version).then(() => {
 					return this.getUpdatePackagePath(update.version, updateType).then(updatePackagePath => {
 						return pfs.Promises.exists(updatePackagePath).then(exists => {
 							if (exists) {
@@ -447,6 +386,14 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 						}
 					});
 				});
+
+				// A portable copy on the exact release a small package was made for takes
+				// the small package; anything that goes wrong with it falls back to the
+				// full download, so the person always ends up updated or untouched.
+				if (updateType === UpdateType.Archive && update.delta) {
+					return this.tryDeltaUpdate(update, explicit, token).then(done => done ? undefined : downloadFull());
+				}
+				return downloadFull();
 			})
 			.then(undefined, (error) => {
 				// The chain was cancelled because updates are being disabled; leave state to the disable flow.
@@ -511,7 +458,6 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 				this.logService.warn(`update#prepareArchiveUpdate: the previous staging is locked, using a fresh folder`, error);
 				stagingDir = `${appDir}.update-${Date.now()}`;
 			}
-			const scriptPath = path.join(stagingDir, 'update.cmd');
 			// Electron's fs intercepts every path whose last segment ends in
 			// `.asar` and treats it as an archive — the staged pack carries
 			// `node_modules.asar`, and writing it extracted needs the real
@@ -527,18 +473,113 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 			} finally {
 				process.noAsar = noAsar;
 			}
-			const exeName = path.basename(process.execPath);
-			if (!await pfs.Promises.exists(path.join(stagingDir, exeName))) {
-				throw new Error(`the update archive does not carry ${exeName}`);
-			}
-			await pfs.Promises.writeFile(scriptPath, archiveSwapScript(appDir, stagingDir, exeName, process.pid));
-			this.availableUpdate = { packagePath, updateFilePath: scriptPath, stagingDir };
-			this.logService.info(`update#prepareArchiveUpdate: the portable update is staged in ${stagingDir}`);
+			await this.finishArchiveStaging(packagePath, appDir, stagingDir);
 		} catch (error) {
 			this.logService.error('update#prepareArchiveUpdate: failed to stage the portable update', error);
 			this.availableUpdate = undefined;
 			await pfs.Promises.rm(stagingDir).catch(() => { });
 			throw error; // the caller's error path reports it and falls back to Idle
+		}
+	}
+
+	/** The last step of staging, shared by the full and the small update: the swap script and the pending state. */
+	private async finishArchiveStaging(packagePath: string, appDir: string, stagingDir: string): Promise<void> {
+		const exeName = path.basename(process.execPath);
+		if (!await pfs.Promises.exists(path.join(stagingDir, exeName))) {
+			throw new Error(`the update does not carry ${exeName}`);
+		}
+		// The script must live OUTSIDE both folders it moves. Inside the staged one, the swap
+		// moves the file out from under the running script, Windows can no longer read the next
+		// line and the update stops half done (measured: the profile is never moved back and the
+		// editor is never started).
+		const scriptPath = path.join(await this.cachePath, `swap-${process.pid}.cmd`);
+		await pfs.Promises.writeFile(scriptPath, archiveSwapScript(appDir, stagingDir, exeName, process.pid));
+		this.availableUpdate = { packagePath, updateFilePath: scriptPath, stagingDir };
+		this.logService.info(`update#prepareArchiveUpdate: the portable update is staged in ${stagingDir}`);
+	}
+
+	/**
+	 * The small update: a copy of this installation with only the changed files replaced.
+	 * Returns `false` — never throws — whenever it cannot be used, so the caller downloads the
+	 * full build instead. It is used only when this copy is exactly the release the package
+	 * was made for, and only if the package is signed (when the product carries a key).
+	 */
+	private async tryDeltaUpdate(update: IUpdate, explicit: boolean, token: CancellationToken): Promise<boolean> {
+		const delta = update.delta;
+		if (!delta || !delta.url || !delta.sha256hash || delta.from !== this.productService.picodeVersion) {
+			return false;
+		}
+
+		const appDir = path.dirname(process.execPath);
+		const stagingDir = `${appDir}.update`;
+		const cachePath = await this.cachePath;
+		const downloadPath = path.join(cachePath, `delta-${update.version}.zip`);
+		let workDir: string | undefined;
+		try {
+			await pfs.Promises.rm(stagingDir);
+
+			const context = await this.requestService.request({ url: delta.url, callSite: NO_FETCH_TELEMETRY }, token);
+			await this.fileService.writeFile(URI.file(`${downloadPath}.tmp`), context.stream);
+			await checksum(`${downloadPath}.tmp`, delta.sha256hash);
+			await pfs.Promises.rename(`${downloadPath}.tmp`, downloadPath, false /* no retry */);
+
+			workDir = await mkdtemp(path.join(cachePath, 'delta-'));
+			await import('yauzl'); // loaded before the asar hatch closes, as in prepareArchiveUpdate
+			await extract(downloadPath, workDir, {}, CancellationToken.None);
+			const manifest = await readManifest(workDir, this.productService.hotfixPublicKey);
+
+			// Electron's fs reads any path ending in `.asar` as an archive; the copy
+			// needs the plain files, exactly as extracting a full build does.
+			const noAsar = process.noAsar;
+			process.noAsar = true;
+			try {
+				await cp(appDir, stagingDir, { recursive: true, filter: source => path.normalize(source) !== path.join(appDir, 'data') });
+				await applyDelta({ targetDir: stagingDir, deltaDir: workDir, manifest, expectedFrom: delta.from });
+			} finally {
+				process.noAsar = noAsar;
+			}
+
+			if (token.isCancellationRequested) {
+				throw new Error('cancelled');
+			}
+			await this.finishArchiveStaging(downloadPath, appDir, stagingDir);
+			this.saveUpdateMetadata(update);
+			this.setState(State.Ready(update, explicit, this._overwrite));
+			this.logService.info(`update#tryDeltaUpdate: small update ready (${manifest.files.length} files changed)`);
+			return true;
+		} catch (error) {
+			const reason = error instanceof DeltaError ? `${error.code}: ${error.message}` : String(error);
+			this.logService.warn(`update#tryDeltaUpdate: the small update was not used (${reason}); downloading the full build`);
+			this.availableUpdate = undefined;
+			await pfs.Promises.rm(stagingDir).catch(() => { });
+			return false;
+		} finally {
+			if (workDir) {
+				await pfs.Promises.rm(workDir).catch(() => { });
+			}
+			await this.unlink(`${downloadPath}.tmp`);
+		}
+	}
+
+	/**
+	 * After an update the swap script waits for proof that the new build came up. The proof is
+	 * this: the build has been running for a while with its window open, and it deletes the
+	 * `update-verify` flag the script left and writes `data/.update-ok`. Without it the script
+	 * puts the previous build back.
+	 */
+	private async confirmUpdateStarted(): Promise<void> {
+		const appDir = path.dirname(process.execPath);
+		const flag = path.join(appDir, 'update-verify');
+		if (!await pfs.Promises.exists(flag)) {
+			return;
+		}
+		await this.lifecycleMainService.when(LifecycleMainPhase.Eventually);
+		try {
+			await mkdir(path.join(appDir, 'data'), { recursive: true });
+			await pfs.Promises.writeFile(path.join(appDir, 'data', '.update-ok'), 'ok');
+			await this.unlink(flag);
+		} catch (error) {
+			this.logService.error('update#confirmUpdateStarted: could not confirm the update', error);
 		}
 	}
 
