@@ -29,6 +29,8 @@ export interface BackgroundJob {
 	readonly label?: string;
 	/** The command, capped to what a card shows; the pill shows this, not a transcript. */
 	readonly command?: string;
+	/** The file the job writes its output to, when the start named it. */
+	readonly outputPath?: string;
 	/** When the start was seen, in the same clock the caller passed in. */
 	readonly startedAt: number;
 }
@@ -38,6 +40,7 @@ export interface BackgroundJobStart {
 	readonly jobNumber: string;
 	readonly label?: string;
 	readonly command?: string;
+	readonly outputPath?: string;
 }
 
 /** What a job's completion carries, reduced to what closes a job. */
@@ -85,6 +88,7 @@ export class BackgroundJobTracker {
 			jobNumber: start.jobNumber,
 			...(start.label === undefined ? {} : { label: start.label }),
 			...(start.command === undefined ? {} : { command: start.command }),
+			...(start.outputPath === undefined ? {} : { outputPath: start.outputPath }),
 			startedAt,
 		});
 	}
@@ -141,9 +145,11 @@ export function backgroundJobStartOf(resultText: string | undefined): Background
 		return undefined;
 	}
 	const label = textOf(match[2]);
+	const outputPath = textOf(/^Output:\s*(.+)$/m.exec(text ?? '')?.[1]);
 	return {
 		jobNumber: match[1],
 		...(label === undefined ? {} : { label }),
+		...(outputPath === undefined ? {} : { outputPath }),
 	};
 }
 
@@ -152,6 +158,8 @@ export interface BackgroundJobRow {
 	readonly jobNumber: string;
 	readonly label?: string;
 	readonly command?: string;
+	/** Where the job writes its output; the Tasks block opens it as a live view. */
+	readonly outputPath?: string;
 	/** When the start was seen, in the same clock the caller passed in; the pill reads elapsed from it. */
 	readonly startedAt: number;
 }
@@ -162,6 +170,7 @@ export function backgroundJobRows(jobs: readonly BackgroundJob[], _now: number):
 		jobNumber: job.jobNumber,
 		...(job.label === undefined ? {} : { label: job.label }),
 		...(job.command === undefined ? {} : { command: job.command }),
+		...(job.outputPath === undefined ? {} : { outputPath: job.outputPath }),
 		startedAt: job.startedAt,
 	}));
 }

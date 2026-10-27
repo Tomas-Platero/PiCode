@@ -1567,7 +1567,9 @@ configurationRegistry.registerConfiguration({
 		[ChatAIDisabledSettingId]: {
 			type: 'boolean',
 			description: nls.localize('chat.disableAIFeatures', "Turn off all AI in PiCode: the chat, pi, Gentle AI and memory are shut down and hidden. Turn it off again to bring them back (the window reloads)."),
-			default: true,
+			// AI is the product: it is on unless the user switches it off. (Upstream defaults to hidden, which
+			// also hides the PiCode views on any profile that was not seeded by the portable build.)
+			default: false,
 			scope: ConfigurationScope.WINDOW,
 		},
 		[ChatConfiguration.RestoreLastPanelSession]: {

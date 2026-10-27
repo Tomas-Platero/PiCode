@@ -38,7 +38,7 @@ type TasksNode =
 	| { readonly kind: 'message'; readonly text: string }
 	| { readonly kind: 'group'; readonly group: 'running' | 'finished'; readonly count: number }
 	| { readonly kind: 'row'; readonly row: TaskRow }
-	| { readonly kind: 'fact'; readonly label: string; readonly detail: string; readonly icon: string; readonly tooltip?: string };
+	| { readonly kind: 'fact'; readonly label: string; readonly detail: string; readonly icon: string; readonly tooltip?: string; readonly openFile?: string };
 
 /** Where the block reads from. The jobs are the chat's own tracker, not a copy of it. */
 export interface TasksViewDeps {
@@ -168,6 +168,10 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				if (node.tooltip !== undefined) {
 					item.tooltip = node.tooltip;
 				}
+				if (node.openFile !== undefined) {
+					// The editor reloads an open file as it grows, so this is the job's live output.
+					item.command = { command: 'vscode.open', title: 'Open live output', arguments: [vscode.Uri.file(node.openFile)] };
+				}
 				return item;
 			}
 		}
@@ -214,6 +218,9 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			];
 			if (row.job.command !== undefined) {
 				facts.push({ kind: 'fact', label: 'Command', detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });
+			}
+			if (row.job.outputPath !== undefined) {
+				facts.push({ kind: 'fact', label: 'Live output', detail: 'Open', icon: 'output', tooltip: 'Opens what the job prints; it keeps updating while the job runs.', openFile: row.job.outputPath });
 			}
 			return facts;
 		}

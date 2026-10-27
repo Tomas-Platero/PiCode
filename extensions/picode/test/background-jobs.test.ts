@@ -87,3 +87,9 @@ test('clear forgets every job — the session they belonged to is gone', () => {
 
 	assert.ok(tracker.isEmpty());
 });
+
+test('a job start carries the file its output goes to', () => {
+	const start = backgroundJobStartOf(['Started background job 3 (web lint).', 'Output: /data/jobs/3.log', 'You will be notified once.'].join(String.fromCharCode(10)));
+	assert.strictEqual(start?.outputPath, '/data/jobs/3.log');
+	assert.strictEqual(backgroundJobStartOf('Started background job 3 (web lint). It keeps running.')?.outputPath, undefined);
+});

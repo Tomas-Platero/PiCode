@@ -278,3 +278,78 @@ export function countLineChanges(before: string, after: string): readonly [added
 
 /** Above this many table cells the LCS falls back to "everything changed". */
 const LCS_CELL_CAP = 25_000_000;
+
+/* ------------------------------------------------------------------ *
+ * Undo: put the files back the way the turn found them
+ * ------------------------------------------------------------------ */
+
+/** How one file fared when its turn was undone. */
+export type UndoOutcome = 'restored' | 'removed' | 'changed-since' | 'failed';
+
+/** What undo does to the disk; the bridge passes the real file system, tests pass a fake. */
+export interface UndoIo {
+	read(absolutePath: string): Promise<string | undefined>;
+	write(absolutePath: string, content: string): Promise<void>;
+	remove(absolutePath: string): Promise<void>;
+}
+
+/**
+ * Puts every given file back as the turn found it: the snapshot is written back, and a file
+ * the turn created is removed.
+ *
+ * A file is only touched while it still reads exactly as the turn left it. If the owner (or a
+ * later turn) changed it since, undoing would throw their work away, so it is skipped and
+ * reported instead.
+ */
+export async function undoEdits(
+	edits: readonly TurnFileEdit[],
+	io: UndoIo,
+): Promise<ReadonlyArray<{ readonly path: string; readonly outcome: UndoOutcome }>> {
+	const results: Array<{ path: string; outcome: UndoOutcome }> = [];
+	for (const edit of edits) {
+		try {
+			const current = await io.read(edit.path);
+			if (current !== edit.after) {
+				results.push({ path: edit.path, outcome: 'changed-since' });
+			} else if (edit.isNew || edit.before === undefined) {
+				await io.remove(edit.path);
+				results.push({ path: edit.path, outcome: 'removed' });
+			} else {
+				await io.write(edit.path, edit.before);
+				results.push({ path: edit.path, outcome: 'restored' });
+			}
+		} catch {
+			results.push({ path: edit.path, outcome: 'failed' });
+		}
+	}
+	return results;
+}
+
+/** How many past turns stay undoable. */
+const MAX_UNDOABLE_TURNS = 5;
+const undoable = new Map<string, readonly TurnFileEdit[]>();
+let undoCounter = 0;
+
+/** Keeps a finished turn's edits so its card's button can undo them later; returns the button's key. */
+export function rememberTurnForUndo(edits: readonly TurnFileEdit[]): string {
+	const key = `turn-${++undoCounter}`;
+	undoable.set(key, edits);
+	while (undoable.size > MAX_UNDOABLE_TURNS) {
+		const oldest = undoable.keys().next().value;
+		if (oldest === undefined) {
+			break;
+		}
+		undoable.delete(oldest);
+	}
+	return key;
+}
+
+/** The edits behind a button key, or `undefined` once that turn has been forgotten or undone. */
+export function undoableTurn(key: string): readonly TurnFileEdit[] | undefined {
+	return undoable.get(key);
+}
+
+/** Forgets a turn after it was undone, so a second click cannot act on stale content. */
+export function forgetUndoableTurn(key: string): void {
+	undoable.delete(key);
+}
