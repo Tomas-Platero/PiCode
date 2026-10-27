@@ -704,6 +704,27 @@ jobs:
               exit 1
             }
 
+      # Stable and beta go to winget, each as its own package (stable is
+      # TomasPlatero.PiCode, beta is TomasPlatero.PiCode.Beta); experimental
+      # stays out of a public catalogue. A package there pins one installer
+      # URL and its hash, so the newest version is what people install. It runs
+      # after the feeds are verified live, so winget never hears about a
+      # release the updater cannot serve, and a failure here (token missing or
+      # expired, review in progress) leaves the published release alone. The
+      # first version of each package was submitted by hand; this opens the
+      # pull request for every one after it, from the token owner's fork of
+      # microsoft/winget-pkgs.
+      - name: Submit the release to winget
+        if: env.CHANNEL == 'stable' || env.CHANNEL == 'beta'
+        continue-on-error: true
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: ${{ env.CHANNEL == 'beta' && 'TomasPlatero.PiCode.Beta' || 'TomasPlatero.PiCode' }}
+          version: ${{ env.PICODE_VERSION }}
+          release-tag: v${{ env.PICODE_VERSION }}
+          installers-regex: '-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
       - name: Visibility and summary
         env:
           GH_TOKEN: ${{ github.token }}
