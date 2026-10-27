@@ -16,6 +16,7 @@ import { mcpServerNameOfTool } from './mcp-provider';
 import { resolveSessionCwd } from './session-cwd';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
+import { mcpNotice } from './mcp-notice';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -837,6 +838,11 @@ function trimExtensionText(text: string): string {
  * no shape pass through untouched — the notice stays the extension's words. The card
  * itself (color, icon) comes from the stream's `warning()`, not from this string.
  */
+/** `SIGN_IN_MCP_SERVER_COMMAND` in `extension.ts`, which this module cannot import without a cycle. */
+const SIGN_IN_MCP_SERVER_COMMAND_ID = 'picode.mcp.signInServer';
+/** The editor's customizations page; with no argument it opens on MCP Servers. */
+const OPEN_MCP_SERVERS_COMMAND_ID = 'aiCustomization.openManagementEditor';
+
 function styledExtensionNotice(message: string): string {
 	const lines = message.split('\n').map(line => line.trim()).filter(line => line !== '');
 	if (lines.length <= 1) {
@@ -999,6 +1005,18 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			}
 			// Expected by the product, and written in terms of files and variables: not shown.
 			if (isExpectedHelperNotice(message)) {
+				return;
+			}
+			const mcp = mcpNotice(message.trim());
+			if (mcp !== undefined) {
+				try {
+					stream.warning(`\n${mcp.markdown}\n`);
+					// The fixes as buttons, instead of pi's "Run /mcp to fix.".
+					for (const row of mcp.rows.filter(entry => entry.needsSignIn)) {
+						stream.button({ command: SIGN_IN_MCP_SERVER_COMMAND_ID, title: `Sign in to ${row.server}`, arguments: [row.server] });
+					}
+					stream.button({ command: OPEN_MCP_SERVERS_COMMAND_ID, title: 'Manage MCP servers' });
+				} catch { /* a stream that already closed is not an error to report */ }
 				return;
 			}
 			const styled = styledExtensionNotice(message.trim());
