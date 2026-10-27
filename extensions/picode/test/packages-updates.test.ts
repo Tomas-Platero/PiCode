@@ -179,6 +179,16 @@ test('a row that cannot be checked costs no request and says so', async () => {
 	assert.match(statuses[0].reason ?? '', /git/);
 });
 
+test('a pinned row is never offered an update and costs no request', async () => {
+	const fetchFn = fetchAnswering({ 'pi-lens': '4.4.0' });
+	const { cache, flights } = privateCache();
+	const statuses = await checkPackageUpdates([
+		{ path: 'C:\\p\\npm\\node_modules\\pi-lens', name: 'pi-lens', version: '4.3.0', source: 'npm:pi-lens@4.3.0' },
+	], { fetchFn, cache, flights });
+	assert.strictEqual(fetchFn.calls.length, 0);
+	assert.strictEqual(statuses[0].state, 'uncheckable');
+});
+
 test('a fresh cache answers without asking npm again', async () => {
 	const fetchFn = fetchAnswering({ 'pi-lens': '4.4.0' });
 	const { cache, flights } = privateCache();
