@@ -18,7 +18,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { mergeModelsFile, type ModelDraft } from '../src/declarations.ts';
+import { mergeModelsFile, NO_KEY_PLACEHOLDER, withKeyPlaceholders, type ModelDraft } from '../src/declarations.ts';
 
 const EXISTING = {
 	providers: {
@@ -75,4 +75,33 @@ test('mergeModelsFile writes a fresh provider when there is nothing on disk', ()
 			omni: { baseUrl: 'https://e', api: 'openai-completions', authHeader: true, models: [{ id: 'm1' }] },
 		},
 	});
+});
+
+test('withKeyPlaceholders gives a keyless added provider the placeholder, and leaves the rest alone', () => {
+	const models = {
+		providers: {
+			omni: { baseUrl: 'http://192.168.1.65:20128/v1', api: 'openai-responses', authHeader: true, models: [{ id: 'auto' }] },
+			nan: { baseUrl: 'https://api.nan.builders/v1', api: 'openai-completions', models: [{ id: 'x' }] },
+			keyed: { baseUrl: 'https://k.example/v1', api: 'openai-completions', apiKey: '$K', models: [] },
+			headed: { baseUrl: 'https://h.example/v1', api: 'openai-completions', headers: { Authorization: 'Bearer $H' }, models: [] },
+			anthropic: { baseUrl: 'https://proxy.example' },
+		},
+	};
+	const filled = withKeyPlaceholders(models, { nan: { type: 'api_key', key: 'secret' } });
+	const providers = filled!['providers'] as Record<string, Record<string, unknown>>;
+	assert.strictEqual(providers['omni']['apiKey'], NO_KEY_PLACEHOLDER);
+	assert.strictEqual(providers['nan']['apiKey'], undefined);
+	assert.strictEqual(providers['keyed']['apiKey'], '$K');
+	assert.strictEqual(providers['headed']['apiKey'], undefined);
+	assert.strictEqual(providers['anthropic']['apiKey'], undefined);
+	// A second pass has nothing left to do.
+	assert.strictEqual(withKeyPlaceholders(filled, { nan: { type: 'api_key', key: 'secret' } }), undefined);
+});
+
+test('mergeModelsFile drops the placeholder once the provider is given a real key', () => {
+	const existing = { providers: { omni: { baseUrl: 'https://o.example/v1', api: 'openai-completions', apiKey: NO_KEY_PLACEHOLDER, models: [] } } };
+	const merged = mergeModelsFile(existing, { id: 'omni', baseUrl: 'https://o.example/v1', api: 'openai-completions', authHeader: true }, []);
+	const provider = (merged['providers'] as Record<string, Record<string, unknown>>)['omni'];
+	assert.strictEqual(provider['apiKey'], undefined);
+	assert.strictEqual(provider['authHeader'], true);
 });

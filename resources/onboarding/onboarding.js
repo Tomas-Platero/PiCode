@@ -108,6 +108,20 @@ const STRINGS = {
 		subCode: 'Your code',
 		subWaiting: 'Waiting for you to finish in the browser…',
 		subCancel: 'Cancel',
+		gentleTitle: 'Gentle AI',
+		gentleLead: 'How the agents talk and how much they ask before acting. You can change both later from the chat.',
+		gentlePersonaTitle: 'Tone',
+		personaGentleman: 'Gentleman',
+		personaGentlemanWhy: 'Warm and direct, like a mentor. The default.',
+		personaNeutral: 'Neutral',
+		personaNeutralWhy: 'Plain and to the point, with no personality.',
+		gentlePermissionsTitle: 'Permissions',
+		permissionsNormal: 'Ask first',
+		permissionsNormalWhy: 'Asks before it changes files or runs commands. The default.',
+		permissionsAuto: 'Auto',
+		permissionsAutoWhy: 'Lets safe actions through and still asks about the rest.',
+		permissionsYolo: 'No questions',
+		permissionsYoloWhy: 'Never asks. Only for work you can easily undo.',
 		subChoose: 'Choose how to sign in…',
 		subDone: 'Signed in',
 		subCancelled: 'The sign-in was cancelled.',
@@ -297,6 +311,20 @@ const STRINGS = {
 		subCode: 'Tu código',
 		subWaiting: 'Esperando a que termines en el navegador…',
 		subCancel: 'Cancelar',
+		gentleTitle: 'Gentle AI',
+		gentleLead: 'Cómo hablan los agentes y cuánto preguntan antes de actuar. Puedes cambiar ambas cosas luego desde el chat.',
+		gentlePersonaTitle: 'Tono',
+		personaGentleman: 'Gentleman',
+		personaGentlemanWhy: 'Cercano y directo, como un mentor. El predeterminado.',
+		personaNeutral: 'Neutro',
+		personaNeutralWhy: 'Claro y al grano, sin personalidad.',
+		gentlePermissionsTitle: 'Permisos',
+		permissionsNormal: 'Preguntar antes',
+		permissionsNormalWhy: 'Pregunta antes de cambiar archivos o ejecutar comandos. El predeterminado.',
+		permissionsAuto: 'Automático',
+		permissionsAutoWhy: 'Deja pasar lo seguro y sigue preguntando por el resto.',
+		permissionsYolo: 'Sin preguntas',
+		permissionsYoloWhy: 'No pregunta nunca. Solo para trabajo que puedas deshacer fácilmente.',
 		subChoose: 'Elige cómo iniciar sesión…',
 		subDone: 'Sesión iniciada',
 		subCancelled: 'Has cancelado el inicio de sesión.',
@@ -946,6 +974,8 @@ async function signOutOfAccount() {
 	state.account = { state: 'signed-out', email: undefined, error: undefined };
 	renderAccount();
 	try {
+		// The running editor first: removing the account from its storage is what signs it out now.
+		await window.picode.account.signOut();
 		await command('clearPendingCode', {});
 		await command('setAccountSignOut', {});
 	} catch {
@@ -1764,7 +1794,66 @@ async function chooseTheme(theme) {
 
 /* -- step 5: extras ----------------------------------------------- */
 
+/** Gentle's two preferences, read once from the profile the editor will use. */
+async function loadGentle() {
+	if (state.gentle !== undefined || state.gentleLoading === true) {
+		return;
+	}
+	state.gentleLoading = true;
+	try {
+		const answer = await window.picode.command('gentle', {});
+		if (answer?.data) {
+			state.gentle = answer.data;
+		}
+	} catch {
+		// The panel simply does not show: the preferences stay what Gentle has on disk.
+	} finally {
+		state.gentleLoading = false;
+		renderExtras();
+	}
+}
+
+async function chooseGentle(key, value) {
+	await withBusy('', async () => {
+		const answer = await command('setGentle', { key, value });
+		if (answer?.data) {
+			state.gentle = answer.data;
+		}
+	});
+	renderExtras();
+}
+
+/** One group of cards for one Gentle preference, in the same shape as the context cards. */
+function gentleChoice(title, key, current, options) {
+	return el('div', { class: 'panel' },
+		el('div', { class: 'panel-head' },
+			el('span', { class: 'panel-title', text: title }),
+		),
+		el('div', { class: 'modes', role: 'radiogroup', 'aria-label': title },
+			options.map(option => {
+				const chosen = current === option.value;
+				return el('button', {
+					type: 'button',
+					class: `mode${chosen ? ' chosen' : ''}`,
+					role: 'radio',
+					'aria-checked': chosen ? 'true' : 'false',
+					onclick: () => chooseGentle(key, option.value),
+				},
+					el('span', { class: 'mode-head' },
+						el('span', { class: 'mode-mark', text: option.mark }),
+						el('strong', { text: option.title }),
+						chosen ? el('span', { class: 'mode-check', text: '✓' }) : undefined,
+					),
+					el('span', { class: 'mode-why', text: option.why }),
+				);
+			})),
+	);
+}
+
 function renderExtras() {
+	if (state.gentle === undefined && state.gentleLoading !== true) {
+		void loadGentle();
+	}
 	$('extras-title').textContent = t('extrasTitle');
 	$('extras-lead').textContent = t('extrasLead');
 	const toggle = (key, title, why) => el('label', { class: 'switch' },
@@ -1823,6 +1912,18 @@ function renderExtras() {
 			state.extras.context === false
 				? el('p', { class: 'hint' }, t('contextOffNote'))
 				: undefined,
+		),
+		state.gentle === undefined ? undefined : el('div', { class: 'panels' },
+			el('p', { class: 'panel-hint', text: `${t('gentleTitle')} · ${t('gentleLead')}` }),
+			gentleChoice(t('gentlePersonaTitle'), 'persona', state.gentle.persona, [
+				{ value: 'gentleman', title: t('personaGentleman'), why: t('personaGentlemanWhy'), mark: '🎩' },
+				{ value: 'neutral', title: t('personaNeutral'), why: t('personaNeutralWhy'), mark: '🧭' },
+			]),
+			gentleChoice(t('gentlePermissionsTitle'), 'permissions', state.gentle.permissions, [
+				{ value: 'normal', title: t('permissionsNormal'), why: t('permissionsNormalWhy'), mark: '🛡️' },
+				{ value: 'auto', title: t('permissionsAuto'), why: t('permissionsAutoWhy'), mark: '⚙️' },
+				{ value: 'yolo', title: t('permissionsYolo'), why: t('permissionsYoloWhy'), mark: '🚀' },
+			]),
 		),
 	);
 
@@ -2045,11 +2146,12 @@ async function main() {
 		}
 		const signedIn = email.length > 0;
 		const already = state.account.state === 'signed-in';
-		if (signedIn === already && (state.account.email ?? '') === email) {
+		const picture = typeof message?.picture === 'string' && message.picture.length > 0 ? message.picture : undefined;
+		if (signedIn === already && (state.account.email ?? '') === email && (signedIn ? state.account.picture === picture || picture === undefined : true)) {
 			return;
 		}
 		state.account = signedIn
-			? { state: 'signed-in', email, error: undefined }
+			? { state: 'signed-in', email, picture: typeof message?.picture === 'string' && message.picture.length > 0 ? message.picture : undefined, error: undefined }
 			: { state: 'idle', email: undefined, error: undefined };
 		renderAccount();
 		if (signedIn) {
@@ -2060,6 +2162,9 @@ async function main() {
 		const boot = await window.picode.bootstrap();
 		state.mode = boot.mode ?? 'first-run';
 		state.version = boot.version ?? '';
+		if (typeof boot.accountEmail === 'string' && boot.accountEmail.length > 0) {
+			state.account = { state: 'signed-in', email: boot.accountEmail, picture: boot.accountPicture || undefined, error: undefined };
+		}
 		if (boot.snapshot) {
 			adopt(boot.snapshot);
 			if (!boot.snapshot.theme) {

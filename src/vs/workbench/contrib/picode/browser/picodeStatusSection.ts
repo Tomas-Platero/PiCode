@@ -68,11 +68,15 @@ interface IProjectRow {
 interface ISubscriptionWindow {
 	readonly label: string;
 	readonly usedPercent: number;
-	readonly resetAt: number;
+	/** When the window resets, in epoch ms; `null` when the provider did not say. */
+	readonly resetAt: number | null;
 }
 
 interface ISubscriptionStatus {
+	/** The model the meter belongs to, as the provider names it. */
+	readonly meter?: string;
 	readonly windows: readonly ISubscriptionWindow[];
+	readonly limitReached?: boolean;
 }
 
 interface IUpdatesSnapshot {
@@ -102,6 +106,8 @@ interface IStatusData {
 	readonly cacheRead?: number;
 	readonly cacheWrite?: number;
 	readonly subscription?: ISubscriptionStatus;
+	/** Every meter of the account's subscription, the model in use first. */
+	readonly subscriptions?: readonly ISubscriptionStatus[];
 	readonly jobs?: readonly { readonly label?: string; readonly command?: string }[];
 	readonly updates?: IUpdatesSnapshot;
 	readonly error?: string;
@@ -329,10 +335,18 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			this.addRow(card, Codicon.diff, localize('picodeStatusChanges', "Changes"), changes);
 		});
 
-		if (data.subscription !== undefined) {
-			this.renderCard(localize('picodeStatusCardSubscription', "Model subscription"), Codicon.creditCard, card => {
-				for (const window of data.subscription!.windows) {
-					this.addRow(card, Codicon.clock, window.label, `${window.usedPercent}% used`);
+		// The account's allowance, drawn like a usage meter: how much is used, and when it resets. The
+		// quota is the account's, so it shows whichever provider's model is answering.
+		const meters = data.subscriptions ?? (data.subscription === undefined ? [] : [data.subscription]);
+		if (meters.length > 0) {
+			this.renderCard(localize('picodeStatusCardUsageLimits', "Usage limits"), Codicon.creditCard, card => {
+				for (const meter of meters) {
+					if (meter.meter !== undefined && meter.meter.length > 0) {
+						DOM.append(card, $('.picode-status-meter-model')).textContent = meter.meter;
+					}
+					for (const window of meter.windows) {
+						this.addMeterRow(card, window, meter.limitReached === true);
+					}
 				}
 			});
 		}
@@ -404,6 +418,26 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 	}
 
 	/** A fact: what it is on the left, what it says on the right, on one line each. */
+	/** One allowance window: its name, a bar with how much is used, and when it resets. */
+	private addMeterRow(card: HTMLElement, window: ISubscriptionWindow, limitReached: boolean): void {
+		const percent = Math.max(0, Math.min(100, Math.round(window.usedPercent)));
+		const row = DOM.append(card, $('.row'));
+		const text = this.addRowTitle(row, Codicon.clock, window.label);
+		const bar = DOM.append(text, $('.picode-status-meter'));
+		bar.classList.add(limitReached || percent >= 90 ? 'danger' : percent >= 60 ? 'warn' : 'ok');
+		bar.setAttribute('role', 'progressbar');
+		bar.setAttribute('aria-valuemin', '0');
+		bar.setAttribute('aria-valuemax', '100');
+		bar.setAttribute('aria-valuenow', String(percent));
+		bar.setAttribute('aria-label', window.label);
+		DOM.append(bar, $('.picode-status-meter-fill')).style.width = `${percent}%`;
+		if (window.resetAt !== null) {
+			DOM.append(text, $('.picode-status-row-text')).textContent = localize('picodeStatusResetsIn', "Resets in {0}", formatResetIn(window.resetAt));
+		}
+		const value = DOM.append(row, $('.value'));
+		value.textContent = localize('picodeStatusPercentUsed', "{0}% used", String(percent));
+	}
+
 	private addRow(card: HTMLElement, icon: { readonly id: string }, label: string, value: string): void {
 		const row = DOM.append(card, $('.row'));
 		this.addRowTitle(row, icon, label);
@@ -518,3 +552,17 @@ const contribution: IAICustomizationManagementSectionContribution = {
 	create: (instantiationService, container) => instantiationService.createInstance(PicodeStatusSection, container),
 };
 aiCustomizationManagementSectionRegistry.register(contribution);
+
+/** How long until a window resets, in the shortest words that are still true: 40m, 2h 33m, 3d 5h. */
+function formatResetIn(resetAt: number): string {
+	const minutes = Math.max(0, Math.round((resetAt - Date.now()) / 60_000));
+	if (minutes < 60) {
+		return `${minutes}m`;
+	}
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) {
+		return minutes % 60 > 0 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+	}
+	const days = Math.floor(hours / 24);
+	return hours % 24 > 0 ? `${days}d ${hours % 24}h` : `${days}d`;
+}

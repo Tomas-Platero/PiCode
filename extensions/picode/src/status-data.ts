@@ -15,10 +15,10 @@ import { readPiChatSettings } from './piConfig';
 import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
-import { STATUS_DATA_COMMAND, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
+import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
-import { getCachedNanUsage, matchedNanProvider, nanModelUsage, resolveNanApiKey, spokenWindowLabel } from './usage-data';
+import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 
 /**
  * The data behind PiCode's status surface.
@@ -313,7 +313,10 @@ async function readSubscription(profileDir: string, model: string | undefined): 
 		return undefined;
 	}
 	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('providers'));
-	const provider = matchedNanProvider(declared, current.provider);
+	// NaN's own pi package registers the provider without any settings line: its id is enough, and
+	// the key is the one pi stored for it.
+	const provider = matchedNanProvider(declared, current.provider)
+		?? (current.provider === NAN_PROVIDER_ID ? { id: NAN_PROVIDER_ID, key: undefined } : undefined);
 	if (provider === undefined) {
 		return undefined;
 	}
@@ -331,7 +334,11 @@ async function readSubscription(profileDir: string, model: string | undefined): 
 		// A read that names no meter for this model says nothing: no section, not an empty one.
 		return undefined;
 	}
-	// Tightest window first — the one that runs out first leads.
+	return toSubscriptionStatus(limit, cached.fresh);
+}
+
+/** One meter as the panel draws it: the tightest window first, because it runs out first. */
+function toSubscriptionStatus(limit: NanUsageLimit, fresh: boolean): SubscriptionStatus {
 	const labelled = limit.windows.filter(window => window.label.length > 0).sort((left, right) => left.windowSeconds - right.windowSeconds);
 	const unlabelled = limit.windows.filter(window => window.label.length === 0);
 	return {
@@ -342,8 +349,97 @@ async function readSubscription(profileDir: string, model: string | undefined): 
 			resetAt: window.resetAt,
 		})),
 		limitReached: limit.limitReached,
-		fresh: cached.fresh,
+		fresh,
 	};
+}
+
+/** NaN's quota for the account the profile holds a key for, or `undefined` when there is none. */
+async function readNanAccount(profileDir: string): Promise<CachedNanUsage | undefined> {
+	const declared = declarationsFromSetting(vscode.workspace.getConfiguration('picode').get('providers'));
+	const carried = readJsonObject(path.join(profileDir, 'models.json'))?.['providers'];
+	const refs: { id: string; baseUrl: string; key?: string }[] = [
+		...declared.map(declaration => ({ id: declaration.id, baseUrl: declaration.baseUrl, key: declaration.key })),
+		...(isRecord(carried)
+			? Object.entries(carried).map(([id, entry]) => ({
+				id,
+				baseUrl: isRecord(entry) && typeof entry['baseUrl'] === 'string' ? entry['baseUrl'] : '',
+				key: isRecord(entry) && typeof entry['apiKey'] === 'string' ? entry['apiKey'] : undefined,
+			}))
+			: []),
+	];
+	// NaN's own pi package registers the provider with no settings line and no model list entry:
+	// the key pi stored for it is what says it is there.
+	const provider = firstNanProvider(refs)
+		?? (storedApiKey(profileDir, NAN_PROVIDER_ID) === undefined ? undefined : { id: NAN_PROVIDER_ID, baseUrl: '', key: undefined });
+	if (provider === undefined) {
+		return undefined;
+	}
+	const apiKey = resolveNanApiKey({
+		declared: provider.key,
+		environment: process.env,
+		stored: storedApiKey(profileDir, provider.id),
+	});
+	if (apiKey === undefined) {
+		return undefined;
+	}
+	return getCachedNanUsage(apiKey, Date.now());
+}
+
+/**
+ * The account's whole allowance: every metered model, the one in use first, whichever provider's
+ * model is answering right now.
+ *
+ * NaN's quota belongs to the account, so it is worth seeing while a Claude model is the one in the
+ * chat — the case the one-meter rule above leaves empty. The provider is found where the owner may
+ * have put it: declared in the settings, or only carried in the profile's own model list. Nothing is
+ * drawn when no NaN provider with a key exists, and a read that names no meter says nothing.
+ */
+async function readAccountSubscriptions(profileDir: string, model: string | undefined): Promise<readonly SubscriptionStatus[] | undefined> {
+	const cached = await readNanAccount(profileDir);
+	if (cached?.value === undefined) {
+		return undefined;
+	}
+	const meters = nanAccountMeters(cached.value, currentModelRef(model)?.model)
+		.filter(limit => limit.windows.length > 0)
+		.map(limit => toSubscriptionStatus(limit, cached.fresh));
+	return meters.length > 0 ? meters : undefined;
+}
+
+/**
+ * The whole NaN account for the status-bar panel: every metered model with its period allowance,
+ * the one the chat is on (the session's model, or the profile default before the first turn) first.
+ * `undefined` when the profile holds no NaN key or the quota has never answered.
+ */
+export async function readUsagePanel(distributionRoot: string): Promise<UsagePanelData | undefined> {
+	const profileDir = readRuntimeMode() === 'external' ? externalProfileDir() : internalProfileDir(distributionRoot);
+	const cached = await readNanAccount(profileDir);
+	if (cached?.value === undefined) {
+		return undefined;
+	}
+	const modelId = currentModelRef(getSessionUsage()?.model ?? readDefaultModel(profileDir))?.model;
+	const models = nanAccountMeters(cached.value, modelId).flatMap((limit): UsagePanelModel[] => {
+		const period = limit.windows.find(window => window.label.length === 0);
+		if (period?.used === undefined || period.budget === undefined) {
+			return [];
+		}
+		const rolling = limit.windows.find(window => window.label.length > 0);
+		return [{
+			name: limit.name,
+			used: period.used,
+			cap: period.budget,
+			usedPercent: period.usedPercent,
+			resetAt: period.resetAt,
+			...(rolling === undefined ? {} : { window: { label: `${spokenWindowLabel(rolling.label)} window`, usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
+			limitReached: limit.limitReached,
+			current: limit.name === modelId,
+		}];
+	});
+	return models.length === 0 ? undefined : { models, periodStart: cached.value.periodStart ?? null, fresh: cached.fresh, fetchedAt: cached.value.fetchedAt };
+}
+
+/** Registers the command the status-bar usage panel reads; the caller collects the disposable. */
+export function registerUsagePanelCommand(distributionRoot: string): vscode.Disposable {
+	return vscode.commands.registerCommand(USAGE_PANEL_COMMAND, () => readUsagePanel(distributionRoot));
 }
 
 /** Builds the one answer the status tree renders, from the profile in force. */
@@ -397,7 +493,8 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The provider's own quota for the model in use, never the session's totals above.
 		// The model's subscription meter, read the way the Session Usage row used to be: the lookup
 		// and its one-minute cache belong to `usage-data.ts`, and the block draws what it answered.
-		subscription: await readSubscription(profileDir, usage?.model),
+		subscription: await readSubscription(profileDir, usage?.model ?? defaultModel),
+		subscriptions: await readAccountSubscriptions(profileDir, usage?.model ?? defaultModel),
 		// What the update check last found, read from where the check stored it: the lookup and its
 		// cadence belong to `updates-check.ts`, and this reading only draws the answer it left behind.
 		updates: parseSnapshot(deps.globalState.get<unknown>(UPDATES_STATE_KEY)),

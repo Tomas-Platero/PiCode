@@ -140,6 +140,12 @@ export interface StatusData {
 	 */
 	subscription?: SubscriptionStatus;
 	/**
+	 * Every meter of the account's subscription, the model in use first (`usage-data.ts`). The
+	 * quota is the account's, so this is present while another provider's model is the one
+	 * answering — the case `subscription` above, which follows the session's model, leaves empty.
+	 */
+	subscriptions?: readonly SubscriptionStatus[];
+	/**
 	 * The chat's background jobs still running (`background-jobs.ts`), the same answer the pill
 	 * above the chat input reads. Each leaves when its completion message closes it, so a job
 	 * that failed or finished is not listed: the card is work still out, and a finished
@@ -153,6 +159,34 @@ export interface StatusData {
 	 */
 	updates?: UpdatesSnapshot;
 	error?: string;
+}
+
+/** What the status-bar usage panel reads: the whole NaN account, one row per metered model. */
+export const USAGE_PANEL_COMMAND = 'picode.usage.read';
+
+/** One metered model of the account, as the usage panel draws it. */
+export interface UsagePanelModel {
+	readonly name: string;
+	/** Tokens used and allowed over the billing period. */
+	readonly used: number;
+	readonly cap: number;
+	readonly usedPercent: number;
+	/** When this model's period resets, in epoch ms; `null` when the provider did not say. */
+	readonly resetAt: number | null;
+	/** The rolling window on top of the period, when the model has one. */
+	readonly window?: SubscriptionWindowRow;
+	readonly limitReached: boolean;
+	/** Whether this is the model the chat is on. */
+	readonly current: boolean;
+}
+
+export interface UsagePanelData {
+	/** The models, the one in use first. */
+	readonly models: readonly UsagePanelModel[];
+	readonly periodStart: number | null;
+	/** `false` when the endpoint did not answer and this is the last good reading. */
+	readonly fresh: boolean;
+	readonly fetchedAt: number;
 }
 
 /** The way into the providers' settings page, offered by the Providers card. */

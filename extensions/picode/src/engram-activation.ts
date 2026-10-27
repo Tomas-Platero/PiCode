@@ -40,7 +40,6 @@ import { mcpServersTextWithRemoved, serverEntry } from './mcp-add';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
 export const MEMORY_ENABLED_SETTING = 'picode.memory.enabled';
-export const MEMORY_BINARY_SETTING = 'picode.memory.binary';
 
 /** On unless the owner said otherwise: the product ships with memory working. */
 export function memoryEnabled(): boolean {
@@ -49,13 +48,12 @@ export function memoryEnabled(): boolean {
 
 /** Everything memory needs from the editor, in one place so the tests can leave the editor out. */
 function memoryIo(): EngramProbeIo {
-	const configured = vscode.workspace.getConfiguration('picode.memory').get<string>('binary');
+	// Always the engine PiCode carries: there is no setting to point memory at another one.
 	return nodeEngramProbeIo({
 		env: process.env,
 		home: os.homedir(),
 		appRoot: vscode.env.appRoot,
-		workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath),
-		configured: typeof configured === 'string' && configured.trim() !== '' ? configured.trim() : undefined
+		workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath)
 	});
 }
 

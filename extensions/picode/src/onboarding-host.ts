@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { gentleSettings, setGentleSetting, type GentleSettings } from './gentle-settings';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportReport, type ImportSelection, type ProfilePreview } from './profile-import';
-import { projectDeclaration } from './declarations';
+import { NO_KEY_PLACEHOLDER, projectDeclaration } from './declarations';
 import { probeEndpoint, type EndpointProbe } from './endpoint';
 import { externalSdkEntry } from './piLocate';
 import { searchPackages, type PackageSearchRow } from './packages-registry';
@@ -109,7 +110,8 @@ export function profileProviders(paths: SetupPaths): ProviderFacts[] {
 			endpoint: typeof entry['baseUrl'] === 'string' ? entry['baseUrl'] : undefined,
 			api: typeof entry['api'] === 'string' ? entry['api'] : undefined,
 			models,
-			hasKey: typeof credentials[id] === 'string' || entry['apiKey'] !== undefined,
+			// The placeholder a keyless provider is given is not a key: the row still says it needs none.
+			hasKey: typeof credentials[id] === 'string' || (entry['apiKey'] !== undefined && entry['apiKey'] !== NO_KEY_PLACEHOLDER),
 		});
 	}
 	return rows.sort((left, right) => left.id.localeCompare(right.id));
@@ -580,7 +582,9 @@ export type HostCommand =
 	| 'clearPendingCode'
 	| 'searchPackages'
 	| 'subscriptions'
-	| 'availableProviders';
+	| 'availableProviders'
+	| 'gentle'
+	| 'setGentle';
 
 /**
  * What one command answers.
@@ -601,6 +605,7 @@ export type HostAnswer =
 	| readonly PackageSearchRow[]
 	| readonly SubscriptionChoice[]
 	| readonly AvailableProvider[]
+	| GentleSettings
 	| { readonly snapshot: SetupSnapshot };
 
 /** One round trip: a command name and its JSON payload, answered with a JSON value. */
@@ -687,6 +692,10 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			return subscriptionChoices(paths);
 		case 'availableProviders':
 			return availableProviders(paths);
+		case 'gentle':
+			return gentleSettings(paths.profileDir);
+		case 'setGentle':
+			return setGentleSetting(paths.profileDir, { key: payload['key'], value: payload['value'] });
 		case 'searchPackages': {
 			const query = stringOf(payload['query']).trim();
 			return query.length === 0 ? [] : await searchPackages(query);
