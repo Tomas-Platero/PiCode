@@ -19,7 +19,7 @@ import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, sp
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, packagePreviews, searchPackages } from './packages-registry';
-import { checkPackageUpdates, clearPackageUpdateCache, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
+import { checkPackageUpdates, clearPackageUpdateCache, updateCheckableSource, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
 import {
 	DISABLED_PACKAGES_KEY,
@@ -2074,7 +2074,7 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 	const allPackages = piPackages(scopes, nodeFs()).packages;
 	const declaredPaths = new Set(
 		[...packageDisplayInfo(allPackages, scopes, {}, profileDir).entries()]
-			.filter(([, info]) => info.source !== undefined && info.source.length > 0)
+			.filter(([, info]) => info.source !== undefined && info.source.length > 0 && !isPinnedSource(info.source))
 			.map(([path]) => path),
 	);
 	const npmPackages = allPackages.filter((found): found is PiPackage & { version: string } =>
@@ -2609,4 +2609,10 @@ export function deactivate(): void {
 	// The provider is registered as a subscription and released with it.
 	// The memory engine this editor started goes with it; one that was already serving stays.
 	stopStartedMemory();
+}
+
+/** A package whose declaration fixes its version: the update check never offers it (the pin would undo the update). */
+function isPinnedSource(source: string): boolean {
+	const checkable = updateCheckableSource(source);
+	return checkable.kind === 'npm' && checkable.pin !== undefined;
 }
