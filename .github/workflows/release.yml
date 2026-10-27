@@ -319,11 +319,107 @@ jobs:
           echo "SHA=${SHA}" >> "$GITHUB_ENV"
           echo "SHA_SETUP=${SHA_SETUP}" >> "$GITHUB_ENV"
 
+      - name: Make the small update for people on the previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The private half of the key whose public half is `hotfixPublicKey` in
+          # product.json. Without it no small update is made: the release still ships whole.
+          HOTFIX_SIGNING_KEY: ${{ secrets.HOTFIX_SIGNING_KEY }}
+          # Set to hotfix, minor or release to overrule the label the commits give.
+          KIND_OVERRIDE: ${{ vars.UPDATE_KIND_OVERRIDE }}
+        shell: bash
+        run: |
+          # People on the previous release can update by downloading only the files that
+          # differ. It is made from the two real builds, so it cannot disagree with the
+          # full one, and it is proven before it ships: old build + package must give back
+          # exactly the new build, file by file. Every way this can go wrong ends the same
+          # way: no small update, and the full download that always works.
+          # (docs/HOTFIX.md)
+          DELTA=no
+          KIND=release
+          skip() { echo "::notice::no small update for this release: $1"; }
+
+          PREV_FEED="updates/${CHANNEL}/win32/x64/archive/latest.json"
+          PREV_URL=""
+          if [ -f "${PREV_FEED}" ]; then
+            PREV_URL=$(node -p "require('./${PREV_FEED}').url" 2>/dev/null || true)
+            PREV_ZIP_SHA=$(node -p "require('./${PREV_FEED}').sha256hash" 2>/dev/null || true)
+          fi
+          PUBLIC_KEY=$(node -p "require('./product.json').hotfixPublicKey || ''")
+
+          if [ -z "${HOTFIX_SIGNING_KEY}" ]; then
+            skip "the signing key is not configured"
+          elif [ -z "${PUBLIC_KEY}" ]; then
+            skip "product.json carries no public key"
+          elif [ -z "${PREV_URL}" ]; then
+            skip "this channel has no previous release"
+          else
+            ZIP7=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
+            WORK="${RUNNER_TEMP}/delta-work"
+            rm -rf "${WORK}" && mkdir -p "${WORK}"
+            KEY_FILE="${WORK}/signing-key.pem"
+            printf '%s\n' "${HOTFIX_SIGNING_KEY}" > "${KEY_FILE}"
+
+            if ! curl -fsSL --retry 3 -o "${WORK}/previous.zip" "${PREV_URL}"; then
+              skip "the previous release could not be downloaded"
+            elif [ "$(sha256sum "${WORK}/previous.zip" | cut -d' ' -f1)" != "${PREV_ZIP_SHA}" ]; then
+              skip "the previous release does not match its published hash"
+            else
+              "${ZIP7}" x -y "-o${WORK}/previous" "${WORK}/previous.zip" > /dev/null
+              PREV_PICODE=$(node -p "require('./${WORK}/previous/resources/app/product.json').picodeVersion" 2>/dev/null || true)
+              KIND=$(node build/release.mjs kind --delta yes \
+                --from "${PREV_SHA}" --to "${GITHUB_SHA}" \
+                ${KIND_OVERRIDE:+--override "${KIND_OVERRIDE}"})
+              if [ "${KIND}" = "release" ]; then
+                MAKE_KIND=minor
+              else
+                MAKE_KIND="${KIND}"
+              fi
+              set +e
+              node build/hotfix.mjs make --old "${WORK}/previous" --new "${PACK}" \
+                --out "${WORK}/delta" --from "${PREV_PICODE}" --to "${PICODE_VERSION}" \
+                --kind "${MAKE_KIND}" --key "${KEY_FILE}"
+              MADE=$?
+              set -e
+              if [ "${MADE}" -eq 3 ]; then
+                skip "this release changes something a small update may not (see the list above)"
+                KIND=release
+              elif [ "${MADE}" -ne 0 ]; then
+                echo "::warning::the small update could not be made; this release ships whole"
+                KIND=release
+              elif ! node build/hotfix.mjs check --old "${WORK}/previous" --new "${PACK}" \
+                     --delta "${WORK}/delta" --public-key "${PUBLIC_KEY}"; then
+                echo "::warning::old build + small update is NOT the new build; this release ships whole"
+                KIND=release
+              else
+                DELTA_ZIP="PiCode-win32-x64-${PICODE_VERSION}-update-from-${PREV_PICODE}.zip"
+                (cd "${WORK}/delta" && "${ZIP7}" a -tzip "${GITHUB_WORKSPACE}/${DELTA_ZIP}" . > /dev/null)
+                DELTA_SHA=$(sha256sum "${DELTA_ZIP}" | cut -d' ' -f1)
+                [ "${KIND}" = "release" ] && KIND="${MAKE_KIND}"
+                DELTA=yes
+                {
+                  echo "DELTA_ZIP=${DELTA_ZIP}"
+                  echo "DELTA_SHA=${DELTA_SHA}"
+                  echo "DELTA_FROM=${PREV_PICODE}"
+                } >> "$GITHUB_ENV"
+              fi
+            fi
+            rm -rf "${WORK}"
+          fi
+          echo "DELTA=${DELTA}" >> "$GITHUB_ENV"
+          echo "KIND=${KIND}" >> "$GITHUB_ENV"
+          echo "update kind: ${KIND} (small update: ${DELTA})"
+
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # The small update, when there is one, is one more file of the release.
+          EXTRA=()
+          if [ "${DELTA}" = "yes" ]; then
+            EXTRA=("${DELTA_ZIP}")
+          fi
           # `--target` is for CREATING a tag. When the tag already exists — the
           # normal tag-push release — passing it makes gh resolve/recreate an
           # annotated tag and the API answers 403 "Resource not accessible by
@@ -352,12 +448,12 @@ jobs:
           if gh release view "v${PICODE_VERSION}" >/dev/null 2>&1; then
             gh release upload "v${PICODE_VERSION}" \
               "PiCode-win32-x64-${PICODE_VERSION}.zip" \
-              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" --clobber
+              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" "${EXTRA[@]}" --clobber
             gh release edit "v${PICODE_VERSION}" "${EDIT[@]}"
           else
             gh release create "v${PICODE_VERSION}" \
               "PiCode-win32-x64-${PICODE_VERSION}.zip" \
-              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" \
+              "PiCode-win32-x64-${PICODE_VERSION}-setup.exe" "${EXTRA[@]}" \
               --title "PiCode ${PICODE_VERSION}" --generate-notes \
               "${CREATE[@]}" "${TARGET[@]}"
           fi
@@ -434,6 +530,9 @@ jobs:
             echo "| --- | --- |"
             echo "| \`${EXE}\` | install it |"
             echo "| \`${ZIP}\` | run it in place, without installing |"
+            if [ "${DELTA}" = "yes" ]; then
+              echo "| \`${DELTA_ZIP}\` | only what changed since ${DELTA_FROM}; the editor picks it by itself |"
+            fi
           } > release-notes.md
           gh release edit "v${PICODE_VERSION}" --notes-file release-notes.md
 
@@ -466,16 +565,24 @@ jobs:
           else
             INSTALLED=()
           fi
+          # The label (hotfix, minor, release) goes in both feeds. The small update is
+          # offered only to the portable build: an installed one is replaced by its
+          # installer, which has no use for a folder of changed files.
+          DELTA_FLAGS=()
+          if [ "${DELTA}" = "yes" ]; then
+            DELTA_FLAGS=(--delta-url "${BASE}/${DELTA_ZIP}" \
+              --delta-sha256 "${DELTA_SHA}" --delta-from "${DELTA_FROM}")
+          fi
           node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_ZIP}" --sha256 "${SHA}" \
             --picode-version "${PICODE_VERSION}" \
-            --quality "${CHANNEL}" \
+            --quality "${CHANNEL}" --kind "${KIND}" \
             --platform win32 --arch x64 --target archive \
-            "${INSTALLED[@]}"
+            "${DELTA_FLAGS[@]}" "${INSTALLED[@]}"
           node build/release.mjs update-feed --version "${VERSION}" \
             --commit "${COMMIT}" --url "${URL_SETUP}" --sha256 "${SHA_SETUP}" \
             --picode-version "${PICODE_VERSION}" \
-            --quality "${CHANNEL}" \
+            --quality "${CHANNEL}" --kind "${KIND}" \
             --platform win32 --arch x64 --target user \
             "${INSTALLED[@]}"
 

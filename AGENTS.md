@@ -208,6 +208,20 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * Los commits de feed y housekeeping no aparecen: no le dicen nada a quien lee la página.
 * Siempre conserva: la descripción del canal encima (`build/release-notes/<canal>.md`), el changelog generado por GitHub debajo (con el enlace de comparación apuntando al propio tag) y la tabla de archivos.
 
+### Las actualizaciones llegan pequeñas, y no se rompen
+>
+> *"Hay que pensar un sistema de hotfixes rápidos para esto que no sea rebuildeando todo."* — 2026-10-27
+>
+> *"No quiero subir una 0.3.2 a 0.3.3 y encontrarme problemas y errores."*
+>
+> *"y en vez de hablar de fixes solo añadimos también "minor update" en plan un pack de fixes + alguna mejora nueva"*
+
+* **Una sola numeración:** cada hotfix es una versión de verdad (`0.5.0` → `0.5.1`). Lo que cambia es la descarga: quien está en la versión anterior (portable) baja solo lo que cambió; el resto, la release completa. Mismo resultado.
+* **Tres etiquetas, que se ponen solas:** *Hotfix* (solo arreglos), *Minor update* (arreglos y alguna novedad) y *Release* (no cabe en un zip pequeño).
+* **Nunca peor que antes:** el paquete se prueba antes de publicarse, va firmado, se aplica sobre una copia y, si la versión nueva no arranca, se vuelve sola a la anterior con el perfil. Cualquier fallo termina en la descarga completa.
+* **Qué entra y qué no:** el editor, las pantallas y la extensión sí; Electron, dependencias, pi, engram y la identidad del producto, no. Un cambio que migre datos del usuario tampoco entra en un hotfix.
+* Detalle y uso: [`docs/HOTFIX.md`](docs/HOTFIX.md) · decisión: ADR-034.
+
 ### Idioma del proyecto y del producto
 >
 > *"En español."*
@@ -363,3 +377,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-26** · pi-intercom viene de serie («Haz que venga de serie»): las sesiones de pi se pueden mandar mensajes entre sí. Fijado como gentle-pi y gentle-engram, con sus datos dentro del perfil y su proceso intermediario arrancado con el propio editor, sin Node instalado (ADR-033).
 * **2026-10-26** · Cada chat del editor es su propia conversación de pi («si hazlo»): un chat nuevo ya no sigue escribiendo en el anterior, cada uno sale como su fila en Sessions y los chats abiertos se ven entre sí en pi-intercom, con el nombre de su primer mensaje (ADR-033, adenda 1).
 * **2026-10-27** · El chat puede buscar y leer las conversaciones anteriores de la lista Sessions, también las de antes de cerrar PiCode («sí, haz que pi pueda buscar y leer mis conversaciones anteriores de la lista Sessions»; ADR-033, adenda 2).
+* **2026-10-27** · Actualizaciones pequeñas: **hotfix, minor update y release** («un sistema de hotfixes rápidos que no sea rebuildeando todo», «no quiero subir una 0.3.2 a 0.3.3 y encontrarme problemas»). Una sola numeración; el zip pequeño lleva solo lo que cambió, se prueba antes de publicar, va firmado y, si la versión nueva no arranca, se vuelve sola a la anterior (ADR-034, `docs/HOTFIX.md`). Al probarlo se arregló un fallo antiguo de la actualización portable: su script se movía a sí mismo y la dejaba a medias.

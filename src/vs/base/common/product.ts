@@ -105,6 +105,11 @@ export interface IProductConfiguration {
 	 * one, so the owner reads PiCode's version rather than the editor's underneath.
 	 */
 	readonly picodeVersion?: string;
+	/**
+	 * The key that signs small update packages (base64 of the public key's DER form). When it is
+	 * set, a package without a valid signature is never applied and the full download is used.
+	 */
+	readonly hotfixPublicKey?: string;
 	readonly date?: string;
 	readonly quality?: string;
 	readonly commit?: string;

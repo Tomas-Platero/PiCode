@@ -1346,3 +1346,50 @@ leer mis conversaciones anteriores de la lista Sessions»).
 - **El id va entero:** los ids de pi empiezan por la hora, y dos conversaciones del mismo minuto comparten los
   primeros caracteres.
 - **Solo el pi interno:** con el pi externo no se dan; su historia no es de PiCode.
+
+## ADR-034 — Actualizaciones pequeñas: hotfix, minor update y release
+
+**Estado:** aceptada (2026-10-27).
+
+> *"Hay que pensar un sistema de hotfixes rápidos para esto que no sea rebuildeando todo."*
+>
+> *"No quiero subir una 0.3.2 a 0.3.3 y encontrarme problemas y errores."*
+>
+> *"y en vez de hablar de fixes solo añadimos también "minor update" en plan un pack de fixes + alguna mejora nueva"*
+
+**Contexto:** cada arreglo obligaba a que todo el mundo bajase la app entera. Los `patches/` ya no existen
+(se borraron el 2026-09-27) y no habrían servido: la app instalada es un árbol de ficheros, no un código que
+se parchee por líneas.
+
+**Decisión:**
+
+- **Una sola numeración.** Cada hotfix es una versión de verdad; no hay contador de fixes. Lo que cambia es
+  lo que se descarga: quien está en la versión anterior exacta (portable) recibe un zip con solo lo que
+  cambió; todos los demás, la release completa. El resultado es el mismo.
+- **Tres etiquetas** que pone el pipeline mirando los commits (`release.mjs kind`): *Hotfix* (solo arreglos),
+  *Minor update* (hay alguna novedad) y *Release* (no cabe en un zip pequeño). Se puede cambiar con
+  `UPDATE_KIND_OVERRIDE`. La etiqueta no decide la descarga.
+- **Lista de lo permitido, no de prohibiciones:** el zip solo puede tocar `resources/app/out`, las
+  extensiones integradas, los medios, el asistente de primer arranque y unos campos de `product.json` /
+  `package.json`. Nunca binarios. Lo demás obliga a release completa, y lo comprueba la herramienta.
+- **El paquete sale de las dos builds reales** y se **prueba antes de publicarse**: build vieja + paquete debe
+  dar exactamente la build nueva, fichero a fichero. Si algo falla, no hay paquete y la release sale entera.
+- **Se aplica sobre una copia**, firmado (Ed25519, clave pública en `product.json`), con hash de cada fichero
+  antes y después, y sin tocar el perfil portable. Cualquier fallo vuelve a la descarga completa.
+- **La versión nueva tiene que demostrar que arrancó** antes de borrar la anterior; si no, el script de cambio
+  la quita y devuelve la anterior con el perfil. Esto vale también para las actualizaciones completas.
+- **Un Hotfix espera 6 h** en vez de las 120 h de `update.minReleaseAge`; las otras etiquetas esperan lo de
+  siempre. La fecha del feed no se toca («nunca se toca la fecha del feed para acelerarlo» sigue en pie).
+
+**Fallo que ya existía y se arregló al probar el script de cambio:** el script de la actualización portable
+vivía dentro de la carpeta que mueve. Al moverla, Windows no encontraba la línea siguiente y la actualización
+se quedaba a medias (sin volver a poner el perfil ni arrancar el editor). Ahora vive fuera de las dos carpetas.
+También llama a `tasklist`, `find` y `taskkill` por su ruta de Windows: con Git en el PATH, `find` era el de Unix.
+
+**Consecuencias y límites:**
+
+- No evita construir la release completa; evita que la gente la descargue entera.
+- Solo la versión portable. Solo desde la versión anterior. Pi, engram y las dependencias no viajan en un
+  zip pequeño (no se ha mirado qué hay dentro de `resources/pi-runtime`).
+- La prueba de arranque no es una prueba funcional.
+- Detalle y uso: [`HOTFIX.md`](HOTFIX.md).

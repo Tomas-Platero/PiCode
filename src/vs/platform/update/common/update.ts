@@ -16,9 +16,25 @@ export interface IUpdate {
 	 * shows this one when present and falls back to `productVersion` otherwise.
 	 */
 	picodeVersion?: string;
+	/** What the update is called to the person: only fixes, fixes plus something new, or a full release. */
+	kind?: UpdateKind;
+	/**
+	 * A small package for people already on `from` (a PiCode version): only the files that
+	 * differ. Anyone on another version, or whose copy cannot take it, uses `url` instead.
+	 */
+	delta?: IDeltaUpdate;
 	timestamp?: number;
 	url?: string;
 	sha256hash?: string;
+}
+
+export type UpdateKind = 'hotfix' | 'minor' | 'release';
+
+export interface IDeltaUpdate {
+	url: string;
+	sha256hash: string;
+	/** The PiCode version this package applies to. */
+	from: string;
 }
 
 /**
