@@ -22,7 +22,8 @@ import { chatAgentDir, internalProfileDir, piRuntimeRoot, resolveProjectScope } 
 import { resolveSessionCwd } from './session-cwd';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
-import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { windowPastConversationTools } from './past-conversations-window';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -145,7 +146,10 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 	const created = await loaded.sdk.createAgentSessionFromServices({
 		services,
 		sessionManager,
-		customTools: settings.mcpEnabled ? piToolsFromEditor(toolToken) : [],
+		customTools: [
+			...(settings.mcpEnabled ? piToolsFromEditor(toolToken) : []),
+			...asPiCustomTools(windowPastConversationTools(agentDir, () => file)),
+		],
 		...(settings.disabledTools.length === 0 ? {} : { excludeTools: [...settings.disabledTools] }),
 	});
 	await bindSessionExtensions(created.session, deps.log);

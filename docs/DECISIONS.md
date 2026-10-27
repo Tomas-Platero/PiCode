@@ -1324,3 +1324,25 @@ el editor (`ui.custom` es nulo). Las herramientas, que son lo que usa el agente,
   conserva su fichero: con el siguiente mensaje se reabre.
 - **Siguen de uno en uno:** los turnos de chats distintos esperan su vez, porque la puerta de permisos y el
   testigo de las herramientas MCP del editor son de la ventana.
+
+### Adenda 2 (2026-10-27) · El chat puede leer las conversaciones anteriores
+
+**Contexto.** pi-intercom solo llega a las conversaciones que están en marcha, y la memoria solo guarda lo que
+se guardó a propósito. Una conversación de ayer, o de antes de cerrar PiCode, quedaba fuera de alcance: el dueño
+preguntó «¿cómo me llamo en la otra sesión?» y el chat no tenía forma de mirarlo («sí, haz que pi pueda buscar y
+leer mis conversaciones anteriores de la lista Sessions»).
+
+**Decisión.** Cada sesión de pi del editor lleva dos herramientas propias, de solo lectura
+(`extensions/picode/src/past-conversations.ts`):
+
+- **`past_conversations`**: la lista de conversaciones de la ventana, la misma que enseña Sessions, de la más
+  nueva a la más vieja; con `query`, solo las que contienen ese texto, con un trozo alrededor de cada acierto.
+- **`read_past_conversation`**: los mensajes de una, por su id, a páginas de 24 000 caracteres.
+
+- **La misma lista que Sessions:** se lee en cada llamada, así que una conversación acabada hace un minuto ya
+  está. Los transcríptos de subagentes no entran, igual que en el panel.
+- **Lo que se lee es lo que se dijo:** el texto del usuario sin el marco que el editor añade y las respuestas,
+  sin pensamiento ni resultados de herramientas.
+- **El id va entero:** los ids de pi empiezan por la hora, y dos conversaciones del mismo minuto comparten los
+  primeros caracteres.
+- **Solo el pi interno:** con el pi externo no se dan; su historia no es de PiCode.

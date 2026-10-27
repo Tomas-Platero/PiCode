@@ -14,7 +14,8 @@ import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
 import { resolveSessionCwd } from './session-cwd';
-import { piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
+import { windowPastConversationTools } from './past-conversations-window';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -1631,7 +1632,11 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					...(settings.thinkingLevel === undefined ? {} : { thinkingLevel: settings.thinkingLevel }),
 					// The editor's MCP servers, as tools pi can call (see `mcp.ts`). Read every time,
 					// because a server added a minute ago has to be there on the next message.
-					customTools: mcpEnabled() ? piToolsFromEditor(toolToken) : [],
+					// The owner's earlier conversations ride along, read only (see `past-conversations.ts`).
+					customTools: [
+						...(mcpEnabled() ? piToolsFromEditor(toolToken) : []),
+						...asPiCustomTools(windowPastConversationTools(agentDir, () => chat.sessionManager?.getSessionFile())),
+					],
 					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
 				});
 				chat.session = created.session;
