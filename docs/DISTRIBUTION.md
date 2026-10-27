@@ -221,3 +221,21 @@ bitmap, so both compare "different" against a correct icon.
   needs a justification to exist (the lightweight cut is doctrine).
 - Reimplementing what pi already brings: providers, OAuth, skills and the orchestrator are
   pi's, and PiCode teaches them to the editor.
+
+## 🪟 winget (estable y beta)
+
+PiCode está en winget con dos paquetes: `TomasPlatero.PiCode` (estable) y `TomasPlatero.PiCode.Beta`
+(beta, se instala al lado de la estable). Experimental queda fuera: es el canal más inestable y no
+tiene sitio en un catálogo público.
+
+- **Las primeras versiones (0.5.0 y 0.5.0-beta)** se enviaron a mano como pull requests a
+  `microsoft/winget-pkgs` (instalador Inno Setup, por usuario, x64). Microsoft las revisa antes de publicarlas.
+- **Las siguientes salen solas:** el paso «Submit the release to winget» de
+  `.github/workflows/release.yml` abre el pull request tras publicar la release y verificar los
+  feeds. Si falla, la release no se toca.
+- **Requisito:** un secreto del repositorio `WINGET_TOKEN` (token clásico de GitHub con permiso
+  `public_repo`) de la cuenta que tiene el fork `winget-pkgs`. Sin él el paso falla y avisa, pero
+  no rompe nada.
+- **Código de producto:** el de la estable es el de `product.json`; el de la beta es el de las
+  compilaciones lado a lado (el instalador beta lo registra así). Se leyó instalando una vez.
+- **El paquete se prueba** con `winget validate` antes de enviarse.
