@@ -40,6 +40,16 @@ test("a feed path without a target", () => {
   assert.equal(feedUrl(feed!), "https://raw.githubusercontent.com/Tomas-Platero/PiCode/beta/updates/insider/linux/arm64/latest.json");
 });
 
+test("every release channel's feed is accepted", () => {
+  for (const [branch, quality] of [["master", "stable"], ["beta", "beta"], ["experimental", "experimental"]]) {
+    const feed = parseFeedPath([branch, "updates", quality, "win32", "x64", "user", "latest.json"]);
+    assert.equal(
+      feed && feedUrl(feed),
+      `https://raw.githubusercontent.com/Tomas-Platero/PiCode/${branch}/updates/${quality}/win32/x64/user/latest.json`,
+    );
+  }
+});
+
 test("anything that is not a feed path is refused", () => {
   for (const path of [
     ["main", "updates", "stable", "win32", "x64", "latest.json"],
