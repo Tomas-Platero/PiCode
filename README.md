@@ -54,6 +54,7 @@
 | 🎨 **Themes** | Every card in the setup is painted in the theme's own colours, so the choice is what you see. More themes are installed as extensions, from the editor. |
 | 🧩 **MCP servers, in one place** | Your agent's external tools live in one screen: add a server, edit it, switch it off or remove it. pi calls them through the editor, so its confirmations and permissions apply — you are asked before one of their tools runs. |
 | 📊 **A status panel that tells the truth** | Which pi is answering, its version, your providers, every MCP server and its state, the model and thinking level in use, what the session has cost, the tokens and cache it has used, the plan the agent is working through, your project's branch and changes. |
+| 🧠 **Gentle AI, built in** | PiCode runs on [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai): its method (Organic-Driven Development), its specialised subagents and its review tools come with the editor, and its [Engram](https://github.com/Gentleman-Programming/engram) memory is what your agent remembers between conversations. Made by [Gentleman Programming](https://github.com/Gentleman-Programming). |
 | 🗂️ **Sessions** | Every conversation is kept per project. Search them, reopen them, read any transcript. |
 | ☁️ **PiCode Account** | Sign in and your settings, extensions, AI configuration and your agent's memory follow you to any machine — encrypted in transit and at rest. |
 
@@ -109,7 +110,7 @@ Releases are built and published by GitHub Actions: bump the version in [`produc
 
 ## 🙏 Credits
 
-PiCode stands on open source: [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code — MIT source](https://github.com/microsoft/vscode) for the editor, and the [Pi](https://pi.dev) coding agent for the agentic loop. Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.
+PiCode stands on open source: [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code — MIT source](https://github.com/microsoft/vscode) for the editor,, the [Pi](https://pi.dev) coding agent for the agentic loop, and [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) with its [Engram](https://github.com/Gentleman-Programming/engram) memory — both MIT, by [Gentleman Programming](https://github.com/Gentleman-Programming) — for the method, the subagents and the memory. Thank you. Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.
 
 <br />
 <div align="center">

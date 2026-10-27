@@ -112,6 +112,14 @@ fi
 echo "copying the memory engine into ${TARGET}"
 cp "${FOUND}" "${TARGET}/${BINARY}"
 
+# MIT asks that the licence text travels with the program; it is copied from the release archive.
+LICENSE_FILE=$( find "${UNPACKED}" -type f \( -iname 'LICENSE' -o -iname 'LICENSE.*' \) | head -n 1 )
+if [[ -n "${LICENSE_FILE}" ]]; then
+  cp "${LICENSE_FILE}" "${TARGET}/LICENSE-engram.txt"
+else
+  echo "warning: the engram archive has no licence file; add its text to ${TARGET}/LICENSE-engram.txt by hand." >&2
+fi
+
 # The check that matters: the program is asked to start from where it now lives. A file that is
 # present but cannot run would put the failure in the owner's editor instead of in this build.
 INSTALLED=$( "${TARGET}/${BINARY}" version 2>&1 | tr -d '\r' | head -n 1 )

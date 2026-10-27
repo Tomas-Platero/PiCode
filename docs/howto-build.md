@@ -1,7 +1,7 @@
 # Cómo compilar PiCode desde la fuente
 
 Este documento describe cómo se compila PiCode desde su propia fuente: qué es
-`./the tree`, qué hace cada fase del build y qué se hace el día que toca traer una
+el árbol, qué hace cada fase del build y qué se hace el día que toca traer una
 versión nueva de VS Code.
 
 No sustituye a la release. El **ZIP precompilado** sigue siendo el camino de quien solo
@@ -18,7 +18,7 @@ parcheo, y las dependencias se instalan una vez.
 
 ## 🗺️ Índice
 
-- [Qué es ./the tree](#qué-es-the tree)
+- [Qué es el árbol](#qué-es-el-árbol)
 - [La cadena, por capas](#la-cadena-por-capas)
 - [Dependencias en Windows](#dependencias-en-windows)
 - [Cómo compilar](#cómo-compilar)
@@ -26,12 +26,12 @@ parcheo, y las dependencias se instalan una vez.
 - [El camino retirado: los parches (borrados)](#el-camino-retirado-los-parches-borrados)
 - [Estado de verificación](#estado-de-verificación)
 
-## Qué es `./the tree`
+## Qué es el árbol
 
 El árbol del editor **con los cambios de PiCode ya dentro**. Vino de aquí:
 
 ```text
-  Microsoft VS Code 1.135.0  (commit 08d4889f, el tag y el commit de upstream/stable.json)
+  Microsoft VS Code 1.135.0  (commit 08d4889f, el tag y el commit de host/upstream/stable.json)
         │
         │  el juego de parches heredado   patches/vscodium/**
         │  (verbatim de la revisión de VSCodium fijada en upstream/vscodium.json)
@@ -50,13 +50,13 @@ del dueño, 2026-09-27 — commit `396b3d7`). A partir de ahí:
 - **no se descarga nada**: el árbol ya está;
 - **no se aplica ningún parche**: los cambios son el código;
 - `patches/**`, `upstream/vscodium.json` y el bundle de historial **se borraron** el 2026-09-27:
-  no son entrada del build, y la procedencia que importa es `upstream/stable.json`.
+  no son entrada del build, y la procedencia que importa es `host/upstream/stable.json`.
 
 Lo que trajo ese paso, y conviene no confundir: como la fuente de Microsoft vive ahora **dentro
 de este repositorio**, la prohibición de `CONTRIBUTING.md` subió de nivel — lo que no puede
 hacerse es **empujar este repositorio a un origen público**. Publicarlo es decisión exclusiva
 del dueño. El historial anterior a la importación se guardó en un bundle fuera del repositorio
-(`.scratch/the tree-history.bundle`, 54 MB).
+(`.scratch/picode-source-history.bundle`, 54 MB).
 
 ## La cadena, por capas
 
@@ -65,7 +65,7 @@ primeras no es negociable —así se construyó el árbol— pero **el build ya 
 
 | Capa | Fuente de verdad | Qué aportó | ¿La ejecuta el build? |
 | --- | --- | --- | --- |
-| Fuente | `upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
+| Fuente | `host/upstream/stable.json` | El VS Code exacto del que desciende el árbol. | No (procedencia) |
 | Cambios heredados | *(fueron `patches/vscodium/**`)* | Todo lo que VSCodium ya quita (telemetría, Copilot, cloud, update, firma, onboarding…), hoy **código dentro del árbol**. | No |
 | Cambios propios | *(fueron `patches/picode/**`)* | Los cambios de fuente de PiCode, hoy **código dentro del árbol**. | No |
 | Producto | `product.json` | Marca, galería, URLs, poda de claves, **versión**. Es la **única** fuente de la identidad PiCode. | **Sí** — fase 1, idempotente y **se deshace**: un build de canal lo sella, lo usa para empaquetar y lo devuelve tal cual al terminar |
@@ -92,7 +92,7 @@ Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash
 | Herramienta | Para qué | Instalación |
 | --- | --- | --- |
 | **Git for Windows** | Git **y Git Bash**: sin él no hay shell para los scripts. | `winget install --id Git.Git -e` |
-| **Node.js 24.19.0** (lo que dice [`.nvmrc`](../.nvmrc)) | `npm ci` y las tareas gulp. Con nvm-windows: | `nvm install 24.19.0` y luego `nvm use 24.19.0` |
+| **Node.js 24.20.0** (lo que dice [`.nvmrc`](../.nvmrc)) | `npm ci` y las tareas gulp. Con nvm-windows: | `nvm install 24.20.0` y luego `nvm use 24.20.0` |
 | ~~**jq**~~ | **Ya no hace falta para nada.** El build lee y escribe el JSON que toca con `node`; el último guion que usaba `jq` (`build/utils.sh`) fue borrado el 2026-09-27 junto con el aparato de parches. | — |
 | **Python 3.11** | Lo pide el sistema de build de VS Code para los módulos nativos (`node-gyp`). Medido: con **3.14.7** `node-gyp` llegó hasta MSBuild sin quejarse, así que la versión **no** fue el obstáculo; 3.11 es lo que documenta upstream y lo recomendable. | `winget install --id Python.Python.3.11 -e` |
 | **Rustup** | Compila algunos módulos nativos de VS Code. Reescribe el `PATH` al terminar: reinicia el shell. | [rustup.rs](https://rustup.rs/) o `winget install --id Rustlang.Rustup -e` |
@@ -123,7 +123,7 @@ conviene marcar la opción de instalar las herramientas de compilación C++.
 Comprobación rápida del `PATH`, desde Git Bash:
 
 ```bash
-node --version    # debe casar con .nvmrc (24.19.0)
+node --version    # debe casar con .nvmrc (24.20.0)
 npm --version
 python3 --version # debe ser 3.11.x
 cargo --version
@@ -148,8 +148,8 @@ Medido el 2026-09-23. Se deja dicho para que nadie lo dé por hecho:
   localiza por `vswhere`.
 - **Falta el componente Spectre** (`Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre`).
   Esta es la única dependencia ausente que se ha comprobado, y **fue la que paró la compilación**.
-- **Node es 24.19.0**, no el 24.18.0 que fijaba el `.nvmrc` aquel día (hoy `.nvmrc` también
-  dice 24.19.0). Es la misma línea 24, y VSCodium salta la comprobación con
+- **Node es 24.20.0**, no el 24.18.0 que fijaba el `.nvmrc` aquel día (hoy `.nvmrc` también
+  dice 24.20.0). Es la misma línea 24, y VSCodium salta la comprobación con
   `VSCODE_SKIP_NODE_VERSION_CHECK=yes`.
 - **Python es 3.14.7**, no 3.11. No fue el obstáculo: `node-gyp` invocó MSBuild y el fallo
   llegó de ahí.
@@ -161,7 +161,7 @@ Los dos pines ya **no dirigen el build**: son la procedencia del árbol.
 
 | Pin | Qué registra |
 | --- | --- |
-| [`upstream/stable.json`](../upstream/stable.json) | El commit de **VS Code** del que desciende `./the tree`: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `build/vscodium-product.json` se borraron con el aparato de parches. |
+| [`host/upstream/stable.json`](../host/upstream/stable.json) | El commit de **VS Code** del que desciende el árbol: `tag`, `commit`, `repository`. **Es el único pin que queda**: `upstream/vscodium.json` y `build/vscodium-product.json` se borraron con el aparato de parches. |
 
 El día que toque una versión nueva, el trabajo **no** es reaplicar parches: es **juntar las dos
 versiones**. Este repositorio recibió el árbol como una importación aplastada (sin el historial
@@ -171,7 +171,7 @@ ejecutado todavía**: se lee como un plan, no como una receta comprobada.
 
 1. Levantar un clon de trabajo **con el historial de VS Code**: `git clone
    https://github.com/microsoft/vscode .merge-work` y situarse en el commit que dice
-   `upstream/stable.json`. El bundle superficial que se usó la primera vez **ya no existe** —
+   `host/upstream/stable.json`. El bundle superficial que se usó la primera vez **ya no existe** —
    nunca se versionó; un clon completo cumple la misma función y no depende de esta máquina.
 2. Juntar allí: `git -C .merge-work merge <commit-nuevo>`. Los conflictos salen uno a uno y con
    contexto, en vez de un `git apply` que se para sin decir dónde.
@@ -179,7 +179,7 @@ ejecutado todavía**: se lee como un plan, no como una receta comprobada.
    `node_modules` ni los `out*`) y commitear aquí —el commit de la juntanza es la nueva
    procedencia—. `git status` en el padre es el control: si solo cambió lo que cambió el merge,
    entró limpio.
-4. Actualizar `tag` y `commit` en `upstream/stable.json`, y —si el delta de producto necesita
+4. Actualizar `tag` y `commit` en `host/upstream/stable.json`, y —si el delta de producto necesita
    ajustes para la versión nueva— aplicarlos en `product.json`. No hay
    parches que re-vendorizar: se retiraron el 2026-09-27.
 5. Comprobar que el árbol sigue siendo el que el build espera: `./build/build.sh -o`. Y volver a
@@ -187,7 +187,7 @@ ejecutado todavía**: se lee como un plan, no como una receta comprobada.
 6. Compilar y confirmar que arranca.
 
 `RELEASE_VERSION` sale de `product.json` (`version`), que es la **única**
-casa de la versión desde que las fases 1-5 se retiraron. `upstream/stable.json` ya no la fija.
+casa de la versión desde que las fases 1-5 se retiraron. `host/upstream/stable.json` ya no la fija.
 
 El pin se mueve **a mano**: el vigilante semanal de CI que abría la PR con el pin nuevo se
 eliminó, y [`docs/CI.md`](CI.md) lo explica.
@@ -207,7 +207,7 @@ eliminó, y [`docs/CI.md`](CI.md) lo explica.
   identidad y antes de instalar nada; sale con código 0 y **no compila nada**. En la
   práctica son segundos, y es la forma de saber que el árbol es el correcto antes de pagar un
   build largo.
-- **`-f` no existe**, y a propósito: borraba `./the tree`. Ese árbol es la fuente y el único
+- **`-f` no existe**, y a propósito: borraba el árbol. Ese árbol es la fuente y el único
   sitio donde existe; el flag da error y lo explica.
 - **`-s`** se acepta con un aviso: significaba "reutiliza el árbol en vez de descargarlo", y desde
   el 2026-09-27 eso es lo único que puede pasar.
@@ -219,11 +219,11 @@ no se pueda derivar `windows`, `osx` o `linux` es un error duro.
 
 | Ruta | Qué es |
 | --- | --- |
-| `./the tree` | **La fuente de PiCode.** Se edita, se commitea y vive en **este** repositorio. |
+| El árbol | **La fuente de PiCode.** Se edita, se commitea y vive en **este** repositorio. |
 | `./PiCode-Win32-x64` | La salida del empaquetado (fases 4 y 5). |
 | `./PiCode-Win32-x64/PiCode.exe` | El ejecutable construido desde fuente. |
 
-`./the tree` **se versiona en este repositorio** desde el 2026-09-27; `./PiCode-Win32-*` es
+el árbol **se versiona en este repositorio** desde el 2026-09-27; `./PiCode-Win32-*` es
 salida del empaquetado y sigue ignorado. La fuente de Microsoft vive aquí dentro, así que la
 regla de publicación es la de `CONTRIBUTING.md`: este repositorio no se empuja a un origen
 público sin decisión del dueño.
@@ -301,10 +301,10 @@ aparato: `patches/**` (los propios y los heredados de VSCodium), `build/get_repo
 Lo que merecía la pena guardar de ese camino está en otras manos:
 
 - **Los cambios son la fuente**: el árbol, versionado en este repositorio.
-- **La procedencia es un único pin**: `upstream/stable.json` (commit `08d4889f`, VS Code
+- **La procedencia es un único pin**: `host/upstream/stable.json` (commit `08d4889f`, VS Code
   1.135.0) y el plan para la siguiente versión está más arriba, en *Traer una versión nueva*.
 - La historia completa antes/después del parcheo existe además en el bundle local
-  `.scratch/the tree-history.bundle` (fuera del versionado: respaldo de esta máquina).
+  `.scratch/picode-source-history.bundle` (fuera del versionado: respaldo de esta máquina).
 
 Los placeholders `!!APP_NAME!!` y las reglas de sufijos `.patch.no` / `.patch.yet` murieron con
 la maquinaria: nada los expande ni los aplica. Lo que alguna vez hizo un parche, hoy se escribe
@@ -328,14 +328,14 @@ directamente en el árbol y se commitea.
   arrancando después. El `rimraf` de `out-build/` sigue costando ~3 s: no es palanca, y ahora
   menos.
 
-- El árbol preparado se registró como commit en el git de `./the tree` (`5945775f`, sobre
+- El árbol preparado se registró como commit en el git de el árbol (`5945775f`, sobre
   el commit virgen `08d4889f`). Después de eso `git status` queda **limpio**: las 5.053 rutas
   borradas, las 327 modificadas y las 40 añadidas pasan a ser historial.
 - La comprobación de fuente y de identidad de la fase 1 se ejecutó contra el árbol real y pasa:
   nombre de producto, nombre de compañía en `electron.ts`, icono de Windows que lee el
   empaquetador, manifiesto del servidor y conector, todo presente.
 - `build/build-helpers.mjs deps-current` se ejecutó contra el estado real y respondió que **cuadra** (node
-  24.19.0). Eso es lo que permite que `npm ci` no vuelva a correr.
+  24.20.0). Eso es lo que permite que `npm ci` no vuelva a correr.
 - `bash -n` y el análisis estático de los scripts tocados salen limpios. En esa fecha CI estaba
   apagado; volvió el 2026-09-28 (`.github/workflows/ci.yml` y `release.yml`), y
   [`docs/CI.md`](CI.md) lo documenta.

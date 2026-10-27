@@ -1,6 +1,6 @@
 # src/ — ⬆️ El motor de VS Code (zona upstream)
 
-**Carpeta upstream: aquí no se documenta fichero a fichero.** Son los ~9.400 ficheros del editor de VS Code tal como descienden de `upstream/stable.json` (VS Code `1.135.0`), con los cambios de VSCodium y los nuestros aplicados encima y commiteados.
+**Carpeta upstream: aquí no se documenta fichero a fichero.** Son los ~9.400 ficheros del editor de VS Code tal como descienden de `host/upstream/stable.json` (VS Code `1.135.0`), con los cambios de VSCodium y los nuestros aplicados encima y commiteados.
 
 ## 📌 La regla
 

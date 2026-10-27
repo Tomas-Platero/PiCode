@@ -8,7 +8,7 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [VISION.md](VISION.md) | 🌱 La visión del dueño: qué quiere que PiCode llegue a ser | ES |
 | [DISENO.md](DISENO.md) | 🧱 Cómo se junta todo hoy: capas, núcleo, perfil, reglas de diseño | ES |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 🏗️ El modelo de 4 capas, la capa de agente, el SDK de pi, testing | EN |
-| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–021): qué se decidió, por qué, y qué lo revertiría | EN |
+| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–033): qué se decidió, por qué, y qué lo revertiría | EN |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
 | [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |

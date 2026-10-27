@@ -116,6 +116,6 @@ La **vía manual** de la skill `picode-release` sigue válida como reserva
 
 ## 📌 El pin, sin vigilancia automática
 
-El pin de VS Code (`upstream/stable.json`) se mueve a mano (los pasos en
+El pin de VS Code (`host/upstream/stable.json`) se mueve a mano (los pasos en
 [`howto-build.md`](howto-build.md)). El workflow que lo vigilaba
 (`pin-watch.yml`) sigue eliminado; su lógica estaba en el historial de git.

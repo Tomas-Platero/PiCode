@@ -3,12 +3,12 @@
 The static documents the editor's updater reads. They are served from this directory by
 `raw.githubusercontent.com`; the editor reaches them through PiCode's own API, which counts the
 check anonymously and redirects here (see *Anonymous usage* in
-[`cloud/sync-api/README.md`](../cloud/sync-api/README.md)). The documents themselves only live here.
+[`cloud/sync-api/README.md`](../host/cloud/sync-api/README.md)). The documents themselves only live here.
 
 ## 🧭 Why it lives here and not in GitHub Releases
 
 With the updater change baked into the source tree (VSCodium's
-`11-update-use-github-release`, now ordinary code in `the tree`), the updater asks for
+`11-update-use-github-release`, now ordinary code in the tree), the updater asks for
 
 ```text
 <updateUrl>/<quality>/<platform>/<architecture>[/<target>]/latest.json

@@ -2,7 +2,7 @@
 
 **La pieza que hace que el chat exista.** Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP, gestiona paquetes, lista y continúa las conversaciones de pi y pinta el panel de estado.
 
-> Regla de producto: PiCode **no tiene extensión propia instalable**. Este conector es código del núcleo: viaja dentro del árbol (`the tree`), se empaqueta con el editor y no se instala de ningún sitio. La capa de superficie vive en el chat y en la barra de actividad, no en una ventana aparte.
+> Regla de producto: PiCode **no tiene extensión propia instalable**. Este conector es código del núcleo: viaja dentro del árbol (el árbol), se empaqueta con el editor y no se instala de ningún sitio. La capa de superficie vive en el chat y en la barra de actividad, no en una ventana aparte.
 
 ## 🗂️ Dentro
 
