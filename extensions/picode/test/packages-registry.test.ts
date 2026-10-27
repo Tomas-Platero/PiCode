@@ -94,7 +94,7 @@ function catalogPayload(...objects: ReadonlyArray<{ name?: string; downloads: nu
  * ------------------------------------------------------------------ */
 
 test('an empty query searches the keyword alone, fully encoded', () => {
-	assert.strictEqual(catalogSearchUrl(''), 'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package&size=50');
+	assert.strictEqual(catalogSearchUrl(''), 'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package&size=250');
 	// Whitespace is not a query: the keyword alone is what both answer.
 	assert.strictEqual(catalogSearchUrl('   '), catalogSearchUrl(''));
 });
@@ -102,12 +102,12 @@ test('an empty query searches the keyword alone, fully encoded', () => {
 test("the owner's query is appended after the keyword and encoded once", () => {
 	assert.strictEqual(
 		catalogSearchUrl('react hooks'),
-		'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package%20react%20hooks&size=50',
+		'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package%20react%20hooks&size=250',
 	);
 	// Characters npm would otherwise read as syntax travel encoded inside `text`.
 	assert.strictEqual(
 		catalogSearchUrl('a&b=c'),
-		'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package%20a%26b%3Dc&size=50',
+		'https://registry.npmjs.org/-/v1/search?text=keywords%3Api-package%20a%26b%3Dc&size=250',
 	);
 });
 

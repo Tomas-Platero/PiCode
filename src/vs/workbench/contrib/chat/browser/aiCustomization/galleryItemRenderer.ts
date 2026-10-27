@@ -28,6 +28,8 @@ export interface IGalleryItemProvider<TElement> {
 	getLabel(element: TElement): string;
 	getPublisherDisplayName(element: TElement): string | undefined;
 	getDescription(element: TElement): string | undefined;
+	/** A preview picture for the row; rows without one get the plain tile. Lists that have no pictures omit this. */
+	getImage?(element: TElement): string | undefined;
 	getInstallState(element: TElement): GalleryItemInstallState;
 	canInstall?(element: TElement): boolean;
 	install(element: TElement): Promise<void>;
@@ -35,6 +37,7 @@ export interface IGalleryItemProvider<TElement> {
 }
 
 interface IGalleryItemTemplateData {
+	readonly thumb: HTMLElement;
 	readonly name: HTMLElement;
 	readonly publisher: HTMLElement;
 	readonly description: HTMLElement;
@@ -57,6 +60,7 @@ export class GalleryItemRenderer<TElement> implements IListRenderer<TElement, IG
 
 	renderTemplate(container: HTMLElement): IGalleryItemTemplateData {
 		container.classList.add('gallery-item');
+		const thumb = DOM.append(container, $('.gallery-item-thumb'));
 		const details = DOM.append(container, $('.gallery-item-details'));
 		const name = DOM.append(details, $('span.gallery-item-name'));
 		const description = DOM.append(details, $('span.gallery-item-description'));
@@ -67,11 +71,22 @@ export class GalleryItemRenderer<TElement> implements IListRenderer<TElement, IG
 		const templateDisposables = new DisposableStore();
 		templateDisposables.add(installButton);
 
-		return { name, publisher, description, installButton, elementDisposables: new DisposableStore(), templateDisposables };
+		return { thumb, name, publisher, description, installButton, elementDisposables: new DisposableStore(), templateDisposables };
 	}
 
 	renderElement(element: TElement, _index: number, templateData: IGalleryItemTemplateData): void {
 		templateData.elementDisposables.clear();
+
+		// Lists without previews never show the tile at all.
+		DOM.clearNode(templateData.thumb);
+		templateData.thumb.style.display = this._provider.getImage ? '' : 'none';
+		const image = this._provider.getImage?.(element);
+		if (image) {
+			const picture = DOM.append(templateData.thumb, $('img')) as HTMLImageElement;
+			picture.alt = '';
+			picture.src = image;
+			templateData.elementDisposables.add(DOM.addDisposableListener(picture, DOM.EventType.ERROR, () => picture.remove()));
+		}
 
 		templateData.name.textContent = this._provider.getLabel(element);
 		const publisher = this._provider.getPublisherDisplayName(element);

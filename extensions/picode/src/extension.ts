@@ -18,7 +18,7 @@ import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, storedDiscove
 import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
-import { installPackage, searchPackages } from './packages-registry';
+import { installPackage, packagePreviews, searchPackages } from './packages-registry';
 import { checkPackageUpdates, clearPackageUpdateCache, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
 import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
 import {
@@ -625,6 +625,9 @@ export const PACKAGES_COMMAND = 'picode.setup.packages';
  */
 export const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
 
+/** The previews of the catalog rows on screen, by package name. A **contract** with the browse list. */
+export const PACKAGES_PREVIEWS_COMMAND = 'picode.packages.previews';
+
 /**
  * The Packages section's install: pi's own installer, run into the profile in force. A
  * **contract** like the search: the page hands the target the owner chose (an npm name or a
@@ -1160,6 +1163,8 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// is the directory pi installs into.
 	disposables.push(vscode.commands.registerCommand(PACKAGES_SEARCH_COMMAND, async (query?: string) =>
 		searchPackages(typeof query === 'string' ? query : '', { log: report })));
+	disposables.push(vscode.commands.registerCommand(PACKAGES_PREVIEWS_COMMAND, async (names?: unknown) =>
+		packagePreviews(Array.isArray(names) ? names.filter((name): name is string => typeof name === 'string') : [], { log: report })));
 	disposables.push(vscode.commands.registerCommand(PACKAGES_INSTALL_COMMAND, async (target?: string) => {
 		const refusal = externalProfileRefusal();
 		if (refusal !== undefined) {
