@@ -52,8 +52,8 @@ const SEARCH_URL = 'https://registry.npmjs.org/-/v1/search';
 /** The keyword pi packages are tagged with; the query the owner types is added after it. */
 const SEARCH_KEYWORD = 'keywords:pi-package';
 
-/** One page of results is all the page shows; npm's default of 25 is smaller than the list needs. */
-const SEARCH_SIZE = 50;
+/** The most npm returns in one answer; the page shows it in pages of its own. */
+const SEARCH_SIZE = 250;
 
 /** A catalog that never answers must not hold the page open: the request is cut at eight seconds. */
 const SEARCH_TIMEOUT_MS = 8_000;
@@ -176,6 +176,50 @@ export async function searchPackages(query: string, deps: SearchDependencies = {
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+/** The previews npm's search does not carry, per package name; `null` is "asked, has none". */
+const previewCache = new Map<string, string | null>();
+
+/**
+ * The preview each package declares for pi's gallery (`pi.image`), for the names asked.
+ *
+ * npm's search payload leaves the manifest's `pi` field out, so each name's latest manifest is
+ * asked once (and remembered). Only web addresses count, and every failure just leaves that
+ * package without a preview: the row falls back to its plain tile.
+ */
+export async function packagePreviews(names: readonly string[], deps: SearchDependencies = {}): Promise<Record<string, string>> {
+	const previews: Record<string, string> = {};
+	const fetchFn: FetchFn = deps.fetchFn ?? ((url_, init_) => fetch(url_, init_));
+	await Promise.all(names.slice(0, 60).map(async name => {
+		const known = previewCache.get(name);
+		if (known !== undefined) {
+			if (known !== null) {
+				previews[name] = known;
+			}
+			return;
+		}
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+		try {
+			const response = await fetchFn(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`, { signal: controller.signal });
+			if (!response.ok) {
+				return;
+			}
+			const manifest = await response.json() as { pi?: { image?: unknown } } | null;
+			const image = manifest?.pi?.image;
+			const usable = typeof image === 'string' && /^https:\/\//i.test(image) ? image : null;
+			previewCache.set(name, usable);
+			if (usable !== null) {
+				previews[name] = usable;
+			}
+		} catch (error) {
+			deps.log?.(`packages: the preview of ${name} could not be read (${error instanceof Error ? error.message : String(error)})`);
+		} finally {
+			clearTimeout(timer);
+		}
+	}));
+	return previews;
 }
 
 /* ------------------------------------------------------------------ *

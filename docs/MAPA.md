@@ -378,6 +378,7 @@
 │   │   │   ├── child-trace.ts
 │   │   │   ├── command-registry.ts
 │   │   │   ├── commands.ts
+│   │   │   ├── compare-models.ts
 │   │   │   ├── context.ts
 │   │   │   ├── customizations.ts
 │   │   │   ├── declarations.ts
@@ -453,7 +454,7 @@
 │   │   │   ├── usage-data.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 85 files in total
+│   │   │   └── … 86 files in total
 │   │   ├── test/
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
@@ -462,6 +463,7 @@
 │   │   │   ├── chat-edits.test.ts
 │   │   │   ├── child-trace.test.ts
 │   │   │   ├── command-registry.test.ts
+│   │   │   ├── compare-models.test.ts
 │   │   │   ├── context.test.ts
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
@@ -516,7 +518,7 @@
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 61 files in total
+│   │   │   └── … 62 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json

@@ -68,6 +68,10 @@ interface IPackageInstallResult {
 }
 
 const PACKAGES_SEARCH_COMMAND = 'picode.packages.search';
+const PACKAGES_PREVIEWS_COMMAND = 'picode.packages.previews';
+
+/** How many catalog rows one page of the browse list shows. */
+const MARKETPLACE_PAGE_SIZE = 20;
 const PACKAGES_INSTALL_COMMAND = 'picode.packages.install';
 
 /** The listing command: what is installed, each row carrying its source, state and scope. */
@@ -551,6 +555,7 @@ class PluginMarketplaceItemProvider implements IGalleryItemProvider<IPluginMarke
 		private readonly commandService: ICommandService,
 		private readonly dialogService: IDialogService,
 		private readonly onPackageInstalled: () => void,
+		private readonly previews: ReadonlyMap<string, string>,
 	) { }
 
 	getLabel(element: IPluginMarketplaceItemEntry): string {
@@ -563,6 +568,10 @@ class PluginMarketplaceItemProvider implements IGalleryItemProvider<IPluginMarke
 
 	getDescription(element: IPluginMarketplaceItemEntry): string | undefined {
 		return element.item.description;
+	}
+
+	getImage(element: IPluginMarketplaceItemEntry): string | undefined {
+		return this.previews.get(element.item.name);
 	}
 
 	getInstallState(element: IPluginMarketplaceItemEntry): GalleryItemInstallState {
@@ -731,6 +740,14 @@ export class PluginListWidget extends Disposable {
 	private packageUpdateStatusesJson = '';
 	private displayEntries: IPluginListEntry[] = [];
 	private marketplaceItems: IMarketplacePluginItem[] = [];
+	private marketplacePage = 0;
+	private readonly previewsAsked = new Set<string>();
+	/** The previews of the catalog rows, by package name — filled page by page as the owner browses. */
+	private readonly marketplacePreviews = new Map<string, string>();
+	private pagerContainer!: HTMLElement;
+	private pagerPrevious!: Button;
+	private pagerNext!: Button;
+	private pagerLabel!: HTMLElement;
 	private searchQuery: string = '';
 	private browseMode: boolean = false;
 	private lastHeight: number = 0;
@@ -913,6 +930,20 @@ export class PluginListWidget extends Disposable {
 
 		this.listContainer = DOM.append(this.element, $('.mcp-list-container'));
 
+		// Pager under the browse list: previous, "1–20 of 143", next. Hidden outside browse mode
+		// and whenever everything fits one page.
+		this.pagerContainer = DOM.append(this.element, $('.pi-packages-pager'));
+		this.pagerContainer.style.display = 'none';
+		const previousLabel = localize('packagesPreviousPage', "Previous page");
+		this.pagerPrevious = this._register(new Button(this.pagerContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: previousLabel, ariaLabel: previousLabel }));
+		this.pagerPrevious.label = `$(${Codicon.chevronLeft.id})`;
+		this.pagerLabel = DOM.append(this.pagerContainer, $('span.pi-packages-pager-label'));
+		const nextLabel = localize('packagesNextPage', "Next page");
+		this.pagerNext = this._register(new Button(this.pagerContainer, { ...defaultButtonStyles, secondary: true, supportIcons: true, title: nextLabel, ariaLabel: nextLabel }));
+		this.pagerNext.label = `$(${Codicon.chevronRight.id})`;
+		this._register(this.pagerPrevious.onDidClick(() => this.goToMarketplacePage(this.marketplacePage - 1)));
+		this._register(this.pagerNext.onDidClick(() => this.goToMarketplacePage(this.marketplacePage + 1)));
+
 		// Section footer (removed — see section-title-header at top)
 
 		// Create list
@@ -933,6 +964,7 @@ export class PluginListWidget extends Disposable {
 			this.commandService,
 			this.dialogService,
 			() => this.exitBrowseMode(),
+			this.marketplacePreviews,
 		));
 
 		this.list = this._register(this.instantiationService.createInstance(
@@ -1457,8 +1489,54 @@ export class PluginListWidget extends Disposable {
 			this.listContainer.style.display = '';
 		}
 
-		const entries: IPluginListEntry[] = this.marketplaceItems.map(item => ({ type: 'marketplace-item' as const, item }));
+		const pageCount = Math.max(1, Math.ceil(this.marketplaceItems.length / MARKETPLACE_PAGE_SIZE));
+		this.marketplacePage = Math.min(this.marketplacePage, pageCount - 1);
+		const start = this.marketplacePage * MARKETPLACE_PAGE_SIZE;
+		const pageItems = this.marketplaceItems.slice(start, start + MARKETPLACE_PAGE_SIZE);
+		const entries: IPluginListEntry[] = pageItems.map(item => ({ type: 'marketplace-item' as const, item }));
 		this.list.splice(0, this.list.length, entries);
+		this.list.scrollTop = 0;
+		void this.loadPagePreviews(pageItems);
+
+		this.pagerContainer.style.display = pageCount > 1 ? '' : 'none';
+		this.pagerPrevious.enabled = this.marketplacePage > 0;
+		this.pagerNext.enabled = this.marketplacePage < pageCount - 1;
+		this.pagerLabel.textContent = localize('packagesPagerLabel', "{0}–{1} of {2}", start + 1, start + pageItems.length, this.marketplaceItems.length);
+
+		// The list is measured from its container, which was hidden while the catalog loaded:
+		// without a new layout it keeps the zero height it was given then and shows nothing.
+		if (this.marketplaceItems.length > 0 && this.lastHeight > 0) {
+			this.layout(this.lastHeight, this.lastWidth);
+		}
+	}
+
+	/** Asks for the previews of the page on screen that are not known yet, then repaints the rows. */
+	private async loadPagePreviews(pageItems: readonly IMarketplacePluginItem[]): Promise<void> {
+		const missing = pageItems.map(item => item.name).filter(name => !this.marketplacePreviews.has(name) && !this.previewsAsked.has(name));
+		if (missing.length === 0) {
+			return;
+		}
+		for (const name of missing) {
+			this.previewsAsked.add(name);
+		}
+		try {
+			const found = await this.commandService.executeCommand<Record<string, string>>(PACKAGES_PREVIEWS_COMMAND, missing) ?? {};
+			let changed = false;
+			for (const [name, image] of Object.entries(found)) {
+				this.marketplacePreviews.set(name, image);
+				changed = true;
+			}
+			if (changed && this.browseMode) {
+				this.list.rerender();
+			}
+		} catch {
+			// The rows keep their plain tile.
+		}
+	}
+
+	private goToMarketplacePage(page: number): void {
+		this.marketplacePage = Math.max(0, page);
+		this.updateMarketplaceList();
 	}
 
 	private async getRemotePluginItems(query: string): Promise<readonly ICustomizationItem[]> {

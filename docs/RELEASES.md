@@ -132,6 +132,14 @@ El mismo movimiento, un escalón más arriba:
 3. PR contra `master`, merge, tag `v0.3.0`.
 4. Mensaje recomendado: `merge: stable takes the beta work as v0.3.0`.
 
+## 🩹 Cómo le llega a cada persona
+
+Cada release es una versión completa; además, si no toca el motor, las dependencias, pi ni la identidad del
+producto, el pipeline publica un **zip pequeño** con solo lo que cambió respecto a la release anterior del
+canal, lo prueba (build vieja + zip = build nueva) y lo anuncia en el feed junto a la etiqueta **Hotfix**,
+**Minor update** o **Release**. Quien está en la versión anterior (portable) baja el pequeño; los demás, el
+completo. Todo el detalle, en [`HOTFIX.md`](HOTFIX.md).
+
 ## 🛡️ Lo que el pipeline vigila solo
 
 | Guardia | Si falla |
@@ -141,6 +149,7 @@ El mismo movimiento, un escalón más arriba:
 | `version` es más nueva que la del feed del canal | Se para: sube `version` |
 | El generador del feed acepta la versión (nunca `--force`) | Se para |
 | El feed queda en vivo en la rama del canal | Se reintenta 10 veces; si no, falla el run |
+| El zip pequeño: firmado, equivalente a la build nueva | No se publica; la release sale entera |
 
 Y además, en cada release:
 
