@@ -80,6 +80,14 @@ Grab the latest release from [GitHub Releases](https://github.com/Tomas-Platero/
 
 Three channels share the same code, each on its own branch of this repo: **stable** (recommended, no suffix), **beta** (`-beta`, early access to what is coming) and **experimental** (`-experimental`, built from the freshest work). Each has its own update feed, so switching channels is switching branches — [choose a channel](https://www.getpicode.app/#download).
 
+### 🔏 Code signing policy
+
+Windows builds are signed with a free certificate: *Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).*
+
+- **Only official builds are signed.** Every release is built from this repository by GitHub Actions and signed from that same run; nothing built on a personal machine is signed.
+- **Team roles.** [Tomás Platero](https://github.com/Tomas-Platero) is the author, reviewer and approver of every signing request.
+- **Privacy.** PiCode only talks to other systems when asked: it checks `getpicode.app` for updates, signs in to your PiCode Account, syncs your settings if you have Pro, and sends prompts to the AI providers you configure. Nothing else leaves your computer. See the [privacy policy](https://www.getpicode.app/legal/privacy).
+
 <a id="building-from-source"></a>
 
 ## 🛠️ Building from source
