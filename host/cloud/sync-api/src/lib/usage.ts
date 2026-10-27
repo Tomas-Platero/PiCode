@@ -12,7 +12,8 @@
 export const FEED_BRANCHES = ["HEAD", "master", "beta", "experimental"] as const;
 export type FeedBranch = (typeof FEED_BRANCHES)[number];
 
-const QUALITIES = new Set(["stable", "insider"]);
+// One per release channel (ADR-015); `insider` is upstream's and stays for old clients.
+const QUALITIES = new Set(["stable", "beta", "experimental", "insider"]);
 const PLATFORMS = new Set(["win32", "linux", "darwin"]);
 const ARCHITECTURES = /^[a-z0-9]{2,12}$/;
 const TARGETS = /^[a-z0-9-]{2,16}$/;
