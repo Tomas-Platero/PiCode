@@ -37,7 +37,7 @@ export function registerAgentModelsStateCommands(profileDir: string, onSaved: ()
 export interface AgentModelsDeps {
 	readonly profileDir: string;
 	/** The models the editor can reach, as `provider/model` references. */
-	readonly listModels: () => Promise<{ models: ReadonlyArray<{ ref: string; model: string }> }>;
+	readonly listModels: () => Promise<{ models: ReadonlyArray<{ ref: string; model: string; levels?: readonly ThinkingLevel[] }> }>;
 	/** Called after a change is saved: the chat's session starts again so the agents pick it up. */
 	readonly onSaved: () => void;
 }
@@ -73,15 +73,19 @@ export async function chooseAgentModels(deps: AgentModelsDeps): Promise<string |
 		if (target === undefined) {
 			break;
 		}
-		const model = await pickModel(deps, target.value === ALL_AGENTS ? 'all agents' : target.value);
-		if (model === undefined) {
+		const picked = await pickModel(deps, target.value === ALL_AGENTS ? 'all agents' : target.value);
+		if (picked === undefined) {
 			continue;
 		}
+		const model = picked.model;
 		let thinking: ThinkingLevel | undefined;
-		if (model !== '') {
+		// Only the effort levels the model supports are offered. A model that cannot think has nothing to
+		// choose; one the catalogue does not describe keeps every level.
+		const offered = picked.levels === undefined ? THINKING_LEVELS : picked.levels;
+		if (model !== '' && offered.length > 1) {
 			const level = await vscode.window.showQuickPick<Item<ThinkingLevel | ''>>([
 				{ label: 'Default', description: 'No effort setting', value: '' },
-				...THINKING_LEVELS.map(value => ({ label: value, value })),
+				...offered.map(value => ({ label: value, value })),
 			], { title: 'Models for agents', placeHolder: 'How much should it think?', ignoreFocusOut: true });
 			if (level === undefined) {
 				continue;
@@ -98,8 +102,8 @@ export async function chooseAgentModels(deps: AgentModelsDeps): Promise<string |
 		: `Saved. The agents use this from your next message.\n\n${changes.map(line => `- ${line}`).join('\n')}`;
 }
 
-/** The model for one round: a `provider/model` reference, an empty string for "same as the rest", or `undefined` when cancelled. */
-async function pickModel(deps: AgentModelsDeps, who: string): Promise<string | undefined> {
+/** The model for one round: a `provider/model` reference (empty for "same as the rest") with the effort levels it supports when known, or `undefined` when cancelled. */
+async function pickModel(deps: AgentModelsDeps, who: string): Promise<{ model: string; levels?: readonly ThinkingLevel[] } | undefined> {
 	const listed = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Looking for models…' }, () => deps.listModels().catch(() => ({ models: [] })));
 	const picked = await vscode.window.showQuickPick<Item<string>>([
 		{ label: `$(circle-slash) ${SAME_MODEL}`, description: 'No model of its own', value: '' },
@@ -112,7 +116,8 @@ async function pickModel(deps: AgentModelsDeps, who: string): Promise<string | u
 		return undefined;
 	}
 	if (picked.value !== '?') {
-		return picked.value;
+		const levels = listed.models.find(model => model.ref === picked.value)?.levels;
+		return { model: picked.value, ...(levels === undefined ? {} : { levels }) };
 	}
 	const typed = await vscode.window.showInputBox({
 		title: 'Models for agents',
@@ -121,5 +126,10 @@ async function pickModel(deps: AgentModelsDeps, who: string): Promise<string | u
 		ignoreFocusOut: true,
 		validateInput: value => modelRefOf(value) === undefined ? 'Write it as provider/model, without spaces.' : undefined,
 	});
-	return typed === undefined ? undefined : modelRefOf(typed);
+	const ref = typed === undefined ? undefined : modelRefOf(typed);
+	if (ref === undefined) {
+		return undefined;
+	}
+	const levels = listed.models.find(model => model.ref === ref)?.levels;
+	return { model: ref, ...(levels === undefined ? {} : { levels }) };
 }
