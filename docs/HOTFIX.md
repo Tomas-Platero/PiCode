@@ -100,6 +100,15 @@ que la gente la descargue entera. Para ver un cambio mientras se trabaja sigue v
 > barras `sha256sum` antepone una `\` al hash y `require()` pierde la unidad. Ahora el trabajo va en una carpeta
 > relativa del repositorio y el hash se lee por la entrada estándar. Comprobado en un runner de verdad, de punta a
 > punta (zip pequeño firmado, ficheros idénticos). Un fallo así sale ahora como aviso (`::warning::`), no como nota.
+>
+> 🧱 **Y el ruido de compilación (2026-10-28):** con el hash ya bien, 0.5.4 seguía saliendo entera porque cada build
+> cambia bytes de los binarios sin cambiar lo que hacen: la hora de enlazado y el GUID de depuración de cada `.exe`/`.node`,
+> el número de versión que se estampa en todos, el commit y la versión del lanzador `bin/picode`, y el orden de los
+> ficheros dentro de `node_modules.asar`. `build/hotfix.mjs` ahora reconoce esas diferencias (y solo esas) y **deja la
+> copia que ya tiene la persona**; el zip no los lleva. El CLI (`bin/*-cli*`) se recompila con identificadores nuevos en
+> cada build: se conserva solo si `cli/` no cambió entre las dos releases. `check` vuelve a probar cada fichero conservado.
+> Medido con las builds reales 0.5.3 → 0.5.4: 28 binarios conservados, 15 ficheros en el zip (~48 MB sin comprimir frente
+> a 275 MB). Las pruebas de `build/hotfix.test.mjs` corren ahora dentro del paso; si fallan, no hay zip pequeño.
 
 ## 🔑 La clave de firma
 
