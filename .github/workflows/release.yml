@@ -43,7 +43,7 @@ jobs:
   release:
     runs-on: windows-latest
     # A cold Rust CLI build (OpenSSL included) is ~13 minutes on top of the rest.
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       # fetch-depth 0 because the feed branch is rebuilt from the channel
       # branch below (and the pull request merge walks that history);
