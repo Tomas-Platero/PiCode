@@ -1,14 +1,9 @@
 {
-  "version": "62797e676c5087e515623a3dd764328cad4cb1d5",
-  "productVersion": "1.142.9",
-  "picodeVersion": "0.5.5-beta",
-  "kind": "hotfix",
-  "timestamp": 1793189067768,
-  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.5.5-beta/PiCode-win32-x64-0.5.5-beta.zip",
-  "sha256hash": "653edd285c5840c8be57c4d22c28d9ae4647b316fbfee3603a15ac9e4efca415",
-  "delta": {
-    "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.5.5-beta/PiCode-win32-x64-0.5.5-beta-update-from-0.5.4-beta.zip",
-    "sha256hash": "fc7c0ee457b73aa33e0a688159a0e54b0b700601b058ce416fb17dfe7ef52981",
-    "from": "0.5.4-beta"
-  }
+  "version": "82d0b69238878fc13ac0906d867dece73c44f2a4",
+  "productVersion": "1.142.10",
+  "picodeVersion": "0.5.6-beta",
+  "kind": "release",
+  "timestamp": 1793191269330,
+  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v0.5.6-beta/PiCode-win32-x64-0.5.6-beta.zip",
+  "sha256hash": "7f59d3ba3db29aa1114e15d1fa36605a33710e2f19f9d2673c31a319e586f8c6"
 }
