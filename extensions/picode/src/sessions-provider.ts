@@ -186,7 +186,9 @@ export function sessionTurns(text: string): PiSessionTurn[] {
 		}
 		const role = message['role'];
 		if (role === 'user') {
-			const text = textOfContent(message['content']);
+			// What the owner wrote, not the frame the editor sent in front of it: a reopened chat
+			// replays these as his messages, and its title comes from the first one.
+			const text = ownerPrompt(textOfContent(message['content']));
 			if (text.length > 0) {
 				// The stamp rides only when the entry carries one: a turn without a date is
 				// honest undefined, never a key that pretends to hold a number.
