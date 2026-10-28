@@ -353,10 +353,13 @@ jobs:
             skip "product.json carries no public key"
           elif [ -z "${PREV_URL}" ]; then
             skip "this channel has no previous release"
+          elif ! node --test build/hotfix.test.mjs > "${RUNNER_TEMP}/hotfix-tests.log" 2>&1; then
+            cat "${RUNNER_TEMP}/hotfix-tests.log"
+            echo "::warning::no small update: the small-update tests failed"
           else
             ZIP7=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
-            # Inside the workspace and relative: RUNNER_TEMP is a D:a_temp path, and the
-            # backslashes made sha256sum print "<hash>" and node's require() lose the drive.
+            # Inside the workspace and relative: RUNNER_TEMP is a backslash path (D:\a\_temp),
+            # which made sha256sum prefix the hash with "\" and node's require() lose the drive.
             WORK="delta-work"
             rm -rf "${WORK}" && mkdir -p "${WORK}"
             KEY_FILE="${WORK}/signing-key.pem"
@@ -377,10 +380,17 @@ jobs:
               else
                 MAKE_KIND="${KIND}"
               fi
+              # The CLI is compiled again each build and carries per-build ids, so its bytes
+              # always differ; when its sources did not change, the person keeps their copy.
+              REBUILT_UNCHANGED=""
+              if [ -n "${PREV_SHA}" ] && git diff --quiet "${PREV_SHA}" "${GITHUB_SHA}" -- cli/; then
+                REBUILT_UNCHANGED=$(cd "${PACK}" && ls bin 2>/dev/null | grep -E -- '-cli(\.exe)?$' | sed 's#^#bin/#' | paste -sd, - || true)
+              fi
               set +e
               node build/hotfix.mjs make --old "${WORK}/previous" --new "${PACK}" \
                 --out "${WORK}/delta" --from "${PREV_PICODE}" --to "${PICODE_VERSION}" \
-                --kind "${MAKE_KIND}" --key "${KEY_FILE}"
+                --kind "${MAKE_KIND}" --key "${KEY_FILE}" \
+                ${REBUILT_UNCHANGED:+--rebuilt-unchanged "${REBUILT_UNCHANGED}"}
               MADE=$?
               set -e
               if [ "${MADE}" -eq 3 ]; then
@@ -390,7 +400,8 @@ jobs:
                 echo "::warning::the small update could not be made; this release ships whole"
                 KIND=release
               elif ! node build/hotfix.mjs check --old "${WORK}/previous" --new "${PACK}" \
-                     --delta "${WORK}/delta" --public-key "${PUBLIC_KEY}"; then
+                     --delta "${WORK}/delta" --public-key "${PUBLIC_KEY}" \
+                     ${REBUILT_UNCHANGED:+--rebuilt-unchanged "${REBUILT_UNCHANGED}"}; then
                 echo "::warning::old build + small update is NOT the new build; this release ships whole"
                 KIND=release
               else
