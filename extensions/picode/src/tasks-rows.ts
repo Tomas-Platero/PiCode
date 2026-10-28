@@ -12,8 +12,9 @@
  *
  * Two rules decide the shape:
  *
- *  * **A job is running by definition.** The tracker only holds jobs whose completion has not
- *    arrived, so every job row leads; a finished job's report is already in the conversation.
+ *  * **An open job is running by definition.** The tracker's open jobs are the ones whose completion
+ *    has not arrived, so they lead; a job that just ended is listed among the finished, with its
+ *    time, and its report is already in the conversation.
  *  * **An agent says its own state.** A queued, running or waiting agent is out; a finished one
  *    is listed apart, newest first and capped, so its outcome is not lost the moment it ends.
  *
@@ -25,7 +26,7 @@ import type { BackgroundJobStatus } from './status-contract';
 
 /** One row of the Tasks block: a background job, or a subagent. */
 export type TaskRow =
-	| { readonly kind: 'job'; readonly job: BackgroundJobStatus }
+	| { readonly kind: 'job'; readonly job: BackgroundJobStatus & { readonly endedAt?: number } }
 	| { readonly kind: 'agent'; readonly agent: AgentTaskRow };
 
 /**
@@ -48,8 +49,8 @@ export interface TaskBoard {
 	readonly total: number;
 }
 
-/** Builds the board from the chat's running jobs and the subagents' last published state. */
-export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly AgentTaskRow[] = []): TaskBoard {
+/** Builds the board from the chat's running jobs, the subagents' last published state and the jobs that just ended. */
+export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly AgentTaskRow[] = [], endedJobs: ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }> = []): TaskBoard {
 	const running: TaskRow[] = jobs.map(job => ({ kind: 'job', job }));
 	const finished: TaskRow[] = [];
 	for (const agent of agents) {
@@ -58,6 +59,12 @@ export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly
 		} else {
 			finished.push({ kind: 'agent', agent });
 		}
+	}
+	// Ended jobs sit among the finished agents, newest first; without any, the agents keep the order they came in.
+	if (endedJobs.length > 0) {
+		finished.push(...endedJobs.map((job): TaskRow => ({ kind: 'job', job })));
+		const endedAt = (row: TaskRow): number => (row.kind === 'job' ? row.job.endedAt : row.agent.endedAt) ?? 0;
+		finished.sort((a, b) => endedAt(b) - endedAt(a));
 	}
 	const shown = finished.slice(0, FINISHED_AGENTS_SHOWN);
 	return { running, finished: shown, total: running.length + shown.length };
@@ -74,7 +81,7 @@ export function taskTitle(row: TaskRow): string {
 /** What the row is doing, in one word that is true. */
 export function taskState(row: TaskRow): string {
 	if (row.kind === 'job') {
-		return 'running';
+		return row.job.endedAt === undefined ? 'running' : 'done';
 	}
 	switch (row.agent.status) {
 		case 'queued': return 'queued';
@@ -93,7 +100,7 @@ export function taskState(row: TaskRow): string {
  */
 export function taskDetail(row: TaskRow, now: number): string {
 	if (row.kind === 'job') {
-		return `${taskState(row)} · ${elapsedLabel(row.job.startedAt, now)}`;
+		return `${taskState(row)} · ${elapsedLabel(row.job.startedAt, row.job.endedAt ?? now)}`;
 	}
 	const { agent } = row;
 	const parts = [taskState(row)];

@@ -43,6 +43,8 @@ type TasksNode =
 /** Where the block reads from. The jobs are the chat's own tracker, not a copy of it. */
 export interface TasksViewDeps {
 	readonly runningJobs: () => readonly BackgroundJobStatus[];
+	/** The jobs that ended most recently, newest first. */
+	readonly finishedJobs?: () => ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }>;
 	/** The subagents gentle-pi last published. */
 	readonly agents?: () => readonly AgentTaskRow[];
 	/** Calls the listener when the agents change; returns how to stop. */
@@ -83,7 +85,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 
 	/** Reads the board from the tracker and from what gentle-pi published. */
 	refresh(): void {
-		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? []);
+		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? [], this.deps.finishedJobs?.() ?? []);
 		this.changed.fire();
 	}
 
@@ -214,7 +216,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	private details(row: TaskRow): TasksNode[] {
 		if (row.kind === 'job') {
 			const facts: TasksNode[] = [
-				{ kind: 'fact', label: 'Running for', detail: elapsedLabel(row.job.startedAt, this.now()), icon: 'watch' },
+				{ kind: 'fact', label: row.job.endedAt === undefined ? 'Running for' : 'Ran for', detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? this.now()), icon: 'watch' },
 			];
 			if (row.job.command !== undefined) {
 				facts.push({ kind: 'fact', label: 'Command', detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });

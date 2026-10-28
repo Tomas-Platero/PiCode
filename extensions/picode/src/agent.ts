@@ -30,7 +30,7 @@ import {
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
-import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
+import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
 import {
 	beforeUriPathOf,
 	clearTurnEdits,
@@ -1335,6 +1335,11 @@ export function cancelQueuedTurns(): number {
  */
 export function runningBackgroundJobs(): ReturnType<typeof backgroundJobRows> {
 	return backgroundJobRows(backgroundJobs.list(), Date.now());
+}
+
+/** The background jobs that ended most recently, newest first: the Tasks block lists them as done. */
+export function finishedBackgroundJobs(): ReturnType<typeof finishedJobRows> {
+	return finishedJobRows(backgroundJobs.finished());
 }
 
 /**
