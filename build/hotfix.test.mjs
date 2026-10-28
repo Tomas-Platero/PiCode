@@ -166,6 +166,82 @@ describe('making and applying a package', () => {
 	}
 });
 
+describe('files a rebuild changes without changing what they do', () => {
+	/** A minimal Windows binary: a link time, a checksum and a version string, nothing else. */
+	function binary(linkTime, checksum, version) {
+		const buffer = Buffer.alloc(512);
+		buffer.write('MZ', 0, 'latin1');
+		buffer.writeUInt32LE(0x80, 0x3c);
+		buffer.write('PE\0\0', 0x80, 'latin1');
+		buffer.writeUInt32LE(linkTime, 0x80 + 8);
+		buffer.writeUInt16LE(240, 0x80 + 20);
+		buffer.writeUInt16LE(0x20b, 0x80 + 24);
+		buffer.writeUInt32LE(checksum, 0x80 + 24 + 64);
+		buffer.write(`FileVersion ${version}`, 0x180, 'utf16le');
+		return buffer;
+	}
+	/** An asar archive holding the given files, in the given order. */
+	function asar(files) {
+		let offset = 0;
+		const entries = {};
+		for (const [name, content] of files) {
+			entries[name] = { size: content.length, offset: String(offset) };
+			offset += content.length;
+		}
+		const json = Buffer.from(JSON.stringify({ files: entries }));
+		const headerSize = 8 + json.length;
+		const head = Buffer.alloc(16);
+		head.writeUInt32LE(4, 0);
+		head.writeUInt32LE(headerSize, 4);
+		head.writeUInt32LE(headerSize - 4, 8);
+		head.writeUInt32LE(json.length, 12);
+		return Buffer.concat([head, json, ...files.map(([, content]) => Buffer.from(content))]);
+	}
+	const product = (version, commit) => JSON.stringify({ nameShort: 'PiCode', version, picodeVersion: '0.4.0', commit, date: 'd', checksums: {} });
+	const launcher = (version, commit) => `COMMIT="${commit}"\nVERSION="${version}"\nexec app "$@"\n`;
+	const oldDir = makeBuild('noise-old', {
+		'resources/app/product.json': product('1.0.7', 'aaaaaaaa'),
+		'PiCode.exe': binary(1000, 11, '1.0.7'),
+		'bin/picode': launcher('1.0.7', 'aaaaaaaa'),
+		'bin/picode-cli.exe': 'cli built once',
+		'resources/app/node_modules.asar': asar([['a.js', 'one'], ['b.js', 'two']]),
+	});
+	const rebuilt = {
+		'resources/app/product.json': product('1.0.8', 'bbbbbbbb'),
+		'PiCode.exe': binary(2000, 22, '1.0.8'),
+		'bin/picode': launcher('1.0.8', 'bbbbbbbb'),
+		'bin/picode-cli.exe': 'cli built twice',
+		'resources/app/node_modules.asar': asar([['b.js', 'two'], ['a.js', 'one']]),
+	};
+	const args = (newDir, out, extra = []) => ['--old', oldDir, '--new', newDir, '--from', '0.4.0', '--to', '0.4.1', '--kind', 'hotfix', '--out', out, ...extra];
+
+	test('a rebuild of the same sources is a small package that keeps the person\'s copies', () => {
+		const newDir = makeBuild('noise-new', rebuilt);
+		const out = join(root, 'delta-noise');
+		const vouch = ['--rebuilt-unchanged', 'bin/picode-cli.exe'];
+		const made = hotfix('make', ...args(newDir, out, vouch));
+		assert.equal(made.status, 0, made.stderr);
+		const manifest = JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8'));
+		assert.deepEqual(manifest.files.map(file => file.path), ['resources/app/product.json'], 'the binaries never travel');
+		const check = hotfix('check', '--old', oldDir, '--new', newDir, '--delta', out, ...vouch);
+		assert.equal(check.status, 0, check.stderr);
+		assert.match(check.stdout, /4 kept/);
+	});
+
+	test('a real change hidden among the stamps still needs the full download', () => {
+		for (const [file, content] of [
+			['PiCode.exe', Buffer.concat([binary(2000, 22, '1.0.8').subarray(0, 500), Buffer.from('new code!!!!')])],
+			['bin/picode', `${launcher('1.0.8', 'bbbbbbbb')}echo more\n`],
+			['resources/app/node_modules.asar', asar([['b.js', 'two'], ['a.js', 'ONE']])],
+			['bin/picode-cli.exe', 'cli built twice'],
+		]) {
+			const newDir = makeBuild(`noise-real-${file.replaceAll('/', '_')}`, { ...rebuilt, [file]: content });
+			const made = hotfix('make', ...args(newDir, join(root, 'delta-noise-real'), file === 'bin/picode-cli.exe' ? [] : ['--rebuilt-unchanged', 'bin/picode-cli.exe']));
+			assert.equal(made.status, 3, `${file}: ${made.stderr}`);
+		}
+	});
+});
+
 describe('the release kind', () => {
 	const kind = (...args) => execFileSync(process.execPath, [join(dirname(HOTFIX), 'release.mjs'), 'kind', ...args], { encoding: 'utf8' }).trim();
 
@@ -176,7 +252,9 @@ describe('the release kind', () => {
 	});
 });
 
-describe('the swap script (Windows)', { skip: process.platform !== 'win32' }, () => {
+// The script starts the build with `start`, which opens a console window per run: on a desktop
+// that is a window popping up mid-work, so these run in CI only (set CI=1 to run them here).
+describe('the swap script (Windows)', { skip: process.platform !== 'win32' || !process.env.CI }, () => {
 	let counter = 0;
 
 	/** A fake installation: `PiCode.cmd` stands in for the executable. */
