@@ -6,7 +6,7 @@
 <br />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
-[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fproduct.json&query=%24.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./product.json)
+[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fexperimental%2Fproduct.json&query=%24.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./product.json)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-F0883E?style=flat-square)](https://github.com/Tomas-Platero/PiCode/releases)
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square)](#download)
