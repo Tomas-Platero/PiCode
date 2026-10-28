@@ -34,7 +34,8 @@ export function createNativeAboutDialogDetails(
 			localize('aboutCommit', "Commit: {0}", productService.commit || 'Unknown'),
 			localize('aboutDate', "Date: {0}", date),
 			localize('aboutElectron', "Electron: {0}", process.versions['electron']),
-			localize('aboutElectronBuildId', "ElectronBuildId: {0}", process.versions['microsoft-build'] || 'Unknown'),
+			// Only Microsoft's own Electron build carries this id; the public Electron PiCode ships has none.
+			...(process.versions['microsoft-build'] ? [localize('aboutElectronBuildId', "ElectronBuildId: {0}", process.versions['microsoft-build'])] : []),
 			localize('aboutChromium', "Chromium: {0}", process.versions['chrome']),
 			localize('aboutNode', "Node.js: {0}", process.versions['node']),
 			localize('aboutV8', "V8: {0}", process.versions['v8']),
