@@ -93,3 +93,16 @@ test('a job start carries the file its output goes to', () => {
 	assert.strictEqual(start?.outputPath, '/data/jobs/3.log');
 	assert.strictEqual(backgroundJobStartOf('Started background job 3 (web lint). It keeps running.')?.outputPath, undefined);
 });
+
+test('a completed job is remembered as ended, newest first, and capped', () => {
+	const tracker = new BackgroundJobTracker();
+	for (let n = 1; n <= 7; n++) {
+		tracker.start({ jobNumber: String(n), label: `job ${n}` }, T0 + n);
+		tracker.complete({ id: String(n) }, T0 + 100 + n);
+	}
+	assert.deepStrictEqual(tracker.list(), []);
+	assert.deepStrictEqual(tracker.finished().map(job => job.jobNumber), ['7', '6', '5', '4', '3']);
+	assert.strictEqual(tracker.finished()[0].endedAt, T0 + 107);
+	tracker.clear();
+	assert.deepStrictEqual(tracker.finished(), []);
+});

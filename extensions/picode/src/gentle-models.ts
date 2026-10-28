@@ -36,6 +36,28 @@ export const ALL_AGENTS = 'all';
 /** The characters Gentle accepts in a model reference. */
 const SAFE_MODEL = /^[A-Za-z0-9._~:@/+%-]+$/;
 
+/**
+ * The effort levels one catalogue model supports, the way pi counts them: a model without reasoning
+ * only has `off`, a level mapped to `null` is not offered, and `xhigh` / `max` only exist when
+ * the model maps them. A model whose catalogue entry does not say whether it reasons is unknown
+ * (`undefined`) and keeps every level, rather than being narrowed to `off`.
+ */
+export function supportedLevels(model: { readonly reasoning?: unknown; readonly thinkingLevelMap?: Record<string, unknown> | null }): ThinkingLevel[] | undefined {
+	if (typeof model.reasoning !== 'boolean') {
+		return undefined;
+	}
+	if (!model.reasoning) {
+		return ['off'];
+	}
+	return THINKING_LEVELS.filter(level => {
+		const mapped = model.thinkingLevelMap?.[level];
+		if (mapped === null) {
+			return false;
+		}
+		return level === 'xhigh' || level === 'max' ? mapped !== undefined : true;
+	});
+}
+
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
 	return typeof value === 'string' && (THINKING_LEVELS as readonly string[]).includes(value);
 }
@@ -196,7 +218,7 @@ export function setAgentModel(profileDir: string, request: unknown): AgentModels
 	return agentModelsState(profileDir);
 }
 
-/** Whether a chat message is the request to choose the agents' models. */
+/** Whether a chat message is the request to choose the agents' models (gentle-pi now calls it `/gentle:profiles`; both names open the same pickers). */
 export function isAgentModelsCommand(prompt: string): boolean {
-	return /^\/gentle:models\s*$/.test(prompt.trim());
+	return /^\/gentle:(?:models|profiles)\s*$/.test(prompt.trim());
 }

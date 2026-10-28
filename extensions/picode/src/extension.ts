@@ -44,7 +44,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, runningBackgroundJobs, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
@@ -2526,6 +2526,7 @@ const setupDeps = {
 	// the tracker the pill reads, so the two surfaces cannot disagree about what is still running.
 	context.subscriptions.push(registerTasksView({
 		runningJobs: runningBackgroundJobs,
+		finishedJobs: finishedBackgroundJobs,
 		agents: () => gentleAgents.current(),
 		onAgentsChange: listener => gentleAgents.onDidChange(listener),
 		openTranscript: id => {

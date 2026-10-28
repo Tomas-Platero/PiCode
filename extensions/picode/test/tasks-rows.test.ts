@@ -82,3 +82,12 @@ test('an agent counts its role and its time: running until now, finished until i
 	assert.equal(taskDetail({ kind: 'agent', agent: agent('1', 'completed', { endedAt: 1_000 + 5_000 }) }, 1_000 + 90_000_000), 'done · review-risk · 5s');
 	assert.equal(taskDetail({ kind: 'agent', agent: agent('1', 'running', { label: '', startedAt: undefined }) }, 0), 'running');
 });
+
+test('a job that ended is listed among the finished, newest first, with its own time', () => {
+	const ended = { ...job('1', 'lint'), endedAt: 1_000 + 90_000 };
+	const board = taskBoard([job('2')], [agent('d', 'completed', { endedAt: 50_000 })], [ended]);
+	assert.deepEqual(board.running.map(row => taskTitle(row)), ['Background job 2']);
+	assert.deepEqual(board.finished.map(row => taskTitle(row)), ['lint', board.finished[1].kind === 'agent' ? taskTitle(board.finished[1]) : '']);
+	assert.equal(taskState(board.finished[0]), 'done');
+	assert.equal(taskDetail(board.finished[0], 9_999_999), 'done · 1m');
+});
