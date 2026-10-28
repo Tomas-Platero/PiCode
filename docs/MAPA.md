@@ -6,13 +6,13 @@
 
 ## 📊 Status
 
-- **17** folders documented · **20** without a README.
+- **16** folders documented · **21** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
 
 ```text
-├── .github/ — Plantillas y automatismos: lo que se ve cuando alguien abre una issue, un PR o lanza una build.
+├── .github/ — ⚠️ no README
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml
 │   │   ├── build_failure.yml
@@ -22,8 +22,7 @@
 │   ├── workflows/
 │   │   ├── ci.yml
 │   │   └── release.yml
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── README.md
+│   └── PULL_REQUEST_TEMPLATE.md
 ├── build/ — build/ builds PiCode from its own source tree, and the source tree is this repository. There is no picode-source/ folder and no download: the…
 │   ├── agent-sdk/ — Per-platform agent SDK production. Each VS Code build (darwin-arm64, linux-x64, Alpine REH, etc.) uploads its own platform's SDK tarballs to…
 │   │   ├── agents/
@@ -333,6 +332,8 @@
 │   ├── gulpfile.vscode.ts
 │   ├── gulpfile.vscode.web.ts
 │   ├── gulpfile.vscode.win32.ts
+│   ├── hotfix.mjs
+│   ├── hotfix.test.mjs
 │   ├── hygiene.ts
 │   ├── package-lock.json
 │   ├── package.json
@@ -343,7 +344,7 @@
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 40 files in total
+│   └── … 42 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
@@ -352,7 +353,9 @@
 │   ├── DISENO.md
 │   ├── DISTRIBUTION.md
 │   ├── ENGRAM.md
+│   ├── GITHUB.md
 │   ├── HARNESS.md
+│   ├── HOTFIX.md
 │   ├── howto-build.md
 │   ├── MAPA.md
 │   ├── README.md
@@ -617,6 +620,7 @@
 
 ## ⚠️ Folders without a README
 
+- `.github/`
 - `build/agent-sdk/agents/`
 - `build/checker/`
 - `build/checksums/`

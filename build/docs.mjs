@@ -50,7 +50,6 @@ import { pathToFileURL } from 'node:url';
 	// would fail the moment this file runs on another channel's branch. The DIFF
 	// half below still asks for a README the first time a channel's folder appears.
 	const REQUIRED = [
-		'.github',
 		'build',
 		'cli',
 		'docs',
