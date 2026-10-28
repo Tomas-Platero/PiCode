@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import type { PiToolDefinition } from './mcp';
 import { pastConversationTools } from './past-conversations';
 import { windowSessionScope } from './runtime';
-import { areaConversationsReport, conversationsReport, ownerPrompt, sessionTurns } from './sessions-provider';
+import { areaConversationsReport, conversationsReport, sessionTurns } from './sessions-provider';
 
 /**
  * The past-conversation tools over this window's own list — the same one the Sessions panel shows
@@ -35,7 +35,7 @@ export function windowPastConversationTools(agentDir: string | undefined, curren
 			} catch {
 				return [];
 			}
-			return sessionTurns(text).map(turn => turn.role === 'user' ? { ...turn, text: ownerPrompt(turn.text) } : turn);
+			return sessionTurns(text);
 		},
 	});
 }

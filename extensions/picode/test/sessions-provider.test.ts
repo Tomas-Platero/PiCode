@@ -29,6 +29,12 @@ test('sessionTurns maps user and assistant messages, skipping thinking and tool 
 	]);
 });
 
+test('a reopened chat replays the owner’s words, not the frame the editor sent before them', () => {
+	const framed = 'You are pi, the coding agent that runs inside the PiCode editor. You answer about the project the person you are talking to has open in it.\n\nContext from the editor, as it is right now:\n\n- Workspace: X\n\n\n---\n\nreintenta';
+	const jsonl = `{"type":"message","id":"e1","message":{"role":"user","content":[{"type":"text","text":${JSON.stringify(framed)}}]}}`;
+	assert.deepStrictEqual(sessionTurns(jsonl), [{ role: 'user', text: 'reintenta' }]);
+});
+
 test('listSessionFiles walks project folders and labels from the first prompt', () => {
 	const files: Record<string, string> = {
 		'/sessions/--C--demo--/2026_a.jsonl': '{"type":"session","id":"a"}\n{"type":"message","message":{"role":"user","content":[{"type":"text","text":"hola pi"}]}}',
