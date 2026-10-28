@@ -142,3 +142,7 @@ Windows, tanto cuando la versión nueva arranca como cuando no.
   la ventana no se deshace sola.
 - **No hay aún canal para empujar un arreglo a quien ya tiene la última versión** sin subir el
   número: cada hotfix es una versión nueva.
+- **Cuando la versión interna cambia de longitud** (`1.142.9` → `1.142.10`, `1.142.99` → `1.142.100`)
+  la release sale entera: esa versión va estampada en todos los binarios, y con otra longitud se
+  mueve el resto del fichero, así que ya no se puede probar que solo cambió el sello. Pasó en 0.5.6;
+  las siguientes (`1.142.10` → `1.142.11`…) vuelven a llevar zip pequeño.
