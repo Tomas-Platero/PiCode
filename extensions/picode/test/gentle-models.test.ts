@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { ALL_AGENTS, agentModelsState, assign, describeAgentModel, isAgentModelsCommand, listAgents, modelRefOf, modelsFile, readAgentModels, setAgentModel, writeAgentModels } from '../src/gentle-models.ts';
+import { ALL_AGENTS, agentModelsState, assign, describeAgentModel, isAgentModelsCommand, listAgents, supportedLevels, modelRefOf, modelsFile, readAgentModels, setAgentModel, writeAgentModels } from '../src/gentle-models.ts';
 
 function profile(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), 'picode-models-'));
@@ -81,6 +81,8 @@ test('only the bare command opens the pickers', () => {
 	assert.equal(isAgentModelsCommand('/gentle:models'), true);
 	assert.equal(isAgentModelsCommand('  /gentle:models  '), true);
 	assert.equal(isAgentModelsCommand('/gentle:models now'), false);
+	assert.equal(isAgentModelsCommand('/gentle:profiles'), true);
+	assert.equal(isAgentModelsCommand('/gentle:profiles export x'), false);
 	assert.equal(isAgentModelsCommand('/gentle:status'), false);
 });
 
@@ -118,4 +120,11 @@ test('a hand-made request that Gentle would reject is refused and writes nothing
 		assert.throws(() => setAgentModel(dir, bad), () => true, JSON.stringify(bad));
 	}
 	assert.equal(fs.existsSync(modelsFile(dir)), false);
+});
+
+test('a model offers only the effort levels it supports, and an undescribed one keeps them all', () => {
+	assert.deepEqual(supportedLevels({ reasoning: false }), ['off']);
+	assert.deepEqual(supportedLevels({ reasoning: true }), ['off', 'minimal', 'low', 'medium', 'high']);
+	assert.deepEqual(supportedLevels({ reasoning: true, thinkingLevelMap: { minimal: null, xhigh: 'xhigh' } }), ['off', 'low', 'medium', 'high', 'xhigh']);
+	assert.equal(supportedLevels({}), undefined);
 });
