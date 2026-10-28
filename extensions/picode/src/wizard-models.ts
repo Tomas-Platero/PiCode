@@ -11,6 +11,7 @@ import { loadPiSdk, type OfficialSdk } from './piSdk';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { projectDeclaration } from './declarations';
+import { supportedLevels, type ThinkingLevel } from './gentle-models';
 import { piRuntimeRoot } from './runtime';
 
 /**
@@ -58,6 +59,8 @@ export interface WizardModel {
 	readonly ref: string;
 	readonly provider: string;
 	readonly model: string;
+	/** The effort levels the model supports; absent when the catalogue does not say. */
+	readonly levels?: readonly ThinkingLevel[];
 }
 
 /** The dialects the editor's own provider form offers, in the same words. */
@@ -105,7 +108,7 @@ interface CatalogShape {
 	readonly modelRuntime: {
 		readonly getProviders?: () => ReadonlyArray<{ readonly id: string; readonly name?: string }>;
 		readonly hasConfiguredAuth?: (providerId: string) => boolean;
-		readonly getModels?: (providerId?: string) => ReadonlyArray<{ readonly id: string; readonly name?: string }>;
+		readonly getModels?: (providerId?: string) => ReadonlyArray<{ readonly id: string; readonly name?: string; readonly reasoning?: unknown; readonly thinkingLevelMap?: Record<string, unknown> | null }>;
 	};
 }
 
@@ -116,10 +119,10 @@ interface RuntimeSdk {
 /** The models of the setup: the profile's providers and pi's logged-in catalogue. */
 export async function listModels(deps: WizardModelDeps): Promise<{ models: WizardModel[] }> {
 	const models = new Map<string, WizardModel>();
-	const push = (provider: string, mid: string, name?: string): void => {
+	const push = (provider: string, mid: string, name?: string, levels?: ThinkingLevel[]): void => {
 		const ref = `${provider}/${mid}`;
 		if (!models.has(ref)) {
-			models.set(ref, { ref, provider, model: name && name !== mid ? `${mid} · ${name}` : mid });
+			models.set(ref, { ref, provider, model: name && name !== mid ? `${mid} · ${name}` : mid, ...(levels === undefined ? {} : { levels }) });
 		}
 	};
 
@@ -153,7 +156,7 @@ export async function listModels(deps: WizardModelDeps): Promise<{ models: Wizar
 				if (runtime.hasConfiguredAuth !== undefined && !runtime.hasConfiguredAuth(provider.id)) { continue; }
 				for (const model of runtime.getModels?.(provider.id) ?? []) {
 					if (typeof model.id === 'string' && model.id.length > 0) {
-						push(provider.id, model.id, typeof model.name === 'string' ? model.name : undefined);
+						push(provider.id, model.id, typeof model.name === 'string' ? model.name : undefined, supportedLevels(model));
 					}
 				}
 			}
