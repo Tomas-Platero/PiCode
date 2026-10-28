@@ -95,6 +95,12 @@ El paquete sale de las dos builds completas, así que **no evita construir la re
 que la gente la descargue entera. Para ver un cambio mientras se trabaja sigue valiendo
 `build/build-fast.sh` (sin comprobación de tipos) o el bucle de `docs/howto-build.md`.
 
+> 🩹 **Corregido el 2026-10-28:** desde 0.5.1 el paso decía siempre «la release anterior no coincide con su hash» y
+> todas las releases salían enteras. Causa: la carpeta de trabajo estaba en `RUNNER_TEMP` (`D:\a\_temp`); con esas
+> barras `sha256sum` antepone una `\` al hash y `require()` pierde la unidad. Ahora el trabajo va en una carpeta
+> relativa del repositorio y el hash se lee por la entrada estándar. Comprobado en un runner de verdad, de punta a
+> punta (zip pequeño firmado, ficheros idénticos). Un fallo así sale ahora como aviso (`::warning::`), no como nota.
+
 ## 🔑 La clave de firma
 
 - La parte **pública** vive en `product.json` (`hotfixPublicKey`).

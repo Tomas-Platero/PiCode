@@ -355,15 +355,17 @@ jobs:
             skip "this channel has no previous release"
           else
             ZIP7=$(command -v 7z || echo "/c/Program Files/7-Zip/7z.exe")
-            WORK="${RUNNER_TEMP}/delta-work"
+            # Inside the workspace and relative: RUNNER_TEMP is a D:a_temp path, and the
+            # backslashes made sha256sum print "<hash>" and node's require() lose the drive.
+            WORK="delta-work"
             rm -rf "${WORK}" && mkdir -p "${WORK}"
             KEY_FILE="${WORK}/signing-key.pem"
             printf '%s\n' "${HOTFIX_SIGNING_KEY}" > "${KEY_FILE}"
 
             if ! curl -fsSL --retry 3 -o "${WORK}/previous.zip" "${PREV_URL}"; then
               skip "the previous release could not be downloaded"
-            elif [ "$(sha256sum "${WORK}/previous.zip" | cut -d' ' -f1)" != "${PREV_ZIP_SHA}" ]; then
-              skip "the previous release does not match its published hash"
+            elif [ "$(sha256sum < "${WORK}/previous.zip" | cut -d' ' -f1)" != "${PREV_ZIP_SHA}" ]; then
+              echo "::warning::no small update: the previous release does not match its published hash"
             else
               "${ZIP7}" x -y "-o${WORK}/previous" "${WORK}/previous.zip" > /dev/null
               PREV_PICODE=$(node -p "require('./${WORK}/previous/resources/app/product.json').picodeVersion" 2>/dev/null || true)
