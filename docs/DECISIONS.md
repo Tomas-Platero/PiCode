@@ -1400,3 +1400,10 @@ También llama a `tasklist`, `find` y `taskkill` por su ruta de Windows: con Git
 - It is a pin in `extensions/picode`, so it fits a hotfix or minor update (ADR-034); gentle-pi is installed in the profile from npm, not shipped in `resources/pi-runtime`.
 - The package row no longer offers Update for a pinned package: the pin put the old version back, so the button only ended in a refusal.
 
+
+### ADR-031, adenda 6 (2026-10-28): gentle-pi 4.5.0
+
+- `product-packages.ts` pins **gentle-pi 4.5.0**. No new extension files: the same terminal-only filter from 4.4.0 still covers everything that has no place in the editor.
+- What changes for the editor: the Jobs card now keeps finished jobs for a minute (terminal sidebar only); `/gentle:models` was renamed `/gentle:profiles` inside gentle-pi, but the editor answers the typed `/gentle:models` itself, so the chat keeps working; the models screen now offers only the effort levels each model supports; `gentle-shell update --latest` and an installer for the music player are terminal-only.
+- Still a pin in `extensions/picode`, so it fits a hotfix (ADR-034).
+- What the editor does with it: the agent model picker offers only the effort levels each model supports (a model that cannot think is not asked); the Tasks block lists the last five background jobs that ended, among the finished agents, newest first; and `/gentle:profiles` opens the same agent model picker as `/gentle:models` in the chat.

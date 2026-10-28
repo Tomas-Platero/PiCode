@@ -84,7 +84,7 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 
 /** What the product pins, in the order it declares them. */
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
-	{ name: 'gentle-pi', version: '4.4.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
+	{ name: 'gentle-pi', version: '4.5.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.4.2' },
 	{ name: 'pi-intercom', version: '0.18.1' },
 ];

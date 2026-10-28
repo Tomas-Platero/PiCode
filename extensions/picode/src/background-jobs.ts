@@ -65,6 +65,9 @@ function textOf(value: unknown): string | undefined {
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+/** How many ended jobs the tracker remembers for the Tasks block. */
+const ENDED_JOBS_KEPT = 5;
+
 /**
  * The jobs still running, kept by one window's agent.
  *
@@ -75,6 +78,7 @@ function textOf(value: unknown): string | undefined {
  */
 export class BackgroundJobTracker {
 	private readonly jobs = new Map<string, BackgroundJob>();
+	private readonly ended: Array<BackgroundJob & { readonly endedAt: number }> = [];
 
 	/**
 	 * Records a job's start. A start without a number cannot be closed by a completion
@@ -100,19 +104,34 @@ export class BackgroundJobTracker {
 	 * no such job, the completion's label and command are matched against the open jobs'
 	 * — the two facts a completion repeats from its start. The first matching job closes.
 	 */
-	complete(completion: BackgroundJobCompletion): void {
+	complete(completion: BackgroundJobCompletion, endedAt: number = Date.now()): void {
 		if (completion.id !== undefined && this.jobs.has(completion.id)) {
-			this.jobs.delete(completion.id);
+			this.close(completion.id, endedAt);
 			return;
 		}
 		for (const [jobNumber, job] of this.jobs) {
 			const labelMatches = completion.label !== undefined && completion.label === job.label;
 			const commandMatches = completion.command !== undefined && completion.command === job.command;
 			if (labelMatches || commandMatches) {
-				this.jobs.delete(jobNumber);
+				this.close(jobNumber, endedAt);
 				return;
 			}
 		}
+	}
+
+	/** Takes a job out of the running ones and keeps it among the last that ended. */
+	private close(jobNumber: string, endedAt: number): void {
+		const job = this.jobs.get(jobNumber);
+		this.jobs.delete(jobNumber);
+		if (job !== undefined) {
+			this.ended.unshift({ ...job, endedAt });
+			this.ended.length = Math.min(this.ended.length, ENDED_JOBS_KEPT);
+		}
+	}
+
+	/** The jobs that ended most recently, newest first — what the Tasks block lists as done. */
+	finished(): ReadonlyArray<BackgroundJob & { readonly endedAt: number }> {
+		return [...this.ended];
 	}
 
 	/** The jobs still running, oldest first — the order the pill shows. */
@@ -128,6 +147,7 @@ export class BackgroundJobTracker {
 	/** Forgets every job: the session they belonged to is gone. */
 	clear(): void {
 		this.jobs.clear();
+		this.ended.length = 0;
 	}
 }
 
@@ -173,6 +193,15 @@ export function backgroundJobRows(jobs: readonly BackgroundJob[], _now: number):
 		...(job.outputPath === undefined ? {} : { outputPath: job.outputPath }),
 		startedAt: job.startedAt,
 	}));
+}
+
+/** The row for one job that ended: the pill's row plus when it ended. */
+export interface FinishedBackgroundJobRow extends BackgroundJobRow {
+	readonly endedAt: number;
+}
+
+export function finishedJobRows(jobs: ReadonlyArray<BackgroundJob & { readonly endedAt: number }>): readonly FinishedBackgroundJobRow[] {
+	return jobs.map(job => ({ ...backgroundJobRows([job], 0)[0], endedAt: job.endedAt }));
 }
 
 export { recordOf, textOf };
