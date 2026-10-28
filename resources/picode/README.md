@@ -4,7 +4,8 @@
 
 | Fichero | Qué hace |
 | --- | --- |
-| `picode-banner.png` | La cabecera del README. |
+| `picode-banner.png` | La cabecera del README (en inglés). Se genera con `python resources/picode/banner.py`; no se retoca a mano. |
+| `banner.py` | El generador de esa cabecera: texto, colores y marca en un solo sitio. |
 | `pi.svg` | La marca de pi, cuando hay que citarla. |
 | `vscodium.svg` | La marca de VSCodium, de la que procede el árbol. |
 
