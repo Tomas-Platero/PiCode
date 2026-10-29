@@ -8,12 +8,13 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [VISION.md](VISION.md) | 🌱 La visión del dueño: qué quiere que PiCode llegue a ser | ES |
 | [DISENO.md](DISENO.md) | 🧱 Cómo se junta todo hoy: capas, núcleo, perfil, reglas de diseño | ES |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 🏗️ El modelo de 4 capas, la capa de agente, el SDK de pi, testing | EN |
-| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–033): qué se decidió, por qué, y qué lo revertiría | EN |
+| [DECISIONS.md](DECISIONS.md) | ⚖️ Los ADR (001–035): qué se decidió, por qué, y qué lo revertiría | EN |
 | [DISTRIBUTION.md](DISTRIBUTION.md) | 📦 El árbol propio: delta de producto, perfil portable, verificación | EN |
 | [howto-build.md](howto-build.md) | 🔨 Compilar desde la fuente: dependencias, fases, reparación, verificación | ES |
 | [CI.md](CI.md) | 🧪 La build y las releases en GitHub: workflows, cachés, política de urgencia | ES |
 | [RELEASES.md](RELEASES.md) | 🚀 El viaje de una release de experimental a beta y a stable, con gráficos | ES |
 | [HOTFIX.md](HOTFIX.md) | 🩹 Actualizaciones pequeñas: hotfix, minor update y release, y qué las protege | ES |
+| [PINS.md](PINS.md) | 📌 Cómo se mantienen al día gentle-pi, gentle-engram, pi-intercom y engram sin dejar de estar fijados | ES |
 | [HARNESS.md](HARNESS.md) | 🤖 Cómo está integrado hoy el harness de agentes: las capas de pi | ES |
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
 | [SETTINGS.md](SETTINGS.md) | ⚙️ El inventario de **todas** las opciones: clave, para qué, dónde aparece y dónde debe aparecer, con lo que se oculta y lo que no se toca | ES |

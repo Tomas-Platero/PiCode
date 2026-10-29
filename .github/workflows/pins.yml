@@ -1,0 +1,113 @@
+# Keeps the Gentle AI pins current: gentle-pi, gentle-engram, pi-intercom and the
+# memory engine (ADR-035).
+#
+# Once a day, for each pin, `build/pins.mjs bump` looks for a newer stable release
+# (at least 24 h old, never past npm's `latest` tag), reads what the step changes and
+# writes the new pin. The connector tests run against it here, because a pull request
+# opened with the workflow token does not start CI on its own.
+#
+#   - safe step, tests green -> the pull request merges itself into `experimental`
+#     and ships with the next release;
+#   - anything else          -> the pull request stays open with the reasons.
+#
+# One branch per pin (`bot/pin-<name>`), so a step that waits never holds back the
+# others, and a newer release refreshes the same pull request. Closing a pull request
+# without merging it skips that version: the next run leaves it alone and only opens
+# a new one when a later version comes out.
+name: Pins
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pins
+  cancel-in-progress: false
+
+jobs:
+  pin:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      # One at a time: two pins merging into experimental at once would race.
+      max-parallel: 1
+      matrix:
+        pin: [gentle-pi, gentle-engram, pi-intercom, engram]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experimental
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Pin rules
+        run: node --test build/pins.test.mjs
+
+      - name: Look for a newer release
+        id: bump
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ matrix.pin }}
+        run: node build/pins.mjs bump "${PIN}" --report "${RUNNER_TEMP}/body.md" --github-output "${GITHUB_OUTPUT}"
+
+      - name: Skip a version the owner turned down
+        id: declined
+        if: steps.bump.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ matrix.pin }}
+          TITLE: ${{ steps.bump.outputs.title }}
+        run: |
+          DECLINED=$(gh pr list --state closed --head "bot/pin-${PIN}" --limit 50 --json title,mergedAt \
+            --jq "[.[] | select(.mergedAt == null and .title == env.TITLE)] | length")
+          echo "skip=$([ "${DECLINED:-0}" -gt 0 ] && echo true || echo false)" >> "${GITHUB_OUTPUT}"
+
+      - name: Connector tests
+        id: tests
+        if: steps.bump.outputs.changed == 'true' && steps.declined.outputs.skip != 'true'
+        continue-on-error: true
+        run: node build/checks.mjs test-connector
+
+      - name: Open or refresh the pull request
+        if: steps.bump.outputs.changed == 'true' && steps.declined.outputs.skip != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN: ${{ matrix.pin }}
+          TITLE: ${{ steps.bump.outputs.title }}
+          VERDICT: ${{ steps.bump.outputs.verdict }}
+          TESTS: ${{ steps.tests.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BODY="${RUNNER_TEMP}/body.md"
+          if [ "${TESTS}" != "success" ]; then
+            VERDICT="review"
+            printf '\n### ❌ Connector tests failed\n\nThe pin moved and the connector tests did not pass: %s\n' "${RUN_URL}" >> "${BODY}"
+          fi
+          BRANCH="bot/pin-${PIN}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "${BRANCH}"
+          git commit -am "${TITLE}"
+          git push --force origin "HEAD:refs/heads/${BRANCH}"
+          if [ "$(gh pr list --state open --head "${BRANCH}" --json number --jq length)" -gt 0 ]; then
+            gh pr edit "${BRANCH}" --title "${TITLE}" --body-file "${BODY}"
+          else
+            gh pr create --base experimental --head "${BRANCH}" --title "${TITLE}" --body-file "${BODY}"
+          fi
+          if [ "${VERDICT}" = "safe" ]; then
+            gh pr merge "${BRANCH}" --squash --delete-branch
+            echo "### ✅ ${TITLE} — merged" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "### 🔎 ${TITLE} — waiting for review" >> "${GITHUB_STEP_SUMMARY}"
+          fi
