@@ -424,7 +424,8 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		const row = DOM.append(card, $('.row'));
 		const text = this.addRowTitle(row, Codicon.clock, window.label);
 		const bar = DOM.append(text, $('.picode-status-meter'));
-		bar.classList.add(limitReached || percent >= 90 ? 'danger' : percent >= 60 ? 'warn' : 'ok');
+		// The terminal's own thresholds: a warning from 80% and an error from 95%.
+		bar.classList.add(limitReached || percent >= 95 ? 'danger' : percent >= 80 ? 'warn' : 'ok');
 		bar.setAttribute('role', 'progressbar');
 		bar.setAttribute('aria-valuemin', '0');
 		bar.setAttribute('aria-valuemax', '100');
