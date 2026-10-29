@@ -11,10 +11,9 @@
  * exactly one such route — NaN's — so the Status view can show the same number the TUI shows
  * without inventing one.
  *
- * The other two routes are deliberately absent: Codex and Claude Pro/Max report their windows
- * in **SSE response headers** of the chat request itself, and this connector never sees those
- * headers (the request is made by pi, not by the editor). A follow-up, not a guess: a window
- * this module cannot read is a row it does not print.
+ * The other two routes, ChatGPT (Codex) and Claude Pro/Max, live in `subscription-usage.ts`:
+ * they report their windows in the chat response's own headers, which pi hands to the chat's
+ * inline extension.
  *
  * ## Why nothing here is trusted
  *
