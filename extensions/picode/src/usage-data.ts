@@ -188,7 +188,9 @@ function effectiveAllowance(raw: Record<string, unknown>): number | undefined {
 
 /** The rolling window a model applies on top of its period allowance, when it reports one. */
 function rollingWindow(raw: Record<string, unknown>): NanUsageWindow | undefined {
-	const used = numberOf(raw['windowTokensUsed'], false);
+	// A premium model (glm5.2, glm5.3) reports its 4-hour budget before any of it is spent: no usage field yet means nothing used.
+	const used = numberOf(raw['windowTokensUsed'], false)
+		?? (numberOf(raw['fullWindowTokens'], true) !== undefined ? 0 : undefined);
 	if (used === undefined) {
 		return undefined;
 	}

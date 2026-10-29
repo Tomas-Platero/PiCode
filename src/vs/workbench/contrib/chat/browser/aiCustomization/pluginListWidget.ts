@@ -59,7 +59,12 @@ interface IPackageCatalogRow {
 	readonly description?: string;
 	readonly publisher?: string;
 	readonly version?: string;
+	readonly downloads?: number;
+	readonly date?: string;
 }
+
+/** How the browse list is ordered. */
+type PackageSort = 'downloads' | 'recent' | 'name';
 
 /** Result shape returned by the PiCode package installer connector (`picode.packages.install`). */
 interface IPackageInstallResult {
@@ -749,6 +754,8 @@ export class PluginListWidget extends Disposable {
 	private pagerNext!: Button;
 	private pagerLabel!: HTMLElement;
 	private searchQuery: string = '';
+	private packageSort: PackageSort = 'downloads';
+	private sortBar: HTMLElement | undefined;
 	private browseMode: boolean = false;
 	private lastHeight: number = 0;
 	private lastWidth: number = 0;
@@ -854,6 +861,33 @@ export class PluginListWidget extends Disposable {
 				this.delayedFilter.trigger(() => this.filterPlugins());
 			}
 		}));
+
+		// Sort chips (browse mode only): most downloaded, most recent, A–Z.
+		const sortBar = this.sortBar = DOM.append(this.element, $('.picode-package-sort'));
+		sortBar.style.cssText = 'display:none;gap:6px;align-items:center;padding:0 0 8px 0;flex-wrap:wrap;';
+		const sortChips = new Map<PackageSort, HTMLElement>();
+		const paintSort = () => {
+			for (const [key, chip] of sortChips) {
+				const active = key === this.packageSort;
+				chip.setAttribute('aria-pressed', String(active));
+				chip.style.cssText = `border:1px solid var(--vscode-widget-border,rgba(128,128,128,.4));border-radius:12px;padding:2px 10px;font-size:12px;cursor:pointer;background:${active ? 'var(--vscode-button-background)' : 'transparent'};color:${active ? 'var(--vscode-button-foreground)' : 'var(--vscode-foreground)'};`;
+			}
+		};
+		for (const [key, label] of [
+			['downloads', localize('pkgSortDownloads', "Most downloaded")],
+			['recent', localize('pkgSortRecent', "Most recent")],
+			['name', localize('pkgSortName', "A–Z")],
+		] as const) {
+			const chip = DOM.append(sortBar, $('button.picode-package-sort-chip'));
+			chip.textContent = label;
+			sortChips.set(key, chip);
+			this._register(DOM.addDisposableListener(chip, 'click', () => {
+				this.packageSort = key;
+				paintSort();
+				void this.queryMarketplace();
+			}));
+		}
+		paintSort();
 
 		// Button container (Browse Marketplace + Add actions + Create Plugin + Update Plugins)
 		this.buttonContainer = DOM.append(this.searchAndButtonContainer, $('.list-button-group'));
@@ -1401,6 +1435,9 @@ export class PluginListWidget extends Disposable {
 		this.searchInput.value = '';
 		this.searchQuery = '';
 
+		if (this.sortBar) {
+			this.sortBar.style.display = browse ? 'flex' : 'none';
+		}
 		this.browseButton.element.parentElement!.style.display = browse ? 'none' : '';
 		this.backButton.element.parentElement!.style.display = browse ? '' : 'none';
 
@@ -1447,7 +1484,11 @@ export class PluginListWidget extends Disposable {
 			const filtered = rows.filter(p =>
 				p.name.toLowerCase().includes(query)
 				|| (p.description ?? '').toLowerCase().includes(query)
-			);
+			).sort((a, b) => this.packageSort === 'name'
+				? a.name.localeCompare(b.name)
+				: this.packageSort === 'recent'
+					? (b.date ?? '').localeCompare(a.date ?? '')
+					: (b.downloads ?? 0) - (a.downloads ?? 0));
 
 			// Filter out already-installed packages
 			const installedUris = new Set(this.agentPluginService.plugins.get().map(p => p.uri.toString()));

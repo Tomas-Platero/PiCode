@@ -21,8 +21,8 @@ import { IEditorService } from '../../../../services/editor/common/editorService
 import { isChatViewTitleActionContext } from '../../common/actions/chatActions.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { CHAT_DEBUG_ACTIVE_SESSION_IS_AGENT_HOST, CHAT_DEBUG_HAS_ACTIVE_SESSION, IChatDebugService } from '../../common/chatDebugService.js';
-import { ChatViewId, IChatWidgetService } from '../chat.js';
-import { CHAT_CATEGORY, CHAT_CONFIG_MENU_ID } from './chatActions.js';
+import { IChatWidgetService } from '../chat.js';
+import { CHAT_CATEGORY } from './chatActions.js';
 import { ChatDebugEditorInput } from '../chatDebug/chatDebugEditorInput.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { IChatDebugEditorOptions } from '../chatDebug/chatDebugTypes.js';
@@ -63,22 +63,6 @@ export function registerChatOpenAgentDebugPanelAction() {
 				f1: false,
 				category: CHAT_CATEGORY,
 				precondition: ChatContextKeys.enabled,
-				menu: [{
-					id: CHAT_CONFIG_MENU_ID,
-					when: ContextKeyExpr.and(ChatContextKeys.enabled, ContextKeyExpr.equals('view', ChatViewId)),
-					order: 0,
-					group: '4_logs'
-				}, {
-					id: MenuId.ChatWelcomeContext,
-					group: '2_settings',
-					order: 0,
-					when: ChatContextKeys.inChatEditor.negate()
-				}, {
-					id: MenuId.ViewTitle,
-					when: ContextKeyExpr.and(ChatContextKeys.enabled, ContextKeyExpr.equals('view', ChatViewId)),
-					order: 0,
-					group: '4_logs'
-				}]
 			});
 		}
 

@@ -109,9 +109,21 @@
 	height: 28px;
 	flex: none;
 	border-radius: 7px;
-	background: var(--vscode-badge-background, rgba(128, 128, 128, 0.15));
+	background: transparent;
 	font-size: 14px;
 	line-height: 1;
+}
+
+.picode-mcp-card-mark .picode-pm-logo {
+	width: 28px;
+	height: 28px;
+	border-radius: 7px;
+	font-size: 11px;
+}
+
+.picode-mcp-card-mark .picode-pm-logo img {
+	width: 20px;
+	height: 20px;
 }
 
 .picode-mcp-card-text {

@@ -322,7 +322,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			pill,
 			actions: [
 				{ label: localize('picodeStatusCheckUpdates', "Check again"), icon: Codicon.refresh, title: localize('picodeStatusCheckUpdatesTitle', "Look for new versions of pi, its packages and the memory engine."), command: CHECK_UPDATES_COMMAND },
-				{ label: localize('picodeStatusUpdateAll', "Update all"), icon: Codicon.cloudDownload, title: localize('picodeStatusUpdateDescription', "Update pi, its packages and the memory engine."), command: UPDATE_COMMAND, primary: targets.length > 0 },
+				...(targets.length === 0 ? [] : [{ label: localize('picodeStatusUpdateAll', "Update all"), icon: Codicon.cloudDownload, title: localize('picodeStatusUpdateDescription', "Update pi, its packages and the memory engine."), command: UPDATE_COMMAND, primary: true }]),
 			],
 		});
 

@@ -27,7 +27,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { engramServerUrl } from './engram';
 import { parseEngramHealth, parseEngramProjects } from './engram';
-import { updateEngine } from './memory-update';
+import { compareVersions, fetchLatestRelease, updateEngine } from './memory-update';
 import type { EngramProject } from './engram';
 import {
 	memoryDetailMarkdown,
@@ -96,6 +96,8 @@ type MemoryData =
 		/** What the engine says it is, and when the newest memory was written. */
 		readonly version?: string;
 		readonly lastSaved?: string;
+		/** The newer engine version, only once one is known to exist. */
+		readonly newerEngine?: string;
 	};
 
 /** One icon per kind of memory, because a row's icon is read before its title is. */
@@ -129,6 +131,54 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	private readonly rows = new Map<string, readonly MemoryRow[]>();
 	private readonly titles = new Map<number, string>();
 	private retried = false;
+	/** The newest engine release, asked at most once an hour: GitHub rate-limits anonymous reads. */
+	private latestEngine: { readonly version: string | undefined; readonly at: number } | undefined;
+
+	/** The folder names this window has open: the only projects the panel shows. */
+	private workspaceNames(): string[] {
+		return (vscode.workspace.workspaceFolders ?? []).map(folder => folder.name);
+	}
+
+	private async newerEngine(installed: string | undefined): Promise<string | undefined> {
+		if (installed === undefined) {
+			return undefined;
+		}
+		if (this.latestEngine === undefined || Date.now() - this.latestEngine.at > 3_600_000) {
+			let version: string | undefined;
+			try {
+				version = (await fetchLatestRelease())?.version;
+			} catch {
+				version = undefined;
+			}
+			this.latestEngine = { version, at: Date.now() };
+		}
+		const latest = this.latestEngine.version;
+		return latest !== undefined && compareVersions(installed, latest) < 0 ? latest : undefined;
+	}
+
+	/** A search limited to the open projects; the engine's answer is narrowed again here to be safe. */
+	private async searchOpenProjects(query: string): Promise<readonly MemoryRow[] | undefined> {
+		const names = this.workspaceNames();
+		if (names.length === 0) {
+			return [];
+		}
+		const answers = await Promise.all(names.map(name => this.getJson(`/search?q=${encodeURIComponent(query)}&project=${encodeURIComponent(name)}`)));
+		if (answers.every(answer => answer === undefined)) {
+			return undefined;
+		}
+		const wanted = new Set(names.map(name => name.toLowerCase()));
+		const seen = new Set<number>();
+		const rows: MemoryRow[] = [];
+		for (const answer of answers) {
+			for (const row of parseMemoryRows(answer) ?? []) {
+				if (wanted.has(row.project.toLowerCase()) && !seen.has(row.id)) {
+					seen.add(row.id);
+					rows.push(row);
+				}
+			}
+		}
+		return rows;
+	}
 
 	dispose(): void {
 		this.changed.dispose();
@@ -167,20 +217,25 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		// results, or the panel would keep handing out a row that no longer exists.
 		let search = previous;
 		if (previous !== undefined) {
-			const answered = await this.getJson(`/search?q=${encodeURIComponent(previous.query)}`);
+			const answered = await this.searchOpenProjects(previous.query);
 			if (answered !== undefined) {
-				search = { query: previous.query, rows: parseMemoryRows(answered) ?? [] };
+				search = { query: previous.query, rows: answered };
 			}
 		}
 		const newest = parseMemoryRows(newestJson)?.[0];
+		const version = parseEngramHealth(healthJson)?.version;
+		// Only the folders open in this window, in the order they were opened; one with nothing saved yet still shows, at zero.
+		const openProjects = this.workspaceNames().map(name =>
+			listed.projects.find(project => project.name.toLowerCase() === name.toLowerCase()) ?? { name, memories: 0 });
 		this.data = {
 			kind: 'ready',
-			total: listed.total,
-			projects: [...listed.projects].sort((a, b) => b.memories - a.memories || a.name.localeCompare(b.name)),
+			total: openProjects.reduce((sum, project) => sum + project.memories, 0),
+			projects: openProjects,
+			newerEngine: await this.newerEngine(version),
 			review: parseMemoryReview(reviewJson),
 			conflicts: parseMemoryConflicts(conflictsJson),
 			search,
-			version: parseEngramHealth(healthJson)?.version,
+			version,
 			lastSaved: newest === undefined ? undefined : newest.updatedAt || newest.createdAt,
 		};
 		this.changed.fire();
@@ -220,7 +275,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 						? 'Clear search'
 						: node.action === 'check'
 							? 'Check memory'
-							: 'Update memory engine…';
+							: 'Update memory engine';
 				const icon = node.action === 'search'
 					? 'search'
 					: node.action === 'clear'
@@ -318,7 +373,9 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				nodes.push({ kind: 'section', section: 'conflicts', count: data.conflicts.total });
 			}
 			nodes.push({ kind: 'action', action: 'check' });
-			nodes.push({ kind: 'action', action: 'update' });
+			if (data.newerEngine !== undefined) {
+				nodes.push({ kind: 'action', action: 'update' });
+			}
 			return nodes;
 		}
 		switch (element.kind) {
@@ -395,19 +452,18 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	async search(): Promise<void> {
 		const current = this.data.kind === 'ready' ? this.data.search?.query : undefined;
 		const query = await vscode.window.showInputBox({
-			prompt: 'Search everything this machine remembers',
+			prompt: 'Search the memories of the projects open in this window',
 			placeHolder: 'a decision, a convention, a trap you hit before…',
 			value: current ?? '',
 		});
 		if (query === undefined || query.trim() === '') {
 			return;
 		}
-		const json = await this.getJson(`/search?q=${encodeURIComponent(query.trim())}`);
-		if (json === undefined) {
+		const rows = await this.searchOpenProjects(query.trim());
+		if (rows === undefined) {
 			void vscode.window.showWarningMessage('The memory engine did not answer the search. Nothing was changed.');
 			return;
 		}
-		const rows = parseMemoryRows(json) ?? [];
 		if (this.data.kind !== 'ready') {
 			return;
 		}
