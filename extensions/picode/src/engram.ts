@@ -64,7 +64,8 @@ export function engramBinaryCandidates(configured: string | undefined, workspace
 		...workspaceFolders.map(folder => joinPath(folder, relative, binary)),
 		// The owner's own update, if they ran it: a newer engine downloaded into their profile,
 		// never the shared store and never the installation. It wins over the shipped copy
-		// because it is the one they asked for, and it is reverted by deleting the folder.
+		// because it is the one they asked for — until PiCode ships a newer one (`firstEngramBinary`)
+		// — and it is reverted by deleting the folder.
 		...(home !== undefined && home.trim() !== '' ? [joinPath(home, '.picode', 'memory', binary)] : []),
 		// The only candidate an *installed* editor has: `<app>/resources/memory`, which is what
 		// the build writes. It is tried whatever the setting is spelled as — the value says where
@@ -83,9 +84,46 @@ export function engramBinaryCandidates(configured: string | undefined, workspace
  * gentle-engram reads `ENGRAM_BIN` once, when pi loads it, so the answer has to be there before
  * any session is built — the probe below waits on the network and cannot be.
  */
-export function firstEngramBinary(io: Pick<EngramProbeIo, 'env' | 'home' | 'appRoot' | 'workspaceFolders' | 'configured' | 'exists'>): string | undefined {
+export function firstEngramBinary(io: Pick<EngramProbeIo, 'env' | 'home' | 'appRoot' | 'workspaceFolders' | 'configured' | 'exists'> & Partial<Pick<EngramProbeIo, 'read'>>): string | undefined {
+	const binary = engramBinaryName();
+	const updated = io.home !== undefined && io.home.trim() !== '' ? joinPath(io.home, '.picode', 'memory', binary) : undefined;
+	const shipped = joinPath(io.appRoot, '..', SHIPPED_ENGRAM_FOLDER, binary);
+	// The owner's update is a floor-raiser, never a lid: once a PiCode update ships a newer engine
+	// than the one they downloaded, the shipped one is used. Both say their version in a file beside
+	// them; when either cannot be read, the owner's choice stands.
+	const versionOf = (file: string): string | undefined => io.read?.(joinPath(file, '..', ENGRAM_VERSION_FILE))?.trim();
+	const outgrown = (candidate: string): boolean => {
+		if (candidate !== updated || !io.exists(shipped)) {
+			return false;
+		}
+		const mine = versionOf(updated);
+		const theirs = versionOf(shipped);
+		return mine !== undefined && theirs !== undefined && olderVersion(mine, theirs);
+	};
 	return engramBinaryCandidates(io.configured, io.workspaceFolders, io.appRoot, io.env['PATH'] ?? io.env['Path'], io.home)
-		.find(candidate => io.exists(candidate));
+		.find(candidate => io.exists(candidate) && !outgrown(candidate));
+}
+
+/** The file beside an engine that names its version: written by the build and by the app's update. */
+export const ENGRAM_VERSION_FILE = 'engram.version';
+
+/** Whether `a` is an older `x.y.z` than `b`; anything unreadable is not older. */
+function olderVersion(a: string, b: string): boolean {
+	const parse = (value: string): number[] | undefined => {
+		const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(value);
+		return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])];
+	};
+	const x = parse(a);
+	const y = parse(b);
+	if (x === undefined || y === undefined) {
+		return false;
+	}
+	for (let index = 0; index < 3; index++) {
+		if (x[index] !== y[index]) {
+			return x[index] < y[index];
+		}
+	}
+	return false;
 }
 
 /** `~/.engram` — the engine's own default, kept so the store is shared rather than owned. */
