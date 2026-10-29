@@ -27,7 +27,7 @@ registerHooks({
 });
 
 const { pointChildPiAtThisPi } = await import('../src/product-env.ts');
-const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, productEntry, switchedOff, withProductPackages } = await import('../src/product-packages.ts');
+const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, isNewerRelease, isProductPackage, productEntry, switchedOff, withProductPackages, withProductPackageVersion } = await import('../src/product-packages.ts');
 
 const GENTLE_PI = { source: 'npm:gentle-pi@4.5.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
@@ -95,6 +95,43 @@ test('a settings file that is not a JSON object is never replaced by a guess', (
 		assert.equal(result.changed, false);
 		assert.equal(result.text, text);
 	}
+});
+
+test('the pin is a floor: a newer exact version the owner took from the app is kept, an older one is raised', () => {
+	const source = JSON.stringify({ packages: ['npm:gentle-pi@99.0.0', 'npm:gentle-engram@0.0.1', 'npm:pi-intercom@99.1.2'] });
+	const parsed = JSON.parse(withProductPackages(source).text!);
+	assert.deepEqual(parsed.packages, [
+		// The filter still comes from the product, whatever the version.
+		{ ...GENTLE_PI, source: 'npm:gentle-pi@99.0.0' },
+		productEntry(PRODUCT_PACKAGES[1]!),
+		'npm:pi-intercom@99.1.2',
+	]);
+});
+
+test('a range or a prerelease above the floor is not an update the owner took: it goes back to the floor', () => {
+	const source = JSON.stringify({ packages: ['npm:gentle-pi@^99.0.0', 'npm:gentle-engram@99.0.0-beta.1'] });
+	const parsed = JSON.parse(withProductPackages(source).text!);
+	assert.deepEqual(parsed.packages.slice(0, 2), [GENTLE_PI, productEntry(PRODUCT_PACKAGES[1]!)]);
+});
+
+test('the app moves one product package up, and never below the floor', () => {
+	const moved = withProductPackageVersion(undefined, 'gentle-engram', '99.0.0');
+	assert.equal(moved.changed, true);
+	assert.ok(JSON.parse(moved.text!).packages.includes('npm:gentle-engram@99.0.0'));
+	for (const [name, version] of [['gentle-engram', '0.0.1'], ['gentle-engram', 'latest'], ['gentle-engram', '^99.0.0'], ['pi-lens', '99.0.0']]) {
+		assert.deepEqual(withProductPackageVersion('{}', name!, version!), { text: '{}', changed: false }, `${name}@${version}`);
+	}
+});
+
+test('newer means a newer exact release', () => {
+	assert.equal(isNewerRelease('4.5.1', '4.5.0'), true);
+	assert.equal(isNewerRelease('4.10.0', '4.9.9'), true);
+	assert.equal(isNewerRelease('4.5.0', '4.5.0'), false);
+	assert.equal(isNewerRelease('4.4.9', '4.5.0'), false);
+	assert.equal(isNewerRelease('5.0.0-rc.1', '4.5.0'), false);
+	assert.equal(isNewerRelease(undefined, '4.5.0'), false);
+	assert.equal(isProductPackage('gentle-pi'), true);
+	assert.equal(isProductPackage('pi-lens'), false);
 });
 
 test('an empty list of products changes nothing', () => {
