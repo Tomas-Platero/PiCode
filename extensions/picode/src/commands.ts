@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
@@ -11,7 +12,8 @@ import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, sdkEn
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
-import { fileNameOf, piCommandsOfRunner, promptFileText, type PiCommand } from './command-registry';
+import { chatSlashCommandsOf, fileNameOf, promptFileText, type PiCommand } from './command-registry';
+import { EDITOR_COMMANDS, isListedCommand } from './chat-commands';
 import { bindSessionExtensions, pinAgentDir, type PiSession } from './agent';
 import { listAgents } from './gentle-models';
 
@@ -20,7 +22,8 @@ import { listAgents } from './gentle-models';
  *
  * pi's terminal owns a command registry: the builtin TUI commands plus the commands its
  * loaded extensions register through `pi.registerCommand`. This module puts the commands
- * of the runtime in force into the chat input's slash list, contributed as prompt files
+ * of the runtime in force into the chat input's slash list — with pi's prompt templates and the
+ * editor's own answers to pi's terminal commands (`chat-commands.ts`) — contributed as prompt files
  * the editor's own slash machinery lists.
  *
  * Three decisions are deliberate here:
@@ -72,6 +75,8 @@ export interface PiCommandDeps {
 	readonly liveSessionCommands: () => { readonly key: string; readonly commands: readonly PiCommand[] } | undefined;
 	/** Fires when the chat's session was created, replaced or dropped, so the list re-reads. */
 	readonly onSessionChanged?: vscode.Event<void>;
+	/** Whether the chat has learned this command only works in pi's terminal. */
+	readonly isTerminalOnly?: (command: PiCommand) => boolean;
 }
 
 /** Opens a session of the runtime in force, reads its command registry and closes it. */
@@ -130,7 +135,7 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		return created.session;
 	})();
 	try {
-		return piCommandsOfRunner(session);
+		return chatSlashCommandsOf(session, EDITOR_COMMANDS, isListedCommand);
 	} finally {
 		// The discovery session held nothing: no message ran, so pi wrote no transcript.
 		try {
@@ -140,6 +145,23 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 			// commands were already read.
 		}
 	}
+}
+
+/** The settings files that declare pi's packages: the profile's (pi's own default when external) and the project's. */
+function packageSettingsFiles(agentDir: string | undefined, cwd: string): string[] {
+	const profile = agentDir ?? process.env['PI_CODING_AGENT_DIR'] ?? path.join(os.homedir(), '.pi', 'agent');
+	return [path.join(profile, 'settings.json'), path.join(cwd, '.pi', 'settings.json')];
+}
+
+/** When each of those files last changed: a new value means the package list may have changed. */
+function packagesFingerprint(files: readonly string[]): string {
+	return files.map(file => {
+		try {
+			return String(fs.statSync(file).mtimeMs);
+		} catch {
+			return '-';
+		}
+	}).join(',');
 }
 
 /** A file's text, or `undefined` when it is not there. */
@@ -160,7 +182,7 @@ function readTextFile(file: string): string | undefined {
  * cached until the session, the runtime or the folder changes. `refresh` forces a re-read
  * (a runtime switch while the window sits idle, for one).
  */
-export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, deps: PiCommandDeps): { refresh(): void; dispose(): void } {
+export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, deps: PiCommandDeps): { refresh(): void; list(): Promise<readonly vscode.ChatResource[]>; dispose(): void } {
 	const commandsDir = path.join(context.globalStorageUri.fsPath, 'pi-commands');
 	const changed = new vscode.EventEmitter<void>();
 	/** The prompt files the last sync wrote, so a command that disappears loses its file. */
@@ -186,7 +208,9 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 		}
 		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 		const agentDir = chatAgentDir(deps.distributionRoot);
-		const key = [readRuntimeMode(), cwd, agentDir ?? ''].join('\u0000');
+		// The packages are part of the key: one installed or removed (from the app or from pi's
+		// terminal) changes what the session holds, and an old listing would hide its commands.
+		const key = [readRuntimeMode(), cwd, agentDir ?? '', packagesFingerprint(packageSettingsFiles(agentDir, cwd))].join('\u0000');
 		if (discovery?.key === key) {
 			return Promise.resolve(discovery.commands);
 		}
@@ -205,6 +229,10 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 		/** The files the commands want now, first command of a name wins. */
 		const wanted = new Map<string, PiCommand>();
 		for (const command of commands) {
+			// A command the chat learned only works in pi's terminal is not offered (`learned-commands.ts`).
+			if (deps.isTerminalOnly?.(command) === true) {
+				continue;
+			}
 			if ([...wanted.values()].some(seen => seen.name === command.name)) {
 				continue;
 			}
@@ -282,10 +310,27 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 	// after the first paint has landed. The slash list fills in when the discovery ends
 	// either way.
 	const warmup = setTimeout(refreshQuietly, 20_000);
+	// The files that say which packages pi has. A change re-reads the list, so a package's new
+	// commands and prompts show up in the slash list without a restart.
+	const cwdNow = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+	for (const file of packageSettingsFiles(chatAgentDir(deps.distributionRoot), cwdNow)) {
+		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)));
+		context.subscriptions.push(watcher, watcher.onDidCreate(refreshQuietly), watcher.onDidChange(refreshQuietly), watcher.onDidDelete(refreshQuietly));
+	}
 	context.subscriptions.push(new vscode.Disposable(() => clearTimeout(warmup)));
 
 	return {
 		refresh: refreshQuietly,
+		// The same commands the prompt-file provider hands over, for the customization list that
+		// conversations opened from the Sessions panel read (a different session type: see `extension.ts`).
+		list: async () => {
+			try {
+				return await refreshNow();
+			} catch (error) {
+				deps.log(`commands: ${error instanceof Error ? error.message : String(error)}`);
+				return lastResources;
+			}
+		},
 		dispose: () => {
 			for (const subscriptions of [registration, changed]) {
 				subscriptions.dispose();

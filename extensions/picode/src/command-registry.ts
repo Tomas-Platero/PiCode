@@ -25,6 +25,8 @@ export interface PiCommand {
 	readonly name: string;
 	readonly description?: string;
 	readonly argumentHint?: string;
+	/** The file the command comes from, when pi says: what a learned verdict is tied to (`learned-commands.ts`). */
+	readonly source?: string;
 }
 
 /** The longest argument hint written into a command's prompt file; the rest is trimmed. */
@@ -113,6 +115,39 @@ export function piCommandsOfRunner(piSession: unknown): readonly PiCommand[] {
 			}
 			const description = typeof record?.['description'] === 'string' && record['description'].length > 0 ? record['description'] : undefined;
 			const argumentHint = piArgumentHintOf(command);
+			const sourceInfo = recordOf(record?.['sourceInfo']);
+			const source = typeof record?.['extensionPath'] === 'string' ? record['extensionPath']
+				: typeof sourceInfo?.['path'] === 'string' ? sourceInfo['path'] : undefined;
+			return [{
+				name,
+				...(description === undefined ? {} : { description }),
+				...(argumentHint === undefined ? {} : { argumentHint }),
+				...(source === undefined ? {} : { source }),
+			} satisfies PiCommand];
+		});
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * pi's prompt templates, as slash commands: pi expands `/name args` into the template by itself
+ * (`AgentSession.prompt`), so listing them is all the chat needs to do.
+ */
+export function piPromptTemplatesOf(piSession: unknown): readonly PiCommand[] {
+	try {
+		const templates = (piSession as { promptTemplates?: unknown } | undefined)?.promptTemplates;
+		if (!Array.isArray(templates)) {
+			return [];
+		}
+		return templates.flatMap(template => {
+			const record = recordOf(template);
+			const name = typeof record?.['name'] === 'string' && record['name'].length > 0 ? record['name'] : undefined;
+			if (name === undefined) {
+				return [];
+			}
+			const description = typeof record?.['description'] === 'string' && record['description'].length > 0 ? record['description'] : undefined;
+			const argumentHint = typeof record?.['argumentHint'] === 'string' && record['argumentHint'].length > 0 ? record['argumentHint'] : undefined;
 			return [{
 				name,
 				...(description === undefined ? {} : { description }),
@@ -122,6 +157,24 @@ export function piCommandsOfRunner(piSession: unknown): readonly PiCommand[] {
 	} catch {
 		return [];
 	}
+}
+
+/**
+ * Everything the chat's slash list offers for one session: its extension commands, its prompt
+ * templates, and the editor's own answers to pi's terminal commands — minus the commands that only
+ * work in pi's terminal. First of a name wins, in that order, which is also the order pi runs them.
+ */
+export function chatSlashCommandsOf(piSession: unknown, editorCommands: readonly PiCommand[], isListed: (name: string) => boolean): readonly PiCommand[] {
+	const seen = new Set<string>();
+	const listed: PiCommand[] = [];
+	for (const command of [...piCommandsOfRunner(piSession), ...piPromptTemplatesOf(piSession), ...editorCommands]) {
+		if (seen.has(command.name) || !isListed(command.name)) {
+			continue;
+		}
+		seen.add(command.name);
+		listed.push(command);
+	}
+	return listed;
 }
 
 /** A file name a command's prompt file can carry. */

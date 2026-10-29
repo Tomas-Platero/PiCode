@@ -45,13 +45,14 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
 import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateCommands } from './gentle-models-ui';
 import { registerPiSessionsProvider } from './sessions-register';
-import { applyProductEnv, pointChildPiAtThisPi } from './product-env';
+import { applyProductEnv, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
+import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
 import { traceChildPi } from './child-trace';
 import { distributionRootOf } from './distribution-root';
@@ -892,6 +893,14 @@ function mcpDefinition(server: PiMcpServer): vscode.McpServerDefinition {
  * record lives there, keyed per profile directory, the same way `registerSetupCommands` keeps
  * its state.
  */
+/**
+ * The slash commands of pi's session, for the customization list of a conversation opened from the
+ * Sessions panel. That session type answers its own list instead of the prompt files the live chat
+ * reads, and until commands were added to it those conversations offered skills and nothing else
+ * (`/export`, `/compact`… were missing). Set when the commands register.
+ */
+let piCommandResources: (() => Promise<readonly vscode.ChatResource[]>) | undefined;
+
 function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[] {
 	const changed = new vscode.EventEmitter<void>();
 	const fsReader = nodeFs();
@@ -1004,7 +1013,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	};
 	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('pi', { label: 'PiCode' }, {
 		onDidChange: changed.event,
-		provideChatSessionCustomizations: () => [
+		provideChatSessionCustomizations: async () => [
 			...discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader).map(agent => ({
 				uri: vscode.Uri.file(agent.file),
 				type: customizationType.Agent,
@@ -1018,6 +1027,13 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 				name: skill.name,
 				...(skill.description === undefined ? {} : { description: skill.description }),
 				source: skill.source,
+			})),
+			...(await (piCommandResources?.() ?? Promise.resolve([]))).map(command => ({
+				uri: command.uri,
+				type: customizationType.Prompt,
+				name: (command as NamedChatResource).name,
+				...((command as NamedChatResource).description === undefined ? {} : { description: (command as NamedChatResource).description }),
+				source: 'extension' as const,
 			})),
 		],
 		provideSourceFolders: (_session, type) => piCreationFolders(type.id),
@@ -2276,6 +2292,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 			firstBackgroundCheck = false;
 		} catch (error) {
 			report(`updates: the check failed (${error instanceof Error ? error.message : String(error)})`);
+			// Offline on startup: the last answer is all there is, and it is still worth saying once.
+			const cached = readUpdatesSnapshot(context.globalState);
+			if (firstBackgroundCheck && cached !== undefined && cached.targets.length > 0) {
+				void showUpdatesNotice(cached);
+			}
+			firstBackgroundCheck = false;
 		} finally {
 			checking = false;
 		}
@@ -2284,13 +2306,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// The last check's answer survives restarts, so the item is back the moment the window is —
 	// before the first check of this session has run.
 	showStatus(readUpdatesSnapshot(context.globalState));
-	// If a previous check already found updates, say so once, on startup, instead of waiting for
-	// the owner to open the panel. The delay lets the window finish opening before the toast.
+	// If a previous check already found updates, the first check of this session runs early, and its
+	// answer is the one toast of the session. Toasting the stored answer as well showed two notices,
+	// the older one with versions that were no longer installed.
 	const cachedSnapshot = readUpdatesSnapshot(context.globalState);
-	if (cachedSnapshot !== undefined && cachedSnapshot.targets.length > 0) {
-		setTimeout(() => void showUpdatesNotice(cachedSnapshot), 8000);
-	}
-	const firstCheck = setTimeout(() => { void scheduledCheck(); }, UPDATES_FIRST_CHECK_DELAY_MS);
+	const firstCheckDelay = cachedSnapshot !== undefined && cachedSnapshot.targets.length > 0 ? 8_000 : UPDATES_FIRST_CHECK_DELAY_MS;
+	const firstCheck = setTimeout(() => { void scheduledCheck(); }, firstCheckDelay);
 	const interval = setInterval(() => { void scheduledCheck(); }, UPDATES_CHECK_INTERVAL_MS);
 	context.subscriptions.push(new vscode.Disposable(() => {
 		clearTimeout(firstCheck);
@@ -2319,6 +2340,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		path.join(piRuntimeRoot(distributionRoot(context.extensionUri)), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'),
 		candidate => fs.existsSync(candidate),
 	);
+	// A subagent whose own model is refused carries on with the chat's model.
+	Object.assign(process.env, subagentInjectionEnv(
+		path.join(profileDirectory(context.extensionUri), 'npm', 'node_modules', 'gentle-pi'),
+		path.join(context.extensionUri.fsPath, 'out', 'subagent-model-fallback.js'),
+		candidate => fs.existsSync(candidate),
+	));
 	// What those children do, and when: a line each in the log, so an agent that fails to end can be read.
 	traceChildPi(require('node:child_process'), line => console.error(`[pi] ${line}`));
 	// Modules that imported `spawn` by name see the wrapped one.
@@ -2421,7 +2448,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		log: line => console.error(`[pi] ${line}`),
 		liveSessionCommands,
 		onSessionChanged: onPiSessionChanged,
+		isTerminalOnly: isLearnedTerminalOnly,
 	});
+	piCommandResources = piCommands.list;
 	context.subscriptions.push(piCommands);
 
 	// The MCP servers pi runs are written from the settings row, and followed while the editor is
@@ -2587,6 +2616,7 @@ const setupDeps = {
 		finishedJobs: finishedBackgroundJobs,
 		agents: () => gentleAgents.current(),
 		onAgentsChange: listener => gentleAgents.onDidChange(listener),
+		explainFailure: id => isTaskId(id) ? explainTaskFailure(profileDirectory(context.extensionUri), id) : undefined,
 		openTranscript: id => {
 			if (!isTaskId(id)) {
 				return;

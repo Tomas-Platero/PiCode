@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { contextBlockFor } from './editor-context';
-import { readPiChatSettings } from './piConfig';
+import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
 import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, resolveProjectScope, sdkEntryCandidates } from './runtime';
@@ -62,7 +62,7 @@ import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } fr
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
-import { piCommandsOfRunner, type PiCommand } from './command-registry';
+import { chatSlashCommandsOf, piCommandsOfRunner, type PiCommand } from './command-registry';
 import { modelRefOf } from './providerIds';
 import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
@@ -70,6 +70,9 @@ import { conversationName, isSlashCommand } from './context';
 import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice } from './extension-notices';
 import { recordUsageHeaders } from './subscription-usage';
+import { CHAT_MODEL_ENV } from './subagent-model-fallback';
+import { displayedCustomText, EDITOR_COMMANDS, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
+import { LearnedCommands, terminalOnlyVerdict } from './learned-commands';
 
 /**
  * `@pi` inside the editor's own chat.
@@ -151,9 +154,15 @@ interface PiToolCallResult {
  */
 interface PiExtensionApi {
 	on(event: 'tool_call', handler: (event: PiToolCallEvent) => Promise<PiToolCallResult | undefined>): () => void;
-	on(event: 'before_agent_start', handler: (event: PiBeforeAgentStartEvent) => void | Promise<void>): () => void;
+	on(event: 'before_agent_start', handler: (event: PiBeforeAgentStartEvent, ctx: { readonly model?: PiModelRef }) => void | Promise<void>): () => void;
+	on(event: 'model_select', handler: (event: { readonly model?: PiModelRef }) => void): () => void;
 	on(event: 'after_provider_response', handler: (event: { readonly headers: Record<string, string> }) => void): () => void;
 	getAllTools(): readonly PiKnownTool[];
+}
+
+interface PiModelRef {
+	readonly provider: string;
+	readonly id: string;
 }
 
 interface PiBeforeAgentStartEvent {
@@ -224,7 +233,25 @@ export interface PiSession {
 	getAllTools?(): ReadonlyArray<{ readonly name: string }>;
 	/** Names the conversation: what pi-intercom calls the session, and what its transcript records. */
 	setSessionName?(name: string): void;
+	/** The members the editor's answers to pi's terminal commands use (`chat-commands.ts`); optional, read defensively. */
+	readonly sessionName?: string;
+	compact?(customInstructions?: string): Promise<unknown>;
+	getSessionStats?(): PiSessionStats;
+	exportToHtml?(outputPath?: string): Promise<string>;
+	getLastAssistantText?(): string | undefined;
+	readonly promptTemplates?: ReadonlyArray<{ readonly name: string; readonly description?: string; readonly argumentHint?: string }>;
+	readonly resourceLoader?: { getSkills?(): { readonly skills: ReadonlyArray<{ readonly name: string }> } };
 	dispose(): void;
+}
+
+/** pi's `getSessionStats()`, reduced to what `/session` shows. */
+interface PiSessionStats {
+	readonly userMessages?: number;
+	readonly assistantMessages?: number;
+	readonly toolCalls?: number;
+	readonly tokens?: { readonly input?: number; readonly output?: number; readonly cacheRead?: number };
+	readonly cost?: number;
+	readonly contextUsage?: { readonly percent?: number | null };
 }
 
 /**
@@ -599,6 +626,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 		const subscription = session.subscribe(event => {
 			if (event.type === 'agent_start') {
 				agentRunBegan = true;
+				noteCommandShown();
 			}
 			if (event.type === 'message_update') {
 				const delta = event.assistantMessageEvent;
@@ -701,6 +729,14 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					};
 					backgroundJobs.complete(closed);
 					notifyAgentStatus();
+				} else {
+					// What an extension posts for the person to read (`pi.sendMessage` with `display`): the
+					// terminal shows it, so the chat does too.
+					const shown = displayedCustomText(message);
+					if (shown !== undefined) {
+						stream.markdown(`\n\n${shown}\n`);
+						noteCommandShown();
+					}
 				}
 				if (message?.role === 'assistant' && typeof message.errorMessage === 'string' && message.errorMessage.length > 0) {
 					// What happened first, then pi's own sentence — except for the one failure whose advice only works
@@ -779,6 +815,38 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 interface TurnContext {
 	stream: vscode.ChatResponseStream;
 	level: ReturnType<typeof permissionLevelOf>;
+	/** While an extension command runs: what it said and whether anything reached the person (`learned-commands.ts`). */
+	command?: { notices: string[]; shown: boolean };
+}
+
+/** Something an extension command did reached the person. */
+function noteCommandShown(): void {
+	if (turnContext.current?.command !== undefined) {
+		turnContext.current.command.shown = true;
+	}
+}
+
+/** How long a bare command that has shown nothing yet is given before its silence counts. */
+const SILENCE_WAIT_MS = 8_000;
+
+/** The terminal-only commands the chat learned by itself; set when the participant registers. */
+let learnedCommands: LearnedCommands | undefined;
+
+/** A command's file as it is now: a package update changes it, and the learned verdict lapses. */
+function commandFingerprint(source: string | undefined): string {
+	if (source === undefined) {
+		return 'unknown';
+	}
+	try {
+		return `${source}@${fs.statSync(source).mtimeMs}`;
+	} catch {
+		return source;
+	}
+}
+
+/** Whether the chat learned this command only works in pi's terminal (the slash list leaves it out). */
+export function isLearnedTerminalOnly(command: PiCommand): boolean {
+	return learnedCommands?.has(command.name, command.source) === true;
 }
 
 /** The request in flight, which is where a pi tool call gets its stream and its level. */
@@ -870,6 +938,28 @@ export function usageHeadersExtension(): PiInlineExtension {
 	};
 }
 
+/**
+ * Publishes the model the chat is answering with in `PICODE_CHAT_MODEL`, which the subagents
+ * gentle-pi starts inherit: a subagent whose own model is refused switches to it
+ * (`subagent-model-fallback.ts`). Set when a run starts and when the model changes, so it names
+ * the model of the chat that launched the task.
+ */
+export function chatModelExtension(): PiInlineExtension {
+	const publish = (model: PiModelRef | undefined): void => {
+		if (model !== undefined && model.provider.length > 0 && model.id.length > 0) {
+			process.env[CHAT_MODEL_ENV] = `${model.provider}/${model.id}`;
+		}
+	};
+	return {
+		name: 'picode-chat-model',
+		hidden: true,
+		factory: pi => {
+			void pi.on('before_agent_start', (_event, ctx) => { publish(ctx.model); });
+			void pi.on('model_select', event => { publish(event.model); });
+		},
+	};
+}
+
 /* ------------------------------------------------------------------ *
  * pi's interactive UI, as the chat can host it
  * ------------------------------------------------------------------ */
@@ -945,6 +1035,7 @@ async function askExtensionInChat(
 		log(`extension asked a ${kind} question outside a chat turn: ${title}`);
 		return undefined;
 	}
+	noteCommandShown();
 	const question = new vscode.ChatQuestion(
 		EXTENSION_UI_QUESTION_ID,
 		kind === 'text' ? vscode.ChatQuestionType.Text : vscode.ChatQuestionType.SingleSelect,
@@ -997,7 +1088,7 @@ interface PiExtensionUiContext {
 	setFooter(factory?: unknown): void;
 	setHeader(factory?: unknown): void;
 	setTitle(title: string): void;
-	custom(): Promise<undefined>;
+	custom(factory?: unknown): Promise<undefined>;
 	pasteToEditor(text: string): void;
 	setEditorText(text: string): void;
 	getEditorText(): string;
@@ -1041,6 +1132,33 @@ const CHAT_THEME: ChatTheme = new Proxy({} as ChatTheme, {
  * `custom` (a terminal component) resolves `undefined`, exactly as pi's own RPC mode does; callers
  * already handle that as "she did not pick anything".
  */
+/** The width a terminal panel is drawn at for the chat. */
+const PANEL_WIDTH = 100;
+
+/** A terminal panel's text, drawn once from pi's `custom()` factory, or `undefined` when it draws nothing. */
+async function panelSnapshot(factory: unknown): Promise<string | undefined> {
+	if (typeof factory !== 'function') {
+		return undefined;
+	}
+	const tui = { requestRender: (): void => undefined, terminal: { columns: PANEL_WIDTH, rows: 40 } };
+	const component = await (factory as (...args: unknown[]) => unknown)(tui, CHAT_THEME, {}, (): void => undefined) as
+		{ render?: (width: number) => unknown; dispose?: () => void } | undefined;
+	try {
+		const lines = component?.render?.(PANEL_WIDTH);
+		return Array.isArray(lines) ? panelText(lines.filter((line): line is string => typeof line === 'string')) : undefined;
+	} finally {
+		component?.dispose?.();
+	}
+}
+
+/** Puts text in the chat's input, without sending it. */
+function putInChatInput(text: string): void {
+	if (typeof text !== 'string' || text.trim() === '') {
+		return;
+	}
+	void vscode.commands.executeCommand('workbench.action.chat.open', { query: text, isPartialQuery: true }).then(undefined, () => undefined);
+}
+
 function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
@@ -1059,6 +1177,8 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			if (stream === undefined || typeof message !== 'string' || message.trim() === '') {
 				return;
 			}
+			turnContext.current?.command?.notices.push(message);
+			noteCommandShown();
 			// Expected by the product, and written in terms of files and variables: not shown.
 			if (isExpectedHelperNotice(message)) {
 				return;
@@ -1100,9 +1220,26 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 		setFooter: noop,
 		setHeader: noop,
 		setTitle: noop,
-		custom: async (): Promise<undefined> => undefined,
-		pasteToEditor: noop,
-		setEditorText: noop,
+		// A terminal panel cannot be used here, but what it shows can: it is drawn once and its text
+		// goes into the answer (`/cache-stats`). The caller still sees the panel closed with no choice.
+		custom: async (factory?: unknown): Promise<undefined> => {
+			const stream = turnContext.current?.stream;
+			if (stream !== undefined) {
+				try {
+					const text = await panelSnapshot(factory);
+					if (text !== undefined) {
+						stream.markdown(`\n\`\`\`text\n${text}\n\`\`\`\n`);
+						noteCommandShown();
+					}
+				} catch (error) {
+					log(`an extension panel could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}
+			return undefined;
+		},
+		// Text an extension hands to the input (`/intercom-id`) lands in the chat's own input.
+		pasteToEditor: (text: string): void => putInChatInput(text),
+		setEditorText: (text: string): void => putInChatInput(text),
 		getEditorText: (): string => '',
 		editor: async (): Promise<undefined> => undefined,
 		addAutocompleteProvider: noop,
@@ -1212,6 +1349,180 @@ export async function bindSessionExtensions(session: PiSession, log: (line: stri
 /* ------------------------------------------------------------------ *
  * Registration
  * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
+ * pi's terminal commands, answered by the chat
+ * ------------------------------------------------------------------ */
+
+/** What the session can run by name right now: its extension commands and its skills. */
+function slashContextOf(session: PiSession): SlashContext {
+	let skills: readonly { readonly name: string }[] = [];
+	try {
+		skills = session.resourceLoader?.getSkills?.().skills ?? [];
+	} catch {
+		// A loader that cannot list its skills leaves the text as typed.
+	}
+	const commands = piCommandsOfRunner(session);
+	return {
+		extensionCommands: new Set(commands.map(command => command.name)),
+		skills: new Set(skills.map(skill => skill.name)),
+		learnedTerminalOnly: name => {
+			const command = commands.find(candidate => candidate.name === name);
+			return command !== undefined && isLearnedTerminalOnly(command) ? LEARNED_TERMINAL_ONLY : undefined;
+		},
+	};
+}
+
+/**
+ * After an extension command ran: when it only answered "this needs pi's terminal", or showed
+ * nothing at all, it is remembered as terminal-only and the slash list stops offering it.
+ */
+async function judgeCommandRun(session: PiSession, name: string, args: string, watched: { notices: string[]; shown: boolean }, stream: vscode.ChatResponseStream): Promise<boolean> {
+	// A command still working in the background (a fetch) may answer after the turn ended: silence is
+	// only a verdict once it has had a while to say something.
+	for (let waited = 0; !watched.shown && args.trim().length === 0 && waited < SILENCE_WAIT_MS; waited += 250) {
+		await new Promise(resolve => setTimeout(resolve, 250));
+	}
+	const verdict = terminalOnlyVerdict({ args, notices: watched.notices, shownSomething: watched.shown });
+	if (verdict === undefined || learnedCommands === undefined) {
+		return false;
+	}
+	const command = piCommandsOfRunner(session).find(candidate => candidate.name === name);
+	await learnedCommands.learn(name, command?.source, verdict.message);
+	stream.markdown(watched.shown
+		? `\n\nℹ️ /${name} only works in pi’s terminal, so the chat will not offer it any more.`
+		: `ℹ️ /${name} shows nothing in the editor: it only works in pi’s terminal, so the chat will not offer it any more.`);
+	return true;
+}
+
+/** The button each terminal-only command points at, when the editor has a way there. */
+const UNAVAILABLE_BUTTONS: Record<NonNullable<UnavailableCommand['action']>, vscode.Command> = {
+	tasks: { command: 'picode.status.tasks.focus', title: 'Open Tasks' },
+	agentModels: { command: 'picode.agents.chooseModels', title: 'Choose agent models' },
+	sessions: { command: 'agentSessions.showAgentSessionsSidebar', title: 'Open Sessions' },
+};
+
+/** A command that only exists in pi's terminal: said plainly, with the way there is. */
+function answerUnavailable(stream: vscode.ChatResponseStream, command: UnavailableCommand): void {
+	stream.markdown(`ℹ️ ${command.message}`);
+	if (command.action !== undefined) {
+		stream.button(UNAVAILABLE_BUTTONS[command.action]);
+	}
+}
+
+/**
+ * Runs one of `EDITOR_COMMANDS` against the chat's session. Returns `true` when the session has
+ * to be built again before the next message (`/reload`).
+ */
+async function runEditorCommand(name: string, args: string, session: PiSession, stream: vscode.ChatResponseStream, deps: AgentDeps, cwd: string): Promise<boolean> {
+	const run = (command: string, ...commandArgs: unknown[]): Thenable<unknown> => vscode.commands.executeCommand(command, ...commandArgs);
+	switch (name) {
+		case 'compact': {
+			if (typeof session.compact !== 'function') {
+				stream.markdown('This pi cannot compact a conversation.');
+				return false;
+			}
+			stream.progress('Compacting the conversation…');
+			await session.compact(args.length === 0 ? undefined : args);
+			stream.markdown('🗜️ Conversation compacted: earlier messages were summarized to free up context.');
+			return false;
+		}
+		case 'new':
+			await run('workbench.action.chat.newChat');
+			return false;
+		case 'model':
+			await run('workbench.action.chat.openModelPicker');
+			return false;
+		case 'thinking': {
+			const level = args.toLowerCase();
+			if (level.length === 0) {
+				stream.markdown(`🧠 Thinking: **${session.thinkingLevel ?? 'default'}**. Choose one with \`/thinking <level>\`: ${THINKING_LEVELS.join(', ')}.`);
+				return false;
+			}
+			if (!(THINKING_LEVELS as readonly string[]).includes(level)) {
+				stream.markdown(`Unknown thinking level “${args}”. Choose one of: ${THINKING_LEVELS.join(', ')}.`);
+				return false;
+			}
+			// The setting is what the chat's own thinking picker writes, and what every turn applies.
+			await vscode.workspace.getConfiguration('picode').update('pi.thinkingLevel', level, vscode.ConfigurationTarget.Global);
+			session.setThinkingLevel(level);
+			stream.markdown(`🧠 Thinking set to **${level}**.`);
+			return false;
+		}
+		case 'name':
+			if (args.length === 0) {
+				stream.markdown(`💬 This conversation is called **${session.sessionName ?? 'Untitled'}**. Rename it with \`/name <new name>\`.`);
+				return false;
+			}
+			session.setSessionName?.(args);
+			stream.markdown(`💬 Conversation renamed to **${args}**.`);
+			return false;
+		case 'session': {
+			const stats = session.getSessionStats?.();
+			const percent = stats?.contextUsage?.percent;
+			stream.markdown(sessionStatsMarkdown({
+				...(session.sessionName === undefined ? {} : { name: session.sessionName }),
+				...(session.model === undefined ? {} : { model: `${session.model.provider}/${session.model.id}` }),
+				...(stats?.userMessages === undefined ? {} : { userMessages: stats.userMessages }),
+				...(stats?.assistantMessages === undefined ? {} : { assistantMessages: stats.assistantMessages }),
+				...(stats?.toolCalls === undefined ? {} : { toolCalls: stats.toolCalls }),
+				...(stats?.tokens?.input === undefined ? {} : { input: stats.tokens.input }),
+				...(stats?.tokens?.output === undefined ? {} : { output: stats.tokens.output }),
+				...(stats?.tokens?.cacheRead === undefined ? {} : { cacheRead: stats.tokens.cacheRead }),
+				...(stats?.cost === undefined ? {} : { cost: stats.cost }),
+				...(typeof percent === 'number' ? { contextPercent: percent } : {}),
+			}));
+			return false;
+		}
+		case 'export': {
+			if (typeof session.exportToHtml !== 'function') {
+				stream.markdown('This pi cannot save a conversation as a web page.');
+				return false;
+			}
+			stream.progress('Saving the conversation…');
+			// Always a full path: left to itself pi writes a relative one, next to wherever the editor was
+			// launched from, and the buttons below could not find the file. Like pi's terminal, the
+			// default is the project folder.
+			const target = args.length === 0
+				? `pi-session-${new Date().toISOString().replace(/[:.]/g, '-')}.html`
+				: args;
+			const file = await session.exportToHtml(path.resolve(cwd, target));
+			stream.markdown('📄 Conversation saved as a web page.');
+			// In the editor's own browser, to read it as a page — not as a text file to edit.
+			stream.button({ command: 'workbench.action.browser.openFile', title: 'Open it', arguments: [vscode.Uri.file(file)] });
+			stream.button({ command: 'revealFileInOS', title: 'Show the file', arguments: [vscode.Uri.file(file)] });
+			return false;
+		}
+		case 'copy': {
+			const text = session.getLastAssistantText?.();
+			if (text === undefined || text.trim() === '') {
+				stream.markdown('There is no answer to copy yet.');
+				return false;
+			}
+			await vscode.env.clipboard.writeText(text);
+			stream.markdown('📋 Last answer copied.');
+			return false;
+		}
+		case 'reload':
+			stream.markdown('🔄 Extensions, skills and prompts will be loaded again with your next message.');
+			return true;
+		case 'resume':
+			await run('agentSessions.showAgentSessionsSidebar');
+			return false;
+		case 'login':
+		case 'logout':
+			await run('workbench.action.openSettings', 'picode.providers');
+			return false;
+		case 'settings':
+			await run('workbench.action.openSettings', 'picode');
+			return false;
+		case 'gentle:models':
+			stream.markdown(await deps.chooseAgentModels?.() ?? 'No change to the agents’ models.');
+			return false;
+		default:
+			return false;
+	}
+}
 
 /** The participant id the chat calls this agent by. */
 export const PI_PARTICIPANT = 'picode.pi';
@@ -1393,6 +1704,7 @@ interface ChatPi {
 }
 
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
+	learnedCommands = new LearnedCommands(context.globalState, commandFingerprint);
 	// The setup bridge needs to drop the live session when the profile's packages change:
 	// what they load (agents, skills, commands) registers when pi's session is created.
 	sessionResetter = () => {
@@ -1484,7 +1796,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		}
 		// The key is the session's identity: a rebuilt session reads again instead of
 		// serving another session's registry.
-		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: piCommandsOfRunner(session) };
+		return { key: `${sessionFolder}\u0000${session.sessionId}`, commands: chatSlashCommandsOf(session, EDITOR_COMMANDS, isListedCommand) };
 	};
 	sessionMcpProvider = () => {
 		const session = active?.session;
@@ -1657,7 +1969,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension()],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 					},
 				});
 				// pi collects load problems instead of failing the session; one that could not be
@@ -1744,6 +2056,33 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 			}
 
+			// A slash command pi's session would not understand is answered here, or rewritten into the
+			// form pi does understand (a skill as `/skill:name`); see `chat-commands.ts`.
+			let prompt = request.prompt;
+			const route = isSlashCommand(prompt) ? routeSlash(prompt, slashContextOf(chat.session)) : undefined;
+			if (route?.kind === 'unavailable') {
+				answerUnavailable(stream, route.command);
+				return {};
+			}
+			if (route?.kind === 'editor') {
+				if (chat.session.isStreaming && route.name === 'compact') {
+					stream.markdown('PiCode is still answering. Try /compact again when it has finished.');
+					return {};
+				}
+				const reload = await runEditorCommand(route.name, route.args, chat.session, stream, deps, cwd);
+				if (reload) {
+					// Built again, with everything re-read, on the next message; the conversation stays.
+					chat.session.dispose();
+					chat.session = undefined;
+					gentleAgents.clear();
+					sessionChangedEmitter.fire();
+				}
+				return {};
+			}
+			if (route?.kind === 'pi') {
+				prompt = route.text;
+			}
+
 			const context = settings.attachContext ? contextBlockFor(scope, picked, request.references, settings.contextMode) : undefined;
 			// One turn at a time in this window: the next one waits for the turn in flight to end, so
 			// a second chat session cannot prompt an agent that is still answering. See `turnChain`.
@@ -1776,8 +2115,21 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 						chat.session.setSessionName?.(name);
 					}
 				}
-				const framed = withContext(request.prompt, context, readRuntimeMode());
+				const framed = withContext(prompt, context, readRuntimeMode());
+				// An extension command is watched while it runs, so one that only works in pi's terminal is
+				// learned the first time (`learned-commands.ts`).
+				const slash = parseSlash(prompt);
+				const watched = slash !== undefined && route?.kind === 'pi' && slashContextOf(chat.session).extensionCommands.has(slash.name)
+					? { notices: [], shown: false }
+					: undefined;
+				if (turnContext.current !== undefined) {
+					turnContext.current.command = watched;
+				}
 				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
+					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
+					sessionChangedEmitter.fire();
+				}
 			} finally {
 				waitingTurns.delete(waitingTurn);
 				turnsWaiting--;

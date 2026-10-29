@@ -29,6 +29,9 @@ export interface SubscriptionWindowRow {
 	readonly usedPercent: number;
 	/** When the window resets, in epoch ms; `null` when the provider did not say. */
 	readonly resetAt: number | null;
+	/** Tokens used and allowed in the window, when the provider counts in tokens. */
+	readonly used?: number;
+	readonly cap?: number;
 }
 
 /**
@@ -40,6 +43,10 @@ export interface SubscriptionWindowRow {
 export interface SubscriptionStatus {
 	/** The meter's own id, which names the model it meters. */
 	readonly meter: string;
+	/** The provider the meter belongs to (`nan`, `openai-codex`, `anthropic`), when known. */
+	readonly provider?: string;
+	/** Whether this is the meter of the model the chat is on. */
+	readonly current?: boolean;
 	/** The windows, tightest first — the one that runs out first leads. */
 	readonly windows: readonly SubscriptionWindowRow[];
 	readonly limitReached: boolean;
