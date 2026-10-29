@@ -19,6 +19,7 @@ import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type Usa
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
+import { ANTHROPIC_PROVIDER, CODEX_PROVIDER, codexSignIn, getCachedCodexUsage, newestUsage, usageFromResponses, type ProviderUsage } from './subscription-usage';
 
 /**
  * The data behind PiCode's status surface.
@@ -303,9 +304,8 @@ function storedApiKey(profileDir: string, providerId: string): string | undefine
  * provider's meter under the session's model would be a number the owner cannot act on.
  *
  * Once those hold, the block is worth showing even before the first turn: the meter is live
- * provider data, not session data. Codex and Claude Pro/Max report their windows in SSE response
- * headers this connector never sees, so they get no block at all — the Model Subscription section
- * hides itself, which is the honest form of "this model has no window we can read".
+ * provider data, not session data. ChatGPT and Claude are read by `readAccountSubscriptions`, which
+ * is what the card draws whenever it has anything; this row is only its fallback.
  */
 async function readSubscription(profileDir: string, model: string | undefined): Promise<SubscriptionStatus | undefined> {
 	const current = currentModelRef(model);
@@ -386,23 +386,50 @@ async function readNanAccount(profileDir: string): Promise<CachedNanUsage | unde
 }
 
 /**
- * The account's whole allowance: every metered model, the one in use first, whichever provider's
- * model is answering right now.
+ * The account's whole allowance: NaN's metered models, ChatGPT's and Claude's windows, the
+ * provider the chat is on first, whichever provider's model is answering right now.
  *
- * NaN's quota belongs to the account, so it is worth seeing while a Claude model is the one in the
- * chat — the case the one-meter rule above leaves empty. The provider is found where the owner may
- * have put it: declared in the settings, or only carried in the profile's own model list. Nothing is
- * drawn when no NaN provider with a key exists, and a read that names no meter says nothing.
+ * A quota belongs to the account, so it is worth seeing while another provider's model is the one
+ * in the chat — the case the one-meter rule above leaves empty. NaN is found where the owner may
+ * have put it: declared in the settings, or only carried in the profile's own model list. ChatGPT
+ * and Claude come from `subscription-usage.ts`. A provider with nothing to read draws nothing.
  */
 async function readAccountSubscriptions(profileDir: string, model: string | undefined): Promise<readonly SubscriptionStatus[] | undefined> {
+	const current = currentModelRef(model);
 	const cached = await readNanAccount(profileDir);
-	if (cached?.value === undefined) {
-		return undefined;
-	}
-	const meters = nanAccountMeters(cached.value, currentModelRef(model)?.model)
-		.filter(limit => limit.windows.length > 0)
-		.map(limit => toSubscriptionStatus(limit, cached.fresh));
+	const nan = cached?.value === undefined
+		? []
+		: nanAccountMeters(cached.value, current?.model)
+			.filter(limit => limit.windows.length > 0)
+			.map(limit => toSubscriptionStatus(limit, cached.fresh));
+	const groups: { provider: string; meters: SubscriptionStatus[] }[] = [
+		{ provider: NAN_PROVIDER_ID, meters: nan },
+		{ provider: CODEX_PROVIDER, meters: await readCodexMeters(profileDir) },
+		{ provider: ANTHROPIC_PROVIDER, meters: signInMeters(usageFromResponses(ANTHROPIC_PROVIDER), true) },
+	];
+	// The provider the chat is on leads; the rest keep their order, so the card does not reshuffle.
+	const ordered = [...groups.filter(group => group.provider === current?.provider), ...groups.filter(group => group.provider !== current?.provider)];
+	const meters = ordered.flatMap(group => group.meters);
 	return meters.length > 0 ? meters : undefined;
+}
+
+/**
+ * ChatGPT's allowances: Codex's usage endpoint, read with the sign-in pi holds, merged with what the
+ * last ChatGPT response reported — whichever is newer. Nothing when there is neither.
+ */
+async function readCodexMeters(profileDir: string): Promise<SubscriptionStatus[]> {
+	const now = Date.now();
+	const signIn = codexSignIn(readJsonObject(path.join(profileDir, 'auth.json'))?.[CODEX_PROVIDER], now);
+	const endpoint = signIn === undefined ? undefined : await getCachedCodexUsage(signIn, now);
+	const usage = newestUsage(endpoint?.value, usageFromResponses(CODEX_PROVIDER));
+	return signInMeters(usage, usage !== endpoint?.value || endpoint?.fresh === true);
+}
+
+/** A sign-in provider's snapshot as the card draws it. */
+function signInMeters(usage: ProviderUsage | undefined, fresh: boolean): SubscriptionStatus[] {
+	return (usage?.limits ?? [])
+		.filter(limit => limit.windows.length > 0)
+		.map(limit => toSubscriptionStatus({ ...limit, windows: [...limit.windows] }, fresh));
 }
 
 /**

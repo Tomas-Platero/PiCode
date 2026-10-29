@@ -120,6 +120,7 @@ files, grouped by what it is for, each command keeping the name it always had:
 | `hotfix.mjs` | `make`, `check`, `apply`, `keygen` (the small update package; tests in `hotfix.test.mjs`) |
 | `branding.mjs` | `brand-copy`, `ico-to-png`, `make-inno-images`, `patch-inno-updater` |
 | `checks.mjs` | `check-mcp`, `patch-languageserver`, `patch-gulp-electron`, `prune-binaries` |
+| `pins.mjs` | `check`, `bump`, `audit` (the Gentle AI pins; run daily by `.github/workflows/pins.yml`, tests in `pins.test.mjs`) |
 
 Run one with `node build/<file>.mjs <command>`; run the file with no command (or
 an unknown one) and it prints the commands it accepts.
