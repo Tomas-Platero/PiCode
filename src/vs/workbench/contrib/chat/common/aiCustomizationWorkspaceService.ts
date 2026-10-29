@@ -47,6 +47,8 @@ export const AICustomizationManagementSection = {
 	Models: 'models',
 	/** PiCode's own panel: providers and models in one place (see `picodeProvidersModelsSection.ts`). */
 	ProvidersModels: 'providersModels',
+	/** PiCode's own panel: the plan allowances of the signed-in providers (see `picodeUsageLimitsSection.ts`). */
+	UsageLimits: 'usageLimits',
 	Tools: 'tools',
 	HarnessSettings: 'harnessSettings',
 	Status: 'status',
