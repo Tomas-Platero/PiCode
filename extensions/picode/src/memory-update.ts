@@ -8,7 +8,8 @@
  * The engine ships with PiCode, pinned. This module is the second path: the owner asks for a newer
  * one and it is downloaded into **their** profile (`~/.picode/memory/`), never into the
  * installation and never over the store. The shipped copy is left alone, so a PiCode update still
- * replaces it, and deleting `~/.picode/memory/` reverts to it. Nothing here migrates `~/.engram`:
+ * replaces it — and wins once it is newer (`firstEngramBinary`) — and deleting `~/.picode/memory/`
+ * reverts to it. It is offered with everything else in the app's update check (`extension.ts`). Nothing here migrates `~/.engram`:
  * a newer engine may, on first run, but that is the engine's own decision and the backup of the
  * database is taken before anything is started.
  *
@@ -21,7 +22,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
-import { engramBinaryName } from './engram';
+import { ENGRAM_VERSION_FILE, engramBinaryName } from './engram';
 
 const REPO = 'Gentleman-Programming/engram';
 const API = `https://api.github.com/repos/${REPO}/releases/latest`;
@@ -318,6 +319,8 @@ export async function updateEngine(options: {
 		if (hadBackup) {
 			try { fs.rmSync(backup, { force: true }); } catch { /* leave it; harmless */ }
 		}
+		// Says which version this is, so a newer engine shipped by a later PiCode wins over it.
+		try { fs.writeFileSync(path.join(targetDir, ENGRAM_VERSION_FILE), `${release.version}\n`); } catch { /* without it, this engine keeps winning */ }
 
 		return {
 			ok: true,

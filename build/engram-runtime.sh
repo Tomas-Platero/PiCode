@@ -129,6 +129,10 @@ if [[ "${INSTALLED}" != *"${VERSION}"* ]]; then
   exit 1
 fi
 
+# The version beside the engine: an engine the owner updated from the app gives way to this one
+# once this one is newer (`firstEngramBinary` in extensions/picode/src/engram.ts).
+printf '%s\n' "${VERSION}" > "${TARGET}/engram.version"
+
 if [[ ! -d "$HOME/.engram" ]]; then
   echo "  -- no existing memory on this machine yet: the engine creates one on first run"
 fi
