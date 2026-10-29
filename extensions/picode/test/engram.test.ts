@@ -19,6 +19,7 @@ import { test } from 'node:test';
 import * as path from 'path';
 import {
 	ENGRAM_DEFAULT_PORT,
+	ENGRAM_VERSION_FILE,
 	engramBinaryCandidates,
 	firstEngramBinary,
 	engramBinaryName,
@@ -66,6 +67,24 @@ test('the engine is found without waiting: the first candidate that exists, or n
 	const base = { env: {}, home: slashed(path.resolve(process.cwd(), 'home')), appRoot: appRoot(), workspaceFolders: [] as string[] };
 	assert.equal(firstEngramBinary({ ...base, exists: candidate => slashed(candidate) === shipped }), shipped);
 	assert.equal(firstEngramBinary({ ...base, exists: () => false }), undefined);
+});
+
+test('an engine the owner updated wins until PiCode ships a newer one', () => {
+	const binary = engramBinaryName();
+	const home = slashed(path.resolve(process.cwd(), 'home'));
+	const updated = `${home}/.picode/memory/${binary}`;
+	const shipped = slashed(path.resolve(process.cwd(), 'install', 'resources', SHIPPED_ENGRAM_FOLDER, binary));
+	const versions = (mine: string | undefined, theirs: string | undefined) => (file: string) => {
+		const at = slashed(file);
+		return at === `${home}/.picode/memory/${ENGRAM_VERSION_FILE}` ? mine : at === slashed(path.resolve(process.cwd(), 'install', 'resources', SHIPPED_ENGRAM_FOLDER, ENGRAM_VERSION_FILE)) ? theirs : undefined;
+	};
+	const base = { env: {}, home, appRoot: appRoot(), workspaceFolders: [] as string[], exists: (file: string) => slashed(file) === updated || slashed(file) === shipped };
+	assert.equal(firstEngramBinary({ ...base, read: versions('3.6.0', '3.5.1') }), updated);
+	assert.equal(firstEngramBinary({ ...base, read: versions('3.6.0', '3.6.0') }), updated);
+	assert.equal(firstEngramBinary({ ...base, read: versions('3.6.0', '3.7.0') }), shipped);
+	// A version that cannot be read leaves the owner's choice standing.
+	assert.equal(firstEngramBinary({ ...base, read: versions(undefined, '3.7.0') }), updated);
+	assert.equal(firstEngramBinary(base), updated);
 });
 
 test('a custom relative folder still ends at the engine the editor ships', () => {

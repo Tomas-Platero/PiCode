@@ -153,6 +153,15 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Cerrar el PR es decir «esta no»:** el bot no vuelve a proponer esa versión.
 * Detalle y uso: [`docs/PINS.md`](docs/PINS.md) · decisión: ADR-035.
 
+### Todo se actualiza desde la app; lo fijado es el mínimo
+>
+> *"nono quiero que se pueda actualizar todo desde la app, desde pi, engram, gentle, etc. Si sacan actualizaciones como mucho sus features hasta que nosotros no la integremos 100% en el editor no funcionarán pero poco más. Pero pueden arreglar bugs y demás."* — 2026-10-29
+
+* **Todo tiene botón de actualizar:** pi, sus paquetes, gentle-pi, gentle-engram, pi-intercom y el motor de engram salen en *Updates* y se actualizan con el mismo **Update**, sin esperar a una release de PiCode.
+* **El pin es el mínimo, no el techo:** la versión que fija PiCode es la de partida. Lo que el usuario actualiza desde la app se queda; una actualización de PiCode solo sube, nunca baja.
+* **Se acepta el coste:** una versión nueva puede traer funciones que el editor aún no enseña; sus arreglos llegan igual.
+* Detalle: ADR-035, adenda 1 · [`docs/PINS.md`](docs/PINS.md).
+
 ---
 
 ## 5. Personalización del Editor
@@ -389,4 +398,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-27** · El chat puede buscar y leer las conversaciones anteriores de la lista Sessions, también las de antes de cerrar PiCode («sí, haz que pi pueda buscar y leer mis conversaciones anteriores de la lista Sessions»; ADR-033, adenda 2).
 * **2026-10-27** · Actualizaciones pequeñas: **hotfix, minor update y release** («un sistema de hotfixes rápidos que no sea rebuildeando todo», «no quiero subir una 0.3.2 a 0.3.3 y encontrarme problemas»). Una sola numeración; el zip pequeño lleva solo lo que cambió, se prueba antes de publicar, va firmado y, si la versión nueva no arranca, se vuelve sola a la anterior (ADR-034, `docs/HOTFIX.md`). Al probarlo se arregló un fallo antiguo de la actualización portable: su script se movía a sí mismo y la dejaba a medias.
 * **2026-10-29** · Las piezas fijadas de Gentle AI se actualizan solas («un sistema para poder actualizar gentle-ai aunque sea casi automatizado o full automatizado»): un bot diario mueve el pin, lo seguro se fusiona solo en `experimental` y lo demás espera revisión; el motor de engram siempre espera (ADR-035).
+* **2026-10-29** · Todo se actualiza desde la app («quiero que se pueda actualizar todo desde la app, desde pi, engram, gentle, etc.»): las piezas de Gentle AI y el motor de engram salen en *Updates* con el resto, y el pin del producto pasa a ser el mínimo, no el techo (ADR-035, adenda 1).
 * **2026-10-29** · Gentle Shell revisado: es la parte de terminal de gentle-pi y no se integra entera; solo se trae su consumo de suscripción. La tarjeta *Usage limits* enseña ChatGPT y Claude además de NaN, con avisos al 80 % y al 95 % («Sí, tráelo»; ADR-036).

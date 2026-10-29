@@ -146,8 +146,8 @@ export function compareVersions(a: string, b: string): number {
  * What can be updated
  * ------------------------------------------------------------------ */
 
-/** The kinds of thing the check watches: the pi runtime, and pi's npm packages. */
-export type UpdateKind = 'runtime' | 'package';
+/** The kinds of thing the check watches: the pi runtime, pi's npm packages, and the memory engine. */
+export type UpdateKind = 'runtime' | 'package' | 'engine';
 
 /** One candidate the check compared, as the caller gathered it — versions may be missing. */
 export interface CandidateTarget {
@@ -236,7 +236,7 @@ export interface UpdatesSnapshot {
 }
 
 /** The kinds that may appear in a stored target, as a set the reader checks against. */
-const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'package'];
+const SNAPSHOT_KINDS: readonly UpdateKind[] = ['runtime', 'package', 'engine'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);

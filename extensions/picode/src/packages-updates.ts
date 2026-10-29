@@ -18,7 +18,8 @@
  *   npm's registry. A **pinned** one can still be *checked* — the installed version on disk
  *   against the registry's latest — but it cannot be taken: pi loads the pinned spelling, so
  *   an install behind its back would be re-pinned on the next load, and the row says to
- *   change the pin instead.
+ *   change the pin instead. The product's own packages are the exception: their pin is a floor
+ *   the app moves itself (`product-packages.ts`).
  * - A **git** declaration cannot be honestly checked by npm: the registry has no answer for a
  *   checkout pi installed as a repository, and guessing one would put a fake badge on a row.
  *   The row says it cannot be checked. The same for a **local path** — the answer is the
@@ -51,6 +52,7 @@ import { cacheKey, cachedModels, singleFlight, storeModels, type CacheEntry } fr
 import { parsePackageSource } from './packages-data';
 import { isSafeNpmInstallSpec, type InstallResult } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
+import { isProductPackage } from './product-packages';
 import { compareVersions, fetchNpmLatest, isComparableVersion, type FetchFn } from './updates-check';
 
 /* ------------------------------------------------------------------ *
@@ -236,8 +238,9 @@ export async function checkPackageUpdates(rows: readonly PackageUpdateRowInput[]
 			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: checkable.reason };
 		}
 		// A pinned package cannot be updated from its row (the pin would put the old version back),
-		// so it is never offered an Update button.
-		if (checkable.pin !== undefined) {
+		// so it is never offered an Update button — except the product's own, whose pin is a floor
+		// the app moves itself (`withProductPackageVersion`).
+		if (checkable.pin !== undefined && !isProductPackage(checkable.name)) {
 			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: 'Its version is fixed' };
 		}
 		const latest = await npmLatestFor(checkable.name, deps, cache, flights);
