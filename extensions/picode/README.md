@@ -67,6 +67,7 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `subscriptions.ts` | Los proveedores que se conectan con la suscripción que ya se paga (ChatGPT, Claude, Copilot, Grok, Kimi). |
 | `login.ts` | El flujo de «conectar una suscripción». |
 | `usage-data.ts` | El cuota de la suscripción, leída en vivo del proveedor. |
+| `subscription-usage.ts` | Los límites de ChatGPT y Claude: las ventanas que dan sus respuestas y el endpoint de consumo de Codex. |
 | `wizard-models.ts` | Proveedor y modelo del asistente de bienvenida: las dos preguntas de la primera ejecución. |
 
 ### 🔌 MCP (herramientas externas)

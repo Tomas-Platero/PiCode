@@ -141,7 +141,8 @@ export interface StatusData {
 	 */
 	subscription?: SubscriptionStatus;
 	/**
-	 * Every meter of the account's subscription, the model in use first (`usage-data.ts`). The
+	 * Every meter of the account's subscriptions — NaN's (`usage-data.ts`), ChatGPT's and Claude's
+	 * (`subscription-usage.ts`) — the provider in use first. The
 	 * quota is the account's, so this is present while another provider's model is the one
 	 * answering — the case `subscription` above, which follows the session's model, leaves empty.
 	 */
