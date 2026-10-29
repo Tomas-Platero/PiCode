@@ -189,6 +189,15 @@ test('a pinned row is never offered an update and costs no request', async () =>
 	assert.strictEqual(statuses[0].state, 'uncheckable');
 });
 
+test('a product package is pinned at its floor and still offered its update', async () => {
+	const fetchFn = fetchAnswering({ 'gentle-pi': '99.0.0' });
+	const { cache, flights } = privateCache();
+	const statuses = await checkPackageUpdates([
+		{ path: 'C:\\p\\npm\\node_modules\\gentle-pi', name: 'gentle-pi', version: '4.0.0', source: 'npm:gentle-pi@4.0.0' },
+	], { fetchFn, cache, flights });
+	assert.deepStrictEqual(statuses, [{ path: 'C:\\p\\npm\\node_modules\\gentle-pi', name: 'gentle-pi', state: 'behind', latest: '99.0.0' }]);
+});
+
 test('a fresh cache answers without asking npm again', async () => {
 	const fetchFn = fetchAnswering({ 'pi-lens': '4.4.0' });
 	const { cache, flights } = privateCache();

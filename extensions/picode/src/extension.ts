@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
 import { declarationsFromSetting, fillKeylessProviders, isRecord, projectDeclaration } from './declarations';
@@ -59,6 +60,8 @@ import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
+import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
+import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
 import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
@@ -1142,7 +1145,19 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			return { ok: false, message: refusal };
 		}
 		const profileDir = profileInForce();
-		const result = await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
+		// The product's own packages move their floor instead: `npm install` would be undone by the
+		// declaration on pi's next load.
+		const checkable = updateCheckableSource(target);
+		const productName = checkable.kind === 'npm' && isProductPackage(checkable.name) ? checkable.name : undefined;
+		const result = productName !== undefined
+			? await (async () => {
+				clearPackageUpdateCache();
+				const latest = await fetchNpmLatest(productName, { log: report });
+				return latest === undefined
+					? { ok: false, message: `PiCode could not find a newer ${productName}.` }
+					: updateProductPackages([{ name: productName, latest }]).then(outcome => outcome.message === '' ? { ok: true, message: `${productName} is up to date.` } : outcome);
+			})()
+			: await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
 		if (result.ok) {
 			// The panel reads the STORED snapshot: an update that does not re-run the check
 			// leaves the row saying it is behind until the next six-hourly pass — the "it
@@ -2084,13 +2099,26 @@ async function gatherUpdateCandidates(): Promise<readonly CandidateTarget[]> {
 		&& declaredPaths.has(found.path)
 		&& npmRoots.some(root => isInside(root, found.path)));
 
-	const latestVersions = await Promise.all(npmPackages.map(found => fetchNpmLatest(found.name, { log: report })));
-	npmPackages.forEach((found, index) => {
+	// The product's own packages are declared at an exact version, so the filter above leaves them
+	// out; their pin is a floor the app moves itself, so they are offered like any other.
+	const productPackages = PRODUCT_PACKAGES
+		.map(pkg => allPackages.find(found => found.name === pkg.name && found.version !== undefined && npmRoots.some(root => isInside(root, found.path))))
+		.filter((found): found is PiPackage & { version: string } => found !== undefined);
+
+	const checked = [...npmPackages, ...productPackages];
+	const [latestVersions, engine] = await Promise.all([
+		Promise.all(checked.map(found => fetchNpmLatest(found.name, { log: report }))),
+		memoryEngineCandidate(),
+	]);
+	checked.forEach((found, index) => {
 		const latest = latestVersions[index];
 		if (latest !== undefined) {
 			candidates.push({ kind: 'package', name: found.name, installed: found.version, latest });
 		}
 	});
+	if (engine !== undefined) {
+		candidates.push(engine);
+	}
 	return candidates;
 }
 
@@ -2126,7 +2154,13 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 	};
 
-	/** The update itself: stop the chat's pi, let pi update everything, then reload. */
+	/**
+	 * The update itself: stop the chat's pi, update what the last check found behind, then reload.
+	 *
+	 * Three parts, each only when the check found it behind (all of pi's when there is no answer yet):
+	 * pi and the packages the owner installed (`pi update`), the product's own packages, whose pin is
+	 * a floor the app moves (`updateProductPackages`), and the memory engine (`memory-update.ts`).
+	 */
 	const runUpdateFlow = async (): Promise<void> => {
 		// The check is quiet with the machine's pi in force, but a snapshot from before a runtime switch
 		// (or the status-bar item it left) must not be able to talk this flow into writing there.
@@ -2139,20 +2173,44 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 			void vscode.window.showInformationMessage('PiCode could not be updated: pi is missing from this installation.');
 			return;
 		}
+		const targets = readUpdatesSnapshot(context.globalState)?.targets ?? [];
+		const products = targets.filter(target => target.kind === 'package' && isProductPackage(target.name));
+		const engine = targets.find(target => target.kind === 'engine');
+		const piWork = targets.length === 0 || targets.some(target => target.kind === 'runtime' || (target.kind === 'package' && !isProductPackage(target.name)));
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
 		resetChatSession();
-		const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli() });
-		if (!result.ok) {
-			void vscode.window.showInformationMessage(result.message);
-			return;
+		if (piWork) {
+			const result = await runPiUpdate({ cliEntry, runtimeDir: piRuntimeDir(), profileDir: profileInForce(), npmCli: locateNpmCli() });
+			if (!result.ok) {
+				void vscode.window.showInformationMessage(result.message);
+				return;
+			}
+		}
+		if (products.length > 0) {
+			const result = await updateProductPackages(products);
+			if (!result.ok) {
+				void vscode.window.showInformationMessage(result.message);
+				return;
+			}
+		}
+		if (engine !== undefined) {
+			// The owner already said Update: the engine's own question is answered yes.
+			const result = await updateEngine({ home: os.homedir(), currentVersion: engine.installed, confirm: async () => true, progress: line => report(`updates: ${line}`) });
+			if (!result.ok) {
+				void vscode.window.showInformationMessage(`PiCode: the memory engine was not updated. ${result.message}`);
+				return;
+			}
 		}
 		// The optimistic clear: the new version is on disk, the reload loads it, and the check
 		// that runs after the reload rebuilds the truth from scratch.
 		await context.globalState.update(UPDATES_STATE_KEY, undefined);
 		showStatus(undefined);
+		// The memory engine runs on its own, outside the window: a reload keeps the old one serving.
 		void vscode.window.showInformationMessage(
-			'PiCode updated. Reload the window to start using the new version.',
+			engine === undefined
+				? 'PiCode updated. Reload the window to start using the new version.'
+				: 'PiCode updated. Reload the window to use the new pi packages; the new memory engine starts the next time PiCode opens.',
 			'Reload Window',
 		).then(choice => {
 			if (choice === 'Reload Window') {
@@ -2616,4 +2674,57 @@ export function deactivate(): void {
 function isPinnedSource(source: string): boolean {
 	const checkable = updateCheckableSource(source);
 	return checkable.kind === 'npm' && checkable.pin !== undefined;
+}
+
+/**
+ * Moves the product's own packages — gentle-pi, gentle-engram, pi-intercom — to newer versions in
+ * PiCode's profile, and installs them (ADR-035, addendum 1).
+ *
+ * The product's pin is a floor: the newer exact version is written into the profile's declaration,
+ * which the package installer keeps from then on. If the install fails the declaration is put back,
+ * so pi never finds a version declared that is not on disk.
+ */
+async function updateProductPackages(targets: readonly { readonly name: string; readonly latest: string }[]): Promise<{ ok: boolean; message: string }> {
+	const profileDir = profileDirectory(requireProfileUri());
+	const settingsFile = path.join(profileDir, 'settings.json');
+	let original: string | undefined;
+	try {
+		original = fs.readFileSync(settingsFile, 'utf8');
+	} catch {
+		original = undefined;
+	}
+	let text = original;
+	const moved: string[] = [];
+	for (const target of targets) {
+		const result = withProductPackageVersion(text, target.name, target.latest);
+		if (result.changed && result.text !== undefined) {
+			text = result.text;
+			moved.push(`${target.name} ${target.latest}`);
+		}
+	}
+	if (moved.length === 0 || text === undefined) {
+		return { ok: true, message: '' };
+	}
+	// pi runs in this process: its session goes before the files under it change.
+	resetChatSession();
+	forgetPiRuntime();
+	fs.writeFileSync(settingsFile, text);
+	const outcome = await ensureProfilePackages({ profileDir, runtimeRoot: piRuntimeRoot(distributionRoot(requireProfileUri())), npmCli: locateNpmCli(), log: report });
+	if (outcome.failed > 0 || outcome.rejected.length > 0) {
+		if (original !== undefined) {
+			fs.writeFileSync(settingsFile, original);
+		}
+		return { ok: false, message: `PiCode could not update ${moved.join(', ')}. The previous versions stay in use.` };
+	}
+	return { ok: true, message: `Updated ${moved.join(', ')}.` };
+}
+
+/** The memory engine in use and the newest one released, for the update check; `undefined` when memory is off or either is unknown. */
+async function memoryEngineCandidate(): Promise<CandidateTarget | undefined> {
+	const binary = process.env['ENGRAM_BIN'];
+	if (!memoryEnabled() || binary === undefined || !fs.existsSync(binary)) {
+		return undefined;
+	}
+	const latest = await fetchLatestRelease(reason => report(`updates: memory engine — ${reason}`));
+	return { kind: 'engine', name: 'memory engine', installed: probeEngineVersion(binary), latest: latest?.version };
 }
