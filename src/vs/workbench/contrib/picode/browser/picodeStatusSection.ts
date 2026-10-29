@@ -81,7 +81,7 @@ interface ISubscriptionStatus {
 
 interface IUpdatesSnapshot {
 	readonly checkedAt?: number;
-	readonly targets?: readonly { readonly kind?: 'runtime' | 'package'; readonly name: string; readonly installed: string; readonly latest: string }[];
+	readonly targets?: readonly { readonly kind?: 'runtime' | 'package' | 'engine'; readonly name: string; readonly installed: string; readonly latest: string }[];
 }
 
 /** The slice of the status answer this section reads. */
@@ -257,11 +257,15 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 					void this.commandService.executeCommand(CHECK_UPDATES_COMMAND);
 				});
 				// What the update covers is said once, and each row says which part it is: the pi
-				// runtime itself, or one of the packages it loads.
+				// runtime itself, one of the packages it loads (Gentle AI's among them), or the memory engine.
 				if (targets.length > 0) {
-					this.addRow(card, Codicon.package, localize('picodeStatusUpdatesCovers', "Covers"), localize('picodeStatusUpdatesCoversValue', "pi and its packages"));
+					this.addRow(card, Codicon.package, localize('picodeStatusUpdatesCovers', "Covers"), localize('picodeStatusUpdatesCoversValue', "pi, its packages and the memory engine"));
 					for (const target of targets) {
-						const kind = target.kind === 'package' ? localize('picodeStatusUpdatesPackage', "Package") : localize('picodeStatusUpdatesRuntime', "pi");
+						const kind = target.kind === 'package'
+							? localize('picodeStatusUpdatesPackage', "Package")
+							: target.kind === 'engine'
+								? localize('picodeStatusUpdatesEngine', "Memory")
+								: localize('picodeStatusUpdatesRuntime', "pi");
 						this.addRow(card, Codicon.cloudDownload, `${kind} · ${target.name}`, `${target.installed} → ${target.latest}`);
 					}
 				}

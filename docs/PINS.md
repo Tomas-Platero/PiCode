@@ -11,6 +11,7 @@ desde que su autor la publica hasta el perfil de cada persona. La decisión est�
 Las cuatro piezas van **fijadas a versión exacta**: quien instala PiCode recibe justo las versiones
 con las que se probó, y su perfil nunca se mueve solo a una que nadie miró. Fijado no quiere decir
 congelado: un bot propone cada versión nueva, y la mayoría entra sin que nadie tenga que hacer nada.
+Y la versión fijada es un **mínimo**: desde la app se puede ir por delante cuando se quiera (abajo).
 
 | Pieza | Dónde está fijada | Qué es |
 | --- | --- | --- |
@@ -71,11 +72,37 @@ Publicada la release, el editor no la ofrece al momento ([HOTFIX.md](HOTFIX.md))
 Cuando la persona actualiza PiCode, el editor pone en su perfil **la versión exacta nueva** antes de
 que pi cargue nada (al abrir el chat, en el asistente de primer arranque, al cambiar de modelo…), y
 la instala si falta. Si una importación o una edición a mano había dejado otra versión, se corrige.
-El editor no tiene botón para actualizar una pieza fijada por su cuenta: el pin volvía a poner la
-anterior, así que se quitó (ADR-031, adenda 5).
+Si la persona ya tenía una **más nueva** (la actualizó desde la app), se queda con la suya.
 
-**Tiempo mínimo** desde que el autor publica hasta que alguien la recibe: unas **30 horas** en un
-arreglo pequeño (24 h + 6 h), más lo que tarde en salir la release.
+**Tiempo mínimo** por este camino desde que el autor publica hasta que alguien la recibe: unas
+**30 horas** en un arreglo pequeño (24 h + 6 h), más lo que tarde en salir la release. Quien no quiera
+esperar tiene el atajo de abajo.
+
+## ⚡ El atajo: actualizar desde la app
+
+> *"quiero que se pueda actualizar todo desde la app, desde pi, engram, gentle, etc."*
+
+La versión que fija PiCode es **el mínimo, no el techo** (ADR-035, adenda 1). Cualquiera puede ir por
+delante sin esperar a una release:
+
+| Dónde | Qué |
+| --- | --- |
+| **Status → Updates** y el aviso de la barra de estado | pi, sus paquetes, gentle-pi, gentle-engram, pi-intercom y el motor de memoria, cada uno con su versión actual → la nueva. Un solo **Update** lo hace todo |
+| **Página de paquetes** | **Update** en la fila de cada paquete, también los de Gentle |
+| **Vista Memory** | *Update memory engine*, como siempre |
+
+Lo que pasa al pulsar:
+
+- **Paquetes de Gentle:** la versión nueva se escribe en el perfil y se instala. Si falla, se vuelve a la
+  anterior. Desde entonces el editor la respeta: solo una PiCode con un mínimo más alto la sube.
+- **Motor de memoria:** se baja a `~/.picode/memory`, comprobado contra las sumas de su release, y arranca
+  la próxima vez que se abre PiCode. Cuando una PiCode trae un motor más nuevo que ese, se usa el de PiCode.
+- **pi:** se actualiza dentro de la instalación; la siguiente actualización de PiCode pone el suyo y, si
+  había uno más nuevo, *Updates* lo vuelve a ofrecer.
+
+Por este atajo **no hay espera de 24 h ni revisión**: es la versión que el autor marca como la última. Lo
+asumido: puede traer funciones que el editor todavía no enseña (y una extensión solo de terminal carga
+hasta que el bot la filtre), pero sus arreglos llegan igual.
 
 ## 🔎 Segura o a revisar
 

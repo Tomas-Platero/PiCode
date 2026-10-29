@@ -1456,6 +1456,42 @@ pendientes: gentle-pi 4.5.1 y engram 3.6.0.
   segura si lo demás encaja. Lo que la protege son las pruebas del conector y el canal experimental.
 - Pi (`runtime.json`) no entra: sus subidas llevan una revisión escrita a mano y viajan en release completa.
 
+### Adenda 1 (2026-10-29) · Todo se actualiza desde la app; el pin es el mínimo
+
+> *"nono quiero que se pueda actualizar todo desde la app, desde pi, engram, gentle, etc. Si sacan actualizaciones como mucho sus features hasta que nosotros no la integremos 100% en el editor no funcionarán pero poco más. Pero pueden arreglar bugs y demás."*
+
+**Contexto:** pi ya se actualizaba desde *Updates* y el motor de engram desde la vista Memory, pero los
+paquetes de Gentle AI no: el pin volvía a poner su versión en cada arranque, y su fila no tenía botón
+(ADR-031, adenda 5). Además, una actualización del motor bajada por el usuario tapaba para siempre al que
+trajera una PiCode más nueva.
+
+**Decisión:**
+
+- **El pin es el mínimo.** `withProductPackages` (`product-packages.ts`) conserva una declaración a versión
+  exacta **más nueva** que el pin; una más vieja, un rango o una prerelease vuelven al pin. Una
+  actualización de PiCode solo sube un paquete, nunca lo baja.
+- **Los paquetes de Gentle salen en *Updates*** con el resto (`gatherUpdateCandidates`, `extension.ts`), y
+  su fila en la página de paquetes vuelve a tener **Update**. Actualizar escribe la versión nueva en la
+  declaración del perfil (`withProductPackageVersion`) y la instala; si la instalación falla, la
+  declaración vuelve a la anterior.
+- **El motor de engram también sale en *Updates*** (tipo `engine`). El mismo **Update** lo baja a
+  `~/.picode/memory` (`memory-update.ts`), como ya hacía la vista Memory.
+- **El motor del usuario cede ante uno más nuevo de PiCode:** cada motor lleva al lado un `engram.version`
+  (lo escriben la build y la actualización de la app) y `firstEngramBinary` usa el de PiCode cuando es más
+  nuevo. Si alguno no dice su versión, gana el del usuario, como antes.
+- **El bot de ADR-035 sigue:** sube el mínimo para todos y se queda con su auditoría. La app es para quien
+  quiere la versión nueva ya.
+
+**Consecuencias:**
+
+- Una versión nueva puede traer funciones que el editor no enseña (comandos de terminal, paneles); sus
+  arreglos llegan igual. Una extensión de terminal nueva **sí carga** hasta que el bot la añada al filtro.
+- El motor nuevo arranca la próxima vez que se abre PiCode (el que está en marcha no se para), y puede
+  migrar `~/.engram`, que es compartido.
+- pi se actualiza dentro de la instalación: la siguiente actualización de PiCode vuelve a poner el suyo, y
+  *Updates* lo vuelve a ofrecer si había uno más nuevo.
+- Solo con el pi interno; con el externo (PATH), *Updates* sigue callado.
+
 ## ADR-036 — Los límites de ChatGPT y Claude, en la vista de estado
 
 **Estado:** aceptada (2026-10-29).

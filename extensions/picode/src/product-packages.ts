@@ -8,10 +8,15 @@
  *
  * PiCode is pi plus Gentle AI (ADR-030): gentle-pi brings the method, the roles and the review
  * tools; gentle-engram brings pi its memory; pi-intercom lets pi sessions talk to each other
- * (`intercom-config.ts` starts its broker on the editor's binary). They are declared here at **exact versions**, so a
- * profile can never float to a release nobody tried, and every run of the package installer
- * puts the declaration back the way the product pins it — an import, an old profile or a hand
- * edit cannot leave it ranged, unpinned or filtered differently.
+ * (`intercom-config.ts` starts its broker on the editor's binary). They are declared at **exact
+ * versions**, so a profile never floats on its own, and every run of the package installer puts
+ * the declaration back the way the product wants it — an import, an old profile or a hand edit
+ * cannot leave it ranged, unpinned or filtered differently.
+ *
+ * The version here is the **floor**, not a ceiling (ADR-035, addendum 1): the owner can update a
+ * package from the app (`withProductPackageVersion`), and a declaration at an exact version newer
+ * than the floor is kept. A PiCode update only ever raises a package, never lowers it. A newer
+ * upstream release may bring features the editor does not show yet; it still brings its fixes.
  *
  * gentle-pi is also **narrowed**: it ships a terminal experience (a banner, sounds, a pretty
  * printer, a prompt history, the Herdr integration, usage statistics, its shell and its usage
@@ -102,8 +107,8 @@ export function productEntry(pkg: ProductPackage): string | Record<string, unkno
 	};
 }
 
-/** The bare npm name an existing `packages` entry points at, or `undefined` when it is not an npm one. */
-function npmNameOf(entry: unknown): string | undefined {
+/** The npm name and spec an existing `packages` entry points at, or `undefined` when it is not an npm one. */
+function npmSpecOf(entry: unknown): { readonly name: string; readonly version?: string } | undefined {
 	const source = typeof entry === 'string'
 		? entry
 		: typeof entry === 'object' && entry !== null && typeof (entry as { source?: unknown })['source'] === 'string'
@@ -114,7 +119,33 @@ function npmNameOf(entry: unknown): string | undefined {
 	}
 	const spec = source.slice('npm:'.length).trim();
 	const at = spec.indexOf('@', 1);
-	return at > 0 ? spec.slice(0, at) : spec;
+	return at > 0 ? { name: spec.slice(0, at), version: spec.slice(at + 1) } : { name: spec };
+}
+
+/** `1.2.3` as numbers, or `undefined` for anything that is not an exact release (a range, a tag, a prerelease). */
+function exactRelease(version: string | undefined): readonly number[] | undefined {
+	const match = version === undefined ? null : /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+	return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** Whether `version` is an exact release newer than `floor`. */
+export function isNewerRelease(version: string | undefined, floor: string): boolean {
+	const a = exactRelease(version);
+	const b = exactRelease(floor);
+	if (a === undefined || b === undefined) {
+		return false;
+	}
+	for (let index = 0; index < 3; index++) {
+		if (a[index] !== b[index]) {
+			return a[index] > b[index];
+		}
+	}
+	return false;
+}
+
+/** Whether `name` is one of the packages the product declares itself. */
+export function isProductPackage(name: string, products: readonly ProductPackage[] = PRODUCT_PACKAGES): boolean {
+	return products.some(pkg => pkg.name === name);
 }
 
 /** The entry that keeps a displaced package declared and loads nothing from it. */
@@ -130,11 +161,12 @@ export interface ProductPackagesResult {
 }
 
 /**
- * Makes the settings declare every product package exactly as the product pins it.
+ * Makes the settings declare every product package the way the product wants it.
  *
  * Other entries stay where they are, untouched. A product package already declared keeps its
- * position and is rewritten to the pinned entry; a duplicate declaration is dropped; a missing
- * one is appended. A settings file that is not a JSON object is left alone — the owner's file
+ * position and is rewritten to the product's entry — at the version it already names when that
+ * is an exact release newer than the floor (an update the owner took from the app), at the floor
+ * otherwise; a duplicate declaration is dropped; a missing one is appended. A settings file that is not a JSON object is left alone — the owner's file
  * is never replaced by a guess.
  *
  * A displaced package written as a plain declaration is switched off (`switchedOff`): still
@@ -165,26 +197,27 @@ export function withProductPackages(
 		}
 	}
 	const declared = Array.isArray(settings['packages']) ? settings['packages'] as unknown[] : [];
-	const wanted = new Map(products.map(pkg => [pkg.name, productEntry(pkg)] as const));
+	const wanted = new Map(products.map(pkg => [pkg.name, pkg] as const));
 	const placed = new Set<string>();
 	const next: unknown[] = [];
 	for (const entry of declared) {
 		if (isLeftBehindPackage(entry, removed)) {
 			continue;
 		}
-		const name = npmNameOf(entry);
-		if (name === undefined || !wanted.has(name)) {
+		const spec = npmSpecOf(entry);
+		const pkg = spec === undefined ? undefined : wanted.get(spec.name);
+		if (spec === undefined || pkg === undefined) {
 			next.push(typeof entry === 'string' && displaced.includes(packageNameOf(entry)) ? switchedOff(entry) : entry);
 			continue;
 		}
-		if (!placed.has(name)) {
-			placed.add(name);
-			next.push(wanted.get(name));
+		if (!placed.has(spec.name)) {
+			placed.add(spec.name);
+			next.push(productEntry(isNewerRelease(spec.version, pkg.version) ? { ...pkg, version: spec.version!.trim() } : pkg));
 		}
 	}
-	for (const [name, entry] of wanted) {
+	for (const [name, pkg] of wanted) {
 		if (!placed.has(name)) {
-			next.push(entry);
+			next.push(productEntry(pkg));
 		}
 	}
 	if (JSON.stringify(next) === JSON.stringify(declared) && (Array.isArray(settings['packages']) || next.length === 0)) {
@@ -192,4 +225,22 @@ export function withProductPackages(
 	}
 	const text = `${JSON.stringify({ ...settings, packages: next }, undefined, '\t')}\n`;
 	return { text, changed: true };
+}
+
+/**
+ * The settings with one product package declared at `version` — the update the owner takes from
+ * the app. Only an exact release newer than the floor is written; anything else answers the
+ * settings unchanged, so the floor can never be undercut from here.
+ */
+export function withProductPackageVersion(
+	settingsText: string | undefined,
+	name: string,
+	version: string,
+	products: readonly ProductPackage[] = PRODUCT_PACKAGES,
+): ProductPackagesResult {
+	const pkg = products.find(candidate => candidate.name === name);
+	if (pkg === undefined || !isNewerRelease(version, pkg.version)) {
+		return { text: settingsText, changed: false };
+	}
+	return withProductPackages(settingsText, products.map(candidate => candidate === pkg ? { ...pkg, version: version.trim() } : candidate));
 }
