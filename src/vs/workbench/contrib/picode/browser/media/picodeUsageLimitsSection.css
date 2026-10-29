@@ -1,0 +1,370 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * The Usage limits section of Chat Settings (picodeUsageLimitsSection.ts): a summary strip, then one
+ * group per provider with a tile per metered model. Colours come from `--vscode-*` only.
+ */
+
+.picode-limits {
+	--picode-limits-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+	--picode-limits-warn: var(--vscode-editorWarning-foreground, var(--vscode-charts-orange));
+	--picode-limits-danger: var(--vscode-errorForeground, var(--vscode-charts-red));
+	--picode-limits-border: var(--vscode-widget-border, var(--vscode-panel-border));
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 16px;
+	height: 100%;
+	min-height: 0;
+	box-sizing: border-box;
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+.picode-limits > * {
+	flex: 0 0 auto;
+}
+
+.picode-limits.busy .picode-limits-body {
+	opacity: 0.6;
+	transition: opacity 150ms ease;
+}
+
+/* ------------------------------------------------------------------- head */
+
+.picode-limits-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+
+.picode-limits-intro {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.picode-limits-description {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-updated {
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	opacity: 0.8;
+}
+
+.picode-limits-btn.monaco-button {
+	width: auto;
+	flex: 0 0 auto;
+	height: 28px;
+	padding: 0 12px;
+	font-size: 12px;
+	border-radius: 4px;
+	white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- summary */
+
+.picode-limits-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 8px;
+}
+
+.picode-limits-summary:empty {
+	display: none;
+}
+
+.picode-limits-stat {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border: 1px solid var(--picode-limits-border);
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+}
+
+.picode-limits-stat-icon {
+	display: flex;
+	font-size: 14px;
+}
+
+.picode-limits-stat.ok .picode-limits-stat-icon { color: var(--picode-limits-ok); }
+.picode-limits-stat.warn .picode-limits-stat-icon { color: var(--picode-limits-warn); }
+.picode-limits-stat.danger .picode-limits-stat-icon { color: var(--picode-limits-danger); }
+
+.picode-limits-stat-count {
+	font-size: 18px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-limits-stat-label {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.picode-limits-stat.zero {
+	opacity: 0.55;
+}
+
+/* ----------------------------------------------------------------- groups */
+
+.picode-limits-body {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+
+.picode-limits-group-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	min-width: 0;
+}
+
+.picode-limits-group-head .picode-pm-logo {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	font-size: 9px;
+	font-weight: 700;
+	overflow: hidden;
+	flex: 0 0 auto;
+}
+
+.picode-limits-group-head .picode-pm-logo img {
+	width: 16px;
+	height: 16px;
+	object-fit: contain;
+}
+
+.picode-limits-group-icon {
+	display: flex;
+	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+
+.picode-limits-group-name {
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.picode-limits-group-count {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-limits-stale {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	color: var(--picode-limits-warn);
+}
+
+.picode-limits-group-head .grow {
+	flex: 1 1 auto;
+}
+
+.picode-limits-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.picode-limits-link:hover,
+.picode-limits-link:focus-visible {
+	color: var(--vscode-textLink-activeForeground);
+	text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ tiles */
+
+.picode-limits-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 10px;
+}
+
+.picode-limits-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 12px 14px;
+	min-width: 0;
+	border: 1px solid var(--picode-limits-border);
+	border-left: 3px solid var(--picode-limits-ok);
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+}
+
+.picode-limits-tile.warn { border-left-color: var(--picode-limits-warn); }
+.picode-limits-tile.danger { border-left-color: var(--picode-limits-danger); }
+
+.picode-limits-tile.current {
+	border-color: var(--vscode-focusBorder);
+	border-left-width: 3px;
+}
+
+.picode-limits-tile-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.picode-limits-tile-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.picode-limits-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 10px;
+	border: 1px solid currentColor;
+	white-space: nowrap;
+}
+
+.picode-limits-badge .codicon {
+	font-size: 7px;
+}
+
+.picode-limits-badge.current { color: var(--vscode-textLink-foreground); }
+.picode-limits-badge.danger { color: var(--picode-limits-danger); }
+
+.picode-limits-window {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.picode-limits-window-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.picode-limits-window-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	min-width: 0;
+}
+
+.picode-limits-window-label .codicon {
+	font-size: 12px;
+}
+
+.picode-limits-window-value {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+}
+
+.picode-limits-window-value strong {
+	font-size: 16px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--vscode-foreground);
+}
+
+.picode-limits-window.warn .picode-limits-window-value strong { color: var(--picode-limits-warn); }
+.picode-limits-window.danger .picode-limits-window-value strong { color: var(--picode-limits-danger); }
+
+.picode-limits-bar {
+	height: 8px;
+	border-radius: 999px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+}
+
+.picode-limits-bar-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: var(--picode-limits-ok);
+	transition: width 300ms ease;
+}
+
+.picode-limits-window.warn .picode-limits-bar-fill { background: var(--picode-limits-warn); }
+.picode-limits-window.danger .picode-limits-bar-fill { background: var(--picode-limits-danger); }
+
+.picode-limits-window-foot {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ empty */
+
+.picode-limits-empty {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-limits-none {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 36px 16px;
+	text-align: center;
+	border: 1px dashed var(--picode-limits-border);
+	border-radius: 6px;
+}
+
+.picode-limits-none-icon {
+	font-size: 28px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-limits-none-icon .codicon {
+	font-size: 28px;
+}
+
+.picode-limits-none-title {
+	font-weight: 600;
+}
+
+.picode-limits-none-text {
+	max-width: 420px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	margin-bottom: 6px;
+}

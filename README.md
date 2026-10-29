@@ -6,8 +6,8 @@
 <br />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square&logo=opensourceinitiative&logoColor=white)](./LICENSE)
-[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fmaster%2Fproduct.json&query=%24.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./product.json)
-[![Status: stable](https://img.shields.io/badge/status-stable-3FB950?style=flat-square)](https://github.com/Tomas-Platero/PiCode/releases)
+[![PiCode](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fexperimental%2Fproduct.json&query=%24.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square)](./product.json)
+[![Status: experimental](https://img.shields.io/badge/status-experimental-F0883E?style=flat-square)](https://github.com/Tomas-Platero/PiCode/releases)
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square)](#download)
 [![Website](https://img.shields.io/badge/website-getpicode.app-3B9BFF?style=flat-square)](https://www.getpicode.app)
@@ -15,8 +15,8 @@
 [![Node](https://img.shields.io/badge/node-24.20.0-339933?style=flat-square&logo=nodedotjs&logoColor=white)](./.nvmrc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](./)
 
-[![CI](https://github.com/Tomas-Platero/PiCode/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Tomas-Platero/PiCode/actions/workflows/ci.yml?query=branch%3Amaster)
-[![Last commit](https://img.shields.io/github/last-commit/Tomas-Platero/PiCode/master?style=flat-square&logo=github&logoColor=white)](https://github.com/Tomas-Platero/PiCode/commits/master)
+[![CI](https://github.com/Tomas-Platero/PiCode/actions/workflows/ci.yml/badge.svg?branch=experimental)](https://github.com/Tomas-Platero/PiCode/actions/workflows/ci.yml?query=branch%3Aexperimental)
+[![Last commit](https://img.shields.io/github/last-commit/Tomas-Platero/PiCode/experimental?style=flat-square&logo=github&logoColor=white)](https://github.com/Tomas-Platero/PiCode/commits/experimental)
 [![Stars](https://img.shields.io/github/stars/Tomas-Platero/PiCode?style=flat-square&logo=github&logoColor=white)](https://github.com/Tomas-Platero/PiCode/stargazers)
 [![Forks](https://img.shields.io/github/forks/Tomas-Platero/PiCode?style=flat-square&logo=github&logoColor=white)](https://github.com/Tomas-Platero/PiCode/forks)
 [![Issues](https://img.shields.io/github/issues/Tomas-Platero/PiCode?style=flat-square&logo=github&logoColor=white)](https://github.com/Tomas-Platero/PiCode/issues)

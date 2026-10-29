@@ -59,18 +59,25 @@
 	flex: 0 0 auto;
 }
 
-.picode-status-section-description {
-	color: var(--vscode-descriptionForeground);
-	margin: 0 0 2px;
-}
-
 .picode-status-cards {
 	display: flex;
 	flex-direction: column;
 }
 
+/* The filter and the settings button share the top line. */
+.picode-status-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
 /* The filter narrows what the status says; a card that does not carry the word steps aside. */
 .picode-status-filter {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 28px;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -78,6 +85,10 @@
 	border: 1px solid var(--vscode-input-border, transparent);
 	border-radius: 4px;
 	background: var(--vscode-input-background);
+}
+
+.picode-status-filter:focus-within {
+	border-color: var(--vscode-focusBorder);
 }
 
 .picode-status-filter-icon {
@@ -122,16 +133,18 @@
 
 .card-head {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	padding: 10px 14px;
+	padding: 8px 10px 8px 14px;
+	min-height: 28px;
 	font-weight: 600;
 	min-width: 0;
 	border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
 }
 
 .card-head .grow {
-	flex: 1 1 auto;
+	flex: 1 1 80px;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -142,6 +155,21 @@
 	display: flex;
 	align-items: center;
 	color: var(--vscode-icon-foreground, var(--vscode-foreground));
+}
+
+/* A card with nothing under its header draws no line under it. */
+.picode-status-card.head-only .card-head {
+	border-bottom: 0;
+}
+
+/* A card's buttons: in its header, on the right, wrapping under the title when the panel is narrow. */
+.card-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-left: auto;
+	font-weight: 400;
 }
 
 /* ------------------------------------------------------------------- host */
@@ -235,6 +263,34 @@
 	overflow-wrap: anywhere;
 }
 
+/* A fact with its own switch: the value, then the button that changes it. */
+.row.with-button {
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+.row-side {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* The project's changes: added lines green, removed lines red, as the diff editor paints them. */
+.row .value.picode-status-diff {
+	display: inline-flex;
+	gap: 8px;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-status-diff .added {
+	color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+}
+
+.picode-status-diff .removed {
+	color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+}
+
 /* A fact's answer: one line, ellipsis, the whole sentence in the tooltip. */
 .row .value {
 	justify-self: end;
@@ -248,20 +304,25 @@
 
 /* ---------------------------------------------------------------- buttons */
 
-/* The connector's buttons are workbench Buttons (monaco-button): fixed minimum width, natural
-   width, never 100%, so a column of them lines up without touching the panel's edges. */
+/* Compact workbench Buttons: natural width, one line, so a header holds two of them. */
 .picode-status-btn.monaco-button {
-	min-width: 116px;
 	width: auto;
-	height: 28px;
-	padding: 0 12px;
+	min-width: 64px;
+	flex: 0 0 auto;
+	height: 26px;
+	padding: 0 10px;
 	font-size: 12px;
+	font-weight: 400;
 	border-radius: 4px;
 	justify-content: center;
 	white-space: nowrap;
 }
 
-/* The only destructive action of the page. */
+.picode-status-toolbar .picode-status-btn.monaco-button {
+	height: 28px;
+}
+
+/* The only destructive action of the page: it throws the model cache away. */
 .picode-status-btn.monaco-button.danger {
 	color: var(--vscode-errorForeground);
 	border: 1px solid var(--vscode-errorForeground);
@@ -269,6 +330,16 @@
 
 .picode-status-btn.monaco-button.danger:hover {
 	background: var(--vscode-inputValidation-errorBackground, var(--vscode-button-secondaryHoverBackground));
+}
+
+/* While its command runs, a button says so and takes no second click. */
+.picode-status-btn.monaco-button.busy {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+.picode-status-btn.monaco-button.busy .codicon {
+	animation: codicon-spin 1.5s steps(30) infinite;
 }
 
 /* ------------------------------------------------------------------ pills */
@@ -312,17 +383,11 @@
 	background: transparent;
 }
 
-/* The usage-limit bars: how much of a window is used, in the colours the rest of the panel keeps. */
-.picode-status-meter-model {
-	padding: 10px 0 2px;
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--vscode-foreground);
-}
-
+/* A fill bar under a row's name (the session's context): how full it is, in the panel's colours. */
 .picode-status-meter {
-	height: 6px;
+	height: 4px;
 	margin-top: 6px;
+	max-width: 320px;
 	border-radius: 999px;
 	overflow: hidden;
 	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
