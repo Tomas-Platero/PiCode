@@ -568,11 +568,15 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
 
 	return async () => {
 		const versionedResourcesFolder = util.getVersionedResourcesFolder('win32', commit!);
+		// PiCode: `data/` is the portable profile, never part of the product. It is meant to be held
+		// aside during the pack (build/data-hold.sh), but when it is there its packages' native
+		// binaries (pi-tui's Linux prebuilds among them) are not ours to stamp, and rcedit fails on them.
+		const notProfile = ['data/**'];
 		const deps = (await Promise.all([
-			glob('**/*.node', { cwd, ignore: 'extensions/node_modules/@parcel/watcher/**' }),
-			glob('**/rg.exe', { cwd }),
-			glob('**/tgrep.exe', { cwd }),
-			glob('**/*explorer_command*.dll', { cwd }),
+			glob('**/*.node', { cwd, ignore: ['extensions/node_modules/@parcel/watcher/**', ...notProfile] }),
+			glob('**/rg.exe', { cwd, ignore: notProfile }),
+			glob('**/tgrep.exe', { cwd, ignore: notProfile }),
+			glob('**/*explorer_command*.dll', { cwd, ignore: notProfile }),
 			// PiCode: the updater that runs while the app restarts is a Microsoft binary and its
 			// strings used to say so - both its VERSION resource and the windows it opens. The
 			// windows are branded in the vendored binary by build/branding.mjs

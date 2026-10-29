@@ -347,6 +347,7 @@ function toSubscriptionStatus(limit: NanUsageLimit, fresh: boolean): Subscriptio
 			label: window.label.length > 0 ? `${spokenWindowLabel(window.label)} window` : 'billing period',
 			usedPercent: window.usedPercent,
 			resetAt: window.resetAt,
+			...(window.used === undefined || window.budget === undefined ? {} : { used: window.used, cap: window.budget }),
 		})),
 		limitReached: limit.limitReached,
 		fresh,
@@ -409,7 +410,12 @@ async function readAccountSubscriptions(profileDir: string, model: string | unde
 	];
 	// The provider the chat is on leads; the rest keep their order, so the card does not reshuffle.
 	const ordered = [...groups.filter(group => group.provider === current?.provider), ...groups.filter(group => group.provider !== current?.provider)];
-	const meters = ordered.flatMap(group => group.meters);
+	const meters = ordered.flatMap(group => group.meters.map(meter => ({
+		...meter,
+		provider: group.provider,
+		// NaN may be declared under another id (`omni`), so its meter is matched by the model name.
+		current: group.provider === NAN_PROVIDER_ID ? meter.meter === current?.model : group.provider === current?.provider,
+	})));
 	return meters.length > 0 ? meters : undefined;
 }
 

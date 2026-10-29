@@ -73,6 +73,29 @@ export function pointChildPiAtThisPi(cliEntry: string, exists: (path: string) =>
 	return true;
 }
 
+/** gentle-pi's signal for the extensions every subagent loads with `--extension`. */
+export const CHILD_INJECTION_ENV = 'GENTLE_SHELL_CHILD_PACKAGE_INJECTION';
+
+/** What gentle-pi hands its subagents when no signal is set; the signal replaces it, so it is repeated. */
+const GENTLE_CHILD_EXTENSIONS = ['child-context.ts', 'child-safety.ts', 'nan-provider.ts'];
+
+/**
+ * Adds one extension of PiCode's to every gentle-pi subagent: the model fallback
+ * (`subagent-model-fallback.ts`). gentle-pi forwards the extensions named in its injection signal
+ * to each child instead of its own short list, so that list — the ones of its files that exist —
+ * goes first. Nothing is set when the fallback file is missing.
+ */
+export function subagentInjectionEnv(gentlePiDir: string, fallbackExtension: string, exists: (path: string) => boolean): Readonly<Record<string, string>> {
+	if (!exists(fallbackExtension)) {
+		return {};
+	}
+	const extensionPaths = [
+		...GENTLE_CHILD_EXTENSIONS.map(name => path.join(gentlePiDir, 'extensions', name)).filter(exists),
+		fallbackExtension,
+	];
+	return { [CHILD_INJECTION_ENV]: JSON.stringify({ version: 1, noExtensions: false, extensionPaths }) };
+}
+
 /** `env` with the product's variables laid over it; the product's values win. */
 export function withProductEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 	return { ...env, ...PRODUCT_ENV };

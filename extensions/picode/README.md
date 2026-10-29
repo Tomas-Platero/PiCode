@@ -97,7 +97,9 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `child-trace.ts` | La cronología de los procesos pi hijos de gentle-pi: cuándo empiezan, cuándo se les pide parar y cuándo salen. |
 | `distribution-root.ts` | Qué carpeta es la distribución: la del pack, o el repositorio en una ejecución de desarrollo. |
 | `extension-notices.ts` | Los avisos de una extensión que el chat no enseña porque el producto ya los espera. |
-| `product-env.ts` | Las variables que el producto fija para pi y para npm: sin descargas de instalación ni telemetría. |
+| `product-env.ts` | Las variables que el producto fija para pi y para npm: sin descargas de instalación ni telemetría, y la extensión que llevan los subagentes. |
+| `subagent-failure.ts` | Por qué falló el modelo de un subagente, en palabras: sin cupo, clave rechazada, límite, modelo inexistente. |
+| `subagent-model-fallback.ts` | Extensión de pi que carga cada subagente: si su modelo es rechazado, sigue con el del chat. |
 | `npm-run.ts` | Cómo ejecuta npm este editor, decidido en un sitio (el caso de `npm.cmd` en Windows). |
 | `updates-check.ts` | Las reglas del chequeo de actualizaciones: qué se comprueba, qué se guarda y qué se avisa. |
 | `onboarding.ts` | La configuración de primer arranque, como puente de la página de bienvenida. |
