@@ -143,6 +143,16 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Tasks:** muestra los trabajos del chat y los subagentes de gentle-pi (ADR-032), los que siguen y los últimos que acabaron.
 * **Memoria:** gentle-engram será la memoria que pi usa; el vedado de `gentle-pi` y `gentle-engram` ya está levantado y los dos entran fijados (ADR-031). El detalle y las decisiones: ADR-030 en [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
+### Lo de Gentle AI se actualiza solo, pero sigue fijado
+>
+> *"habría tener un sistema para poder actualizar gentle-ai aunque sea casi automatizado o full automatizado, ya que tenemos pinneado esto. Imaginam que mañana y pasado y el dia siguiente salen versiones nuevas de gentle-pi o engram."* — 2026-10-29
+
+* **Fijado no es congelado:** gentle-pi, gentle-engram, pi-intercom y el motor de engram siguen a versión exacta, pero un bot diario propone la versión nueva en cuanto lleva un día publicada.
+* **Lo seguro entra solo:** si la versión nueva no trae nada que pida mirarla y las pruebas pasan, se fusiona sola en `experimental` y sale con la siguiente release.
+* **Lo que no, espera con el motivo escrito:** salto grande, extensiones nuevas, otro pi, scripts de instalación… y siempre el motor de engram, porque su memoria es compartida.
+* **Cerrar el PR es decir «esta no»:** el bot no vuelve a proponer esa versión.
+* Detalle y uso: [`docs/PINS.md`](docs/PINS.md) · decisión: ADR-035.
+
 ---
 
 ## 5. Personalización del Editor
@@ -378,3 +388,5 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-10-26** · Cada chat del editor es su propia conversación de pi («si hazlo»): un chat nuevo ya no sigue escribiendo en el anterior, cada uno sale como su fila en Sessions y los chats abiertos se ven entre sí en pi-intercom, con el nombre de su primer mensaje (ADR-033, adenda 1).
 * **2026-10-27** · El chat puede buscar y leer las conversaciones anteriores de la lista Sessions, también las de antes de cerrar PiCode («sí, haz que pi pueda buscar y leer mis conversaciones anteriores de la lista Sessions»; ADR-033, adenda 2).
 * **2026-10-27** · Actualizaciones pequeñas: **hotfix, minor update y release** («un sistema de hotfixes rápidos que no sea rebuildeando todo», «no quiero subir una 0.3.2 a 0.3.3 y encontrarme problemas»). Una sola numeración; el zip pequeño lleva solo lo que cambió, se prueba antes de publicar, va firmado y, si la versión nueva no arranca, se vuelve sola a la anterior (ADR-034, `docs/HOTFIX.md`). Al probarlo se arregló un fallo antiguo de la actualización portable: su script se movía a sí mismo y la dejaba a medias.
+* **2026-10-29** · Las piezas fijadas de Gentle AI se actualizan solas («un sistema para poder actualizar gentle-ai aunque sea casi automatizado o full automatizado»): un bot diario mueve el pin, lo seguro se fusiona solo en `experimental` y lo demás espera revisión; el motor de engram siempre espera (ADR-035).
+* **2026-10-29** · Gentle Shell revisado: es la parte de terminal de gentle-pi y no se integra entera; solo se trae su consumo de suscripción. La tarjeta *Usage limits* enseña ChatGPT y Claude además de NaN, con avisos al 80 % y al 95 % («Sí, tráelo»; ADR-036).

@@ -1407,3 +1407,87 @@ También llama a `tasklist`, `find` y `taskkill` por su ruta de Windows: con Git
 - What changes for the editor: the Jobs card now keeps finished jobs for a minute (terminal sidebar only); `/gentle:models` was renamed `/gentle:profiles` inside gentle-pi, but the editor answers the typed `/gentle:models` itself, so the chat keeps working; the models screen now offers only the effort levels each model supports; `gentle-shell update --latest` and an installer for the music player are terminal-only.
 - Still a pin in `extensions/picode`, so it fits a hotfix (ADR-034).
 - What the editor does with it: the agent model picker offers only the effort levels each model supports (a model that cannot think is not asked); the Tasks block lists the last five background jobs that ended, among the finished agents, newest first; and `/gentle:profiles` opens the same agent model picker as `/gentle:models` in the chat.
+
+## ADR-035 — Las piezas de Gentle AI se actualizan solas, sin dejar de estar fijadas
+
+**Estado:** aceptada (2026-10-29).
+
+> *"habría tener un sistema para poder actualizar gentle-ai aunque sea casi automatizado o full automatizado, ya que tenemos pinneado esto. Imaginam que mañana y pasado y el dia siguiente salen versiones nuevas de gentle-pi o engram."*
+
+**Contexto:** el producto fija cuatro piezas a versión exacta (ADR-031, ADR-033): los paquetes de pi
+`gentle-pi`, `gentle-engram` y `pi-intercom` (`extensions/picode/src/product-packages.ts`) y el motor de
+memoria (`build/distribution/engram.json`). Fijar es lo que impide que alguien reciba una versión que
+nadie probó, pero cada subida se hacía a mano (adendas 5 y 6 de ADR-031). Al escribir esto ya había dos
+pendientes: gentle-pi 4.5.1 y engram 3.6.0.
+
+**Decisión:**
+
+- **Siguen fijadas.** Lo que se automatiza es *mover* el pin, no soltarlo: el perfil nunca flota.
+- **`build/pins.mjs`** busca la versión estable más nueva con **al menos 24 h** publicada (una versión
+  rota o comprometida suele retirarse en horas) y, en npm, **nunca por encima de la etiqueta `latest`**
+  (gentle-engram 0.5.1 está publicado como `candidate`, y no se coge). Lee lo que cambia entre los dos
+  paquetes publicados y decide:
+  - **Segura:** nada de lo de abajo. Se aplica sola.
+  - **A revisar**, con el motivo escrito: salto mayor (o de menor en un 0.x); una extensión nueva que pi
+    cargaría (el caso de gentle-pi 4.4.0, que trajo tres de terminal que hubo que filtrar); cambios en
+    el manifiesto de pi, en los scripts de instalación o en los nombres de dependencias; un rango de pi
+    que ya no incluye el pi que lleva el producto (`runtime.json`); y **siempre el motor de engram**,
+    porque su almacén (`~/.engram`) es compartido y un motor nuevo puede migrarlo. Ese paso va en una
+    release completa, nunca en un zip pequeño (ADR-034). Del motor se descargan los dos zip de Windows y
+    se comprueban contra el `checksums.txt` de la release antes de escribir sus SHA-256.
+- **`.github/workflows/pins.yml`**, una vez al día, una rama y un PR por pieza (`bot/pin-<nombre>`) contra
+  `experimental`. Pasa las pruebas del conector allí mismo (un PR abierto con el token del flujo no
+  arranca CI). Seguro y en verde → **se fusiona solo**. Si no → se queda abierto con los motivos. Una
+  versión más nueva refresca el mismo PR.
+- **Cerrar el PR sin fusionar = saltar esa versión.** El bot no la vuelve a proponer; propone la siguiente.
+- **La release no se automatiza:** lo fusionado sale con la próxima release del canal, como cualquier
+  otro cambio. Una subida de los paquetes de pi cabe en un hotfix; la del motor, no.
+
+**El recorrido entero** (del autor al perfil de cada persona, con los tiempos): [`PINS.md`](PINS.md).
+
+**Uso a mano:** `node build/pins.mjs check` (qué hay nuevo), `node build/pins.mjs audit gentle-pi 4.3.0 4.4.0`
+(qué cambia entre dos versiones, sin escribir nada), `node build/pins.mjs bump <pieza>` (mueve el pin).
+
+**Límites:**
+
+- El flujo programado solo corre cuando el fichero está en la rama por defecto (`master`); hasta entonces
+  se puede lanzar el script a mano.
+- La auditoría lee el paquete, no lo ejecuta: una extensión que ya existía y cambia por dentro pasa como
+  segura si lo demás encaja. Lo que la protege son las pruebas del conector y el canal experimental.
+- Pi (`runtime.json`) no entra: sus subidas llevan una revisión escrita a mano y viajan en release completa.
+
+## ADR-036 — Los límites de ChatGPT y Claude, en la vista de estado
+
+**Estado:** aceptada (2026-10-29).
+
+> *"Sí, tráelo"* — a la propuesta de traer al editor el consumo de las cuentas que enseña Gentle Shell.
+
+**Contexto:** Gentle Shell es el nombre nuevo de la parte de terminal de gentle-pi (la barra, el panel
+lateral, el lanzador `gentle-shell`). El editor ya carga gentle-pi pero deja fuera esa parte
+(`GENTLE_PI_TERMINAL_EXTENSIONS`), porque dibuja en la terminal. De todo lo que enseña, lo único que el
+editor no tenía era su panel de consumo de suscripción: la tarjeta *Usage limits* solo sabía leer NaN.
+
+**Decisión:**
+
+- La tarjeta *Usage limits* enseña también **ChatGPT (Codex)** y **Claude Pro/Max**
+  (`extensions/picode/src/subscription-usage.ts`), con los mismos datos que el terminal: cada ventana
+  (5 horas, semanal…), el porcentaje usado, cuándo se reinicia y si se llegó al límite. El proveedor del
+  chat va primero.
+- **Dos vías, las del terminal.** Las cabeceras de cada respuesta del chat, que pi entrega a una extensión
+  propia del chat (`usageHeadersExtension`, en `agent.ts` y en las conversaciones reabiertas); y, para
+  ChatGPT, el endpoint de consumo que lee el propio Codex, con la sesión que pi ya tiene guardada, como
+  mucho una vez por minuto. Claude no tiene endpoint: su tarjeta aparece con la primera respuesta.
+- **No se escribe nada.** Un token caducado no se renueva desde aquí (renovarlo reescribe `auth.json`); se
+  enseña lo último que dijo una respuesta. Las cabeceras se leen y se olvidan; solo quedan las ventanas.
+- **Avisos a 80 % y 95 %**, los del terminal: la barra pasa a aviso desde el 80 % y a error desde el 95 %
+  (antes 60 % y 90 %), en todas las tarjetas de consumo.
+- **No se integra el resto de Gentle Shell:** el lanzador y su actualización (escriben en `~/.pi`), la
+  barra, el panel lateral, el editor de mensajes y el menú de comandos tienen ya su sitio en el editor.
+
+**Consecuencias:**
+
+- Proveedores que otras extensiones registran en gentle-shell (`gentle-pi:usage-source/v1`) no se ven: ese
+  canal vive dentro de la extensión de terminal, que sigue apagada.
+- El contador de la barra de estado sigue siendo solo de NaN (habla de tokens y del periodo de pago, que
+  ChatGPT y Claude no dan).
+- Es código del conector y una línea de la vista de estado: cabe en un hotfix (ADR-034).

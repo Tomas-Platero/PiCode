@@ -14,6 +14,7 @@ staging step lays the defaults and the marks onto the packed output.
 | --- | --- |
 | `settings.json` | First-run defaults. Copied only when the user has no settings file of their own. |
 | `runtime.json` | The pinned pi runtime version the editor ships (`build/pi-runtime.sh` reads it). |
+| `engram.json` | The pinned memory engine and the SHA-256 of its Windows archives (`build/engram-runtime.sh` reads it). `build/pins.mjs` moves it, always through a pull request that waits for review (ADR-035). |
 | `picode.ico` | The Windows icon the packer reads; `build/build.sh` fails in phase 1 if it is missing. |
 | `picode-icon.svg` / `picode.svg` | The brand marks the staging step lays onto the packed tree: the filled plate for icon surfaces, the strokes-only drawing for watermark surfaces. |
 

@@ -69,6 +69,7 @@ import { gentleAgents } from './gentle-agents-store';
 import { conversationName, isSlashCommand } from './context';
 import { isAgentModelsCommand } from './gentle-models';
 import { isExpectedHelperNotice } from './extension-notices';
+import { recordUsageHeaders } from './subscription-usage';
 
 /**
  * `@pi` inside the editor's own chat.
@@ -151,6 +152,7 @@ interface PiToolCallResult {
 interface PiExtensionApi {
 	on(event: 'tool_call', handler: (event: PiToolCallEvent) => Promise<PiToolCallResult | undefined>): () => void;
 	on(event: 'before_agent_start', handler: (event: PiBeforeAgentStartEvent) => void | Promise<void>): () => void;
+	on(event: 'after_provider_response', handler: (event: { readonly headers: Record<string, string> }) => void): () => void;
 	getAllTools(): readonly PiKnownTool[];
 }
 
@@ -846,6 +848,23 @@ function permissionExtension(log: (line: string) => void): PiInlineExtension {
 					log(`permission question failed: ${error instanceof Error ? error.message : String(error)}`);
 					return undefined;
 				}
+			});
+		},
+	};
+}
+
+/**
+ * Hands every provider response's headers to the Usage limits card (`subscription-usage.ts`):
+ * ChatGPT and Claude report their rate-limit windows there, and pi's own request is the only
+ * place they arrive. Only the windows are kept; every other header is dropped on the spot.
+ */
+export function usageHeadersExtension(): PiInlineExtension {
+	return {
+		name: 'picode-usage-headers',
+		hidden: true,
+		factory: pi => {
+			void pi.on('after_provider_response', event => {
+				recordUsageHeaders(event.headers);
 			});
 		},
 	};
@@ -1638,7 +1657,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
 					resourceLoaderOptions: {
-						extensionFactories: [...loaded.builtins, permissionExtension(deps.log)],
+						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension()],
 					},
 				});
 				// pi collects load problems instead of failing the session; one that could not be
