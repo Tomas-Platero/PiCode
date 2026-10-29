@@ -1277,6 +1277,31 @@ play. Unverified in a running editor.
   reemplaza: se avisa y el control queda apagado. Cada cambio reinicia la sesión del chat. Los permisos de
   *esta* conversación siguen cambiándose con `/gentle:mode`.
 
+### Adenda 5 (2026-10-29) · Si el modelo de un subagente se queda sin cupo, sigue con el del chat
+
+> *"suele fallar por que los usbagentes no pillan el model que está en el chat automaticamente"* ·
+> *"pues arregla eso"*
+
+- **Lo que pasaba:** la auditoría de APIs falló tres veces en el primer turno. Los agentes de gentle
+  estaban en `nan/deepseek-v4-flash` y NaN tenía la cuota mensual agotada (402, hasta el 1-11); el chat iba
+  por Omni y respondía. En Tasks solo se leía «assistant reported an error», dos veces.
+- **Cambio al modelo del chat, una vez:** cada subagente carga una extensión de PiCode
+  (`subagent-model-fallback.ts`, compilada en `out/`). Cuando su modelo es rechazado por algo del proveedor
+  —sin cupo o crédito, clave rechazada, límite de peticiones, modelo inexistente— cambia al modelo del chat
+  y sigue en el mismo trabajo (`agent_before_settle` con `continue`). No se guarda: el agente conserva su
+  modelo para la siguiente tarea. Un error del propio trabajo no cambia nada.
+- **Cómo llega:** el chat publica su modelo en `PICODE_CHAT_MODEL` al empezar cada respuesta y al cambiar de
+  modelo; los subagentes lo heredan. La extensión entra por la señal de gentle-pi
+  `GENTLE_SHELL_CHILD_PACKAGE_INJECTION`, que **sustituye** su lista corta de extensiones para los hijos;
+  por eso se repiten las suyas (`child-context`, `child-safety`, `nan-provider`, las que existan) y la
+  nuestra va detrás. Si gentle-pi cambia esa lista en una versión nueva, hay que copiarla aquí
+  (`product-env.ts`).
+- **Tasks dice el motivo real:** si gentle solo apuntó «assistant reported an error», la fila *Problem* lee
+  la sesión del subagente y lo explica: «NaN allowance used up · resets Nov 1». *Last step* ya no repite el
+  error.
+- **Probado:** el pi del editor arrancado como subagente sobre NaN agotado: el primer intento da 402,
+  cambia a Omni y responde en el mismo trabajo.
+
 ## ADR-033 — pi-intercom viene de serie: las sesiones de pi hablan entre sí
 
 **Estado:** aceptada (2026-10-26).
@@ -1527,3 +1552,94 @@ editor no tenía era su panel de consumo de suscripción: la tarjeta *Usage limi
 - El contador de la barra de estado sigue siendo solo de NaN (habla de tokens y del periodo de pago, que
   ChatGPT y Claude no dan).
 - Es código del conector y una línea de la vista de estado: cabe en un hotfix (ADR-034).
+
+**Adenda 1 (2026-10-29) — Los límites, en su propia pestaña.**
+
+> *"haz que los limites estén en otra pestaña como agents o skills con un buen sistema de visualización, debajo de providers & models"*
+
+- *Usage limits* deja la vista de estado y pasa a ser una sección propia de Chat Settings, justo debajo
+  de *Providers & Models* (`picodeUsageLimitsSection.ts`). Lee los mismos datos (`picode.setup.status`,
+  `subscriptions`), que ahora dicen a qué proveedor pertenece cada medidor, cuál es el del modelo en uso
+  y, en NaN, los tokens usados y el tope del periodo.
+- Se pinta como un resumen (con margen / cerca del límite / en el límite), un grupo por proveedor con su
+  logo y una tarjeta por modelo, con su barra por ventana, el porcentaje, los tokens y la cuenta atrás.
+  Se relee cada 15 s mientras está a la vista; NaN lleva su enlace al panel de la cuenta.
+- La vista de estado se queda con lo suyo y cada tarjeta lleva sus botones en la cabecera (sin repetir el
+  título de la fila). Un botón se queda ocupado mientras su orden corre y el estado se relee al acabar; una
+  lectura que no cambió nada ya no reconstruye las tarjetas, que era lo que se comía algún clic.
+
+## ADR-037 — Todos los comandos de pi y de Gentle AI, usables desde el chat del editor
+
+> *"revisa que todos los comandos de gentle-ai y pi estén usables y disponibles en el chat del editor"* — 2026-10-29
+
+**Contexto (medido el 2026-10-29 contra el perfil real, 57 comandos, 38 skills, 1 plantilla):**
+
+- Los comandos de extensión (gentle-pi, gentle-engram, pi-intercom, pi-lens, btw…) ya llegaban a pi y
+  respondían con `notify`, que el chat pinta. Funcionaban.
+- **Skills elegidas del menú `/`:** llegaban a pi como `/vitest`, y pi solo carga una skill con
+  `/skill:vitest`. El modelo recibía la frase sin la skill.
+- **Comandos propios del terminal de pi** (`/compact`, `/model`, `/new`, `/name`, `/session`, `/export`,
+  `/reload`…): no existen fuera de su TUI; el chat se los mandaba al modelo como una pregunta.
+- **Plantillas de pi** (`/skill-creation`): pi las expande, pero no salían en el menú. `/gentle:models`
+  tampoco (lo responde el editor, no pi).
+- **Paneles de terminal:** `/cache-stats` y `/cache-graph` no enseñaban nada; `/intercom`,
+  `/gentle:agents`, `/gentle:jobs` y `/gentle:review-session-permission` piden la TUI;
+  `/gentle:review-mode`, `/gentle:telemetry` y `/gentle:dev-binary` necesitan el programa de Gentle AI que
+  PiCode no instala (ADR-031). `/intercom-id` escribía en un editor de terminal que no existe.
+
+**Decisión** (`extensions/picode/src/chat-commands.ts`):
+
+- Cada `/nombre` se enruta antes del turno: comando de extensión → a pi tal cual; skill → `/skill:nombre`;
+  comando del terminal de pi → lo responde el editor; solo-terminal → una frase y, si hay, el botón al sitio
+  equivalente (Tasks, modelos de los agentes, Sessions). Un comando de extensión con el mismo nombre gana
+  al del editor, como en pi.
+- El editor responde: `/compact`, `/new`, `/model` (abre el selector), `/thinking` (escribe el mismo ajuste
+  que el selector), `/name`, `/session` (tabla de mensajes, tokens y coste), `/export` (página web, con
+  botón para abrirla), `/copy`, `/reload` (la sesión se reconstruye con el siguiente mensaje, sin perder la
+  conversación), `/resume`, `/login`/`/logout` (proveedores), `/settings` y `/gentle:models`.
+- Sin equivalente: `/tree`, `/fork`, `/clone`, `/import`, `/scoped-models`, `/share`, `/bug`, `/trust`,
+  `/changelog`, `/hotkeys`, `/quit` → frase clara, nunca al modelo.
+- El menú `/` lista comandos de extensión, plantillas y los del editor, y **oculta** los solo-terminal.
+- Un panel de terminal (`ctx.ui.custom`) se dibuja una vez y su texto va a la respuesta: `/cache-stats`
+  ya enseña sus cifras. El texto que una extensión deja en el editor (`/intercom-id`) va al input del chat.
+
+**Consecuencias:**
+
+- Un panel interactivo dibujado así es una foto: no se puede elegir nada en él. Por eso los interactivos
+  siguen en la lista de solo-terminal.
+- La lista escrita a mano es solo el punto de partida: lo demás lo aprende el chat (adenda 1).
+- `/btw` y `/side` sin texto siguen avisando de que la pregunta va en la misma línea (`/btw <pregunta>`):
+  es su comportamiento fuera del terminal y funciona así.
+- Es código del conector: cabe en un hotfix (ADR-034).
+
+**Adenda 1 (2026-10-29) — El chat aprende solo lo que es de terminal, y lo de un paquete nuevo entra solo.**
+
+> *"automatizalo claro"* · *"yo si instalo packages quiero que se integre todo skills, comandos, agentes si trae, etc etc lo mismo que en el editor"*
+
+- **Aprende solo** (`learned-commands.ts`): cada comando de extensión se vigila mientras corre. Si solo
+  contesta que necesita la TUI (sin ofrecer otra vía, como hace `/btw` con «pásala en la misma línea»), o
+  si lanzado sin argumentos no enseña nada en 8 s, se recuerda como de terminal: se responde con una frase y
+  sale del menú `/`. Lo recordado va atado al fichero del comando (ruta y fecha); al actualizarse el paquete,
+  se olvida y el comando vuelve a tener su oportunidad.
+- **Lo de un paquete entra solo**: instalar, quitar o actualizar un paquete (desde la app o desde el
+  terminal de pi) cambia `settings.json`, y eso vuelve a leer la lista del menú `/` (comandos y plantillas)
+  sin reiniciar; las skills ya se releían así. Antes la lista podía quedarse con la de antes de instalar.
+- **Los mensajes que un paquete publica para leer** (`pi.sendMessage` con `display`) se pintan en el chat;
+  antes no salían, y un comando que contestaba así parecía no hacer nada.
+- Agentes: los paquetes de pi no traen agentes como tal (pi solo reparte extensiones, skills, plantillas y
+  temas); los que una extensión escribe en el perfil ya salen en *Agents*, que vigila esas carpetas. Los
+  temas de pi no aplican: los temas los lleva el editor (sección 5 de AGENTS.md).
+- Coste aceptado: un comando sin argumentos que de verdad no enseña nada (un interruptor mudo) se tomará por
+  de terminal hasta que su paquete se actualice.
+
+**Adenda 2 (2026-10-29) — `/export` en el chat, y los comandos también en las conversaciones antiguas.**
+
+> *"en sesiones anteriores no me sale el comando /export en el chat"* · *"Cuando le des a open it quiero que lo abras con el explorador integrado no para editar el fichero"*
+
+- **`/export` guarda siempre en la carpeta de la conversación** (ruta absoluta): pi devolvía una ruta relativa a su
+  propio directorio y el botón *Open it* decía «file not found».
+- **Open it abre la página en el navegador integrado** del editor, no como fichero de texto; *Show the file* la
+  enseña en el explorador del sistema.
+- **Las conversaciones abiertas desde Sessions** (tipo `pi`) listan ahora también los comandos y plantillas en el
+  menú `/`; antes solo tenían agentes y skills.
+- gentle-pi sube a 4.5.1 (segura según `pins.mjs`).

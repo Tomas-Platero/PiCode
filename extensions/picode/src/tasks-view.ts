@@ -23,6 +23,7 @@ import * as vscode from 'vscode';
 import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
 import { elapsedLabel, taskBoard, taskDetail, taskState, taskTitle, type TaskBoard, type TaskRow } from './tasks-rows';
+import { GENERIC_PROVIDER_ERROR } from './subagent-failure';
 
 /** The view id, which the manifest also declares: the two must not drift. */
 export const TASKS_VIEW_ID = 'picode.status.tasks';
@@ -51,6 +52,8 @@ export interface TasksViewDeps {
 	readonly onAgentsChange?: (listener: () => void) => () => void;
 	/** Opens the page that follows what one agent does (by its task id). */
 	readonly openTranscript?: (id: string) => void;
+	/** Why a finished agent failed, in the provider's terms, when gentle-pi only recorded that it did. */
+	readonly explainFailure?: (id: string) => string | undefined;
 	/** What "now" is, so the tests can hold a clock still. */
 	readonly now?: () => number;
 }
@@ -237,11 +240,13 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			facts.push({ kind: 'fact', label: agent.endedAt === undefined ? 'Running for' : 'Took', detail: elapsedLabel(agent.startedAt, agent.endedAt ?? this.now()), icon: 'watch' });
 		}
 		facts.push({ kind: 'fact', label: 'Steps', detail: `${agent.turns} ${agent.turns === 1 ? 'turn' : 'turns'} · ${agent.toolCalls} ${agent.toolCalls === 1 ? 'tool call' : 'tool calls'}`, icon: 'list-ordered' });
-		if (agent.lastStep.length > 0) {
+		// A failed task's last step is its error: one row says it.
+		if (agent.lastStep.length > 0 && agent.lastStep !== agent.error) {
 			facts.push({ kind: 'fact', label: 'Last step', detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
 		}
 		if (agent.error !== undefined) {
-			facts.push({ kind: 'fact', label: 'Problem', detail: agent.error, icon: 'warning', tooltip: agent.error });
+			const problem = (agent.error === GENERIC_PROVIDER_ERROR ? this.deps.explainFailure?.(agent.id) : undefined) ?? agent.error;
+			facts.push({ kind: 'fact', label: 'Problem', detail: problem, icon: 'warning', tooltip: problem });
 		}
 		return facts;
 	}

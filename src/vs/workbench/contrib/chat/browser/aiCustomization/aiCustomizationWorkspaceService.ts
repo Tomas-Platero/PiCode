@@ -60,6 +60,8 @@ class AICustomizationWorkspaceService implements IAICustomizationWorkspaceServic
 		// shelves of installable things. It replaces the editor's full-screen Models page, which does
 		// not fit in a side panel.
 		AICustomizationManagementSection.ProvidersModels,
+		// How much of each plan is left: right under the providers it belongs to.
+		AICustomizationManagementSection.UsageLimits,
 		AICustomizationManagementSection.McpServers,
 		AICustomizationManagementSection.Plugins,
 		AICustomizationManagementSection.Tools,

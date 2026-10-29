@@ -10,6 +10,7 @@ import {
 	pinAgentDir,
 	runTurn,
 	usageHeadersExtension,
+	chatModelExtension,
 	type AgentDeps,
 	type PiInlineExtension,
 	type PiSdk,
@@ -136,7 +137,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		cwd: picked.cwd,
 		...(agentDir === undefined ? {} : { agentDir }),
 		resourceLoaderOptions: {
-			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension()],
+			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 		},
 	});
 	// The transcript carries its own model and thinking level in its header; pi restores them

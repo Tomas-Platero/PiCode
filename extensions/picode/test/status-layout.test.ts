@@ -82,9 +82,16 @@ test('the section scrolls inside the page\'s box instead of losing its cards', (
 	assert.match(CSS, /::-webkit-scrollbar-thumb\s*\{[^}]*--vscode-scrollbarSlider-background/, 'the scrollbar follows the theme');
 });
 
-test('the DOM the section builds matches the layout: a row owns its button', () => {
-	// The button must be a child of the row (its own grid column), not appended to the card after
-	// the text — the shape that produced "text on one side, button on the other".
-	assert.match(SOURCE, /private addActionRow\(card: HTMLElement, label: string[\s\S]*?const row = DOM\.append\(card, \$\('\.row'\)\);[\s\S]*?this\.addButton\(row, label, icon, onClick\)/);
-	assert.match(SOURCE, /private addRowButton\(card: HTMLElement[\s\S]*?this\.addButton\(row, buttonLabel, buttonIcon, onClick\)/);
+test('the DOM the section builds matches the layout: buttons live in a header or a row', () => {
+	// A card's buttons sit in its own header bar, and a row's switch is a child of that row (its own
+	// grid column) — never appended to the card after the text, the shape that produced "text on one
+	// side, button on the other".
+	assert.match(SOURCE, /const bar = DOM\.append\(header, \$\('\.card-actions'\)\);[\s\S]*?this\.addButton\(bar, action\)/);
+	assert.match(SOURCE, /private addRowButton\(card: HTMLElement[\s\S]*?const side = DOM\.append\(row, \$\('\.row-side'\)\);[\s\S]*?this\.addButton\(side, action\)/);
+});
+
+test('a button stays busy while its command runs, and the page reads the status again after', () => {
+	assert.match(SOURCE, /private async run\(action: IAction, button: Button\)[\s\S]*?this\.setBusy\(button, true\)[\s\S]*?await this\.commandService\.executeCommand[\s\S]*?this\.refresh\(true\)/);
+	// A reading that changed nothing must not rebuild the cards (and swap a button out from under a click).
+	assert.match(SOURCE, /fingerprint === this\.fingerprint/);
 });

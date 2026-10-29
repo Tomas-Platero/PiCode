@@ -1185,13 +1185,16 @@ async function runImport() {
 
 const STATUS_WORDS = { copied: 'importDone', overwritten: 'importOverwritten', absent: 'importAbsent', failed: 'importFailed', declined: 'importDeclined' };
 
+/** Items this page never offers (memory stays in engram; conversations have their own import). */
+const NOT_OFFERED = new Set(['memory', 'sessions']);
+
 /** The report, item by item: what was copied, what was replaced, what was not there. */
 function renderImportReport(report) {
 	if (!report || !Array.isArray(report.items)) {
 		return undefined;
 	}
 	return el('div', { class: 'report' },
-		report.items.map(item => el('div', { class: `report-row ${item.status}` },
+		report.items.filter(item => !NOT_OFFERED.has(item.item)).map(item => el('div', { class: `report-row ${item.status}` },
 			el('span', { class: 'report-item', text: item.item }),
 			el('span', { class: 'report-status', text: t(STATUS_WORDS[item.status] ?? 'importFailed') }),
 			item.reason ? el('span', { class: 'report-why', text: item.reason }) : undefined,
