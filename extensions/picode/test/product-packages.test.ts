@@ -12,8 +12,9 @@
 
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
+import * as path from 'node:path';
 import { test } from 'node:test';
-import { HOST_ENV, PRODUCT_ENV, applyProductEnv, configHomeEnv, withProductEnv } from '../src/product-env.ts';
+import { CHILD_INJECTION_ENV, HOST_ENV, PRODUCT_ENV, applyProductEnv, configHomeEnv, subagentInjectionEnv, withProductEnv } from '../src/product-env.ts';
 
 // `product-packages.ts` imports a sibling the way the compiler wants it (no extension); the
 // runtime needs the extension, which this hook adds in this process only.
@@ -29,10 +30,10 @@ registerHooks({
 const { pointChildPiAtThisPi } = await import('../src/product-env.ts');
 const { DISPLACED_PACKAGE_NAMES, GENTLE_PI_TERMINAL_EXTENSIONS, PRODUCT_PACKAGES, isNewerRelease, isProductPackage, productEntry, switchedOff, withProductPackages, withProductPackageVersion } = await import('../src/product-packages.ts');
 
-const GENTLE_PI = { source: 'npm:gentle-pi@4.5.0', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
+const GENTLE_PI = { source: 'npm:gentle-pi@4.5.1', extensions: [...GENTLE_PI_TERMINAL_EXTENSIONS], themes: [] };
 
 test('the product pins gentle-pi, gentle-engram and pi-intercom at exact versions', () => {
-	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.5.0', 'gentle-engram@0.4.2', 'pi-intercom@0.18.1']);
+	assert.deepEqual(PRODUCT_PACKAGES.map(pkg => `${pkg.name}@${pkg.version}`), ['gentle-pi@4.5.1', 'gentle-engram@0.4.2', 'pi-intercom@0.18.1']);
 	for (const pkg of PRODUCT_PACKAGES) {
 		assert.match(pkg.version, /^\d+\.\d+\.\d+$/, `${pkg.name} is pinned exactly, never a range`);
 	}
@@ -207,4 +208,18 @@ test('a profile that still declares the durable agent loses that declaration and
 	const result = withProductPackages(before, []);
 	assert.equal(result.changed, true);
 	assert.deepEqual(JSON.parse(result.text ?? '{}').packages, ['npm:pi-lens']);
+});
+
+test('every subagent loads gentle-pi\'s own child extensions and then the model fallback', () => {
+	const gentle = path.join('/profile', 'npm', 'node_modules', 'gentle-pi');
+	const fallback = path.join('/connector', 'out', 'subagent-model-fallback.js');
+	const present = new Set([fallback, path.join(gentle, 'extensions', 'child-context.ts'), path.join(gentle, 'extensions', 'nan-provider.ts')]);
+	const env = subagentInjectionEnv(gentle, fallback, file => present.has(file));
+	assert.deepEqual(JSON.parse(env[CHILD_INJECTION_ENV]!), {
+		version: 1,
+		noExtensions: false,
+		extensionPaths: [path.join(gentle, 'extensions', 'child-context.ts'), path.join(gentle, 'extensions', 'nan-provider.ts'), fallback],
+	});
+	// Without the fallback file nothing changes: gentle-pi keeps its own list.
+	assert.deepEqual(subagentInjectionEnv(gentle, fallback, () => false), {});
 });
