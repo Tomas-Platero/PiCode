@@ -1,9 +1,9 @@
 {
-  "version": "3.5.1",
-  "asset": "engram_3.5.1_windows_amd64.zip",
-  "sha256": "23cd4fec76a4aa6047e2e87ac66c4c995e8f5773880e1071da54c0a24caf0abc",
-  "assetArm64": "engram_3.5.1_windows_arm64.zip",
-  "sha256Arm64": "f056abf2b5637c0395b78e6a52ee149be409353bed93387ad5552ee2e15135b7",
+  "version": "3.6.0",
+  "asset": "engram_3.6.0_windows_amd64.zip",
+  "sha256": "22650375af19d1e46ffe1f376314c12c20370dfd19045fbc649a95991706a102",
+  "assetArm64": "engram_3.6.0_windows_arm64.zip",
+  "sha256Arm64": "5a990f889bb1fb1b72bf1127216cc9f2f0bba7faa37c030a36329f8e8a51586d",
   "binary": "engram.exe",
   "notice": "Engram is a third-party MIT program (Gentleman-Programming/engram). PiCode ships its engine unchanged: the name and logo are its author's trademarks, so no surface here is dressed as their product.",
   "note": "The pinned memory engine, fetched from its own release by build/engram-runtime.sh and carried at `<pack>/resources/memory/engram.exe`. Pinned, never `latest`: an editor built today must behave the same in six months, and the store it writes is shared with whatever other agent on the machine points at `~/.engram` — a version that moves on its own is a version that can migrate somebody else's memory without asking. 3.5.1 is the release the owner already runs, so PiCode joins the store it has rather than opening a second one on it. It is the `gentle-engram` pi package is pinned separately in the profile (product-packages.ts) and pointed at this engine through ENGRAM_BIN."
