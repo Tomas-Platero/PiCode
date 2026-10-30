@@ -191,6 +191,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: true,
 			included: false,
 		},
+		// Written by the setup window when the owner switched dictation on; the connector reads it
+		// once at start, begins the download and clears it. Hidden for the same reason as above.
+		'picode.voice.downloadOnStart': {
+			type: 'boolean',
+			default: false,
+			included: false,
+		},
 		'picode.mcp.servers': {
 			type: 'array',
 			default: [],

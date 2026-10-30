@@ -132,6 +132,14 @@ test('extra switches only write keys the product declares', () => {
 	assert.ok(!Object.keys(settings).some(key => key.includes('somethingElse')));
 });
 
+test('switching dictation on only leaves a note for the editor to act on', () => {
+	const { paths } = profiles();
+	assert.deepStrictEqual(setExtras(paths, { voice: true }), { voice: true });
+	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], true);
+	assert.deepStrictEqual(setExtras(paths, { voice: false }), { voice: false });
+	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], false);
+});
+
 test('a value that is not a boolean is not written', () => {
 	const { paths } = profiles();
 	assert.deepStrictEqual(setExtras(paths, { mcp: 'yes' }), {});

@@ -19,6 +19,15 @@ export type VoiceStatus =
 	| { readonly state: 'downloading'; readonly sizeMb: number; readonly percent: number }
 	| { readonly state: 'ready' };
 
+/**
+ * Whether the editor should start the download now because the setup window asked for it.
+ * Only when it was asked for and there is something to fetch: a download already running, or
+ * dictation already on the machine, is left alone.
+ */
+export function shouldDownloadOnStart(asked: boolean, status: VoiceStatus): boolean {
+	return asked && status.state === 'not-installed';
+}
+
 /** What the controller does to the machine, handed in so it can be exercised without one. */
 export interface VoiceOps {
 	readonly install: (home: string, manifest: VoiceManifest, onProgress: (p: VoiceProgress) => void, signal: AbortSignal) => Promise<VoiceInstallResult>;

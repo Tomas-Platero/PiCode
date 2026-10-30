@@ -16,7 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { VoiceController } from '../src/voice-controller.ts';
+import { shouldDownloadOnStart, VoiceController } from '../src/voice-controller.ts';
 import { readVoiceState, removeVoice, voiceDownloadSize, voiceManifestFor, type VoiceInstallResult, type VoiceManifest, type VoiceProgress } from '../src/voice-install.ts';
 
 const real = { install: undefined as never, readState: readVoiceState, remove: removeVoice, downloadSize: voiceDownloadSize };
@@ -94,6 +94,14 @@ test('a real failure is remembered, and the next try clears it', async () => {
 
 	void ctl.start();
 	assert.equal(ctl.status().state, 'downloading');
+});
+
+test('the setup window asking for dictation starts a download only when there is something to fetch', () => {
+	assert.equal(shouldDownloadOnStart(true, { state: 'not-installed', sizeMb: 700 }), true);
+	assert.equal(shouldDownloadOnStart(false, { state: 'not-installed', sizeMb: 700 }), false);
+	assert.equal(shouldDownloadOnStart(true, { state: 'downloading', sizeMb: 700, percent: 3 }), false);
+	assert.equal(shouldDownloadOnStart(true, { state: 'ready' }), false);
+	assert.equal(shouldDownloadOnStart(true, { state: 'unsupported' }), false);
 });
 
 test('remove refuses while a download is running', async () => {

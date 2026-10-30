@@ -66,7 +66,7 @@ import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-u
 import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
 import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
-import { VoiceController } from './voice-controller';
+import { shouldDownloadOnStart, VoiceController } from './voice-controller';
 import { forkVoiceWorker } from './voice-fork';
 import { VoiceSession, type SessionEvent } from './voice-session';
 import { installVoice, readVoiceState, removeVoice, voiceDir, voiceDownloadSize, voiceManifestFor } from './voice-install';
@@ -2338,6 +2338,16 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand(VOICE_CANCEL_COMMAND, () => voice.cancel()));
+
+	// The setup window can only note that the owner wants dictation; the transfer itself happens here,
+	// where its progress shows and it can be cancelled. The note is spent the moment it is read.
+	const voiceSettings = vscode.workspace.getConfiguration('picode.voice');
+	if (voiceSettings.get<boolean>('downloadOnStart') === true) {
+		void voiceSettings.update('downloadOnStart', false, vscode.ConfigurationTarget.Global);
+		if (shouldDownloadOnStart(true, voice.status())) {
+			void vscode.commands.executeCommand(VOICE_DOWNLOAD_COMMAND);
+		}
+	}
 
 	// Listening. The chat polls for what was heard: the phrase so far, finished phrases, and the end
 	// at the time limit. Events wait here until asked for, so a poll never misses one.

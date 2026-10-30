@@ -14,6 +14,7 @@ import { searchPackages, type PackageSearchRow } from './packages-registry';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piRuntimeRoot } from './distribution-root';
+import { voiceManifestFor } from './voice-install';
 import { firstExisting, importPiModule, sdkCandidates } from './piSdk';
 import { FEATURED_SUBSCRIPTIONS, rankOf, type PiAuthEvent, type PiAuthPrompt, type PiModelRuntime } from './subscriptions';
 import {
@@ -198,6 +199,8 @@ export function accountAvailable(distributionRoot: string): boolean {
 export interface SetupExtras {
 	readonly mcp: boolean;
 	readonly context: boolean;
+	/** Whether dictation is to be downloaded when the editor opens. Off unless the owner asked. */
+	readonly voice: boolean;
 }
 
 /** The whole picture the window renders, in one call. */
@@ -205,6 +208,8 @@ export interface SetupSnapshot {
 	readonly internalPiVersion?: string;
 	readonly externalPi?: ExternalPiFacts;
 	readonly extras: SetupExtras;
+	/** Whether dictation exists for this system, so the switch is offered only where it works. */
+	readonly voiceAvailable: boolean;
 	/** Whether signing in to PiCode's own account is possible in this build. */
 	readonly accountAvailable: boolean;
 	/**
@@ -256,6 +261,7 @@ function readExtras(paths: SetupPaths): SetupExtras {
 	return {
 		mcp: value('picode.mcp.enabled', true),
 		context: value('picode.context.attach', true),
+		voice: value('picode.voice.downloadOnStart', false),
 	};
 }
 
@@ -321,6 +327,7 @@ function orphanCredentials(paths: SetupPaths): string[] {
 export function setupSnapshot(paths: SetupPaths): SetupSnapshot {
 	return {
 		extras: readExtras(paths),
+		voiceAvailable: voiceManifestFor(process.platform, process.arch) !== undefined,
 		accountAvailable: accountAvailable(paths.distributionRoot),
 		orphanCredentials: orphanCredentials(paths),
 		contextMode: contextModeInForce(paths),

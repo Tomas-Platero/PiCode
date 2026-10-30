@@ -1,6 +1,6 @@
 # 🎙️ Dictado por voz en el chat del editor
 
-> **Estado: fases 1 a 4 hechas.** Se descarga (tarjeta *Dictation* en Status) y el micrófono del chat dicta frase a frase. Falta el paso opcional del primer arranque (4b) y el cierre (fase 5).
+> **Estado: todas las fases hechas.** Se descarga (tarjeta *Dictation* en Status o desde el asistente de primer arranque) y el micrófono del chat dicta frase a frase. Quedan por ver en pantalla la tarjeta, el interruptor del asistente y el botón del micrófono.
 
 ## 🎯 Qué se quiere
 
@@ -66,7 +66,7 @@ Reglas: texto en inglés, icono en cada fila, sin rutas ni nombres internos, el 
 | 2 ✅ | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
 | 3 ✅ | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
 | 4 ✅ | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
-| 4b | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
+| 4b ✅ | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
 | 5 | Cierre | Pruebas, esta ficha puesta al día, `AGENTS.md` y `docs/MAPA.md` regenerado. |
 
 **La fase 1 decide todo.** Si el motor no funciona dentro de PiCode, se vuelve al camino A con otro motor antes de construir nada más.
@@ -156,4 +156,11 @@ Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), c
 - **No se envía solo:** el chat solo envía tras una pausa si `accessibility.voice.speechTimeout` es mayor que 0; por defecto es 0.
 - **Sin descargar:** pulsar el micrófono ofrece *Download* con el tamaño (≈ 700 MB) en un aviso; nada se baja sin confirmar. Si está descargando, lo dice.
 - **Solo Windows** por ahora: en otros sistemas el botón de micrófono no aparece.
-- **No hecho:** el paso opcional del asistente de primer arranque (fase 4b) y el ajuste de dictado en Ajustes (la tarjeta de Status ya existe).
+- **No hecho:** un ajuste de dictado aparte en Ajustes (la tarjeta de Status ya cubre estado, descarga y quitar).
+
+## ✅ Fase 4b: el asistente de primer arranque (2026-10-30)
+
+- **Qué es:** un interruptor más en el paso *Extras* del asistente: **Dictation** — «Talk to the chat instead of typing. It runs on your computer. Downloads about 700 MB once, when PiCode opens.» Apagado por defecto. Solo aparece donde el dictado existe (hoy Windows x64).
+- **Quién descarga:** el asistente **no descarga nada**: apuntar el deseo es todo lo que hace (`picode.voice.downloadOnStart` en los ajustes del editor). El editor lo lee al abrir, lo borra en el acto y arranca la descarga; así el progreso se ve en la tarjeta de Status y se puede cancelar, y cerrar el asistente sin terminar no baja nada.
+- **El idioma ya no se pregunta:** Parakeet v3 cubre todos con un solo modelo (resultado de la fase 1), así que no hay lista de idiomas ni de tamaños.
+- **Probado:** el interruptor escribe y apaga la nota; el editor solo descarga si se pidió y hay algo que bajar. **No visto en pantalla.**
