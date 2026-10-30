@@ -1,6 +1,6 @@
 # 🎙️ Dictado por voz en el chat del editor
 
-> **Estado: planteado y con diseño aprobado, sin empezar.** Este documento es el plan. Nada de lo que describe existe todavía.
+> **Estado: fases 1 y 2 hechas.** La descarga con progreso, firma y cancelación existe (tarjeta *Dictation* en Status). Faltan grabar y transcribir dentro del editor (fase 3) y el micrófono del chat (fase 4).
 
 ## 🎯 Qué se quiere
 
@@ -62,8 +62,8 @@ Reglas: texto en inglés, icono en cada fila, sin rutas ni nombres internos, el 
 
 | # | Fase | Hecho cuando |
 |---|---|---|
-| 1 | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
-| 2 | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
+| 1 ✅ | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
+| 2 ✅ | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
 | 3 | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
 | 4 | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
 | 4b | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
@@ -130,3 +130,13 @@ Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), c
 **Hallazgo para el diseño:** la función `readWave` del motor falla dentro del editor («External buffers are not allowed»), porque Electron no admite esos buffers. Se evita leyendo el audio en JavaScript y pasándoselo al motor; con eso funciona igual que en Node normal. El audio del micrófono llegará ya como datos de JavaScript, así que no afecta, pero **nunca se debe usar `readWave`**.
 
 **Fase 1 completa:** motor, modelo y micrófono funcionan dentro de PiCode. Dos detalles para la fase 3: el micrófono entrega estéreo a 48 kHz (se mezcla a mono y el motor lo reduce solo a 16 kHz), y la calidad con micrófono real es algo peor que con audio limpio («dictada de vos» por «dictado de voz»), así que conviene cortar el silencio y probar con varios micrófonos.
+
+## ✅ Fase 2: descarga y estado (2026-10-30)
+
+- **Dónde:** `extensions/picode/src/voice-install.ts` (descarga, firmas, reanudación) y `voice-controller.ts` (qué está pasando ahora); la tarjeta *Dictation* de Status la dibuja `picodeStatusSection.ts`. Carpeta de destino: `~/.picode/voice`.
+- **Qué hace:** *Download* (se ve el tamaño antes, ≈ 700 MB) → progreso en la etiqueta de la tarjeta → *Ready*. *Cancel* conserva lo bajado y la siguiente vez continúa. *Remove* lo quita todo.
+- **Seguridad:** cada fichero se comprueba contra su firma (sha256 del modelo, sha512 de las librerías de npm) antes de usarse; uno que no coincide se borra. Solo se siguen redirecciones a Hugging Face, su red de descargas y npm. El marcador de "instalado" se escribe el último, así que una descarga a medias nunca figura como lista.
+- **Probado:** 16 pruebas del conector (firma, reanudación, servidor que ignora el rango, cancelar, hosts permitidos, estados) y una descarga real contra Hugging Face y npm en una carpeta limpia; lo instalado transcribe español e inglés dentro de PiCode.
+- **Fallo encontrado en la prueba real:** el `tar` que trae Git para Windows lee `C:\…` como una máquina remota. Se descomprime con rutas relativas, que valen para cualquier `tar`.
+- **Solo Windows x64 por ahora**, que es lo único probado. En otros sistemas la tarjeta no aparece.
+- **No probado todavía:** cómo se ve la tarjeta en pantalla y pulsar los botones en la app.

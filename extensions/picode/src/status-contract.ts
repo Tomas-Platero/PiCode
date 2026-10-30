@@ -5,6 +5,7 @@
 
 import type { PiProviderRow } from './providers-list';
 import type { UpdatesSnapshot } from './updates-check';
+import type { VoiceStatus } from './voice-controller';
 /**
  * The one answer the status surface draws, and the commands it acts through.
  *
@@ -167,6 +168,8 @@ export interface StatusData {
 	 * packages that often would be its own kind of wrong — the card offers a check to run instead.
 	 */
 	updates?: UpdatesSnapshot;
+	/** Whether dictation is on this machine, downloading, or not there (`voice-controller.ts`). */
+	voice?: VoiceStatus;
 	error?: string;
 }
 
@@ -209,3 +212,8 @@ export const STATUS_PROVIDER_SETTINGS_COMMAND = 'picode.status.openProviderSetti
  */
 export const UPDATES_APPLY_COMMAND = 'picode.updates.apply';
 export const UPDATES_CHECK_COMMAND = 'picode.updates.check';
+
+/** What the Dictation card can do: fetch the speech engine, stop fetching it, or take it off the machine. */
+export const VOICE_DOWNLOAD_COMMAND = 'picode.voice.download';
+export const VOICE_CANCEL_COMMAND = 'picode.voice.cancel';
+export const VOICE_REMOVE_COMMAND = 'picode.voice.remove';
