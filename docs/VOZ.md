@@ -100,3 +100,33 @@ El motor (sherpa-onnx) admite muchos modelos; Gentle solo trae Parakeet v3. Tama
 | Whisper tiny / base | multilingüe | ≈ 110 / ≈ 197 MB |
 
 **Propuesta:** el usuario elige idioma y se baja solo ese modelo (≈ 50–150 MB); Parakeet v3 queda como opción "todos los idiomas". Cuesta más: una lista de modelos propia que PiCode tiene que fijar con versión y firma, porque los de Gentle ya vienen fijados y estos no.
+
+## ✅ Resultados de la fase 1 (2026-10-30, a medias)
+
+Probado en **Node 24 normal**, en Windows, con el modelo y el motor fijados por Gentle (firma del modelo verificada). **Todavía no probado dentro de PiCode.**
+
+| Medida | Resultado |
+|---|---|
+| Español (frase de 5,3 s) | Transcrita sin errores, con tildes y puntuación, en 0,37 s |
+| Inglés (frase de 3,8 s) | Transcrita sin errores en 0,30 s |
+| Carga del modelo | ≈ 2 s |
+| Memoria | ≈ 750–800 MB |
+| Descarga real | modelo 670 MB + motor y micrófono ≈ 30 MB |
+
+**Conclusión:** Parakeet v3 entiende español bien y rápido en CPU. Con él **no hace falta** un modelo por idioma: un solo modelo cubre todos. Los modelos pequeños quedan solo como alternativa si 700 MB pesa demasiado.
+
+### Dentro de PiCode (2026-10-30)
+
+Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), con el modelo y las dos librerías descargados de cero y sus firmas verificadas.
+
+| Medida | Resultado |
+|---|---|
+| Español (5,3 s) | «No preguntes que puede hacer tu país por ti, pregunta qué puedes hacer tú por tu país.» en 0,42 s |
+| Inglés (3,8 s) | Correcto en 0,34 s |
+| Carga del modelo | ≈ 2,4 s |
+| Memoria | ≈ 780 MB |
+| Micrófono (node-cpal) | Graba 6 s a 48 kHz desde el micrófono por defecto y se transcribe: «Hola, hola. Esto es una prueba de dictada de vos…» (hablando de verdad, con el nivel correcto) |
+
+**Hallazgo para el diseño:** la función `readWave` del motor falla dentro del editor («External buffers are not allowed»), porque Electron no admite esos buffers. Se evita leyendo el audio en JavaScript y pasándoselo al motor; con eso funciona igual que en Node normal. El audio del micrófono llegará ya como datos de JavaScript, así que no afecta, pero **nunca se debe usar `readWave`**.
+
+**Fase 1 completa:** motor, modelo y micrófono funcionan dentro de PiCode. Dos detalles para la fase 3: el micrófono entrega estéreo a 48 kHz (se mezcla a mono y el motor lo reduce solo a 16 kHz), y la calidad con micrófono real es algo peor que con audio limpio («dictada de vos» por «dictado de voz»), así que conviene cortar el silencio y probar con varios micrófonos.
