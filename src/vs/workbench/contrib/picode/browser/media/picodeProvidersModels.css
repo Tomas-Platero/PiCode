@@ -498,3 +498,51 @@
 .picode-pm-agent-all {
 	font-weight: 600;
 }
+
+/* A Gentle preference: icon, name with a muted one-line explanation under it, the control on the right. */
+.picode-pm-setting {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 0 0 8px;
+	padding: 10px 14px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-pm-setting-icon {
+	flex-shrink: 0;
+	font-size: 18px;
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-pm-setting-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.picode-pm-setting-label {
+	font-weight: 600;
+}
+
+.picode-pm-setting-hint,
+.picode-pm-hint {
+	margin: 2px 0 0;
+	font-size: var(--vscode-agents-fontSize-label1, 12px);
+	line-height: 1.4;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-pm-hint {
+	margin: 6px 0 10px;
+}
+
+/* Yellow is kept for a real problem only. */
+.picode-pm-setting-hint.warning {
+	color: var(--vscode-editorWarning-foreground, #d29922);
+}
+
+.picode-pm-setting-select {
+	flex: 0 0 160px;
+}

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './media/picodeProvidersModels.css';
 import { $, addDisposableListener } from '../../../../base/browser/dom.js';
 
 /**
@@ -40,7 +41,50 @@ const KNOWN_DOMAINS: Readonly<Record<string, string>> = {
 	github: 'github.com',
 	'github-copilot': 'github.com',
 	radius: 'radius.dev',
+	// MCP servers people commonly connect.
+	aikido: 'aikido.dev',
+	atlassian: 'atlassian.com',
+	'atlassian-rovo-mcp': 'atlassian.com',
+	firebase: 'firebase.google.com',
+	sentry: 'sentry.io',
+	supabase: 'supabase.com',
+	'supabase-mcp-server': 'supabase.com',
+	vercel: 'vercel.com',
+	linear: 'linear.app',
+	notion: 'notion.so',
+	slack: 'slack.com',
+	stripe: 'stripe.com',
+	figma: 'figma.com',
+	cloudflare: 'cloudflare.com',
+	context7: 'context7.com',
+	playwright: 'playwright.dev',
+	repomix: 'repomix.com',
+	codegraph: 'github.com',
+	'sequential-thinking': 'modelcontextprotocol.io',
 };
+
+/** Properly written names for the services whose spelling is not just the id capitalised. */
+const DISPLAY_NAMES: Readonly<Record<string, string>> = {
+	'atlassian-rovo-mcp': 'Atlassian Rovo',
+	'supabase-mcp-server': 'Supabase',
+	'sequential-thinking': 'Sequential Thinking',
+	github: 'GitHub',
+	codegraph: 'CodeGraph',
+	openai: 'OpenAI',
+	deepseek: 'DeepSeek',
+	nan: 'NaN',
+};
+
+/** `atlassian-rovo-mcp` → `Atlassian Rovo`, `aikido` → `Aikido`: the name as a person would write it. */
+export function displayNameOf(id: string): string {
+	const known = DISPLAY_NAMES[id.toLowerCase()];
+	if (known !== undefined) {
+		return known;
+	}
+	return id.split(/[-_]/).filter(word => word.length > 0 && word.toLowerCase() !== 'mcp' && word.toLowerCase() !== 'server')
+		.map(word => word[0].toUpperCase() + word.slice(1))
+		.join(' ') || id;
+}
 
 /** `https://…/v1` → `example.com`. Hostnames only; anything else yields nothing. */
 function domainOf(endpoint: string | undefined): string | undefined {
