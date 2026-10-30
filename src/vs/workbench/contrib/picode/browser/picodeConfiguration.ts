@@ -20,6 +20,7 @@ import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';
 import './picodeSetupCommands.js';
 import './picodeWhatsNew.js';
+import './picodeSpeech.js';
 
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.

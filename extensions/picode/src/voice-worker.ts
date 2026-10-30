@@ -10,15 +10,16 @@
  * leaves this process: the parent says `start` and `stop` and gets the words back.
  *
  * Messages in:  { type: 'init', dir } · { type: 'start' } · { type: 'stop' }
- * Messages out: { type: 'ready' } · { type: 'listening' } · { type: 'limit' }
- *               · { type: 'result', text, seconds, cutOff } · { type: 'error', message }
+ * Messages out: { type: 'ready' } · { type: 'listening' } · { type: 'partial', text }
+ *               · { type: 'final', text } · { type: 'limit' } · { type: 'stopped' }
+ *               · { type: 'error', message }
  *
  * `readWave` of sherpa-onnx is never used: Electron refuses the external buffers it returns. The
  * audio is handed over as ordinary JavaScript arrays, which is how the microphone delivers it.
  */
 
 import * as path from 'path';
-import { Dictation, mixToMono, type VoiceInput, type VoiceRecognizer } from './voice-engine';
+import { LiveDictation, mixToMono, type VoiceInput, type VoiceRecognizer } from './voice-engine';
 
 type Incoming =
 	| { readonly type: 'init'; readonly dir: string }
@@ -49,7 +50,7 @@ function errorText(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-let dictation: Dictation | undefined;
+let dictation: LiveDictation | undefined;
 
 function init(dir: string): void {
 	const modules = path.join(dir, 'node_modules');
@@ -107,7 +108,11 @@ function init(dir: string): void {
 		};
 	};
 
-	dictation = new Dictation(openInput, voiceRecognizer, () => send({ type: 'limit' }));
+	dictation = new LiveDictation(openInput, voiceRecognizer, {
+		onPartial: text => send({ type: 'partial', text }),
+		onFinal: text => send({ type: 'final', text }),
+		onLimit: () => send({ type: 'limit' }),
+	});
 	send({ type: 'ready' });
 }
 
@@ -128,8 +133,8 @@ process.on('message', (message: Incoming) => {
 				if (!dictation) {
 					throw new Error('The speech engine is not loaded.');
 				}
-				const result = dictation.stop();
-				send({ type: 'result', text: result.text, seconds: result.seconds, cutOff: result.cutOff });
+				dictation.stop();
+				send({ type: 'stopped' });
 				break;
 			}
 		}

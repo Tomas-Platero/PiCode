@@ -6,14 +6,15 @@
 /**
  * The editor's side of a dictation, with a worker that is only a script of replies.
  *
- * What matters: the model is loaded once and reused; a failure comes back as a message and leaves
- * the session ready to try again; the time limit hands the words over without anyone asking; a
- * worker that dies is replaced on the next press; and the worker is let go after a quiet while.
+ * What matters: the model is loaded once and reused; phrases reach the listener as they come; a
+ * failure comes back as a message and leaves the session ready to try again; the time limit ends
+ * the session by itself; a worker that dies is replaced on the next press; and the worker is let
+ * go after a quiet while.
  */
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { VoiceSession, type DictationOutcome, type WorkerChannel } from '../src/voice-session.ts';
+import { VoiceSession, type SessionEvent, type WorkerChannel } from '../src/voice-session.ts';
 
 class FakeWorker implements WorkerChannel {
 	sent: Record<string, unknown>[] = [];
@@ -24,7 +25,7 @@ class FakeWorker implements WorkerChannel {
 	replies: Record<string, Record<string, unknown> | undefined> = {
 		init: { type: 'ready' },
 		start: { type: 'listening' },
-		stop: { type: 'result', text: 'hello world', seconds: 2, cutOff: false },
+		stop: { type: 'stopped' },
 	};
 	send(message: Record<string, unknown>): void {
 		this.sent.push(message);
@@ -42,20 +43,19 @@ class FakeWorker implements WorkerChannel {
 
 function setup(idleMs?: number) {
 	const workers: FakeWorker[] = [];
-	const auto: DictationOutcome[] = [];
-	const session = new VoiceSession(() => { const w = new FakeWorker(); workers.push(w); return w; }, 'voice-dir', o => auto.push(o), idleMs);
-	return { session, workers, auto };
+	const events: SessionEvent[] = [];
+	const session = new VoiceSession(() => { const w = new FakeWorker(); workers.push(w); return w; }, 'voice-dir', e => events.push(e), idleMs);
+	return { session, workers, events };
 }
 
-test('a dictation loads the model once, listens, and returns the words', async () => {
+test('a dictation loads the model once, listens, and stops', async () => {
 	const { session, workers } = setup();
 	await session.start();
 	assert.equal(session.state, 'listening');
 	assert.deepEqual(workers[0].sent.map(m => m['type']), ['init', 'start']);
 	assert.equal(workers[0].sent[0]['dir'], 'voice-dir');
 
-	const outcome = await session.stop();
-	assert.equal(outcome.text, 'hello world');
+	await session.stop();
 	assert.equal(session.state, 'idle');
 
 	await session.start();
@@ -64,9 +64,31 @@ test('a dictation loads the model once, listens, and returns the words', async (
 	session.dispose();
 });
 
-test('stopping when nothing is recording says nothing', async () => {
+test('phrases reach the listener as they are spoken, and the last one before stop is not lost', async () => {
+	const { session, workers, events } = setup();
+	await session.start();
+	workers[0].emit({ type: 'partial', text: 'hel' });
+	workers[0].emit({ type: 'partial', text: 'hello wor' });
+	workers[0].emit({ type: 'final', text: 'hello world' });
+
+	workers[0].replies['stop'] = undefined;
+	const stopping = session.stop();
+	workers[0].emit({ type: 'final', text: 'and more' });
+	workers[0].emit({ type: 'stopped' });
+	await stopping;
+
+	assert.deepEqual(events, [
+		{ kind: 'partial', text: 'hel' },
+		{ kind: 'partial', text: 'hello wor' },
+		{ kind: 'final', text: 'hello world' },
+		{ kind: 'final', text: 'and more' },
+	]);
+});
+
+test('stopping when nothing is recording is harmless', async () => {
 	const { session } = setup();
-	assert.deepEqual(await session.stop(), { text: '', seconds: 0, cutOff: false });
+	await session.stop();
+	assert.equal(session.state, 'idle');
 });
 
 test('a second press while running is refused', async () => {
@@ -89,14 +111,14 @@ test('a failure comes back as words and leaves the session ready to try again', 
 	session.dispose();
 });
 
-test('at the time limit the words are handed over without anyone asking', async () => {
-	const { session, workers, auto } = setup();
+test('at the time limit the listener hears it and the session stops itself', async () => {
+	const { session, workers, events } = setup();
 	await session.start();
-	workers[0].replies['stop'] = { type: 'result', text: 'long talk', seconds: 120, cutOff: true };
 	workers[0].emit({ type: 'limit' });
 	await new Promise(r => setTimeout(r, 5));
-	assert.deepEqual(auto, [{ text: 'long talk', seconds: 120, cutOff: true }]);
+	assert.deepEqual(events, [{ kind: 'limit' }]);
 	assert.equal(session.state, 'idle');
+	assert.equal(workers[0].sent.at(-1)?.['type'], 'stop');
 });
 
 test('a worker that dies is replaced on the next press', async () => {

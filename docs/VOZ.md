@@ -1,6 +1,6 @@
 # 🎙️ Dictado por voz en el chat del editor
 
-> **Estado: fases 1, 2 y 3 hechas.** Se descarga (tarjeta *Dictation* en Status) y el conector sabe escuchar y devolver el texto. Falta conectar el micrófono del chat y el ajuste (fase 4).
+> **Estado: fases 1 a 4 hechas.** Se descarga (tarjeta *Dictation* en Status) y el micrófono del chat dicta frase a frase. Falta el paso opcional del primer arranque (4b) y el cierre (fase 5).
 
 ## 🎯 Qué se quiere
 
@@ -65,7 +65,7 @@ Reglas: texto en inglés, icono en cada fila, sin rutas ni nombres internos, el 
 | 1 ✅ | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
 | 2 ✅ | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
 | 3 ✅ | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
-| 4 | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
+| 4 ✅ | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
 | 4b | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
 | 5 | Cierre | Pruebas, esta ficha puesta al día, `AGENTS.md` y `docs/MAPA.md` regenerado. |
 
@@ -143,8 +143,17 @@ Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), c
 
 ## ✅ Fase 3: grabar y transcribir (2026-10-30)
 
-- **Dónde:** `voice-engine.ts` (juntar audio, mezclar a mono, cortar a los 120 s, ignorar clics de menos de 0,3 s), `voice-worker.ts` (el proceso hijo que carga el modelo y usa el micrófono), `voice-session.ts` (el lado del editor: arrancar, parar, reutilizar el proceso, soltarlo a los 5 minutos de calma) y `voice-fork.ts` (lo lanza con el Node del propio editor).
-- **Cómo se usa:** dos comandos del conector, `picode.voice.listen` (empieza a escuchar) y `picode.voice.finish` (para y devuelve el texto). Si la grabación llegó a los 2 minutos, se cortó sola y `finish` devuelve lo dicho hasta ahí con `cutOff: true`. Es lo que usará el micrófono del chat en la fase 4.
-- **El audio no sale del proceso hijo:** el editor solo manda *empieza* y *para* y recibe el texto. Si el motor se cae, el chat sigue y la siguiente pulsación arranca uno nuevo.
-- **Probado:** 16 pruebas nuevas (mezcla, corte a los 2 minutos, clic corto, parar dos veces, micrófono caído, proceso que muere, reutilización, soltar por inactividad) y una ejecución real del proceso con el Node del editor y el micrófono: carga 2,3 s, la segunda dictada es inmediata. En silencio devuelve texto vacío.
-- **No probado todavía:** hablar de verdad a través de este camino (la voz se probó en la fase 1 con el mismo motor y micrófono) y el corte real a los 2 minutos (probado con un reloj simulado, no esperando 120 s).
+- **Dónde:** `voice-engine.ts` (mezclar a mono, distinguir voz de silencio, cortar en frases, parar a los 120 s), `voice-worker.ts` (el proceso hijo que carga el modelo y usa el micrófono), `voice-session.ts` (el lado del editor: arrancar, parar, reutilizar el proceso, soltarlo a los 5 minutos de calma) y `voice-fork.ts` (lo lanza con el Node del propio editor).
+- **Por frases, no de golpe:** el motor transcribe audio ya terminado, no un flujo. Mientras se habla, la frase hasta ahora se transcribe cada ≈ 1,2 s y se ofrece como *parcial*; en una pausa de 0,8 s se transcribe una última vez y se ofrece como *final*. Es lo que necesita el chat (ver fase 4).
+- **El audio no sale del proceso hijo:** el editor solo manda *empieza* y *para* y recibe texto. Si el motor se cae, el chat sigue y la siguiente pulsación arranca uno nuevo.
+- **Probado:** 13 pruebas del motor (mezcla, frases, pausa, clic corto, parar con frase abierta, trozos de tamaño raro, límite de 2 minutos, micrófono caído), 9 de la sesión, y una ejecución con **voz real** (los dos audios de ejemplo con una pausa en medio): salen 4 parciales que van creciendo y un final por idioma, con tildes y puntuación. El proceso real con el micrófono arranca en 2 s y la segunda vez es inmediata.
+- **Límite:** probado con un reloj simulado, no esperando 120 s reales.
+
+## ✅ Fase 4: el micrófono del chat (2026-10-30)
+
+- **Qué se descubrió:** el chat de VS Code corta la sesión en cuanto se pulsa parar y **descarta todo lo que llegue después**. Por eso el dictado va por frases: el texto se pega en el borrador mientras se habla, y al parar queda lo ya pegado (lo dicho en el último segundo, sin pausa, puede perderse).
+- **Cómo:** `picodeSpeech.ts` registra un proveedor de voz propio (`ISpeechService`), que habla con el conector con tres comandos: `picode.voice.listen` (empieza), `picode.voice.poll` (cada 300 ms: qué se oyó) y `picode.voice.finish` (para). El conector no puede empujar datos al chat, por eso se pregunta.
+- **No se envía solo:** el chat solo envía tras una pausa si `accessibility.voice.speechTimeout` es mayor que 0; por defecto es 0.
+- **Sin descargar:** pulsar el micrófono ofrece *Download* con el tamaño (≈ 700 MB) en un aviso; nada se baja sin confirmar. Si está descargando, lo dice.
+- **Solo Windows** por ahora: en otros sistemas el botón de micrófono no aparece.
+- **No hecho:** el paso opcional del asistente de primer arranque (fase 4b) y el ajuste de dictado en Ajustes (la tarjeta de Status ya existe).

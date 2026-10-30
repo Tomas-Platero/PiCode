@@ -18,14 +18,13 @@ export interface WorkerChannel {
 	kill(): void;
 }
 
-export interface DictationOutcome {
-	readonly text: string;
-	readonly seconds: number;
-	/** The recording ended at the time limit instead of when the owner stopped it. */
-	readonly cutOff: boolean;
-}
+/** What a dictation reports while it runs: the phrase so far, a finished phrase, or the end at the time limit. */
+export type SessionEvent =
+	| { readonly kind: 'partial'; readonly text: string }
+	| { readonly kind: 'final'; readonly text: string }
+	| { readonly kind: 'limit' };
 
-export type SessionState = 'idle' | 'loading' | 'listening' | 'transcribing';
+export type SessionState = 'idle' | 'loading' | 'listening' | 'stopping';
 
 interface Waiter {
 	readonly accept: Set<string>;
@@ -41,17 +40,14 @@ export class VoiceSession {
 	private idleTimer: ReturnType<typeof setTimeout> | undefined;
 	private readonly spawn: () => WorkerChannel;
 	private readonly dir: string;
-	private readonly onAutoStop: (outcome: DictationOutcome) => void;
+	private readonly listener: (event: SessionEvent) => void;
 	private readonly idleMs: number;
 
-	/**
-	 * `onAutoStop` receives the result when the time limit ended a recording — the one case where
-	 * nobody called `stop()` to ask for it.
-	 */
-	constructor(spawn: () => WorkerChannel, dir: string, onAutoStop: (outcome: DictationOutcome) => void, idleMs: number = 5 * 60_000) {
+	/** `listener` hears every phrase as it is spoken and, at the time limit, `limit` (the session then stops itself). */
+	constructor(spawn: () => WorkerChannel, dir: string, listener: (event: SessionEvent) => void, idleMs: number = 5 * 60_000) {
 		this.spawn = spawn;
 		this.dir = dir;
-		this.onAutoStop = onAutoStop;
+		this.listener = listener;
 		this.idleMs = idleMs;
 	}
 
@@ -61,7 +57,7 @@ export class VoiceSession {
 
 	/** Starts listening. Rejects with words the owner can read, and leaves the session idle. */
 	async start(): Promise<void> {
-		if (this.current === 'listening' || this.current === 'loading' || this.current === 'transcribing') {
+		if (this.current === 'listening' || this.current === 'loading' || this.current === 'stopping') {
 			throw new Error('Dictation is already running.');
 		}
 		this.clearIdle();
@@ -85,16 +81,16 @@ export class VoiceSession {
 		}
 	}
 
-	/** Stops listening and returns what was said. */
-	async stop(): Promise<DictationOutcome> {
+	/** Stops listening. The phrase still open is offered as final before this resolves. */
+	async stop(): Promise<void> {
 		if (this.current !== 'listening' || this.worker === undefined) {
-			return { text: '', seconds: 0, cutOff: false };
+			return;
 		}
-		this.current = 'transcribing';
+		this.current = 'stopping';
 		try {
-			const result = this.wait(['result']);
+			const stopped = this.wait(['stopped']);
 			this.worker.send({ type: 'stop' });
-			return this.outcome(await result);
+			await stopped;
 		} finally {
 			this.current = 'idle';
 			this.armIdle();
@@ -128,8 +124,13 @@ export class VoiceSession {
 			return;
 		}
 		const type = String(message['type']);
+		if (type === 'partial' || type === 'final') {
+			this.listener({ kind: type, text: String(message['text'] ?? '') });
+			return;
+		}
 		if (type === 'limit') {
-			void this.finishAtLimit();
+			this.listener({ kind: 'limit' });
+			void this.stop().catch(() => undefined);
 			return;
 		}
 		const waiter = this.waiter;
@@ -145,25 +146,10 @@ export class VoiceSession {
 		}
 	}
 
-	private async finishAtLimit(): Promise<void> {
-		if (this.current !== 'listening') {
-			return;
-		}
-		try {
-			this.onAutoStop(await this.stop());
-		} catch {
-			// The owner will find out on the next press; there is no one waiting to tell now.
-		}
-	}
-
 	private wait(types: readonly string[]): Promise<Record<string, unknown>> {
 		return new Promise((resolve, reject) => {
 			this.waiter = { accept: new Set(types), resolve, reject };
 		});
-	}
-
-	private outcome(message: Record<string, unknown>): DictationOutcome {
-		return { text: String(message['text'] ?? ''), seconds: Number(message['seconds'] ?? 0), cutOff: message['cutOff'] === true };
 	}
 
 	private drop(reason: Error): void {

@@ -219,8 +219,10 @@ export const VOICE_CANCEL_COMMAND = 'picode.voice.cancel';
 export const VOICE_REMOVE_COMMAND = 'picode.voice.remove';
 
 /**
- * Dictation itself, for the chat's microphone: start listening, then stop and get the words.
- * `stop` also covers the recording that ended on its own at the time limit.
+ * Dictation itself, for the chat's microphone: `listen` starts, `poll` hands over what was heard
+ * since the last poll (the phrase so far, finished phrases, the end at the time limit), `finish`
+ * stops and hands over the rest. The chat polls because commands return once; it cannot be pushed to.
  */
 export const VOICE_LISTEN_COMMAND = 'picode.voice.listen';
+export const VOICE_POLL_COMMAND = 'picode.voice.poll';
 export const VOICE_FINISH_COMMAND = 'picode.voice.finish';
