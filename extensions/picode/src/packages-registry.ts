@@ -36,6 +36,10 @@ export interface PackageSearchRow {
 	readonly description?: string;
 	readonly publisher?: string;
 	readonly version?: string;
+	/** npm's monthly downloads, when the payload carries them. */
+	readonly downloads?: number;
+	/** When the latest version was published (ISO), when the payload carries it. */
+	readonly date?: string;
 }
 
 /**
@@ -83,6 +87,7 @@ interface CatalogEntry {
 		readonly name?: unknown;
 		readonly description?: unknown;
 		readonly version?: unknown;
+		readonly date?: unknown;
 		readonly publisher?: { readonly username?: unknown };
 	};
 	readonly downloads?: { readonly monthly?: unknown };
@@ -114,6 +119,8 @@ function parseCatalog(payload: unknown): PackageSearchRow[] {
 			description?: string;
 			publisher?: string;
 			version?: string;
+			downloads?: number;
+			date?: string;
 		} = { name: manifest.name };
 		if (typeof manifest.description === 'string') {
 			row.description = manifest.description;
@@ -125,6 +132,10 @@ function parseCatalog(payload: unknown): PackageSearchRow[] {
 			row.version = manifest.version;
 		}
 		const downloads = typeof entry.downloads?.monthly === 'number' ? entry.downloads.monthly : 0;
+		row.downloads = downloads;
+		if (typeof manifest.date === 'string') {
+			row.date = manifest.date;
+		}
 		rows.push({ row, downloads });
 	}
 	return rows.sort((left, right) => right.downloads - left.downloads).map(kept => kept.row);

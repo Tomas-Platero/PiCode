@@ -1,0 +1,98 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { localize } from '../../../../nls.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { MarkdownString } from '../../../../base/common/htmlContent.js';
+import { URI } from '../../../../base/common/uri.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+import { IProductService } from '../../../../platform/product/common/productService.js';
+import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IHostService } from '../../../services/host/browser/host.js';
+import { extractWhatChanged } from './picodeWhatsNewData.js';
+
+const LAST_VERSION_KEY = 'picode.whatsNew.lastVersion';
+const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases/tags/';
+
+/**
+ * After PiCode updates, shows a small window with what changed in the new version.
+ * Does nothing on a first install, when the version has not changed, when the user turned
+ * release notes off (the same `update.showReleaseNotes` switch VS Code uses), or when the
+ * release has no summary or cannot be reached.
+ */
+export class PicodeWhatsNewContribution implements IWorkbenchContribution {
+
+	static readonly ID = 'workbench.contrib.picodeWhatsNew';
+
+	constructor(
+		@IStorageService private readonly storageService: IStorageService,
+		@IProductService private readonly productService: IProductService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IHostService hostService: IHostService,
+		@IRequestService private readonly requestService: IRequestService,
+		@IDialogService private readonly dialogService: IDialogService,
+		@IOpenerService private readonly openerService: IOpenerService,
+	) {
+		hostService.hadLastFocus().then(hadLastFocus => {
+			if (hadLastFocus) {
+				return this.run();
+			}
+			return undefined;
+		}).catch(() => { /* a missing summary must never get in the way of starting */ });
+	}
+
+	private async run(): Promise<void> {
+		const current = this.productService.picodeVersion;
+		if (!current) {
+			return;
+		}
+
+		const last = this.storageService.get(LAST_VERSION_KEY, StorageScope.APPLICATION, '');
+		this.storageService.store(LAST_VERSION_KEY, current, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		if (!last || last === current || !this.configurationService.getValue<boolean>('update.showReleaseNotes')) {
+			return;
+		}
+
+		const notes = await this.fetchNotes(current);
+		if (!notes) {
+			return;
+		}
+
+		const releaseUrl = `${this.productService.releaseNotesUrl ?? 'https://github.com/Tomas-Platero/PiCode/releases'}/tag/v${current}`;
+		await this.dialogService.prompt({
+			message: localize('picodeWhatsNew.title', "PiCode {0} is ready", current),
+			detail: localize('picodeWhatsNew.subtitle', "Here is what changed since the last version."),
+			buttons: [
+				{ label: localize('picodeWhatsNew.close', "Close"), run: () => undefined },
+				{ label: localize('picodeWhatsNew.full', "Full release notes"), run: () => this.openerService.open(URI.parse(releaseUrl)) },
+			],
+			custom: { markdownDetails: [{ markdown: new MarkdownString(notes) }] },
+		});
+	}
+
+	private async fetchNotes(version: string): Promise<string | undefined> {
+		try {
+			const context = await this.requestService.request({
+				type: 'GET',
+				url: RELEASES_API + encodeURIComponent(`v${version}`),
+				headers: { 'Accept': 'application/vnd.github+json' },
+				callSite: 'picodeWhatsNew',
+			}, CancellationToken.None);
+			if (context.res.statusCode !== 200) {
+				return undefined;
+			}
+			const release = await asJson<{ body?: string }>(context);
+			return release?.body ? extractWhatChanged(release.body) : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+}
+
+registerWorkbenchContribution2(PicodeWhatsNewContribution.ID, PicodeWhatsNewContribution, WorkbenchPhase.Eventually);
