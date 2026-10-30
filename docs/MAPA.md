@@ -21,6 +21,7 @@
 │   │   └── question.yml
 │   ├── workflows/
 │   │   ├── ci.yml
+│   │   ├── pins.yml
 │   │   └── release.yml
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── build/ — build/ builds PiCode from its own source tree, and the source tree is this repository. There is no picode-source/ folder and no download: the…
@@ -338,13 +339,15 @@
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── pi-runtime.sh
+│   ├── pins.mjs
+│   ├── pins.test.mjs
 │   ├── README.md
 │   ├── release.mjs
 │   ├── setup-npm-registry.ts
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 42 files in total
+│   └── … 44 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
@@ -358,11 +361,13 @@
 │   ├── HOTFIX.md
 │   ├── howto-build.md
 │   ├── MAPA.md
+│   ├── PINS.md
 │   ├── README.md
 │   ├── RELEASES.md
 │   ├── SETTINGS.md
 │   ├── TAREAS.md
-│   └── VISION.md
+│   ├── VISION.md
+│   └── VOZ.md
 ├── extensions/ — Casi todo lo que hay aquí es upstream: las extensiones que VS Code trae de serie (git, json, markdown, typescript-language-features…), tal como…
 │   ├── picode/ — La pieza que hace que el chat exista. Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP,…
 │   │   ├── media/
@@ -377,6 +382,7 @@
 │   │   │   ├── agents.ts
 │   │   │   ├── background-cards.ts
 │   │   │   ├── background-jobs.ts
+│   │   │   ├── chat-commands.ts
 │   │   │   ├── chat-edits.ts
 │   │   │   ├── child-trace.ts
 │   │   │   ├── command-registry.ts
@@ -399,6 +405,7 @@
 │   │   │   ├── gentle-settings.ts
 │   │   │   ├── import-project.ts
 │   │   │   ├── intercom-config.ts
+│   │   │   ├── learned-commands.ts
 │   │   │   ├── left-behind-packages.ts
 │   │   │   ├── login.ts
 │   │   │   ├── mcp-add.ts
@@ -447,6 +454,9 @@
 │   │   │   ├── sessions-resume.ts
 │   │   │   ├── status-contract.ts
 │   │   │   ├── status-data.ts
+│   │   │   ├── subagent-failure.ts
+│   │   │   ├── subagent-model-fallback.ts
+│   │   │   ├── subscription-usage.ts
 │   │   │   ├── subscriptions.ts
 │   │   │   ├── tasks-rows.ts
 │   │   │   ├── tasks-view.ts
@@ -455,14 +465,21 @@
 │   │   │   ├── theme-types.ts
 │   │   │   ├── updates-check.ts
 │   │   │   ├── usage-data.ts
+│   │   │   ├── voice-controller.ts
+│   │   │   ├── voice-engine.ts
+│   │   │   ├── voice-fork.ts
+│   │   │   ├── voice-install.ts
+│   │   │   ├── voice-session.ts
+│   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 86 files in total
+│   │   │   └── … 97 files in total
 │   │   ├── test/
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
 │   │   │   ├── background-jobs.test.ts
+│   │   │   ├── chat-commands.test.ts
 │   │   │   ├── chat-edits.test.ts
 │   │   │   ├── child-trace.test.ts
 │   │   │   ├── command-registry.test.ts
@@ -480,6 +497,7 @@
 │   │   │   ├── gentle-models.test.ts
 │   │   │   ├── gentle-settings.test.ts
 │   │   │   ├── intercom-config.test.ts
+│   │   │   ├── learned-commands.test.ts
 │   │   │   ├── left-behind-packages.test.ts
 │   │   │   ├── mcp-add.test.ts
 │   │   │   ├── mcp-cwd.test.ts
@@ -516,12 +534,18 @@
 │   │   │   ├── sessions-provider.test.ts
 │   │   │   ├── setup-host-no-editor.test.ts
 │   │   │   ├── status-layout.test.ts
+│   │   │   ├── subagent-failure.test.ts
+│   │   │   ├── subscription-usage.test.ts
 │   │   │   ├── tasks-rows.test.ts
 │   │   │   ├── theme-catalog.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
+│   │   │   ├── voice-controller.test.ts
+│   │   │   ├── voice-engine.test.ts
+│   │   │   ├── voice-install.test.ts
+│   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 62 files in total
+│   │   │   └── … 70 files in total
 │   │   ├── package.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
@@ -584,6 +608,7 @@
 ├── remote/ · ⬆️ upstream, no breakdown
 ├── resources/
 │   ├── picode/ — Las imágenes del propio repositorio (no las del producto): lo que se ve en el README público y en la cabecera de GitHub.
+│   │   ├── banner.py
 │   │   ├── pi.svg
 │   │   ├── picode-banner.png
 │   │   ├── README.md
