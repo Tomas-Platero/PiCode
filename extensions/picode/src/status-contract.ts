@@ -217,3 +217,10 @@ export const UPDATES_CHECK_COMMAND = 'picode.updates.check';
 export const VOICE_DOWNLOAD_COMMAND = 'picode.voice.download';
 export const VOICE_CANCEL_COMMAND = 'picode.voice.cancel';
 export const VOICE_REMOVE_COMMAND = 'picode.voice.remove';
+
+/**
+ * Dictation itself, for the chat's microphone: start listening, then stop and get the words.
+ * `stop` also covers the recording that ended on its own at the time limit.
+ */
+export const VOICE_LISTEN_COMMAND = 'picode.voice.listen';
+export const VOICE_FINISH_COMMAND = 'picode.voice.finish';

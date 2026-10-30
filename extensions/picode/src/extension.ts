@@ -65,9 +65,11 @@ import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from '.
 import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
 import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
-import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
+import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
 import { VoiceController } from './voice-controller';
-import { installVoice, readVoiceState, removeVoice, voiceDownloadSize, voiceManifestFor } from './voice-install';
+import { forkVoiceWorker } from './voice-fork';
+import { VoiceSession, type DictationOutcome } from './voice-session';
+import { installVoice, readVoiceState, removeVoice, voiceDir, voiceDownloadSize, voiceManifestFor } from './voice-install';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
 import { isRunning, isTaskId, transcriptOf, transcriptOfJson } from './agent-transcript';
@@ -2336,6 +2338,40 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand(VOICE_CANCEL_COMMAND, () => voice.cancel()));
+
+	// Listening. A recording that reached the time limit ends by itself; its words wait here until
+	// the chat asks for them, so the press that comes next still gets what was said.
+	let endedAtLimit: DictationOutcome | undefined;
+	const dictation = new VoiceSession(
+		() => forkVoiceWorker(path.join(context.extensionPath, 'out', 'voice-worker.js')),
+		voiceDir(os.homedir()),
+		outcome => { endedAtLimit = outcome; },
+	);
+	context.subscriptions.push(new vscode.Disposable(() => dictation.dispose()));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_LISTEN_COMMAND, async (): Promise<{ ok: boolean; message?: string }> => {
+		if (voice.status().state !== 'ready') {
+			return { ok: false, message: 'Dictation is not downloaded yet. Download it from the Status page.' };
+		}
+		endedAtLimit = undefined;
+		try {
+			await dictation.start();
+			return { ok: true };
+		} catch (err) {
+			return { ok: false, message: err instanceof Error ? err.message : 'Dictation could not start.' };
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_FINISH_COMMAND, async (): Promise<DictationOutcome & { error?: string }> => {
+		if (endedAtLimit !== undefined) {
+			const outcome = endedAtLimit;
+			endedAtLimit = undefined;
+			return outcome;
+		}
+		try {
+			return await dictation.stop();
+		} catch (err) {
+			return { text: '', seconds: 0, cutOff: false, error: err instanceof Error ? err.message : 'Dictation failed.' };
+		}
+	}));
 	context.subscriptions.push(vscode.commands.registerCommand(VOICE_REMOVE_COMMAND, async () => {
 		if (!(await voice.remove())) {
 			void vscode.window.showWarningMessage('Wait for the download to finish, or cancel it, before removing dictation.');

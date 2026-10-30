@@ -1,6 +1,6 @@
 # 🎙️ Dictado por voz en el chat del editor
 
-> **Estado: fases 1 y 2 hechas.** La descarga con progreso, firma y cancelación existe (tarjeta *Dictation* en Status). Faltan grabar y transcribir dentro del editor (fase 3) y el micrófono del chat (fase 4).
+> **Estado: fases 1, 2 y 3 hechas.** Se descarga (tarjeta *Dictation* en Status) y el conector sabe escuchar y devolver el texto. Falta conectar el micrófono del chat y el ajuste (fase 4).
 
 ## 🎯 Qué se quiere
 
@@ -64,7 +64,7 @@ Reglas: texto en inglés, icono en cada fila, sin rutas ni nombres internos, el 
 |---|---|---|
 | 1 ✅ | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
 | 2 ✅ | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
-| 3 | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
+| 3 ✅ | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
 | 4 | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
 | 4b | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
 | 5 | Cierre | Pruebas, esta ficha puesta al día, `AGENTS.md` y `docs/MAPA.md` regenerado. |
@@ -140,3 +140,11 @@ Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), c
 - **Fallo encontrado en la prueba real:** el `tar` que trae Git para Windows lee `C:\…` como una máquina remota. Se descomprime con rutas relativas, que valen para cualquier `tar`.
 - **Solo Windows x64 por ahora**, que es lo único probado. En otros sistemas la tarjeta no aparece.
 - **No probado todavía:** cómo se ve la tarjeta en pantalla y pulsar los botones en la app.
+
+## ✅ Fase 3: grabar y transcribir (2026-10-30)
+
+- **Dónde:** `voice-engine.ts` (juntar audio, mezclar a mono, cortar a los 120 s, ignorar clics de menos de 0,3 s), `voice-worker.ts` (el proceso hijo que carga el modelo y usa el micrófono), `voice-session.ts` (el lado del editor: arrancar, parar, reutilizar el proceso, soltarlo a los 5 minutos de calma) y `voice-fork.ts` (lo lanza con el Node del propio editor).
+- **Cómo se usa:** dos comandos del conector, `picode.voice.listen` (empieza a escuchar) y `picode.voice.finish` (para y devuelve el texto). Si la grabación llegó a los 2 minutos, se cortó sola y `finish` devuelve lo dicho hasta ahí con `cutOff: true`. Es lo que usará el micrófono del chat en la fase 4.
+- **El audio no sale del proceso hijo:** el editor solo manda *empieza* y *para* y recibe el texto. Si el motor se cae, el chat sigue y la siguiente pulsación arranca uno nuevo.
+- **Probado:** 16 pruebas nuevas (mezcla, corte a los 2 minutos, clic corto, parar dos veces, micrófono caído, proceso que muere, reutilización, soltar por inactividad) y una ejecución real del proceso con el Node del editor y el micrófono: carga 2,3 s, la segunda dictada es inmediata. En silencio devuelve texto vacío.
+- **No probado todavía:** hablar de verdad a través de este camino (la voz se probó en la fase 1 con el mismo motor y micrófono) y el corte real a los 2 minutos (probado con un reloj simulado, no esperando 120 s).
