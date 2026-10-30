@@ -126,8 +126,8 @@ test('the catalog payload becomes rows sorted by downloads, nameless entries ski
 
 	// The entry without a name cannot be shown or installed: it is not a row.
 	assert.deepStrictEqual(rows, [
-		{ name: 'sample-pi', description: 'A package for pi', publisher: 'quintin', version: '1.2.3' },
-		{ name: 'little-used', version: '0.1.0' },
+		{ name: 'sample-pi', description: 'A package for pi', publisher: 'quintin', version: '1.2.3', downloads: 5000 },
+		{ name: 'little-used', version: '0.1.0', downloads: 12 },
 	]);
 });
 
@@ -149,7 +149,7 @@ test('a non-OK catalog answer is an empty list, said out loud and not cached', a
 
 	// A failure is not an answer: the next ask goes back to the network.
 	const good = fetchAnswering(catalogPayload({ name: 'recovered', downloads: 1 }));
-	assert.deepStrictEqual(await searchPackages('failing-probe', { fetchFn: good, now: () => 0 }), [{ name: 'recovered' }]);
+	assert.deepStrictEqual(await searchPackages('failing-probe', { fetchFn: good, now: () => 0 }), [{ name: 'recovered', downloads: 1 }]);
 	assert.strictEqual(good.calls.length, 1);
 });
 
@@ -161,7 +161,7 @@ test('a network error is an empty list, said out loud and not cached', async () 
 	assert.ok(lines[0].includes('ENOTFOUND'));
 
 	const good = fetchAnswering(catalogPayload({ name: 'back', downloads: 1 }));
-	assert.deepStrictEqual(await searchPackages('down-probe', { fetchFn: good, now: () => 0 }), [{ name: 'back' }]);
+	assert.deepStrictEqual(await searchPackages('down-probe', { fetchFn: good, now: () => 0 }), [{ name: 'back', downloads: 1 }]);
 	assert.strictEqual(good.calls.length, 1);
 });
 

@@ -499,35 +499,40 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	private renderGentleBehaviour(): void {
 		const gentle = this.gentleState;
 		if (gentle !== undefined) {
-			const choice = (label: string, description: string, current: string, options: ReadonlyArray<[string, string]>, key: string, disabled: boolean): void => {
-				const line = append(this.body, $('.picode-pm-agent'));
-				const text = append(line, $('.picode-pm-agent-name'));
-				append(text, $('span')).textContent = label;
+			const choice = (icon: ThemeIcon, label: string, description: string, warning: boolean, current: string, options: ReadonlyArray<[string, string]>, key: string, disabled: boolean): void => {
+				const card = append(this.body, $('.picode-pm-setting'));
+				append(card, $('span.picode-pm-setting-icon' + ThemeIcon.asCSSSelector(icon)));
+				const text = append(card, $('.picode-pm-setting-text'));
+				append(text, $('.picode-pm-setting-label')).textContent = label;
+				append(text, $('.picode-pm-setting-hint' + (warning ? '.warning' : ''))).textContent = description;
 				const select = document.createElement('select');
-				select.className = 'picode-pm-select picode-pm-agent-select';
+				select.className = 'picode-pm-select picode-pm-setting-select';
 				select.setAttribute('aria-label', label);
 				select.disabled = disabled;
 				for (const [value, name] of options) {
 					select.append(new Option(name, value));
 				}
 				select.value = current;
-				line.append(select);
-				append(this.body, $('p.picode-pm-note')).textContent = description;
+				card.append(select);
 				this.store.add(addDisposableListener(select, 'change', () => { void this.saveGentle(key, select.value); }));
 			};
 			choice(
+				Codicon.comment,
 				localize('picodePm.gentlePersona', "How it talks"),
 				localize('picodePm.gentlePersonaNote', "Gentleman is direct and teaches the why behind each step. Neutral is plain and professional."),
+				false,
 				gentle.persona,
 				[['gentleman', localize('picodePm.personaGentleman', "Gentleman")], ['neutral', localize('picodePm.personaNeutral', "Neutral")]],
 				'persona',
 				false,
 			);
 			choice(
+				Codicon.shield,
 				localize('picodePm.gentlePermissions', "Permissions for new conversations"),
 				gentle.permissionsBroken
 					? localize('picodePm.gentlePermissionsBroken', "The saved permissions could not be read. Delete the file and try again.")
 					: localize('picodePm.gentlePermissionsNote', "Normal asks before it acts. Auto lets a second model call decide, which costs extra. YOLO does ordinary development steps without asking; anything destructive still asks."),
+				gentle.permissionsBroken,
 				gentle.permissions,
 				[['normal', localize('picodePm.permNormal', "Normal")], ['auto', localize('picodePm.permAuto', "Auto")], ['yolo', localize('picodePm.permYolo', "YOLO")]],
 				'permissions',
@@ -594,7 +599,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 			return select;
 		};
 
-		append(this.body, $('p.picode-pm-note')).textContent = localize(
+		append(this.body, $('p.picode-pm-hint')).textContent = localize(
 			'picodePm.agentsNote',
 			"The model each of Gentle's agents answers with. An agent on the same model as the rest uses the model new conversations open with.",
 		);

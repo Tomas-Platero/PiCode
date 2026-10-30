@@ -7,6 +7,7 @@ import './media/picodeMcpSection.css';
 import { $ } from '../../../../base/browser/dom.js';
 import * as DOM from '../../../../base/browser/dom.js';
 import { Button } from '../../../../base/browser/ui/button/button.js';
+import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Action } from '../../../../base/common/actions.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -237,11 +238,11 @@ export class PicodeMcpServersWidget extends Disposable implements IAICustomizati
 
 		const main = DOM.append(card, $('.picode-mcp-card-main'));
 		const mark = DOM.append(main, $('.picode-mcp-card-mark'));
-		mark.textContent = '🛠️';
+		mark.appendChild(createServiceLogo(row.name));
 
 		const text = DOM.append(main, $('.picode-mcp-card-text'));
 		const name = DOM.append(text, $('.picode-mcp-card-name'));
-		name.textContent = row.name;
+		name.textContent = displayNameOf(row.name);
 
 		const subtitleParts: string[] = [];
 		if (row.origin === 'project') {

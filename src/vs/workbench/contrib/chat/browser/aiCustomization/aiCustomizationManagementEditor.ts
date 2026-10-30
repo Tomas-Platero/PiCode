@@ -472,6 +472,8 @@ export class AICustomizationManagementEditor extends EditorPane {
 		const savedSection = this.storageService.get(AI_CUSTOMIZATION_MANAGEMENT_SELECTED_SECTION_KEY, StorageScope.PROFILE);
 		if (savedSection && this.sections.some(s => s.id === savedSection)) {
 			this.selectedSection = savedSection as AICustomizationManagementSection;
+		} else if (this.sections.some(s => s.id === AICustomizationManagementSection.Status)) {
+			this.selectedSection = AICustomizationManagementSection.Status; // Status is the home page
 		} else {
 			this.selectedSection = undefined; // Show welcome page
 		}
@@ -727,6 +729,7 @@ export class AICustomizationManagementEditor extends EditorPane {
 		// Home/overview button
 		const homeButton = this.homeButton = DOM.append(headerRow, $('button.sidebar-home-button'));
 		homeButton.classList.add('sidebar-harness-home-button');
+		homeButton.style.display = 'none';
 		homeButton.setAttribute('aria-label', localize('homeButton', "Overview"));
 		this.editorDisposables.add(this.hoverService.setupManagedHover(getDefaultHoverDelegate('element'), homeButton, localize('homeButtonTooltip', "Back to overview")));
 		const homeIcon = this.homeButtonIcon = DOM.append(homeButton, $('span.sidebar-home-icon'));
@@ -1858,6 +1861,11 @@ export class AICustomizationManagementEditor extends EditorPane {
 	 * Navigates to the welcome page (no section selected).
 	 */
 	public showWelcomePage(): void {
+		// Status replaces the overview as the home page.
+		if (this.sections.some(s => s.id === AICustomizationManagementSection.Status)) {
+			this.selectSection(AICustomizationManagementSection.Status);
+			return;
+		}
 		if (this.viewMode === 'editor') {
 			this.goBackToList();
 		}
