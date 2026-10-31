@@ -18,3 +18,24 @@ export function extractWhatChanged(body: string): string | undefined {
 	const section = (next ? rest.slice(0, next.index) : rest).trim();
 	return section || undefined;
 }
+
+/**
+ * Whether the window opens after this start.
+ *
+ * `last` is the PiCode version this window was last seen at, kept by the window itself. It is
+ * empty on a first install, but ALSO on the first start of the update that brought this window
+ * in: the version before it never kept one. `editorLast` tells the two apart. It is the editor
+ * version the core's own release-notes check keeps (`releaseNotes/lastVersion`), read before
+ * that check overwrites it on this start: present and different from this editor version
+ * means the person updated; absent means a first install.
+ */
+export function shouldShowWhatsNew(state: { last: string; current: string; editorLast: string; editorCurrent: string }): boolean {
+	const { last, current, editorLast, editorCurrent } = state;
+	if (!current) {
+		return false;
+	}
+	if (last) {
+		return last !== current;
+	}
+	return !!editorLast && !!editorCurrent && editorLast !== editorCurrent;
+}
