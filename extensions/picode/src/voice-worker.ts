@@ -11,7 +11,7 @@
  *
  * Messages in:  { type: 'init', dir } · { type: 'start' } · { type: 'stop' }
  * Messages out: { type: 'ready' } · { type: 'listening' } · { type: 'partial', text }
- *               · { type: 'final', text } · { type: 'limit' } · { type: 'stopped' }
+ *               · { type: 'final', text } · { type: 'level', value } · { type: 'limit' } · { type: 'stopped' }
  *               · { type: 'error', message }
  *
  * `readWave` of sherpa-onnx is never used: Electron refuses the external buffers it returns. The
@@ -112,6 +112,7 @@ function init(dir: string): void {
 		onPartial: text => send({ type: 'partial', text }),
 		onFinal: text => send({ type: 'final', text }),
 		onLimit: () => send({ type: 'limit' }),
+		onLevel: value => send({ type: 'level', value }),
 	});
 	send({ type: 'ready' });
 }

@@ -44,7 +44,8 @@ function setup(options: ConstructorParameters<typeof LiveDictation>[3] = {}) {
 		onFinal: t => log.push(`final:${t}`),
 		onLimit: () => log.push('limit'),
 	};
-	const live = new LiveDictation(() => mic.input, recognizer, handlers, options);
+	// The scenarios below are written against a 1.2 s partial and a 0.8 s pause; the real defaults are faster.
+	const live = new LiveDictation(() => mic.input, recognizer, handlers, { partialEverySeconds: 1.2, endSilenceSeconds: 0.8, ...options });
 	return { mic, log, lengths, live };
 }
 
@@ -167,4 +168,46 @@ test('a microphone that failed is reported, not turned into silence', () => {
 	live.start();
 	mic.fail(new Error('device lost'));
 	assert.throws(() => live.stop(), /device lost/);
+});
+
+test('the meter follows how loud each tenth of a second is, and is 0 for digital silence', () => {
+	const levels: number[] = [];
+	const mic = fakeInput();
+	const live = new LiveDictation(() => mic.input, { transcribe: () => '' }, { onPartial: () => undefined, onFinal: () => undefined, onLimit: () => undefined, onLevel: l => levels.push(l) });
+	live.start();
+	mic.push(tone(1, 0));
+	mic.push(tone(1, QUIET));
+	mic.push(tone(1, SPEECH));
+	live.stop();
+	assert.equal(levels.length, 3);
+	assert.equal(levels[0], 0);
+	assert.ok(levels[1] > 0 && levels[1] < levels[2], 'a louder window reads higher');
+	assert.equal(levels[2], 1);
+});
+
+test('by default the phrase so far is offered every 0.4 s, so words keep arriving', () => {
+	const mic = fakeInput();
+	const log: string[] = [];
+	const live = new LiveDictation(() => mic.input, { transcribe: s => `w${s.length}` }, { onPartial: t => log.push(t), onFinal: () => undefined, onLimit: () => undefined });
+	live.start();
+	mic.push(tone(13, SPEECH));
+	// speech starts on window 1, a partial every 4 windows after it
+	assert.equal(log.length, 3);
+});
+
+test('a slow recogniser is given room: the next partial waits a few times what the last one took', () => {
+	const mic = fakeInput();
+	const log: string[] = [];
+	let now = 0;
+	const realNow = Date.now;
+	Date.now = () => now;
+	try {
+		const live = new LiveDictation(() => mic.input, { transcribe: s => { now += 1000; return `w${s.length}`; } }, { onPartial: t => log.push(t), onFinal: () => undefined, onLimit: () => undefined });
+		live.start();
+		mic.push(tone(40, SPEECH));
+		// a 1 s decode means waiting 3 s (30 windows) before the next one
+		assert.equal(log.length, 2);
+	} finally {
+		Date.now = realNow;
+	}
 });

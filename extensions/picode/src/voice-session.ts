@@ -18,10 +18,11 @@ export interface WorkerChannel {
 	kill(): void;
 }
 
-/** What a dictation reports while it runs: the phrase so far, a finished phrase, or the end at the time limit. */
+/** What a dictation reports while it runs: the phrase so far, a finished phrase, how loud it is, or the end at the time limit. */
 export type SessionEvent =
 	| { readonly kind: 'partial'; readonly text: string }
 	| { readonly kind: 'final'; readonly text: string }
+	| { readonly kind: 'level'; readonly value: number }
 	| { readonly kind: 'limit' };
 
 export type SessionState = 'idle' | 'loading' | 'listening' | 'stopping';
@@ -126,6 +127,10 @@ export class VoiceSession {
 		const type = String(message['type']);
 		if (type === 'partial' || type === 'final') {
 			this.listener({ kind: type, text: String(message['text'] ?? '') });
+			return;
+		}
+		if (type === 'level') {
+			this.listener({ kind: 'level', value: Number(message['value']) || 0 });
 			return;
 		}
 		if (type === 'limit') {

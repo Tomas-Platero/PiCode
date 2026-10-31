@@ -60,7 +60,7 @@ export interface LiveOptions {
 	readonly minLevel: number;
 }
 
-export const LIVE_DEFAULTS: LiveOptions = { maxSeconds: MAX_SECONDS, endSilenceSeconds: 0.8, partialEverySeconds: 1.2, maxPhraseSeconds: 30, minLevel: 0.01 };
+export const LIVE_DEFAULTS: LiveOptions = { maxSeconds: MAX_SECONDS, endSilenceSeconds: 0.7, partialEverySeconds: 0.4, maxPhraseSeconds: 30, minLevel: 0.01 };
 
 export interface LiveHandlers {
 	/** The phrase being spoken, as heard so far. Replaces the previous partial. */
@@ -69,7 +69,12 @@ export interface LiveHandlers {
 	onFinal(text: string): void;
 	/** The time limit was reached; no more audio is taken. */
 	onLimit(): void;
+	/** How loud the last tenth of a second was, from 0 (digital silence) to 1. Drives the chat's meter. */
+	onLevel?(level: number): void;
 }
+
+/** Loudness at which the meter is full; ordinary speech at the microphone lands well below it. */
+const FULL_METER_RMS = 0.1;
 
 const WINDOW_SECONDS = 0.1;
 const PRE_ROLL_WINDOWS = 3;
@@ -109,6 +114,8 @@ export class LiveDictation {
 	private loudWindows = 0;
 	private sinceDecode = 0;
 	private lastPartial = '';
+	/** How long the last decode took: the next partial waits a few times that, so a slow computer is never starved. */
+	private decodeSeconds = 0;
 	private readonly openInput: () => VoiceInput;
 	private readonly recognizer: VoiceRecognizer;
 	private readonly handlers: LiveHandlers;
@@ -181,6 +188,8 @@ export class LiveDictation {
 		const seconds = WINDOW_SECONDS;
 		this.total += window.length;
 		const level = rms(window);
+		// The square root makes a quiet voice move the meter as much as the ear says it should.
+		this.handlers.onLevel?.(Math.min(1, Math.sqrt(level / FULL_METER_RMS)));
 		// The room's own level is learned only from windows that were not speech, so starting to talk
 		// at once is not mistaken for a loud room.
 		const loud = level > Math.max(this.options.minLevel, this.noise * 3);
@@ -213,7 +222,7 @@ export class LiveDictation {
 			}
 			if (this.silentWindows * seconds >= this.options.endSilenceSeconds || this.phrase.length * seconds >= this.options.maxPhraseSeconds) {
 				this.closePhrase();
-			} else if (this.sinceDecode * seconds >= this.options.partialEverySeconds) {
+			} else if (this.sinceDecode * seconds >= Math.max(this.options.partialEverySeconds, this.decodeSeconds * 3)) {
 				this.sinceDecode = 0;
 				const text = this.decode();
 				if (text !== '' && text !== this.lastPartial) {
@@ -232,7 +241,10 @@ export class LiveDictation {
 
 	private decode(): string {
 		const length = this.phrase.reduce((sum, w) => sum + w.length, 0);
-		return this.recognizer.transcribe(join(this.phrase, length), this.sampleRate).trim();
+		const began = Date.now();
+		const text = this.recognizer.transcribe(join(this.phrase, length), this.sampleRate).trim();
+		this.decodeSeconds = (Date.now() - began) / 1000;
+		return text;
 	}
 
 	private closePhrase(): void {

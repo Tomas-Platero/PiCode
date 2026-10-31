@@ -150,3 +150,11 @@ test('after a quiet while the worker and its memory are let go', async () => {
 	await new Promise(r => setTimeout(r, 60));
 	assert.equal(workers[0].killed, true);
 });
+
+test('the loudness the worker reports reaches the listener as it comes', async () => {
+	const { session, workers, events } = setup();
+	await session.start();
+	workers[0].emit({ type: 'level', value: 0.5 });
+	workers[0].emit({ type: 'level', value: 'x' });
+	assert.deepEqual(events, [{ kind: 'level', value: 0.5 }, { kind: 'level', value: 0 }]);
+});

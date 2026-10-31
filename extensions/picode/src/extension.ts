@@ -2352,10 +2352,20 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// Listening. The chat polls for what was heard: the phrase so far, finished phrases, and the end
 	// at the time limit. Events wait here until asked for, so a poll never misses one.
 	let heard: SessionEvent[] = [];
+	// The loudest moment since the last poll, so a short syllable between two polls still shows.
+	let level = 0;
+	let levelSeen = false;
 	const dictation = new VoiceSession(
 		() => forkVoiceWorker(path.join(context.extensionPath, 'out', 'voice-worker.js')),
 		voiceDir(os.homedir()),
-		event => { heard.push(event); },
+		event => {
+			if (event.kind === 'level') {
+				level = levelSeen ? Math.max(level, event.value) : event.value;
+				levelSeen = true;
+			} else {
+				heard.push(event);
+			}
+		},
 	);
 	const drain = (): SessionEvent[] => { const events = heard; heard = []; return events; };
 	context.subscriptions.push(new vscode.Disposable(() => dictation.dispose()));
@@ -2366,6 +2376,8 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 				: { ok: false, needsDownload: true, message: 'Dictation is not downloaded yet.' };
 		}
 		heard = [];
+		level = 0;
+		levelSeen = false;
 		try {
 			await dictation.start();
 			return { ok: true };
@@ -2373,8 +2385,10 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 			return { ok: false, message: err instanceof Error ? err.message : 'Dictation could not start.' };
 		}
 	}));
-	context.subscriptions.push(vscode.commands.registerCommand(VOICE_POLL_COMMAND, (): { events: SessionEvent[]; active: boolean } =>
-		({ events: drain(), active: dictation.state === 'listening' })));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_POLL_COMMAND, (): { events: SessionEvent[]; active: boolean; level: number } => {
+		levelSeen = false;
+		return { events: drain(), active: dictation.state === 'listening', level };
+	}));
 	context.subscriptions.push(vscode.commands.registerCommand(VOICE_FINISH_COMMAND, async (): Promise<{ events: SessionEvent[]; error?: string }> => {
 		try {
 			await dictation.stop();
