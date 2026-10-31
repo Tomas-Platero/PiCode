@@ -4,6 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
+ * How the swap script is started. No `detached`: on Windows that is `DETACHED_PROCESS`, which
+ * leaves `cmd.exe` with no console at all and makes Windows ignore `windowsHide`
+ * (`CREATE_NO_WINDOW` is dropped next to `DETACHED_PROCESS`). Every console tool the script then
+ * runs (`tasklist`, `find`, `ping`) gets a brand-new visible console — with Windows Terminal as
+ * the default terminal, an empty tab titled `find.exe` for the whole update. With `windowsHide`
+ * alone the script gets one hidden console its tools share, and `unref()` lets it outlive the
+ * editor: a Windows child is not killed when its parent quits.
+ */
+export function archiveSwapSpawnOptions(): { windowsHide: true; stdio: ['ignore', 'ignore', 'ignore'] } {
+	return { windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] };
+}
+
+/**
  * The batch script that swaps a staged portable build into place once the
  * running one has quit. Everything is baked in: the folder being replaced, the
  * staged copy beside it, the executable's name and the process to wait for.

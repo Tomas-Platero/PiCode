@@ -37,7 +37,7 @@ import { AvailableForDownload, DisablementReason, IUpdate, State, StateType, Tar
 import { applyDelta, DeltaError, readManifest } from '../node/deltaPackage.js';
 import { AbstractUpdateService, createUpdateURL, IUpdateURLOptions } from './abstractUpdateService.js';
 import { getRelaunchArguments } from './updateRelaunchArguments.js';
-import { archiveSwapScript } from './archiveSwapScript.js';
+import { archiveSwapScript, archiveSwapSpawnOptions } from './archiveSwapScript.js';
 import { isInnoSetupInstall } from './win32UpdateType.js';
 
 interface IAvailableUpdate {
@@ -857,11 +857,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		// The swap script carries the relaunch; quitting is all this side does.
 		if (getUpdateType() === UpdateType.Archive && this.availableUpdate.stagingDir && this.availableUpdate.updateFilePath) {
 			this.logService.info(`update#doQuitAndInstall - swapping the portable build from ${this.availableUpdate.stagingDir}`);
-			spawn('cmd.exe', ['/c', this.availableUpdate.updateFilePath], {
-				detached: true,
-				windowsHide: true,
-				stdio: ['ignore', 'ignore', 'ignore'],
-			}).unref();
+			spawn('cmd.exe', ['/c', this.availableUpdate.updateFilePath], archiveSwapSpawnOptions()).unref();
 			return;
 		}
 
