@@ -14,7 +14,8 @@ import { searchPackages, type PackageSearchRow } from './packages-registry';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piRuntimeRoot } from './distribution-root';
-import { voiceManifestFor } from './voice-install';
+import { readVoiceState, voiceManifestFor } from './voice-install';
+import { homedir } from 'node:os';
 import { firstExisting, importPiModule, sdkCandidates } from './piSdk';
 import { FEATURED_SUBSCRIPTIONS, rankOf, type PiAuthEvent, type PiAuthPrompt, type PiModelRuntime } from './subscriptions';
 import {
@@ -208,7 +209,7 @@ export interface SetupSnapshot {
 	readonly internalPiVersion?: string;
 	readonly externalPi?: ExternalPiFacts;
 	readonly extras: SetupExtras;
-	/** Whether dictation exists for this system, so the switch is offered only where it works. */
+	/** Whether the dictation switch is worth offering: it works on this system and is not installed yet. */
 	readonly voiceAvailable: boolean;
 	/** Whether signing in to PiCode's own account is possible in this build. */
 	readonly accountAvailable: boolean;
@@ -327,7 +328,7 @@ function orphanCredentials(paths: SetupPaths): string[] {
 export function setupSnapshot(paths: SetupPaths): SetupSnapshot {
 	return {
 		extras: readExtras(paths),
-		voiceAvailable: voiceManifestFor(process.platform, process.arch) !== undefined,
+		voiceAvailable: readVoiceState(homedir(), voiceManifestFor(process.platform, process.arch)).kind === 'not-installed',
 		accountAvailable: accountAvailable(paths.distributionRoot),
 		orphanCredentials: orphanCredentials(paths),
 		contextMode: contextModeInForce(paths),
