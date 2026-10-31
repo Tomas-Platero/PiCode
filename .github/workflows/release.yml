@@ -390,11 +390,18 @@ jobs:
               node build/hotfix.mjs make --old "${WORK}/previous" --new "${PACK}" \
                 --out "${WORK}/delta" --from "${PREV_PICODE}" --to "${PICODE_VERSION}" \
                 --kind "${MAKE_KIND}" --key "${KEY_FILE}" \
-                ${REBUILT_UNCHANGED:+--rebuilt-unchanged "${REBUILT_UNCHANGED}"}
+                ${REBUILT_UNCHANGED:+--rebuilt-unchanged "${REBUILT_UNCHANGED}"} \
+                2> "${WORK}/make.log"
               MADE=$?
               set -e
+              cat "${WORK}/make.log" >&2
               if [ "${MADE}" -eq 3 ]; then
                 skip "this release changes something a small update may not (see the list above)"
+                # The reasons also go to the run's summary as annotations: the log is the only
+                # other place they live, and it is the part that says what to fix.
+                grep -E '^  (-|\.\.\.) ' "${WORK}/make.log" | sed -E 's/^  (- )?//' | while IFS= read -r reason; do
+                  echo "::notice title=Needs the full download::${reason}"
+                done || true
                 KIND=release
               elif [ "${MADE}" -ne 0 ]; then
                 echo "::warning::the small update could not be made; this release ships whole"
