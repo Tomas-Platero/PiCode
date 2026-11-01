@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "0.8.0-experimental",
+			"notes": "### 🔧 Other changes\n\n- update engram to 3.6.0 (#125)"
+		},
+		{
 			"version": "0.7.4-experimental",
 			"notes": "### 🐛 Fixed\n\n- What's New now also opens on the update that brings it in.\n- Updating the portable version no longer opens empty command windows."
 		},
