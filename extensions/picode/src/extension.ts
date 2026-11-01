@@ -65,7 +65,11 @@ import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from '.
 import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
 import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
-import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
+import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
+import { shouldDownloadOnStart, VoiceController } from './voice-controller';
+import { forkVoiceWorker } from './voice-fork';
+import { VoiceSession, type SessionEvent } from './voice-session';
+import { installVoice, readVoiceState, removeVoice, voiceDir, voiceDownloadSize, voiceManifestFor } from './voice-install';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
 import { isRunning, isTaskId, transcriptOf, transcriptOfJson } from './agent-transcript';
@@ -2322,6 +2326,82 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// path and one check path, and the panel is a second door onto them, not a second copy of them.
 	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_APPLY_COMMAND, () => runUpdateFlow()));
 	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_CHECK_COMMAND, () => scheduledCheck(true)));
+
+	// Dictation: the card's three buttons. Nothing is fetched until the owner presses Download, and
+	// the size is on the card before they do.
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_DOWNLOAD_COMMAND, async () => {
+		const result = await voice.start();
+		if (result.ok) {
+			void vscode.window.showInformationMessage('Dictation is ready.');
+		} else if (!result.cancelled) {
+			void vscode.window.showErrorMessage(`Dictation could not be downloaded. ${result.message}`);
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_CANCEL_COMMAND, () => voice.cancel()));
+
+	// The setup window can only note that the owner wants dictation; the transfer itself happens here,
+	// where its progress shows and it can be cancelled. The note is spent the moment it is read.
+	const voiceSettings = vscode.workspace.getConfiguration('picode.voice');
+	if (voiceSettings.get<boolean>('downloadOnStart') === true) {
+		void voiceSettings.update('downloadOnStart', false, vscode.ConfigurationTarget.Global);
+		if (shouldDownloadOnStart(true, voice.status())) {
+			void vscode.commands.executeCommand(VOICE_DOWNLOAD_COMMAND);
+		}
+	}
+
+	// Listening. The chat polls for what was heard: the phrase so far, finished phrases, and the end
+	// at the time limit. Events wait here until asked for, so a poll never misses one.
+	let heard: SessionEvent[] = [];
+	// The loudest moment since the last poll, so a short syllable between two polls still shows.
+	let level = 0;
+	let levelSeen = false;
+	const dictation = new VoiceSession(
+		() => forkVoiceWorker(path.join(context.extensionPath, 'out', 'voice-worker.js')),
+		voiceDir(os.homedir()),
+		event => {
+			if (event.kind === 'level') {
+				level = levelSeen ? Math.max(level, event.value) : event.value;
+				levelSeen = true;
+			} else {
+				heard.push(event);
+			}
+		},
+	);
+	const drain = (): SessionEvent[] => { const events = heard; heard = []; return events; };
+	context.subscriptions.push(new vscode.Disposable(() => dictation.dispose()));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_LISTEN_COMMAND, async (): Promise<{ ok: boolean; message?: string; needsDownload?: boolean }> => {
+		if (voice.status().state !== 'ready') {
+			return voice.status().state === 'downloading'
+				? { ok: false, message: 'Dictation is still downloading.' }
+				: { ok: false, needsDownload: true, message: 'Dictation is not downloaded yet.' };
+		}
+		heard = [];
+		level = 0;
+		levelSeen = false;
+		try {
+			await dictation.start();
+			return { ok: true };
+		} catch (err) {
+			return { ok: false, message: err instanceof Error ? err.message : 'Dictation could not start.' };
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_POLL_COMMAND, (): { events: SessionEvent[]; active: boolean; level: number } => {
+		levelSeen = false;
+		return { events: drain(), active: dictation.state === 'listening', level };
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_FINISH_COMMAND, async (): Promise<{ events: SessionEvent[]; error?: string }> => {
+		try {
+			await dictation.stop();
+			return { events: drain() };
+		} catch (err) {
+			return { events: drain(), error: err instanceof Error ? err.message : 'Dictation failed.' };
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_REMOVE_COMMAND, async () => {
+		if (!(await voice.remove())) {
+			void vscode.window.showWarningMessage('Wait for the download to finish, or cancel it, before removing dictation.');
+		}
+	}));
 }
 
 function requireProfileUri(): vscode.Uri {
@@ -2330,6 +2410,9 @@ function requireProfileUri(): vscode.Uri {
 	}
 	return profileUri;
 }
+
+// Dictation's one holder of "downloading now": the status card reads it, the commands drive it.
+const voice = new VoiceController(os.homedir(), voiceManifestFor(process.platform, process.arch), { install: installVoice, readState: readVoiceState, remove: removeVoice, downloadSize: voiceDownloadSize });
 
 export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
@@ -2520,6 +2603,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(piSessions, new vscode.Disposable(disposeResumedSessions));
 
 const setupDeps = {
+		voice: () => voice.status(),
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		// `<userData>/User/globalStorage/<extension>` → three levels up. The account hand-over is

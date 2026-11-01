@@ -18,9 +18,12 @@ import { asJson, IRequestService } from '../../../../platform/request/common/req
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
-import { extractWhatChanged } from './picodeWhatsNewData.js';
+import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
+import { extractWhatChanged, shouldShowWhatsNew } from './picodeWhatsNewData.js';
 
 const LAST_VERSION_KEY = 'picode.whatsNew.lastVersion';
+/** The core's own key (`ProductContribution` in contrib/update): the editor version of the last start. */
+const EDITOR_LAST_VERSION_KEY = 'releaseNotes/lastVersion';
 const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases/tags/';
 
 /** Looks up the release summary for a version and shows it in a small window. Returns false when there is nothing to show. */
@@ -63,13 +66,16 @@ async function fetchNotes(requestService: IRequestService, version: string): Pro
 
 /**
  * After PiCode updates, shows a small window with what changed in the new version.
- * Does nothing on a first install, when the version has not changed, when the user turned
+ * Does nothing on a first install (the update that brought this window in counts as an update,
+ * see `shouldShowWhatsNew`), when the version has not changed, when the user turned
  * release notes off (the same `update.showReleaseNotes` switch VS Code uses), or when the
  * release has no summary or cannot be reached.
  */
 export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 
 	static readonly ID = 'workbench.contrib.picodeWhatsNew';
+
+	private readonly editorLast: string;
 
 	constructor(
 		@IStorageService private readonly storageService: IStorageService,
@@ -79,8 +85,13 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 		@IRequestService private readonly requestService: IRequestService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IOpenerService private readonly openerService: IOpenerService,
+		@ILifecycleService lifecycleService: ILifecycleService,
 	) {
-		hostService.hadLastFocus().then(hadLastFocus => {
+		// Read now, at startup: the core's release-notes check stores this start's version over
+		// it a moment later, and then an update could no longer be told from a first install.
+		this.editorLast = this.storageService.get(EDITOR_LAST_VERSION_KEY, StorageScope.APPLICATION, '');
+		// The window itself waits until the editor has settled, as it always did.
+		lifecycleService.when(LifecyclePhase.Eventually).then(() => hostService.hadLastFocus()).then(hadLastFocus => {
 			if (hadLastFocus) {
 				return this.run();
 			}
@@ -96,7 +107,8 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 
 		const last = this.storageService.get(LAST_VERSION_KEY, StorageScope.APPLICATION, '');
 		this.storageService.store(LAST_VERSION_KEY, current, StorageScope.APPLICATION, StorageTarget.MACHINE);
-		if (!last || last === current || !this.configurationService.getValue<boolean>('update.showReleaseNotes')) {
+		const show = shouldShowWhatsNew({ last, current, editorLast: this.editorLast, editorCurrent: this.productService.version });
+		if (!show || !this.configurationService.getValue<boolean>('update.showReleaseNotes')) {
 			return;
 		}
 
@@ -104,7 +116,10 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 	}
 }
 
-registerWorkbenchContribution2(PicodeWhatsNewContribution.ID, PicodeWhatsNewContribution, WorkbenchPhase.Eventually);
+// BlockRestore, not Eventually: the constructor must read the core's key before the core's
+// release-notes check (LifecyclePhase.Restored) replaces it. The constructor only reads storage;
+// the window itself still waits for the Eventually phase, focus and the network.
+registerWorkbenchContribution2(PicodeWhatsNewContribution.ID, PicodeWhatsNewContribution, WorkbenchPhase.BlockRestore);
 
 registerAction2(class ShowWhatsNewAction extends Action2 {
 	constructor() {

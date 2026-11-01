@@ -25,7 +25,7 @@ import { IKeybindingService } from '../../../../../platform/keybinding/common/ke
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { contrastBorder, focusBorder } from '../../../../../platform/theme/common/colorRegistry.js';
 import { editorInfoForeground } from '../../../../../platform/theme/common/colors/editorColors.js';
-import { spinningLoading, syncing } from '../../../../../platform/theme/common/iconRegistry.js';
+import { syncing } from '../../../../../platform/theme/common/iconRegistry.js';
 import { isHighContrast } from '../../../../../platform/theme/common/theme.js';
 import { registerThemingParticipant } from '../../../../../platform/theme/common/themeService.js';
 import { ActiveEditorContext } from '../../../../common/contextkeys.js';
@@ -606,7 +606,9 @@ export class StopListeningAction extends Action2 {
 				primary: KeyCode.Escape,
 				when: AnyScopedVoiceChatInProgress
 			},
-			icon: spinningLoading,
+			// A still microphone: the ring around it (voiceChatActions.css) grows with the voice, so it
+			// is the sound that moves, not the icon.
+			icon: Codicon.micFilled,
 			precondition: GlobalVoiceChatInProgress, // need global context here because of `f1: true`
 			menu: primaryVoiceActionMenu(AnyScopedVoiceChatInProgress, SegmentedVoiceInputModePillInactive)
 		});

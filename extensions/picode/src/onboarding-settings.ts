@@ -199,6 +199,9 @@ export function writeProfileSettings(paths: SetupPaths, patch: Record<string, un
 export const EXTRA_SETTINGS: Readonly<Record<string, string>> = {
 	mcp: 'picode.mcp.enabled',
 	context: 'picode.context.attach',
+	// Asks the editor to download dictation when it opens. The window itself downloads nothing: a
+	// 700 MB transfer belongs where its progress can be seen and cancelled (the Status page).
+	voice: 'picode.voice.downloadOnStart',
 };
 
 /** Turns the extras on or off, ignoring any key the product does not declare. */

@@ -164,6 +164,8 @@ const STRINGS = {
 		extrasLead: 'Switch on what sounds useful. Everything here can be changed later in Settings.',
 		extraMcp: 'MCP servers',
 		extraMcpWhy: 'Let the agent use servers you add (MCP).',
+		extraVoice: 'Dictation',
+		extraVoiceWhy: 'Talk to the chat instead of typing. It runs on your computer. Downloads about 700 MB once, when PiCode opens.',
 		extraContext: 'Your code in the chat',
 		extraContextWhy: 'The chat sees the file and the folder you are working in.',
 		search: 'Search',
@@ -362,6 +364,8 @@ const STRINGS = {
 		extrasLead: 'Activa lo que te suene útil. Todo esto se cambia luego en Ajustes.',
 		extraMcp: 'Servidores MCP',
 		extraMcpWhy: 'Deja que el agente use los servidores que añadas (MCP).',
+		extraVoice: 'Dictado por voz',
+		extraVoiceWhy: 'Habla al chat en vez de escribir. Funciona en tu equipo. Descarga unos 700 MB una sola vez, al abrir PiCode.',
 		extraContext: 'Tu código en el chat',
 		extraContextWhy: 'El chat ve el archivo y la carpeta en la que trabajas.',
 		search: 'Buscar',
@@ -532,7 +536,9 @@ const state = {
 	theme: undefined,
 	showAllThemes: false,
 	/** The three switches, as the editor has them in force; the backend says. */
-	extras: { mcp: true, context: true },
+	extras: { mcp: true, context: true, voice: false },
+	/** Whether dictation exists for this system; the switch is offered only where it does. */
+	voiceAvailable: false,
 	packageQuery: '',
 	packageRows: undefined,
 	packageError: undefined,
@@ -1880,6 +1886,9 @@ function renderExtras() {
 		el('div', { class: 'panel' },
 			toggle('mcp', t('extraMcp'), t('extraMcpWhy')),
 		),
+		state.voiceAvailable ? el('div', { class: 'panel' },
+			toggle('voice', t('extraVoice'), t('extraVoiceWhy')),
+		) : undefined,
 		el('div', { class: 'panel' },
 			el('div', { class: 'panel-head' },
 				el('span', { class: 'panel-title', text: t('contextTitle') }),
@@ -2174,6 +2183,7 @@ async function main() {
 			if (boot.snapshot.extras) {
 				state.extras = { ...state.extras, ...boot.snapshot.extras };
 			}
+			state.voiceAvailable = boot.snapshot.voiceAvailable === true;
 			if (typeof boot.snapshot.contextMode === 'string') {
 				state.contextMode = boot.snapshot.contextMode;
 			}

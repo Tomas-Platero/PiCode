@@ -18,6 +18,7 @@ import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runt
 import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
+import type { VoiceStatus } from './voice-controller';
 import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 import { ANTHROPIC_PROVIDER, CODEX_PROVIDER, codexSignIn, getCachedCodexUsage, newestUsage, usageFromResponses, type ProviderUsage } from './subscription-usage';
 
@@ -65,6 +66,8 @@ export interface StatusDeps {
 	 * tracker is the one holder of the truth, and the panel only draws it.
 	 */
 	readonly runningJobs: () => readonly BackgroundJobStatus[];
+	/** Dictation's state, read live per refresh from `voice-controller.ts`: a download's progress moves between refreshes. */
+	readonly voice: () => VoiceStatus;
 }
 
 /** Reads a JSON object from a file, treating "missing or malformed" as "nothing there". */
@@ -534,6 +537,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The chat's own background jobs, straight from the tracker the pill reads — the same rows,
 		// so the card and the pill can never disagree about what is still out.
 		jobs: deps.runningJobs(),
+		voice: deps.voice(),
 	};
 }
 

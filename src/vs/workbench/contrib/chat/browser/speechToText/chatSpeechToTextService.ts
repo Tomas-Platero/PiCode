@@ -458,7 +458,11 @@ export class ChatSpeechToTextService extends Disposable implements IChatSpeechTo
 	private _maiFinalTranscript: DeferredPromise<void> | undefined;
 
 	get isConfigured(): boolean {
-		if (this._configurationService.getValue<boolean>(ENABLED_SETTING) === false) {
+		// PiCode dictates with its own engine (`picodeSpeech.ts`). While this one counts as
+		// configured the chat hides every other microphone, and a default for the setting is not
+		// enough: the key is first computed before it applies. So it is off unless the owner turns
+		// it on explicitly.
+		if (this._configurationService.getValue<boolean>(ENABLED_SETTING) !== true) {
 			return false;
 		}
 		const backend = this._getBackend();
