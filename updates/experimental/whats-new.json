@@ -1,0 +1,12 @@
+{
+	"versions": [
+		{
+			"version": "0.7.4-experimental",
+			"notes": "### 🐛 Fixed\n\n- What's New now also opens on the update that brings it in.\n- Updating the portable version no longer opens empty command windows."
+		},
+		{
+			"version": "0.7.3-experimental",
+			"notes": "### ✨ New\n\n- Voice dictation in the chat: talk and your words are typed phrase by phrase, all on your own computer.\n- The microphone ring follows your voice, the text appears as you speak, and the message can send itself after a pause.\n- Dictation can be set up from the first-run setup; it downloads with progress, is checked before use and can be cancelled.\n- After an update, a window shows what changed.\n\n### 🐛 Fixed\n\n- The chat microphone shows up again, and dictation is no longer offered once it is installed."
+		}
+	]
+}

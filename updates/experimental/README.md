@@ -6,6 +6,7 @@
 | --- | --- |
 | `win32/x64/user/latest.json` | La última build para el canal. |
 | `win32/x64/archive/latest.json` | La versión archivada del propio canal. |
+| `whats-new.json` | El resumen «What changed» de las releases que el canal ya borró, para que la ventana What's New enseñe también las versiones que alguien se saltó. |
 
 📖 Cómo se genera, por qué cada canal es una rama distinta y la regla de «una release por canal»: [`updates/README.md`](../README.md) y [`docs/DISTRIBUTION.md`](../../docs/DISTRIBUTION.md).
 
