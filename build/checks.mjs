@@ -450,6 +450,7 @@ import { pathToFileURL } from 'node:url';
 	};
 
 	run('folder documentation', process.execPath, ['build/docs.mjs', 'check']);
+	run('translations', process.execPath, ['build/l10n.mjs', 'check']);
 	run('MCP entries against pi', process.execPath, ['build/checks.mjs', 'check-mcp']);
 	run('connector tests', process.execPath, ['build/checks.mjs', 'test-connector']);
 

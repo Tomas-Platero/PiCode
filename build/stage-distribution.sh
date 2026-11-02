@@ -141,6 +141,9 @@ fi
 rm -rf "${ONBOARDING_TARGET}"
 mkdir -p "${ONBOARDING_TARGET}"
 cp -R "${ONBOARDING_SOURCE}/." "${ONBOARDING_TARGET}/"
+# Half-done translations are scratch (`node build/l10n.mjs split` writes them under `.work/`): the
+# pack carries the finished tables, never the chunks somebody was in the middle of.
+rm -rf "${ONBOARDING_TARGET}/l10n/.work"
 echo "copied resources/onboarding ($( find "${ONBOARDING_TARGET}" -type f | wc -l | tr -d ' ' ) files)"
 
 # ---------------------------------------------------------------------------
