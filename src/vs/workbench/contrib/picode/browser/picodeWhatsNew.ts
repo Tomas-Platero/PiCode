@@ -7,7 +7,7 @@ import { localize, localize2 } from '../../../../nls.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { URI } from '../../../../base/common/uri.js';
-import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
@@ -32,9 +32,11 @@ const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases
  * from: every version they skipped since then is shown too, below this one. Returns false when
  * there is nothing to show.
  */
-async function showWhatsNew(version: string, last: string, requestService: IRequestService, dialogService: IDialogService, openerService: IOpenerService, productService: IProductService, configurationService: IConfigurationService, commandService: ICommandService): Promise<boolean> {
+async function showWhatsNew(version: string, last: string, requestService: IRequestService, dialogService: IDialogService, openerService: IOpenerService, productService: IProductService, configurationService: IConfigurationService, commandService: ICommandService, manual = false): Promise<boolean> {
 	const [notes, history] = await Promise.all([fetchNotes(requestService, version), fetchHistory(requestService, productService.quality)]);
-	const current = notes ? { version, notes } : history.find(entry => entry.version === version);
+	// Asked for by hand (Help menu), a version without its own summary shows the newest one the
+	// channel has, so the window is never empty when something is on record.
+	const current = notes ? { version, notes } : history.find(entry => entry.version === version) ?? (manual ? history[0] : undefined);
 	if (!current) {
 		return false;
 	}
@@ -164,6 +166,7 @@ registerAction2(class ShowWhatsNewAction extends Action2 {
 			title: localize2('picodeWhatsNew.command', "Show What's New"),
 			category: localize2('picode.category', "PiCode"),
 			f1: true,
+			menu: { id: MenuId.MenubarHelpMenu, group: '1_welcome', order: 10 },
 		});
 	}
 
@@ -171,7 +174,7 @@ registerAction2(class ShowWhatsNewAction extends Action2 {
 		const productService = accessor.get(IProductService);
 		const notificationService = accessor.get(INotificationService);
 		const version = productService.picodeVersion;
-		const shown = version && await showWhatsNew(version, '', accessor.get(IRequestService), accessor.get(IDialogService), accessor.get(IOpenerService), productService, accessor.get(IConfigurationService), accessor.get(ICommandService));
+		const shown = version && await showWhatsNew(version, '', accessor.get(IRequestService), accessor.get(IDialogService), accessor.get(IOpenerService), productService, accessor.get(IConfigurationService), accessor.get(ICommandService), true);
 		if (!shown) {
 			notificationService.info(localize('picodeWhatsNew.none', "There are no release notes for this version yet."));
 		}
