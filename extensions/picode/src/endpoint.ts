@@ -16,6 +16,7 @@
  */
 
 import { isRecord } from './declarations';
+import { l10n } from './l10n.ts';
 
 /**
  * The model ids an endpoint answers with.
@@ -76,18 +77,18 @@ export interface EndpointProbe {
 /** The sentence for a status the endpoint answered with. */
 function refusalOf(status: number): string {
 	if (status === 401 || status === 403) {
-		return 'the key was refused';
+		return l10n.t('the key was refused');
 	}
 	if (status === 402) {
-		return 'the account has no credit left';
+		return l10n.t('the account has no credit left');
 	}
 	if (status === 404) {
-		return 'that address has no model list — check it ends in /v1 when it should';
+		return l10n.t('that address has no model list — check it ends in /v1 when it should');
 	}
 	if (status === 429) {
-		return 'too many requests right now';
+		return l10n.t('too many requests right now');
 	}
-	return `the address answered ${status}`;
+	return l10n.t('the address answered {0}', status);
 }
 
 /**
@@ -118,7 +119,7 @@ export async function probeEndpoint(baseUrl: string, apiKey: string | undefined,
 		}
 		const models = parseModelIds(await response.json());
 		if (models.length === 0) {
-			return { ok: false, status: response.status, latencyMs, models: [], error: 'the address answered no models' };
+			return { ok: false, status: response.status, latencyMs, models: [], error: l10n.t('the address answered no models') };
 		}
 		return { ok: true, status: response.status, latencyMs, models };
 	} catch (error) {
@@ -128,7 +129,7 @@ export async function probeEndpoint(baseUrl: string, apiKey: string | undefined,
 			ok: false,
 			latencyMs,
 			models: [],
-			error: timedOut ? `no answer within ${Math.round(timeoutMs / 1000)} s` : 'the address could not be reached',
+			error: timedOut ? l10n.t('no answer within {0} s', Math.round(timeoutMs / 1000)) : l10n.t('the address could not be reached'),
 		};
 	}
 }

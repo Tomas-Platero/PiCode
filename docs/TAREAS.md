@@ -20,6 +20,7 @@
 | **La traducción de lo que pi dice y hace** | Escrita y compilando: texto y herramientas |
 | **La extensión vieja, fuera del producto** | No se compila ni se empaqueta; su material está archivado |
 | **La copia del producto, en inglés** | Traducidas las cadenas del conector, las del ajuste de Proveedores y las del selector de modelos; el editor construido se barrió y no queda copia nuestra en español |
+| **Los 13 idiomas, completos** | Editor (1.315 frases), ventana de primer arranque (209), conector (537) y títulos de sus comandos (46): 13 ficheros de cada, generados y verificados por `node build/l10n.mjs check`, que además vigila los `{0}` y la lista de idiomas que carga la ventana |
 | **El conector, con casa en el árbol** | Vive en `extensions/picode/`, versionado con el resto de la fuente; lo compila `build/build-connector.sh` en la fase 2. Ya no lo crea ningún parche |
 | **Los proveedores, declarados en los ajustes** | La cadena de cuatro ventanas, borrada; una línea por proveedor con sus campos en la fila de Proveedores, y once comprobaciones ejecutadas contra un endpoint local (la lista, la clave, los ficheros de pi) |
 | **Los proveedores, en un formulario** | Una fila por proveedor con sus cuatro campos (nombre, dirección, dialecto, clave), pintada por un widget del núcleo: añadir, editar y borrar en su sitio, sin ventanas |

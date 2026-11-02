@@ -11,6 +11,8 @@
  * dictation starts a fresh one.
  */
 
+import { l10n } from './l10n.ts';
+
 export interface WorkerChannel {
 	send(message: Record<string, unknown>): void;
 	onMessage(listener: (message: Record<string, unknown>) => void): void;
@@ -59,7 +61,7 @@ export class VoiceSession {
 	/** Starts listening. Rejects with words the owner can read, and leaves the session idle. */
 	async start(): Promise<void> {
 		if (this.current === 'listening' || this.current === 'loading' || this.current === 'stopping') {
-			throw new Error('Dictation is already running.');
+			throw new Error(l10n.t('Dictation is already running.'));
 		}
 		this.clearIdle();
 		this.current = 'loading';
@@ -101,7 +103,7 @@ export class VoiceSession {
 	/** Lets go of the worker and the memory it holds. */
 	dispose(): void {
 		this.clearIdle();
-		this.drop(new Error('Dictation was closed.'));
+		this.drop(new Error(l10n.t('Dictation was closed.')));
 	}
 
 	private ensureWorker(): WorkerChannel {
@@ -114,7 +116,7 @@ export class VoiceSession {
 		worker.onMessage(message => this.receive(worker, message));
 		worker.onExit(() => {
 			if (this.worker === worker) {
-				this.drop(new Error('The speech engine stopped unexpectedly.'));
+				this.drop(new Error(l10n.t('The speech engine stopped unexpectedly.')));
 			}
 		});
 		return worker;
@@ -144,7 +146,7 @@ export class VoiceSession {
 		}
 		if (type === 'error') {
 			this.waiter = undefined;
-			waiter.reject(new Error(String(message['message'] ?? 'Dictation failed.')));
+			waiter.reject(new Error(String(message['message'] ?? l10n.t('Dictation failed.'))));
 		} else if (waiter.accept.has(type)) {
 			this.waiter = undefined;
 			waiter.resolve(message);
@@ -170,7 +172,7 @@ export class VoiceSession {
 
 	private armIdle(): void {
 		this.clearIdle();
-		this.idleTimer = setTimeout(() => { if (this.current === 'idle') { this.drop(new Error('Dictation went idle.')); } }, this.idleMs);
+		this.idleTimer = setTimeout(() => { if (this.current === 'idle') { this.drop(new Error(l10n.t('Dictation went idle.'))); } }, this.idleMs);
 		this.idleTimer.unref?.();
 	}
 

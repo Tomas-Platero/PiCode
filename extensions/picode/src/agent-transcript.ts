@@ -14,6 +14,8 @@
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
+import { l10n } from './l10n.ts';
+
 /** The longest a tool's output or arguments are shown, so a page stays readable. */
 const OUTPUT_LIMIT = 4_000;
 const ARGS_LIMIT = 240;
@@ -83,7 +85,7 @@ export function transcriptOf(parsed: unknown): Transcript | undefined {
 			const args = item['args'];
 			steps.push({
 				kind: 'tool',
-				name: text(item['name']) || 'tool',
+				name: text(item['name']) || l10n.t('tool'),
 				args: args === undefined ? '' : clip(typeof args === 'string' ? args : JSON.stringify(args), ARGS_LIMIT),
 				output: clip(text(item['output']), OUTPUT_LIMIT),
 				running: item['running'] === true,
@@ -93,7 +95,7 @@ export function transcriptOf(parsed: unknown): Transcript | undefined {
 	}
 	const dropped = thread?.['dropped'];
 	return {
-		agent: text(task['agent']) || 'Agent',
+		agent: text(task['agent']) || l10n.t('Agent'),
 		label: text(task['label']),
 		status: text(task['status']),
 		model: text(task['model']),
@@ -122,18 +124,21 @@ export function isRunning(status: string): boolean {
 	return status === 'running' || status === 'queued' || status === 'waiting';
 }
 
-const STATUS_WORDS: Readonly<Record<string, string>> = {
-	running: 'Working',
-	queued: 'Waiting to start',
-	waiting: 'Waiting',
-	completed: 'Done',
-	failed: 'Failed',
-	cancelled: 'Stopped',
-	timed_out: 'Timed out',
-};
-
+/**
+ * What the pill says for a status. Read where it is shown, not kept in a table: the words are
+ * translated, and the language is the editor's to change.
+ */
 export function statusWord(status: string): string {
-	return STATUS_WORDS[status] ?? status;
+	switch (status) {
+		case 'running': return l10n.t('Working');
+		case 'queued': return l10n.t('Waiting to start');
+		case 'waiting': return l10n.t('Waiting');
+		case 'completed': return l10n.t('Done');
+		case 'failed': return l10n.t('Failed');
+		case 'cancelled': return l10n.t('Stopped');
+		case 'timed_out': return l10n.t('Timed out');
+		default: return status;
+	}
 }
 
 /** `35s` / `2m 5s`. */
@@ -175,11 +180,11 @@ export async function transcriptHtml(transcript: Transcript, render: RenderMarkd
 		`<header><div class="who">${escapeHtml(transcript.agent)}</div>${transcript.label.length > 0 ? `<div class="what">${escapeHtml(transcript.label)}</div>` : ''}<div class="pills">${pills}</div></header>`,
 	];
 	if (transcript.prompt.length > 0) {
-		parts.push(`<details class="task"><summary>Task</summary><div class="body">${await markdown(transcript.prompt)}</div></details>`);
+		parts.push(`<details class="task"><summary>${escapeHtml(l10n.t('Task'))}</summary><div class="body">${await markdown(transcript.prompt)}</div></details>`);
 	}
 	const steps: string[] = [];
 	if (transcript.dropped > 0) {
-		steps.push(`<li class="note">The first ${transcript.dropped} steps are not shown.</li>`);
+		steps.push(`<li class="note">${escapeHtml(l10n.t('The first {0} steps are not shown.', transcript.dropped))}</li>`);
 	}
 	for (const step of transcript.steps) {
 		switch (step.kind) {
@@ -187,34 +192,34 @@ export async function transcriptHtml(transcript: Transcript, render: RenderMarkd
 				steps.push(`<li class="says"><div class="body">${await markdown(step.text)}</div></li>`);
 				break;
 			case 'thinking':
-				steps.push(`<li class="thinks"><details><summary>Thinking</summary><div class="body">${await markdown(step.text)}</div></details></li>`);
+				steps.push(`<li class="thinks"><details><summary>${escapeHtml(l10n.t('Thinking'))}</summary><div class="body">${await markdown(step.text)}</div></details></li>`);
 				break;
 			case 'note':
 				steps.push(`<li class="note">${escapeHtml(step.text)}</li>`);
 				break;
 			case 'tool': {
 				const state = step.isError ? 'error' : step.running ? 'running' : 'done';
-				steps.push(`<li class="tool ${state}"><div class="call"><span class="name">${escapeHtml(step.name)}</span>${step.args.length > 0 ? `<code class="args">${escapeHtml(step.args)}</code>` : ''}</div>${step.output.length > 0 ? `<details><summary>Output</summary><pre>${escapeHtml(step.output)}</pre></details>` : ''}</li>`);
+				steps.push(`<li class="tool ${state}"><div class="call"><span class="name">${escapeHtml(step.name)}</span>${step.args.length > 0 ? `<code class="args">${escapeHtml(step.args)}</code>` : ''}</div>${step.output.length > 0 ? `<details><summary>${escapeHtml(l10n.t('Output'))}</summary><pre>${escapeHtml(step.output)}</pre></details>` : ''}</li>`);
 				break;
 			}
 		}
 	}
 	if (steps.length > 0) {
-		parts.push(`<section><h2>What it did</h2><ol class="timeline">${steps.join('')}</ol></section>`);
+		parts.push(`<section><h2>${escapeHtml(l10n.t('What it did'))}</h2><ol class="timeline">${steps.join('')}</ol></section>`);
 	} else if (running) {
-		parts.push('<p class="muted">Getting started…</p>');
+		parts.push(`<p class="muted">${escapeHtml(l10n.t('Getting started…'))}</p>`);
 	}
 	if (transcript.result.length > 0) {
-		parts.push(`<section class="answer"><h2>Answer</h2><div class="body">${await markdown(transcript.result)}</div></section>`);
+		parts.push(`<section class="answer"><h2>${escapeHtml(l10n.t('Answer'))}</h2><div class="body">${await markdown(transcript.result)}</div></section>`);
 	}
 	if (transcript.error.length > 0) {
-		parts.push(`<section class="problem"><h2>Problem</h2><p>${escapeHtml(transcript.error)}</p></section>`);
+		parts.push(`<section class="problem"><h2>${escapeHtml(l10n.t('Problem'))}</h2><p>${escapeHtml(transcript.error)}</p></section>`);
 	}
 	if (steps.length === 0 && transcript.result.length === 0 && transcript.error.length === 0 && !running) {
-		parts.push('<p class="muted">Nothing was recorded for this agent.</p>');
+		parts.push(`<p class="muted">${escapeHtml(l10n.t('Nothing was recorded for this agent.'))}</p>`);
 	}
 	if (running) {
-		parts.push('<p class="live muted">Updating as it works…</p>');
+		parts.push(`<p class="live muted">${escapeHtml(l10n.t('Updating as it works…'))}</p>`);
 	}
 	return parts.join('');
 }

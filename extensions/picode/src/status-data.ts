@@ -347,7 +347,7 @@ function toSubscriptionStatus(limit: NanUsageLimit, fresh: boolean): Subscriptio
 	return {
 		meter: limit.name,
 		windows: [...labelled, ...unlabelled].map(window => ({
-			label: window.label.length > 0 ? `${spokenWindowLabel(window.label)} window` : 'billing period',
+			label: window.label.length > 0 ? vscode.l10n.t('{0} window', spokenWindowLabel(window.label)) : vscode.l10n.t('billing period'),
 			usedPercent: window.usedPercent,
 			resetAt: window.resetAt,
 			...(window.used === undefined || window.budget === undefined ? {} : { used: window.used, cap: window.budget }),
@@ -465,7 +465,7 @@ export async function readUsagePanel(distributionRoot: string): Promise<UsagePan
 			cap: period.budget,
 			usedPercent: period.usedPercent,
 			resetAt: period.resetAt,
-			...(rolling === undefined ? {} : { window: { label: `${spokenWindowLabel(rolling.label)} window`, usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
+			...(rolling === undefined ? {} : { window: { label: vscode.l10n.t('{0} window', spokenWindowLabel(rolling.label)), usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
 			limitReached: limit.limitReached,
 			current: limit.name === modelId,
 		}];

@@ -54,6 +54,7 @@ import { isSafeNpmInstallSpec, type InstallResult } from './packages-registry';
 import { npmRunEnv, planNpmRun } from './npm-run';
 import { isProductPackage } from './product-packages';
 import { compareVersions, fetchNpmLatest, isComparableVersion, type FetchFn } from './updates-check';
+import { l10n } from './l10n.ts';
 
 /* ------------------------------------------------------------------ *
  * What can be checked
@@ -74,17 +75,17 @@ export type UpdateCheckableSource =
 export function updateCheckableSource(source: string | undefined): UpdateCheckableSource {
 	const trimmed = source?.trim() ?? '';
 	if (trimmed.length === 0) {
-		return { kind: 'uncheckable', reason: 'No declaration of its own to check' };
+		return { kind: 'uncheckable', reason: l10n.t('No declaration of its own to check') };
 	}
 	const parsed = parsePackageSource(trimmed);
 	if (parsed === undefined) {
-		return { kind: 'uncheckable', reason: 'Its declaration cannot be read' };
+		return { kind: 'uncheckable', reason: l10n.t('Its declaration cannot be read') };
 	}
 	if (parsed.kind === 'git') {
-		return { kind: 'uncheckable', reason: 'Installed from git; npm cannot say whether it is behind' };
+		return { kind: 'uncheckable', reason: l10n.t('Installed from git; npm cannot say whether it is behind') };
 	}
 	if (parsed.kind === 'local') {
-		return { kind: 'uncheckable', reason: 'A local path; npm cannot say whether it is behind' };
+		return { kind: 'uncheckable', reason: l10n.t('A local path; npm cannot say whether it is behind') };
 	}
 	// The spec is the name alone, or the name with the pin after an `@` — the same split
 	// `parsePackageSource` made, kept here as the row's honest refusal when an update is asked.
@@ -121,15 +122,15 @@ export function updateStatusFor(installed: string | undefined, latest: string | 
 		return { state: 'uncheckable', reason: checkable.reason };
 	}
 	if (installed === undefined || installed.trim().length === 0) {
-		return { state: 'unknown', reason: 'Its installed version cannot be read' };
+		return { state: 'unknown', reason: l10n.t('Its installed version cannot be read') };
 	}
 	if (latest === undefined) {
-		return { state: 'unknown', reason: 'npm could not be asked' };
+		return { state: 'unknown', reason: l10n.t('npm could not be asked') };
 	}
 	// A version the comparator cannot order — `dev`, a git sha — is not a version answer: the
 	// string fallback `compareVersions` keeps for determinism must never decide "current".
 	if (!isComparableVersion(installed) || !isComparableVersion(latest)) {
-		return { state: 'unknown', reason: 'Its version cannot be compared' };
+		return { state: 'unknown', reason: l10n.t('Its version cannot be compared') };
 	}
 	if (compareVersions(installed, latest) < 0) {
 		return { state: 'behind', latest };
@@ -241,7 +242,7 @@ export async function checkPackageUpdates(rows: readonly PackageUpdateRowInput[]
 		// so it is never offered an Update button — except the product's own, whose pin is a floor
 		// the app moves itself (`withProductPackageVersion`).
 		if (checkable.pin !== undefined && !isProductPackage(checkable.name)) {
-			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: 'Its version is fixed' };
+			return { path: row.path, name: row.name, state: 'uncheckable' as const, reason: l10n.t('Its version is fixed') };
 		}
 		const latest = await npmLatestFor(checkable.name, deps, cache, flights);
 		return { path: row.path, name: row.name, ...updateStatusFor(row.version, latest, checkable) };
@@ -336,13 +337,13 @@ function lastMeaningfulLine(text: string): string | undefined {
 export async function updatePackage(source: string, context: PackageUpdateContext): Promise<InstallResult> {
 	const checkable = updateCheckableSource(source);
 	if (checkable.kind === 'uncheckable') {
-		return { ok: false, message: `Package ${source} cannot be updated here (${checkable.reason.toLowerCase()}).` };
+		return { ok: false, message: l10n.t('Package {0} cannot be updated here ({1}).', source, checkable.reason) };
 	}
 	if (checkable.pin !== undefined) {
-		return { ok: false, message: `Package ${checkable.name} is pinned to ${checkable.pin} in the settings; change the pin to update it.` };
+		return { ok: false, message: l10n.t('Package {0} is pinned to {1} in the settings; change the pin to update it.', checkable.name, checkable.pin) };
 	}
 	if (!isSafeNpmInstallSpec(`${checkable.name}@latest`)) {
-		return { ok: false, message: `Package ${checkable.name} cannot be updated: its name does not fit the spelling this editor installs.` };
+		return { ok: false, message: l10n.t('Package {0} cannot be updated: its name does not fit the spelling this editor installs.', checkable.name) };
 	}
 	const plan = planNpmRun(packageUpdateArgs(checkable.name), { npmCli: context.npmCli });
 	const spawn = context.spawn ?? defaultSpawn;
@@ -356,10 +357,15 @@ export async function updatePackage(source: string, context: PackageUpdateContex
 		});
 		if (!outcome.ok) {
 			const reason = lastMeaningfulLine(outcome.stderr);
-			return { ok: false, message: `Package ${checkable.name} could not be updated${reason === undefined ? '.' : `: ${reason}`}` };
+			return {
+				ok: false,
+				message: reason === undefined
+					? l10n.t('Package {0} could not be updated.', checkable.name)
+					: l10n.t('Package {0} could not be updated: {1}', checkable.name, reason),
+			};
 		}
-		return { ok: true, message: `Package ${checkable.name} updated to the latest version.` };
+		return { ok: true, message: l10n.t('Package {0} updated to the latest version.', checkable.name) };
 	} catch (error) {
-		return { ok: false, message: `Package ${checkable.name} could not be updated (${error instanceof Error ? error.message : String(error)}).` };
+		return { ok: false, message: l10n.t('Package {0} could not be updated ({1}).', checkable.name, error instanceof Error ? error.message : String(error)) };
 	}
 }

@@ -75,7 +75,11 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 			return defaultNLSConfiguration(userLocale, osLocale, nlsMetadataPath);
 		}
 
-		const languagePackId = `${languagePack.hash}.${resolvedLanguage}`;
+		// PiCode's own strings are not in any marketplace language pack, so each shipped
+		// language adds an overlay (flat `key -> text`) that wins over the pack. Its hash goes
+		// into the cache id so editing the overlay never serves a stale merged file.
+		const picodeOverlay = await readPicodeOverlay(nlsMetadataPath, resolvedLanguage);
+		const languagePackId = `${languagePack.hash}${picodeOverlay.hash}.${resolvedLanguage}`;
 		const globalLanguagePackCachePath = join(userDataPath, 'clp', languagePackId);
 		const commitLanguagePackCachePath = join(globalLanguagePackCachePath, commit);
 		const languagePackMessagesFile = join(commitLanguagePackCachePath, 'nls.messages.json');
@@ -138,7 +142,8 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 		for (const [moduleId, nlsKeys] of nlsDefaultKeys) {
 			const moduleTranslations = nlsPackdata.contents[moduleId];
 			for (const nlsKey of nlsKeys) {
-				nlsResult.push(moduleTranslations?.[nlsKey] || nlsDefaultMessages[nlsIndex]);
+				// `picode*` keys are unique on their own; strings PiCode rewrote inside upstream modules are scoped by module.
+				nlsResult.push(picodeOverlay.messages[nlsKey] || picodeOverlay.messages[`${moduleId}#${nlsKey}`] || moduleTranslations?.[nlsKey] || nlsDefaultMessages[nlsIndex]);
 				nlsIndex++;
 			}
 		}
@@ -158,6 +163,35 @@ export async function resolveNLSConfiguration({ userLocale, osLocale, userDataPa
 	}
 
 	return defaultNLSConfiguration(userLocale, osLocale, nlsMetadataPath);
+}
+
+interface IPicodeOverlay {
+	readonly messages: Record<string, string>;
+	/** Empty when there is no overlay for the language. */
+	readonly hash: string;
+}
+
+/**
+ * Reads `picode/l10n/<language>.json`, falling back from `pt-br` to `pt`. A missing or broken
+ * file just means PiCode's own strings stay in English.
+ */
+async function readPicodeOverlay(nlsMetadataPath: string, language: string): Promise<IPicodeOverlay> {
+	const directory = join(nlsMetadataPath, 'vs', 'workbench', 'contrib', 'picode', 'l10n');
+	for (let candidate = language; candidate;) {
+		try {
+			const content = await promises.readFile(join(directory, `${candidate}.json`), 'utf-8');
+			const messages = JSON.parse(content) as Record<string, string>;
+			let hash = 0;
+			for (let i = 0; i < content.length; i++) {
+				hash = (hash * 31 + content.charCodeAt(i)) | 0;
+			}
+			return { messages, hash: `-${(hash >>> 0).toString(16)}` };
+		} catch {
+			const index = candidate.lastIndexOf('-');
+			candidate = index > 0 ? candidate.substring(0, index) : '';
+		}
+	}
+	return { messages: {}, hash: '' };
 }
 
 /**
