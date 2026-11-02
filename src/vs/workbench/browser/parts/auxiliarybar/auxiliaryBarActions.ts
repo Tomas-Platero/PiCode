@@ -276,6 +276,8 @@ class ToggleMaximizedAuxiliaryBar extends Action2 {
 				id: MenuId.AuxiliaryBarTitle,
 				group: 'navigation',
 				order: 1,
+				// PiCode's Agent layout keeps its sessions column at its width: no maximize there.
+				when: ContextKeyExpr.notEquals('config.picode.appearance.layout', 'agent'),
 			}
 		});
 	}

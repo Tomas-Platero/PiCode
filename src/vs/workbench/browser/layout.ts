@@ -1912,8 +1912,9 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		this.workbenchGrid.setViewVisible(this.editorPartView, !hidden);
 
 		// The editor and panel cannot be hidden at the same time
-		// unless we have a maximized auxiliary bar
-		if (hidden && !this.isVisible(Parts.PANEL_PART) && !this.isAuxiliaryBarMaximized()) {
+		// unless we have a maximized auxiliary bar, or PiCode's Agent layout (where the chat and the
+		// review side bar share the room when no file is open)
+		if (hidden && !this.isVisible(Parts.PANEL_PART) && !this.isAuxiliaryBarMaximized() && this.configurationService.getValue<string>('picode.appearance.layout') !== 'agent') {
 			this.setPanelHidden(false, true);
 		}
 	}
