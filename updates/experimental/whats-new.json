@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.0-experimental",
+			"notes": "### ✨ New\n\n- **Two ways of working: Agent or Editor.** Agent puts the chat in the middle, your sessions on the left and a review bar on the right; Editor is the VS Code you know. Switch any time, no restart.\n- **A Status column** next to the chat: where the agent works, your MCP servers, the lines you changed (click to review every change), its tasks and what your memory holds.\n- **13 languages.** The editor, the setup and everything PiCode adds are translated, and the setup opens in your computer's language and gets it ready for the editor.\n- **A new setup:** pick your layout (Agent is marked by default), sign in or sign up from the account card, and the page keeps its place when you choose something.\n\n### 🐛 Fixed\n\n- The What's New history now reads in plain words for 0.8.0."
+		},
+		{
 			"version": "0.8.1-experimental",
 			"notes": "### ✨ New\n\n- If you skip versions, What's New now shows what changed in each one you missed, not only the latest.\n\n### 🐛 Fixed\n\n- The What's New window no longer shows a stray line under the list."
 		},
