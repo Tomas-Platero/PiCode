@@ -506,6 +506,16 @@ fixes we do not inherit, not surface, and that price is knowingly accepted.
 **Reversal trigger:** a required extension that genuinely needs 1.141 behaviour, or an upstream
 security fix that only lands in the code, turns this back into a real merge.
 
+**Addendum (2026-11-02) — declared 1.144.0.** VS Code 1.144.0 was out, so the declared number
+moved from 1.142.x to 1.144.0 (the owner: *"sube hasta ahí"*). Measured first, as this ADR asks: the
+stable extension API (`src/vscode-dts/vscode.d.ts`) is byte for byte the same in 1.142.0, 1.143.0 and
+1.144.0 (same MD5), so no extension sees a difference. The release notes of 1.143 and 1.144 were
+read for what PiCode could inherit: nearly all of it is Copilot or the Agents window, which PiCode
+does not use. Worth taking by hand, none of it in the tree yet: the multi-file diff editor's file
+list (1.143, experimental, `multiDiffEditor.experimental.fileList`), diagnostics highlighted up to
+5,000 per file instead of 500 (1.143), and Windows terminal dialogs opening in front of the editor
+(1.144, `terminal.integrated.windowsReparentConsoleWindow`). Nothing was deprecated in either release.
+
 ## ADR-017 — Cloud sync is a Pro feature; the free plan is an account, not storage
 
 **Status:** accepted.

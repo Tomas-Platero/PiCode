@@ -45,7 +45,7 @@ datos propia, galería y el **número** que leen las extensiones, todo versionad
 
 **Procedencia y número no son lo mismo.** El pin `host/upstream/stable.json` registra de qué VS
 Code desciende el árbol (1.135.0); el número declarado (`set.version`, por delante del pin) se sube
-para que las extensiones que piden `engines.vscode: ^1.142.0` sigan instalándose. Es una
+para que las extensiones que piden `engines.vscode: ^1.144.0` sigan instalándose. Es una
 decisión medida, no un rebase: ver ADR-016.
 
 **Por qué así y no un binario ajeno:** cualquiera puede auditar y recompilar. El instalador
