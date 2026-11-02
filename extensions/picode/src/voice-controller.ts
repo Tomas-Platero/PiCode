@@ -12,6 +12,7 @@
  */
 
 import type { VoiceInstallResult, VoiceManifest, VoiceProgress, VoiceState } from './voice-install';
+import { l10n } from './l10n.ts';
 
 export type VoiceStatus =
 	| { readonly state: 'unsupported' }
@@ -67,7 +68,7 @@ export class VoiceController {
 	/** Starts the download, or joins the one already running. */
 	start(): Promise<VoiceInstallResult> {
 		if (this.manifest === undefined) {
-			return Promise.resolve({ ok: false, cancelled: false, message: 'Dictation is not available on this system yet.' });
+			return Promise.resolve({ ok: false, cancelled: false, message: l10n.t('Dictation is not available on this system yet.') });
 		}
 		if (this.running !== undefined) {
 			return this.running.done;

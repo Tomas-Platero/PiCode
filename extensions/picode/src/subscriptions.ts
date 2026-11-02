@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { l10n } from './l10n.ts';
 import type { OfficialSdk } from './piSdk';
 
 /**
@@ -111,12 +112,12 @@ export interface SubscriptionRow extends vscode.QuickPickItem {
  * Only the **order** and the note are here; see the module comment for where they come from.
  */
 export const FEATURED_SUBSCRIPTIONS: readonly { readonly id: string; readonly note: string }[] = [
-	{ id: 'openai-codex', note: 'ChatGPT Plus or Pro' },
-	{ id: 'anthropic', note: 'Claude Pro or Max' },
-	{ id: 'github-copilot', note: 'GitHub Copilot' },
-	{ id: 'xai', note: 'Grok or X subscription' },
-	{ id: 'kimi-coding', note: 'Kimi For Coding' },
-	{ id: 'openrouter', note: 'OpenRouter credits' },
+	{ id: 'openai-codex', note: l10n.t('ChatGPT Plus or Pro') },
+	{ id: 'anthropic', note: l10n.t('Claude Pro or Max') },
+	{ id: 'github-copilot', note: l10n.t('GitHub Copilot') },
+	{ id: 'xai', note: l10n.t('Grok or X subscription') },
+	{ id: 'kimi-coding', note: l10n.t('Kimi For Coding') },
+	{ id: 'openrouter', note: l10n.t('OpenRouter credits') },
 ];
 
 /** The position of a provider in that order; everything else sorts after it, by name. */
@@ -127,7 +128,7 @@ export function rankOf(providerId: string): number {
 
 /** What a row says about the account: whether there is one yet. */
 export function accountState(configured: boolean): string {
-	return configured ? 'already connected' : 'not connected yet';
+	return configured ? l10n.t('already connected') : l10n.t('not connected yet');
 }
 
 /**
@@ -145,10 +146,10 @@ export function subscriptionRows(providers: readonly PiProvider[], hasCredential
 			continue;
 		}
 		const featured = FEATURED_SUBSCRIPTIONS.find(entry => entry.id === provider.id);
-		const detail = featured === undefined ? '' : `${featured.note} · `;
+		const state = accountState(hasCredential(provider.id));
 		rows.push({
 			label: provider.name,
-			description: detail + accountState(hasCredential(provider.id)),
+			description: featured === undefined ? state : `${featured.note} · ${state}`,
 			detail: provider.id,
 			providerId: provider.id,
 		});
@@ -181,7 +182,7 @@ export function noticeOf(event: PiAuthEvent): { message: string; url?: string } 
 		case 'auth_url':
 			return { message: event.instructions === undefined ? event.url : `${event.instructions}\n${event.url}`, url: event.url };
 		case 'device_code':
-			return { message: `Enter the code ${event.userCode} at ${event.verificationUri}`, url: event.verificationUri };
+			return { message: l10n.t('Enter the code {0} at {1}', event.userCode, event.verificationUri), url: event.verificationUri };
 		case 'progress':
 			return { message: event.message };
 	}

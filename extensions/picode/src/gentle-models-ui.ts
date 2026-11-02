@@ -46,8 +46,8 @@ interface Item<T> extends vscode.QuickPickItem {
 	readonly value: T;
 }
 
-const SAME_MODEL = 'Same model as the rest';
-const OTHER_MODEL = 'Type another model…';
+const SAME_MODEL = vscode.l10n.t('Same model as the rest');
+const OTHER_MODEL = vscode.l10n.t('Type another model…');
 
 /**
  * Lets the owner give each Gentle agent the model it should answer with — the editor's own
@@ -57,23 +57,23 @@ const OTHER_MODEL = 'Type another model…';
 export async function chooseAgentModels(deps: AgentModelsDeps): Promise<string | undefined> {
 	const agents = listAgents(deps.profileDir);
 	if (agents.length === 0) {
-		return 'The agents are not ready yet. Send a message in the chat once, then choose their models.';
+		return vscode.l10n.t('The agents are not ready yet. Send a message in the chat once, then choose their models.');
 	}
 	const changes: string[] = [];
 	for (;;) {
 		const saved = readAgentModels(deps.profileDir);
 		if (saved.status === 'invalid') {
-			return 'The agents’ model list could not be read. Delete it and try again.';
+			return vscode.l10n.t('The agents’ model list could not be read. Delete it and try again.');
 		}
 		const target = await vscode.window.showQuickPick<Item<string>>([
-			{ label: '$(organization) All agents', description: 'Give every agent the same model', value: ALL_AGENTS },
+			{ label: `$(organization) ${vscode.l10n.t('All agents')}`, description: vscode.l10n.t('Give every agent the same model'), value: ALL_AGENTS },
 			{ label: '', kind: vscode.QuickPickItemKind.Separator, value: '' },
 			...agents.map(agent => ({ label: `$(hubot) ${agent}`, description: describeAgentModel(saved.models[agent]), value: agent })),
-		], { title: 'Models for agents', placeHolder: 'Which agent?', ignoreFocusOut: true });
+		], { title: vscode.l10n.t('Models for agents'), placeHolder: vscode.l10n.t('Which agent?'), ignoreFocusOut: true });
 		if (target === undefined) {
 			break;
 		}
-		const picked = await pickModel(deps, target.value === ALL_AGENTS ? 'all agents' : target.value);
+		const picked = await pickModel(deps, target.value === ALL_AGENTS ? vscode.l10n.t('all agents') : target.value);
 		if (picked === undefined) {
 			continue;
 		}
@@ -84,9 +84,9 @@ export async function chooseAgentModels(deps: AgentModelsDeps): Promise<string |
 		const offered = picked.levels === undefined ? THINKING_LEVELS : picked.levels;
 		if (model !== '' && offered.length > 1) {
 			const level = await vscode.window.showQuickPick<Item<ThinkingLevel | ''>>([
-				{ label: 'Default', description: 'No effort setting', value: '' },
+				{ label: vscode.l10n.t('Default'), description: vscode.l10n.t('No effort setting'), value: '' },
 				...offered.map(value => ({ label: value, value })),
-			], { title: 'Models for agents', placeHolder: 'How much should it think?', ignoreFocusOut: true });
+			], { title: vscode.l10n.t('Models for agents'), placeHolder: vscode.l10n.t('How much should it think?'), ignoreFocusOut: true });
 			if (level === undefined) {
 				continue;
 			}
@@ -95,23 +95,23 @@ export async function chooseAgentModels(deps: AgentModelsDeps): Promise<string |
 		const next = assign(saved.models, agents, target.value, model === '' ? {} : { model, ...(thinking === undefined ? {} : { thinking }) });
 		writeAgentModels(deps.profileDir, next);
 		deps.onSaved();
-		changes.push(`${target.value === ALL_AGENTS ? 'All agents' : target.value}: ${model === '' ? SAME_MODEL.toLowerCase() : thinking === undefined ? model : `${model} · ${thinking}`}`);
+		changes.push(vscode.l10n.t('{0}: {1}', target.value === ALL_AGENTS ? vscode.l10n.t('All agents') : target.value, model === '' ? SAME_MODEL.toLowerCase() : thinking === undefined ? model : `${model} · ${thinking}`));
 	}
 	return changes.length === 0
 		? undefined
-		: `Saved. The agents use this from your next message.\n\n${changes.map(line => `- ${line}`).join('\n')}`;
+		: `${vscode.l10n.t('Saved. The agents use this from your next message.')}\n\n${changes.map(line => `- ${line}`).join('\n')}`;
 }
 
 /** The model for one round: a `provider/model` reference (empty for "same as the rest") with the effort levels it supports when known, or `undefined` when cancelled. */
 async function pickModel(deps: AgentModelsDeps, who: string): Promise<{ model: string; levels?: readonly ThinkingLevel[] } | undefined> {
-	const listed = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Looking for models…' }, () => deps.listModels().catch(() => ({ models: [] })));
+	const listed = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Looking for models…') }, () => deps.listModels().catch(() => ({ models: [] })));
 	const picked = await vscode.window.showQuickPick<Item<string>>([
-		{ label: `$(circle-slash) ${SAME_MODEL}`, description: 'No model of its own', value: '' },
+		{ label: `$(circle-slash) ${SAME_MODEL}`, description: vscode.l10n.t('No model of its own'), value: '' },
 		...(listed.models.length === 0 ? [] : [{ label: '', kind: vscode.QuickPickItemKind.Separator, value: '#' }]),
 		...listed.models.map(model => ({ label: model.model, description: model.ref, value: model.ref })),
 		{ label: '', kind: vscode.QuickPickItemKind.Separator, value: '#' },
 		{ label: `$(edit) ${OTHER_MODEL}`, value: '?' },
-	], { title: 'Models for agents', placeHolder: `Model for ${who}`, matchOnDescription: true, ignoreFocusOut: true });
+	], { title: vscode.l10n.t('Models for agents'), placeHolder: vscode.l10n.t('Model for {0}', who), matchOnDescription: true, ignoreFocusOut: true });
 	if (picked === undefined) {
 		return undefined;
 	}
@@ -120,11 +120,11 @@ async function pickModel(deps: AgentModelsDeps, who: string): Promise<{ model: s
 		return { model: picked.value, ...(levels === undefined ? {} : { levels }) };
 	}
 	const typed = await vscode.window.showInputBox({
-		title: 'Models for agents',
-		prompt: `Model for ${who}`,
+		title: vscode.l10n.t('Models for agents'),
+		prompt: vscode.l10n.t('Model for {0}', who),
 		placeHolder: 'provider/model',
 		ignoreFocusOut: true,
-		validateInput: value => modelRefOf(value) === undefined ? 'Write it as provider/model, without spaces.' : undefined,
+		validateInput: value => modelRefOf(value) === undefined ? vscode.l10n.t('Write it as provider/model, without spaces.') : undefined,
 	});
 	const ref = typed === undefined ? undefined : modelRefOf(typed);
 	if (ref === undefined) {

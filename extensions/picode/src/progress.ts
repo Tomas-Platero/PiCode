@@ -15,6 +15,8 @@
  * No `vscode` import: it is wording, and wording can be exercised by running it.
  */
 
+import { l10n } from './l10n.ts';
+
 /** The fields a tool's arguments may carry, tried in this order for each tool. */
 function firstString(args: unknown, keys: readonly string[]): string | undefined {
 	if (typeof args !== 'object' || args === null) {
@@ -77,7 +79,7 @@ function capped(text: string, max: number): string {
 		return text;
 	}
 	const dropped = text.length - max;
-	return `${text.slice(0, max)}\n… ${dropped} more characters`;
+	return `${text.slice(0, max)}\n${l10n.t('… {0} more characters', dropped)}`;
 }
 
 /**

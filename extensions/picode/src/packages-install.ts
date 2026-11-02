@@ -49,6 +49,7 @@ import { withProductEnv } from './product-env';
 import { isLeftBehindPackage } from './left-behind-packages';
 import { PRODUCT_PACKAGES, withProductPackages, type ProductPackage } from './product-packages';
 import { parsePackageSource, parseSettings, type SettingsDocument } from './packages-data';
+import { l10n } from './l10n.ts';
 
 /** The whitelist this module enforces before any profile-derived spec reaches npm's shell. */
 export { isSafeNpmInstallSpec } from './packages-registry';
@@ -161,7 +162,7 @@ export function scanDeclaredPackages(
 			const spec = npmInstallSpec(`npm:${source.spec}`);
 			if (spec === undefined || !isSafeNpmInstallSpec(spec)) {
 				failedBeforeSpawn += 1;
-				rejected.push(`Refused ${source.spec}: it does not fit the spelling this editor installs through npm's shell.`);
+				rejected.push(l10n.t("Refused {0}: it does not fit the spelling this editor installs through npm's shell.", source.spec));
 				continue;
 			}
 			specs.push(spec);
@@ -178,7 +179,7 @@ export function scanDeclaredPackages(
 		const url = `https://${source.host}/${source.path}`;
 		if (!isSafeNpmInstallSpec(`git+https://${source.host}/${source.path}`)) {
 			failedBeforeSpawn += 1;
-			rejected.push(`Refused ${source.spec}: the repository address does not fit the spelling this editor clones.`);
+			rejected.push(l10n.t('Refused {0}: the repository address does not fit the spelling this editor clones.', source.spec));
 			continue;
 		}
 		gitClones.push({ url, target });
@@ -451,7 +452,7 @@ const realIo: PackagesFileIo = {
 function reasonOf(stderr: string): string {
 	const line = stderr.split(/\r?\n/).map(part => part.trim()).filter(part => part.length > 0).pop();
 	if (line === undefined) {
-		return 'npm gave no reason';
+		return l10n.t('npm gave no reason');
 	}
 	return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
@@ -484,9 +485,9 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 		try {
 			(io.writeText ?? realIo.writeText)!(settingsFile, pinned.text);
 			settingsText = pinned.text;
-			log('This profile now declares the packages PiCode ships, at the versions it ships them.');
+			log(l10n.t('This profile now declares the packages PiCode ships, at the versions it ships them.'));
 		} catch (error) {
-			log(`The packages PiCode ships could not be declared in this profile (${error instanceof Error ? error.message : String(error)}).`);
+			log(l10n.t('The packages PiCode ships could not be declared in this profile ({0}).', error instanceof Error ? error.message : String(error)));
 		}
 	}
 	const settings = parseSettings(settingsText);
@@ -512,10 +513,12 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 			}
 		} catch (error) {
 			failed += scan.specs.length;
-			log(`The profile's npm directory could not be prepared (${error instanceof Error ? error.message : String(error)}), so ${scan.specs.length} package(s) were not installed.`);
+			log(l10n.t("The profile's npm directory could not be prepared ({0}), so {1} package(s) were not installed.", error instanceof Error ? error.message : String(error), scan.specs.length));
 		}
 		if (failed === scan.failedBeforeSpawn) {
-			log(`Installing ${scan.specs.length} missing package${scan.specs.length === 1 ? '' : 's'} for this profile…`);
+			log(scan.specs.length === 1
+				? l10n.t('Installing {0} missing package for this profile…', scan.specs.length)
+				: l10n.t('Installing {0} missing packages for this profile…', scan.specs.length));
 			const runArgs = (specs: readonly string[]): string[] => ['install', '--save', '--no-audit', '--no-fund', ...specs];
 			const npmPlan = planNpmRun(runArgs(scan.specs), { npmCli: options.npmCli });
 			try {
@@ -551,12 +554,14 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 						}
 					} catch {
 						failed += 1;
-						log(`Package ${spec} could not be installed (${batchError instanceof Error ? batchError.message : String(batchError)}).`);
+						log(l10n.t('Package {0} could not be installed ({1}).', spec, batchError instanceof Error ? batchError.message : String(batchError)));
 					}
 				}
 			}
 			if (installed > 0) {
-				log(`Installed ${installed} package${installed === 1 ? '' : 's'} into this profile.`);
+				log(installed === 1
+					? l10n.t('Installed {0} package into this profile.', installed)
+					: l10n.t('Installed {0} packages into this profile.', installed));
 			}
 		}
 	}
@@ -574,7 +579,7 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 		const familyWork = scanRuntimeFamily(npmRoot, family, io);
 		declareFamilyInManifest(npmProject, familyWork.declared, io);
 		if (familyWork.specs.length > 0) {
-			log('Updating this profile’s pi packages so they match the version PiCode runs…');
+			log(l10n.t('Updating this profile’s pi packages so they match the version PiCode runs…'));
 			const familyPlan = planNpmRun(['install', '--save-exact', '--no-audit', '--no-fund', ...familyWork.specs], { npmCli: options.npmCli });
 			try {
 				const outcome = await spawn(familyPlan.file, familyPlan.args, {
@@ -587,10 +592,12 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 				if (!outcome.ok) {
 					throw new Error(reasonOf(outcome.stderr));
 				}
-				log(`Updated ${familyWork.specs.length} pi package${familyWork.specs.length === 1 ? '' : 's'} in this profile.`);
+				log(familyWork.specs.length === 1
+					? l10n.t('Updated {0} pi package in this profile.', familyWork.specs.length)
+					: l10n.t('Updated {0} pi packages in this profile.', familyWork.specs.length));
 			} catch (error) {
 				failed += familyWork.specs.length;
-				log(`This profile’s pi packages could not be updated (${error instanceof Error ? error.message : String(error)}), so they stay on the version already installed.`);
+				log(l10n.t('This profile’s pi packages could not be updated ({0}), so they stay on the version already installed.', error instanceof Error ? error.message : String(error)));
 			}
 		}
 	}
@@ -611,11 +618,13 @@ async function runEnsure(options: EnsureProfilePackagesOptions): Promise<Package
 			}
 		} catch (error) {
 			failed += 1;
-			log(`Repository ${checkout.url} could not be brought into this profile (${error instanceof Error ? error.message : String(error)}).`);
+			log(l10n.t('Repository {0} could not be brought into this profile ({1}).', checkout.url, error instanceof Error ? error.message : String(error)));
 		}
 	}
 	if (cloned > 0) {
-		log(`Brought ${cloned} git package${cloned === 1 ? '' : 's'} into this profile.`);
+		log(cloned === 1
+			? l10n.t('Brought {0} git package into this profile.', cloned)
+			: l10n.t('Brought {0} git packages into this profile.', cloned));
 	}
 
 	return { installed, cloned, present: scan.present, failed, rejected: scan.rejected, lines };

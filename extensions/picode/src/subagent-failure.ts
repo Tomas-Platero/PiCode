@@ -5,6 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { l10n } from './l10n.ts';
 
 /**
  * Why a subagent's model did not answer, in words a person can act on.
@@ -103,7 +104,7 @@ function resetNote(message: string): string {
 		return '';
 	}
 	const month = MONTHS[Number(match[2]) - 1];
-	return month === undefined ? '' : ` · resets ${month} ${Number(match[3])}`;
+	return month === undefined ? '' : l10n.t(' · resets {0} {1}', month, Number(match[3]));
 }
 
 const OTHER_LIMIT = 160;
@@ -112,13 +113,16 @@ const OTHER_LIMIT = 160;
 export function describeFailure(failure: ProviderFailure): string {
 	const who = providerName(failure.provider);
 	switch (failureKind(failure.message)) {
-		case 'allowance': return `${who} allowance used up${resetNote(failure.message)}`;
-		case 'access': return `${who} refused the key or sign-in`;
-		case 'rate': return `${who} is limiting requests — try again later`;
-		case 'model': return `${who} does not offer ${failure.model}`;
+		case 'allowance': {
+		const note = resetNote(failure.message);
+		return note === '' ? l10n.t('{0} allowance used up', who) : l10n.t('{0} allowance used up{1}', who, note);
+	}
+		case 'access': return l10n.t('{0} refused the key or sign-in', who);
+		case 'rate': return l10n.t('{0} is limiting requests — try again later', who);
+		case 'model': return l10n.t('{0} does not offer {1}', who, failure.model);
 		default: {
 			const text = innerMessage(failure.message).replace(/\s+/g, ' ');
-			return `${who}: ${text.length > OTHER_LIMIT ? `${text.slice(0, OTHER_LIMIT - 1)}…` : text}`;
+			return l10n.t('{0}: {1}', who, text.length > OTHER_LIMIT ? `${text.slice(0, OTHER_LIMIT - 1)}…` : text);
 		}
 	}
 }

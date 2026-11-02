@@ -20,6 +20,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
+import { l10n } from './l10n.ts';
 
 const PARAKEET_REPO = 'csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8';
 const PARAKEET_REVISION = '2bda32ec70b097a55adaa07d9a7173915b43cc78';
@@ -161,10 +162,16 @@ export function isAllowedHost(url: URL): boolean {
 }
 
 async function openStream(url: string, offset: number, signal: AbortSignal, allow: (url: URL) => boolean): Promise<Response> {
-	let current = new URL(url);
+	let current: URL;
+	try {
+		current = new URL(url);
+	} catch {
+		// A download address that is not an address at all: said plainly, because it reaches the owner.
+		throw new Error(l10n.t('The download address is not a valid web address.'));
+	}
 	for (let hop = 0; hop < 5; hop++) {
 		if (!allow(current)) {
-			throw new Error(`Refused to download from ${current.hostname}.`);
+			throw new Error(l10n.t('Refused to download from {0}.', current.hostname));
 		}
 		const headers: Record<string, string> = { 'User-Agent': 'PiCode' };
 		if (offset > 0) {
@@ -174,14 +181,14 @@ async function openStream(url: string, offset: number, signal: AbortSignal, allo
 		if (response.status >= 300 && response.status < 400) {
 			const location = response.headers.get('location');
 			if (location === null) {
-				throw new Error('The server sent a redirect without a destination.');
+				throw new Error(l10n.t('The server sent a redirect without a destination.'));
 			}
 			current = new URL(location, current);
 			continue;
 		}
 		return response;
 	}
-	throw new Error('Too many redirects.');
+	throw new Error(l10n.t('Too many redirects.'));
 }
 
 /**
@@ -214,10 +221,10 @@ export async function downloadVerified(
 			fs.rmSync(part, { force: true });
 			have = 0;
 		} else if (response.status !== 200 && response.status !== 206) {
-			throw new Error(`The download failed (${response.status}).`);
+			throw new Error(l10n.t('The download failed ({0}).', response.status));
 		}
 		if (response.body === null) {
-			throw new Error('The download came back empty.');
+			throw new Error(l10n.t('The download came back empty.'));
 		}
 		const out = fs.createWriteStream(part, { flags: have > 0 ? 'a' : 'w' });
 		try {
@@ -238,7 +245,7 @@ export async function downloadVerified(
 	}
 	if (fs.statSync(part).size !== expected.size || (await expected.digest(part)) !== expected.want) {
 		fs.rmSync(part, { force: true });
-		throw new Error('A downloaded file did not match its published signature and was discarded.');
+		throw new Error(l10n.t('A downloaded file did not match its published signature and was discarded.'));
 	}
 	fs.renameSync(part, dest);
 }
@@ -258,7 +265,7 @@ function extractTarball(tarball: string, into: string): void {
 	const cwd = path.dirname(tarball);
 	const result = spawnSync('tar', ['-xzf', path.basename(tarball), '-C', path.relative(cwd, into).split(path.sep).join('/'), '--strip-components=1'], { cwd, encoding: 'utf8', timeout: 120_000, windowsHide: true });
 	if (result.status !== 0) {
-		throw new Error(`Could not unpack a library: ${(result.stderr ?? '').trim() || 'unknown error'}`);
+		throw new Error(l10n.t('Could not unpack a library: {0}', (result.stderr ?? '').trim() || l10n.t('unknown error')));
 	}
 }
 
@@ -286,7 +293,7 @@ export async function installVoice(
 		fs.rmSync(path.join(dir, MARKER), { force: true });
 
 		for (const file of manifest.modelFiles) {
-			label = 'Speech model';
+			label = l10n.t('Speech model');
 			const dest = path.join(dir, 'model', file.name);
 			if (fs.existsSync(dest) && fs.statSync(dest).size === file.size && (await hashFile(dest, 'sha256', 'hex')) === file.sha256) {
 				bump(file.size);
@@ -297,7 +304,7 @@ export async function installVoice(
 		}
 
 		for (const pkg of manifest.packages) {
-			label = 'Speech engine';
+			label = l10n.t('Speech engine');
 			const tarball = path.join(dir, 'downloads', `${pkg.name}-${pkg.version}.tgz`);
 			const want = pkg.integrity.replace(/^sha512-/, '');
 			await downloadVerified(`https://registry.npmjs.org/${pkg.name}/-/${pkg.name}-${pkg.version}.tgz`, tarball,
@@ -305,7 +312,7 @@ export async function installVoice(
 			extractTarball(tarball, path.join(dir, 'node_modules', pkg.name));
 			for (const required of pkg.requiredFiles) {
 				if (!fs.existsSync(path.join(dir, 'node_modules', pkg.name, required))) {
-					throw new Error('A downloaded library is incomplete.');
+					throw new Error(l10n.t('A downloaded library is incomplete.'));
 				}
 			}
 		}
@@ -315,9 +322,9 @@ export async function installVoice(
 		return { ok: true };
 	} catch (err) {
 		if (signal.aborted) {
-			return { ok: false, cancelled: true, message: 'Download cancelled. What was fetched is kept.' };
+			return { ok: false, cancelled: true, message: l10n.t('Download cancelled. What was fetched is kept.') };
 		}
-		return { ok: false, cancelled: false, message: err instanceof Error ? err.message : 'The download failed.' };
+		return { ok: false, cancelled: false, message: err instanceof Error ? err.message : l10n.t('The download failed.') };
 	}
 }
 

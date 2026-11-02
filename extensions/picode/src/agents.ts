@@ -22,8 +22,11 @@
  * a long time `finished`.
  *
  * No `vscode` import and no clock of its own: the rows are a pure function of a listing and the
- * `now` the caller passes, so `node --test` runs this file directly.
+ * `now` the caller passes, so `node --test` runs this file directly. What the list says in words
+ * goes through the editor's own translator.
  */
+
+import { l10n } from './l10n.ts';
 
 
 /**
@@ -103,17 +106,17 @@ export function agentsSummary(agents: readonly LaunchedAgent[]): { total: number
 export function lastActivity(mtime: number, now: number): string {
 	const seconds = Math.max(0, Math.round((now - mtime) / 1000));
 	if (seconds < 60) {
-		return 'just now';
+		return l10n.t('just now');
 	}
 	const minutes = Math.round(seconds / 60);
 	if (minutes < 60) {
-		return `${minutes} min ago`;
+		return l10n.t('{0} min ago', minutes);
 	}
 	const hours = Math.round(minutes / 60);
 	if (hours < 24) {
-		return `${hours} h ago`;
+		return l10n.t('{0} h ago', hours);
 	}
-	return `${Math.round(hours / 24)} d ago`;
+	return l10n.t('{0} d ago', Math.round(hours / 24));
 }
 
 /** A text order that depends on the text alone — no locale, so it is the same on any machine. */

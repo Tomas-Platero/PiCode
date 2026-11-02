@@ -18,7 +18,7 @@ import { mcpServerNameOfTool } from './mcp-provider';
 import { resolveSessionCwd } from './session-cwd';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
-import { mcpNotice } from './mcp-notice';
+import { mcpNotice, mcpNoticeLine } from './mcp-notice';
 import {
 	decisionFromAnswer,
 	isReadOnlyShellCommand,
@@ -68,7 +68,7 @@ import { VENDOR } from './providers';
 import { gentleAgents } from './gentle-agents-store';
 import { conversationName, isSlashCommand } from './context';
 import { isAgentModelsCommand } from './gentle-models';
-import { isExpectedHelperNotice } from './extension-notices';
+import { isExpectedHelperNotice, isStartupHousekeepingNotice } from './extension-notices';
 import { recordUsageHeaders } from './subscription-usage';
 import { CHAT_MODEL_ENV } from './subagent-model-fallback';
 import { displayedCustomText, EDITOR_COMMANDS, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
@@ -373,8 +373,8 @@ function pushMemoryCard(
 function pushBackgroundCard(stream: vscode.ChatResponseStream, toolCallId: string, call: BackgroundCall, jobNumber: string | undefined, log: (line: string) => void): void {
 	try {
 		const subagent = new vscode.ChatSubagentToolInvocationData(
-			jobNumber === undefined ? 'Starting in the background' : 'Running in the background',
-			call.label ?? 'background job',
+			jobNumber === undefined ? vscode.l10n.t('Starting in the background') : vscode.l10n.t('Running in the background'),
+			call.label ?? vscode.l10n.t('background job'),
 			call.command ?? '',
 			runningResultLine(jobNumber),
 		);
@@ -403,8 +403,8 @@ function pushBackgroundCompletionCard(
 	try {
 		const failed = completionFailed(completion);
 		const subagent = new vscode.ChatSubagentToolInvocationData(
-			failed ? 'A background job failed' : 'A background job finished',
-			completion.label ?? 'background job',
+			failed ? vscode.l10n.t('A background job failed') : vscode.l10n.t('A background job finished'),
+			completion.label ?? vscode.l10n.t('background job'),
 			completion.command ?? '',
 			[finishedResultLine(completion), completion.tail ?? ''].filter(line => line.length > 0).join('\n\n'),
 		);
@@ -448,7 +448,7 @@ function pushToolCard(
 		const line = toolProgress(toolName, args);
 		const part = new vscode.ChatToolInvocationPart(toolName, toolCallId);
 		part.invocationMessage = line;
-		part.pastTenseMessage = isError ? `${line} — failed` : line;
+		part.pastTenseMessage = isError ? vscode.l10n.t('{0} — failed', line) : line;
 		part.toolSpecificData = { input: toolInputText(args), output: toolOutputText(result) };
 		part.enablePartialUpdate = true;
 		part.isComplete = result !== undefined;
@@ -531,7 +531,7 @@ function recordToolResult(toolName: string, args: unknown, isError: boolean | un
 }
 
 /** The title the multi-diff editor opens with; the card's own header is the renderer's. */
-const TURN_EDITS_TITLE = 'Changed files';
+const TURN_EDITS_TITLE = vscode.l10n.t('Changed files');
 
 /** The button under the change card: puts the turn's files back as they were. */
 /** Opens the model comparison from the palette. */
@@ -543,7 +543,7 @@ export const UNDO_TURN_EDITS_COMMAND_ID = 'picode.undoTurnEdits';
 export async function undoTurnEditsCommand(key: unknown): Promise<void> {
 	const edits = typeof key === 'string' ? undoableTurn(key) : undefined;
 	if (edits === undefined) {
-		void vscode.window.showInformationMessage('These changes can no longer be undone.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('These changes can no longer be undone.'));
 		return;
 	}
 	const results = await undoEdits(edits, {
@@ -554,11 +554,11 @@ export async function undoTurnEditsCommand(key: unknown): Promise<void> {
 	forgetUndoableTurn(key as string);
 	const undone = results.filter(r => r.outcome === 'restored' || r.outcome === 'removed').length;
 	const skipped = results.length - undone;
-	const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`;
+	const files = (count: number) => count === 1 ? vscode.l10n.t('{0} file', count) : vscode.l10n.t('{0} files', count);
 	void vscode.window.showInformationMessage(
 		skipped === 0
-			? `Undid the changes in ${files(undone)}.`
-			: `Undid ${files(undone)}. ${files(skipped)} changed since and were left as they are.`,
+			? vscode.l10n.t('Undid the changes in {0}.', files(undone))
+			: vscode.l10n.t('Undid {0}. {1} changed since and were left as they are.', files(undone), files(skipped)),
 	);
 }
 
@@ -593,7 +593,7 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 			};
 		});
 		stream.push(new vscode.ChatResponseMultiDiffPart(entries, TURN_EDITS_TITLE));
-		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: 'Undo these changes', arguments: [rememberTurnForUndo(edits)] });
+		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: vscode.l10n.t('Undo these changes'), arguments: [rememberTurnForUndo(edits)] });
 	} catch (error) {
 		log(`turn edits card failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
@@ -742,8 +742,8 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					// What happened first, then pi's own sentence — except for the one failure whose advice only works
 					// in a terminal, which is answered with the settings where a provider is added.
 					stream.markdown(needsProvider(message.errorMessage)
-						? '\n\n> PiCode: this model has no provider connected. [Open the provider settings](command:workbench.action.openSettings?%5B%22picode.providers%22%5D) to add one.\n'
-						: `\n\n> PiCode: the answer could not be finished — ${message.errorMessage}\n`);
+						? `\n\n${vscode.l10n.t('> PiCode: this model has no provider connected. [Open the provider settings](command:workbench.action.openSettings?%5B%22picode.providers%22%5D) to add one.')}\n`
+						: `\n\n${vscode.l10n.t('> PiCode: the answer could not be finished — {0}', message.errorMessage)}\n`);
 				}
 				return;
 			}
@@ -855,18 +855,23 @@ const turnContext: { current?: TurnContext } = {};
 /** The longest stretch of a command or path shown in the permission question. */
 const PERMISSION_DETAIL_LIMIT = 160;
 
+/**
+ * The two answers the extension bridge hands back. They are read as the option's own value, so the
+ * label the question shows and the word compared afterwards have to be the same string.
+ */
+const ALLOW_ANSWER = vscode.l10n.t('Allow');
+const DENY_ANSWER = vscode.l10n.t('Deny');
+
 /** One line saying what the tool is about to do, for the question's message. */
 function describeToolCall(toolName: string, input: unknown): string {
 	const record = recordOf(input);
 	if (toolName === 'bash' || toolName === 'powershell') {
 		const command = typeof record?.['command'] === 'string' ? record['command'] : '';
-		return command.length === 0 ? `It runs a ${toolName} command.`
-			: `It runs:${command.length > PERMISSION_DETAIL_LIMIT ? `
-${command.slice(0, PERMISSION_DETAIL_LIMIT)}…` : `
-${command}`}`;
+		const shown = command.length > PERMISSION_DETAIL_LIMIT ? `${command.slice(0, PERMISSION_DETAIL_LIMIT)}…` : command;
+		return command.length === 0 ? vscode.l10n.t('It runs a {0} command.', toolName) : vscode.l10n.t('It runs:{0}', `\n${shown}`);
 	}
 	const target = typeof record?.['path'] === 'string' ? record['path'] : '';
-	return target.length === 0 ? `It changes a file with ${toolName}.` : `It wants to ${toolName} ${target}.`;
+	return target.length === 0 ? vscode.l10n.t('It changes a file with {0}.', toolName) : vscode.l10n.t('It wants to {0} {1}.', toolName, target);
 }
 
 /** The Allow / Deny question, in the two positions the chat's picker model speaks. */
@@ -874,12 +879,12 @@ function permissionQuestion(toolName: string, input: unknown): vscode.ChatQuesti
 	return new vscode.ChatQuestion(
 		PERMISSION_QUESTION_ID,
 		vscode.ChatQuestionType.SingleSelect,
-		`pi wants to run ${toolName}`,
+		vscode.l10n.t('pi wants to run {0}', toolName),
 		{
 			message: describeToolCall(toolName, input),
 			options: [
-				{ id: 'allow', label: 'Allow', value: PERMISSION_ALLOW },
-				{ id: 'deny', label: 'Deny', value: 'deny' },
+				{ id: 'allow', label: ALLOW_ANSWER, value: PERMISSION_ALLOW },
+				{ id: 'deny', label: DENY_ANSWER, value: 'deny' },
 			],
 		},
 	);
@@ -1159,11 +1164,14 @@ function putInChatInput(text: string): void {
 	void vscode.commands.executeCommand('workbench.action.chat.open', { query: text, isPartialQuery: true }).then(undefined, () => undefined);
 }
 
+/** The MCP notices this window already showed (`McpNotice.key`), so a new chat does not repeat one. */
+const shownMcpNotices = new Set<string>();
+
 function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 	const noop = (): void => { /* the chat owns this surface */ };
 	return {
 		confirm: async (title: string, message: string): Promise<boolean> =>
-			(await askExtensionInChat('select', title, message, ['Allow', 'Deny'], log)) === 'Allow',
+			(await askExtensionInChat('select', title, message, [ALLOW_ANSWER, DENY_ANSWER], log)) === ALLOW_ANSWER,
 		select: async (title: string, options: string[]): Promise<string | undefined> => {
 			const answer = await askExtensionInChat('select', title, undefined, options, log);
 			return typeof answer === 'string' ? answer : undefined;
@@ -1179,19 +1187,24 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 			}
 			turnContext.current?.command?.notices.push(message);
 			noteCommandShown();
-			// Expected by the product, and written in terms of files and variables: not shown.
-			if (isExpectedHelperNotice(message)) {
+			// Expected by the product, and written in terms of files and variables: not shown. Nor is
+			// gentle-pi's start-up housekeeping report, which nobody asked about and nobody acts on.
+			if (isExpectedHelperNotice(message) || isStartupHousekeepingNotice(message)) {
 				return;
 			}
 			const mcp = mcpNotice(message.trim());
 			if (mcp !== undefined) {
+				// pi repeats this at the start of every conversation; the chat says it once per window
+				// for the same servers in the same state (the Status panel keeps showing it).
+				if (shownMcpNotices.has(mcp.key)) {
+					return;
+				}
+				shownMcpNotices.add(mcp.key);
 				try {
-					stream.warning(`\n${mcp.markdown}\n`);
-					// The fixes as buttons, instead of pi's "Run /mcp to fix.".
-					for (const row of mcp.rows.filter(entry => entry.needsSignIn)) {
-						stream.button({ command: SIGN_IN_MCP_SERVER_COMMAND_ID, title: `Sign in to ${row.server}`, arguments: [row.server] });
-					}
-					stream.button({ command: OPEN_MCP_SERVERS_COMMAND_ID, title: 'Manage MCP servers' });
+					// One quiet line with the fixes as links, instead of pi's "Run /mcp to fix.".
+					const line = new vscode.MarkdownString(`\n${mcpNoticeLine(mcp, SIGN_IN_MCP_SERVER_COMMAND_ID, OPEN_MCP_SERVERS_COMMAND_ID)}\n`);
+					line.isTrusted = { enabledCommands: [SIGN_IN_MCP_SERVER_COMMAND_ID, OPEN_MCP_SERVERS_COMMAND_ID] };
+					stream.markdown(line);
 				} catch { /* a stream that already closed is not an error to report */ }
 				return;
 			}
@@ -1248,7 +1261,7 @@ function extensionUiContext(log: (line: string) => void): PiExtensionUiContext {
 		theme: CHAT_THEME,
 		getAllThemes: (): readonly unknown[] => [],
 		getTheme: (): undefined => undefined,
-		setTheme: (): { success: boolean; error: string } => ({ success: false, error: 'Themes are managed by the editor.' }),
+		setTheme: (): { success: boolean; error: string } => ({ success: false, error: vscode.l10n.t('Themes are managed by the editor.') }),
 		getToolsExpanded: (): boolean => false,
 		setToolsExpanded: noop,
 	};
@@ -1390,16 +1403,16 @@ async function judgeCommandRun(session: PiSession, name: string, args: string, w
 	const command = piCommandsOfRunner(session).find(candidate => candidate.name === name);
 	await learnedCommands.learn(name, command?.source, verdict.message);
 	stream.markdown(watched.shown
-		? `\n\nℹ️ /${name} only works in pi’s terminal, so the chat will not offer it any more.`
-		: `ℹ️ /${name} shows nothing in the editor: it only works in pi’s terminal, so the chat will not offer it any more.`);
+		? `\n\n${vscode.l10n.t('ℹ️ /{0} only works in pi’s terminal, so the chat will not offer it any more.', name)}`
+		: vscode.l10n.t('ℹ️ /{0} shows nothing in the editor: it only works in pi’s terminal, so the chat will not offer it any more.', name));
 	return true;
 }
 
 /** The button each terminal-only command points at, when the editor has a way there. */
 const UNAVAILABLE_BUTTONS: Record<NonNullable<UnavailableCommand['action']>, vscode.Command> = {
-	tasks: { command: 'picode.status.tasks.focus', title: 'Open Tasks' },
-	agentModels: { command: 'picode.agents.chooseModels', title: 'Choose agent models' },
-	sessions: { command: 'agentSessions.showAgentSessionsSidebar', title: 'Open Sessions' },
+	tasks: { command: 'picode.status.tasks.focus', title: vscode.l10n.t('Open Tasks') },
+	agentModels: { command: 'picode.agents.chooseModels', title: vscode.l10n.t('Choose agent models') },
+	sessions: { command: 'agentSessions.showAgentSessionsSidebar', title: vscode.l10n.t('Open Sessions') },
 };
 
 /** A command that only exists in pi's terminal: said plainly, with the way there is. */
@@ -1419,12 +1432,12 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 	switch (name) {
 		case 'compact': {
 			if (typeof session.compact !== 'function') {
-				stream.markdown('This pi cannot compact a conversation.');
+				stream.markdown(vscode.l10n.t('This pi cannot compact a conversation.'));
 				return false;
 			}
-			stream.progress('Compacting the conversation…');
+			stream.progress(vscode.l10n.t('Compacting the conversation…'));
 			await session.compact(args.length === 0 ? undefined : args);
-			stream.markdown('🗜️ Conversation compacted: earlier messages were summarized to free up context.');
+			stream.markdown(vscode.l10n.t('🗜️ Conversation compacted: earlier messages were summarized to free up context.'));
 			return false;
 		}
 		case 'new':
@@ -1436,26 +1449,28 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 		case 'thinking': {
 			const level = args.toLowerCase();
 			if (level.length === 0) {
-				stream.markdown(`🧠 Thinking: **${session.thinkingLevel ?? 'default'}**. Choose one with \`/thinking <level>\`: ${THINKING_LEVELS.join(', ')}.`);
+				const current = session.thinkingLevel ?? vscode.l10n.t('default');
+				stream.markdown(vscode.l10n.t('🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.', current, THINKING_LEVELS.join(', ')));
 				return false;
 			}
 			if (!(THINKING_LEVELS as readonly string[]).includes(level)) {
-				stream.markdown(`Unknown thinking level “${args}”. Choose one of: ${THINKING_LEVELS.join(', ')}.`);
+				stream.markdown(vscode.l10n.t('Unknown thinking level “{0}”. Choose one of: {1}.', args, THINKING_LEVELS.join(', ')));
 				return false;
 			}
 			// The setting is what the chat's own thinking picker writes, and what every turn applies.
 			await vscode.workspace.getConfiguration('picode').update('pi.thinkingLevel', level, vscode.ConfigurationTarget.Global);
 			session.setThinkingLevel(level);
-			stream.markdown(`🧠 Thinking set to **${level}**.`);
+			stream.markdown(vscode.l10n.t('🧠 Thinking set to **{0}**.', level));
 			return false;
 		}
 		case 'name':
 			if (args.length === 0) {
-				stream.markdown(`💬 This conversation is called **${session.sessionName ?? 'Untitled'}**. Rename it with \`/name <new name>\`.`);
+				const current = session.sessionName ?? vscode.l10n.t('Untitled');
+				stream.markdown(vscode.l10n.t('💬 This conversation is called **{0}**. Rename it with `/name <new name>`.', current));
 				return false;
 			}
 			session.setSessionName?.(args);
-			stream.markdown(`💬 Conversation renamed to **${args}**.`);
+			stream.markdown(vscode.l10n.t('💬 Conversation renamed to **{0}**.', args));
 			return false;
 		case 'session': {
 			const stats = session.getSessionStats?.();
@@ -1476,10 +1491,10 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 		}
 		case 'export': {
 			if (typeof session.exportToHtml !== 'function') {
-				stream.markdown('This pi cannot save a conversation as a web page.');
+				stream.markdown(vscode.l10n.t('This pi cannot save a conversation as a web page.'));
 				return false;
 			}
-			stream.progress('Saving the conversation…');
+			stream.progress(vscode.l10n.t('Saving the conversation…'));
 			// Always a full path: left to itself pi writes a relative one, next to wherever the editor was
 			// launched from, and the buttons below could not find the file. Like pi's terminal, the
 			// default is the project folder.
@@ -1487,24 +1502,24 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 				? `pi-session-${new Date().toISOString().replace(/[:.]/g, '-')}.html`
 				: args;
 			const file = await session.exportToHtml(path.resolve(cwd, target));
-			stream.markdown('📄 Conversation saved as a web page.');
+			stream.markdown(vscode.l10n.t('📄 Conversation saved as a web page.'));
 			// In the editor's own browser, to read it as a page — not as a text file to edit.
-			stream.button({ command: 'workbench.action.browser.openFile', title: 'Open it', arguments: [vscode.Uri.file(file)] });
-			stream.button({ command: 'revealFileInOS', title: 'Show the file', arguments: [vscode.Uri.file(file)] });
+			stream.button({ command: 'workbench.action.browser.openFile', title: vscode.l10n.t('Open it'), arguments: [vscode.Uri.file(file)] });
+			stream.button({ command: 'revealFileInOS', title: vscode.l10n.t('Show the file'), arguments: [vscode.Uri.file(file)] });
 			return false;
 		}
 		case 'copy': {
 			const text = session.getLastAssistantText?.();
 			if (text === undefined || text.trim() === '') {
-				stream.markdown('There is no answer to copy yet.');
+				stream.markdown(vscode.l10n.t('There is no answer to copy yet.'));
 				return false;
 			}
 			await vscode.env.clipboard.writeText(text);
-			stream.markdown('📋 Last answer copied.');
+			stream.markdown(vscode.l10n.t('📋 Last answer copied.'));
 			return false;
 		}
 		case 'reload':
-			stream.markdown('🔄 Extensions, skills and prompts will be loaded again with your next message.');
+			stream.markdown(vscode.l10n.t('🔄 Extensions, skills and prompts will be loaded again with your next message.'));
 			return true;
 		case 'resume':
 			await run('agentSessions.showAgentSessionsSidebar');
@@ -1517,7 +1532,7 @@ async function runEditorCommand(name: string, args: string, session: PiSession, 
 			await run('workbench.action.openSettings', 'picode');
 			return false;
 		case 'gentle:models':
-			stream.markdown(await deps.chooseAgentModels?.() ?? 'No change to the agents’ models.');
+			stream.markdown(await deps.chooseAgentModels?.() ?? vscode.l10n.t('No change to the agents’ models.'));
 			return false;
 		default:
 			return false;
@@ -1901,12 +1916,12 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		// Gentle's terminal panel for the agents' models cannot be drawn here, so the editor answers
 		// the command with its own pickers.
 		if (deps.chooseAgentModels !== undefined && isAgentModelsCommand(request.prompt)) {
-			stream.markdown(await deps.chooseAgentModels() ?? 'No change to the agents’ models.');
+			stream.markdown(await deps.chooseAgentModels() ?? vscode.l10n.t('No change to the agents’ models.'));
 			return {};
 		}
 		const loaded = await loadSdk(deps.distributionRoot, deps.log);
 		if (loaded === undefined) {
-			stream.markdown('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.');
+			stream.markdown(vscode.l10n.t('PiCode: this editor has no pi to talk to. [Set up PiCode](command:picode.setup) so the agent can answer.'));
 			return {};
 		}
 
@@ -2066,7 +2081,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			}
 			if (route?.kind === 'editor') {
 				if (chat.session.isStreaming && route.name === 'compact') {
-					stream.markdown('PiCode is still answering. Try /compact again when it has finished.');
+					stream.markdown(vscode.l10n.t('PiCode is still answering. Try /compact again when it has finished.'));
 					return {};
 				}
 				const reload = await runEditorCommand(route.name, route.args, chat.session, stream, deps, cwd);
@@ -2100,7 +2115,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 			notifyAgentStatus();
 			try {
 				if (turnsWaiting > 1) {
-					stream.progress('PiCode is finishing the turn already running in this window…');
+					stream.progress(vscode.l10n.t('PiCode is finishing the turn already running in this window…'));
 				}
 				await Promise.race([previousTurn.catch(() => undefined), droppedWhileWaiting]);
 				if (token.isCancellationRequested) {
@@ -2141,7 +2156,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`turn failed: ${message}`);
-			stream.markdown(`\n\n> PiCode: the turn could not finish — ${message}\n`);
+			stream.markdown(`\n\n${vscode.l10n.t('> PiCode: the turn could not finish — {0}', message)}\n`);
 		}
 		return {};
 	};
@@ -2152,38 +2167,38 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 	context.subscriptions.push(vscode.commands.registerCommand(COMPARE_MODELS_COMMAND_ID, async (presetQuestion?: unknown) => {
 		const loaded = await loadSdk(deps.distributionRoot, deps.log);
 		if (loaded === undefined) {
-			void vscode.window.showInformationMessage('PiCode has no agent to compare models with yet. Set up PiCode first.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode has no agent to compare models with yet. Set up PiCode first.'));
 			return;
 		}
 		const catalogue = await vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: 'Looking for models…' },
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Looking for models…') },
 			() => listModels({ distributionRoot: deps.distributionRoot, profileDir: internalProfileDir(deps.distributionRoot), refreshModels: () => undefined }).catch(() => ({ models: [] })),
 		);
 		if (catalogue.models.length < MIN_COMPARED_MODELS) {
-			void vscode.window.showInformationMessage('Connect at least two models to compare them.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('Connect at least two models to compare them.'));
 			return;
 		}
 		const chosen = await vscode.window.showQuickPick(
 			catalogue.models.map(model => ({ label: model.model, description: model.provider, ref: model.ref })),
-			{ canPickMany: true, title: 'Compare models', placeHolder: `Pick ${MIN_COMPARED_MODELS} to ${MAX_COMPARED_MODELS} models`, matchOnDescription: true },
+			{ canPickMany: true, title: vscode.l10n.t('Compare models'), placeHolder: vscode.l10n.t('Pick {0} to {1} models', MIN_COMPARED_MODELS, MAX_COMPARED_MODELS), matchOnDescription: true },
 		);
 		if (chosen === undefined) {
 			return;
 		}
 		if (chosen.length < MIN_COMPARED_MODELS || chosen.length > MAX_COMPARED_MODELS) {
-			void vscode.window.showInformationMessage(`Pick between ${MIN_COMPARED_MODELS} and ${MAX_COMPARED_MODELS} models.`);
+			void vscode.window.showInformationMessage(vscode.l10n.t('Pick between {0} and {1} models.', MIN_COMPARED_MODELS, MAX_COMPARED_MODELS));
 			return;
 		}
 		const question = typeof presetQuestion === 'string' && presetQuestion.trim().length > 0
 			? presetQuestion
-			: await vscode.window.showInputBox({ title: 'Compare models', prompt: 'What should they answer?', ignoreFocusOut: true });
+			: await vscode.window.showInputBox({ title: vscode.l10n.t('Compare models'), prompt: vscode.l10n.t('What should they answer?'), ignoreFocusOut: true });
 		if (question === undefined || question.trim().length === 0) {
 			return;
 		}
 		const cwd = resolveSessionCwd(resolveProjectScope().folders, os.homedir()).cwd;
 		const agentDir = chatAgentDir(deps.distributionRoot);
 		const answers = await vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: `Asking ${chosen.length} models…`, cancellable: true },
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Asking {0} models…', chosen.length), cancellable: true },
 			async (_progress, token) => {
 				const controller = new AbortController();
 				token.onCancellationRequested(() => controller.abort());
@@ -2193,7 +2208,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					const slash = ref.indexOf('/');
 					const model = services.modelRuntime.getModel(ref.slice(0, slash), ref.slice(slash + 1));
 					if (model === undefined) {
-						throw new Error('This model is not available.');
+						throw new Error(vscode.l10n.t('This model is not available.'));
 					}
 					const created = await loaded.sdk.createAgentSessionFromServices({
 						services,

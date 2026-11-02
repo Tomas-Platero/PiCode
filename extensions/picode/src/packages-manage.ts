@@ -30,6 +30,7 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { parsePackageSource, projectPackageScope, userPackageScope, type PackageScope, type PiPackage } from './packages-data';
 import type { InstallContext, InstallResult, SpawnOptions, SpawnOutcome } from './packages-registry';
+import { l10n } from './l10n.ts';
 
 /* ------------------------------------------------------------------ *
  * Shapes
@@ -470,7 +471,7 @@ async function profileDeclaresSource(source: string, context: InstallContext): P
 export async function removePackage(rawSource: string, context: InstallContext): Promise<InstallResult> {
 	const source = rawSource.trim();
 	if (source.length === 0) {
-		return { ok: false, message: 'No package source was given.' };
+		return { ok: false, message: l10n.t('No package source was given.') };
 	}
 	let outcome: SpawnOutcome;
 	try {
@@ -480,7 +481,7 @@ export async function removePackage(rawSource: string, context: InstallContext):
 			timeoutMs: REMOVE_TIMEOUT_MS,
 		});
 	} catch (error) {
-		return { ok: false, message: `Package ${source} could not be removed (${error instanceof Error ? error.message : String(error)}).` };
+		return { ok: false, message: l10n.t('Package {0} could not be removed ({1}).', source, error instanceof Error ? error.message : String(error)) };
 	}
 	if (!outcome.ok) {
 		const reason = lastMeaningfulLine(outcome.stderr);
@@ -490,9 +491,14 @@ export async function removePackage(rawSource: string, context: InstallContext):
 		// the truth. Said as what it is.
 		if (reason !== undefined && reason.includes('No matching package found')
 			&& !await profileDeclaresSource(source, context)) {
-			return { ok: true, message: `Package ${source} was already removed.` };
+			return { ok: true, message: l10n.t('Package {0} was already removed.', source) };
 		}
-		return { ok: false, message: `Package ${source} could not be removed${reason === undefined ? '.' : `: ${reason}`}` };
+		return {
+			ok: false,
+			message: reason === undefined
+				? l10n.t('Package {0} could not be removed.', source)
+				: l10n.t('Package {0} could not be removed: {1}', source, reason),
+		};
 	}
-	return { ok: true, message: `Package ${source} removed with pi.` };
+	return { ok: true, message: l10n.t('Package {0} removed with pi.', source) };
 }
