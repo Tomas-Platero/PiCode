@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "Закрыть",
 	"picodeWhatsNew.command": "Показать «Что нового»",
 	"picodeWhatsNew.full": "Полные заметки о выпуске",
+	"picodeWhatsNew.tryAgent": "Попробовать макет Agent",
 	"picodeWhatsNew.none": "Для этой версии пока нет заметок о выпуске.",
 	"picodeWhatsNew.subtitle": "Вот что изменилось с прошлой версии.",
 	"picodeWhatsNew.subtitleSince": "Вот что изменилось с версии {0}.",

@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "Close",
 	"picodeWhatsNew.command": "Show What's New",
 	"picodeWhatsNew.full": "Full release notes",
+	"picodeWhatsNew.tryAgent": "Try the Agent layout",
 	"picodeWhatsNew.none": "There are no release notes for this version yet.",
 	"picodeWhatsNew.subtitle": "Here is what changed since the last version.",
 	"picodeWhatsNew.subtitleSince": "Here is what changed since {0}.",

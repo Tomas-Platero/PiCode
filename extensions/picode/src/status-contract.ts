@@ -137,6 +137,8 @@ export interface StatusData {
 	ctxTokens?: number;
 	ctxWindow?: number;
 	cost?: number;
+	/** True when some priced turn was worked out from the model catalogue, not billed by the provider. */
+	costEstimated?: boolean;
 	inputTokens?: number;
 	outputTokens?: number;
 	cacheRead?: number;

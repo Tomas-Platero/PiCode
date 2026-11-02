@@ -519,6 +519,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// only the fallback for a session that has not reported a model yet.
 		ctxWindow: usage?.ctxTokens === undefined ? undefined : readContextWindow(profileDir, usage?.model ?? defaultModel),
 		cost: usage?.cost,
+		costEstimated: usage?.costEstimated,
 		inputTokens: usage?.input,
 		outputTokens: usage?.output,
 		cacheRead: usage?.cacheRead,

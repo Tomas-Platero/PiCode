@@ -810,6 +810,25 @@ function externalProfileRefusal(): string | undefined {
  * that is where the package was found. An unspellable source answers the profile's, which is
  * where the updater's own refusal sentences come from instead of a wrong install root.
  */
+/**
+ * After a package update, offers the changelog the package ships (pi 1.5 reads the same
+ * `CHANGELOG.md`), so what changed is one click away instead of a search on the registry.
+ * Packages without one say nothing.
+ */
+function offerChangelog(name: string, profileDir: string): void {
+	for (const scope of packageScopes(profileDir)) {
+		const changelog = path.join(scope.npmRoot, name, 'CHANGELOG.md');
+		if (fs.existsSync(changelog)) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('Package {0} updated to the latest version.', name), vscode.l10n.t('What’s new')).then(choice => {
+				if (choice !== undefined) {
+					void vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(changelog)).then(undefined, () => vscode.commands.executeCommand('vscode.open', vscode.Uri.file(changelog)));
+				}
+			});
+			return;
+		}
+	}
+}
+
 function npmProjectFor(source: string, profileDir: string): string {
 	const parsed = parsePackageSource(source);
 	if (parsed !== undefined && parsed.kind === 'npm') {
@@ -1196,6 +1215,9 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// would keep the row red.
 			clearPackageUpdateCache();
 			void runUpdateCheck(globalState).then(() => fire(), () => fire());
+			if (productName === undefined && checkable.kind === 'npm') {
+				offerChangelog(checkable.name, profileDir);
+			}
 		}
 		return result;
 	}));
