@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.1-experimental",
+			"notes": "### ✨ New\n\n- **Try the Agent layout from What's New.** If you are still on the Editor layout, the window that shows what changed now has a button to switch to Agent.\n- **Easier code sign-in.** When signing in with a code, PiCode copies the code and opens the page for you.\n- **Clearer cost.** In Status, a \"~\" before the cost means it is an estimate, not what your provider charged.\n- **What's new in your packages.** After updating a package that lists its changes, a \"What's new\" button shows them.\n\n### 🔧 Other changes\n\n- The built-in AI agent (pi) is updated to 1.5.0: safer sign-ins, better stability on Windows and faster answers."
+		},
+		{
 			"version": "1.0.0-experimental",
 			"notes": "### ✨ New\n\n- **Two ways of working: Agent or Editor.** Agent puts the chat in the middle, your sessions on the left and a review bar on the right; Editor is the VS Code you know. Switch any time, no restart.\n- **A Status column** next to the chat: where the agent works, your MCP servers, the lines you changed (click to review every change), its tasks and what your memory holds.\n- **13 languages.** The editor, the setup and everything PiCode adds are translated, and the setup opens in your computer's language and gets it ready for the editor.\n- **A new setup:** pick your layout (Agent is marked by default), sign in or sign up from the account card, and the page keeps its place when you choose something.\n\n### 🐛 Fixed\n\n- The What's New history now reads in plain words for 0.8.0."
 		},
