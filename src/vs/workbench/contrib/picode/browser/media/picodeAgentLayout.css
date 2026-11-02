@@ -536,3 +536,9 @@
 .monaco-workbench.picode-agent .part.auxiliarybar > .header-or-footer {
 	display: none;
 }
+
+/* The chat has one place to run, pi, so the "Pi" target picker under the input has nothing to
+ * choose between: it is left out in both layouts. */
+.monaco-workbench .chat-input-picker-item.chat-session-target-picker-item {
+	display: none;
+}
