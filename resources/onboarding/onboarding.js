@@ -18,405 +18,52 @@
  * ------------------------------------------------------------------ */
 
 /**
- * Two languages, one table. The product's own text is English; the Spanish column is here
- * because this window is the first thing somebody sees and the brief asks for it. A page that
- * ships its own two columns is a page that needs no language pack to be usable.
+ * One table per language, loaded from l10n/<code>.js (see index.html). English is the source and
+ * the fallback for any key a language lacks, so a page with only some languages is still usable
+ * without a language pack.
+ *
+ * A list stays a list: spreading English's arrays over the translation's would turn them into plain
+ * objects, and the page destructures two of them (`layoutAgentZones`, `layoutEditorZones`) and maps
+ * the other two. A language that left an item out gets the English one in its place.
  */
-const STRINGS = {
-	en: {
-		language: 'English',
-		railSubtitle: 'Setup',
-		steps: {
-			welcome: 'Welcome',
-			pi: 'Agent',
-			model: 'Model',
-			theme: 'Theme',
-			extras: 'Extras',
-			done: 'Ready',
-		},
-		accountHow: 'A browser window will open to complete sign-in when the editor launches.',
-		accountWhy: 'Sync your settings, extensions, and AI profiles seamlessly across all your devices.',
-		accountButton: 'Sign in with PiCode',
-		accountSignIn: 'Sign in with PiCode',
-		accountWaiting: 'Waiting for browser authorization…',
-		accountWaitingWhy: 'A browser window has opened. Complete the sign-in there to continue.',
-		accountSignedIn: (email) => `✓ Signed in as ${email}`,
-		accountSignedInShort: 'Signed in',
-		accountFailed: (reason) => `Authentication failed: ${reason}. Click to retry.`,
-		accountRetry: 'Try again',
-		accountEditorSignedIn: (email) => `The editor is signed in as ${email}.`,
-		accountNoHandover: 'Signed in, but the editor did not receive the hand-over. Sign in again from the editor with PiCode: Sign in to PiCode.',
-		accountTitle: 'PiCode Account',
-		accountSignOutQueued: 'Signed out. Your editor will finish it when it starts.',
-		accountReopen: 'Open the page again',
-		accountSignOut: 'Sign out',
-		accountCancel: 'Cancel sign-in',
-		accountQueued: 'Ready. Press Continue.',
-		accountSkip: 'Stay signed out',
-		welcomeTitle: 'Welcome to PiCode',
-		welcomeFirst: 'Your editor and AI agent, perfectly integrated.',
-		welcomeHow: 'Choose your agent, pick a model, and set your theme in three steps. Then you start coding.',
-		welcomeUpdate: 'PiCode tiene versión nueva. Todo está ya configurado: revísalo, cambia lo que quieras y sigue.',
-		welcomeSetup: 'Change anything about your setup. Nothing is touched unless you say so.',
-		welcomeFactsPi: 'Agent',
-		welcomeFactsModel: 'Model',
-		welcomeFactsTheme: 'Theme',
-		welcomeNotSet: 'not set yet',
-		getStarted: 'Get started',
-		piTitle: 'Choose your agent',
-		piLead: 'Pi is the background agent powering your editor. Use the built-in version or connect an existing environment.',
-		piInternal: 'Built-in Pi',
-		piInternalRecommended: 'RECOMMENDED',
-		piInternalWhy: 'Managed automatically by PiCode. Settings stay integrated within the editor.',
-		piExternal: 'System Pi',
-		piExternalWhy: "Uses your machine's global installation. PiCode won't modify its files.",
-		piExternalFound: 'Found on machine',
-		piExternalMissing: 'No Pi installation found on this machine',
-		piInternalVersion: 'Version',
-		piChosen: 'IN USE',
-		importTitle: 'Import Configuration',
-		importLead: 'Copy settings and assets from your local setup. Nothing is overwritten without confirmation.',
-		importCredentialsToggle: 'Include my saved sign-ins',
-		importCredentials: '🔒 Local Credentials & Sign-ins',
-		importCredentialsWhy: 'Credentials stay strictly local on your machine and are used only to reach your configured providers.',
-		importRun: 'Import Selected Data',
-		importRunning: 'Copying…',
-		importDone: 'Copied',
-		importOverwritten: 'Replaced',
-		importAbsent: 'Was not there',
-		importDeclined: 'Not chosen',
-		importFailed: 'Failed',
-		models: 'AI connections',
-		settings: 'Settings and packages',
-		mcp: 'MCP servers',
-		skills: 'Skills',
-		modelTitle: 'Select an AI Model',
-		modelConnectedVia: 'available via',
-		piExternalReadOnly: 'READ-ONLY',
-		modelLead: 'Choose how PiCode connects to your preferred provider. You can manage connections and switch models anytime in Settings.',
-		modelSubscriptionNote: 'Signing in needs the editor running, because the account flow lives there. Start with a key now — the subscription is one click away inside.',
-		modelSubscription: 'Subscription',
-		modelSubscriptionWhy: 'ChatGPT, Claude, Copilot and others, with the account you already pay for.',
-		subLoading: 'Fetching available providers… (First-time setup may take a moment while installing packages).',
-		subTitle: 'Sign in with your Subscription',
-		subLead: 'Authenticate via your browser to link your account. If prompted, simply paste the authorization code provided by Pi.',
-		subSignIn: 'Sign in',
-		subSignedIn: 'Signed in',
-		subOpen: 'Open the page',
-		subCode: 'Your code',
-		subWaiting: 'Waiting for you to finish in the browser…',
-		subCancel: 'Cancel',
-		gentleTitle: 'Gentle AI',
-		gentleLead: 'How the agents talk and how much they ask before acting. You can change both later from the chat.',
-		gentlePersonaTitle: 'Tone',
-		personaGentleman: 'Gentleman',
-		personaGentlemanWhy: 'Warm and direct, like a mentor. The default.',
-		personaNeutral: 'Neutral',
-		personaNeutralWhy: 'Plain and to the point, with no personality.',
-		gentlePermissionsTitle: 'Permissions',
-		permissionsNormal: 'Ask first',
-		permissionsNormalWhy: 'Asks before it changes files or runs commands. The default.',
-		permissionsAuto: 'Auto',
-		permissionsAutoWhy: 'Lets safe actions through and still asks about the rest.',
-		permissionsYolo: 'No questions',
-		permissionsYoloWhy: 'Never asks. Only for work you can easily undo.',
-		subChoose: 'Choose how to sign in…',
-		subDone: 'Signed in',
-		subCancelled: 'The sign-in was cancelled.',
-		subFailed: 'The sign-in did not finish',
-		subNone: 'This pi offers no subscription sign-in.',
-
-		modelOrphan: 'Tienes una clave guardada como «nan», pero no hay ningún proveedor con ese nombre. Sus modelos están dentro de otro proveedor.',
-		modelWord: 'model',
-		modelCount: 'models',
-		modelStale: (ref) => `El modelo que tenías (${ref}) ya no está en tu configuración. Elige uno abajo y guárdalo.`,
-		modelPickProvider: 'Choose a provider',
-		modelNewConversations: 'Model for new conversations',
-		modelAgentsNote: 'Your agents use this model too. Give each one its own any time with /gentle:models in the chat.',
-		modelNoKey: 'no key saved',
-
-		modelLocal: 'Local / Self-Hosted',
-		providerAdvancedShow: 'Advanced options (address, dialect, name)',
-		providerAdvancedHide: 'Hide advanced options',
-		modelApiKey: 'API Key',
-		modelApiKeyWhy: 'OpenRouter, DeepSeek, Groq, or any address that speaks the OpenAI dialect.',
-		modelImported: 'Use the models you brought across',
-		modelImportedWhy: 'Your other pi already had these connected.',
-		modelConnected: 'Connected',
-		modelDefault: 'Model for new conversations',
-		modelSaveDefault: 'Use this model',
-		modelLater: "I'll do it later",
-		modelNothingYet: 'Not connected yet',
-		providerName: 'Name',
-		providerEndpoint: 'Address',
-		providerDialect: 'Dialect',
-		providerKey: 'Key',
-		providerKeyHint: 'Saved in your pi profile, never shown again.',
-		providerConnect: 'Connect',
-		providerConnecting: 'Asking the address…',
-		providerBadAnswer: 'That address answered no models. Check it, and the key.',
-		themeTitle: 'A colour scheme',
-		themeTry: 'Move the pointer over a card to try it on the window',
-		themeLead: 'Eight to start with. Move the pointer over a card to try it on the window, and click to keep it.',
-		themeAll: 'See all themes',
-		themeFewer: 'Show fewer',
-		extrasTitle: 'A few extras',
-		extrasLead: 'Switch on what sounds useful. Everything here can be changed later in Settings.',
-		extraMcp: 'MCP servers',
-		extraMcpWhy: 'Let the agent use servers you add (MCP).',
-		extraVoice: 'Dictation',
-		extraVoiceWhy: 'Talk to the chat instead of typing. It runs on your computer. Downloads about 700 MB once, when PiCode opens.',
-		extraContext: 'Your code in the chat',
-		extraContextWhy: 'The chat sees the file and the folder you are working in.',
-		search: 'Search',
-		skipExtras: 'Skip extras',
-		doneTitle: 'Ready',
-		doneLead: 'This is what your editor will start with.',
-		clone: 'Clone',
-		startHint: 'Or start with nothing and open a folder from the editor.',
-		proNote: 'PiCode Pro brings Sync — your whole setup, backed up and on every machine. Free to try from Settings > Accounts.',
-		startCoding: 'Start coding',
-		skip: 'Skip setup',
-		back: 'Back',
-		next: 'Continue',
-		folderChosen: 'The editor will open this folder.',
-		cloning: 'Cloning…',
-		errorTitle: 'That did not work',
-		loading: 'Reading your setup…',
-		notSet: 'not set',
-		providerTest: 'Test connection',
-		providerTesting: 'Asking the address…',
-		providerOk: 'Connected',
-		providerFail: 'Not connected',
-		providerGetKey: 'Get a key',
-		providerPicks: 'Common picks from this provider',
-		providerAllModels: 'All models',
-		providerWait: 'Nothing saved until you press Connect.',
-		modelsWord: 'models',
-		mcpWhy: 'Servers the agent may call: your database, an API, your own tools.',
-		skillsWhy: 'Instructions the agent follows when it works in this folder.',
-		credentialsNote: 'Kept in your pi profile on this machine. PiCode never sends them anywhere; pi uses them only against the provider you configured.',
-		contextTitle: 'AI Code Context & Privacy',
-		contextOffNote: 'The context is currently off in Settings. Choosing any option turns it back on.',
-		contextRecommended: 'Recommended',
-		contextLead: 'Choose what of your workspace is attached to every message. It changes what the agent is told without asking, not what it is able to read.',
-		contextProject: 'Full Workspace',
-		contextProjectWhy: 'The agent knows which folder you are working in, sees the file you have open and your selection. The default, and what makes “fix this” work.',
-		contextFile: 'Active File Only',
-		contextFileWhy: 'The open file and your selection, without naming the folder. Fewer tokens, and the focus stays on the file on screen.',
-		contextSelection: 'Selection Only',
-		contextSelectionWhy: 'Only the lines you select. No folder names, no paths: the most private option, and the narrowest.',
-		factHint: 'Click to change',
-		startTitle: 'Where do you want to start?',
-		startFolder: 'Open a local folder',
-		startFolderWhy: 'The editor opens it and the agent works in it.',
-		startClone: 'Clone from GitHub',
-		startCloneWhy: 'Paste an address and choose where it lands.',
-		startBlank: 'Blank project',
-		startBlankWhy: 'Nothing yet; open something from the editor.',
-		internalShort: 'Built in',
-		externalShort: 'Yours',
-	},
-	es: {
-		language: 'Español',
-		railSubtitle: 'Configuración',
-		steps: {
-			welcome: 'Bienvenida',
-			pi: 'Agente',
-			model: 'Modelo',
-			theme: 'Tema',
-			extras: 'Extras',
-			done: 'Listo',
-		},
-		accountHow: 'Se abrirá una ventana del navegador para completar el inicio de sesión cuando arranque el editor.',
-		accountWhy: 'Sincroniza tus ajustes, extensiones y perfiles de IA en todos tus dispositivos.',
-		accountButton: 'Entrar con PiCode',
-		accountSignIn: 'Entrar con PiCode',
-		accountWaiting: 'Esperando la autorización del navegador…',
-		accountWaitingWhy: 'Se ha abierto una ventana del navegador. Completa allí el inicio de sesión.',
-		accountSignedIn: (email) => `✓ Sesión iniciada como ${email}`,
-		accountSignedInShort: 'Sesión iniciada',
-		accountFailed: (reason) => `No se pudo iniciar sesión: ${reason}. Pulsa para reintentar.`,
-		accountRetry: 'Reintentar',
-		accountEditorSignedIn: (email) => `El editor ha iniciado sesión como ${email}.`,
-		accountNoHandover: 'Sesión iniciada, pero el editor no recibió el traspaso. Vuelve a entrar desde el editor con PiCode: Sign in to PiCode.',
-		accountTitle: 'Cuenta de PiCode',
-		accountSignOutQueued: 'Sesión cerrada. Tu editor lo terminará al arrancar.',
-		accountReopen: 'Abrir la página otra vez',
-		accountSignOut: 'Cerrar sesión',
-		accountCancel: 'Cancelar inicio de sesión',
-		accountQueued: 'Listo. Pulsa Continuar.',
-		accountSkip: 'Seguir sin cuenta',
-		welcomeTitle: 'Bienvenido a PiCode',
-		welcomeFirst: 'Tu editor y tu agente de IA, integrados de verdad.',
-		welcomeHow: 'Elige tu agente, escoge un modelo y pon tu tema en tres pasos. Y a programar.',
-		welcomeUpdate: 'PiCode ha subido de versión. Ya está todo configurado: revísalo, cambia lo que quieras y omite en un clic.',
-		welcomeSetup: 'Cambia lo que quieras de tu configuración. No se toca nada que no pidas.',
-		welcomeFactsPi: 'Agente',
-		welcomeFactsModel: 'Modelo',
-		factHint: 'Pulsa para cambiar',
-		startTitle: '¿Dónde quieres empezar?',
-		startFolder: 'Abrir una carpeta local',
-		startFolderWhy: 'El editor la abre y el agente trabaja en ella.',
-		startClone: 'Clonar desde GitHub',
-		startCloneWhy: 'Pega una dirección y elige dónde queda.',
-		startBlank: 'Proyecto en blanco',
-		startBlankWhy: 'Nada por ahora; abre algo desde el editor.',
-		welcomeFactsTheme: 'Tema',
-		welcomeNotSet: 'sin definir',
-		getStarted: 'Empezar',
-		piTitle: 'Elige tu agente',
-		piLead: 'Pi es el agente que da vida a tu editor por dentro. Usa el que viene incluido o conecta uno que ya tengas.',
-		piInternal: 'Pi incluido',
-		piInternalRecommended: 'RECOMENDADO',
-		piInternalWhy: 'Lo mantiene PiCode por ti y sus ajustes viven dentro del editor.',
-		piExternal: 'Pi del sistema',
-		piExternalWhy: 'Usa el que ya está instalado en tu equipo. PiCode no toca sus archivos.',
-		piExternalFound: 'Encontrado en el equipo',
-		piExternalMissing: 'No hay ningún Pi instalado en este equipo',
-		piInternalVersion: 'Versión',
-		piChosen: 'EN USO',
-		importTitle: 'Importar configuración',
-		importLead: 'Copia ajustes y contenido de tu configuración local. Nada se sobrescribe sin confirmártelo.',
-		importCredentials: '🔒 Credenciales locales y sesiones',
-		importCredentialsToggle: 'Incluir mis sesiones guardadas',
-		importCredentialsWhy: 'Las credenciales se quedan en tu equipo y solo se usan para llegar a los proveedores que configures.',
-		importRun: 'Importar lo seleccionado',
-		importRunning: 'Copiando…',
-		importDone: 'Copiado',
-		importOverwritten: 'Reemplazado',
-		importAbsent: 'No estaba',
-		importDeclined: 'No elegido',
-		importFailed: 'Falló',
-		models: 'Conexiones de IA',
-		settings: 'Ajustes y paquetes',
-		mcp: 'Servidores MCP',
-		skills: 'Habilidades',
-		modelTitle: 'Elige un modelo de IA',
-		modelConnectedVia: 'disponibles vía',
-		piExternalReadOnly: 'SOLO LECTURA',
-		modelLead: 'Decide cómo se conecta PiCode con tu proveedor. Puedes gestionar las conexiones y cambiar de modelo cuando quieras, en Ajustes.',
-		modelSubscriptionNote: 'Iniciar sesión necesita el editor en marcha, porque el flujo de cuenta vive ahí. Empieza con una clave; dentro está a un clic.',
-		modelSubscription: 'Suscripción',
-		modelSubscriptionWhy: 'ChatGPT, Claude, Copilot y otros, con la cuenta que ya pagas.',
-		subLoading: 'Buscando proveedores disponibles… (La primera vez puede tardar un poco: Pi instala sus paquetes).',
-		subTitle: 'Entra con tu suscripción',
-		subLead: 'Te autenticas en el navegador y quedas vinculado. Si te lo pide, pega el código de autorización que te dé Pi.',
-		subSignIn: 'Entrar',
-		subSignedIn: 'Sesión iniciada',
-		subOpen: 'Abrir la página',
-		subCode: 'Tu código',
-		subWaiting: 'Esperando a que termines en el navegador…',
-		subCancel: 'Cancelar',
-		gentleTitle: 'Gentle AI',
-		gentleLead: 'Cómo hablan los agentes y cuánto preguntan antes de actuar. Puedes cambiar ambas cosas luego desde el chat.',
-		gentlePersonaTitle: 'Tono',
-		personaGentleman: 'Gentleman',
-		personaGentlemanWhy: 'Cercano y directo, como un mentor. El predeterminado.',
-		personaNeutral: 'Neutro',
-		personaNeutralWhy: 'Claro y al grano, sin personalidad.',
-		gentlePermissionsTitle: 'Permisos',
-		permissionsNormal: 'Preguntar antes',
-		permissionsNormalWhy: 'Pregunta antes de cambiar archivos o ejecutar comandos. El predeterminado.',
-		permissionsAuto: 'Automático',
-		permissionsAutoWhy: 'Deja pasar lo seguro y sigue preguntando por el resto.',
-		permissionsYolo: 'Sin preguntas',
-		permissionsYoloWhy: 'No pregunta nunca. Solo para trabajo que puedas deshacer fácilmente.',
-		subChoose: 'Elige cómo iniciar sesión…',
-		subDone: 'Sesión iniciada',
-		subCancelled: 'Has cancelado el inicio de sesión.',
-		subFailed: 'El inicio de sesión no terminó',
-		subNone: 'Este pi no ofrece inicio de sesión por suscripción.',
-		modelOrphan: 'Hay una clave guardada con este nombre, pero ningún proveedor declarado: los modelos que serviría están dentro de otro proveedor. Para usarlo como proveedor propio, añádelo en Ajustes → Chat → Proveedores.',
-		modelStale: (ref) => `El modelo en uso es ${ref} y ningún proveedor de aquí lo declara. Elige uno abajo y guárdalo.`,
-		modelPickProvider: 'Elige un proveedor',
-		modelWord: 'modelo',
-		modelCount: 'modelos',
-		modelNewConversations: 'Modelo para conversaciones nuevas',
-		modelAgentsNote: 'Tus agentes usan este modelo también. Dale uno distinto a cada uno cuando quieras con /gentle:models en el chat.',
-		modelNoKey: 'sin clave guardada',
-		modelLocal: 'Local / propio',
-		providerAdvancedShow: 'Opciones avanzadas (dirección, dialecto, nombre)',
-		providerAdvancedHide: 'Ocultar opciones avanzadas',
-		modelApiKey: 'Clave API',
-		modelApiKeyWhy: 'OpenRouter, DeepSeek, Groq, o cualquier dirección que hable el dialecto de OpenAI.',
-		modelImported: 'Usar los modelos que trajiste',
-		modelImportedWhy: 'Tu otro pi ya los tenía conectados.',
-		modelConnected: 'Conectado',
-		modelDefault: 'Modelo para conversaciones nuevas',
-		modelSaveDefault: 'Usar este modelo',
-		modelLater: 'Lo haré más tarde',
-		modelNothingYet: 'Aún sin conectar',
-		providerName: 'Nombre',
-		providerEndpoint: 'Dirección',
-		providerDialect: 'Dialecto',
-		providerKey: 'Clave',
-		providerKeyHint: 'Se guarda en tu perfil de pi y no se vuelve a mostrar.',
-		providerConnect: 'Conectar',
-		providerConnecting: 'Preguntando a la dirección…',
-		providerBadAnswer: 'Esa dirección no ha devuelto modelos. Revísala, y la clave.',
-		themeTitle: 'Una combinación de colores',
-		themeTry: 'Pasa el puntero por una tarjeta para probarla en la ventana',
-		themeLead: 'Ocho para empezar. Pasa el puntero por una tarjeta para probarla en la ventana y pulsa para quedártela.',
-		themeAll: 'Ver todos los temas',
-		themeFewer: 'Ver menos',
-		extrasTitle: 'Algunos extras',
-		extrasLead: 'Activa lo que te suene útil. Todo esto se cambia luego en Ajustes.',
-		extraMcp: 'Servidores MCP',
-		extraMcpWhy: 'Deja que el agente use los servidores que añadas (MCP).',
-		extraVoice: 'Dictado por voz',
-		extraVoiceWhy: 'Habla al chat en vez de escribir. Funciona en tu equipo. Descarga unos 700 MB una sola vez, al abrir PiCode.',
-		extraContext: 'Tu código en el chat',
-		extraContextWhy: 'El chat ve el archivo y la carpeta en la que trabajas.',
-		search: 'Buscar',
-		skipExtras: 'Omitir extras',
-		doneTitle: 'Listo',
-		doneLead: 'Con esto arrancará tu editor.',
-		clone: 'Clonar',
-		startHint: 'O empieza sin nada y abre una carpeta desde el editor.',
-		proNote: ' PiCode Pro trae Sync: toda tu configuración, respaldada y en todas tus máquinas. Pruébalo en Ajustes > Cuentas.',
-		startCoding: 'Empezar a programar',
-		skip: 'Omitir configuración',
-		back: 'Atrás',
-		next: 'Continuar',
-		folderChosen: 'El editor abrirá esta carpeta.',
-		cloning: 'Clonando…',
-		errorTitle: 'Eso no funcionó',
-		loading: 'Leyendo tu configuración…',
-		notSet: 'sin definir',
-		providerTest: 'Probar conexión',
-		providerTesting: 'Preguntando a la dirección…',
-		providerOk: 'Conectado',
-		providerFail: 'Sin conectar',
-		providerGetKey: 'Obtener clave',
-		providerPicks: 'Elecciones habituales de este proveedor',
-		providerAllModels: 'Todos los modelos',
-		providerWait: 'No se guarda nada hasta que pulses Conectar.',
-		modelsWord: 'modelos',
-		mcpWhy: 'Servidores que el agente puede usar: tu base de datos, una API, tus herramientas.',
-		skillsWhy: 'Instrucciones que el agente sigue cuando trabaja en esta carpeta.',
-		credentialsNote: 'Se guardan en tu perfil de pi, en esta máquina. PiCode no los envía a ningún sitio; pi solo los usa contra el proveedor que hayas configurado.',
-		contextTitle: 'Contexto de código para la IA',
-		contextOffNote: 'El contexto está apagado ahora mismo en Ajustes. Al elegir cualquier opción se vuelve a activar.',
-		contextRecommended: 'Recomendado',
-		contextLead: 'Elige qué parte de tu espacio de trabajo se adjunta en cada mensaje. Cambia lo que se le dice al agente sin preguntar, no lo que puede leer.',
-		contextProject: 'Proyecto completo',
-		contextProjectWhy: 'El agente sabe en qué carpeta trabajas, ve el archivo abierto y tu selección. Es lo de por defecto, y lo que hace que «arréglalo» funcione.',
-		contextFile: 'Solo el archivo activo',
-		contextFileWhy: 'El archivo abierto y tu selección, sin nombrar la carpeta. Menos tokens y la atención en lo que tienes en pantalla.',
-		contextSelection: 'Solo la selección',
-		contextSelectionWhy: 'Solo las líneas que seleccionas. Sin nombres de carpetas ni rutas: la opción más privada y la más estrecha.',
-		internalShort: 'Integrado',
-		externalShort: 'El tuyo',
-	},
-};
+const STRINGS = window.PICODE_L10N;
+for (const [code, table] of Object.entries(STRINGS)) {
+	if (code === 'en') continue;
+	for (const [key, value] of Object.entries(STRINGS.en)) {
+		if (Array.isArray(value)) {
+			const mine = Array.isArray(table[key]) ? table[key] : [];
+			table[key] = value.map((item, index) => mine[index] ?? item);
+		} else if (value && typeof value === 'object') {
+			table[key] = { ...value, ...table[key] };
+		}
+	}
+}
 
 let language = 'en';
 
-/** One word, from the current language. */
-function t(key) {
+/** One word, from the current language; `{0}`, `{1}`… are filled from the extra arguments. */
+function t(key, ...args) {
 	const table = STRINGS[language] ?? STRINGS.en;
-	return table[key] ?? STRINGS.en[key] ?? key;
+	const value = table[key] ?? STRINGS.en[key] ?? key;
+	return typeof value === 'string' && args.length > 0 ? value.replace(/\{(\d+)\}/g, (whole, index) => String(args[Number(index)] ?? whole)) : value;
+}
+
+/**
+ * The language the window opens in: the first of the system's languages that has a table
+ * (`pt-BR` before `pt`, `zh-Hant-TW` as `zh-tw`), English when none does.
+ */
+function initialLanguage(languages = navigator.languages ?? [navigator.language]) {
+	for (const raw of languages) {
+		const parts = String(raw).toLowerCase().split('-');
+		const region = parts.find((part, index) => index > 0 && part.length === 2);
+		const script = parts.find((part, index) => index > 0 && part.length === 4);
+		const candidates = [region && `${parts[0]}-${region}`, script === 'hant' ? 'zh-tw' : script === 'hans' ? 'zh-cn' : undefined, parts[0]];
+		const match = candidates.find(code => code && STRINGS[code]);
+		if (match) {
+			return match;
+		}
+	}
+	return 'en';
 }
 
 /* ------------------------------------------------------------------ *
@@ -492,9 +139,11 @@ const RECOMMENDED_MODELS = [
  */
 const DEFAULT_THEME = 'PiCode Dark';
 
-const STEPS = ['welcome', 'pi', 'model', 'theme', 'extras', 'done'];
+const STEPS = ['welcome', 'layout', 'pi', 'model', 'theme', 'extras', 'done'];
 
 const state = {
+	/** How the editor's own language went: `ready`, `offline`… (the backend's word), until it is known. */
+	languageOutcome: undefined,
 	mode: 'first-run',
 	version: '',
 	snapshot: undefined,
@@ -534,6 +183,8 @@ const state = {
 	/** The model the owner picked, before it is written. */
 	pickedModel: undefined,
 	theme: undefined,
+	/** How PiCode is laid out (`picode.appearance.layout`): `editor` unless agent was chosen. */
+	layout: 'editor',
 	showAllThemes: false,
 	/** The three switches, as the editor has them in force; the backend says. */
 	extras: { mcp: true, context: true, voice: false },
@@ -593,7 +244,18 @@ function fill(node, ...children) {
 	if (!node) {
 		return;
 	}
+	// Painting a list again must not move the page: a choice repaints its step, and the person was
+	// reading the bottom of it. The position is put back at once, and again after the next frame,
+	// in case the browser settles the layout (or the focused card that was replaced) later.
+	const scroller = node.closest('.steps-scroll');
+	const top = scroller?.scrollTop;
 	node.replaceChildren(...children.flat().filter(child => child !== undefined && child !== null && child !== false));
+	if (scroller && top !== undefined && top > 0) {
+		scroller.scrollTop = top;
+		requestAnimationFrame(() => {
+			scroller.scrollTop = top;
+		});
+	}
 }
 
 /** The snapshot, or an empty shape so the page can paint before the first answer. */
@@ -682,6 +344,7 @@ function adopt(next) {
 	}
 	state.snapshot = next;
 	state.theme = typeof next.theme === 'string' && next.theme.trim().length > 0 ? next.theme : DEFAULT_THEME;
+	state.layout = next.layout === 'agent' ? 'agent' : 'editor';
 }
 
 /* ------------------------------------------------------------------ *
@@ -761,6 +424,9 @@ function renderRail() {
 }
 
 /** Which section is on screen, and what the footer says. */
+/** The step last shown: only arriving at another one starts it at the top. */
+let shownStep = -1;
+
 function renderStep() {
 	const name = STEPS[state.step];
 	for (const section of document.querySelectorAll('.step')) {
@@ -768,7 +434,10 @@ function renderStep() {
 	}
 	renderRail();
 	renderFooter();
-	document.querySelector('.content')?.scrollTo?.({ top: 0 });
+	if (shownStep !== state.step) {
+		shownStep = state.step;
+		document.querySelector('.steps-scroll')?.scrollTo?.({ top: 0 });
+	}
 }
 
 function renderFooter() {
@@ -790,42 +459,17 @@ function renderFooter() {
 	}
 	$('skip').hidden = false;
 	$('skip').textContent = skipLabel;
-	$('next').disabled = state.step === 2 && !hasModel();
+	$('next').disabled = STEPS[state.step] === 'model' && !hasModel();
 }
 
 /* -- step 1: welcome ------------------------------------------------ */
 
 function renderWelcome() {
-	const pi = snapshot().runtime === 'external' && snapshot().externalPi ? t('externalShort') : t('internalShort');
-	// Each fact is the way to the question it answers: a summary you cannot act on is a list of
-	// words. Pressing "Model" here is the same as reaching that step from the rail.
-	const facts = [
-		{ step: 1, mark: '🤖', label: t('welcomeFactsPi'), value: pi },
-		{ step: 2, mark: '⚡', label: t('welcomeFactsModel'), value: hasModel() ? shortModel(snapshot().defaultModel) : t('welcomeNotSet') },
-		{ step: 3, mark: '🎨', label: t('welcomeFactsTheme'), value: state.theme ?? t('welcomeNotSet') },
-	];
 	renderAccount();
-	fill($('welcome-facts'), facts.map(fact => el('button', {
-		type: 'button',
-		class: 'fact',
-		title: t('factHint'),
-		onclick: () => go(fact.step),
-	},
-		el('span', { class: 'fact-head' },
-			el('span', { class: 'fact-mark', text: fact.mark }),
-			el('span', { class: 'fact-label', text: fact.label }),
-		),
-		el('span', { class: 'fact-value', text: fact.value }),
-	)));
 	$('welcome-title').textContent = t('welcomeTitle');
 	$('welcome-line').textContent = state.mode === 'update' ? t('welcomeUpdate') : state.mode === 'setup' ? t('welcomeSetup') : t('welcomeFirst');
 	// The second line only belongs to a first run: the other two modes already say what they are.
 	$('welcome-how').textContent = state.mode === 'first-run' ? t('welcomeHow') : '';
-}
-
-/** `provider/model` → the model part, which is what a person recognises. */
-function shortModel(ref) {
-	return typeof ref === 'string' && ref.includes('/') ? ref.slice(ref.indexOf('/') + 1) : (ref ?? '');
 }
 
 /**
@@ -876,13 +520,13 @@ function renderAccount() {
 		: account.state === 'waiting'
 			? el('p', { class: 'account-line waiting' }, el('span', { class: 'spinner' }), t('accountWaiting'))
 			: account.state === 'failed'
-				? el('p', { class: 'account-line error', text: t('accountFailed')(account.error ?? '?') })
+				? el('p', { class: 'account-line error', text: t('accountFailed', account.error ?? '?') })
 				: signedIn ? undefined : el('p', { class: 'account-line', text: t('accountHow') });
 
 	const action = signedIn
-		? el('button', { type: 'button', class: 'link small', onclick: () => signOutOfAccount() }, t('accountSignOut'))
+		? el('button', { type: 'button', class: 'secondary compact', onclick: () => signOutOfAccount() }, t('accountSignOut'))
 		: account.state === 'waiting'
-			? el('button', { type: 'button', class: 'link small', onclick: () => cancelAccountSignIn() }, t('accountCancel'))
+			? el('button', { type: 'button', class: 'link quiet', onclick: () => cancelAccountSignIn() }, t('accountCancel'))
 			: el('button', {
 				type: 'button', class: 'primary account-button',
 				onclick: () => startAccountSignIn(),
@@ -891,6 +535,9 @@ function renderAccount() {
 				el('span', { text: account.state === 'failed' ? t('accountRetry') : t('accountSignIn') }),
 			);
 
+	// Not signed in and not waiting: what the account is, and where the plans are.
+	const signedOut = !signedIn && account.state !== 'waiting' && account.state !== 'signed-out';
+
 	fill(node,
 		el('div', { class: 'panel-head account-head' },
 			el('span', { class: 'panel-title', text: t('accountTitle') }),
@@ -898,18 +545,28 @@ function renderAccount() {
 		el('p', { class: 'account-line account-subtitle', text: t('accountWhy') }),
 		profile,
 		status,
+		signedOut ? accountPerks() : undefined,
 		account.state === 'waiting' ? el('p', { class: 'hint account-hint', text: t('accountWaitingWhy') }) : undefined,
 		// Everything sits on the card's centre line: one action, or the waiting pair in a row.
 		el('div', { class: 'account-actions' },
 			// Waiting: the page first, the way out second, both on the centre line.
 			account.state === 'waiting' && typeof account.url === 'string'
-				? el('button', { type: 'button', class: 'link small', onclick: () => window.picode.openExternal(account.url) }, t('accountReopen'))
-				: undefined,
-			account.state === 'waiting' && typeof account.url === 'string'
-				? el('span', { class: 'account-sep', text: '·' })
+				? el('button', { type: 'button', class: 'secondary compact', onclick: () => window.picode.openExternal(account.url) }, t('accountReopen'))
 				: undefined,
 			action,
+			signedOut ? el('button', { type: 'button', class: 'link quiet', onclick: () => window.picode.openExternal(PLANS_URL) }, t('accountPlans')) : undefined,
 		),
+	);
+}
+
+/** Where the plans are explained: the free account and what Pro adds. */
+const PLANS_URL = 'https://www.getpicode.app/pricing';
+
+/** What an account is, said once, in the states where a person has not signed in yet. */
+function accountPerks() {
+	return el('ul', { class: 'account-perks' },
+		el('li', {}, el('span', { class: 'perk-mark', text: '\ud83c\udd93' }), el('span', { text: t('accountFree') })),
+		el('li', {}, el('span', { class: 'perk-mark', text: '\u2601\ufe0f' }), el('span', { text: t('accountPro') })),
 	);
 }
 
@@ -1659,7 +1316,7 @@ function renderLocal(refs) {
 	// that never mentions it.
 	const allRefs = entries.length > 0 ? entries[0] === undefined ? [] : providerList().flatMap(provider => provider.models.map(model => `${provider.id}/${model}`)) : [];
 	state.staleModel = typeof current === 'string' && current.length > 0 && !allRefs.includes(current)
-		? t('modelStale')(current)
+		? t('modelStale', current)
 		: undefined;
 	if (state.localProvider === undefined || !entries.some(entry => entry.key === state.localProvider)) {
 		// Start where the owner already is: the narrowest entry that holds the default model, so the
@@ -1748,6 +1405,12 @@ function providerEntries() {
 
 /* -- step 4: theme ------------------------------------------------- */
 
+function renderLayout() {
+	$('layout-title').textContent = t('layoutTitle');
+	$('layout-lead').textContent = t('layoutLead');
+	fill($('layout-grid'), ['agent', 'editor'].map(layoutCard));
+}
+
 function renderTheme() {
 	$('theme-title').textContent = t('themeTitle');
 	$('theme-lead').textContent = t('themeLead');
@@ -1784,6 +1447,44 @@ function themeCard(theme) {
 			chosen ? el('span', { class: 'badge ok', text: '✓' }) : undefined,
 		),
 	);
+}
+
+/**
+ * One layout, as a card that explains itself: a small window with its three zones named, a line
+ * saying who it suits, and three points on what goes where.
+ */
+function layoutCard(layout) {
+	const chosen = state.layout === layout;
+	const agent = layout === 'agent';
+	const [left, centre, right] = t(agent ? 'layoutAgentZones' : 'layoutEditorZones');
+	const zone = (name, label) => el('span', { class: `layout-zone ${name}` }, el('span', { class: 'layout-zone-label', text: label }));
+	const preview = agent
+		? el('div', { class: 'layout-preview agent' }, zone('side', left), zone('main', centre), zone('side', right))
+		: el('div', { class: 'layout-preview editor' }, zone('side', left), el('span', { class: 'layout-stack' }, zone('main', centre), zone('bottom', t('layoutEditorBottom'))), zone('side', right));
+	return el('button', {
+		type: 'button',
+		class: `layout-card${chosen ? ' chosen' : ''}`,
+		'aria-pressed': chosen ? 'true' : 'false',
+		onclick: () => chooseLayout(layout),
+	},
+		preview,
+		el('div', { class: 'layout-head' },
+			el('span', { class: 'layout-title' },
+				el('span', { class: 'layout-name', text: agent ? `🤖 ${t('layoutAgent')}` : `💻 ${t('layoutEditor')}` }),
+				// The new way of working says so; the one everybody knows does not need to.
+				agent ? el('span', { class: 'badge new', text: t('layoutNew') }) : undefined,
+			),
+			chosen ? el('span', { class: 'badge ok', text: '✓' }) : undefined,
+		),
+		el('span', { class: 'layout-note', text: agent ? t('layoutAgentNote') : t('layoutEditorNote') }),
+		el('ul', { class: 'layout-points' }, ...t(agent ? 'layoutAgentPoints' : 'layoutEditorPoints').map(point => el('li', { text: point }))),
+	);
+}
+
+async function chooseLayout(layout) {
+	state.layout = layout;
+	renderLayout();
+	await withBusy('', async () => { await command('setLayout', { layout }); });
 }
 
 async function chooseTheme(theme) {
@@ -2022,6 +1723,8 @@ function renderDone() {
 	const rows = [
 		[t('welcomeFactsPi'), piValue],
 		[t('welcomeFactsModel'), hasModel() ? snapshot().defaultModel : t('modelNothingYet')],
+		[t('layoutFact'), state.layout === 'agent' ? t('layoutAgent') : t('layoutEditor')],
+		...(languageRow() ? [languageRow()] : []),
 		[t('welcomeFactsTheme'), state.theme ?? t('notSet')],
 	];
 	fill($('done-summary'), rows.map(([label, value]) => el('div', { class: 'summary-row' },
@@ -2049,6 +1752,8 @@ function renderCurrent() {
 	const name = STEPS[state.step];
 	if (name === 'welcome') {
 		renderWelcome();
+	} else if (name === 'layout') {
+		renderLayout();
 	} else if (name === 'pi') {
 		renderPi();
 	} else if (name === 'model') {
@@ -2120,23 +1825,136 @@ document.addEventListener('keydown', event => {
 /** Switches the whole page's words, and repaints what is on screen. */
 function setLanguage(next) {
 	language = next;
-	// The button offers the language you would switch **to**, not the one you are reading: a button
-	// labelled with the language already on screen looks like a status, and reads as "you are here"
-	// rather than "press to change".
-	const target = next === 'en' ? 'es' : 'en';
-	$('language-label').textContent = STRINGS[target].language;
-	$('language').setAttribute('title', next === 'en' ? 'Cambiar a español' : 'Switch to English');
+	paintLanguage();
 	document.documentElement.lang = next;
 	renderStep();
 	renderCurrent();
 }
 
-$('language').addEventListener('click', () => {
-	setLanguage(language === 'en' ? 'es' : 'en');
-});
+/** The country's flag for a language, as a small vector image: emoji flags are only letters on Windows. */
+function flagOf(code) {
+	const flag = el('span', { class: 'flag', 'aria-hidden': 'true' });
+	flag.innerHTML = window.PICODE_FLAGS?.[code] ?? '';
+	return flag;
+}
+
+/** The button shows the language in use, flag first; the list marks it too. */
+function paintLanguage() {
+	fill($('language'),
+		flagOf(language),
+		el('span', { class: 'lang-name', text: STRINGS[language]?.language ?? language }),
+		el('span', { class: 'lang-caret', 'aria-hidden': 'true', text: '\u25be' }),
+	);
+	for (const item of document.querySelectorAll('#language-list [role="option"]')) {
+		item.setAttribute('aria-selected', String(item.dataset.code === language));
+	}
+}
+
+/**
+ * One entry per table, each with its flag and named in its own language so it can be found by
+ * someone who cannot read the page. A list of our own rather than a `select`: the browser's list
+ * cannot hold a picture, and it opens upward here, where the footer is.
+ */
+function fillLanguages() {
+	const button = $('language');
+	const list = $('language-list');
+	const codes = Object.keys(STRINGS).sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : STRINGS[a].language.localeCompare(STRINGS[b].language)));
+	const close = refocus => {
+		list.hidden = true;
+		button.setAttribute('aria-expanded', 'false');
+		if (refocus) {
+			button.focus();
+		}
+	};
+	const choose = code => {
+		close(true);
+		if (typeof code === 'string' && code !== language) {
+			setLanguage(code);
+			void prepareLanguage(code);
+		}
+	};
+	fill(list, codes.map(code => el('li', {
+		role: 'option',
+		'data-code': code,
+		tabindex: '-1',
+		onclick: () => choose(code),
+	}, flagOf(code), el('span', { class: 'lang-name', text: STRINGS[code].language }))));
+	const options = () => [...list.querySelectorAll('[role="option"]')];
+	button.addEventListener('click', () => {
+		if (!list.hidden) {
+			close(false);
+			return;
+		}
+		list.hidden = false;
+		button.setAttribute('aria-expanded', 'true');
+		(list.querySelector(`[data-code="${language}"]`) ?? options()[0])?.focus();
+	});
+	list.addEventListener('keydown', event => {
+		const all = options();
+		const at = all.indexOf(document.activeElement);
+		const move = index => {
+			all[Math.max(0, Math.min(all.length - 1, index))]?.focus();
+			event.preventDefault();
+		};
+		if (event.key === 'ArrowDown') {
+			move(at + 1);
+		} else if (event.key === 'ArrowUp') {
+			move(at - 1);
+		} else if (event.key === 'Home') {
+			move(0);
+		} else if (event.key === 'End') {
+			move(all.length - 1);
+		} else if (event.key === 'Enter' || event.key === ' ') {
+			choose(document.activeElement?.dataset?.code);
+			event.preventDefault();
+		} else if (event.key === 'Escape') {
+			close(true);
+			event.preventDefault();
+		} else if (event.key === 'Tab') {
+			close(false);
+		}
+	});
+	document.addEventListener('click', event => {
+		if (!list.hidden && !$('lang').contains(event.target)) {
+			close(false);
+		}
+	});
+	paintLanguage();
+}
+
+/**
+ * Gets the editor's own language ready in the background: the language pack is downloaded while
+ * the steps go by, and the editor installs it at its first start. Silent when it cannot: the
+ * editor opens in the language it has, and the summary says so only at the end.
+ */
+async function prepareLanguage(code) {
+	state.languageOutcome = undefined;
+	try {
+		const answer = await command('prepareLanguage', { language: code, label: STRINGS[code]?.language ?? code, firstRun: state.mode === 'first-run' });
+		if (code === language) {
+			state.languageOutcome = answer.data?.language;
+			renderCurrent();
+		}
+	} catch {
+		// Nothing to say: the editor still opens.
+	}
+}
+
+/** The summary's language row: said only while the editor still has to change, or could not get its pack. */
+function languageRow() {
+	const name = STRINGS[language]?.language ?? language;
+	if (state.languageOutcome === 'ready') {
+		return [t('languageFact'), `${name} \u00b7 ${t('languageReady')}`];
+	}
+	if (state.languageOutcome === 'offline') {
+		return [t('languageFact'), `${name} \u00b7 ${t('languageOffline')}`];
+	}
+	return undefined;
+}
 
 async function main() {
-	setLanguage('en');
+	fillLanguages();
+	setLanguage(initialLanguage());
 
 	// The setup window used to keep its own idea of the session; now it follows the shared one, so a
 	// sign-in or a sign-out in the editor shows here immediately (and the reverse is pushed the
@@ -2159,11 +1977,18 @@ async function main() {
 			: { state: 'idle', email: undefined, error: undefined };
 		renderAccount();
 		if (signedIn) {
-			setNotice(t('accountEditorSignedIn')(email), 'info');
+			setNotice(t('accountEditorSignedIn', email), 'info');
 		}
 	});
 	try {
 		const boot = await window.picode.bootstrap();
+		// The computer's language, from the system itself: the browser here speaks the editor's.
+		if (Array.isArray(boot.systemLanguages) && boot.systemLanguages.length > 0) {
+			const detected = initialLanguage(boot.systemLanguages);
+			if (detected !== language) {
+				setLanguage(detected);
+			}
+		}
 		state.mode = boot.mode ?? 'first-run';
 		state.version = boot.version ?? '';
 		if (typeof boot.accountEmail === 'string' && boot.accountEmail.length > 0) {
@@ -2176,6 +2001,12 @@ async function main() {
 				// what makes the card show as chosen and the welcome say the theme, and it keeps
 				// the editor on the brand palette instead of an unset setting.
 				await command('setTheme', { id: DEFAULT_THEME }).catch(() => undefined);
+			}
+			if (state.mode === 'first-run' && boot.snapshot.layout !== 'agent') {
+				// A first setup recommends the new layout: Agent is marked from the start and recorded,
+				// so leaving the step alone (or skipping the setup) keeps it. The other modes keep
+				// whatever the person has.
+				await command('setLayout', { layout: 'agent' }).catch(() => undefined);
 			}
 			state.piChoice = boot.snapshot.runtime === 'external' ? 'external' : 'internal';
 			// The extras start from what is recorded, so the switches tell the truth.
@@ -2199,6 +2030,7 @@ async function main() {
 	// the setup had read — the welcome already shows that (pi, model, theme) and every fact there is
 	// a shortcut to its step. Arriving mid-flow, at step 2, felt like a form that had lost its start.
 	go(0);
+	void prepareLanguage(language);
 }
 
 main();

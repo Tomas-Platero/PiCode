@@ -28,6 +28,8 @@ export interface SetupPaths {
 	readonly profileDir: string;
 	/** The editor's user data directory: `settings.json` lives under `User/` in it. */
 	readonly userDataPath: string;
+	/** The folder installed extensions live in, when the main process says where. */
+	readonly extensionsPath?: string;
 }
 
 /** The environment names the main process hands a host run. */
@@ -35,6 +37,7 @@ export const HOST_ENV = {
 	distributionRoot: 'PICODE_ONBOARDING_DISTRIBUTION_ROOT',
 	profileDir: 'PICODE_ONBOARDING_PROFILE_DIR',
 	userDataPath: 'PICODE_ONBOARDING_USER_DATA',
+	extensionsPath: 'PICODE_ONBOARDING_EXTENSIONS',
 } as const;
 
 /** Reads the paths out of the environment, or `undefined` when the caller forgot one. */
@@ -45,7 +48,8 @@ export function setupPathsFromEnv(env: NodeJS.ProcessEnv): SetupPaths | undefine
 	if (distributionRoot === undefined || profileDir === undefined || userDataPath === undefined) {
 		return undefined;
 	}
-	return { distributionRoot, profileDir, userDataPath };
+	const extensionsPath = env[HOST_ENV.extensionsPath];
+	return extensionsPath === undefined ? { distributionRoot, profileDir, userDataPath } : { distributionRoot, profileDir, userDataPath, extensionsPath };
 }
 
 /* ------------------------------------------------------------------ *
@@ -356,6 +360,23 @@ export function setTheme(paths: SetupPaths, id: string): void {
 		throw new Error('a theme needs a name');
 	}
 	writeEditorSettings(paths, { 'workbench.colorTheme': id.trim() });
+}
+
+/** How PiCode is laid out, as the editor's own setting declares it (`picode.appearance.layout`). */
+export const LAYOUTS = ['agent', 'editor'] as const;
+
+/**
+ * Chooses the layout; anything but the two declared names is refused.
+ *
+ * Only the choice is written. The editor moves its own columns when it starts, and keeps the
+ * settings it changes so the Editor layout can give them back (`picodeLayoutStyle.ts`).
+ */
+export function setLayout(paths: SetupPaths, layout: string): 'agent' | 'editor' {
+	if (layout !== 'agent' && layout !== 'editor') {
+		throw new Error('the layout is agent or editor');
+	}
+	writeEditorSettings(paths, { 'picode.appearance.layout': layout });
+	return layout;
 }
 
 /** Chooses which pi runs. The external one is only ever *chosen*, never written. */

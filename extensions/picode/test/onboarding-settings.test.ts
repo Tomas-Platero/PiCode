@@ -27,6 +27,7 @@ import {
 	readEditorSetting,
 	readPackages,
 	setExtras,
+	setLayout,
 	setModel,
 	setPackages,
 	setRuntime,
@@ -163,6 +164,21 @@ test('a theme with no name is refused rather than written', () => {
 	const { paths } = profiles();
 	assert.throws(() => setTheme(paths, '   '), /needs a name/);
 	assert.ok(!existsSync(editorSettingsPath(paths)));
+});
+
+test('the layout is agent or editor, and only the choice is written', () => {
+	const { paths } = profiles();
+	assert.strictEqual(setLayout(paths, 'agent'), 'agent');
+	let settings = JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'));
+	assert.strictEqual(settings['picode.appearance.layout'], 'agent');
+	assert.strictEqual(settings['workbench.experimental.modernUI'], undefined, 'the editor sets its own look');
+
+	setLayout(paths, 'editor');
+	settings = JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'));
+	assert.strictEqual(settings['picode.appearance.layout'], 'editor');
+
+	assert.throws(() => setLayout(paths, 'modern'), /agent or editor/);
+	assert.strictEqual(readEditorSetting(paths, 'picode.appearance.layout'), 'editor', 'the refused value changed nothing');
 });
 
 test('packages are declared once, and removed when taken off the list', () => {

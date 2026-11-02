@@ -168,6 +168,16 @@ export function internalProfileDir(deps: OnboardingDeps): string {
 	return join(dataDir, 'pi-agent');
 }
 
+/** The computer's languages, most preferred first (`es-ES`, `en-US`…); empty when the system will not say. */
+function systemLanguages(): string[] {
+	try {
+		const all = [...app.getPreferredSystemLanguages(), app.getSystemLocale()];
+		return [...new Set(all.filter(language => typeof language === 'string' && language.length > 0))];
+	} catch {
+		return [];
+	}
+}
+
 /** One answer from the backend process. */
 interface HostAnswer {
 	readonly ok: boolean;
@@ -192,6 +202,7 @@ async function runHostCommand(deps: OnboardingDeps, resources: string, connector
 		PICODE_ONBOARDING_DISTRIBUTION_ROOT: distributionRootOf(deps.environmentMainService),
 		PICODE_ONBOARDING_PROFILE_DIR: internalProfileDir(deps),
 		PICODE_ONBOARDING_USER_DATA: deps.environmentMainService.userDataPath,
+		PICODE_ONBOARDING_EXTENSIONS: deps.environmentMainService.extensionsPath,
 	};
 	return new Promise<HostAnswer>(resolve => {
 		// Only the marked lines are answers; everything else on stdout is pi's own chatter (npm
@@ -631,6 +642,7 @@ const OPENABLE_HOSTS: readonly string[] = [
 	'console.anthropic.com',
 	'github.com',
 	'picode.dev',
+	'getpicode.app',
 ];
 
 /**
@@ -700,6 +712,9 @@ function registerIpc(deps: OnboardingDeps, options: IpcOptions): { dispose: () =
 			version: deps.productService.version,
 			platform: process.platform,
 			dataDir: onboardingDataDir(deps),
+			// The computer's own languages. The page cannot ask for them: inside this editor the browser
+			// reports the editor's language (English until a language pack is installed), not the computer's.
+			systemLanguages: systemLanguages(),
 			snapshot: state.ok ? state.data : undefined,
 			// Who is signed in right now, so a reopened setup starts on the truth instead of waiting
 			// for a change that never comes.

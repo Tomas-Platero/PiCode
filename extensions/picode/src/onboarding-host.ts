@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { gentleSettings, setGentleSetting, type GentleSettings } from './gentle-settings';
+import { prepareEditorLanguage, type LanguageOutcome } from './display-language';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportReport, type ImportSelection, type ProfilePreview } from './profile-import';
@@ -38,6 +39,7 @@ import {
 	setPackages,
 	setRuntime,
 	setTheme,
+	setLayout,
 	writeEditorSettings,
 	type SetupPaths,
 } from './onboarding-settings';
@@ -223,6 +225,8 @@ export interface SetupSnapshot {
 	readonly orphanCredentials: readonly string[];
 	readonly runtime: 'internal' | 'external';
 	readonly theme: string | undefined;
+	/** How PiCode is laid out (`picode.appearance.layout`); the editor layout unless agent was chosen. */
+	readonly layout: 'agent' | 'editor';
 	readonly defaultModel: string | undefined;
 	/** How much of the editor travels with a chat message (`picode.context.mode`). */
 	readonly contextMode: 'project' | 'file' | 'selection';
@@ -336,6 +340,7 @@ export function setupSnapshot(paths: SetupPaths): SetupSnapshot {
 		externalPi: externalPi(),
 		runtime: readRuntime(paths),
 		theme: readEditorSetting(paths, 'workbench.colorTheme'),
+		layout: readEditorSetting(paths, 'picode.appearance.layout') === 'agent' ? 'agent' : 'editor',
 		defaultModel: readDefaultModel(paths),
 		providers: profileProviders(paths),
 		packages: readPackages(paths),
@@ -576,6 +581,7 @@ export type HostCommand =
 	| 'addProvider'
 	| 'setModel'
 	| 'setTheme'
+	| 'setLayout'
 	| 'setRuntime'
 	| 'setPackages'
 	| 'setExtras'
@@ -592,7 +598,8 @@ export type HostCommand =
 	| 'subscriptions'
 	| 'availableProviders'
 	| 'gentle'
-	| 'setGentle';
+	| 'setGentle'
+	| 'prepareLanguage';
 
 /**
  * What one command answers.
@@ -614,6 +621,7 @@ export type HostAnswer =
 	| readonly SubscriptionChoice[]
 	| readonly AvailableProvider[]
 	| GentleSettings
+	| { readonly language: LanguageOutcome }
 	| { readonly snapshot: SetupSnapshot };
 
 /** One round trip: a command name and its JSON payload, answered with a JSON value. */
@@ -646,6 +654,9 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			return { snapshot: setupSnapshot(paths) };
 		case 'setTheme':
 			setTheme(paths, stringOf(payload['id']));
+			return { snapshot: setupSnapshot(paths) };
+		case 'setLayout':
+			setLayout(paths, stringOf(payload['layout']));
 			return { snapshot: setupSnapshot(paths) };
 		case 'setRuntime':
 			setRuntime(paths, stringOf(payload['runtime']));
@@ -691,6 +702,18 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			// Asked, never written: this is what the "Test connection" button does, and a test that
 			// saved a provider would be a very expensive button.
 			return probeEndpoint(stringOf(payload['endpoint']), stringOf(payload['key']) || undefined);
+		case 'prepareLanguage':
+			// In the background while the person walks the steps: the pack is downloaded, and the
+			// editor installs it at its first start. An answer of any kind is fine; none is fatal.
+			return {
+				language: await prepareEditorLanguage({
+					language: stringOf(payload['language']),
+					label: stringOf(payload['label']),
+					userDataPath: paths.userDataPath,
+					extensionsPath: paths.extensionsPath,
+					firstRun: payload['firstRun'] === true,
+				}),
+			};
 		case 'setExtras':
 			return {
 				extras: setExtras(paths, typeof payload['values'] === 'object' && payload['values'] !== null ? payload['values'] as Record<string, unknown> : {}),

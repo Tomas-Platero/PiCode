@@ -117,6 +117,9 @@ import './contrib/logs/electron-browser/logs.contribution.js';
 // Localizations
 import './contrib/localization/electron-browser/localization.contribution.js';
 
+// PiCode: installs the language pack the setup downloaded
+import './contrib/picode/electron-browser/picodePendingLanguage.js';
+
 // Explorer
 import './contrib/files/electron-browser/fileActions.contribution.js';
 
