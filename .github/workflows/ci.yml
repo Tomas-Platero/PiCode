@@ -73,14 +73,6 @@ jobs:
             node build/docs.mjs check
           fi
 
-      # PiCode's own words travel in 13 languages across four surfaces: the editor's
-      # `localize()`, the setup window, the connector's runtime bundle and its manifest
-      # titles. Pure Node, no dependencies, no network: it counts keys, checks the `{0}`
-      # placeholders and fails when a language is half done or the bundle is stale.
-      - name: Translations
-        shell: bash
-        run: node build/l10n.mjs check
-
       # node_modules is reused whenever the lockfile has not moved:
       # build.sh's deps-current check then skips npm ci entirely.
       # restore-keys keeps a stale tree usable — build.sh detects the
@@ -182,6 +174,15 @@ jobs:
           # CLI, and the build's own verification fails without it.
           PICODE_REQUIRE_CLI: 1
         run: ./build/build.sh
+
+      # PiCode's own words travel in 13 languages across four surfaces: the editor's
+      # `localize()`, the setup window, the connector's runtime bundle and its manifest
+      # titles. It reads the sources with `typescript`, so it runs once the Build step has
+      # installed the dependencies; no network. It counts keys, checks the `{0}`
+      # placeholders and fails when a language is half done or the bundle is stale.
+      - name: Translations
+        shell: bash
+        run: node build/l10n.mjs check
 
       - name: Connector tests
         shell: bash
