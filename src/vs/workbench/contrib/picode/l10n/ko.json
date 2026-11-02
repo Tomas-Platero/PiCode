@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "닫기",
 	"picodeWhatsNew.command": "새 소식 보기",
 	"picodeWhatsNew.full": "전체 릴리스 노트",
+	"picodeWhatsNew.tryAgent": "Agent 레이아웃 사용해 보기",
 	"picodeWhatsNew.none": "이 버전의 릴리스 노트가 아직 없습니다.",
 	"picodeWhatsNew.subtitle": "지난 버전 이후 달라진 내용입니다.",
 	"picodeWhatsNew.subtitleSince": "{0} 이후 달라진 내용입니다.",

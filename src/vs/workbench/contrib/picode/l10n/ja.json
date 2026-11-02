@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "閉じる",
 	"picodeWhatsNew.command": "新着情報を表示",
 	"picodeWhatsNew.full": "リリースノート全文",
+	"picodeWhatsNew.tryAgent": "Agent レイアウトを試す",
 	"picodeWhatsNew.none": "このバージョンのリリースノートはまだありません。",
 	"picodeWhatsNew.subtitle": "前のバージョンからの変更点です。",
 	"picodeWhatsNew.subtitleSince": "{0}からの変更点です。",

@@ -10,6 +10,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
@@ -31,7 +32,7 @@ const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases
  * from: every version they skipped since then is shown too, below this one. Returns false when
  * there is nothing to show.
  */
-async function showWhatsNew(version: string, last: string, requestService: IRequestService, dialogService: IDialogService, openerService: IOpenerService, productService: IProductService): Promise<boolean> {
+async function showWhatsNew(version: string, last: string, requestService: IRequestService, dialogService: IDialogService, openerService: IOpenerService, productService: IProductService, configurationService: IConfigurationService, commandService: ICommandService): Promise<boolean> {
 	const [notes, history] = await Promise.all([fetchNotes(requestService, version), fetchHistory(requestService, productService.quality)]);
 	const current = notes ? { version, notes } : history.find(entry => entry.version === version);
 	if (!current) {
@@ -44,12 +45,16 @@ async function showWhatsNew(version: string, last: string, requestService: IRequ
 	}
 
 	const releaseUrl = `${productService.releaseNotesUrl ?? 'https://github.com/Tomas-Platero/PiCode/releases'}/tag/v${version}`;
+	// The notes tell about the Agent layout: someone still on the Editor layout gets the button
+	// that switches to it right here, instead of having to find the robot in the title bar.
+	const offerAgent = /Agent/.test(markdown) && configurationService.getValue<string>('picode.appearance.layout') !== 'agent';
 	await dialogService.prompt({
 		message: localize('picodeWhatsNew.title', "PiCode {0} is ready", version),
 		detail: entries.length > 1
 			? localize('picodeWhatsNew.subtitleSince', "Here is what changed since {0}.", last)
 			: localize('picodeWhatsNew.subtitle', "Here is what changed since the last version."),
 		buttons: [
+			...(offerAgent ? [{ label: localize('picodeWhatsNew.tryAgent', "Try the Agent layout"), run: () => commandService.executeCommand('picode.appearance.switchLayout') }] : []),
 			{ label: localize('picodeWhatsNew.close', "Close"), run: () => undefined },
 			{ label: localize('picodeWhatsNew.full', "Full release notes"), run: () => openerService.open(URI.parse(releaseUrl)) },
 		],
@@ -115,6 +120,7 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 		@IRequestService private readonly requestService: IRequestService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IOpenerService private readonly openerService: IOpenerService,
+		@ICommandService private readonly commandService: ICommandService,
 		@ILifecycleService lifecycleService: ILifecycleService,
 	) {
 		// Read now, at startup: the core's release-notes check stores this start's version over
@@ -142,7 +148,7 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 			return;
 		}
 
-		await showWhatsNew(current, last, this.requestService, this.dialogService, this.openerService, this.productService);
+		await showWhatsNew(current, last, this.requestService, this.dialogService, this.openerService, this.productService, this.configurationService, this.commandService);
 	}
 }
 
@@ -165,7 +171,7 @@ registerAction2(class ShowWhatsNewAction extends Action2 {
 		const productService = accessor.get(IProductService);
 		const notificationService = accessor.get(INotificationService);
 		const version = productService.picodeVersion;
-		const shown = version && await showWhatsNew(version, '', accessor.get(IRequestService), accessor.get(IDialogService), accessor.get(IOpenerService), productService);
+		const shown = version && await showWhatsNew(version, '', accessor.get(IRequestService), accessor.get(IDialogService), accessor.get(IOpenerService), productService, accessor.get(IConfigurationService), accessor.get(ICommandService));
 		if (!shown) {
 			notificationService.info(localize('picodeWhatsNew.none', "There are no release notes for this version yet."));
 		}

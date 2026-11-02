@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "關閉",
 	"picodeWhatsNew.command": "顯示新功能",
 	"picodeWhatsNew.full": "完整版本資訊",
+	"picodeWhatsNew.tryAgent": "試用 Agent 版面",
 	"picodeWhatsNew.none": "此版本尚無版本資訊。",
 	"picodeWhatsNew.subtitle": "以下是自上一版以來的變更。",
 	"picodeWhatsNew.subtitleSince": "以下是自 {0} 以來的變更。",

@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "Zavřít",
 	"picodeWhatsNew.command": "Zobrazit novinky",
 	"picodeWhatsNew.full": "Úplné poznámky k verzi",
+	"picodeWhatsNew.tryAgent": "Vyzkoušet rozvržení Agent",
 	"picodeWhatsNew.none": "K této verzi zatím nejsou poznámky.",
 	"picodeWhatsNew.subtitle": "Tady je, co se od minulé verze změnilo.",
 	"picodeWhatsNew.subtitleSince": "Tady je, co se změnilo od verze {0}.",

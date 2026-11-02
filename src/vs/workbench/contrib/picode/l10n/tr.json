@@ -429,6 +429,7 @@
 	"picodeWhatsNew.close": "Kapat",
 	"picodeWhatsNew.command": "Yenilikleri göster",
 	"picodeWhatsNew.full": "Sürüm notlarının tamamı",
+	"picodeWhatsNew.tryAgent": "Agent düzenini dene",
 	"picodeWhatsNew.none": "Bu sürüm için henüz sürüm notu yok.",
 	"picodeWhatsNew.subtitle": "Son sürümden bu yana neler değişti.",
 	"picodeWhatsNew.subtitleSince": "{0} sürümünden bu yana neler değişti.",
