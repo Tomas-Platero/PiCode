@@ -35,6 +35,14 @@ test('arguments that crossed a boundary are printed rather than left as one long
 	);
 });
 
+test('a shell call is shown as its command, not as a JSON object', () => {
+	assert.strictEqual(toolInputText({ command: 'npm audit --json' }, 'bash'), 'npm audit --json');
+	assert.strictEqual(toolInputText({ command: 'dir' }, 'powershell'), 'dir');
+	// Another tool with a `command` argument, or a shell call without one, keeps the readable JSON.
+	assert.strictEqual(toolInputText({ command: 'x' }, 'other'), JSON.stringify({ command: 'x' }, null, 2));
+	assert.strictEqual(toolInputText({ timeout: 5 }, 'bash'), JSON.stringify({ timeout: 5 }, null, 2));
+});
+
 test('a string that is not JSON is kept as it arrived', () => {
 	assert.strictEqual(toolInputText('not json'), 'not json');
 });
