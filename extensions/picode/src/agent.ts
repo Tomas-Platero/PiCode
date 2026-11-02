@@ -1562,6 +1562,7 @@ export interface AgentDeps {
 export interface SessionUsage {
 	readonly ctxTokens?: number;
 	readonly cost?: number;
+	readonly costEstimated?: boolean;
 	readonly input?: number;
 	readonly output?: number;
 	readonly cacheRead?: number;
@@ -1746,6 +1747,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			let cacheRead = 0;
 			let cacheWrite = 0;
 			let cost = 0;
+			let costEstimated = false;
 			let hasUsage = false;
 			let ctxTokens: number | undefined;
 			let model: string | undefined;
@@ -1772,7 +1774,14 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 					// Occupancy is what the last prompt actually cost: fresh input plus everything
 					// read from or written to the cache. The last answer's output is not in yet.
 					ctxTokens = turnInput + turnCacheRead + turnCacheWrite;
-					cost += numberOf(recordOf(usage['cost'])?.['total']) ?? 0;
+					const turnCost = recordOf(usage['cost']);
+					const turnTotal = numberOf(turnCost?.['total']) ?? 0;
+					cost += turnTotal;
+					// pi 1.5 marks the cost the provider itself billed; a priced turn without that mark
+					// was worked out from the model catalogue, so the total is an estimate.
+					if (turnTotal > 0 && numberOf(turnCost?.['totalFromProvider']) === undefined) {
+						costEstimated = true;
+					}
 					continue;
 				}
 				if (entry['type'] === 'model_change') {
@@ -1793,7 +1802,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			return {
 				...(model === undefined ? {} : { model }),
 				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost } : {}),
+				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost, costEstimated } : {}),
 			};
 		} catch {
 			return undefined;

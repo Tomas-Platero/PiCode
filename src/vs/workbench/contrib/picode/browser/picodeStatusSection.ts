@@ -110,6 +110,7 @@ interface IStatusData {
 	readonly ctxTokens?: number;
 	readonly ctxWindow?: number;
 	readonly cost?: number;
+	readonly costEstimated?: boolean;
 	readonly inputTokens?: number;
 	readonly outputTokens?: number;
 	readonly cacheRead?: number;
@@ -122,8 +123,8 @@ interface IStatusData {
 
 /** The fields the page draws, and only those: the fingerprint must not move with the meters. */
 function fingerprintOf(data: IStatusData): string {
-	const { runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error } = data;
-	return JSON.stringify({ runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error });
+	const { runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, costEstimated, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error } = data;
+	return JSON.stringify({ runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, costEstimated, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error });
 }
 
 export class PicodeStatusSection extends Disposable implements IAICustomizationManagementSectionWidget {
@@ -413,7 +414,8 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				this.addRow(card, Codicon.archive, localize('picodeStatusCache', "Cache read / write"), `${data.cacheRead.toLocaleString()} / ${data.cacheWrite.toLocaleString()}`);
 			}
 			if (data.cost !== undefined) {
-				this.addRow(card, Codicon.creditCard, localize('picodeStatusCost', "Cost"), `$${data.cost.toFixed(4)}`);
+				// A leading "~" marks a cost worked out from the model catalogue rather than billed.
+				this.addRow(card, Codicon.creditCard, localize('picodeStatusCost', "Cost"), `${data.costEstimated ? '~' : ''}$${data.cost.toFixed(4)}`);
 			}
 		}, {
 			actions: [

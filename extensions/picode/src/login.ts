@@ -75,6 +75,14 @@ export function createAuthInteraction(): PiAuthInteraction {
 
 		notify(event: PiAuthEvent): void {
 			const notice = noticeOf(event);
+			if (event.type === 'device_code') {
+				// The code is only useful on the page that asks for it: copy it and open the page, so
+				// signing in is a paste rather than two things typed by hand.
+				void vscode.env.clipboard.writeText(event.userCode);
+				void vscode.env.openExternal(vscode.Uri.parse(event.verificationUri));
+				void vscode.window.showInformationMessage(notice.message);
+				return;
+			}
 			if (notice.url === undefined) {
 				void vscode.window.showInformationMessage(notice.message);
 				return;
