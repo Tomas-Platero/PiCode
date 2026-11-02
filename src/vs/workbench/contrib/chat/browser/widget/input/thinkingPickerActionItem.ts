@@ -161,7 +161,7 @@ export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 		super(action, {
 			actionProvider,
 			reporter: { id: 'ChatThinkingPicker', name: 'ChatThinkingPicker', includeOptions: true },
-			listOptions: { minWidth: 180, ...pickerOptions.listOptions },
+			listOptions: { minWidth: 240, ...pickerOptions.listOptions },
 		}, pickerOptions, actionWidgetService, keybindingService, contextKeyService, telemetryService);
 
 		// Repaint when the setting changes (including from the Settings editor).
