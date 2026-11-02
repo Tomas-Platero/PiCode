@@ -147,6 +147,19 @@ el perfil propio.
    sus habilidades.
 5. **Todo queda en su perfil**, listo para subirse cuando exista la nube.
 
+## 🗣️ Las palabras
+
+Todo lo que el usuario lee está **en inglés** en el código, y PiCode lleva sus propias traducciones a
+**13 idiomas** en cuatro sitios: el editor (mezcladas sobre el paquete de idioma instalado), la
+ventana de primer arranque, y —en el conector— el bundle de frases y los títulos del manifiesto. Los
+paquetes de idioma del mercado solo traducen el VS Code de serie: sin esto, todo lo nuestro se
+quedaría en inglés aunque el editor esté en chino.
+
+Dos ficheros se **generan** desde el código (`source.json` y `bundle.l10n.json`); los ficheros de
+idioma los escribe `build/l10n.mjs merge` desde trozos ya traducidos, y `check` cuenta las claves,
+compara los `{0}` y para CI cuando un idioma va a medias. El detalle, la herramienta y las reglas al
+escribir texto nuevo: [`IDIOMAS.md`](IDIOMAS.md).
+
 ## 🚫 Qué NO es PiCode
 
 - Un panel propio, una pestaña propia, unos ajustes propios.
@@ -154,3 +167,50 @@ el perfil propio.
 - Escribir en el pi de la máquina.
 - Reimplementar proveedores, OAuth, habilidades o el orquestador.
 - Recortar funciones para vender la nube.
+
+## 🤖 Los dos diseños: Agent y Editor
+
+`picode.appearance.layout` elige cómo se reparte la ventana. *Editor* es el VS Code de siempre y
+el valor de serie. *Agent* recoloca las mismas piezas del editor, sin abrir otra ventana (VS Code
+trae una «Agents Window» aparte, `src/vs/sessions`, que no usamos):
+
+| Zona | En Agent |
+| --- | --- |
+| Izquierda | La columna de sesiones (`picodeAgentSessionsView.ts`): filas *New session*, *Search* (ventana centrada, `picodeAgentSearch.ts`) y *Customization* (la página de ajustes del chat); el nombre del proyecto con refrescar y filtrar; las sesiones por fecha y, al pie, el botón de cuenta del editor (avatar, email y plan) y el engranaje; en la barra lateral secundaria |
+| Centro | El chat, sin su lista de sesiones dentro (el panel inferior, acoplado a la izquierda) |
+| Junto al chat | Un fichero abierto se pone a su derecha; sin ficheros, el editor se esconde y el chat ocupa el sitio |
+| Derecha | La barra lateral principal, con sus vistas como pestañas arriba. **Status** (`picodeStatusView.ts`, el panel de `picodeAgentOverviewView.ts`) es la primera: entorno (equipo, carpeta, rama), contexto usado por la conversación, MCPs (los servidores MCP de pi, con *Sign in* si lo piden), cambios (líneas añadidas y quitadas sin guardar en git, `+N −M` como en Claude Code, con el número de ficheros al pasar el ratón y *Review*; pulsar la fila o *Review* abre una pestaña con todos los ficheros cambiados y su diff desplegable, cada uno con su propio `+N −M` en la cabecera (la vista de cambios múltiple del editor, `diffEditorItemTemplate.ts`), como la lista de cambios de Claude Code; al abrirla la barra derecha se estrecha a una columna (320 px) con Status como pestaña abierta, y al cerrarla vuelve al ancho que tenía si nadie la movió mientras; abrir o cerrar un fichero solo reparte el sitio entre el chat y el fichero: las columnas de los lados solo toman su ancho inicial al entrar en Agent; lo cuenta el conector con `git diff --numstat HEAD` más las líneas de los ficheros nuevos, `diff-stat.ts`) y **Tasks** y **Memory**: lo mismo que enseñan los bloques Tareas y Memoria del panel de PiCode, que en Agent no sale (sus vistas llevan `config.picode.appearance.layout != agent`). Tasks lista lo que está en marcha (un agente abre su transcripción; un trabajo, su salida) y *Finished* despliega lo acabado; Memory da el recuento con versión y última escritura, las carpetas abiertas con sus memorias, *Search memories…* (los resultados salen ahí mismo y se abren con un clic), *Check memory* y *Update* si hay motor nuevo. Los datos los da el conector con `picode.tasks.data` y `picode.memory.summary`. Es **o columna o pestaña, nunca las dos**: con la barra ancha (600 px o más) es su propia columna a la izquierda de la barra y su icono sale de la fila de arriba (la clave de contexto `picodeStatusColumnShown` oculta la vista; si la pestaña de Status estaba abierta, la barra pasa al explorador). Con la barra más estrecha la columna se va y Status vuelve como primer icono de la fila; si Status era la pestaña abierta antes de ensanchar, al estrechar vuelve a abrirse (salvo que mientras se eligiera otra a mano). Al entrar en Agent los iconos de la barra se ordenan: Status, explorador, búsqueda, control de código, terminal, problemas, salida, consola de depuración, depurar, extensiones, y el resto detrás (`orderReviewTabs` en `picodeLayoutStyle.ts`, que reescribe el orden guardado de la barra). La primera vez, problemas, salida y consola de depuración salen de la fila (siguen con sus atajos y con clic derecho en la fila); si el usuario las vuelve a poner, se quedan. Al abrir se pinta al momento: entorno, cambios y tareas los sabe el editor, y los MCPs y el `+N −M` salen de lo último que se vio en ese proyecto (`picode.status.lastSeen`, guardado con el espacio de trabajo) hasta que pi arranca y los refresca. Luego archivos, búsqueda, cambios, terminal, problemas, salida… |
+| Fuera | Barra de iconos y barra de estado |
+
+**Cómo está hecho** (`src/vs/workbench/contrib/picode/browser/picodeLayoutStyle.ts`): con los
+ajustes propios del editor — `workbench.experimental.modernUI`, `workbench.sideBar.location: right`
+(la secundaria pasa a la izquierda), `workbench.activityBar.location: top` y
+`workbench.statusBar.visible: false` —, la posición del panel a la izquierda y moviendo
+contenedores de vistas: el chat al panel; terminal, problemas, salida y consola de depuración a la
+barra derecha; las sesiones a la secundaria. Lo que había antes (ajustes y posición del panel) se
+guarda en almacenamiento de aplicación y *Editor* lo devuelve. Retoques al núcleo, marcados con
+`PiCode`: en Agent el chat no pinta su propia lista de sesiones (`chatViewPane.ts`), el editor y
+el panel pueden esconderse a la vez (`layout.ts`) y la barra lateral se parte en dos columnas
+cuando es ancha (`sidebarPart.ts`, `sidebarSideColumn.ts`), con el panel de estado dentro de una
+vista propia para que siga habiendo dónde elegirlo aunque la parte derecha se encoja.
+
+**La primera vez** que un espacio de trabajo entra en Agent (`picode.layout.agentArranged`, se borra al
+volver a Editor) las columnas se ordenan una sola vez: sesiones a la izquierda, la barra derecha
+estrecha (320 px) y con solo *Status* abierto, y el chat y la página de Bienvenida a partes iguales
+con lo que queda. Los arranques siguientes no tocan nada: se queda lo que el usuario dejó. La fila de
+iconos de la columna de sesiones no se pinta (solo tiene una vista). La página de Bienvenida se abre
+sola hasta que el usuario la cierra una vez (`picode.welcome.dismissed`, `startupPage.ts`); cerrar la
+ventana no cuenta como cerrarla.
+
+**Pendiente para igualar a la vista de agente de Claude Code:**
+
+- Una pestaña de navegador en la barra derecha (el navegador integrado hoy se abre como editor).
+- Revisar los cambios del agente en la barra derecha, con aceptar / descartar por fichero.
+- Las tareas y el plan del agente como pestaña de esa barra.
+- Una barra superior con el título de la sesión en lugar del buscador.
+- Los proyectos como grupos de la lista de sesiones.
+- En *Changes*, las líneas añadidas y quitadas (hoy solo el número de ficheros) y un botón para crear el PR.
+
+**Volver a lo de fábrica:** el comando *PiCode: Reset Layout to Default* deja cada pieza donde VS Code
+la pone (chat al lado, terminal y problemas abajo, barra de iconos y de estado visibles, barra
+lateral a la izquierda), pase lo que pase con lo que el diseño Agent recordaba.

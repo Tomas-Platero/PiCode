@@ -343,11 +343,12 @@
 │   ├── pins.test.mjs
 │   ├── README.md
 │   ├── release.mjs
+│   ├── release.test.mjs
 │   ├── setup-npm-registry.ts
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 44 files in total
+│   └── … 45 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
@@ -624,7 +625,8 @@
 │   │   │       │   └── latest.json
 │   │   │       └── user/
 │   │   │           └── latest.json
-│   │   └── README.md
+│   │   ├── README.md
+│   │   └── whats-new.json
 │   └── README.md
 ├── _typos.toml — False positives of the `typos` spell checker.
 ├── AGENTS.md — 📋 The owner's phrases: product, UI, architecture and working rules.
