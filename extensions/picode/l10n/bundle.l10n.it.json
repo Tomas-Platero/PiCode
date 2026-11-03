@@ -361,7 +361,6 @@
 	"Thinking": "Ragionamento",
 	"This command needs the Gentle AI program, which PiCode does not include.": "Questo comando richiede il programma Gentle AI, che PiCode non include.",
 	"This command only works in pi’s terminal.": "Questo comando funziona solo nel terminale di pi.",
-	"This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.": "Questo modello non può leggere le immagini, quindi l’immagine allegata non è stata inviata. Scegli un modello che sappia vedere le immagini.",
 	"This model is not available.": "Questo modello non è disponibile.",
 	"This pi cannot compact a conversation.": "Questo pi non sa compattare una conversazione.",
 	"This pi cannot save a conversation as a web page.": "Questo pi non sa salvare una conversazione come pagina web.",

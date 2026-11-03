@@ -361,7 +361,6 @@
 	"Thinking": "思考",
 	"This command needs the Gentle AI program, which PiCode does not include.": "此命令需要 Gentle AI 程式，PiCode 不包含它。",
 	"This command only works in pi’s terminal.": "此命令僅能在 pi 的終端機中使用。",
-	"This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.": "此模型無法讀取圖片，因此未傳送所附圖片。請選擇能夠檢視圖片的模型。",
 	"This model is not available.": "此模型無法使用。",
 	"This pi cannot compact a conversation.": "此 pi 無法壓縮對話。",
 	"This pi cannot save a conversation as a web page.": "此 pi 無法將對話儲存為網頁。",

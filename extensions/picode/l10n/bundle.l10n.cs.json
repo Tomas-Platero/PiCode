@@ -361,7 +361,6 @@
 	"Thinking": "Uvažování",
 	"This command needs the Gentle AI program, which PiCode does not include.": "Tento příkaz potřebuje program Gentle AI, který PiCode neobsahuje.",
 	"This command only works in pi’s terminal.": "Tento příkaz funguje jen v terminálu pi.",
-	"This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.": "Tento model neumí číst obrázky, proto nebyl přiložený obrázek odeslán. Vyberte model, který obrázky vidí.",
 	"This model is not available.": "Tento model není dostupný.",
 	"This pi cannot compact a conversation.": "Toto pi neumí konverzaci zkrátit.",
 	"This pi cannot save a conversation as a web page.": "Toto pi neumí uložit konverzaci jako webovou stránku.",

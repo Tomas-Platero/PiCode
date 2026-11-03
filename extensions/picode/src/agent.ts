@@ -2166,14 +2166,14 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				// Pasted or attached images travel as images, whole or not at all: a cut-off one would make the
 				// provider refuse every later turn of the conversation.
 				const attached = await imagesOf(request.references);
-				const modelInputs = (chat.session.model as { readonly input?: readonly string[] } | undefined)?.input;
-				const canSee = modelInputs === undefined || modelInputs.includes('image');
-				if (attached.images.length > 0 && !canSee) {
-					stream.markdown(`${vscode.l10n.t('This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.')}\n\n`);
-				} else if (attached.skipped.length > 0) {
-					stream.markdown(`${vscode.l10n.t('Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.', attached.skipped.join(', '))}\n\n`);
+				// The model decides what it can read: pi's own terminal sends images to deepseek-v4-flash although its
+				// catalogue says text only, so nothing is held back here by what the catalogue declares.
+				if (attached.skipped.length > 0) {
+					stream.markdown(`${vscode.l10n.t('Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.', attached.skipped.join(', '))}
+
+`);
 				}
-				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, canSee ? attached.images : []);
+				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
 					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
 					sessionChangedEmitter.fire();

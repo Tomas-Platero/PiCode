@@ -82,7 +82,7 @@ import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
-import { acceptsImages, modelPricing, type PiModelCost } from './model-info';
+import { modelPricing, type PiModelCost } from './model-info';
 
 /**
  * PiCode's bridge, living **inside the core**.
@@ -206,7 +206,7 @@ function toChatInformation(models: PiModelsFile): vscode.LanguageModelChatInform
 				maxInputTokens: model.contextWindow ?? 128000,
 				maxOutputTokens: model.maxTokens ?? 16384,
 				detail: providerId,
-				capabilities: { toolCalling: true, ...(acceptsImages(model.input) ? { imageInput: true } : {}) },
+				capabilities: { toolCalling: true, imageInput: true },
 				...modelPricing(model.cost),
 			});
 		}
@@ -1747,7 +1747,7 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 				maxInputTokens: model.contextWindow ?? 128000,
 				maxOutputTokens: model.maxTokens ?? 16384,
 				detail: provider.id,
-				capabilities: { toolCalling: true, ...(acceptsImages(model.input) ? { imageInput: true } : {}) },
+				capabilities: { toolCalling: true, imageInput: true },
 				...modelPricing(model.cost),
 			});
 		}

@@ -361,7 +361,6 @@
 	"Thinking": "생각 중",
 	"This command needs the Gentle AI program, which PiCode does not include.": "이 명령에는 Gentle AI 프로그램이 필요하지만 PiCode에는 들어 있지 않습니다.",
 	"This command only works in pi’s terminal.": "이 명령은 pi 터미널에서만 동작합니다.",
-	"This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.": "이 모델은 이미지를 읽을 수 없어 첨부한 이미지가 전송되지 않았습니다. 이미지를 볼 수 있는 모델을 선택하세요.",
 	"This model is not available.": "이 모델은 쓸 수 없습니다.",
 	"This pi cannot compact a conversation.": "이 pi는 대화를 압축할 수 없습니다.",
 	"This pi cannot save a conversation as a web page.": "이 pi는 대화를 웹 페이지로 저장할 수 없습니다.",

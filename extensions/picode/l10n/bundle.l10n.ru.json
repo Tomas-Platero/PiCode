@@ -361,7 +361,6 @@
 	"Thinking": "Размышления",
 	"This command needs the Gentle AI program, which PiCode does not include.": "Этой команде нужна программа Gentle AI, которую PiCode не включает.",
 	"This command only works in pi’s terminal.": "Эта команда работает только в терминале pi.",
-	"This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.": "Эта модель не умеет читать изображения, поэтому приложенное изображение не отправлено. Выберите модель, которая видит изображения.",
 	"This model is not available.": "Эта модель недоступна.",
 	"This pi cannot compact a conversation.": "Этот pi не умеет сжимать беседу.",
 	"This pi cannot save a conversation as a web page.": "Этот pi не умеет сохранять беседу как веб-страницу.",
