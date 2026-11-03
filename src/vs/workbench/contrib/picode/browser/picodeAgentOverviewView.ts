@@ -6,7 +6,7 @@
 import { $, append, addDisposableListener, clearNode, EventType } from '../../../../base/browser/dom.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
-import { basename } from '../../../../base/common/resources.js';
+import { basename, dirname } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
@@ -78,7 +78,7 @@ interface IMemorySummary {
 	readonly retried?: boolean;
 	readonly heading?: string;
 	readonly detail?: string;
-	readonly projects?: readonly { readonly name: string; readonly memories: number }[];
+	readonly projects?: readonly { readonly name: string; readonly memories: number; readonly open?: boolean; readonly rows?: readonly { readonly id: number; readonly title: string; readonly when: string; readonly icon: string }[] }[];
 	readonly search?: { readonly query: string; readonly total: number; readonly rows: readonly { readonly id: number; readonly title: string; readonly project: string; readonly when: string; readonly icon: string }[] };
 	readonly newerEngine?: string;
 }
@@ -89,6 +89,7 @@ const MEMORY_SUMMARY_COMMAND = 'picode.memory.summary';
 const MEMORY_SEARCH_COMMAND = 'picode.memory.search';
 const MEMORY_CLEAR_SEARCH_COMMAND = 'picode.memory.clearSearch';
 const MEMORY_OPEN_COMMAND = 'picode.memory.open';
+const MEMORY_TOGGLE_PROJECT_COMMAND = 'picode.memory.toggleProject';
 const MEMORY_CHECK_COMMAND = 'picode.memory.check';
 const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 
@@ -263,7 +264,9 @@ export class PicodeAgentOverview extends Disposable {
 
 		const folder = this.workspaceService.getWorkspace().folders[0];
 		if (folder) {
-			this.row(section, Codicon.folder, folder.name, basename(folder.uri) !== folder.name ? basename(folder.uri) : undefined);
+			// The folder's parent says which "PiCode-Website" this is, without the whole path.
+			const parent = basename(dirname(folder.uri));
+			this.row(section, Codicon.folder, folder.name, parent && parent !== folder.name ? parent : undefined);
 		} else {
 			const row = this.row(section, Codicon.folder, localize('picode.overview.noFolder', "No folder open"));
 			this.action(row, localize('picode.overview.openFolder', "Open"), () => void this.commandService.executeCommand('workbench.action.files.openFolder'));
@@ -460,8 +463,14 @@ export class PicodeAgentOverview extends Disposable {
 			}
 		} else {
 			for (const project of memory.projects ?? []) {
-				const row = this.row(section, Codicon.folder, project.name);
+				const row = this.row(section, project.open ? Codicon.folderOpened : Codicon.folder, project.name);
 				append(row, $('span.picode-overview-value')).textContent = String(project.memories);
+				this.clickable(row, () => void this.runAndRefresh(MEMORY_TOGGLE_PROJECT_COMMAND, project.name));
+				for (const hit of project.open ? project.rows ?? [] : []) {
+					const memoryRow = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
+					memoryRow.classList.add('nested');
+					this.clickable(memoryRow, () => void this.commandService.executeCommand(MEMORY_OPEN_COMMAND, { id: hit.id }));
+				}
 			}
 		}
 		const search = this.row(section, Codicon.search, localize('picode.overview.memorySearch', "Search memories…"));

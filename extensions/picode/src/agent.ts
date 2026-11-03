@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { contextBlockFor } from './editor-context';
+import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
@@ -211,7 +212,7 @@ export interface PiSession {
 	 * 'followUp') to queue the message» — which is what the owner read when he asked how it was going
 	 * while a background job's result was being processed.
 	 */
-	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
+	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp'; readonly images?: readonly PiImage[] }): Promise<void>;
 	abort(): Promise<void>;
 	subscribe(listener: (event: PiEvent) => void): () => void;
 	setModel(model: PiModel): Promise<void>;
@@ -612,7 +613,7 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 /** How long a slash command that began no agent run is given before its turn is ended, in milliseconds. */
 const COMMAND_GRACE_MS = 1_500;
 
-export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<string> {
+export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string, images: readonly PiImage[] = []): Promise<string> {
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
 	clearTurnEdits();
@@ -785,7 +786,10 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 		// once, after everything queued has run (`_runAgentPrompt` loops on `hasQueuedMessages` and calls
 		// `_emitAgentSettled` in its `finally`), so the single `agent_settled` this awaits is the end of
 		// the work that includes this prompt.
-		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).then(() => {
+		const promptOptions = session.isStreaming || images.length > 0
+			? { ...(session.isStreaming ? { streamingBehavior: 'followUp' as const } : {}), ...(images.length > 0 ? { images } : {}) }
+			: undefined;
+		session.prompt(prompt, promptOptions).then(() => {
 			// A command an extension answers itself ends when its handler does: no agent run begins, so
 			// pi never says `agent_settled` and the turn would stay "working" for ever. A moment is
 			// allowed for a command that hands its text on to the agent (a skill) to start its run.
@@ -2159,7 +2163,17 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				if (turnContext.current !== undefined) {
 					turnContext.current.command = watched;
 				}
-				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				// Pasted or attached images travel as images, whole or not at all: a cut-off one would make the
+				// provider refuse every later turn of the conversation.
+				const attached = await imagesOf(request.references);
+				const modelInputs = (chat.session.model as { readonly input?: readonly string[] } | undefined)?.input;
+				const canSee = modelInputs === undefined || modelInputs.includes('image');
+				if (attached.images.length > 0 && !canSee) {
+					stream.markdown(`${vscode.l10n.t('This model cannot read images, so the attached image was not sent. Pick a model that can see images to use it.')}\n\n`);
+				} else if (attached.skipped.length > 0) {
+					stream.markdown(`${vscode.l10n.t('Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.', attached.skipped.join(', '))}\n\n`);
+				}
+				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, canSee ? attached.images : []);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
 					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
 					sessionChangedEmitter.fire();
