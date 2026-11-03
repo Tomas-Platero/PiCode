@@ -116,6 +116,9 @@ export class PanelPart extends AbstractPaneCompositePart {
 			if (e.affectsConfiguration('workbench.panel.showLabels')) {
 				this.updateCompositeBar(true);
 			}
+			if (e.affectsConfiguration('picode.appearance.layout')) {
+				this.applyAgentTitle();
+			}
 			if (e.affectsConfiguration('workbench.bottomPane.experimental.fontFamily')) {
 				this.applyPanelFontFamily();
 			}
@@ -123,6 +126,19 @@ export class PanelPart extends AbstractPaneCompositePart {
 				this.applyPanelFontSize();
 			}
 		}));
+	}
+
+	override create(parent: HTMLElement): void {
+		super.create(parent);
+		this.applyAgentTitle();
+	}
+
+	/**
+	 * In the Agent layout the panel holds only the chat: a row with a "Chat" tab (and whatever
+	 * else is docked here, like Ports) has nothing to choose between, so the row is left out.
+	 */
+	private applyAgentTitle(): void {
+		this.setTitleHidden(this.configurationService.getValue<string>('picode.appearance.layout') === 'agent');
 	}
 
 	override updateStyles(): void {

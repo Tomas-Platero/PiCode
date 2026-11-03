@@ -88,9 +88,16 @@ function capped(text: string, max: number): string {
  * They arrive parsed when the caller is the one that made the call and serialised when they have
  * crossed a boundary, so a JSON string is pretty-printed rather than shown as one long line.
  */
-export function toolInputText(args: unknown): string {
+export function toolInputText(args: unknown, toolName?: string): string {
 	if (args === undefined || args === null) {
 		return '';
+	}
+	// A shell call is its command: showing it inside a JSON object makes the reader dig it out.
+	if (toolName === 'bash' || toolName === 'powershell') {
+		const command = firstString(args, ['command']);
+		if (command !== undefined) {
+			return capped(command, MAX_INPUT_CHARS);
+		}
 	}
 	if (typeof args === 'string') {
 		try {

@@ -4,24 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as dom from '../../../../../../base/browser/dom.js';
-import { BaseActionViewItem } from '../../../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { renderLabelWithIcons } from '../../../../../../base/browser/ui/iconLabel/iconLabels.js';
-import { getBaseLayerHoverDelegate } from '../../../../../../base/browser/ui/hover/hoverDelegate2.js';
-import { getDefaultHoverDelegate } from '../../../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { Event } from '../../../../../../base/common/event.js';
+import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { autorun } from '../../../../../../base/common/observable.js';
 import { localize, localize2 } from '../../../../../../nls.js';
 import { Action2, MenuId, MenuItemAction } from '../../../../../../platform/actions/common/actions.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../../../platform/configuration/common/configuration.js';
-import { ContextKeyExpr } from '../../../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService } from '../../../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../../../platform/instantiation/common/instantiation.js';
+import { IActionWidgetService } from '../../../../../../platform/actionWidget/browser/actionWidget.js';
+import { IActionWidgetDropdownAction, IActionWidgetDropdownActionProvider } from '../../../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
+import { IKeybindingService } from '../../../../../../platform/keybinding/common/keybinding.js';
+import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../../../platform/quickinput/common/quickInput.js';
 import { CHAT_CATEGORY } from '../../actions/chatActions.js';
 import { ChatContextKeys } from '../../../common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../../common/constants.js';
 import { PICODE_THINKING_LEVEL_SETTING } from '../../../../picode/browser/picodeConfiguration.js';
-import { IChatInputPickerOptions } from './chatInputPickerActionItem.js';
+import { ChatInputPickerActionViewItem, IChatInputPickerOptions } from './chatInputPickerActionItem.js';
 
 /**
  * Mirror of `THINKING_LEVELS` in the PiCode extension
@@ -117,70 +119,83 @@ function capitalize(level: string): string {
 }
 
 /**
- * Chat input toolbar chip showing pi's current thinking level next to the
- * model picker. The label is the level name (or "Default"); clicking runs
- * {@link OpenThinkingPickerAction}, which opens the quick pick.
+ * Chat input toolbar chip showing pi's current thinking level next to the model picker. The label
+ * is the level name (or "Default"); clicking opens a dropdown under the chip, the same kind of list
+ * the model picker uses, with the levels and a check on the one in force.
  */
-export class ThinkingPickerActionItem extends BaseActionViewItem {
-
-	private _labelElement: HTMLElement | undefined;
+export class ThinkingPickerActionItem extends ChatInputPickerActionViewItem {
 
 	constructor(
 		action: MenuItemAction,
-		private readonly _pickerOptions: IChatInputPickerOptions,
+		pickerOptions: IChatInputPickerOptions,
+		@IActionWidgetService actionWidgetService: IActionWidgetService,
+		@IKeybindingService keybindingService: IKeybindingService,
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
-		super(undefined, action);
+		const actionProvider: IActionWidgetDropdownActionProvider = {
+			getActions: () => {
+				const current = toThinkingLevel(_configurationService.getValue<string | undefined>(PICODE_THINKING_LEVEL_SETTING));
+				const choose = (level: string | undefined) => async () => {
+					// Writing `undefined` clears the user setting so pi's own default applies.
+					await _configurationService.updateValue(PICODE_THINKING_LEVEL_SETTING, level, ConfigurationTarget.USER);
+				};
+				const entries: { level: string | undefined; label: string; detail?: string }[] = [
+					{ level: undefined, label: localize('thinkingLevel.default', "Default"), detail: localize('thinkingLevel.defaultDescription', "pi's own level") },
+					...THINKING_LEVELS.map(level => ({ level, label: capitalize(level) })),
+				];
+				return entries.map(entry => ({
+					...action,
+					id: `chat.thinking.${entry.level ?? 'default'}`,
+					label: entry.label,
+					...(entry.detail === undefined ? {} : { description: entry.detail }),
+					checked: entry.level === current,
+					enabled: true,
+					tooltip: '',
+					run: choose(entry.level),
+				} satisfies IActionWidgetDropdownAction));
+			}
+		};
+
+		super(action, {
+			actionProvider,
+			reporter: { id: 'ChatThinkingPicker', name: 'ChatThinkingPicker', includeOptions: true },
+			listOptions: { minWidth: 240, ...pickerOptions.listOptions },
+		}, pickerOptions, actionWidgetService, keybindingService, contextKeyService, telemetryService);
 
 		// Repaint when the setting changes (including from the Settings editor).
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(PICODE_THINKING_LEVEL_SETTING)) {
-				this._updateLabel();
+			if (e.affectsConfiguration(PICODE_THINKING_LEVEL_SETTING) && this.element) {
+				this.renderLabel(this.element);
 			}
 		}));
 		// Repaint when the toolbar enters or leaves its compact layout.
 		this._register(autorun(reader => {
-			this._pickerOptions.compact.read(reader);
-			this._updateLabel();
+			pickerOptions.compact.read(reader);
+			if (this.element) {
+				this.renderLabel(this.element);
+			}
 		}));
 	}
 
 	override render(container: HTMLElement): void {
 		super.render(container);
 		container.classList.add('chat-input-picker-item', 'chat-thinking-picker-item');
-
-		const label = this._labelElement = dom.append(container, dom.$('a.action-label.chat-thinking-picker-label'));
-		label.setAttribute('role', 'button');
-		label.setAttribute('aria-haspopup', 'true');
-		label.tabIndex = 0;
-		this._register(getBaseLayerHoverDelegate().setupManagedHover(
-			this.options.hoverDelegate ?? getDefaultHoverDelegate('mouse'),
-			label,
-			this.action.tooltip,
-		));
-		this._register(dom.addDisposableListener(label, dom.EventType.KEY_DOWN, e => {
-			if (e.key === 'Enter' || e.key === ' ') {
-				dom.EventHelper.stop(e, true);
-				this.onClick(e);
-			}
-		}));
-
-		this._updateLabel();
 	}
 
-	private _updateLabel(): void {
-		const label = this._labelElement;
-		if (!label) {
-			return;
-		}
+	protected override renderLabel(element: HTMLElement): IDisposable | null {
+		this.setAriaLabelAttributes(element);
 		const level = toThinkingLevel(this._configurationService.getValue<string | undefined>(PICODE_THINKING_LEVEL_SETTING));
 		const display = level ? capitalize(level) : localize('thinkingLevel.default', "Default");
 
-		dom.reset(label, ...renderLabelWithIcons(`$(${Codicon.sparkle.id})`));
+		const parts: (HTMLElement | string)[] = [...renderLabelWithIcons(`$(${Codicon.sparkle.id})`)];
 		// In the compact layout only the icon is shown, like the other input chips.
-		if (!this._pickerOptions.compact.get()) {
-			dom.append(label, dom.$('span.chat-input-picker-label', undefined, display));
+		if (!this.pickerOptions.compact.get()) {
+			parts.push(dom.$('span.chat-input-picker-label', undefined, display));
 		}
-		label.ariaLabel = localize('thinkingPickerAriaLabel', "Thinking Level: {0}", display);
+		dom.reset(element, ...parts);
+		element.setAttribute('aria-label', localize('thinkingPickerAriaLabel', "Thinking Level: {0}", display));
+		return null;
 	}
 }

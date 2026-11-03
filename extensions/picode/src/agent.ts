@@ -449,7 +449,7 @@ function pushToolCard(
 		const part = new vscode.ChatToolInvocationPart(toolName, toolCallId);
 		part.invocationMessage = line;
 		part.pastTenseMessage = isError ? vscode.l10n.t('{0} — failed', line) : line;
-		part.toolSpecificData = { input: toolInputText(args), output: toolOutputText(result) };
+		part.toolSpecificData = { input: toolInputText(args, toolName), output: toolOutputText(result) };
 		part.enablePartialUpdate = true;
 		part.isComplete = result !== undefined;
 		part.isError = isError;
@@ -645,6 +645,11 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				return;
 			}
 			if (event.type === 'tool_execution_start' && typeof event.toolName === 'string') {
+				// pi's end event carries the answer but not the call's arguments, so the call is kept
+				// until it ends: without it the finished card would lose the command it ran.
+				if (typeof event.toolCallId === 'string') {
+					toolCallArgs.set(event.toolCallId, event.args);
+				}
 				// What it is working on, not just which tool: "read src/app.ts" is worth a line,
 				// "read" is not.
 				stream.progress(toolProgress(event.toolName, event.args));
@@ -676,15 +681,17 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 				return;
 			}
 			if (event.type === 'tool_execution_end' && typeof event.toolName === 'string' && typeof event.toolCallId === 'string') {
+				const endArgs = event.args ?? toolCallArgs.get(event.toolCallId);
+				toolCallArgs.delete(event.toolCallId);
 				// A file this tool has written lands in the ledger — when the tool succeeded;
 				// a failed tool did not change the file, and the card never says it did.
-				recordToolResult(event.toolName, event.args, event.isError, sessionCwd);
+				recordToolResult(event.toolName, endArgs, event.isError, sessionCwd);
 				// The call's own row, now with what the tool answered.
-				const memory = memoryCard(event.toolName, event.args);
+				const memory = memoryCard(event.toolName, endArgs);
 				if (memory !== undefined) {
-					pushMemoryCard(stream, event.toolCallId, memory, event.isError === true ? 'failed' : 'done', event.args, event.result, log);
-				} else if (!hasOwnToolCard(event.toolName, event.args)) {
-					pushToolCard(stream, event.toolName, event.toolCallId, event.args, event.result, event.isError === true, log);
+					pushMemoryCard(stream, event.toolCallId, memory, event.isError === true ? 'failed' : 'done', endArgs, event.result, log);
+				} else if (!hasOwnToolCard(event.toolName, endArgs)) {
+					pushToolCard(stream, event.toolName, event.toolCallId, endArgs, event.result, event.isError === true, log);
 				}
 				// A background job's call ends at once, when the job **starts**: its result is what names
 				// the job, so the same card is updated with it rather than a second one being pushed.
@@ -693,7 +700,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 					// label the call carried — which is what keeps the card honest when the call's own
 					// arguments are not readable from here (they do arrive serialised often enough).
 					const start = backgroundStartOf(backgroundResultOf(event.result));
-					const call = backgroundCallOf(event.args);
+					const call = backgroundCallOf(endArgs);
 					pushBackgroundCard(stream, event.toolCallId, {
 						...call,
 						...(call.label === undefined && start.label !== undefined ? { label: start.label } : {}),
@@ -1618,6 +1625,9 @@ export interface AgentStatusPush {
 
 /** What the agent is doing this instant, as the tool's progress line says it. */
 let agentActivity: string | undefined;
+
+/** The arguments of the tool calls that have started and not ended yet, by call id: pi's end event does not repeat them. */
+const toolCallArgs = new Map<string, unknown>();
 /** Whether a turn is in flight in this window. */
 let agentRunning = false;
 
