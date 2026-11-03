@@ -723,6 +723,12 @@ function createImageElements(resource: URI | undefined, name: string, fullName: 
 
 	if ((!supportsVision && currentLanguageModel) || omittedState === OmittedState.Full) {
 		element.classList.add('warning');
+		// PiCode: the picture still shows as a card, so the person sees what they pasted even when this model cannot read it.
+		if (buffer.byteLength > 0) {
+			const previewUrl = URL.createObjectURL(new Blob([buffer as BlobPart]));
+			disposable.add({ dispose: () => URL.revokeObjectURL(previewUrl) });
+			replacePill(dom.$('div.chat-attached-context-pill', {}, dom.$('img.chat-attached-context-pill-image', { src: previewUrl, alt: '' })));
+		}
 		hoverElement.textContent = localize('chat.imageAttachmentHover', "{0} does not support images.", currentLanguageModelName ?? 'This model');
 		disposable.add(hoverService.setupDelayedHover(element, {
 			content: hoverElement,

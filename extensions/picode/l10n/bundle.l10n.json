@@ -306,6 +306,7 @@
 	"Sign-in needed": "Sign-in needed",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Skipped (larger than 20 MB): {0} and {1} more.",
 	"Skipped (larger than 20 MB): {0}.": "Skipped (larger than 20 MB): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.",
 	"Speech engine": "Speech engine",
 	"Speech model": "Speech model",
 	"Start a new chat": "Start a new chat",
