@@ -45,6 +45,7 @@ import {
 	turnFileEdits,
 	undoableTurn,
 	undoEdits,
+	wasUndone,
 	whenEditsSettled,
 } from './chat-edits';
 import {
@@ -534,18 +535,39 @@ function recordToolResult(toolName: string, args: unknown, isError: boolean | un
 /** The title the multi-diff editor opens with; the card's own header is the renderer's. */
 const TURN_EDITS_TITLE = vscode.l10n.t('Changed files');
 
-/** The button under the change card: puts the turn's files back as they were. */
 /** Opens the model comparison from the palette. */
 const COMPARE_MODELS_COMMAND_ID = 'picode.compareModels';
 
+/** The button under the change card: puts the turn's files back as they were. */
 export const UNDO_TURN_EDITS_COMMAND_ID = 'picode.undoTurnEdits';
 
-/** Runs the card's undo and tells the owner what happened, in the words they care about. */
-export async function undoTurnEditsCommand(key: unknown): Promise<void> {
+/**
+ * Asks, then runs the card's undo and tells the owner what happened, in the words they care about.
+ *
+ * Resolves to `true` only when the changes were put back: the chat greys the button out on that
+ * answer, so a card that was undone cannot be clicked again.
+ */
+export async function undoTurnEditsCommand(key: unknown): Promise<boolean> {
+	if (typeof key === 'string' && wasUndone(key)) {
+		void vscode.window.showInformationMessage(vscode.l10n.t('These changes were already undone.'));
+		return true;
+	}
 	const edits = typeof key === 'string' ? undoableTurn(key) : undefined;
 	if (edits === undefined) {
 		void vscode.window.showInformationMessage(vscode.l10n.t('These changes can no longer be undone.'));
-		return;
+		return false;
+	}
+	const count = edits.length;
+	const undo = vscode.l10n.t('Undo');
+	const answer = await vscode.window.showWarningMessage(
+		count === 1
+			? vscode.l10n.t('Undo the changes in {0} file?', count)
+			: vscode.l10n.t('Undo the changes in {0} files?', count),
+		{ modal: true, detail: vscode.l10n.t('Files go back to how they were before this answer. Files you changed since are left as they are.') },
+		undo
+	);
+	if (answer !== undo) {
+		return false;
 	}
 	const results = await undoEdits(edits, {
 		read: async absolutePath => fs.promises.readFile(absolutePath, 'utf8').catch(() => undefined),
@@ -561,6 +583,7 @@ export async function undoTurnEditsCommand(key: unknown): Promise<void> {
 			? vscode.l10n.t('Undid the changes in {0}.', files(undone))
 			: vscode.l10n.t('Undid {0}. {1} changed since and were left as they are.', files(undone), files(skipped)),
 	);
+	return true;
 }
 
 /**
@@ -594,7 +617,7 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 			};
 		});
 		stream.push(new vscode.ChatResponseMultiDiffPart(entries, TURN_EDITS_TITLE));
-		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: vscode.l10n.t('Undo these changes'), arguments: [rememberTurnForUndo(edits)] });
+		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: vscode.l10n.t('$(discard) Undo these changes'), arguments: [rememberTurnForUndo(edits)] });
 	} catch (error) {
 		log(`turn edits card failed: ${error instanceof Error ? error.message : String(error)}`);
 	}

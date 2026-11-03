@@ -27,7 +27,8 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { engramServerUrl } from './engram';
 import { parseEngramHealth, parseEngramProjects } from './engram';
-import { compareVersions, fetchLatestRelease, updateEngine } from './memory-update';
+import { restartMemory } from './engram-activation';
+import { compareVersions, fetchLatestRelease, installedEngineVersion, updateEngine } from './memory-update';
 import type { EngramProject } from './engram';
 import {
 	memoryDetailMarkdown,
@@ -172,7 +173,10 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			this.latestEngine = { version, at: Date.now() };
 		}
 		const latest = this.latestEngine.version;
-		return latest !== undefined && compareVersions(installed, latest) < 0 ? latest : undefined;
+		// An update already downloaded is not offered again: what is missing is the restart.
+		const downloaded = installedEngineVersion(os.homedir());
+		const have = downloaded !== undefined && compareVersions(downloaded, installed) > 0 ? downloaded : installed;
+		return latest !== undefined && compareVersions(have, latest) < 0 ? latest : undefined;
 	}
 
 	/** A search limited to the open projects; the engine's answer is narrowed again here to be safe. */
@@ -599,15 +603,34 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			currentVersion,
 			confirm: async message => {
 				const update = vscode.l10n.t('Update');
-				const answer = await vscode.window.showInformationMessage(message, { modal: true }, update, vscode.l10n.t('Cancel'));
+				const answer = await vscode.window.showInformationMessage(message, { modal: true }, update);
 				return answer === update;
 			},
 			progress: line => console.log(`[memory] ${line}`)
 		});
-		if (result.ok) {
+		if (result.ok && result.restart === true) {
+			const restart = vscode.l10n.t('Restart engine');
+			const answer = await vscode.window.showInformationMessage(result.message, restart);
+			if (answer === restart) {
+				await this.restartEngine();
+			}
+		} else if (result.ok) {
 			void vscode.window.showInformationMessage(result.message);
 		} else {
 			void vscode.window.showWarningMessage(result.message);
+		}
+		this.refresh();
+	}
+
+	/** Starts the engine again so the downloaded version is the one that runs; one somebody else started is left alone. */
+	private async restartEngine(): Promise<void> {
+		const outcome = await restartMemory(line => console.log(`[memory] ${line}`));
+		if (outcome === 'restarted') {
+			void vscode.window.showInformationMessage(vscode.l10n.t('The memory engine was restarted.'));
+		} else if (outcome === 'not-ours') {
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine was started by another program, so PiCode does not stop it. Close all PiCode windows to use the new version.'));
+		} else {
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine did not start again.'));
 		}
 		this.refresh();
 	}

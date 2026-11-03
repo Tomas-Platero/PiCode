@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { agentRoots, coalesce, discoverAgents, discoverSkills, nodeFs, skillRoots, type ResourceRoot } from './customizations';
 import { declarationsFromSetting, fillKeylessProviders, isRecord, projectDeclaration } from './declarations';
-import { memoryEnabled, startMemory, stopStartedMemory } from './engram-activation';
+import { memoryEnabled, restartMemory, startMemory, stopStartedMemory } from './engram-activation';
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
@@ -1158,7 +1158,6 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The pill's Cancel button calls it; the turn in flight is never touched by it.
 	disposables.push(vscode.commands.registerCommand('picode.cancelQueuedTurns', () => cancelQueuedTurns()));
 	disposables.push(vscode.commands.registerCommand(UNDO_TURN_EDITS_COMMAND_ID, (key: unknown) => undoTurnEditsCommand(key)));
-
 	// The update check: which installed packages npm knows a newer version of. It runs after the
 	// page has rendered — the page calls it without holding the list open — and
 	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
@@ -2227,6 +2226,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		const targets = readUpdatesSnapshot(context.globalState)?.targets ?? [];
 		const products = targets.filter(target => target.kind === 'package' && isProductPackage(target.name));
 		const engine = targets.find(target => target.kind === 'engine');
+		let engineRestarted = false;
 		const piWork = targets.length === 0 || targets.some(target => target.kind === 'runtime' || (target.kind === 'package' && !isProductPackage(target.name)));
 		// The chat runs pi in this very process: its session must be gone before the files under
 		// it change, or it keeps running the code being replaced.
@@ -2252,6 +2252,14 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: the memory engine was not updated. {0}', result.message));
 				return;
 			}
+			// The old engine keeps serving until it is restarted: do it now, so the update takes effect.
+			if (result.restart === true) {
+				engineRestarted = await restartMemory(line => report(`updates: ${line}`)) === 'restarted';
+			}
+			// The old engine keeps serving until it is restarted: do it now, so the update takes effect.
+			if (result.restart === true) {
+				engineRestarted = await restartMemory(line => report(`updates: ${line}`)) === 'restarted';
+			}
 		}
 		// The optimistic clear: the new version is on disk, the reload loads it, and the check
 		// that runs after the reload rebuilds the truth from scratch.
@@ -2260,7 +2268,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// The memory engine runs on its own, outside the window: a reload keeps the old one serving.
 		const reloadLabel = vscode.l10n.t('Reload Window');
 		void vscode.window.showInformationMessage(
-			engine === undefined
+			engine === undefined || engineRestarted
 				? vscode.l10n.t('PiCode updated. Reload the window to start using the new version.')
 				: vscode.l10n.t('PiCode updated. Reload the window to use the new pi packages; the new memory engine starts the next time PiCode opens.'),
 			reloadLabel,
