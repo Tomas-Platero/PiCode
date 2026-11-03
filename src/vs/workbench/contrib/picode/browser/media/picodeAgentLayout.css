@@ -509,12 +509,26 @@
 
 /* Lines added and removed under Changes. */
 .picode-overview-added {
-	color: var(--vscode-gitDecoration-addedResourceForeground);
+	color: var(--vscode-charts-green, #3fb950);
 	margin-right: 6px;
 }
 
 .picode-overview-removed {
-	color: var(--vscode-gitDecoration-deletedResourceForeground);
+	color: var(--vscode-charts-red, #f85149);
+}
+
+/* The fallbacks keep both colours in any theme, including one that defines neither; light themes get darker ones. */
+.monaco-workbench.vs .picode-overview-added {
+	color: var(--vscode-charts-green, #1a7f37);
+}
+
+.monaco-workbench.vs .picode-overview-removed {
+	color: var(--vscode-charts-red, #cf222e);
+}
+
+/* The Status tab names itself by its icon; its title would only repeat the word. */
+.monaco-workbench.picode-agent .part.sidebar:has(.composite[id="workbench.view.picodeStatus"]) > .composite.title .title-label {
+	display: none;
 }
 
 /* The `+N −M` row opens the changes. */

@@ -306,6 +306,7 @@
 	"Sign-in needed": "Accesso richiesto",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Saltati (oltre 20 MB): {0} e altri {1}.",
 	"Skipped (larger than 20 MB): {0}.": "Saltati (oltre 20 MB): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Alcune immagini non si sono potute leggere e non sono state inviate: {0}. Allegale di nuovo come PNG, JPEG, WebP o GIF.",
 	"Speech engine": "Motore vocale",
 	"Speech model": "Modello vocale",
 	"Start a new chat": "Avvia una nuova chat",

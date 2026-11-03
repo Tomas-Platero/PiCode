@@ -306,6 +306,7 @@
 	"Sign-in needed": "サインインが必要",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "スキップしました（20 MBを超えています）: {0}、ほか{1}件。",
 	"Skipped (larger than 20 MB): {0}.": "スキップしました（20 MBを超えています）: {0}。",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "読み取れなかった画像があり、送信されませんでした: {0}。PNG、JPEG、WebP、GIF として添付し直してください。",
 	"Speech engine": "音声エンジン",
 	"Speech model": "音声モデル",
 	"Start a new chat": "新しいチャットを開始",

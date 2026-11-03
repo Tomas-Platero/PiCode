@@ -306,6 +306,7 @@
 	"Sign-in needed": "Oturum açma gerekiyor",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Atlandı (20 MB'tan büyük): {0} ve {1} tane daha.",
 	"Skipped (larger than 20 MB): {0}.": "Atlandı (20 MB'tan büyük): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Bazı görseller okunamadı ve gönderilmedi: {0}. Bunları PNG, JPEG, WebP veya GIF olarak yeniden ekleyin.",
 	"Speech engine": "Konuşma motoru",
 	"Speech model": "Konuşma modeli",
 	"Start a new chat": "Yeni sohbet başlat",
