@@ -1,9 +1,9 @@
 {
-  "version": "42533fbc30419fd0dc5e123c11c400cfba33088b",
-  "productVersion": "1.144.3",
-  "picodeVersion": "1.0.3-experimental",
+  "version": "27e03026325e4d689757ede122874069ddd41edc",
+  "productVersion": "1.144.4",
+  "picodeVersion": "1.0.4-experimental",
   "kind": "hotfix",
-  "timestamp": 1793697600107,
-  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v1.0.3-experimental/PiCode-win32-x64-1.0.3-experimental-setup.exe",
-  "sha256hash": "1515906550a08d9f224702cabece7df5e89d5f9dca6f7bd28d8ae66dba1922c8"
+  "timestamp": 1793704864504,
+  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v1.0.4-experimental/PiCode-win32-x64-1.0.4-experimental-setup.exe",
+  "sha256hash": "4ebab30e77a4fe0c7c79b6f2220f5e3f9ba28c7e27e580a91f42bcf543ab2ac0"
 }
