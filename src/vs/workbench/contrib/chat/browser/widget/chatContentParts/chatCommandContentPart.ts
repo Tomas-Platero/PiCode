@@ -17,6 +17,9 @@ import { Command } from '../../../../../../editor/common/languages.js';
 
 const $ = dom.$;
 
+/** The connector's command behind the change card's undo button. */
+const PICODE_UNDO_TURN_EDITS_COMMAND = 'picode.undoTurnEdits';
+
 export class ChatCommandButtonContentPart extends Disposable implements IChatContentPart {
 	public readonly domNode: HTMLElement;
 
@@ -45,12 +48,20 @@ export class ChatCommandButtonContentPart extends Disposable implements IChatCon
 		const tooltip = enabled ?
 			command.tooltip :
 			localize('commandButtonDisabled', "Button not available in restored chat");
-		const button = this._register(new Button(container, { ...defaultButtonStyles, supportIcons: true, title: tooltip, secondary }));
+		// PiCode: the change card's undo is a quiet action next to the card, not the answer's main button,
+		// and it greys out once it has run (its command answers `true` when the changes were put back).
+		const undoesChanges = command.id === PICODE_UNDO_TURN_EDITS_COMMAND;
+		const button = this._register(new Button(container, { ...defaultButtonStyles, supportIcons: true, title: tooltip, secondary: secondary || undoesChanges }));
 		button.label = command.title;
 		button.enabled = enabled;
 
 		// TODO still need telemetry for command buttons
-		this._register(button.onDidClick(() => this.commandService.executeCommand(command.id, ...(command.arguments ?? []))));
+		this._register(button.onDidClick(async () => {
+			const result = await this.commandService.executeCommand(command.id, ...(command.arguments ?? []));
+			if (undoesChanges && result === true) {
+				button.enabled = false;
+			}
+		}));
 	}
 
 	hasSameContent(other: IChatProgressRenderableResponseContent): boolean {

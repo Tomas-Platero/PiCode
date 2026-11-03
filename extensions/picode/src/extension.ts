@@ -1158,7 +1158,6 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// The pill's Cancel button calls it; the turn in flight is never touched by it.
 	disposables.push(vscode.commands.registerCommand('picode.cancelQueuedTurns', () => cancelQueuedTurns()));
 	disposables.push(vscode.commands.registerCommand(UNDO_TURN_EDITS_COMMAND_ID, (key: unknown) => undoTurnEditsCommand(key)));
-
 	// The update check: which installed packages npm knows a newer version of. It runs after the
 	// page has rendered — the page calls it without holding the list open — and
 	// `checkPackageUpdates` caches each package's latest version for ten minutes, so refreshing
