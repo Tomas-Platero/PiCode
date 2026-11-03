@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.2-experimental",
+			"notes": "### ✨ New\n\n- **Show What's New in the Help menu.** Open the window with what changed whenever you want. If this version has no notes of its own, it shows the latest ones.\n\n### 🐛 Fixed\n\n- After an update, PiCode no longer sends you to the repository's release list in your browser; you only see its own What's New window."
+		},
+		{
 			"version": "1.0.1-experimental",
 			"notes": "### ✨ New\n\n- **Try the Agent layout from What's New.** If you are still on the Editor layout, the window that shows what changed now has a button to switch to Agent.\n- **Easier code sign-in.** When signing in with a code, PiCode copies the code and opens the page for you.\n- **Clearer cost.** In Status, a \"~\" before the cost means it is an estimate, not what your provider charged.\n- **What's new in your packages.** After updating a package that lists its changes, a \"What's new\" button shows them.\n\n### 🔧 Other changes\n\n- The built-in AI agent (pi) is updated to 1.5.0: safer sign-ins, better stability on Windows and faster answers."
 		},
