@@ -42,6 +42,9 @@ export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restor
 export type RestoreWalkthroughsConfigurationValue = { folder: string; category?: string; step?: string };
 
 const configurationKey = 'workbench.startupEditor';
+
+/** PiCode: set when the owner closes the Welcome page; it stops opening itself on every start. */
+const WELCOME_DISMISSED_KEY = 'picode.welcome.dismissed';
 const oldConfigurationKey = 'workbench.welcome.enabled';
 const telemetryOptOutStorageKey = 'workbench.telemetryOptOutShown';
 
@@ -104,10 +107,22 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		super();
 
 		this.run().then(undefined, onUnexpectedError);
+		// PiCode: a window that is closing does not count as the owner closing the page.
+		let shuttingDown = false;
+		const closing = () => {
+			shuttingDown = true;
+			// A close the user cancels must not leave the flag up for the closes that follow.
+			setTimeout(() => shuttingDown = false, 3000);
+		};
+		this._register(this.lifecycleService.onBeforeShutdown(closing));
+		this._register(this.lifecycleService.onWillShutdown(closing));
 		this._register(this.editorService.onDidCloseEditor((e) => {
 			if (e.editor instanceof GettingStartedInput) {
 				e.editor.selectedCategory = undefined;
 				e.editor.selectedStep = undefined;
+				if (!shuttingDown) {
+					this.storageService.store(WELCOME_DISMISSED_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
+				}
 			}
 		}));
 	}
@@ -138,7 +153,8 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		}
 
 		const enabled = isStartupPageEnabled(this.configurationService, this.contextService, this.environmentService);
-		if (enabled && this.lifecycleService.startupKind !== StartupKind.ReloadedWindow) {
+		const dismissed = this.storageService.getBoolean(WELCOME_DISMISSED_KEY, StorageScope.APPLICATION, false);
+		if (enabled && !dismissed && this.lifecycleService.startupKind !== StartupKind.ReloadedWindow) {
 
 			// Open the welcome even if we opened a set of default editors
 			if (!this.editorService.activeEditor || this.layoutService.openedDefaultEditors) {

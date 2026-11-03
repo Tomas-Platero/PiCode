@@ -51,6 +51,9 @@ const PICODE_PENDING_CODE_KEY = 'picode.account.pendingCode';
 /** Application-scope storage keys caching who is signed in, so sessions can be rebuilt without a network round-trip. */
 export const PICODE_UID_STORAGE_KEY = 'picode.account.uid';
 export const PICODE_EMAIL_STORAGE_KEY = 'picode.account.email';
+/** The plan the last sign-in answered with (`free`, `pro`…), shown beside the account; never a gate. */
+export const PICODE_PLAN_STORAGE_KEY = 'picode.account.plan';
+
 /** The avatar's address, kept so the setup window can show it without signing in again. */
 export const PICODE_PICTURE_STORAGE_KEY = 'picode.account.picture';
 export const PICODE_SCOPES_STORAGE_KEY = 'picode.account.scopes';
@@ -276,6 +279,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		this._storageService.remove(PICODE_EMAIL_STORAGE_KEY, StorageScope.APPLICATION);
 		this._storageService.remove(PICODE_SCOPES_STORAGE_KEY, StorageScope.APPLICATION);
 		this._storageService.remove(PICODE_PICTURE_STORAGE_KEY, StorageScope.APPLICATION);
+		this._storageService.remove(PICODE_PLAN_STORAGE_KEY, StorageScope.APPLICATION);
 		this._cachedIdToken = undefined;
 	}
 
@@ -423,6 +427,13 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		if (response.statusCode !== 200 || !response.json?.customToken) {
 			// The most common failure is a code that expired or was already used.
 			throw new Error(localize('picode.account.codeExchangeFailed', "Sign-in could not be completed. The sign-in request may have expired or was already used — please try signing in again."));
+		}
+		// Kept only to say it beside the account (Free / Pro); nothing is decided with it.
+		const plan = typeof response.json.plan === 'string' ? response.json.plan.trim().toLowerCase() : '';
+		if (plan) {
+			this._storageService.store(PICODE_PLAN_STORAGE_KEY, plan, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		} else {
+			this._storageService.remove(PICODE_PLAN_STORAGE_KEY, StorageScope.APPLICATION);
 		}
 		return { customToken: response.json.customToken };
 	}

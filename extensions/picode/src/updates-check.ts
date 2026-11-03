@@ -20,6 +20,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import { l10n } from './l10n.ts';
 import { npmRunEnv, planNpmRun } from './npm-run';
 
 /* ------------------------------------------------------------------ *
@@ -205,14 +206,14 @@ export function describeTargets(targets: readonly UpdateTarget[]): string {
 	const packages = targets.filter(target => target.kind === 'package');
 	for (const target of targets) {
 		if (target.kind !== 'package') {
-			parts.push(`${target.name}: update to ${target.latest} available (now ${target.installed})`);
+			parts.push(l10n.t('{0}: update to {1} available (now {2})', target.name, target.latest, target.installed));
 		}
 	}
 	if (packages.length === 1) {
 		const [only] = packages;
-		parts.push(`1 package: ${only.name}, update to ${only.latest} available (now ${only.installed})`);
+		parts.push(l10n.t('1 package: {0}, update to {1} available (now {2})', only.name, only.latest, only.installed));
 	} else if (packages.length > 1) {
-		parts.push(`${packages.length} packages have updates available: ${packages.map(target => target.name).join(', ')}`);
+		parts.push(l10n.t('{0} packages have updates available: {1}', packages.length, packages.map(target => target.name).join(', ')));
 	}
 	return parts.join(', ');
 }
@@ -400,9 +401,9 @@ function lastMeaningfulLine(text: string): string | undefined {
  * can show as-is, carrying the last meaningful line of the command's stderr.
  */
 export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: boolean; message: string }> {
-	const failed = (label: string, outcome: SpawnOutcome): { ok: boolean; message: string } => {
+	const failed = (outcome: SpawnOutcome, plain: string, withReason: (reason: string) => string): { ok: boolean; message: string } => {
 		const reason = lastMeaningfulLine(outcome.stderr);
-		return { ok: false, message: `PiCode could not update ${label}${reason === undefined ? '.' : `: ${reason}`}` };
+		return { ok: false, message: reason === undefined ? plain : withReason(reason) };
 	};
 	const run = async (spawn: SpawnFn): Promise<{ ok: boolean; message: string }> => {
 		const npmPlan = planNpmRun([
@@ -418,7 +419,7 @@ export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: bool
 			shell: npmPlan.shell,
 		});
 		if (!runtime.ok) {
-			return failed('pi', runtime);
+			return failed(runtime, l10n.t('PiCode could not update pi.'), reason => l10n.t('PiCode could not update pi: {0}', reason));
 		}
 		const packages = await spawn(process.execPath, [context.cliEntry, 'update', '--extensions'], {
 			// The editor's executable is Electron: without this flag it would try to open an app
@@ -429,15 +430,15 @@ export async function runPiUpdate(context: UpdateRunContext): Promise<{ ok: bool
 			shell: false,
 		});
 		if (!packages.ok) {
-			return failed('the packages', packages);
+			return failed(packages, l10n.t('PiCode could not update the packages.'), reason => l10n.t('PiCode could not update the packages: {0}', reason));
 		}
-		return { ok: true, message: 'PiCode updated.' };
+		return { ok: true, message: l10n.t('PiCode updated.') };
 	};
 	const spawn: SpawnFn = context.spawn ?? defaultSpawn;
 	try {
 		return await run(spawn);
 	} catch (error) {
-		return { ok: false, message: `PiCode could not be updated (${error instanceof Error ? error.message : String(error)}).` };
+		return { ok: false, message: l10n.t('PiCode could not be updated ({0}).', error instanceof Error ? error.message : String(error)) };
 	}
 }
 

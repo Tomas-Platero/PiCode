@@ -12,12 +12,14 @@
  * editor's own add flow would put the entry in the editor's user `mcp.json`, a file and a
  * shape pi never reads, which is why this translation exists instead of that command.
  *
- * Like the other pure modules here: no `vscode` import and no sibling import, because the
- * checks and the merge can be exercised by running them and Node does not resolve a sibling
- * import without its extension. The file's shape mirrors `mcpServers.ts` — same key, same
+ * Like the other pure modules here: no `vscode` import, and the one local import carries its
+ * extension (`./l10n.ts`), which is what `node --test` resolves and what the emit turns back into
+ * `./l10n.js`. The file's shape mirrors `mcpServers.ts` — same key, same
  * two-space indent, same final newline — and the tests run the two side by side to keep them
  * that way.
  */
+
+import { l10n } from './l10n.ts';
 
 /** One server as the quick-pick flow collects it. */
 export interface AddServerDraft {
@@ -46,10 +48,10 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
 export function validateServerName(name: string): string | undefined {
 	const trimmed = name.trim();
 	if (trimmed.length === 0) {
-		return 'The server needs a name.';
+		return l10n.t('The server needs a name.');
 	}
 	if (!NAME_PATTERN.test(trimmed)) {
-		return 'A name holds letters, digits, dashes and underscores, and starts with a letter or a digit.';
+		return l10n.t('A name holds letters, digits, dashes and underscores, and starts with a letter or a digit.');
 	}
 	return undefined;
 }
@@ -63,14 +65,14 @@ export function validateDraft(draft: AddServerDraft): string[] {
 	}
 	if (draft.transport === 'stdio') {
 		if ((draft.command ?? '').trim().length === 0) {
-			problems.push('A local server needs the command that starts it.');
+			problems.push(l10n.t('A local server needs the command that starts it.'));
 		}
 	} else {
 		const url = (draft.url ?? '').trim();
 		if (url.length === 0) {
-			problems.push('A remote server needs its URL.');
+			problems.push(l10n.t('A remote server needs its URL.'));
 		} else if (!isHttpUrl(url)) {
-			problems.push(`"${url}" is not a http or https URL.`);
+			problems.push(l10n.t('"{0}" is not a http or https URL.', url));
 		}
 	}
 	return problems;

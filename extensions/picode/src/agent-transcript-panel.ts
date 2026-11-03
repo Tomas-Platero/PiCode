@@ -36,9 +36,11 @@ export function showAgentTranscript(options: TranscriptPanelOptions): void {
 		return;
 	}
 	const first = options.source();
+	// The panel's title is the agent the page is about, under the one name it is read by.
+	const who = first?.agent ?? vscode.l10n.t('Agent');
 	const panel = vscode.window.createWebviewPanel(
 		'picode.agentTranscript',
-		`${first?.agent ?? 'Agent'}${first !== undefined && first.label.length > 0 ? ` · ${first.label}` : ''}`,
+		first !== undefined && first.label.length > 0 ? vscode.l10n.t('{0} · {1}', who, first.label) : who,
 		{ viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
 		{ enableScripts: true, retainContextWhenHidden: true },
 	);
@@ -58,7 +60,7 @@ export function showAgentTranscript(options: TranscriptPanelOptions): void {
 		try {
 			const transcript = options.source();
 			const body = transcript === undefined
-				? '<p class="muted">Nothing was recorded for this agent.</p>'
+				? `<p class="muted">${escapeHtml(vscode.l10n.t('Nothing was recorded for this agent.'))}</p>`
 				: await transcriptHtml(transcript, async markdown => String(await vscode.commands.executeCommand('markdown.api.render', markdown)), Date.now());
 			await panel.webview.postMessage({ body, running: transcript !== undefined && isRunning(transcript.status) });
 		} finally {
@@ -97,7 +99,7 @@ function shell(nonce: string, cspSource: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' ${escapeHtml(cspSource)}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style nonce="${nonce}">${TRANSCRIPT_STYLE}</style></head>
-<body><div class="page" id="root"><p class="muted">Reading…</p></div>
+<body><div class="page" id="root"><p class="muted">${escapeHtml(vscode.l10n.t('Reading…'))}</p></div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 const root = document.getElementById('root');

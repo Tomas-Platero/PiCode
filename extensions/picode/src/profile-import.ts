@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { splitLeftBehindPackages } from './left-behind-packages';
+import { l10n } from './l10n.ts';
 
 /**
  * The one-shot copy of a profile, and the scan that previews it.
@@ -219,15 +220,15 @@ function readJsonObjectForCopy(file: string): { text: string } | { failure: stri
 	try {
 		text = readFileSync(file, 'utf8');
 	} catch {
-		return { failure: 'the source file could not be read' };
+		return { failure: l10n.t('the source file could not be read') };
 	}
 	try {
 		const value: unknown = JSON.parse(text);
 		if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-			return { failure: 'the source is not a JSON object' };
+			return { failure: l10n.t('the source is not a JSON object') };
 		}
 	} catch {
-		return { failure: 'the source is not valid JSON' };
+		return { failure: l10n.t('the source is not valid JSON') };
 	}
 	return { text };
 }
@@ -270,21 +271,21 @@ function importFile(item: ImportItem, source: string, target: string, transform?
 		return { item, status: 'absent', path: target };
 	}
 	if (!isFile(source)) {
-		return { item, status: 'failed', path: target, reason: 'the source path is not a file' };
+		return { item, status: 'failed', path: target, reason: l10n.t('the source path is not a file') };
 	}
 	const read = readJsonObjectForCopy(source);
 	if ('failure' in read) {
 		return { item, status: 'failed', path: target, reason: read.failure };
 	}
 	if (existsSync(target) && !isFile(target)) {
-		return { item, status: 'failed', path: target, reason: 'the target already exists and is not a file' };
+		return { item, status: 'failed', path: target, reason: l10n.t('the target already exists and is not a file') };
 	}
 	const existed = isFile(target);
 	try {
 		mkdirSync(path.dirname(target), { recursive: true });
 		writeFileSync(target, transform !== undefined ? transform(read.text) : read.text);
 	} catch {
-		return { item, status: 'failed', path: target, reason: 'the target could not be written' };
+		return { item, status: 'failed', path: target, reason: l10n.t('the target could not be written') };
 	}
 	return { item, status: existed ? 'overwritten' : 'copied', path: target };
 }
@@ -294,7 +295,7 @@ function importDirectory(item: ImportItem, source: string, target: string): Impo
 		return { item, status: 'absent', path: target };
 	}
 	if (!isDirectory(source)) {
-		return { item, status: 'failed', path: target, reason: 'the source path is not a directory' };
+		return { item, status: 'failed', path: target, reason: l10n.t('the source path is not a directory') };
 	}
 	try {
 		const files = countFiles(source);
@@ -304,7 +305,7 @@ function importDirectory(item: ImportItem, source: string, target: string): Impo
 		copyDirectory(source, target);
 		return { item, status: existed ? 'overwritten' : 'copied', path: target, files };
 	} catch {
-		return { item, status: 'failed', path: target, reason: 'the directory could not be copied' };
+		return { item, status: 'failed', path: target, reason: l10n.t('the directory could not be copied') };
 	}
 }
 

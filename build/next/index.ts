@@ -258,7 +258,8 @@ const commonResourcePatterns = [
 	// Activity Bar's outline icons (picodeActivityBarIcons.ts). Without these entries the build
 	// ships no file there and the renderer logs `picode.svg ... net::ERR_FILE_NOT_FOUND`.
 	'vs/workbench/contrib/picode/browser/media/*.svg',
-	'vs/workbench/contrib/picode/browser/media/tabler/*.svg'
+	'vs/workbench/contrib/picode/browser/media/tabler/*.svg',
+	'vs/workbench/contrib/picode/l10n/*.json'
 ];
 
 // Resources for desktop target

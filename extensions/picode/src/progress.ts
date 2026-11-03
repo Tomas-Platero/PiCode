@@ -15,6 +15,8 @@
  * No `vscode` import: it is wording, and wording can be exercised by running it.
  */
 
+import { l10n } from './l10n.ts';
+
 /** The fields a tool's arguments may carry, tried in this order for each tool. */
 function firstString(args: unknown, keys: readonly string[]): string | undefined {
 	if (typeof args !== 'object' || args === null) {
@@ -77,7 +79,7 @@ function capped(text: string, max: number): string {
 		return text;
 	}
 	const dropped = text.length - max;
-	return `${text.slice(0, max)}\n… ${dropped} more characters`;
+	return `${text.slice(0, max)}\n${l10n.t('… {0} more characters', dropped)}`;
 }
 
 /**
@@ -86,9 +88,16 @@ function capped(text: string, max: number): string {
  * They arrive parsed when the caller is the one that made the call and serialised when they have
  * crossed a boundary, so a JSON string is pretty-printed rather than shown as one long line.
  */
-export function toolInputText(args: unknown): string {
+export function toolInputText(args: unknown, toolName?: string): string {
 	if (args === undefined || args === null) {
 		return '';
+	}
+	// A shell call is its command: showing it inside a JSON object makes the reader dig it out.
+	if (toolName === 'bash' || toolName === 'powershell') {
+		const command = firstString(args, ['command']);
+		if (command !== undefined) {
+			return capped(command, MAX_INPUT_CHARS);
+		}
 	}
 	if (typeof args === 'string') {
 		try {

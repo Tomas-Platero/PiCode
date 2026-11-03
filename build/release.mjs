@@ -8,6 +8,7 @@
  * Usage:
  *   node build/release.mjs update-feed
  *   node build/release.mjs release-notes
+ *   node build/release.mjs whats-new-history
  *
  * One file per domain: the scripts that used to sit side by side in build/ were fused
  * here, each keeping its own explanation directly above the code it runs. Commands are
@@ -362,7 +363,77 @@ import { pathToFileURL } from 'node:url';
 	}
 
 
-const USAGE = `usage: node build/release.mjs <update-feed|release-notes|kind>\n`;
+	// whats-new-history
+	/**
+	 * Keeps a release's "What changed" summary after its release page is gone.
+	 *
+	 * A channel shows only its newest release, so the page of the one it replaces is deleted. The
+	 * editor's What's New window shows every version a person skipped, so before that page goes,
+	 * its summary (as published, including any hand edits) is kept in the channel's history file
+	 * beside the update feed: `updates/<channel>/whats-new.json`, newest first.
+	 *
+	 * Usage: node build/release.mjs whats-new-history --history <file> --version <v> --body <file> [--max <n>]
+	 * `--body` is the release page's whole body; a body without the section leaves the file as it is.
+	 */
+	async function cmdWhatsNewHistory(cli) {
+	const { readFileSync, writeFileSync, existsSync } = await import('node:fs');
+	const arg = (name, fallback) => {
+		const i = cli.indexOf(`--${name}`);
+		return i >= 0 && cli[i + 1] !== undefined ? cli[i + 1] : fallback;
+	};
+	const historyPath = arg('history');
+	const version = arg('version', '').replace(/^v/, '');
+	const bodyPath = arg('body');
+	const max = Number(arg('max', '30'));
+	if (!historyPath || !/^\d+\.\d+\.\d+/.test(version) || !bodyPath) {
+		process.stderr.write('usage: node build/release.mjs whats-new-history --history <file> --version <v> --body <file> [--max <n>]\n');
+		process.exit(2);
+	}
+
+	const notes = whatChangedSection(readFileSync(bodyPath, 'utf8'));
+	if (!notes) {
+		return;
+	}
+	let versions = [];
+	if (existsSync(historyPath)) {
+		const parsed = JSON.parse(readFileSync(historyPath, 'utf8'));
+		versions = Array.isArray(parsed?.versions) ? parsed.versions : [];
+	}
+	versions = [{ version, notes }, ...versions.filter(entry => entry?.version !== version)]
+		.sort((a, b) => compareVersionNumbers(b.version, a.version))
+		.slice(0, max);
+	writeFileSync(historyPath, `${JSON.stringify({ versions }, null, '\t')}\n`);
+	}
+
+	/** The "## What changed" section without its heading; the app reads it the same way (picodeWhatsNewData.ts). */
+	export function whatChangedSection(body) {
+	const match = /^##\s+What changed\s*$/m.exec(body);
+	if (!match) {
+		return undefined;
+	}
+	const rest = body.slice(match.index + match[0].length);
+	const next = /^##\s+(?!#)/m.exec(rest);
+	// A horizontal rule closes the section on the release page; it is layout, not part of the summary.
+	const section = (next ? rest.slice(0, next.index) : rest).replace(/\r\n/g, '\n').replace(/\n-{3,}\s*$/, '').trim();
+	return section || undefined;
+	}
+
+	/** `0.7.10-experimental` after `0.7.9-experimental`: only the numbers count. */
+	export function compareVersionNumbers(a, b) {
+	const parts = version => (/^(\d+)\.(\d+)\.(\d+)/.exec(version ?? '') ?? []).slice(1).map(Number);
+	const left = parts(a);
+	const right = parts(b);
+	for (let i = 0; i < 3; i++) {
+		const diff = (left[i] ?? 0) - (right[i] ?? 0);
+		if (diff !== 0) {
+			return diff;
+		}
+	}
+	return 0;
+	}
+
+
+const USAGE = `usage: node build/release.mjs <update-feed|release-notes|whats-new-history|kind>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
@@ -371,6 +442,8 @@ async function dispatch() {
 			return cmdUpdateFeed(cli.slice(1));
 		case 'release-notes':
 			return cmdReleaseNotes(cli.slice(1));
+		case 'whats-new-history':
+			return cmdWhatsNewHistory(cli.slice(1));
 		case 'kind':
 			return cmdKind(cli.slice(1));
 		default:

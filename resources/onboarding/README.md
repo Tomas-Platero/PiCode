@@ -17,10 +17,35 @@ instead of asking again:
 | --- | --- |
 | [`index.html`](index.html) | the skeleton: rail, six steps, footer. No content — the steps are painted from data. |
 | [`onboarding.js`](onboarding.js) | everything the page decides: which step, what it shows, and the calls it makes. Two languages (English, Spanish) in one table. |
+| [`flags.js`](flags.js) | the 14 country flags of the language list, as small vector images in the flag's own colours (emoji flags are only letters on Windows, so they are drawn). |
 | [`onboarding.css`](onboarding.css) | the look, and the palette: **fixed**, the product's. Three surfaces (canvas `#0B0F19`, rail `#111625`, card `#182030` with a `#2A364F` border), three text weights (`#F3F4F6` · `#9CA3AF` · `#6B7280`), one blue for the action (`#2563EB`, hover `#1D4ED8`) and one green for "this worked" (`#10B981`). |
 | [`preload.cjs`](preload.cjs) | the only bridge to the main process: five named operations, no generic `invoke`. |
 | [`host.cjs`](host.cjs) | the backend shim. It loads the connector's own `onboarding-host` and answers one command per process. |
 | `media/picode.svg` | the robot mark, **copied verbatim** from `extensions/picode/media/picode.svg`. If the mark changes, this file changes with it. |
+
+## The page does not move when it repaints
+
+A choice repaints its step, and the person was reading the bottom of it. `fill()` (the one helper
+every list is painted with) puts `.steps-scroll`'s position back after repainting, at once and again
+after the next frame; only arriving at *another* step starts at the top (`renderStep`, which used to
+scroll `.content`, an element that never scrolls). Scrollbars are the product's own, thin pills in
+the palette (`::-webkit-scrollbar` at the end of `onboarding.css`); never set the standard
+`scrollbar-width` / `scrollbar-color` there, because they switch the WebKit ones off.
+
+## Which layout the setup starts on
+
+A **first** setup recommends the new layout: Agent is marked from the start and recorded as soon as
+the page loads (like the theme), with a *New* tag on its card, so leaving the step alone or skipping
+the setup keeps it. A later setup, or an update, keeps whatever the person has.
+
+## The editor's language, while the steps go by
+
+The page speaks the computer's language, which the main process reads from the system
+(`systemLanguages` in the bootstrap): the browser inside the editor would answer with the editor's own. The editor's own language is fixed when the
+program starts, so the setup cannot switch it live; it gets it ready instead. `prepareLanguage`
+(backend: `extensions/picode/src/display-language.ts`) downloads Microsoft's language pack from Open
+VSX into `<user data>/picode-language/`, and the editor installs it at its first start. The final
+summary shows a *Language* row only while something is left to do. See `docs/IDIOMAS.md`.
 
 ## Signing in to a subscription, before the editor exists
 
@@ -128,10 +153,10 @@ shown as chosen while the thing it describes is off.
   reserves its gutter on **both** edges (`scrollbar-gutter: stable both-edges`): reserving it on the
   right only left every centred block 15 px off. Measured after: 66 px left, 66 px right, 0
   difference.
-- **The welcome is centred and its three cards are shortcuts**: 🤖 pi, ⚡ model, 🎨 theme, each
-  with its value in `#F3F4F6`, hovering to a `#2563EB` border (verified by moving a real pointer),
-  and each jumping to its step. The account card is one line plus one button with an `OPTIONAL`
-  badge — no paragraph to read on the first second.
+- **The welcome is centred and is about the account** (changed 2026-11-02, «quita lo de agente,
+  modelo y tema»): the three shortcut cards (pi, model, theme) are gone, and the second line says
+  what signing in is for. The account card says what an account is (free, with email, Google or
+  GitHub; Pro adds cloud sync), one button *Sign in or sign up* and a quiet link to the plans.
 
 ## What the public README says, and what it must not say
 
@@ -144,8 +169,9 @@ repaints itself; the cards carry their own colours).
 
 ## What each step decided to stop doing
 
-- **Welcome** shows three facts that are **buttons**: pressing "Model" goes to the model step.
-  A summary you cannot act on is a list of words.
+- **Welcome** no longer repeats what the later steps ask: pi, model and theme are the *Ready*
+  summary's job. Its card is the account, and it has three states that read as buttons and one
+  sentence each — waiting (spinner, the page again, cancel), signed in (profile and *Sign out*), failed (retry).
 - **Model** no longer offers "Connect a subscription" as a card. Its sign-in runs in the editor's
   account flow, and a card whose job is to say *you cannot use me yet* is worse than a sentence:
   it is a footnote below the choices now, and only while nothing is connected.

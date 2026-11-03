@@ -221,6 +221,11 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 		const sideBarPosition = this.layoutService.getSideBarPosition();
 		const panelPosition = this.layoutService.getPanelPosition();
 
+		// PiCode's Agent layout puts the sessions list on the left of the chat, wherever the chat lives.
+		if (this.configurationService.getValue<string>('picode.appearance.layout') === 'agent') {
+			return { position: Position.LEFT, location: viewLocation ?? ViewContainerLocation.AuxiliaryBar };
+		}
+
 		let sideSessionsOnRightPosition: boolean;
 		switch (viewLocation) {
 			case ViewContainerLocation.Sidebar:
@@ -296,7 +301,7 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 
 		// Layout changes
 		this._register(Event.any(
-			Event.filter(this.configurationService.onDidChangeConfiguration, e => e.affectsConfiguration('workbench.sideBar.location')),
+			Event.filter(this.configurationService.onDidChangeConfiguration, e => e.affectsConfiguration('workbench.sideBar.location') || e.affectsConfiguration('picode.appearance.layout')),
 			this.layoutService.onDidChangePanelPosition,
 			this.layoutService.onDidChangePartVisibility,
 			Event.filter(this.viewDescriptorService.onDidChangeContainerLocation, e => e.viewContainer === this.viewDescriptorService.getViewContainerByViewId(this.id))
@@ -997,6 +1002,8 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 		let newSessionsContainerVisible: boolean;
 		if (!this.configurationService.getValue<boolean>(ChatConfiguration.ChatViewSessionsEnabled)) {
 			newSessionsContainerVisible = false; // disabled in settings
+		} else if (this.configurationService.getValue<string>('picode.appearance.layout') === 'agent') {
+			newSessionsContainerVisible = false; // PiCode's Agent layout gives the sessions a column of their own
 		} else {
 
 			// Sessions control: stacked
@@ -1146,7 +1153,7 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 		this._register(Event.any(
 			chatWidget.onDidChangeEmptyState,
 			Event.fromObservable(welcomeController.isShowingWelcome),
-			Event.filter(this.configurationService.onDidChangeConfiguration, e => e.affectsConfiguration(ChatConfiguration.ChatViewSessionsEnabled)),
+			Event.filter(this.configurationService.onDidChangeConfiguration, e => e.affectsConfiguration(ChatConfiguration.ChatViewSessionsEnabled) || e.affectsConfiguration('picode.appearance.layout')),
 			Event.filter(this.contextKeyService.onDidChangeContext, e => e.affectsSome(hasByokModelsContextKeys))
 		)(() => {
 			if (this.sessionsViewerOrientation === AgentSessionsViewerOrientation.Stacked) {

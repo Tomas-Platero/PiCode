@@ -23,6 +23,7 @@
 
 import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
+import { l10n } from './l10n.ts';
 
 /** One row of the Tasks block: a background job, or a subagent. */
 export type TaskRow =
@@ -73,24 +74,24 @@ export function taskBoard(jobs: readonly BackgroundJobStatus[], agents: readonly
 /** The row's name: the job's or the agent's own label, or what it is. */
 export function taskTitle(row: TaskRow): string {
 	if (row.kind === 'job') {
-		return row.job.label ?? `Background job ${row.job.jobNumber}`;
+		return row.job.label ?? l10n.t('Background job {0}', row.job.jobNumber);
 	}
-	return row.agent.label.length > 0 ? row.agent.label : row.agent.agent.length > 0 ? row.agent.agent : `Agent ${row.agent.id}`;
+	return row.agent.label.length > 0 ? row.agent.label : row.agent.agent.length > 0 ? row.agent.agent : l10n.t('Agent {0}', row.agent.id);
 }
 
 /** What the row is doing, in one word that is true. */
 export function taskState(row: TaskRow): string {
 	if (row.kind === 'job') {
-		return row.job.endedAt === undefined ? 'running' : 'done';
+		return row.job.endedAt === undefined ? l10n.t('running') : l10n.t('done');
 	}
 	switch (row.agent.status) {
-		case 'queued': return 'queued';
-		case 'running': return 'running';
-		case 'waiting': return 'waiting for you';
-		case 'completed': return 'done';
-		case 'failed': return 'failed';
-		case 'cancelled': return 'stopped';
-		case 'timed_out': return 'timed out';
+		case 'queued': return l10n.t('queued');
+		case 'running': return l10n.t('running');
+		case 'waiting': return l10n.t('waiting for you');
+		case 'completed': return l10n.t('done');
+		case 'failed': return l10n.t('failed');
+		case 'cancelled': return l10n.t('stopped');
+		case 'timed_out': return l10n.t('timed out');
 	}
 }
 
@@ -117,15 +118,15 @@ export function taskDetail(row: TaskRow, now: number): string {
 export function elapsedLabel(startedAt: number, now: number): string {
 	const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
 	if (seconds < 60) {
-		return `${seconds}s`;
+		return l10n.t('{0}s', seconds);
 	}
 	const minutes = Math.floor(seconds / 60);
 	if (minutes < 60) {
-		return `${minutes}m`;
+		return l10n.t('{0}m', minutes);
 	}
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) {
-		return `${hours}h ${minutes % 60}m`;
+		return l10n.t('{0}h {1}m', hours, minutes % 60);
 	}
-	return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+	return l10n.t('{0}d {1}h', Math.floor(hours / 24), hours % 24);
 }

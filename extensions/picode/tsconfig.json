@@ -9,7 +9,9 @@
 		"typeRoots": [
 			"../../node_modules/@types"
 		],
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		// `./l10n.ts` is what the plain-Node tests can resolve; the emit turns it back into `./l10n.js`.
+		"rewriteRelativeImportExtensions": true
 	},
 	"include": [
 		"src/**/*",

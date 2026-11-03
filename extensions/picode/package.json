@@ -12,6 +12,7 @@
 		"Other"
 	],
 	"main": "./out/extension.js",
+	"l10n": "./l10n",
 	"capabilities": {
 		"virtualWorkspaces": false,
 		"untrustedWorkspaces": {
@@ -49,7 +50,7 @@
 				"id": "picode.pi",
 				"name": "picode",
 				"fullName": "PiCode",
-				"description": "PiCode's agent: reads and edits your code with your own models.",
+				"description": "%chatParticipant.description%",
 				"isDefault": true,
 				"modes": [
 					"ask",
@@ -72,7 +73,7 @@
 					"properties": {
 						"endpoint": {
 							"type": "string",
-							"description": "The provider's address, ending in /v1 when it asks for one (for example https://openrouter.ai/api/v1)."
+							"description": "%provider.endpoint.description%"
 						},
 						"api": {
 							"type": "string",
@@ -83,28 +84,28 @@
 								"google-generative-ai"
 							],
 							"enumItemLabels": [
-								"OpenAI (compatible)",
-								"OpenAI (Responses)",
-								"Anthropic",
-								"Google"
+								"%provider.api.openai%",
+								"%provider.api.responses%",
+								"%provider.api.anthropic%",
+								"%provider.api.google%"
 							],
 							"enumDescriptions": [
-								"The usual OpenAI-style endpoint; also the one most compatible providers offer.",
-								"OpenAI's newer Responses-style endpoint.",
-								"Anthropic's own endpoint (Claude).",
-								"Google's own endpoint (Gemini)."
+								"%provider.api.openaiHint%",
+								"%provider.api.responsesHint%",
+								"%provider.api.anthropicHint%",
+								"%provider.api.googleHint%"
 							],
 							"default": "openai-completions",
-							"description": "The dialect that endpoint speaks."
+							"description": "%provider.api.description%"
 						},
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "The provider's key. It is stored encrypted and never shown again."
+							"description": "%provider.apiKey.description%"
 						},
 						"id": {
 							"type": "string",
-							"description": "A short name for this provider, with no spaces: the name the settings row, the model list and the agent use."
+							"description": "%provider.id.description%"
 						}
 					}
 				}
@@ -113,169 +114,169 @@
 		"commands": [
 			{
 				"command": "picode.agents.chooseModels",
-				"title": "Choose Models for Agents",
+				"title": "%command.agents.chooseModels%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.pi.toggleThinking",
-				"title": "Toggle Thinking in Chat",
+				"title": "%command.pi.toggleThinking%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.pi.restart",
-				"title": "Restart Pi",
+				"title": "%command.pi.restart%",
 				"category": "PiCode",
 				"icon": "$(refresh)"
 			},
 			{
 				"command": "picode.pi.cleanCache",
-				"title": "Clean Pi Cache",
+				"title": "%command.pi.cleanCache%",
 				"category": "PiCode",
 				"icon": "$(trash)"
 			},
 			{
 				"command": "picode.pi.openProfile",
-				"title": "Open Pi Profile",
+				"title": "%command.pi.openProfile%",
 				"category": "PiCode",
 				"icon": "$(folder-opened)"
 			},
 			{
 				"command": "picode.compareModels",
-				"title": "Compare Models",
+				"title": "%command.compareModels%",
 				"category": "PiCode",
 				"icon": "$(diff-multiple)"
 			},
 			{
 				"command": "picode.cancelQueuedTurns",
-				"title": "Cancel Queued Turns",
+				"title": "%command.cancelQueuedTurns%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.status.openProviderSettings",
-				"title": "Open Provider Settings",
+				"title": "%command.status.openProviderSettings%",
 				"category": "PiCode",
 				"icon": "$(gear)"
 			},
 			{
 				"command": "picode.updates.apply",
-				"title": "Update Pi",
+				"title": "%command.updates.apply%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.updates.check",
-				"title": "Check for Pi updates",
+				"title": "%command.updates.check%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.agents",
-				"title": "Show Launched Agents",
+				"title": "%command.agents%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.connectProvider",
-				"title": "Connect a subscription",
+				"title": "%command.connectProvider%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.setup",
-				"title": "Set up PiCode",
+				"title": "%command.setup%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.memory.search",
-				"title": "Search memories",
+				"title": "%command.memory.search%",
 				"category": "PiCode",
 				"icon": "$(search)"
 			},
 			{
 				"command": "picode.memory.clearSearch",
-				"title": "Clear the memory search",
+				"title": "%command.memory.clearSearch%",
 				"category": "PiCode",
 				"icon": "$(close)"
 			},
 			{
 				"command": "picode.memory.refresh",
-				"title": "Refresh memory",
+				"title": "%command.memory.refresh%",
 				"category": "PiCode",
 				"icon": "$(refresh)"
 			},
 			{
 				"command": "picode.memory.check",
-				"title": "Check memory",
+				"title": "%command.memory.check%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.memory.copy",
-				"title": "Copy a memory",
+				"title": "%command.memory.copy%",
 				"category": "PiCode",
 				"icon": "$(copy)"
 			},
 			{
 				"command": "picode.memory.delete",
-				"title": "Delete a memory",
+				"title": "%command.memory.delete%",
 				"category": "PiCode",
 				"icon": "$(trash)"
 			},
 			{
 				"command": "picode.memory.open",
-				"title": "Open a memory",
+				"title": "%command.memory.open%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.memory.showMore",
-				"title": "Show more memories",
+				"title": "%command.memory.showMore%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.updates.show",
-				"title": "Show pending updates",
+				"title": "%command.updates.show%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.backupSessions",
-				"title": "Back up pi sessions to the cloud",
+				"title": "%command.backupSessions%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.restoreSessions",
-				"title": "Restore pi sessions from the cloud",
+				"title": "%command.restoreSessions%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.importExternalSessions",
-				"title": "Import pi sessions from the external pi",
+				"title": "%command.importExternalSessions%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.setup.gallerySearch",
-				"title": "List themes from the gallery",
+				"title": "%command.setup.gallerySearch%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.setup.galleryThumb",
-				"title": "Read the colours of a gallery theme",
+				"title": "%command.setup.galleryThumb%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.setup.galleryInstall",
-				"title": "Install a theme from the gallery",
+				"title": "%command.setup.galleryInstall%",
 				"category": "PiCode"
 			},
 			{
 				"command": "picode.memory.updateEngine",
-				"title": "Update memory engine",
+				"title": "%command.memory.updateEngine%",
 				"category": "PiCode",
 				"icon": "$(cloud-download)"
 			},
 			{
 				"command": "picode.tasks.openTranscript",
-				"title": "Open Transcript",
+				"title": "%command.tasks.openTranscript%",
 				"category": "PiCode",
 				"icon": "$(book)"
 			},
 			{
 				"command": "picode.tasks.refresh",
-				"title": "Refresh the tasks",
+				"title": "%command.tasks.refresh%",
 				"category": "PiCode",
 				"icon": "$(refresh)"
 			}
@@ -383,16 +384,16 @@
 				{
 					"type": "tree",
 					"id": "picode.status.tasks",
-					"name": "Tasks",
+					"name": "%view.tasks%",
 					"icon": "$(tasklist)",
-					"when": "!config.chat.disableAIFeatures"
+					"when": "!config.chat.disableAIFeatures && config.picode.appearance.layout != agent"
 				},
 				{
 					"type": "tree",
 					"id": "picode.status.memory",
-					"name": "Memory",
+					"name": "%view.memory%",
 					"icon": "$(database)",
-					"when": "picode.memory.enabled && !config.chat.disableAIFeatures"
+					"when": "picode.memory.enabled && !config.chat.disableAIFeatures && config.picode.appearance.layout != agent"
 				}
 			]
 		}

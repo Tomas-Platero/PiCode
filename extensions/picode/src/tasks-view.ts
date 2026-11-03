@@ -31,6 +31,33 @@ export const TASKS_VIEW_ID = 'picode.status.tasks';
 export const TASKS_REFRESH_COMMAND = 'picode.tasks.refresh';
 export const TASKS_TRANSCRIPT_COMMAND = 'picode.tasks.openTranscript';
 
+/** The same board as plain data, for the Agent layout's status column (the editor draws it there). */
+export const TASKS_DATA_COMMAND = 'picode.tasks.data';
+
+/** One row of the board as the editor draws it. */
+export interface TaskDataRow {
+	readonly title: string;
+	readonly detail: string;
+	/** A codicon name. */
+	readonly icon: string;
+	/** An agent's task id: its transcript opens on a click. */
+	readonly agentId?: string;
+	/** A job's live output file: it opens on a click. */
+	readonly outputFile?: string;
+	/** Hover text: a job's command, an agent's problem. */
+	readonly tooltip?: string;
+}
+
+/** The board as plain data; the rows read the same as the tree's. */
+export function taskBoardData(deps: TasksViewDeps): { readonly running: readonly TaskDataRow[]; readonly finished: readonly TaskDataRow[] } {
+	const board = taskBoard(deps.runningJobs(), deps.agents?.() ?? [], deps.finishedJobs?.() ?? []);
+	const now = deps.now?.() ?? Date.now();
+	const toData = (row: TaskRow): TaskDataRow => row.kind === 'job'
+		? { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), outputFile: row.job.outputPath, tooltip: row.job.command }
+		: { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), agentId: row.agent.id, tooltip: row.agent.error ?? (row.agent.lastStep.length > 0 ? row.agent.lastStep : undefined) };
+	return { running: board.running.map(toData), finished: board.finished.map(toData) };
+}
+
 /** How often a visible block asks again. Folded away, the timer is cleared. */
 const REFRESH_MS = 5_000;
 
@@ -123,14 +150,14 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			case 'heading': {
 				const board = this.board;
 				const label = board === undefined
-					? 'Tasks'
+					? vscode.l10n.t('Tasks')
 					: board.running.length === 0
-						? 'Nothing running'
-						: `${board.running.length} running`;
+						? vscode.l10n.t('Nothing running')
+						: vscode.l10n.t('{0} running', board.running.length);
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon('dashboard');
 				item.contextValue = 'picode.tasks.heading';
-				item.tooltip = 'The work the chat has out: the background jobs it launched and the agents it started.';
+				item.tooltip = vscode.l10n.t('The work the chat has out: the background jobs it launched and the agents it started.');
 				return item;
 			}
 			case 'message': {
@@ -141,13 +168,13 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			}
 			case 'group': {
 				const running = node.group === 'running';
-				const item = new vscode.TreeItem(running ? 'Running' : 'Finished', running ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+				const item = new vscode.TreeItem(running ? vscode.l10n.t('Running') : vscode.l10n.t('Finished'), running ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
 				item.description = String(node.count);
 				item.iconPath = new vscode.ThemeIcon(running ? 'sync' : 'history');
 				item.contextValue = 'picode.tasks.group';
 				item.tooltip = running
-					? 'Happening now: the chat\'s background jobs and the agents still working.'
-					: 'Agents that ended, newest first.';
+					? vscode.l10n.t('Happening now: the chat\'s background jobs and the agents still working.')
+					: vscode.l10n.t('Agents that ended, newest first.');
 				return item;
 			}
 			case 'row': {
@@ -156,12 +183,11 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				item.iconPath = new vscode.ThemeIcon(rowIcon(node.row));
 				if (node.row.kind === 'job') {
 					item.contextValue = 'picode.tasks.job';
-					item.tooltip = node.row.job.command === undefined
-						? 'A background job of this chat; its report lands in the conversation when it ends.'
-						: `${node.row.job.command}\n\nA background job of this chat; its report lands in the conversation when it ends.`;
+					const note = vscode.l10n.t('A background job of this chat; its report lands in the conversation when it ends.');
+					item.tooltip = node.row.job.command === undefined ? note : `${node.row.job.command}\n\n${note}`;
 				} else {
 					item.contextValue = 'picode.tasks.agent';
-					item.tooltip = 'An agent this chat started; its report lands in the conversation when it ends. Open its transcript to follow what it did.';
+					item.tooltip = vscode.l10n.t('An agent this chat started; its report lands in the conversation when it ends. Open its transcript to follow what it did.');
 				}
 				return item;
 			}
@@ -175,7 +201,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				}
 				if (node.openFile !== undefined) {
 					// The editor reloads an open file as it grows, so this is the job's live output.
-					item.command = { command: 'vscode.open', title: 'Open live output', arguments: [vscode.Uri.file(node.openFile)] };
+					item.command = { command: 'vscode.open', title: vscode.l10n.t('Open live output'), arguments: [vscode.Uri.file(node.openFile)] };
 				}
 				return item;
 			}
@@ -210,7 +236,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 			nodes.push({ kind: 'group', group: 'finished', count: this.board.finished.length });
 		}
 		if (this.board.total === 0) {
-			nodes.push({ kind: 'message', text: 'No background jobs or agents running.' });
+			nodes.push({ kind: 'message', text: vscode.l10n.t('No background jobs or agents running.') });
 		}
 		return nodes;
 	}
@@ -219,34 +245,36 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	private details(row: TaskRow): TasksNode[] {
 		if (row.kind === 'job') {
 			const facts: TasksNode[] = [
-				{ kind: 'fact', label: row.job.endedAt === undefined ? 'Running for' : 'Ran for', detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? this.now()), icon: 'watch' },
+				{ kind: 'fact', label: row.job.endedAt === undefined ? vscode.l10n.t('Running for') : vscode.l10n.t('Ran for'), detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? this.now()), icon: 'watch' },
 			];
 			if (row.job.command !== undefined) {
-				facts.push({ kind: 'fact', label: 'Command', detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });
+				facts.push({ kind: 'fact', label: vscode.l10n.t('Command'), detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });
 			}
 			if (row.job.outputPath !== undefined) {
-				facts.push({ kind: 'fact', label: 'Live output', detail: 'Open', icon: 'output', tooltip: 'Opens what the job prints; it keeps updating while the job runs.', openFile: row.job.outputPath });
+				facts.push({ kind: 'fact', label: vscode.l10n.t('Live output'), detail: vscode.l10n.t('Open'), icon: 'output', tooltip: vscode.l10n.t('Opens what the job prints; it keeps updating while the job runs.'), openFile: row.job.outputPath });
 			}
 			return facts;
 		}
 		const { agent } = row;
 		const facts: TasksNode[] = [
-			{ kind: 'fact', label: 'State', detail: taskState(row), icon: rowIcon(row) },
+			{ kind: 'fact', label: vscode.l10n.t('State'), detail: taskState(row), icon: rowIcon(row) },
 		];
 		if (agent.agent.length > 0) {
-			facts.push({ kind: 'fact', label: 'Agent', detail: agent.agent, icon: 'person' });
+			facts.push({ kind: 'fact', label: vscode.l10n.t('Agent'), detail: agent.agent, icon: 'person' });
 		}
 		if (agent.startedAt !== undefined) {
-			facts.push({ kind: 'fact', label: agent.endedAt === undefined ? 'Running for' : 'Took', detail: elapsedLabel(agent.startedAt, agent.endedAt ?? this.now()), icon: 'watch' });
+			facts.push({ kind: 'fact', label: agent.endedAt === undefined ? vscode.l10n.t('Running for') : vscode.l10n.t('Took'), detail: elapsedLabel(agent.startedAt, agent.endedAt ?? this.now()), icon: 'watch' });
 		}
-		facts.push({ kind: 'fact', label: 'Steps', detail: `${agent.turns} ${agent.turns === 1 ? 'turn' : 'turns'} · ${agent.toolCalls} ${agent.toolCalls === 1 ? 'tool call' : 'tool calls'}`, icon: 'list-ordered' });
+		const turns = agent.turns === 1 ? vscode.l10n.t('{0} turn', agent.turns) : vscode.l10n.t('{0} turns', agent.turns);
+		const calls = agent.toolCalls === 1 ? vscode.l10n.t('{0} tool call', agent.toolCalls) : vscode.l10n.t('{0} tool calls', agent.toolCalls);
+		facts.push({ kind: 'fact', label: vscode.l10n.t('Steps'), detail: `${turns} · ${calls}`, icon: 'list-ordered' });
 		// A failed task's last step is its error: one row says it.
 		if (agent.lastStep.length > 0 && agent.lastStep !== agent.error) {
-			facts.push({ kind: 'fact', label: 'Last step', detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
+			facts.push({ kind: 'fact', label: vscode.l10n.t('Last step'), detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
 		}
 		if (agent.error !== undefined) {
 			const problem = (agent.error === GENERIC_PROVIDER_ERROR ? this.deps.explainFailure?.(agent.id) : undefined) ?? agent.error;
-			facts.push({ kind: 'fact', label: 'Problem', detail: problem, icon: 'warning', tooltip: problem });
+			facts.push({ kind: 'fact', label: vscode.l10n.t('Problem'), detail: problem, icon: 'warning', tooltip: problem });
 		}
 		return facts;
 	}
@@ -261,7 +289,13 @@ export function registerTasksView(deps: TasksViewDeps): vscode.Disposable {
 		provider,
 		view,
 		vscode.commands.registerCommand(TASKS_REFRESH_COMMAND, () => provider.refresh()),
-		vscode.commands.registerCommand(TASKS_TRANSCRIPT_COMMAND, (node?: TasksNode) => {
+		vscode.commands.registerCommand(TASKS_DATA_COMMAND, () => taskBoardData(deps)),
+		vscode.commands.registerCommand(TASKS_TRANSCRIPT_COMMAND, (node?: TasksNode | string) => {
+			// The status column passes the task id itself.
+			if (typeof node === 'string') {
+				deps.openTranscript?.(node);
+				return;
+			}
 			if (node?.kind !== 'row' || node.row.kind !== 'agent') {
 				return;
 			}

@@ -37,6 +37,8 @@ import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { VisibleViewContainersTracker } from '../visibleViewContainersTracker.js';
 import { Extensions } from '../../panecomposite.js';
 import { FONT, getFontSize, updateSidebarSize } from '../../../../base/common/font.js';
+import { $, append } from '../../../../base/browser/dom.js';
+import { SIDEBAR_SIDE_COLUMN_MIN_WIDTH, SIDEBAR_SIDE_COLUMN_WIDTH, sidebarSideColumn } from './sidebarSideColumn.js';
 
 const PRIMARY_SIDE_BAR_SASH_CLASS = 'primary-sidebar-sash';
 
@@ -199,8 +201,18 @@ export class SidebarPart extends AbstractPaneCompositePart {
 			return;
 		}
 
-		super.layout(width, height, top, left);
+		// PiCode: in the Agent layout a wide side bar splits in two, its status column first; narrower,
+		// Status is one of the bar's tabs instead.
+		const split = this.configurationService.getValue<string>('picode.appearance.layout') === 'agent'
+			&& width >= SIDEBAR_SIDE_COLUMN_MIN_WIDTH;
+		this.sideColumn ??= append(this.element, $('.picode-sidebar-side-column'));
+		this.element.classList.toggle('picode-sidebar-split', split);
+		sidebarSideColumn.update(this.sideColumn, split);
+
+		super.layout(split ? width - SIDEBAR_SIDE_COLUMN_WIDTH : width, height, top, left);
 	}
+
+	private sideColumn: HTMLElement | undefined;
 
 	override setBoundarySashes(sashes: IBoundarySashes): void {
 		super.setBoundarySashes?.(sashes);
