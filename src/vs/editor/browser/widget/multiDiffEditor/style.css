@@ -156,3 +156,21 @@
 		}
 	}
 }
+
+/* PiCode: each file's `+N −M` in its header. */
+.multiDiffEntry .header .picode-line-counts {
+	display: flex;
+	gap: 6px;
+	margin: 0 8px;
+	line-height: 22px;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+
+	.added {
+		color: var(--vscode-gitDecoration-addedResourceForeground);
+	}
+
+	.removed {
+		color: var(--vscode-gitDecoration-deletedResourceForeground);
+	}
+}

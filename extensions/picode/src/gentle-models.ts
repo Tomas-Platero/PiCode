@@ -15,8 +15,11 @@ import * as path from 'node:path';
  * writes the same file from its own pickers. An agent with no model of its own answers with pi's
  * default model, which is not always the model the chat is on — which is the reason this exists.
  *
- * No `vscode` import, so `node --test` runs this file directly.
+ * No `vscode` import, so `node --test` runs this file directly. What it says in words goes through
+ * the editor's own translator.
  */
+
+import { l10n } from './l10n.ts';
 
 /** The effort levels Gentle accepts. */
 export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -165,7 +168,7 @@ export function assign(current: AgentModels, agents: readonly string[], target: 
 /** One agent's setting, in the words a row shows. */
 export function describeAgentModel(entry: AgentModel | undefined): string {
 	if (entry?.model === undefined) {
-		return 'Same model as the rest';
+		return l10n.t('Same model as the rest');
 	}
 	return entry.thinking === undefined ? entry.model : `${entry.model} · ${entry.thinking}`;
 }
@@ -201,17 +204,17 @@ export function setAgentModel(profileDir: string, request: unknown): AgentModels
 	const { agent, model, thinking } = (typeof request === 'object' && request !== null ? request : {}) as Record<string, unknown>;
 	const state = agentModelsState(profileDir);
 	if (state.invalid) {
-		throw new Error("The agents' model list could not be read.");
+		throw new Error(l10n.t("The agents' model list could not be read."));
 	}
 	if (typeof agent !== 'string' || (agent !== ALL_AGENTS && !state.agents.includes(agent))) {
-		throw new Error('That agent does not exist.');
+		throw new Error(l10n.t('That agent does not exist.'));
 	}
 	const ref = model === undefined || model === '' ? undefined : modelRefOf(model);
 	if (model !== undefined && model !== '' && ref === undefined) {
-		throw new Error('A model is written provider/model, without spaces.');
+		throw new Error(l10n.t('A model is written provider/model, without spaces.'));
 	}
 	if (thinking !== undefined && thinking !== '' && !isThinkingLevel(thinking)) {
-		throw new Error('That is not an effort level.');
+		throw new Error(l10n.t('That is not an effort level.'));
 	}
 	const level = thinking === undefined || thinking === '' ? undefined : thinking as ThinkingLevel;
 	writeAgentModels(profileDir, assign(state.models, state.agents, agent, { ...(ref === undefined ? {} : { model: ref }), ...(level === undefined ? {} : { thinking: level }) }));

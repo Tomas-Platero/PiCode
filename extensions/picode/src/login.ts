@@ -75,13 +75,21 @@ export function createAuthInteraction(): PiAuthInteraction {
 
 		notify(event: PiAuthEvent): void {
 			const notice = noticeOf(event);
+			if (event.type === 'device_code') {
+				// The code is only useful on the page that asks for it: copy it and open the page, so
+				// signing in is a paste rather than two things typed by hand.
+				void vscode.env.clipboard.writeText(event.userCode);
+				void vscode.env.openExternal(vscode.Uri.parse(event.verificationUri));
+				void vscode.window.showInformationMessage(notice.message);
+				return;
+			}
 			if (notice.url === undefined) {
 				void vscode.window.showInformationMessage(notice.message);
 				return;
 			}
 			// `ignoreFocusOut` above is what lets the owner go to the browser mid-login; this is the
 			// button that takes them there, so the address never has to be copied by hand.
-			void vscode.window.showInformationMessage(notice.message, 'Open in browser').then(choice => {
+			void vscode.window.showInformationMessage(notice.message, vscode.l10n.t('Open in browser')).then(choice => {
 				if (choice !== undefined && notice.url !== undefined) {
 					void vscode.env.openExternal(vscode.Uri.parse(notice.url));
 				}
@@ -115,9 +123,8 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 		// The sentence explains the boundary; the button is the way out of it. A notification cannot
 		// render a command link, so the action is an item, which is what the owner can press.
 		void vscode.window.showErrorMessage(
-			'PiCode: the external pi keeps its own credentials, which this editor never writes to. '
-			+ 'Use a provider key instead, or set up PiCode\'s own pi.',
-			'Set up PiCode',
+			vscode.l10n.t('PiCode: the external pi keeps its own credentials, which this editor never writes to. Use a provider key instead, or set up PiCode\'s own pi.'),
+			vscode.l10n.t('Set up PiCode'),
 		).then(choice => {
 			if (choice !== undefined) {
 				void vscode.commands.executeCommand('picode.setup');
@@ -129,7 +136,7 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
 		// What went wrong technically (a pi that could not be loaded, a missing method) is the log's business;
 		// the owner gets the sentence about what they can do, and the door that does it.
-		void vscode.window.showErrorMessage('PiCode: no subscription can be connected from here.', 'Set up PiCode').then(choice => {
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: no subscription can be connected from here.'), vscode.l10n.t('Set up PiCode')).then(choice => {
 			if (choice !== undefined) {
 				void vscode.commands.executeCommand('picode.setup');
 			}
@@ -150,14 +157,14 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 		});
 		runtime = services.modelRuntime;
 	} catch (error) {
-		void vscode.window.showErrorMessage(`PiCode: pi could not be asked for its providers: ${messageOf(error)}`);
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: pi could not be asked for its providers: {0}', messageOf(error)));
 		return;
 	}
 
 	if (typeof runtime.login !== 'function') {
 		void vscode.window.showErrorMessage(
-			'PiCode: this pi cannot log a provider in. Updating pi is what brings the feature.',
-			'Show updates',
+			vscode.l10n.t('PiCode: this pi cannot log a provider in. Updating pi is what brings the feature.'),
+			vscode.l10n.t('Show updates'),
 		).then(choice => {
 			if (choice !== undefined) {
 				void vscode.commands.executeCommand('picode.updates.show');
@@ -168,13 +175,13 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 
 	const rows = subscriptionRows(runtime.getProviders(), providerId => runtime.hasConfiguredAuth(providerId));
 	if (rows.length === 0) {
-		void vscode.window.showInformationMessage('PiCode: this pi offers no provider that can be connected with a subscription.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: this pi offers no provider that can be connected with a subscription.'));
 		return;
 	}
 
 	const chosen = await vscode.window.showQuickPick(rows, {
-		title: 'PiCode: connect a subscription',
-		placeHolder: 'Which account do you already pay for?',
+		title: vscode.l10n.t('PiCode: connect a subscription'),
+		placeHolder: vscode.l10n.t('Which account do you already pay for?'),
 		ignoreFocusOut: true,
 	});
 	if (chosen === undefined) {
@@ -187,14 +194,14 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 		if (error instanceof LoginCancelled) {
 			return;
 		}
-		void vscode.window.showErrorMessage(`PiCode: ${chosen.label} could not be connected: ${messageOf(error)}`);
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: {0} could not be connected: {1}', chosen.label, messageOf(error)));
 		return;
 	}
 
 	// The models come from the profile, which now holds a fresh credential, so the editor is asked
 	// for them again instead of waiting for it to feel like asking.
 	deps.refreshModels();
-	void vscode.window.showInformationMessage(`PiCode: ${chosen.label} connected. Its models are in the model list now.`);
+	void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: {0} connected. Its models are in the model list now.', chosen.label));
 }
 
 /** One sentence out of anything thrown. */

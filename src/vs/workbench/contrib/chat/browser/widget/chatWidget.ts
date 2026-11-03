@@ -1556,6 +1556,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			title: localize('chatWelcomeTitle', "Hello, I'm PiCode"),
 			message: new MarkdownString(DISCLAIMER),
 			icon: FileAccess.asBrowserUri('vs/workbench/contrib/picode/browser/media/picode.svg'),
+			picodeMark: true,
 			additionalMessage,
 		};
 	}

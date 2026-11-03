@@ -60,7 +60,9 @@ export function getEffectiveThinkingDisplayMode(configurationService: IConfigura
 	if (contextKeyService.getContextKeyValue<boolean>(SESSIONS_IS_PHONE_LAYOUT_KEY) === true) {
 		return ThinkingDisplayMode.CollapsedPreview;
 	}
-	return configurationService.getValue<ThinkingDisplayMode>('chat.agent.thinkingStyle') ?? ThinkingDisplayMode.Collapsed;
+	// PiCode shows what the agent is thinking, and what it does, as it happens: open unless the
+	// person chose another style.
+	return configurationService.getValue<ThinkingDisplayMode>('chat.agent.thinkingStyle') ?? ThinkingDisplayMode.Expanded;
 }
 
 function extractTextFromPart(content: IChatThinkingPart): string {
@@ -516,7 +518,9 @@ export class ChatThinkingContentPart extends ChatCollapsibleContentPart implemen
 			alert(localize('chat.thinking.started', 'Thinking'));
 		}
 
-		if (configuredMode === ThinkingDisplayMode.Collapsed) {
+		if (configuredMode === ThinkingDisplayMode.Expanded) {
+			this.setExpanded(true);
+		} else if (configuredMode === ThinkingDisplayMode.Collapsed) {
 			this.setExpanded(false);
 		} else if (configuredMode === ThinkingDisplayMode.CollapsedPreview) {
 			// Start expanded if still in progress.

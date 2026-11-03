@@ -12,8 +12,11 @@
  * price has no price row at all, rather than a "Free" the catalogue never claimed — a zero can mean
  * free, included in a plan, or simply unknown.
  *
- * No `vscode` import and no local imports, so the rules can be exercised by running them.
+ * No `vscode` import, and the one local import carries its extension (`./l10n.ts`), which is what
+ * `node --test` resolves and what the emit turns back into `./l10n.js`.
  */
+
+import { l10n } from './l10n.ts';
 
 /** A model's price as pi's catalogue writes it: US dollars per million tokens. */
 export interface PiModelCost {
@@ -56,12 +59,14 @@ export function modelPricing(cost: PiModelCost | undefined): ModelPricing {
 	}
 	const cacheRead = amount(cost?.cacheRead);
 	const cacheWrite = amount(cost?.cacheWrite);
-	const parts = [
-		...(input === undefined ? [] : [`${formatPrice(input)} in`]),
-		...(output === undefined ? [] : [`${formatPrice(output)} out`]),
-	];
+	const inLabel = input === undefined ? undefined : formatPrice(input);
+	const outLabel = output === undefined ? undefined : formatPrice(output);
 	return {
-		pricing: `${parts.join(' · ')} per 1M tokens`,
+		pricing: inLabel !== undefined && outLabel !== undefined
+			? l10n.t('{0} in · {1} out per 1M tokens', inLabel, outLabel)
+			: inLabel !== undefined
+				? l10n.t('{0} in per 1M tokens', inLabel)
+				: l10n.t('{0} out per 1M tokens', String(outLabel)),
 		...(input === undefined ? {} : { inputCost: input }),
 		...(output === undefined ? {} : { outputCost: output }),
 		...(cacheRead === undefined || cacheRead === 0 ? {} : { cacheCost: cacheRead }),

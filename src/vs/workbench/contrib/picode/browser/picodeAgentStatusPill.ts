@@ -46,6 +46,13 @@ const TICK_MS = 60_000;
 let latestStatus: PillStatus | undefined;
 const onStatusChanged = new Emitter<PillStatus | undefined>();
 
+/** The last status the connector pushed, for other surfaces (the Agent layout's status panel). */
+export function picodeAgentStatus(): PillStatus | undefined {
+	return latestStatus;
+}
+
+export const onDidChangePicodeAgentStatus = onStatusChanged.event;
+
 CommandsRegistry.registerCommand(PUSH_COMMAND_ID, (_accessor, raw: unknown) => {
 	const status = agentStatusOf(raw);
 	const changed = JSON.stringify(status) !== JSON.stringify(latestStatus);

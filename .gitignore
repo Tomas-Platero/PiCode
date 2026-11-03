@@ -195,3 +195,6 @@ picode-url-handler.cmd
 picode-url-handler.ps1
 # Throwaway scratch work: icons for the executable, dev stdout, one-off scripts
 scratchpad/
+
+# Half-done translations (`node build/l10n.mjs split` puts them next to the language files)
+.work/

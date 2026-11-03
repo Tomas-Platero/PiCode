@@ -353,37 +353,6 @@ h2 {
 	filter: drop-shadow(0 6px 22px color-mix(in srgb, var(--accent) 35%, transparent));
 }
 
-.welcome-facts {
-	display: flex;
-	gap: 10px;
-	margin-top: 12px;
-	flex-wrap: wrap;
-}
-
-.fact {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 132px;
-	padding: 10px 14px;
-	border: 1px solid var(--line);
-	border-radius: var(--radius);
-	background: var(--panel);
-}
-
-.fact-label {
-	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.6px;
-	color: var(--comment);
-}
-
-.fact-value {
-	font-size: 13px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 /* --------------------------------------------------------------- cards */
 
 .cards {
@@ -451,6 +420,19 @@ h2 {
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
 	color: var(--comment);
+}
+
+/* "New": the layout the product now recommends, marked in the accent's own colour. */
+.badge.new {
+	border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+	background: color-mix(in srgb, var(--accent) 20%, transparent);
+	color: color-mix(in srgb, var(--accent) 45%, #FFFFFF);
+}
+
+.layout-title {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 }
 
 .badge.ok {
@@ -723,6 +705,111 @@ select:focus {
 	padding: 0 2px 2px;
 }
 
+/* -------------------------------------------------------------- layout: Agent or Editor */
+
+.layout-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--gap);
+}
+
+.layout-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--panel);
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), transform var(--speed);
+}
+
+.layout-card:hover {
+	transform: translateY(-1px);
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.layout-card.chosen {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
+}
+
+.layout-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.layout-name {
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.layout-note {
+	color: var(--fg);
+	opacity: .85;
+}
+
+.layout-points {
+	margin: 0;
+	padding-left: 18px;
+	color: var(--comment);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+/* A small window with its three zones named. */
+.layout-preview {
+	display: grid;
+	height: 128px;
+	gap: 5px;
+	padding: 5px;
+	background: color-mix(in srgb, var(--bg) 60%, #000);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.layout-preview.agent {
+	grid-template-columns: 24% minmax(0, 1fr) 26%;
+}
+
+.layout-preview.editor {
+	grid-template-columns: 22% minmax(0, 1fr) 26%;
+}
+
+.layout-stack {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) 30%;
+	gap: 5px;
+}
+
+.layout-zone {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--fg) 8%, var(--panel));
+}
+
+.layout-zone.main {
+	background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.layout-zone-label {
+	font-size: 11px;
+	color: var(--fg);
+	opacity: .85;
+}
+
+.layout-zone.main .layout-zone-label {
+	font-weight: 600;
+	opacity: 1;
+}
+
 /* -------------------------------------------------------------- extras */
 
 .switch {
@@ -945,17 +1032,92 @@ select:focus {
 	gap: 14px;
 }
 
-/* In the footer, the language is a quiet text button, not a box in the rail */
+/* In the footer, the language is a quiet button with its flag, and its list opens upward */
+.lang {
+	position: relative;
+}
+
 .footer-left .language {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 	width: auto;
-	padding: 4px 0;
+	max-width: none;
+	padding: 4px 6px;
 	border: 0;
+	border-radius: 6px;
 	background: transparent;
 	color: var(--comment);
+	font: inherit;
 	font-size: 12px;
-	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, var(--comment) 40%, transparent);
-	text-underline-offset: 3px;
+	cursor: pointer;
+}
+
+.lang-caret {
+	font-size: 10px;
+	opacity: 0.7;
+}
+
+.flag {
+	display: inline-flex;
+	flex: none;
+}
+
+/* A thin edge keeps the white flags (Japan, Poland) readable on the dark canvas. */
+.flag svg {
+	display: block;
+	width: 18px;
+	height: 12px;
+	border-radius: 2px;
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.lang-list {
+	position: absolute;
+	left: 0;
+	bottom: calc(100% + 8px);
+	z-index: 30;
+	min-width: 200px;
+	max-height: 300px;
+	margin: 0;
+	padding: 4px;
+	overflow-y: auto;
+	list-style: none;
+	background: var(--panel);
+	border: 1px solid var(--line-strong);
+	border-radius: 10px;
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.lang-list[hidden] {
+	display: none;
+}
+
+.lang-list li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	color: var(--fg);
+	font-size: 12.5px;
+	cursor: pointer;
+}
+
+.lang-list li:hover,
+.lang-list li:focus {
+	outline: none;
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.lang-list li[aria-selected="true"] {
+	color: #FFFFFF;
+	font-weight: 600;
+}
+
+.language option {
+	background: var(--bg);
+	color: var(--fg);
 }
 
 .footer-left .language:hover {
@@ -1040,6 +1202,10 @@ button.secondary:disabled {
 }
 
 .spinner {
+	/* A span has no box of its own: without this it drew as a thin bar beside the words. */
+	display: inline-block;
+	flex: none;
+	box-sizing: border-box;
 	width: 12px;
 	height: 12px;
 	border: 2px solid color-mix(in srgb, var(--fg) 20%, transparent);
@@ -1247,33 +1413,6 @@ button.secondary:disabled {
 
 .starters-note.error {
 	color: #f87171;
-}
-
-/* ---------------------------------------------------- welcome, as shortcuts */
-
-/* The facts are buttons now: they were a read-only list of things "not set yet". */
-button.fact {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
-	min-width: 0;
-	padding: 14px 16px;
-	text-align: center;
-	font: inherit;
-	color: inherit;
-	cursor: pointer;
-	transition: border-color var(--speed), background var(--speed), transform var(--speed);
-}
-
-button.fact:hover {
-	border-color: var(--accent);
-	background: var(--panel);
-	transform: translateY(-1px);
-}
-
-button.fact:hover .fact-value {
-	color: var(--fg);
 }
 
 /* ------------------------------------------------------------- where to start */
@@ -1548,46 +1687,6 @@ button.fact:hover .fact-value {
 	margin: 0 auto;
 }
 
-.welcome-facts {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: var(--gap);
-	width: 100%;
-}
-
-@media (max-width: 760px) {
-	.welcome-facts {
-		grid-template-columns: minmax(0, 1fr);
-	}
-}
-
-/* A quick card: icon and label on one line, the value underneath in bright white. */
-.fact-head {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-width: 0;
-}
-
-.fact-mark {
-	font-size: 13px;
-	line-height: 1;
-}
-
-.fact-value {
-	max-width: 100%;
-	color: var(--fg);
-	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-button.fact:hover .fact-value {
-	color: #FFFFFF;
-}
-
 /* The account card: narrow, under the cards, and never wider than the block above it. */
 .account-card {
 	width: 100%;
@@ -1651,6 +1750,10 @@ button.fact:hover .fact-value {
 
 /* The account card's live states: waiting in the browser, signed in, failed. */
 .account-line.waiting {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
 	color: var(--info);
 }
 
@@ -1671,16 +1774,53 @@ button.fact:hover .fact-value {
 	text-align: center;
 }
 
+/* What the account is: two short lines, each with its mark, kept on the card's centre. */
+.account-perks {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 46ch;
+	margin: 6px auto 0;
+	padding: 0;
+	list-style: none;
+	font-size: 12.5px;
+	color: var(--fg);
+	text-align: left;
+}
+
+.account-perks li {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.perk-mark {
+	flex: none;
+	line-height: 1.4;
+}
+
 .account-actions {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 10px;
 	flex-wrap: wrap;
+	margin-top: 12px;
 }
 
-.account-sep {
-	color: var(--fg-disabled);
+/* The account card's buttons: a real button where a link with an arrow used to sit off-centre. */
+button.secondary.compact {
+	padding: 5px 14px;
+	font-size: 12px;
+}
+
+.link.quiet {
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.link.quiet:hover {
+	text-decoration: underline;
 }
 
 /* The signed-in profile: picture (or initials) beside the name. */
@@ -1724,4 +1864,40 @@ button.fact:hover .fact-value {
 .account-sub {
 	font-size: 11.5px;
 	color: var(--ok);
+}
+
+/* ------------------------------------------------------------------ scrollbars */
+
+/*
+ * The product's own scrollbar instead of the system's white one: a thin pill in the text colour at
+ * low strength that takes the accent when pointed at. `border` + `background-clip` is what makes
+ * the thumb thinner than its track, so it can be grabbed without being heavy to look at.
+ * (Only the WebKit pseudo-elements: the standard `scrollbar-*` properties would switch them off.)
+ */
+::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	min-height: 44px;
+	border: 3px solid transparent;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--fg) 20%, transparent);
+	background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--accent) 60%, transparent);
+	background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+	background: var(--accent);
+	background-clip: content-box;
 }

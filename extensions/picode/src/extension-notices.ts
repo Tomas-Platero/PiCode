@@ -22,3 +22,16 @@ export function isExpectedHelperNotice(message: string): boolean {
 	return message.includes('package-local-binary-missing')
 		|| /Gentle AI v\d+\.\d+\.\d+ is not installed at/.test(message);
 }
+
+/**
+ * Whether a notice is gentle-pi's start-up housekeeping report ("applied saved model config to 6
+ * agent(s). Global delegation/review assets ready: 10 new agent(s)…").
+ *
+ * It arrives at the top of a conversation, in bold, before the answer to the first question, and
+ * it reports setup the person never asked about and cannot act on. The chat drops it; the same
+ * facts stay visible where they belong (the agents and their models in the editor's settings).
+ */
+export function isStartupHousekeepingNotice(message: string): boolean {
+	return /applied saved model config to \d+ agent/i.test(message)
+		|| /delegation\/review assets ready/i.test(message);
+}

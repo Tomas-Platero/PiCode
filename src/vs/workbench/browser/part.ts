@@ -142,6 +142,19 @@ export abstract class Part<MementoType extends object = object> extends Componen
 		this.relayout();
 	}
 
+	/**
+	 * Leaves the title row out of the part altogether: not drawn, and its height given to the
+	 * content. Hiding it with CSS alone would leave the part reserving the row's height.
+	 */
+	protected setTitleHidden(hidden: boolean): void {
+		if (!this.titleArea) {
+			return;
+		}
+		this.titleArea.style.display = hidden ? 'none' : '';
+		this.partLayout?.setTitleHidden(hidden);
+		this.relayout();
+	}
+
 	protected removeHeaderArea(): void {
 		if (this.headerArea) {
 			this.headerArea.remove();
@@ -223,6 +236,7 @@ class PartLayout {
 
 	private headerVisible: boolean = false;
 	private footerVisible: boolean = false;
+	private titleHidden: boolean = false;
 
 	constructor(
 		private options: IPartOptions,
@@ -235,7 +249,7 @@ class PartLayout {
 
 		// Title Size: Width (Fill), Height (Variable).
 		let titleSize: Dimension;
-		if (this.options.hasTitle) {
+		if (this.options.hasTitle && !this.titleHidden) {
 			const titleHeight = isModernUI ? PartLayout.AREA_HEIGHT_MODERN_UI : PartLayout.TITLE_HEIGHT;
 			titleSize = new Dimension(width, Math.min(height, titleHeight));
 		} else {
@@ -274,6 +288,10 @@ class PartLayout {
 		}
 
 		return { headerSize, titleSize, contentSize, footerSize };
+	}
+
+	setTitleHidden(hidden: boolean): void {
+		this.titleHidden = hidden;
 	}
 
 	setFooterVisibility(visible: boolean): void {

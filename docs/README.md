@@ -19,6 +19,7 @@ Los papeles que deciden **cómo se junta todo**. Las palabras del dueño viven e
 | [TAREAS.md](TAREAS.md) | 📋 **La única lista de qué queda.** Si otro papel dice otra cosa, gana este | ES |
 | [SETTINGS.md](SETTINGS.md) | ⚙️ El inventario de **todas** las opciones: clave, para qué, dónde aparece y dónde debe aparecer, con lo que se oculta y lo que no se toca | ES |
 | [ENGRAM.md](ENGRAM.md) | 📚 La memoria del producto: pi y engram, decisiones y tareas punto por punto | ES |
+| [IDIOMAS.md](IDIOMAS.md) | 🌍 Los 13 idiomas: las cuatro superficies traducidas, la herramienta que las mantiene y las reglas al escribir texto | ES |
 | [MAPA.md](MAPA.md) | 🗺️ **Qué hace cada carpeta y cada fichero de la raíz** — generado a partir de los README de cada carpeta | ES |
 
 ## Cómo se lee esto sin perderse

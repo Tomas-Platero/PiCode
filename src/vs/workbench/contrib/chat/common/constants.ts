@@ -185,6 +185,8 @@ export function isAutopilotLevel(level: ChatPermissionLevel | undefined): boolea
 
 // Thinking display modes for pinned content
 export enum ThinkingDisplayMode {
+	/** PiCode: open while it streams and still open when it ends; the person folds it if they want. */
+	Expanded = 'expanded',
 	Collapsed = 'collapsed',
 	CollapsedPreview = 'collapsedPreview',
 	FixedScrolling = 'fixedScrolling',

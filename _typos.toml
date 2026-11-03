@@ -41,3 +41,14 @@ comandos = "comandos"
 resolverse = "resolverse"
 alternar = "alternar"
 Alternar = "Alternar"
+
+# The translated files are not English: the linter only carries English dictionaries, so a
+# Spanish, Turkish or Japanese word is a false positive there. What they are translated FROM
+# (`source.json`, `bundle.l10n.json`, `en.js`) is generated from code that is still checked.
+[files]
+extend-exclude = [
+  "src/vs/workbench/contrib/picode/l10n/*.json",
+  "resources/onboarding/l10n/*.js",
+  "extensions/picode/l10n/*.json",
+  "extensions/picode/package.nls.*.json",
+]

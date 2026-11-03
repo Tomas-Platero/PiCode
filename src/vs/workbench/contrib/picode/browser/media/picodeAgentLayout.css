@@ -1,0 +1,544 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * The Agent layout's own touches, on top of the workbench's floating-panel look (`modern-ui`),
+ * which does the heavy lifting: cards, rounded corners, tabs, title and status bars.
+ * Everything hangs off `.picode-agent` on the workbench container.
+ */
+
+/* A rounder, roomier chat input with a visible ring. */
+.monaco-workbench.picode-agent .interactive-session .interactive-input-part:not(.compact) {
+	--chat-input-radius: 16px;
+}
+
+.monaco-workbench.picode-agent .interactive-session .interactive-input-part:not(.compact) .chat-input-container {
+	border-color: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+}
+
+/* Session rows as soft pills. */
+.monaco-workbench.picode-agent .part.auxiliarybar .agent-sessions-viewer .monaco-list-row {
+	border-radius: 8px;
+}
+
+/* -- the sessions column (Agent layout, left) --------------------------------------------------- */
+
+.picode-sessions {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.picode-sessions-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 8px 4px;
+}
+
+.picode-sessions-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 6px 8px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-sessions-row:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-sessions-toolbar-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 8px 2px;
+}
+
+.picode-sessions-heading {
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-sessions-list {
+	flex: 1;
+	min-height: 0;
+	padding: 0 4px;
+}
+
+.picode-sessions-list .monaco-list-row {
+	border-radius: 8px;
+}
+
+.picode-sessions-footer {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	border-top: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+/* The workbench's Accounts / Manage bar is vertical; here its two buttons sit in the row. */
+.picode-sessions-footer .global-activity-bar,
+.picode-sessions-footer .global-activity-bar .monaco-action-bar,
+.picode-sessions-footer .global-activity-bar .actions-container {
+	display: contents !important;
+}
+
+.picode-sessions-footer .global-activity-bar .action-item {
+	display: flex !important;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 32px !important;
+	height: 32px !important;
+	margin: 0 !important;
+}
+
+.picode-sessions-footer .global-activity-bar .action-item:first-child {
+	order: 0;
+}
+
+.picode-sessions-footer .picode-sessions-identity {
+	order: 1;
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	flex-direction: column;
+	line-height: 1.3;
+}
+
+.picode-sessions-footer .global-activity-bar .action-item:last-child {
+	order: 2;
+}
+
+.picode-sessions-account-name {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.picode-sessions-plan {
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+/* -- the status panel (Agent layout, beside the chat) ------------------------------------ */
+
+.picode-overview {
+	padding: 4px 12px 12px;
+	overflow-y: auto;
+	height: 100%;
+	box-sizing: border-box;
+}
+
+.picode-overview-section {
+	padding: 10px 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-overview-section:last-child {
+	border-bottom: none;
+}
+
+.picode-overview-title {
+	margin-bottom: 6px;
+	font-weight: 600;
+}
+
+.picode-overview-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 26px;
+}
+
+.picode-overview-icon {
+	flex: none;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-overview-row.running .picode-overview-icon {
+	animation: codicon-spin 1.5s steps(30) infinite;
+}
+
+.picode-overview-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.picode-overview-detail,
+.picode-overview-value {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-overview-row.attention .picode-overview-label {
+	color: var(--vscode-editorWarning-foreground);
+}
+
+.picode-overview-action {
+	flex: none;
+	padding: 2px 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-overview-action:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-overview-meter {
+	height: 4px;
+	margin-top: 4px;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	overflow: hidden;
+}
+
+.picode-overview-meter-fill {
+	height: 100%;
+	background: var(--vscode-button-background);
+}
+
+.picode-overview-logo {
+	display: inline-flex;
+	flex: none;
+}
+
+.picode-overview-logo .picode-pm-logo {
+	width: 18px;
+	height: 18px;
+	min-width: 18px;
+	font-size: 9px;
+	line-height: 18px;
+}
+
+.picode-overview-logo .picode-pm-logo img {
+	width: 16px;
+	height: 16px;
+}
+
+/* The Manage button paints its gear as a mask the icon bar's stylesheet scopes to itself; here the
+   gear is drawn with the icon font instead. */
+.picode-sessions-footer .global-activity-bar .action-item:last-child .action-label {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	background: transparent !important;
+	-webkit-mask: none !important;
+	mask: none !important;
+	color: var(--vscode-foreground);
+}
+
+.picode-sessions-footer .global-activity-bar .action-item:last-child .action-label::before {
+	font-family: codicon;
+	font-size: 16px;
+	content: '\eb51';
+}
+
+.picode-sessions-footer .global-activity-bar .action-item .action-label {
+	border-radius: 8px;
+}
+
+.picode-sessions-footer .global-activity-bar .action-item:hover .action-label {
+	background-color: color-mix(in srgb, var(--vscode-foreground) 8%, transparent) !important;
+}
+
+/* The project's name in the list's header row stays on one line. */
+.picode-sessions-heading {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* The Accounts button: the icon (or the avatar) centred and at a readable size. */
+.picode-sessions-footer .global-activity-bar .action-item:first-child .action-label {
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	width: 100% !important;
+	height: 100% !important;
+	line-height: 1 !important;
+	font-size: 20px !important;
+	padding: 0 !important;
+	-webkit-mask: none !important;
+	mask: none !important;
+}
+
+.picode-sessions-footer .global-activity-bar .action-item:first-child .accounts-avatar {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	object-fit: cover;
+	position: static;
+}
+
+.picode-sessions-footer .picode-sessions-identity {
+	padding-left: 4px;
+}
+
+/* The chat's title in the Agent layout: without the panel's hide and maximize buttons, the
+   separator that stood before them has nothing to separate. */
+.monaco-workbench.picode-agent .part.panel .title-actions .action-item:last-child:has(> .action-label.separator) {
+	display: none;
+}
+
+/* The Accounts and Manage badges (sign-in needed, update ready…) as a small dot on their button's
+   corner, the way the icon bar shows them; its own rules are scoped to the icon bar. */
+.picode-sessions-footer .global-activity-bar .action-item {
+	position: relative;
+}
+
+.picode-sessions-footer .global-activity-bar .badge {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.picode-sessions-footer .global-activity-bar .badge .badge-content {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 8px;
+	height: 14px;
+	padding: 0 3px;
+	border-radius: 7px;
+	font-size: 9px;
+	font-weight: 600;
+	line-height: 14px;
+	text-align: center;
+}
+
+.picode-sessions-footer .global-activity-bar .badge .badge-content .codicon {
+	font-size: 10px !important;
+}
+
+/* The chat's own title icons (new chat, its gear, more) are not shown in the Agent layout: new
+   session, search and customization are rows of the sessions column there. */
+.monaco-workbench.picode-agent .part.panel > .composite.title .title-actions {
+	display: none;
+}
+
+/* The list's own little find box is left out of the sessions column: its Search row opens the
+   search window, and two ways to search the same list read as two different things. */
+.picode-sessions-toolbar .action-item:has(> .action-label.codicon-search) {
+	display: none;
+}
+
+/* The sessions column's toggle for the chat's own list does nothing in the Agent layout. */
+.picode-sessions-toolbar .action-item:has(> .action-label[aria-label*="Sessions Sidebar"]) {
+	display: none;
+}
+
+/* -- the search window: centred over a dimmed workbench ----------------------------------------- */
+
+.picode-search-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 2550;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.picode-search {
+	display: flex;
+	flex-direction: column;
+	width: min(640px, calc(100% - 48px));
+	max-height: min(520px, calc(100% - 96px));
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 14px;
+	background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background));
+	color: var(--vscode-foreground);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+	overflow: hidden;
+}
+
+.picode-search-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.picode-search-header-icon {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-search-input {
+	flex: 1;
+	min-width: 0;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 14px;
+}
+
+.picode-search-close {
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+	padding: 4px;
+}
+
+.picode-search-close:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-search-results {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 6px 8px;
+}
+
+.picode-search-section {
+	padding: 10px 8px 4px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-search-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.picode-search-row.active {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.picode-search-row-icon {
+	flex: none;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-search-row-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.picode-search-row-detail {
+	flex: none;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-search-empty {
+	padding: 16px 10px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-search-footer {
+	display: flex;
+	gap: 16px;
+	padding: 8px 14px;
+	border-top: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-search-hint kbd {
+	padding: 1px 5px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	border-radius: 4px;
+	font-family: inherit;
+	font-size: 10px;
+}
+
+/* -- the review side bar split in two: status first, then the view ------------------------------ */
+
+.picode-sidebar-side-column {
+	display: none;
+}
+
+.monaco-workbench.picode-agent .part.sidebar.picode-sidebar-split {
+	position: relative;
+	box-sizing: border-box;
+	padding-left: 280px;
+}
+
+.monaco-workbench.picode-agent .part.sidebar.picode-sidebar-split > .picode-sidebar-side-column {
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	width: 280px;
+	overflow: hidden;
+	border-right: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+/* Lines added and removed under Changes. */
+.picode-overview-added {
+	color: var(--vscode-gitDecoration-addedResourceForeground);
+	margin-right: 6px;
+}
+
+.picode-overview-removed {
+	color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+/* The `+N −M` row opens the changes. */
+.picode-overview-row.clickable {
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.picode-overview-row.clickable:hover .picode-overview-label {
+	text-decoration: underline;
+}
+
+/* Rows inside a group (finished tasks, memory search results) sit one step in. */
+.picode-overview-row.nested {
+	padding-left: 18px;
+}
+
+/* The sessions column holds one view: its row of tab icons has nothing to choose between. */
+.monaco-workbench.picode-agent .part.auxiliarybar > .header-or-footer {
+	display: none;
+}
+
+/* The chat has one place to run, pi, so the "Pi" target picker under the input has nothing to
+ * choose between: it is left out in both layouts. */
+.monaco-workbench .chat-input-picker-item.chat-session-target-picker-item {
+	display: none;
+}

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { buildPicodeProductLogo } from '../../../picode/browser/picodeProductLogo.js';
 import { asCSSUrl } from '../../../../../base/browser/cssValue.js';
 import * as dom from '../../../../../base/browser/dom.js';
 import { createCSSRule } from '../../../../../base/browser/domStylesheets.js';
@@ -126,6 +127,8 @@ export interface IChatViewWelcomeContent {
 	tips?: IMarkdownString;
 	readonly inputPart?: HTMLElement;
 	readonly useLargeIcon?: boolean;
+	/** PiCode: draw PiCode's own mark (theme body, blue accents) instead of the icon. */
+	readonly picodeMark?: boolean;
 }
 
 export interface IChatViewWelcomeRenderOptions {
@@ -159,6 +162,9 @@ export class ChatViewWelcomePart extends Disposable {
 				if (ThemeIcon.isThemeIcon(content.icon)) {
 					const iconElement = renderIcon(content.icon);
 					icon.appendChild(iconElement);
+				} else if (content.picodeMark) {
+					icon.appendChild(buildPicodeProductLogo());
+					icon.classList.add('picode-mark');
 				} else if (URI.isUri(content.icon)) {
 					const cssUrl = asCSSUrl(content.icon);
 					const hash = new StringSHA1();
