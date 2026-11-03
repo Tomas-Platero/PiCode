@@ -349,7 +349,7 @@ export async function planSessionsRestore(deps: SessionsBackupDeps): Promise<Res
 	const files = new Map<string, Buffer>();
 	let unreadableRefs = 0;
 	for (const [index, entry] of refs.entries()) {
-		deps.onProgress?.(`ref ${index + 1} of ${refs.length}`);
+		deps.onProgress?.(vscode.l10n.t('ref {0} of {1}', index + 1, refs.length));
 		let response: Response;
 		try {
 			response = await fetchFn(entry.url, { headers: syncHeaders(idToken) });
@@ -434,13 +434,14 @@ export const BACKUP_SESSIONS_COMMAND = 'picode.backupSessions';
 export const RESTORE_SESSIONS_COMMAND = 'picode.restoreSessions';
 
 /** A sentence for the files too large to back up, or nothing when there are none. */
-function tooLargeSentence(skipped: readonly string[]): string {
+function tooLargeSentence(skipped: readonly string[]): string | undefined {
 	if (skipped.length === 0) {
-		return '';
+		return undefined;
 	}
 	const first = skipped.slice(0, 3).join(', ');
-	const more = skipped.length > 3 ? ` and ${skipped.length - 3} more` : '';
-	return ` Skipped (larger than 20 MB): ${first}${more}.`;
+	return skipped.length > 3
+		? vscode.l10n.t('Skipped (larger than 20 MB): {0} and {1} more.', first, skipped.length - 3)
+		: vscode.l10n.t('Skipped (larger than 20 MB): {0}.', first);
 }
 
 /**
@@ -463,7 +464,7 @@ export class NotSignedInError extends Error {
  * feature needs.
  */
 function offerSignIn(): void {
-	void vscode.window.showErrorMessage('PiCode: sign in to use your account.', 'Sign in').then(choice => {
+	void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: sign in to use your account.'), vscode.l10n.t('Sign in')).then(choice => {
 		if (choice !== undefined) {
 			void vscode.authentication.getSession(PICODE_AUTH_PROVIDER_ID, PICODE_AUTH_SCOPES, { createIfNone: true });
 		}
@@ -481,7 +482,7 @@ function offerSignIn(): void {
 export function registerSessionsBackupCommands(deps: SessionsBackupDeps): vscode.Disposable[] {
 	return [
 		vscode.commands.registerCommand(BACKUP_SESSIONS_COMMAND, () => vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: 'Backing up pi sessions to PiCode Cloud…' },
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Backing up pi sessions to PiCode Cloud…') },
 			async (progress: vscode.Progress<{ message?: string }>) => {
 				let report: BackupReport;
 				try {
@@ -497,21 +498,22 @@ export function registerSessionsBackupCommands(deps: SessionsBackupDeps): vscode
 					throw error;
 				}
 				const parts = [
-					`${report.uploaded} uploaded`,
-					`${report.unchanged} already backed up`,
+					vscode.l10n.t('{0} uploaded', report.uploaded),
+					vscode.l10n.t('{0} already backed up', report.unchanged),
 				];
 				if (report.failures.length > 0) {
-					parts.push(`${report.failures.length} failed`);
+					parts.push(vscode.l10n.t('{0} failed', report.failures.length));
 				}
-				void vscode.window.showInformationMessage(
-					`PiCode: pi session backup finished — ${parts.join(', ')}.${tooLargeSentence(report.skippedTooLarge)}`);
+				const finished = vscode.l10n.t('PiCode: pi session backup finished — {0}.', parts.join(', '));
+				const skipped = tooLargeSentence(report.skippedTooLarge);
+				void vscode.window.showInformationMessage(skipped === undefined ? finished : `${finished} ${skipped}`);
 				if (report.failures.length > 0) {
 					console.error(`[pi] session backup failures: ${report.failures.join('; ')}`);
 				}
 			},
 		)),
 		vscode.commands.registerCommand(RESTORE_SESSIONS_COMMAND, () => vscode.window.withProgress(
-			{ location: vscode.ProgressLocation.Notification, title: 'Reading pi sessions from PiCode Cloud…' },
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Reading pi sessions from PiCode Cloud…') },
 			async (progress: vscode.Progress<{ message?: string }>) => {
 				let plan: RestorePlan;
 				try {
@@ -527,26 +529,32 @@ export function registerSessionsBackupCommands(deps: SessionsBackupDeps): vscode
 					throw error;
 				}
 				if (plan.files.size === 0) {
-					void vscode.window.showInformationMessage('PiCode: the cloud holds no pi sessions to restore.'
-						+ (plan.unreadableRefs > 0 ? ` (${plan.unreadableRefs} unreadable refs were skipped.)` : ''));
+					void vscode.window.showInformationMessage(plan.unreadableRefs > 0
+						? vscode.l10n.t('PiCode: the cloud holds no pi sessions to restore. ({0} unreadable refs were skipped.)', plan.unreadableRefs)
+						: vscode.l10n.t('PiCode: the cloud holds no pi sessions to restore.'));
 					return;
 				}
 				const changed = countChangedSessions(plan, deps.sessionsDir);
 				if (changed === 0) {
-					void vscode.window.showInformationMessage(`PiCode: all ${plan.files.size} cloud sessions are already on this machine.`);
+					void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: all {0} cloud sessions are already on this machine.', plan.files.size));
 					return;
 				}
+				const restore = vscode.l10n.t('Restore');
 				const confirmed = await vscode.window.showWarningMessage(
-					`Restore ${changed} pi session file${changed === 1 ? '' : 's'} from PiCode Cloud? Files that differ from what this machine holds will be overwritten.`,
+					changed === 1
+						? vscode.l10n.t('Restore {0} pi session file from PiCode Cloud? Files that differ from what this machine holds will be overwritten.', changed)
+						: vscode.l10n.t('Restore {0} pi session files from PiCode Cloud? Files that differ from what this machine holds will be overwritten.', changed),
 					{ modal: true },
-					'Restore',
+					restore,
 				);
-				if (confirmed !== 'Restore') {
+				if (confirmed !== restore) {
 					return;
 				}
 				const { written, identical } = applySessionsRestore(plan, deps.sessionsDir);
 				void vscode.window.showInformationMessage(
-					`PiCode: restored ${written} pi session file${written === 1 ? '' : 's'} (${identical} already up to date).`);
+					written === 1
+						? vscode.l10n.t('PiCode: restored {0} pi session file ({1} already up to date).', written, identical)
+						: vscode.l10n.t('PiCode: restored {0} pi session files ({1} already up to date).', written, identical));
 			},
 		)),
 	];

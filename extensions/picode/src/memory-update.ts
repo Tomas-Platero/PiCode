@@ -23,6 +23,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { ENGRAM_VERSION_FILE, engramBinaryName } from './engram';
+import { l10n } from './l10n.ts';
 
 const REPO = 'Gentleman-Programming/engram';
 const API = `https://api.github.com/repos/${REPO}/releases/latest`;
@@ -177,6 +178,24 @@ function releaseFor(tag: string, version: string, asset: string, url: string): E
 	};
 }
 
+/** The hosts a release download may come from: GitHub's own, and nowhere else. */
+const DOWNLOAD_HOSTS = ['github.com', 'api.github.com', 'objects.githubusercontent.com', 'codeload.github.com'];
+
+/**
+ * The URL when it is an HTTPS download from GitHub, `undefined` otherwise.
+ *
+ * The asset URL arrives in a release the API answered, so it is checked here before it is fetched:
+ * a download this product does not recognise is not a download it opens.
+ */
+function githubDownload(url: string): string | undefined {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === 'https:' && DOWNLOAD_HOSTS.includes(parsed.hostname) ? parsed.toString() : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Runs the engine and reads the version it reports. `undefined` means it did not answer. */
 export function probeEngineVersion(binary: string): string | undefined {
 	try {
@@ -210,42 +229,55 @@ export async function updateEngine(options: {
 	const reasons: string[] = [];
 	const release = await fetchLatestRelease(reason => reasons.push(reason));
 	if (release === undefined) {
-		return { ok: false, message: `Could not reach the release page${reasons.length > 0 ? ` (${reasons[reasons.length - 1]})` : ''}. Nothing was changed.` };
+		return {
+			ok: false,
+			message: reasons.length > 0
+				? l10n.t('Could not reach the release page ({0}). Nothing was changed.', reasons[reasons.length - 1])
+				: l10n.t('Could not reach the release page. Nothing was changed.')
+		};
 	}
 	if (currentVersion !== undefined && compareVersions(release.version, currentVersion) <= 0) {
-		return { ok: true, message: `Already up to date (${currentVersion}).` };
+		return { ok: true, message: l10n.t('Already up to date ({0}).', currentVersion) };
 	}
 
+	const current = currentVersion ?? l10n.t('an unknown version');
 	const agreed = await confirm(
-		`Memory engine ${release.version} is available (you have ${currentVersion ?? 'an unknown version'}). ` +
-		`It will be downloaded into your profile and used after you restart PiCode. The store is not touched.`
+		l10n.t('Memory engine {0} is available (you have {1}). It will be downloaded into your profile and used after you restart PiCode. The store is not touched.', release.version, current)
 	);
 	if (!agreed) {
-		return { ok: false, message: 'Update cancelled.' };
+		return { ok: false, message: l10n.t('Update cancelled.') };
 	}
 
 	const tempRoot = path.join(os.tmpdir(), `picode-engram-update-${Date.now()}`);
 	fs.mkdirSync(tempRoot, { recursive: true });
 	try {
+		// Both downloads are named by the release and opened only from GitHub's own hosts.
+		const downloadUrl = githubDownload(release.url);
+		const checksumsUrl = githubDownload(release.checksumsUrl);
+		if (downloadUrl === undefined || checksumsUrl === undefined) {
+			return { ok: false, message: l10n.t('The release named a download this product does not fetch. Nothing was changed.') };
+		}
 		progress(`Downloading ${release.asset}…`);
 		const archivePath = path.join(tempRoot, release.asset);
-		const response = await fetch(release.url, { signal: AbortSignal.timeout(120_000) });
+		const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(120_000) });
 		if (!response.ok || response.body === null) {
-			return { ok: false, message: 'The download failed. Nothing was changed.' };
+			return { ok: false, message: l10n.t('The download failed. Nothing was changed.') };
 		}
 		const { pipeline } = await import('node:stream/promises');
 		const { createWriteStream } = await import('node:fs');
+		// SAFETY: undici's body is a web ReadableStream; `pipeline` accepts any async iterable of
+		// chunks on this Node version, and the two typings are deliberately unrelated.
 		await pipeline(response.body as unknown as NodeJS.ReadableStream, createWriteStream(archivePath));
 
 		progress('Verifying the download…');
-		const checksumsResponse = await fetch(release.checksumsUrl, { signal: AbortSignal.timeout(30_000) });
+		const checksumsResponse = await fetch(checksumsUrl, { signal: AbortSignal.timeout(30_000) });
 		if (!checksumsResponse.ok) {
-			return { ok: false, message: 'The checksums could not be fetched. Nothing was changed.' };
+			return { ok: false, message: l10n.t('The checksums could not be fetched. Nothing was changed.') };
 		}
 		const checksums = parseChecksums(await checksumsResponse.text());
 		const expected = checksums.get(release.asset);
 		if (expected === undefined || sha256File(archivePath) !== expected) {
-			return { ok: false, message: 'The download did not match its checksum. Nothing was changed.' };
+			return { ok: false, message: l10n.t('The download did not match its checksum. Nothing was changed.') };
 		}
 
 		progress('Extracting…');
@@ -254,12 +286,14 @@ export async function updateEngine(options: {
 		if (process.platform === 'win32') {
 			const ps = spawnSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path '${archivePath}' -DestinationPath '${extractDir}' -Force`], { encoding: 'utf8', timeout: 120_000, windowsHide: true });
 			if (ps.status !== 0) {
-				return { ok: false, message: `Extraction failed: ${(ps.stderr ?? '').trim() || 'unknown error'}. Nothing was changed.` };
+				const native = (ps.stderr ?? '').trim() || l10n.t('unknown error');
+				return { ok: false, message: l10n.t('Extraction failed: {0}. Nothing was changed.', native) };
 			}
 		} else {
 			const tar = spawnSync('tar', ['-xf', archivePath, '-C', extractDir], { encoding: 'utf8', timeout: 120_000 });
 			if (tar.status !== 0) {
-				return { ok: false, message: `Extraction failed: ${(tar.stderr ?? '').trim() || 'unknown error'}. Nothing was changed.` };
+				const native = (tar.stderr ?? '').trim() || l10n.t('unknown error');
+				return { ok: false, message: l10n.t('Extraction failed: {0}. Nothing was changed.', native) };
 			}
 		}
 
@@ -280,11 +314,11 @@ export async function updateEngine(options: {
 		}
 		walk(extractDir);
 		if (found === undefined) {
-			return { ok: false, message: 'The archive did not contain the engine. Nothing was changed.' };
+			return { ok: false, message: l10n.t('The archive did not contain the engine. Nothing was changed.') };
 		}
 		const newVersion = probeEngineVersion(found);
 		if (newVersion === undefined || newVersion !== release.version) {
-			return { ok: false, message: 'The downloaded engine did not report the expected version. Nothing was changed.' };
+			return { ok: false, message: l10n.t('The downloaded engine did not report the expected version. Nothing was changed.') };
 		}
 
 		progress('Installing…');
@@ -305,7 +339,7 @@ export async function updateEngine(options: {
 			if (hadBackup) {
 				fs.renameSync(backup, target);
 			}
-			return { ok: false, message: `The engine could not be installed: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.` };
+			return { ok: false, message: l10n.t('The engine could not be installed: {0}. Nothing was changed.', error instanceof Error ? error.message : String(error)) };
 		}
 		const installedVersion = probeEngineVersion(target);
 		if (installedVersion !== release.version) {
@@ -314,7 +348,7 @@ export async function updateEngine(options: {
 			if (hadBackup) {
 				fs.renameSync(backup, target);
 			}
-			return { ok: false, message: 'The installed engine did not answer. The previous one was restored.' };
+			return { ok: false, message: l10n.t('The installed engine did not answer. The previous one was restored.') };
 		}
 		if (hadBackup) {
 			try { fs.rmSync(backup, { force: true }); } catch { /* leave it; harmless */ }
@@ -324,7 +358,7 @@ export async function updateEngine(options: {
 
 		return {
 			ok: true,
-			message: `Memory engine ${release.version} is installed. Restart PiCode to use it (it will be picked up automatically).`,
+			message: l10n.t('Memory engine {0} is installed. Restart PiCode to use it (it will be picked up automatically).', release.version),
 		};
 	} finally {
 		try { fs.rmSync(tempRoot, { recursive: true, force: true }); } catch { /* best effort */ }

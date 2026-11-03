@@ -27,6 +27,7 @@ import {
 	readEditorSetting,
 	readPackages,
 	setExtras,
+	setLayout,
 	setModel,
 	setPackages,
 	setRuntime,
@@ -132,6 +133,14 @@ test('extra switches only write keys the product declares', () => {
 	assert.ok(!Object.keys(settings).some(key => key.includes('somethingElse')));
 });
 
+test('switching dictation on only leaves a note for the editor to act on', () => {
+	const { paths } = profiles();
+	assert.deepStrictEqual(setExtras(paths, { voice: true }), { voice: true });
+	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], true);
+	assert.deepStrictEqual(setExtras(paths, { voice: false }), { voice: false });
+	assert.strictEqual(JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'))['picode.voice.downloadOnStart'], false);
+});
+
 test('a value that is not a boolean is not written', () => {
 	const { paths } = profiles();
 	assert.deepStrictEqual(setExtras(paths, { mcp: 'yes' }), {});
@@ -155,6 +164,21 @@ test('a theme with no name is refused rather than written', () => {
 	const { paths } = profiles();
 	assert.throws(() => setTheme(paths, '   '), /needs a name/);
 	assert.ok(!existsSync(editorSettingsPath(paths)));
+});
+
+test('the layout is agent or editor, and only the choice is written', () => {
+	const { paths } = profiles();
+	assert.strictEqual(setLayout(paths, 'agent'), 'agent');
+	let settings = JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'));
+	assert.strictEqual(settings['picode.appearance.layout'], 'agent');
+	assert.strictEqual(settings['workbench.experimental.modernUI'], undefined, 'the editor sets its own look');
+
+	setLayout(paths, 'editor');
+	settings = JSON.parse(readFileSync(editorSettingsPath(paths), 'utf8'));
+	assert.strictEqual(settings['picode.appearance.layout'], 'editor');
+
+	assert.throws(() => setLayout(paths, 'modern'), /agent or editor/);
+	assert.strictEqual(readEditorSetting(paths, 'picode.appearance.layout'), 'editor', 'the refused value changed nothing');
 });
 
 test('packages are declared once, and removed when taken off the list', () => {

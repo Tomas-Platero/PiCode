@@ -57,6 +57,12 @@ export const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 export const MEMORY_COPY_COMMAND = 'picode.memory.copy';
 export const MEMORY_DELETE_COMMAND = 'picode.memory.delete';
 
+/** What the block shows, as plain data, for the Agent layout's status column. */
+export const MEMORY_SUMMARY_COMMAND = 'picode.memory.summary';
+
+/** How old the block's last reading may be before the status column asks for a fresh one. */
+const SUMMARY_STALE_MS = 30_000;
+
 /** The context key that makes the "clear search" button appear only while a search is on. */
 export const MEMORY_SEARCH_CONTEXT = 'picode.memory.searchActive';
 
@@ -72,6 +78,16 @@ const PAGE_SIZE = 50;
 
 /** How many conflicts are resolved to their titles when the group is opened. */
 const CONFLICT_TITLES = 10;
+
+/** A count of memories, singular or plural, as one translatable message. */
+function memoryCount(total: number): string {
+	return total === 1 ? vscode.l10n.t('{0} memory', total) : vscode.l10n.t('{0} memories', total);
+}
+
+/** A count of projects, singular or plural, as one translatable message. */
+function projectCount(total: number): string {
+	return total === 1 ? vscode.l10n.t('{0} project', total) : vscode.l10n.t('{0} projects', total);
+}
 
 type MemoryNode =
 	| { readonly kind: 'heading' }
@@ -127,6 +143,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	readonly onDidChangeTreeData = this.changed.event;
 
 	private data: MemoryData = { kind: 'loading' };
+	private loadedAt = 0;
 	private readonly pages = new Map<string, number>();
 	private readonly rows = new Map<string, readonly MemoryRow[]>();
 	private readonly titles = new Map<number, string>();
@@ -238,7 +255,36 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			version,
 			lastSaved: newest === undefined ? undefined : newest.updatedAt || newest.createdAt,
 		};
+		this.loadedAt = Date.now();
 		this.changed.fire();
+	}
+
+	/**
+	 * The block as plain data: the heading's count and engine, the open projects, an active search's
+	 * results, and whether the engine has a newer version. Reads again when the last reading is old,
+	 * so the status column stays current with the tree folded away or hidden.
+	 */
+	summary(): object {
+		if (Date.now() - this.loadedAt > SUMMARY_STALE_MS) {
+			this.loadedAt = Date.now(); // one reading at a time
+			void this.load();
+		}
+		const data = this.data;
+		if (data.kind !== 'ready') {
+			return { state: data.kind, retried: this.retried };
+		}
+		return {
+			state: 'ready',
+			heading: data.total === 0 ? vscode.l10n.t('Nothing saved yet') : `${memoryCount(data.total)} · ${projectCount(data.projects.length)}`,
+			detail: [data.version, data.lastSaved === undefined ? '' : vscode.l10n.t('last {0}', memoryWhen(data.lastSaved))].filter(part => part !== '' && part !== undefined).join(' · ') || undefined,
+			projects: data.projects.map(project => ({ name: project.name, memories: project.memories })),
+			search: data.search === undefined ? undefined : {
+				query: data.search.query,
+				rows: data.search.rows.slice(0, 20).map(row => ({ id: row.id, title: row.title, project: row.project, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) })),
+				total: data.search.rows.length,
+			},
+			newerEngine: data.newerEngine,
+		};
 	}
 
 	getTreeItem(node: MemoryNode): vscode.TreeItem {
@@ -246,10 +292,10 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			case 'heading': {
 				const ready = this.data.kind === 'ready' ? this.data : undefined;
 				const label = ready === undefined
-					? 'Memory'
+					? vscode.l10n.t('Memory')
 					: ready.total === 0
-						? 'Nothing saved yet'
-						: `${ready.total} ${ready.total === 1 ? 'memory' : 'memories'} · ${ready.projects.length} ${ready.projects.length === 1 ? 'project' : 'projects'}`;
+						? vscode.l10n.t('Nothing saved yet')
+						: `${memoryCount(ready.total)} · ${projectCount(ready.projects.length)}`;
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon('database');
 				item.contextValue = 'picode.memory.heading';
@@ -257,10 +303,10 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				// "what is in here, and is it alive" without a second row saying the same thing.
 				item.description = ready === undefined
 					? undefined
-					: [ready.version, ready.lastSaved === undefined ? '' : `last ${memoryWhen(ready.lastSaved)}`]
+					: [ready.version, ready.lastSaved === undefined ? '' : vscode.l10n.t('last {0}', memoryWhen(ready.lastSaved))]
 						.filter(part => part !== '')
 						.join(' · ') || undefined;
-				item.tooltip = ready === undefined ? undefined : 'Everything this machine remembers, shared with any other agent using the same store.';
+				item.tooltip = ready === undefined ? undefined : vscode.l10n.t('Everything this machine remembers, shared with any other agent using the same store.');
 				return item;
 			}
 			case 'message': {
@@ -270,12 +316,12 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			}
 			case 'action': {
 				const label = node.action === 'search'
-					? 'Search memories…'
+					? vscode.l10n.t('Search memories…')
 					: node.action === 'clear'
-						? 'Clear search'
+						? vscode.l10n.t('Clear search')
 						: node.action === 'check'
-							? 'Check memory'
-							: 'Update memory engine';
+							? vscode.l10n.t('Check memory')
+							: vscode.l10n.t('Update memory engine');
 				const icon = node.action === 'search'
 					? 'search'
 					: node.action === 'clear'
@@ -301,13 +347,13 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				item.description = String(node.project.memories);
 				item.iconPath = new vscode.ThemeIcon('folder');
 				item.contextValue = 'picode.memory.project';
-				item.tooltip = `${node.project.name} · ${node.project.memories} ${node.project.memories === 1 ? 'memory' : 'memories'}`;
+				item.tooltip = `${node.project.name} · ${memoryCount(node.project.memories)}`;
 				return item;
 			}
 			case 'more': {
-				const item = new vscode.TreeItem(`Show ${Math.min(PAGE_SIZE, node.remaining)} more`, vscode.TreeItemCollapsibleState.None);
+				const item = new vscode.TreeItem(vscode.l10n.t('Show {0} more', Math.min(PAGE_SIZE, node.remaining)), vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon('ellipsis');
-				item.command = { command: MEMORY_SHOW_MORE_COMMAND, title: 'Show more', arguments: [node.project] };
+				item.command = { command: MEMORY_SHOW_MORE_COMMAND, title: vscode.l10n.t('Show more'), arguments: [node.project] };
 				item.contextValue = 'picode.memory.action';
 				return item;
 			}
@@ -319,16 +365,16 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				item.description = [node.showProject === true ? node.row.project : '', when].filter(part => part !== '').join(' · ');
 				item.iconPath = new vscode.ThemeIcon(memoryTypeIcon(node.row.type));
 				item.tooltip = new vscode.MarkdownString(`**${node.row.title}**\n\n${node.row.type} · ${node.row.project}`);
-				item.command = { command: MEMORY_OPEN_COMMAND, title: 'Open memory', arguments: [node.row] };
+				item.command = { command: MEMORY_OPEN_COMMAND, title: vscode.l10n.t('Open memory'), arguments: [node.row] };
 				item.contextValue = 'picode.memory.row';
 				return item;
 			}
 			case 'section': {
 				const label = node.section === 'search'
-					? 'Search results'
+					? vscode.l10n.t('Search results')
 					: node.section === 'review'
-						? 'Needs review'
-						: 'Conflicts';
+						? vscode.l10n.t('Needs review')
+						: vscode.l10n.t('Conflicts');
 				const icon = node.section === 'search' ? 'search' : node.section === 'review' ? 'eye' : 'warning';
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
 				item.description = String(node.count);
@@ -341,7 +387,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				const item = new vscode.TreeItem(`${from} ↔ ${to}`, vscode.TreeItemCollapsibleState.None);
 				item.description = node.conflict.relationType;
 				item.iconPath = new vscode.ThemeIcon('warning');
-				item.command = { command: MEMORY_OPEN_COMMAND, title: 'Open memory', arguments: [{ id: node.conflict.fromId }] };
+				item.command = { command: MEMORY_OPEN_COMMAND, title: vscode.l10n.t('Open memory'), arguments: [{ id: node.conflict.fromId }] };
 				item.contextValue = 'picode.memory.conflict';
 				return item;
 			}
@@ -353,7 +399,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			return [];
 		}
 		if (this.data.kind === 'unavailable') {
-			return [{ kind: 'message', text: this.retried ? 'Memory is not answering. The engine may have stopped.' : 'Memory is starting…' }];
+			return [{ kind: 'message', text: this.retried ? vscode.l10n.t('Memory is not answering. The engine may have stopped.') : vscode.l10n.t('Memory is starting…') }];
 		}
 		const data = this.data;
 		if (element === undefined) {
@@ -385,7 +431,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				if (element.section === 'search') {
 					const rows = data.search?.rows ?? [];
 					return rows.length === 0
-						? [{ kind: 'message', text: 'Nothing matches that.' }]
+						? [{ kind: 'message', text: vscode.l10n.t('Nothing matches that.') }]
 						: [...rows.map(row => ({ kind: 'memory' as const, row, showProject: true })), { kind: 'action', action: 'clear' as const }];
 				}
 				if (element.section === 'review') {
@@ -407,7 +453,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			if (json === undefined) {
 				// A failed read is said as a failed read. Showing "nothing here yet" over a project
 				// the engine counted a moment ago would be the panel telling a lie about memory.
-				return [{ kind: 'message', text: 'These memories could not be read. Try again in a moment.' }];
+				return [{ kind: 'message', text: vscode.l10n.t('These memories could not be read. Try again in a moment.') }];
 			}
 			rows = parseMemoryRows(json) ?? [];
 			this.rows.set(project.name, rows);
@@ -417,7 +463,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			nodes.push({ kind: 'more', project: project.name, remaining: project.memories - nodes.length });
 		}
 		if (nodes.length === 0) {
-			nodes.push({ kind: 'message', text: 'Nothing here yet.' });
+			nodes.push({ kind: 'message', text: vscode.l10n.t('Nothing here yet.') });
 		}
 		return nodes;
 	}
@@ -452,8 +498,8 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	async search(): Promise<void> {
 		const current = this.data.kind === 'ready' ? this.data.search?.query : undefined;
 		const query = await vscode.window.showInputBox({
-			prompt: 'Search the memories of the projects open in this window',
-			placeHolder: 'a decision, a convention, a trap you hit before…',
+			prompt: vscode.l10n.t('Search the memories of the projects open in this window'),
+			placeHolder: vscode.l10n.t('a decision, a convention, a trap you hit before…'),
 			value: current ?? '',
 		});
 		if (query === undefined || query.trim() === '') {
@@ -461,7 +507,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		}
 		const rows = await this.searchOpenProjects(query.trim());
 		if (rows === undefined) {
-			void vscode.window.showWarningMessage('The memory engine did not answer the search. Nothing was changed.');
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine did not answer the search. Nothing was changed.'));
 			return;
 		}
 		if (this.data.kind !== 'ready') {
@@ -490,7 +536,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	async open(row: Pick<MemoryRow, 'id'>): Promise<void> {
 		const detail = parseMemoryDetail(await this.getJson(`/observations/${row.id}`));
 		if (detail === undefined) {
-			void vscode.window.showWarningMessage('That memory could not be read. It may have been removed since the list was read.');
+			void vscode.window.showWarningMessage(vscode.l10n.t('That memory could not be read. It may have been removed since the list was read.'));
 			return;
 		}
 		this.titles.set(detail.id, detail.title);
@@ -502,7 +548,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	async openDoctor(): Promise<void> {
 		const report = parseMemoryDoctor(await this.getJson('/doctor'));
 		if (report === undefined) {
-			void vscode.window.showWarningMessage('The memory engine did not answer its check.');
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine did not answer its check.'));
 			return;
 		}
 		const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: memoryDoctorMarkdown(report) });
@@ -522,8 +568,9 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			home: os.homedir(),
 			currentVersion,
 			confirm: async message => {
-				const answer = await vscode.window.showInformationMessage(message, { modal: true }, 'Update', 'Cancel');
-				return answer === 'Update';
+				const update = vscode.l10n.t('Update');
+				const answer = await vscode.window.showInformationMessage(message, { modal: true }, update, vscode.l10n.t('Cancel'));
+				return answer === update;
 			},
 			progress: line => console.log(`[memory] ${line}`)
 		});
@@ -539,11 +586,11 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	async copy(row: MemoryRow): Promise<void> {
 		const detail = parseMemoryDetail(await this.getJson(`/observations/${row.id}`));
 		if (detail === undefined) {
-			void vscode.window.showWarningMessage('That memory could not be read, so nothing was copied.');
+			void vscode.window.showWarningMessage(vscode.l10n.t('That memory could not be read, so nothing was copied.'));
 			return;
 		}
 		await vscode.env.clipboard.writeText(`# ${detail.title}\n\n${detail.content.trim()}\n`);
-		void vscode.window.showInformationMessage('Memory copied to the clipboard.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('Memory copied to the clipboard.'));
 	}
 
 	/**
@@ -553,20 +600,21 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	 * memory instead of asking "are you sure?" about nothing.
 	 */
 	async remove(row: MemoryRow): Promise<void> {
+		const remove = vscode.l10n.t('Delete');
 		const answer = await vscode.window.showWarningMessage(
-			`Delete “${row.title}” from memory?`,
-			{ modal: true, detail: 'It disappears from every agent that shares this memory. This cannot be undone here.' },
-			'Delete'
+			vscode.l10n.t('Delete “{0}” from memory?', row.title),
+			{ modal: true, detail: vscode.l10n.t('It disappears from every agent that shares this memory. This cannot be undone here.') },
+			remove
 		);
-		if (answer !== 'Delete') {
+		if (answer !== remove) {
 			return;
 		}
 		const deleted = await this.send('DELETE', `/observations/${row.id}?expected_project=${encodeURIComponent(row.project)}`);
 		if (!deleted) {
-			void vscode.window.showWarningMessage('That memory could not be deleted. It may already be gone.');
+			void vscode.window.showWarningMessage(vscode.l10n.t('That memory could not be deleted. It may already be gone.'));
 			return;
 		}
-		void vscode.window.showInformationMessage('Memory deleted.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('Memory deleted.'));
 		this.refresh();
 	}
 
@@ -605,6 +653,7 @@ export function registerMemoryView(): vscode.Disposable {
 		provider,
 		view,
 		vscode.commands.registerCommand(MEMORY_REFRESH_COMMAND, () => provider.refresh()),
+		vscode.commands.registerCommand(MEMORY_SUMMARY_COMMAND, () => provider.summary()),
 		vscode.commands.registerCommand(MEMORY_SEARCH_COMMAND, () => provider.search()),
 		vscode.commands.registerCommand(MEMORY_CLEAR_SEARCH_COMMAND, () => provider.clearSearch()),
 		vscode.commands.registerCommand(MEMORY_OPEN_COMMAND, (row: Pick<MemoryRow, 'id'> | undefined) => {

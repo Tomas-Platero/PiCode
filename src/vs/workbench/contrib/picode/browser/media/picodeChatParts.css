@@ -1,0 +1,94 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * How the agent's work reads in the chat: the reasoning, and the card a tool call opens into
+ * (the command that ran and what it printed). Colours come from the theme, so every theme gets the
+ * same shape. Scoped to the chat's responses so nothing else in the editor is touched.
+ */
+
+/* ---- The reasoning ---------------------------------------------------------------------- */
+
+/* The "Completed N steps" line that closes a finished turn: a quiet label, not a button. */
+.monaco-workbench .interactive-session .interactive-response .value .completed-response-summary {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+/* One step of the reasoning: the thought, in a calm voice, with room between steps. */
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-collapsible {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-block: 4px;
+}
+
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-item.markdown-content {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12.5px;
+	line-height: 1.55;
+}
+
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-item.markdown-content p {
+	margin: 0 0 4px;
+}
+
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-item.markdown-content p:last-child {
+	margin-bottom: 0;
+}
+
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-item .chat-thinking-icon {
+	opacity: 0.55;
+	font-size: 8px;
+}
+
+/* ---- A tool call opened up ---------------------------------------------------------------- */
+
+/* The card: the command and its answer, in one framed block that reads like a terminal. */
+.monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible:not(.collapsed) .chat-confirmation-widget-message {
+	margin-top: 6px;
+	padding: 4px 10px 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
+}
+
+/* "Input" / "Output": small quiet labels instead of headings. */
+.monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible .chat-confirmation-widget-message h3 {
+	margin: 10px 0 4px;
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+
+.monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible .chat-confirmation-widget-message h3:first-child {
+	margin-top: 6px;
+}
+
+/* The code blocks inside it: rounded, framed, and never taller than a screenful. */
+.monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible .chat-confirmation-widget-message .interactive-result-code-block {
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+/* The row that names the tool call (and now the command it ran): a command, so monospaced. */
+.monaco-workbench .interactive-session .interactive-response .chat-thinking-tool-wrapper .chat-confirmation-widget-title {
+	font-family: var(--monaco-monospace-font, monospace);
+	font-size: 12px;
+	color: color-mix(in srgb, var(--vscode-foreground) 85%, transparent);
+}
+
+/* Thought text and inline code inside it keep the same small size. */
+.monaco-workbench .interactive-session .interactive-response .value .chat-thinking-item.markdown-content code {
+	font-size: 11.5px;
+}
+
+/* The input block of a call reads as the command line it is. */
+.monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible .chat-confirmation-widget-message h3:first-child + div .interactive-result-code-block {
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}

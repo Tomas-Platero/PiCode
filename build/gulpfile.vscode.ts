@@ -114,6 +114,7 @@ const vscodeResourceIncludes = [
 	// ships no file there and the renderer logs `picode.svg ... net::ERR_FILE_NOT_FOUND`.
 	'out-build/vs/workbench/contrib/picode/browser/media/*.svg',
 	'out-build/vs/workbench/contrib/picode/browser/media/tabler/*.svg',
+	'out-build/vs/workbench/contrib/picode/l10n/*.json',
 
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',

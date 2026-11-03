@@ -144,7 +144,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 			} else if (e.affectsConfiguration('workbench.secondarySideBar.showLabels')) {
 				this.configuration = this.resolveConfiguration();
 				this.updateCompositeBar(true);
-			} else if (e.affectsConfiguration(LayoutSettings.ACTIVITY_BAR_AUTO_HIDE)) {
+			} else if (e.affectsConfiguration(LayoutSettings.ACTIVITY_BAR_AUTO_HIDE) || e.affectsConfiguration('picode.appearance.layout')) {
 				this.onDidChangeActivityBarLocation();
 			}
 			if (e.affectsConfiguration(SidebarPart.fontSizeSettingsKey)) {
@@ -305,6 +305,13 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 
 	protected shouldShowCompositeBar(): boolean {
 		if (this.configuration.position === ActivityBarPosition.HIDDEN) {
+			return false;
+		}
+
+		// The Agent layout holds only the sessions here: a row of tab icons has nothing to choose
+		// between. Leaving it out of the layout (not just hiding it with CSS) is what stops the
+		// column from reserving the row's height and ending short of the window's bottom edge.
+		if (this.configurationService.getValue<string>('picode.appearance.layout') === 'agent') {
 			return false;
 		}
 

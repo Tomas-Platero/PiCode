@@ -65,7 +65,11 @@ import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from '.
 import { fetchLatestRelease, probeEngineVersion, updateEngine } from './memory-update';
 import { readDefaultModel, registerStatusDataCommand, registerUsagePanelCommand } from './status-data';
 import { parseProviderStreamEvent, type ProviderApi } from './provider-stream';
-import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND } from './status-contract';
+import { STATUS_PROVIDER_SETTINGS_COMMAND, UPDATES_APPLY_COMMAND, UPDATES_CHECK_COMMAND, VOICE_CANCEL_COMMAND, VOICE_DOWNLOAD_COMMAND, VOICE_FINISH_COMMAND, VOICE_LISTEN_COMMAND, VOICE_POLL_COMMAND, VOICE_REMOVE_COMMAND } from './status-contract';
+import { shouldDownloadOnStart, VoiceController } from './voice-controller';
+import { forkVoiceWorker } from './voice-fork';
+import { VoiceSession, type SessionEvent } from './voice-session';
+import { installVoice, readVoiceState, removeVoice, voiceDir, voiceDownloadSize, voiceManifestFor } from './voice-install';
 import { MEMORY_ENABLED_CONTEXT, registerMemoryView } from './memory-view';
 import { registerTasksView } from './tasks-view';
 import { isRunning, isTaskId, transcriptOf, transcriptOfJson } from './agent-transcript';
@@ -77,6 +81,7 @@ import { listProjectSessionFiles } from './sessions-provider';
 import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
+import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
 import { acceptsImages, modelPricing, type PiModelCost } from './model-info';
 
 /**
@@ -345,7 +350,7 @@ async function addMcpServer(profile: string): Promise<void> {
 	const existing = readJsonFile(file);
 
 	const name = (await vscode.window.showInputBox({
-		prompt: 'Name of the MCP server',
+		prompt: vscode.l10n.t('Name of the MCP server'),
 		placeHolder: 'my-server',
 		validateInput: validateServerName,
 	}))?.trim();
@@ -353,16 +358,16 @@ async function addMcpServer(profile: string): Promise<void> {
 		return;
 	}
 	if (serverNames(existing).includes(name)) {
-		const overwrite = await vscode.window.showQuickPick(['Overwrite it', 'Cancel'], {
-			placeHolder: `An MCP server named "${name}" is already in pi's profile`,
+		const overwrite = await vscode.window.showQuickPick([vscode.l10n.t('Overwrite it'), vscode.l10n.t('Cancel')], {
+			placeHolder: vscode.l10n.t('An MCP server named "{0}" is already in pi\'s profile', name),
 		});
-		if (overwrite !== 'Overwrite it') {
+		if (overwrite !== vscode.l10n.t('Overwrite it')) {
 			return;
 		}
 	}
 
 	const picked = await vscode.window.showQuickPick(['stdio', 'http'], {
-		placeHolder: 'How the server is reached: a local command or a remote URL',
+		placeHolder: vscode.l10n.t('How the server is reached: a local command or a remote URL'),
 	});
 	if (picked === undefined) {
 		return;
@@ -372,33 +377,33 @@ async function addMcpServer(profile: string): Promise<void> {
 	let draft: AddServerDraft;
 	if (transport === 'stdio') {
 		const command = (await vscode.window.showInputBox({
-			prompt: 'Command that starts the server',
+			prompt: vscode.l10n.t('Command that starts the server'),
 			placeHolder: 'npx -y some-mcp-server',
 		}))?.trim();
 		if (command === undefined || command.length === 0) {
 			return;
 		}
 		const argsText = await vscode.window.showInputBox({
-			prompt: 'Arguments of the command, separated by spaces; quote one that holds spaces (optional)',
+			prompt: vscode.l10n.t('Arguments of the command, separated by spaces; quote one that holds spaces (optional)'),
 			placeHolder: '--port 3000',
 		});
 		if (argsText === undefined) {
 			return;
 		}
-		const env = await collectKeyValueLines('Environment variable of the server');
+		const env = await collectKeyValueLines(vscode.l10n.t('Environment variable of the server'));
 		if (env === undefined) {
 			return;
 		}
 		draft = { name, transport, command, args: splitArguments(argsText), ...env };
 	} else {
 		const url = (await vscode.window.showInputBox({
-			prompt: 'URL of the server',
+			prompt: vscode.l10n.t('URL of the server'),
 			placeHolder: 'https://example.test/mcp',
 		}))?.trim();
 		if (url === undefined || url.length === 0) {
 			return;
 		}
-		const headers = await collectKeyValueLines('Header sent to the server');
+		const headers = await collectKeyValueLines(vscode.l10n.t('Header sent to the server'));
 		if (headers === undefined) {
 			return;
 		}
@@ -408,7 +413,7 @@ async function addMcpServer(profile: string): Promise<void> {
 	const problems = validateDraft(draft);
 	if (problems.length > 0) {
 		// Everything above was validated as it was asked; this is the net under it.
-		void vscode.window.showErrorMessage(`PiCode: the server is not complete — ${problems.join(' ')}`);
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the server is not complete — {0}', problems.join(' ')));
 		return;
 	}
 
@@ -417,7 +422,7 @@ async function addMcpServer(profile: string): Promise<void> {
 
 	// The list repaints itself through the file watcher: pi reads the server from the file, so
 	// nothing else has to be told that one was added.
-	void vscode.window.showInformationMessage(`MCP server ${name} added to pi. It will appear in the list.`);
+	void vscode.window.showInformationMessage(vscode.l10n.t('MCP server {0} added to pi. It will appear in the list.', name));
 }
 
 /** Every file the MCP section's pi servers can live in, in the order `mcpServersFrom` reads them: profile first, then each folder. */
@@ -444,13 +449,13 @@ function locateMcpServerFile(profile: string, name: string): string | undefined 
 
 /** The command's entry point: the page hands the server's name over; without one, the owner picks it. */
 async function editMcpServerCommand(profile: string, name?: string): Promise<void> {
-	const picked = name ?? await pickPiMcpServerName(profile, 'Which MCP server to edit');
+	const picked = name ?? await pickPiMcpServerName(profile, vscode.l10n.t('Which MCP server to edit'));
 	if (picked === undefined) {
 		return;
 	}
 	const file = locateMcpServerFile(profile, picked);
 	if (file === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
+		void vscode.window.showWarningMessage(vscode.l10n.t('PiCode: there is no MCP server named "{0}" any more.', picked));
 		return;
 	}
 	await editMcpServer(file, picked);
@@ -471,7 +476,7 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 	// The transport the entry says now is offered first, so accepting the pick keeps it.
 	const transports = current !== undefined && 'command' in current ? ['stdio', 'http'] : ['http', 'stdio'];
 	const picked = await vscode.window.showQuickPick(transports, {
-		placeHolder: `How "${name}" is reached: a local command or a remote URL`,
+		placeHolder: vscode.l10n.t('How "{0}" is reached: a local command or a remote URL', name),
 	});
 	if (picked === undefined) {
 		return;
@@ -481,7 +486,7 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 	let entry: McpServerFileEntry;
 	if (transport === 'stdio') {
 		const command = (await vscode.window.showInputBox({
-			prompt: 'Command that starts the server',
+			prompt: vscode.l10n.t('Command that starts the server'),
 			placeHolder: 'npx -y some-mcp-server',
 			value: current !== undefined && 'command' in current ? current.command : undefined,
 		}))?.trim();
@@ -489,28 +494,28 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 			return;
 		}
 		const argsText = await vscode.window.showInputBox({
-			prompt: 'Arguments of the command, separated by spaces; quote one that holds spaces (optional)',
+			prompt: vscode.l10n.t('Arguments of the command, separated by spaces; quote one that holds spaces (optional)'),
 			placeHolder: '--port 3000',
 			value: current !== undefined && 'command' in current && current.args.length > 0 ? current.args.join(' ') : undefined,
 		});
 		if (argsText === undefined) {
 			return;
 		}
-		const env = await collectKeyValueLines('Environment variable of the server', current !== undefined && 'command' in current ? { ...current.env } as Record<string, string> : undefined);
+		const env = await collectKeyValueLines(vscode.l10n.t('Environment variable of the server'), current !== undefined && 'command' in current ? { ...current.env } as Record<string, string> : undefined);
 		if (env === undefined) {
 			return;
 		}
 		entry = serverFileEntry({ name, transport, command, args: splitArguments(argsText), ...env });
 	} else {
 		const url = (await vscode.window.showInputBox({
-			prompt: 'URL of the server',
+			prompt: vscode.l10n.t('URL of the server'),
 			placeHolder: 'https://example.test/mcp',
 			value: current !== undefined && 'url' in current ? current.url : undefined,
 		}))?.trim();
 		if (url === undefined || url.length === 0) {
 			return;
 		}
-		const headers = await collectKeyValueLines('Header sent to the server', current !== undefined && 'url' in current ? { ...current.headers } : undefined);
+		const headers = await collectKeyValueLines(vscode.l10n.t('Header sent to the server'), current !== undefined && 'url' in current ? { ...current.headers } : undefined);
 		if (headers === undefined) {
 			return;
 		}
@@ -520,7 +525,7 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 	const problems = validateDraft({ ...entry, name, transport });
 	if (problems.length > 0) {
 		// Everything above was validated as it was asked; this is the net under it.
-		void vscode.window.showErrorMessage(`PiCode: the server is not complete — ${problems.join(' ')}`);
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the server is not complete — {0}', problems.join(' ')));
 		return;
 	}
 
@@ -528,40 +533,43 @@ async function editMcpServer(file: string, name: string): Promise<void> {
 	// still there to be edited. Rewriting from a stale read would resurrect a removed entry.
 	const text = mcpServersTextWithEdited(readJsonFile(file) ?? {}, name, entry);
 	if (text === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${name}" any more.`);
+		void vscode.window.showWarningMessage(vscode.l10n.t('PiCode: there is no MCP server named "{0}" any more.', name));
 		return;
 	}
 	fs.writeFileSync(file, text, { mode: 0o600 });
-	void vscode.window.showInformationMessage(`MCP server ${name} updated in pi. It will appear in the list.`);
+	void vscode.window.showInformationMessage(vscode.l10n.t('MCP server {0} updated in pi. It will appear in the list.', name));
 }
 
 /** The command's entry point: the page hands the server's name over; without one, the owner picks it. */
 async function removeMcpServerCommand(profile: string, name?: string): Promise<void> {
-	const picked = name ?? await pickPiMcpServerName(profile, 'Which MCP server to remove');
+	const picked = name ?? await pickPiMcpServerName(profile, vscode.l10n.t('Which MCP server to remove'));
 	if (picked === undefined) {
 		return;
 	}
 	const file = locateMcpServerFile(profile, picked);
 	if (file === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
+		void vscode.window.showWarningMessage(vscode.l10n.t('PiCode: there is no MCP server named "{0}" any more.', picked));
 		return;
 	}
 
 	// Where the entry lives, in the words of the person reading the question: the path is PiCode's own
 	// business, and the scope is what decides whether removing it affects this project or everything.
-	const declaredIn = path.basename(path.dirname(file)) === '.pi' ? 'this project' : 'your profile';
-	const confirmed = await vscode.window.showWarningMessage(`Remove the MCP server "${picked}" from pi? It is declared in ${declaredIn}.`, { modal: true }, 'Remove');
-	if (confirmed !== 'Remove') {
+	const inProject = path.basename(path.dirname(file)) === '.pi';
+	const removeLabel = vscode.l10n.t('Remove');
+	const confirmed = await vscode.window.showWarningMessage(inProject
+		? vscode.l10n.t('Remove the MCP server "{0}" from pi? It is declared in this project.', picked)
+		: vscode.l10n.t('Remove the MCP server "{0}" from pi? It is declared in your profile.', picked), { modal: true }, removeLabel);
+	if (confirmed !== removeLabel) {
 		return;
 	}
 
 	const text = mcpServersTextWithRemoved(readJsonFile(file) ?? {}, picked);
 	if (text === undefined) {
-		void vscode.window.showWarningMessage(`PiCode: there is no MCP server named "${picked}" any more.`);
+		void vscode.window.showWarningMessage(vscode.l10n.t('PiCode: there is no MCP server named "{0}" any more.', picked));
 		return;
 	}
 	fs.writeFileSync(file, text, { mode: 0o600 });
-	void vscode.window.showInformationMessage(`MCP server ${picked} removed from pi.`);
+	void vscode.window.showInformationMessage(vscode.l10n.t('MCP server {0} removed from pi.', picked));
 }
 
 /** Every server name the files hold, in the order pi reads them, for the pick that runs without a name. */
@@ -573,7 +581,7 @@ async function pickPiMcpServerName(profile: string, subject: string): Promise<st
 		}
 	}
 	if (names.size === 0) {
-		void vscode.window.showInformationMessage('there are no MCP servers to edit.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('There are no MCP servers to edit.'));
 		return undefined;
 	}
 	return vscode.window.showQuickPick([...names], { placeHolder: subject });
@@ -591,11 +599,13 @@ async function collectKeyValueLines(subject: string, initial?: Record<string, st
 	const lines: string[] = Object.entries(initial ?? {}).map(([key, value]) => `${key}=${value}`);
 	for (;;) {
 		const line = await vscode.window.showInputBox({
-			prompt: `${subject} as KEY=VALUE${lines.length === 0 ? '' : ' — leave empty to finish'}`,
+			prompt: lines.length === 0
+				? vscode.l10n.t('{0} as KEY=VALUE', subject)
+				: vscode.l10n.t('{0} as KEY=VALUE — leave empty to finish', subject),
 			placeHolder: 'KEY=VALUE',
 			validateInput: value => value.trim().length === 0 || parseKeyValueLines([value]).malformed.length === 0
 				? undefined
-				: 'Use KEY=VALUE, for example TOKEN=abc.',
+				: vscode.l10n.t('Use KEY=VALUE, for example TOKEN=abc.'),
 		});
 		if (line === undefined) {
 			return undefined;
@@ -791,7 +801,7 @@ function externalProfileRefusal(): string | undefined {
 	if (readRuntimeMode() !== 'external') {
 		return undefined;
 	}
-	return 'Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.';
+	return vscode.l10n.t('Your own pi keeps its own packages, and this editor never writes to them. Manage them where that pi lives.');
 }
 
 /**
@@ -800,6 +810,25 @@ function externalProfileRefusal(): string | undefined {
  * that is where the package was found. An unspellable source answers the profile's, which is
  * where the updater's own refusal sentences come from instead of a wrong install root.
  */
+/**
+ * After a package update, offers the changelog the package ships (pi 1.5 reads the same
+ * `CHANGELOG.md`), so what changed is one click away instead of a search on the registry.
+ * Packages without one say nothing.
+ */
+function offerChangelog(name: string, profileDir: string): void {
+	for (const scope of packageScopes(profileDir)) {
+		const changelog = path.join(scope.npmRoot, name, 'CHANGELOG.md');
+		if (fs.existsSync(changelog)) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('Package {0} updated to the latest version.', name), vscode.l10n.t('What’s new')).then(choice => {
+				if (choice !== undefined) {
+					void vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(changelog)).then(undefined, () => vscode.commands.executeCommand('vscode.open', vscode.Uri.file(changelog)));
+				}
+			});
+			return;
+		}
+	}
+}
+
 function npmProjectFor(source: string, profileDir: string): string {
 	const parsed = parsePackageSource(source);
 	if (parsed !== undefined && parsed.kind === 'npm') {
@@ -997,7 +1026,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		if (type === customizationType.Agent.id) {
 			return agentRoots(profileInForce(), workspaceFolderPaths()).map(root => ({
 				uri: vscode.Uri.file(root.dir),
-				label: root.source === 'local' ? 'This project' : 'PiCode profile',
+				label: root.source === 'local' ? vscode.l10n.t('This project') : vscode.l10n.t('PiCode profile'),
 				source: root.source === 'local' ? 'local' as const : 'user' as const,
 			}));
 		}
@@ -1005,7 +1034,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// Only the two places a person writes skills: the profile, and the project. A package's own
 			// skill directory is the package's to keep, not a place to create somebody else's file.
 			return [
-				{ uri: vscode.Uri.file(path.join(profileInForce(), 'skills')), label: 'PiCode profile', source: 'user' },
+				{ uri: vscode.Uri.file(path.join(profileInForce(), 'skills')), label: vscode.l10n.t('PiCode profile'), source: 'user' },
 				...workspaceFolderPaths().map(folder => ({ uri: vscode.Uri.file(path.join(folder, '.pi', 'skills')), label: folder, source: 'local' as const })),
 			];
 		}
@@ -1080,6 +1109,9 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
 
+	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
+	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? diffStat(folder) : undefined));
+
 	// "Launched agents": the HOST panel's row opens this. The count the panel shows is the
 	// same listing read (`agents.ts`), so the picker answers what the number promises — the
 	// delegations the open projects launched, what each was asked, and what its own
@@ -1092,24 +1124,24 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		try {
 			agents = launchedAgents(listProjectSessionFiles(sessionsDir, projectSlugsOfWindow()));
 		} catch (error) {
-			void vscode.window.showErrorMessage(`PiCode: the agents' transcripts could not be read — ${error instanceof Error ? error.message : String(error)}.`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the agents\' transcripts could not be read — {0}.', error instanceof Error ? error.message : String(error)));
 			return;
 		}
 		if (agents.length === 0) {
-			void vscode.window.showInformationMessage('PiCode: no agent has been launched from the open projects.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: no agent has been launched from the open projects.'));
 			return;
 		}
 		const stateIcon: Record<AgentState, string> = { working: 'loading~spin', answered: 'check', empty: 'circle-outline' };
-		const stateWord: Record<AgentState, string> = { working: 'working', answered: 'answered', empty: 'not started' };
+		const stateWord: Record<AgentState, string> = { working: vscode.l10n.t('working'), answered: vscode.l10n.t('answered'), empty: vscode.l10n.t('not started') };
 		const pick = await vscode.window.showQuickPick(
 			agents.map(agent => ({
 				label: agent.label,
-				description: `${stateWord[agent.state]} · last active ${lastActivity(agent.mtime, Date.now())}`,
-				detail: agent.parentLabel === undefined ? undefined : `launched by: ${agent.parentLabel}`,
+				description: vscode.l10n.t('{0} · last active {1}', stateWord[agent.state], lastActivity(agent.mtime, Date.now())),
+				detail: agent.parentLabel === undefined ? undefined : vscode.l10n.t('launched by: {0}', agent.parentLabel),
 				iconPath: new vscode.ThemeIcon(stateIcon[agent.state]),
 				agent,
 			})),
-			{ placeHolder: 'Agents launched from the open projects', matchOnDescription: true, matchOnDetail: true },
+			{ placeHolder: vscode.l10n.t('Agents launched from the open projects'), matchOnDescription: true, matchOnDetail: true },
 		);
 		if (pick !== undefined) {
 			void vscode.window.showTextDocument(vscode.Uri.file(pick.agent.file), { preview: true });
@@ -1154,7 +1186,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_UPDATE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
-			return { ok: false, message: 'No package source was given.' };
+			return { ok: false, message: vscode.l10n.t('No package source was given.') };
 		}
 		const refusal = externalProfileRefusal();
 		if (refusal !== undefined) {
@@ -1170,8 +1202,8 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 				clearPackageUpdateCache();
 				const latest = await fetchNpmLatest(productName, { log: report });
 				return latest === undefined
-					? { ok: false, message: `PiCode could not find a newer ${productName}.` }
-					: updateProductPackages([{ name: productName, latest }]).then(outcome => outcome.message === '' ? { ok: true, message: `${productName} is up to date.` } : outcome);
+					? { ok: false, message: vscode.l10n.t('PiCode could not find a newer {0}.', productName) }
+					: updateProductPackages([{ name: productName, latest }]).then(outcome => outcome.message === '' ? { ok: true, message: vscode.l10n.t('{0} is up to date.', productName) } : outcome);
 			})()
 			: await updatePackage(target, { npmProject: npmProjectFor(target, profileDir), npmCli: locateNpmCli() });
 		if (result.ok) {
@@ -1183,6 +1215,9 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			// would keep the row red.
 			clearPackageUpdateCache();
 			void runUpdateCheck(globalState).then(() => fire(), () => fire());
+			if (productName === undefined && checkable.kind === 'npm') {
+				offerChangelog(checkable.name, profileDir);
+			}
 		}
 		return result;
 	}));
@@ -1203,7 +1238,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = path.join(distributionRoot(requireProfileUri()), 'resources', 'pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi is missing from this installation.' };
+			return { ok: false, message: vscode.l10n.t('pi is missing from this installation.') };
 		}
 		return installPackage(typeof target === 'string' ? target : '', { cliEntry, profileDir: profileInForce() });
 	}));
@@ -1214,7 +1249,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_DISABLE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
-			return { ok: false, message: 'No package source was given.' };
+			return { ok: false, message: vscode.l10n.t('No package source was given.') };
 		}
 		const refusal = externalProfileRefusal();
 		if (refusal !== undefined) {
@@ -1228,7 +1263,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		});
 		writeDisabledRecord(result.record);
 		fire();
-		return { ok: true, message: `Package ${target} disabled. It is out of pi's settings; its files are untouched.` };
+		return { ok: true, message: vscode.l10n.t('Package {0} disabled. It is out of pi\'s settings; its files are untouched.', target) };
 	}));
 
 	// Enable: the declaration back into the profile settings, the record cleaned, and — when
@@ -1237,7 +1272,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_ENABLE_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
-			return { ok: false, message: 'No package source was given.' };
+			return { ok: false, message: vscode.l10n.t('No package source was given.') };
 		}
 		const refusal = externalProfileRefusal();
 		if (refusal !== undefined) {
@@ -1255,7 +1290,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		if (!installed.some(file => fs.existsSync(file))) {
 			const cliEntry = piCliEntry();
 			if (!fs.existsSync(cliEntry)) {
-				return { ok: false, message: 'pi is missing from this installation.' };
+				return { ok: false, message: vscode.l10n.t('pi is missing from this installation.') };
 			}
 			const reinstall = await installPackage(target, { cliEntry, profileDir });
 			if (!reinstall.ok) {
@@ -1263,7 +1298,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			}
 		}
 		fire();
-		return { ok: true, message: `Package ${target} enabled.` };
+		return { ok: true, message: vscode.l10n.t('Package {0} enabled.', target) };
 	}));
 
 	// Uninstall: pi's own `pi remove`, the same spawn the install runs, and the source out of
@@ -1271,7 +1306,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_UNINSTALL_COMMAND, async (source?: string): Promise<{ ok: boolean; message: string }> => {
 		const target = typeof source === 'string' ? source.trim() : '';
 		if (target.length === 0) {
-			return { ok: false, message: 'No package source was given.' };
+			return { ok: false, message: vscode.l10n.t('No package source was given.') };
 		}
 		const refusal = externalProfileRefusal();
 		if (refusal !== undefined) {
@@ -1279,7 +1314,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			return { ok: false, message: 'pi is missing from this installation.' };
+			return { ok: false, message: vscode.l10n.t('pi is missing from this installation.') };
 		}
 		const result = await removePackage(target, { cliEntry, profileDir: profileInForce() });
 		if (result.ok) {
@@ -1297,7 +1332,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			await addMcpServer(profileInForce());
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be added (${message}).`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the MCP server could not be added ({0}).', message));
 		}
 	}));
 
@@ -1310,7 +1345,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			await editMcpServerCommand(profileInForce(), typeof name === 'string' ? name : undefined);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be edited (${message}).`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the MCP server could not be edited ({0}).', message));
 		}
 	}));
 	disposables.push(vscode.commands.registerCommand(REMOVE_MCP_SERVER_COMMAND, async (name?: string) => {
@@ -1318,7 +1353,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			await removeMcpServerCommand(profileInForce(), typeof name === 'string' ? name : undefined);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			void vscode.window.showErrorMessage(`PiCode: the MCP server could not be removed (${message}).`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: the MCP server could not be removed ({0}).', message));
 		}
 	}));
 
@@ -1341,18 +1376,18 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 				fs.writeFileSync(file.path, toggled.text, { mode: 0o600 });
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				void vscode.window.showErrorMessage(`PiCode: "${server}" could not be switched (${message}).`);
+				void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: "{0}" could not be switched ({1}).', server, message));
 				return;
 			}
 			// The editor's own list follows: an entry that is off stops being offered as a server, so the
 			// page re-reads and its own row moves by one.
 			fire();
-			void vscode.window.showInformationMessage(`PiCode: "${server}" is now ${toggled.on ? 'on' : 'off'}.`);
+			void vscode.window.showInformationMessage(toggled.on ? vscode.l10n.t('PiCode: "{0}" is now on.', server) : vscode.l10n.t('PiCode: "{0}" is now off.', server));
 			// Answered so the MCP page can move its own row with what was just written, rather
 			// than re-reading the whole status (git included) to learn one boolean.
 			return { name: server, on: toggled.on };
 		}
-		void vscode.window.showErrorMessage(`PiCode: "${server}" is not one of pi's servers any more.`);
+		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: "{0}" is not one of pi\'s servers any more.', server));
 		return undefined;
 	}));
 
@@ -1378,7 +1413,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		const candidates = sdkCandidates(distributionRoot(requireProfileUri()));
 		const entry = candidates.map(mcpCliEntryOf).find(file => fs.existsSync(file));
 		if (entry === undefined) {
-			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in — pi's own command line was not found in this installation.`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: "{0}" could not be signed in — pi\'s own command line was not found in this installation.', server));
 			return;
 		}
 		// The sign-in is repaired before it starts: a credential the server cannot renew is one it
@@ -1387,7 +1422,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 		if (sdkEntry !== undefined) {
 			await ensureSignInCanBeRenewed(profile, server, sdkEntry);
 		}
-		void vscode.window.showInformationMessage(`PiCode: signing in to "${server}" — complete it in the browser window that just opens.`);
+		void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: signing in to "{0}" — complete it in the browser window that just opens.', server));
 		execFile(process.execPath, [entry, ...mcpLoginArgs(server)], {
 			// The workspace's first folder, so pi resolves the same project file the sessions do;
 			// the profile's servers are read whatever the folder is.
@@ -1397,7 +1432,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			timeout: MCP_LOGIN_TIMEOUT_MS,
 		}, (error, _stdout, stderr) => {
 			if (error === null) {
-				void vscode.window.showInformationMessage(`PiCode: signed in to "${server}".`);
+				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: signed in to "{0}".', server));
 				return;
 			}
 			// pi's last stderr line is the sentence that matters (a cancelled sign-in, a server
@@ -1405,7 +1440,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 			const reason = typeof stderr === 'string' && stderr.trim().length > 0
 				? stderr.trim().split('\n').pop()?.trim() ?? error.message
 				: error.message;
-			void vscode.window.showErrorMessage(`PiCode: "${server}" could not be signed in (${reason}).`);
+			void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: "{0}" could not be signed in ({1}).', server, reason));
 		});
 	}));
 
@@ -2156,14 +2191,14 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// Left of the status bar, low priority: the corner the owner reads, without pushing the
 	// editor's own indicators around.
 	const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1_000);
-	status.name = 'PiCode updates';
-	status.text = '$(cloud-download) PiCode updates';
+	status.name = vscode.l10n.t('PiCode updates');
+	status.text = vscode.l10n.t('$(cloud-download) PiCode updates');
 	status.command = 'picode.updates.show';
 	context.subscriptions.push(status);
 
 	const showStatus = (snapshot: UpdatesSnapshot | undefined): void => {
 		if (snapshot !== undefined && snapshot.targets.length > 0) {
-			status.tooltip = `PiCode: updates available — ${describeTargets(snapshot.targets)}`;
+			status.tooltip = vscode.l10n.t('PiCode: updates available — {0}', describeTargets(snapshot.targets));
 			status.show();
 		} else {
 			status.hide();
@@ -2181,12 +2216,12 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		// The check is quiet with the machine's pi in force, but a snapshot from before a runtime switch
 		// (or the status-bar item it left) must not be able to talk this flow into writing there.
 		if (readRuntimeMode() === 'external') {
-			void vscode.window.showInformationMessage('PiCode: your own pi and its packages update where they live — this editor never writes to them.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: your own pi and its packages update where they live — this editor never writes to them.'));
 			return;
 		}
 		const cliEntry = piCliEntry();
 		if (!fs.existsSync(cliEntry)) {
-			void vscode.window.showInformationMessage('PiCode could not be updated: pi is missing from this installation.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode could not be updated: pi is missing from this installation.'));
 			return;
 		}
 		const targets = readUpdatesSnapshot(context.globalState)?.targets ?? [];
@@ -2214,7 +2249,7 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 			// The owner already said Update: the engine's own question is answered yes.
 			const result = await updateEngine({ home: os.homedir(), currentVersion: engine.installed, confirm: async () => true, progress: line => report(`updates: ${line}`) });
 			if (!result.ok) {
-				void vscode.window.showInformationMessage(`PiCode: the memory engine was not updated. ${result.message}`);
+				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: the memory engine was not updated. {0}', result.message));
 				return;
 			}
 		}
@@ -2223,13 +2258,14 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 		await context.globalState.update(UPDATES_STATE_KEY, undefined);
 		showStatus(undefined);
 		// The memory engine runs on its own, outside the window: a reload keeps the old one serving.
+		const reloadLabel = vscode.l10n.t('Reload Window');
 		void vscode.window.showInformationMessage(
 			engine === undefined
-				? 'PiCode updated. Reload the window to start using the new version.'
-				: 'PiCode updated. Reload the window to use the new pi packages; the new memory engine starts the next time PiCode opens.',
-			'Reload Window',
+				? vscode.l10n.t('PiCode updated. Reload the window to start using the new version.')
+				: vscode.l10n.t('PiCode updated. Reload the window to use the new pi packages; the new memory engine starts the next time PiCode opens.'),
+			reloadLabel,
 		).then(choice => {
-			if (choice === 'Reload Window') {
+			if (choice === reloadLabel) {
 				void vscode.commands.executeCommand('workbench.action.reloadWindow');
 			}
 		});
@@ -2242,15 +2278,16 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 
 	const showUpdatesNotice = (snapshot: UpdatesSnapshot | undefined): void => {
 		if (snapshot === undefined || snapshot.targets.length === 0) {
-			void vscode.window.showInformationMessage('PiCode: everything is up to date.');
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: everything is up to date.'));
 			return;
 		}
+		const updateLabel = vscode.l10n.t('Update');
 		void vscode.window.showInformationMessage(
-			`PiCode: updates available — ${describeTargets(snapshot.targets)}`,
-			'Update',
-			'Later',
+			vscode.l10n.t('PiCode: updates available — {0}', describeTargets(snapshot.targets)),
+			updateLabel,
+			vscode.l10n.t('Later'),
 		).then(choice => {
-			if (choice === 'Update') {
+			if (choice === updateLabel) {
 				void runUpdateFlow();
 			}
 			// "Later" and a dismissal need no action: the status-bar item stays until the update
@@ -2322,6 +2359,82 @@ function registerUpdateChecks(context: vscode.ExtensionContext): void {
 	// path and one check path, and the panel is a second door onto them, not a second copy of them.
 	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_APPLY_COMMAND, () => runUpdateFlow()));
 	context.subscriptions.push(vscode.commands.registerCommand(UPDATES_CHECK_COMMAND, () => scheduledCheck(true)));
+
+	// Dictation: the card's three buttons. Nothing is fetched until the owner presses Download, and
+	// the size is on the card before they do.
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_DOWNLOAD_COMMAND, async () => {
+		const result = await voice.start();
+		if (result.ok) {
+			void vscode.window.showInformationMessage(vscode.l10n.t('Dictation is ready.'));
+		} else if (!result.cancelled) {
+			void vscode.window.showErrorMessage(vscode.l10n.t('Dictation could not be downloaded. {0}', result.message));
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_CANCEL_COMMAND, () => voice.cancel()));
+
+	// The setup window can only note that the owner wants dictation; the transfer itself happens here,
+	// where its progress shows and it can be cancelled. The note is spent the moment it is read.
+	const voiceSettings = vscode.workspace.getConfiguration('picode.voice');
+	if (voiceSettings.get<boolean>('downloadOnStart') === true) {
+		void voiceSettings.update('downloadOnStart', false, vscode.ConfigurationTarget.Global);
+		if (shouldDownloadOnStart(true, voice.status())) {
+			void vscode.commands.executeCommand(VOICE_DOWNLOAD_COMMAND);
+		}
+	}
+
+	// Listening. The chat polls for what was heard: the phrase so far, finished phrases, and the end
+	// at the time limit. Events wait here until asked for, so a poll never misses one.
+	let heard: SessionEvent[] = [];
+	// The loudest moment since the last poll, so a short syllable between two polls still shows.
+	let level = 0;
+	let levelSeen = false;
+	const dictation = new VoiceSession(
+		() => forkVoiceWorker(path.join(context.extensionPath, 'out', 'voice-worker.js')),
+		voiceDir(os.homedir()),
+		event => {
+			if (event.kind === 'level') {
+				level = levelSeen ? Math.max(level, event.value) : event.value;
+				levelSeen = true;
+			} else {
+				heard.push(event);
+			}
+		},
+	);
+	const drain = (): SessionEvent[] => { const events = heard; heard = []; return events; };
+	context.subscriptions.push(new vscode.Disposable(() => dictation.dispose()));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_LISTEN_COMMAND, async (): Promise<{ ok: boolean; message?: string; needsDownload?: boolean }> => {
+		if (voice.status().state !== 'ready') {
+			return voice.status().state === 'downloading'
+				? { ok: false, message: vscode.l10n.t('Dictation is still downloading.') }
+				: { ok: false, needsDownload: true, message: vscode.l10n.t('Dictation is not downloaded yet.') };
+		}
+		heard = [];
+		level = 0;
+		levelSeen = false;
+		try {
+			await dictation.start();
+			return { ok: true };
+		} catch (err) {
+			return { ok: false, message: err instanceof Error ? err.message : vscode.l10n.t('Dictation could not start.') };
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_POLL_COMMAND, (): { events: SessionEvent[]; active: boolean; level: number } => {
+		levelSeen = false;
+		return { events: drain(), active: dictation.state === 'listening', level };
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_FINISH_COMMAND, async (): Promise<{ events: SessionEvent[]; error?: string }> => {
+		try {
+			await dictation.stop();
+			return { events: drain() };
+		} catch (err) {
+			return { events: drain(), error: err instanceof Error ? err.message : vscode.l10n.t('Dictation failed.') };
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand(VOICE_REMOVE_COMMAND, async () => {
+		if (!(await voice.remove())) {
+			void vscode.window.showWarningMessage(vscode.l10n.t('Wait for the download to finish, or cancel it, before removing dictation.'));
+		}
+	}));
 }
 
 function requireProfileUri(): vscode.Uri {
@@ -2330,6 +2443,9 @@ function requireProfileUri(): vscode.Uri {
 	}
 	return profileUri;
 }
+
+// Dictation's one holder of "downloading now": the status card reads it, the commands drive it.
+const voice = new VoiceController(os.homedir(), voiceManifestFor(process.platform, process.arch), { install: installVoice, readState: readVoiceState, remove: removeVoice, downloadSize: voiceDownloadSize });
 
 export function activate(context: vscode.ExtensionContext): void {
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
@@ -2366,8 +2482,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			stopStartedMemory();
 		}
 		void vscode.window.showInformationMessage(
-			aiIsOff() ? 'PiCode AI is off. Reload the window to finish shutting it down.' : 'PiCode AI is on. Reload the window to start it.',
-			'Reload Window',
+			aiIsOff() ? vscode.l10n.t('PiCode AI is off. Reload the window to finish shutting it down.') : vscode.l10n.t('PiCode AI is on. Reload the window to start it.'),
+			vscode.l10n.t('Reload Window'),
 		).then(choice => {
 			if (choice !== undefined) {
 				void vscode.commands.executeCommand('workbench.action.reloadWindow');
@@ -2405,7 +2521,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		log: line => console.error(`[picode] ${line}`),
 	}).then(outcome => {
 		if (outcome.failed > 0) {
-			void vscode.window.showInformationMessage(`PiCode: ${outcome.failed} package${outcome.failed === 1 ? '' : 's'} of your profile could not be installed — ${outcome.lines[outcome.lines.length - 1] ?? 'see the log for the reason'}.`);
+			void vscode.window.showInformationMessage(outcome.failed === 1
+				? vscode.l10n.t('PiCode: {0} package of your profile could not be installed — {1}.', outcome.failed, outcome.lines[outcome.lines.length - 1] ?? vscode.l10n.t('see the log for the reason'))
+				: vscode.l10n.t('PiCode: {0} packages of your profile could not be installed — {1}.', outcome.failed, outcome.lines[outcome.lines.length - 1] ?? vscode.l10n.t('see the log for the reason')));
 		}
 	});
 
@@ -2520,6 +2638,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(piSessions, new vscode.Disposable(disposeResumedSessions));
 
 const setupDeps = {
+		voice: () => voice.status(),
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		// `<userData>/User/globalStorage/<extension>` → three levels up. The account hand-over is
@@ -2603,7 +2722,7 @@ const setupDeps = {
 		}
 		forgetPiRuntime();
 		onDidChangeModels.fire();
-		void vscode.window.showInformationMessage('PiCode: the model cache was cleared.');
+		void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: the model cache was cleared.'));
 	}));
 	// Memory reads what the engine already answered, so it is a view of its own in the same
 	// container: the panel lists what this machine remembers without a second surface to learn.
@@ -2744,9 +2863,9 @@ async function updateProductPackages(targets: readonly { readonly name: string; 
 		if (original !== undefined) {
 			fs.writeFileSync(settingsFile, original);
 		}
-		return { ok: false, message: `PiCode could not update ${moved.join(', ')}. The previous versions stay in use.` };
+		return { ok: false, message: vscode.l10n.t('PiCode could not update {0}. The previous versions stay in use.', moved.join(', ')) };
 	}
-	return { ok: true, message: `Updated ${moved.join(', ')}.` };
+	return { ok: true, message: vscode.l10n.t('Updated {0}.', moved.join(', ')) };
 }
 
 /** The memory engine in use and the newest one released, for the update check; `undefined` when memory is off or either is unknown. */

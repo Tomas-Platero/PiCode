@@ -18,6 +18,7 @@ import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runt
 import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
+import type { VoiceStatus } from './voice-controller';
 import { firstNanProvider, getCachedNanUsage, type CachedNanUsage, matchedNanProvider, NAN_PROVIDER_ID, nanAccountMeters, nanModelUsage, resolveNanApiKey, spokenWindowLabel, type NanUsageLimit } from './usage-data';
 import { ANTHROPIC_PROVIDER, CODEX_PROVIDER, codexSignIn, getCachedCodexUsage, newestUsage, usageFromResponses, type ProviderUsage } from './subscription-usage';
 
@@ -65,6 +66,8 @@ export interface StatusDeps {
 	 * tracker is the one holder of the truth, and the panel only draws it.
 	 */
 	readonly runningJobs: () => readonly BackgroundJobStatus[];
+	/** Dictation's state, read live per refresh from `voice-controller.ts`: a download's progress moves between refreshes. */
+	readonly voice: () => VoiceStatus;
 }
 
 /** Reads a JSON object from a file, treating "missing or malformed" as "nothing there". */
@@ -344,7 +347,7 @@ function toSubscriptionStatus(limit: NanUsageLimit, fresh: boolean): Subscriptio
 	return {
 		meter: limit.name,
 		windows: [...labelled, ...unlabelled].map(window => ({
-			label: window.label.length > 0 ? `${spokenWindowLabel(window.label)} window` : 'billing period',
+			label: window.label.length > 0 ? vscode.l10n.t('{0} window', spokenWindowLabel(window.label)) : vscode.l10n.t('billing period'),
 			usedPercent: window.usedPercent,
 			resetAt: window.resetAt,
 			...(window.used === undefined || window.budget === undefined ? {} : { used: window.used, cap: window.budget }),
@@ -462,7 +465,7 @@ export async function readUsagePanel(distributionRoot: string): Promise<UsagePan
 			cap: period.budget,
 			usedPercent: period.usedPercent,
 			resetAt: period.resetAt,
-			...(rolling === undefined ? {} : { window: { label: `${spokenWindowLabel(rolling.label)} window`, usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
+			...(rolling === undefined ? {} : { window: { label: vscode.l10n.t('{0} window', spokenWindowLabel(rolling.label)), usedPercent: rolling.usedPercent, resetAt: rolling.resetAt } }),
 			limitReached: limit.limitReached,
 			current: limit.name === modelId,
 		}];
@@ -516,6 +519,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// only the fallback for a session that has not reported a model yet.
 		ctxWindow: usage?.ctxTokens === undefined ? undefined : readContextWindow(profileDir, usage?.model ?? defaultModel),
 		cost: usage?.cost,
+		costEstimated: usage?.costEstimated,
 		inputTokens: usage?.input,
 		outputTokens: usage?.output,
 		cacheRead: usage?.cacheRead,
@@ -534,6 +538,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 		// The chat's own background jobs, straight from the tracker the pill reads — the same rows,
 		// so the card and the pill can never disagree about what is still out.
 		jobs: deps.runningJobs(),
+		voice: deps.voice(),
 	};
 }
 

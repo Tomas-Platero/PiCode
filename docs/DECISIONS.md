@@ -506,6 +506,16 @@ fixes we do not inherit, not surface, and that price is knowingly accepted.
 **Reversal trigger:** a required extension that genuinely needs 1.141 behaviour, or an upstream
 security fix that only lands in the code, turns this back into a real merge.
 
+**Addendum (2026-11-02) — declared 1.144.0.** VS Code 1.144.0 was out, so the declared number
+moved from 1.142.x to 1.144.0 (the owner: *"sube hasta ahí"*). Measured first, as this ADR asks: the
+stable extension API (`src/vscode-dts/vscode.d.ts`) is byte for byte the same in 1.142.0, 1.143.0 and
+1.144.0 (same MD5), so no extension sees a difference. The release notes of 1.143 and 1.144 were
+read for what PiCode could inherit: nearly all of it is Copilot or the Agents window, which PiCode
+does not use. Worth taking by hand, none of it in the tree yet: the multi-file diff editor's file
+list (1.143, experimental, `multiDiffEditor.experimental.fileList`), diagnostics highlighted up to
+5,000 per file instead of 500 (1.143), and Windows terminal dialogs opening in front of the editor
+(1.144, `terminal.integrated.windowsReparentConsoleWindow`). Nothing was deprecated in either release.
+
 ## ADR-017 — Cloud sync is a Pro feature; the free plan is an account, not storage
 
 **Status:** accepted.
@@ -1643,3 +1653,43 @@ editor no tenía era su panel de consumo de suscripción: la tarjeta *Usage limi
 - **Las conversaciones abiertas desde Sessions** (tipo `pi`) listan ahora también los comandos y plantillas en el
   menú `/`; antes solo tenían agentes y skills.
 - gentle-pi sube a 4.5.1 (segura según `pins.mjs`).
+
+## ADR-038 — Las palabras del producto se traducen aquí, en cuatro sitios
+
+> *"quiero que cualquier idioma se traduzca bien"* — 2026-11-01
+>
+> *"quiere que todo lo que ve el usuario final esté en inglés, y los demás idiomas como paquetes de lenguaje"* — AGENTS.md, sección 7
+
+**Contexto.** El texto del producto se escribe en inglés, y el editor tiene 13 idiomas de serie
+(`defaultLanguages` más `extraLanguages` en `build/lib/i18n.ts`). Los paquetes de idioma del mercado
+traducen **solo** las cadenas del VS Code de serie: todo lo que PiCode añade o reescribe se quedaba
+en inglés aunque el editor estuviera en chino, y ni la ventana de primer arranque ni el conector
+tenían traducción ninguna.
+
+**Decisión.** PiCode lleva su propia traducción de los 13 idiomas, en cuatro superficies:
+
+| Superficie | Fichero | Quién lo lee |
+| --- | --- | --- |
+| Editor | `src/vs/workbench/contrib/picode/l10n/<idioma>.json` (1.315 claves) | `src/vs/base/node/nls.ts`, mezclándolo **encima** del paquete de idioma |
+| Ventana de primer arranque | `resources/onboarding/l10n/<idioma>.js` (209 frases) | la propia ventana, que abre en el idioma del sistema si hay fichero |
+| Conector, frases del código | `extensions/picode/l10n/bundle.l10n.<idioma>.json` | `vscode.l10n.t` |
+| Conector, títulos del manifiesto | `extensions/picode/package.nls.<idioma>.json` (46 títulos) | el editor, resolviendo los `%clave%` del `package.json` |
+
+- **Lo que se genera no se escribe a mano.** `source.json` y `bundle.l10n.json` salen del código con
+  `node build/l10n.mjs extract`; el resto lo escribe `merge` desde trozos traducidos.
+- **El inglés es la red.** Una clave que falta cae al inglés: nunca una pantalla vacía ni una clave a
+  la vista.
+- **`check` es la puerta de CI.** Cuenta las claves de los 13 idiomas en las cuatro superficies, compara
+  los `{0}` (movidos vale, perdidos o inventados no), detecta un fichero de idioma que se adelantó al
+  original y avisa si el bundle o `source.json` se quedaron atrás respecto al código.
+- **La caché del paquete de idioma lleva el hash de lo nuestro** en su id: editar una traducción no
+  sirve una mezcla vieja.
+
+**Consecuencias.**
+
+- Una frase nueva sin traducir es un fallo de CI, no un detalle que se descubre en una captura.
+- `split`/`merge` dejan el trabajo por trozos y **no borran** lo hecho: lo que se corta a la mitad se
+  retoma, y `.work/` no se versiona.
+- El título de un comando tiene que vivir en `package.nls.json` (`%clave%`): un texto suelto en
+  `package.json` no se puede traducir.
+- El detalle, la herramienta y las reglas al escribir texto nuevo: [`IDIOMAS.md`](IDIOMAS.md).

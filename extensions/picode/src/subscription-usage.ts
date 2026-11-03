@@ -20,11 +20,12 @@
  * Nothing about the account is kept beyond the plan name: the token travels in a header only, the
  * request refuses redirects, and the cache is keyed by a digest of the token.
  *
- * Like `usage-data.ts`, this file has no `vscode` import and no relative imports, so its parsing
- * and its cache can be exercised by running them.
+ * Like `usage-data.ts`, this file has no `vscode` import, so its parsing and its cache can be
+ * exercised by running them.
  */
 
 import { createHash } from 'node:crypto';
+import { l10n } from './l10n.ts';
 
 export const CODEX_PROVIDER = 'openai-codex';
 export const ANTHROPIC_PROVIDER = 'anthropic';
@@ -91,15 +92,15 @@ function isFiniteNumber(value: unknown): value is number {
 /** How a window is named, from its length: `5h`, `7d`, `week`, `30m`. */
 function windowLabel(seconds: number): string {
 	if (seconds === WEEK) {
-		return 'week';
+		return l10n.t('week');
 	}
 	if (seconds >= DAY && seconds % DAY === 0) {
-		return `${seconds / DAY}d`;
+		return l10n.t('{0}d', seconds / DAY);
 	}
 	if (seconds >= HOUR && seconds % HOUR === 0) {
-		return `${seconds / HOUR}h`;
+		return l10n.t('{0}h', seconds / HOUR);
 	}
-	return `${Math.round(seconds / MINUTE)}m`;
+	return l10n.t('{0}m', Math.round(seconds / MINUTE));
 }
 
 /** How a plan reads: `plus` becomes `Plus`. */

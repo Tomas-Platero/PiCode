@@ -12,6 +12,8 @@
  * lives in `commands.ts`.
  */
 
+import { l10n } from './l10n.ts';
+
 /**
  * One pi command, as the chat's slash list shows it.
  *
@@ -184,7 +186,7 @@ export function fileNameOf(command: PiCommand): string {
 
 /** The text of one command's prompt file: front matter for the description and arguments, one line of body. */
 export function promptFileText(command: PiCommand): string {
-	const description = (command.description ?? `pi's /${command.name} command`).replace(/\s+/g, ' ');
+	const description = (command.description ?? l10n.t('pi\'s /{0} command', command.name)).replace(/\s+/g, ' ');
 	const hint = command.argumentHint === undefined ? '' : `argument-hint: ${command.argumentHint}\n`;
 	return `---\ndescription: ${description}\n${hint}---\n\nThe message text reaches pi as its /${command.name} command, with any arguments typed after it.\n`;
 }

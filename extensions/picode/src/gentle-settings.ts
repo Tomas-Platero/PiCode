@@ -14,8 +14,11 @@ import * as path from 'node:path';
  * session starts. Its terminal changes them with `/gentle:persona` and `/gentle:mode default …`;
  * the editor writes the same files, in the same shape, so either side reads what the other wrote.
  *
- * No `vscode` import, so `node --test` runs this file directly.
+ * No `vscode` import, so `node --test` runs this file directly. What it says in words goes through
+ * the editor's own translator.
  */
+
+import { l10n } from './l10n.ts';
 
 export type Persona = 'gentleman' | 'neutral';
 export type Permissions = 'normal' | 'auto' | 'yolo';
@@ -107,11 +110,11 @@ export function setGentleSetting(profileDir: string, request: unknown): GentleSe
 		writeAtomic(personaFile(profileDir), `${JSON.stringify({ mode: value }, undefined, 2)}\n`);
 	} else if (key === 'permissions' && isPermissions(value)) {
 		if (readPermissions(profileDir).broken) {
-			throw new Error('The saved permissions could not be read. Delete the file and try again.');
+			throw new Error(l10n.t('The saved permissions could not be read. Delete the file and try again.'));
 		}
 		writeAtomic(permissionsFile(profileDir), `${JSON.stringify({ schema: PERMISSIONS_SCHEMA, mode: value })}\n`);
 	} else {
-		throw new Error('That is not a setting Gentle has.');
+		throw new Error(l10n.t('That is not a setting Gentle has.'));
 	}
 	return gentleSettings(profileDir);
 }

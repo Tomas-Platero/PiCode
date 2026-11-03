@@ -63,6 +63,13 @@ const KNOWN_DOMAINS: Readonly<Record<string, string>> = {
 	'sequential-thinking': 'modelcontextprotocol.io',
 };
 
+/**
+ * Domains whose mark is dark ink on a transparent background, so it disappears on a dark theme
+ * (measured on the icons these domains serve: every other mark here carries its own colour or
+ * background and stays readable). Dark themes draw these inverted, i.e. white.
+ */
+const DARK_INK_DOMAINS: ReadonlySet<string> = new Set(['github.com', 'radius.dev']);
+
 /** Properly written names for the services whose spelling is not just the id capitalised. */
 const DISPLAY_NAMES: Readonly<Record<string, string>> = {
 	'atlassian-rovo-mcp': 'Atlassian Rovo',
@@ -142,6 +149,7 @@ export function createServiceLogo(id: string, endpoint?: string): HTMLElement {
 
 	const image = document.createElement('img');
 	image.alt = '';
+	mark.classList.toggle('dark-ink', DARK_INK_DOMAINS.has(domain));
 	image.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
 	image.addEventListener('load', () => {
 		mark.textContent = '';
