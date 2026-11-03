@@ -306,6 +306,7 @@
 	"Sign-in needed": "로그인 필요",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "건너뜀(20 MB 초과): {0} 외 {1}개.",
 	"Skipped (larger than 20 MB): {0}.": "건너뜀(20 MB 초과): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "읽을 수 없는 이미지가 있어 전송되지 않았습니다: {0}. PNG, JPEG, WebP 또는 GIF로 다시 첨부하세요.",
 	"Speech engine": "음성 엔진",
 	"Speech model": "음성 모델",
 	"Start a new chat": "새 채팅 시작",

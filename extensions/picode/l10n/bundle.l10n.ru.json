@@ -306,6 +306,7 @@
 	"Sign-in needed": "Требуется вход",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Пропущено (больше 20 МБ): {0} и ещё {1}.",
 	"Skipped (larger than 20 MB): {0}.": "Пропущено (больше 20 МБ): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Некоторые изображения не удалось прочитать, и они не были отправлены: {0}. Прикрепите их снова в формате PNG, JPEG, WebP или GIF.",
 	"Speech engine": "Речевой механизм",
 	"Speech model": "Речевая модель",
 	"Start a new chat": "Начать новый чат",
