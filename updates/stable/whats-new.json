@@ -1,0 +1,8 @@
+{
+	"versions": [
+		{
+			"version": "0.7.3",
+			"notes": "### 🐛 Fixed\n\n- start the portable swap script without a visible console"
+		}
+	]
+}
