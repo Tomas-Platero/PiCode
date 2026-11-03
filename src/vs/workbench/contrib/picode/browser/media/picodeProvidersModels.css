@@ -546,3 +546,9 @@
 .picode-pm-setting-select {
 	flex: 0 0 160px;
 }
+
+/* A mark drawn in dark ink would vanish on a dark theme: those themes show it in white. */
+.monaco-workbench.vs-dark .picode-pm-logo.dark-ink img,
+.monaco-workbench.hc-black .picode-pm-logo.dark-ink img {
+	filter: invert(1);
+}

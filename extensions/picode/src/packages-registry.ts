@@ -25,6 +25,7 @@
 import { execFile } from 'node:child_process';
 import { cacheKey, cachedModels, storeModels, type CacheEntry } from './models-cache';
 import { withProductEnv } from './product-env';
+import { l10n } from './l10n.ts';
 
 /* ------------------------------------------------------------------ *
  * The catalog: what npm says about pi packages
@@ -202,7 +203,9 @@ const previewCache = new Map<string, string | null>();
 export async function packagePreviews(names: readonly string[], deps: SearchDependencies = {}): Promise<Record<string, string>> {
 	const previews: Record<string, string> = {};
 	const fetchFn: FetchFn = deps.fetchFn ?? ((url_, init_) => fetch(url_, init_));
-	await Promise.all(names.slice(0, 60).map(async name => {
+
+	/** One package's preview, cached; a failure just leaves that package without one. */
+	const readPreview = async (name: string): Promise<void> => {
 		const known = previewCache.get(name);
 		if (known !== undefined) {
 			if (known !== null) {
@@ -229,7 +232,14 @@ export async function packagePreviews(names: readonly string[], deps: SearchDepe
 		} finally {
 			clearTimeout(timer);
 		}
-	}));
+	};
+
+	// Collect the promises first: every package is asked at once, and none of them blocks another.
+	const pending: Promise<void>[] = [];
+	for (const name of names.slice(0, 60)) {
+		pending.push(readPreview(name));
+	}
+	await Promise.all(pending);
 	return previews;
 }
 
@@ -401,7 +411,7 @@ function lastMeaningfulLine(text: string): string | undefined {
 async function runInstall(rawTarget: string, context: InstallContext): Promise<InstallResult> {
 	const target = rawTarget.trim();
 	if (target.length === 0) {
-		return { ok: false, message: 'No package name or URL was given.' };
+		return { ok: false, message: l10n.t('No package name or URL was given.') };
 	}
 	const spec = installTargetSpec(target);
 	let outcome: SpawnOutcome;
@@ -415,13 +425,18 @@ async function runInstall(rawTarget: string, context: InstallContext): Promise<I
 			timeoutMs: INSTALL_TIMEOUT_MS,
 		});
 	} catch (error) {
-		return { ok: false, message: `Package ${target} could not be installed (${error instanceof Error ? error.message : String(error)}).` };
+		return { ok: false, message: l10n.t('Package {0} could not be installed ({1}).', target, error instanceof Error ? error.message : String(error)) };
 	}
 	if (!outcome.ok) {
 		const reason = lastMeaningfulLine(outcome.stderr);
-		return { ok: false, message: `Package ${target} could not be installed${reason === undefined ? '.' : `: ${reason}`}` };
+		return {
+			ok: false,
+			message: reason === undefined
+				? l10n.t('Package {0} could not be installed.', target)
+				: l10n.t('Package {0} could not be installed: {1}', target, reason),
+		};
 	}
-	return { ok: true, message: `Package ${target} installed with pi.` };
+	return { ok: true, message: l10n.t('Package {0} installed with pi.', target) };
 }
 
 /**
@@ -437,7 +452,7 @@ let installQueue: Promise<InstallResult> = Promise.resolve({ ok: true, message: 
 export function installPackage(target: string, context: InstallContext): Promise<InstallResult> {
 	const run = installQueue.then(() => runInstall(target, context));
 	// The chain never keeps a rejection: a failed install must not fail the ones queued after it.
-	const linked = run.catch(() => ({ ok: false, message: `Package ${target} could not be installed.` }));
+	const linked = run.catch(() => ({ ok: false, message: l10n.t('Package {0} could not be installed.', target) }));
 	installQueue = linked;
 	return run;
 }

@@ -19,6 +19,13 @@ import './picodeUsageLimitsSection.js';
 import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';
 import './picodeSetupCommands.js';
+import './picodeWhatsNew.js';
+import './picodeSpeech.js';
+import './picodeLayoutStyle.js';
+import './picodeAgentOverviewView.js';
+import './picodeStatusView.js';
+import './picodeAgentSessionsView.js';
+import './picodeAgentSearch.js';
 
 /**
  * PiCode's settings, declared by the core and not by PiCode's own extension.
@@ -187,6 +194,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 		'picode.mcp.enabled': {
 			type: 'boolean',
 			default: true,
+			included: false,
+		},
+		// Written by the setup window when the owner switched dictation on; the connector reads it
+		// once at start, begins the download and clears it. Hidden for the same reason as above.
+		'picode.voice.downloadOnStart': {
+			type: 'boolean',
+			default: false,
 			included: false,
 		},
 		'picode.mcp.servers': {

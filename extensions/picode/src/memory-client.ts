@@ -15,6 +15,8 @@
  * *nothing on screen*, never a row with `undefined` in its title.
  */
 
+import { l10n } from './l10n.ts';
+
 /** One memory as the list shows it: enough for a row, not the whole body. */
 export interface MemoryRow {
 	readonly id: number;
@@ -248,15 +250,17 @@ export function memoryClientName(sessionId: string | undefined): string | undefi
  */
 export function memoryDetailMarkdown(detail: MemoryDetail): string {
 	const lines: string[] = [`# ${detail.title}`, '', detail.content.trim(), '', '---', ''];
+	// Read once: a second call would narrow differently and the message would lose its argument.
+	const cameFrom = memoryClientName(detail.sessionId);
 	const facts: [string, string][] = [
-		['Project', detail.project],
-		['Type', detail.type],
-		['Scope', detail.scope],
-		['Saved', memoryWhen(detail.createdAt)],
-		['Last seen', memoryWhen(detail.updatedAt)],
-		['Revisions', detail.revisions > 1 ? String(detail.revisions) : ''],
-		['Duplicates', detail.duplicates > 0 ? String(detail.duplicates) : ''],
-		['Came from', memoryClientName(detail.sessionId) === undefined ? '' : `a ${memoryClientName(detail.sessionId)} session`],
+		[l10n.t('Project'), detail.project],
+		[l10n.t('Type'), detail.type],
+		[l10n.t('Scope'), detail.scope],
+		[l10n.t('Saved'), memoryWhen(detail.createdAt)],
+		[l10n.t('Last seen'), memoryWhen(detail.updatedAt)],
+		[l10n.t('Revisions'), detail.revisions > 1 ? String(detail.revisions) : ''],
+		[l10n.t('Duplicates'), detail.duplicates > 0 ? String(detail.duplicates) : ''],
+		[l10n.t('Came from'), cameFrom === undefined ? '' : l10n.t('a {0} session', cameFrom)],
 	];
 	for (const [label, value] of facts) {
 		if (value !== '') {
@@ -285,30 +289,36 @@ export function memoryDoctorMarkdown(report: MemoryDoctorReport): string {
 	const cloud = failing.filter(check => check.id.startsWith('sync_'));
 	const real = failing.filter(check => !check.id.startsWith('sync_'));
 	if (failing.length === 0) {
-		return `# Memory check\n\nEverything checked out: ${summary.total} checks, no problems.\n`;
+		return l10n.t('# Memory check\n\nEverything checked out: {0} checks, no problems.\n', summary.total);
 	}
-	const lines: string[] = ['# Memory check', ''];
+	const lines: string[] = [l10n.t('# Memory check'), ''];
 	if (real.length === 0) {
-		lines.push(`✅ Everything that matters checked out (${report.checks.length - cloud.length} of ${summary.total} checks).`);
+		lines.push(l10n.t('✅ Everything that matters checked out ({0} of {1} checks).', report.checks.length - cloud.length, summary.total));
 	} else {
-		lines.push(`${real.length} of ${summary.total} ${summary.total === 1 ? 'check needs' : 'checks need'} attention.`, '');
+		lines.push(
+			summary.total === 1
+				? l10n.t('{0} of {1} check needs attention.', real.length, summary.total)
+				: l10n.t('{0} of {1} checks need attention.', real.length, summary.total),
+			''
+		);
 		for (const check of real) {
 			const mark = check.severity === 'error' ? '❌' : check.severity === 'blocked' ? '⛔' : '⚠️';
-			lines.push(`${mark} **${check.id.replace(/_/g, ' ')}** — ${check.message || 'needs attention'}`);
+			lines.push(`${mark} **${check.id.replace(/_/g, ' ')}** — ${check.message || l10n.t('needs attention')}`);
 			if (check.why !== '') {
 				lines.push('', `> ${check.why}`, '');
 			}
 		}
 		const passed = report.checks.length - failing.length;
 		if (passed > 0) {
-			lines.push(`✅ ${passed} other ${passed === 1 ? 'check' : 'checks'} passed.`);
+			lines.push(passed === 1
+				? l10n.t('✅ {0} other check passed.', passed)
+				: l10n.t('✅ {0} other checks passed.', passed));
 		}
 	}
 	if (cloud.length > 0) {
 		lines.push(
 			'',
-			'☁️ Not used: cloud sync. Memory lives on this machine and PiCode keeps its cloud off, so',
-			"the engine's note about it (leftover sync rows) changes nothing.",
+			l10n.t("☁️ Not used: cloud sync. Memory lives on this machine and PiCode keeps its cloud off, so the engine's note about it (leftover sync rows) changes nothing."),
 		);
 	}
 	return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';

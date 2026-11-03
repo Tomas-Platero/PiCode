@@ -394,7 +394,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		// Actions
 		if (hasCustomTitlebar(this.configurationService, this.titleBarStyle) && this.actionToolBar) {
 			const affectsLayoutControl = event.affectsConfiguration(LayoutSettings.LAYOUT_ACTIONS);
-			const affectsActivityControl = event.affectsConfiguration(LayoutSettings.ACTIVITY_BAR_LOCATION);
+			const affectsActivityControl = event.affectsConfiguration(LayoutSettings.ACTIVITY_BAR_LOCATION) || event.affectsConfiguration('picode.appearance.layout');
 
 			if (affectsLayoutControl || affectsActivityControl) {
 				this.createActionToolBarMenus({ layoutActions: affectsLayoutControl, activityActions: affectsActivityControl });
@@ -770,7 +770,8 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			}
 
 			// --- Activity Actions (always at the end)
-			if (this.activityActionsEnabled) {
+			// PiCode's Agent layout shows Accounts and Manage at the foot of its sessions column instead.
+			if (this.activityActionsEnabled && this.configurationService.getValue<string>('picode.appearance.layout') !== 'agent') {
 				if (isAccountsActionVisible(this.storageService)) {
 					actions.primary.push(ACCOUNTS_ACTIVITY_TILE_ACTION);
 				}

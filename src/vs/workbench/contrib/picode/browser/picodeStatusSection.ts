@@ -37,6 +37,9 @@ const CLEAN_CACHE_COMMAND = 'picode.pi.cleanCache';
 const OPEN_PROFILE_COMMAND = 'picode.pi.openProfile';
 const UPDATE_COMMAND = 'picode.updates.apply';
 const CHECK_UPDATES_COMMAND = 'picode.updates.check';
+const VOICE_DOWNLOAD_COMMAND = 'picode.voice.download';
+const VOICE_CANCEL_COMMAND = 'picode.voice.cancel';
+const VOICE_REMOVE_COMMAND = 'picode.voice.remove';
 const OPEN_PROVIDERS_COMMAND = 'picode.providersModels.open';
 const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
 const REFRESH_MS = 5_000;
@@ -83,6 +86,13 @@ interface IUpdatesSnapshot {
 	readonly targets?: readonly { readonly kind?: 'runtime' | 'package' | 'engine'; readonly name: string; readonly installed: string; readonly latest: string }[];
 }
 
+/** Dictation's state, as the connector reports it (`voice-controller.ts`). */
+type IVoiceStatus =
+	| { readonly state: 'unsupported' }
+	| { readonly state: 'not-installed'; readonly sizeMb: number; readonly error?: string }
+	| { readonly state: 'downloading'; readonly sizeMb: number; readonly percent: number }
+	| { readonly state: 'ready' };
+
 /** The slice of the status answer this section reads. */
 interface IStatusData {
 	readonly runtime?: string;
@@ -100,19 +110,21 @@ interface IStatusData {
 	readonly ctxTokens?: number;
 	readonly ctxWindow?: number;
 	readonly cost?: number;
+	readonly costEstimated?: boolean;
 	readonly inputTokens?: number;
 	readonly outputTokens?: number;
 	readonly cacheRead?: number;
 	readonly cacheWrite?: number;
 	readonly jobs?: readonly { readonly label?: string; readonly command?: string }[];
 	readonly updates?: IUpdatesSnapshot;
+	readonly voice?: IVoiceStatus;
 	readonly error?: string;
 }
 
 /** The fields the page draws, and only those: the fingerprint must not move with the meters. */
 function fingerprintOf(data: IStatusData): string {
-	const { runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, error } = data;
-	return JSON.stringify({ runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, error });
+	const { runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, costEstimated, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error } = data;
+	return JSON.stringify({ runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, costEstimated, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error });
 }
 
 export class PicodeStatusSection extends Disposable implements IAICustomizationManagementSectionWidget {
@@ -326,6 +338,33 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			],
 		});
 
+		// Dictation: whether the speech engine is on this machine, with the one thing to do about it.
+		const voice = data.voice;
+		if (voice !== undefined && voice.state !== 'unsupported') {
+			const pill: IPill = voice.state === 'ready'
+				? { text: localize('picodeStatusVoicePillReady', "Ready"), tone: 'ok' }
+				: voice.state === 'downloading'
+					? { text: localize('picodeStatusVoicePillDownloading', "Downloading {0}%", voice.percent), tone: 'warn' }
+					: { text: localize('picodeStatusVoicePillOff', "Not installed"), tone: 'off' };
+			this.renderCard(localize('picodeStatusCardVoice', "Dictation"), Codicon.mic, card => {
+				if (voice.state === 'ready') {
+					this.addRow(card, Codicon.check, localize('picodeStatusVoiceReadyRow', "Speech to text"), localize('picodeStatusVoiceReadyValue', "Works on your computer"));
+				} else {
+					this.addRow(card, Codicon.cloudDownload, localize('picodeStatusVoiceSizeRow', "One-time download"), localize('picodeStatusVoiceSizeValue', "About {0} MB", voice.sizeMb));
+					if (voice.state === 'not-installed' && voice.error !== undefined) {
+						this.addRow(card, Codicon.warning, localize('picodeStatusVoiceFailedRow', "Last try"), localize('picodeStatusVoiceFailedValue', "Could not finish downloading"));
+					}
+				}
+			}, {
+				pill,
+				actions: voice.state === 'ready'
+					? [{ label: localize('picodeStatusVoiceRemove', "Remove"), icon: Codicon.trash, title: localize('picodeStatusVoiceRemoveTitle', "Take dictation off this computer."), command: VOICE_REMOVE_COMMAND }]
+					: voice.state === 'downloading'
+						? [{ label: localize('picodeStatusVoiceCancel', "Cancel"), icon: Codicon.debugStop, title: localize('picodeStatusVoiceCancelTitle', "Stop downloading. What was fetched is kept."), command: VOICE_CANCEL_COMMAND }]
+						: [{ label: localize('picodeStatusVoiceDownload', "Download"), icon: Codicon.cloudDownload, title: localize('picodeStatusVoiceDownloadTitle', "Download dictation (about {0} MB). It runs on your computer.", voice.sizeMb), command: VOICE_DOWNLOAD_COMMAND, primary: true }],
+			});
+		}
+
 		if (data.providers !== undefined && data.providers.length > 0) {
 			this.renderCard(localize('picodeStatusCardProviders', "Providers"), Codicon.account, card => {
 				for (const provider of data.providers!) {
@@ -375,7 +414,8 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				this.addRow(card, Codicon.archive, localize('picodeStatusCache', "Cache read / write"), `${data.cacheRead.toLocaleString()} / ${data.cacheWrite.toLocaleString()}`);
 			}
 			if (data.cost !== undefined) {
-				this.addRow(card, Codicon.creditCard, localize('picodeStatusCost', "Cost"), `$${data.cost.toFixed(4)}`);
+				// A leading "~" marks a cost worked out from the model catalogue rather than billed.
+				this.addRow(card, Codicon.creditCard, localize('picodeStatusCost', "Cost"), `${data.costEstimated ? '~' : ''}$${data.cost.toFixed(4)}`);
 			}
 		}, {
 			actions: [

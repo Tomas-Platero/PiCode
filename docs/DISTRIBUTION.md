@@ -166,6 +166,13 @@ Each channel installs **beside** the others: its own folder, its own profile and
 AppId, so removing one leaves the rest untouched. The per-channel release notes are in
 [`build/release-notes/`](../build/release-notes/).
 
+Each channel keeps **only its newest release** on GitHub, so the "What changed" summary of the
+release it replaces would be lost with its page. Before deleting it, the pipeline files that
+summary (as published, hand edits included) in `updates/<channel>/whats-new.json`, beside the
+feed and on the same branch (`build/release.mjs whats-new-history`, newest first, last 30). The
+editor's What's New window reads that file and, after an update that skipped versions, shows the
+new version's summary followed by every skipped one.
+
 ## 🏷️ 10. What is PiCode's, and what is not
 
 The **names** are PiCode's: `PiCode.exe`, the `bin/picode*` shims, the window title, the About

@@ -71,6 +71,9 @@ export class TogglePanelAction extends Action2 {
 
 registerAction2(TogglePanelAction);
 
+/** PiCode's Agent layout keeps the chat in the panel, so the panel's own hide and maximize stay out. */
+const PICODE_NOT_AGENT_LAYOUT = ContextKeyExpr.notEquals('config.picode.appearance.layout', 'agent');
+
 MenuRegistry.appendMenuItem(MenuId.PanelTitle, {
 	command: {
 		id: TogglePanelAction.ID,
@@ -78,7 +81,8 @@ MenuRegistry.appendMenuItem(MenuId.PanelTitle, {
 		icon: closeIcon
 	},
 	group: 'navigation',
-	order: 2
+	order: 2,
+	when: PICODE_NOT_AGENT_LAYOUT
 });
 
 registerAction2(class extends Action2 {
@@ -292,7 +296,7 @@ registerAction2(class extends Action2 {
 				id: MenuId.PanelTitle,
 				group: 'navigation',
 				order: 1,
-				when: panelMaximizationSupportedWhen
+				when: ContextKeyExpr.and(panelMaximizationSupportedWhen, PICODE_NOT_AGENT_LAYOUT)
 			}]
 		});
 	}

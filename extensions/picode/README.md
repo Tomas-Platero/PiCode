@@ -12,6 +12,8 @@
 | `test/` | Los tests (`node --experimental-strip-types --test test/*.test.ts`; también corren en CI). |
 | `media/` | La marca de PiCode para la barra de actividad, con su pareja claro/oscuro. |
 | `out/` | El JavaScript compilado (generado por `build/build-connector.sh`, fase 2 de la build). |
+| `l10n/` | Las frases que dice el conector, en los 13 idiomas (`bundle.l10n.<idioma>.json`); `bundle.l10n.json` se genera del código. |
+| `package.nls.json` / `package.nls.<idioma>.json` | Los títulos de sus comandos y de sus vistas en los 13 idiomas: el `package.json` los pide con `%clave%`. |
 | `package.json` | Contribuciones al editor: 20 comandos, la vista `picode-status`, participantes de chat, proveedores de modelos y de MCP. |
 | `tsconfig.json` / `tsconfig.test.json` | Compilación del código y de los tests (los tests se tipan en CI). |
 
@@ -39,6 +41,8 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `workspace-area.ts` | El área de trabajo como la ve una sesión: su identidad y lo que se le cuenta. |
 | `session-cwd.ts` | El directorio de trabajo de una sesión de chat, elegido para que exista. |
 | `progress.ts` | Qué está haciendo pi, en una línea («read src/app.ts» en vez de «read»). |
+| `l10n.ts` | `l10n.t` para los módulos que tienen que cargar sin el editor (el host del asistente y los tests en Node puro); dentro del editor es `vscode.l10n.t`. |
+| `diff-stat.ts` | Las líneas añadidas y quitadas de un cambio, contadas con `git diff --numstat` para el panel de estado del diseño Agent. |
 
 ### 💬 El chat y sus turnos
 

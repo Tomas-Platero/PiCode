@@ -67,6 +67,19 @@ div.chat-welcome-view {
 		-webkit-mask-size: 40px;
 	}
 
+	/* PiCode's mark (theme body, blue accents) above the greeting, as on the Welcome page. */
+	& > .chat-welcome-view-icon.picode-mark {
+		display: flex;
+		justify-content: center;
+		margin-bottom: 16px;
+		color: var(--vscode-foreground);
+	}
+
+	& > .chat-welcome-view-icon.picode-mark .product-logo-svg {
+		width: 56px;
+		height: 56px;
+	}
+
 	& > .chat-welcome-view-icon.large-icon {
 		min-width: 72px;
 		min-height: 72px;

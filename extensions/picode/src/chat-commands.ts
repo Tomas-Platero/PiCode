@@ -18,6 +18,8 @@
  * - nothing: not a slash command at all.
  */
 
+import { l10n } from './l10n.ts';
+
 /** One command as the chat's slash list shows it. */
 export interface ChatSlashCommand {
 	readonly name: string;
@@ -30,20 +32,20 @@ export interface ChatSlashCommand {
  * the editor replaces with its own pickers.
  */
 export const EDITOR_COMMANDS: readonly ChatSlashCommand[] = [
-	{ name: 'compact', description: 'Summarize the conversation so far to free up context', argumentHint: '[what to keep]' },
-	{ name: 'new', description: 'Start a new chat' },
-	{ name: 'model', description: 'Choose the model' },
-	{ name: 'thinking', description: 'Set how hard the model thinks', argumentHint: '[off | minimal | low | medium | high | xhigh | max]' },
-	{ name: 'name', description: 'Rename this conversation', argumentHint: '<name>' },
-	{ name: 'session', description: 'Show this conversation’s messages, tokens and cost' },
-	{ name: 'export', description: 'Save this conversation as a web page' },
-	{ name: 'copy', description: 'Copy the last answer' },
-	{ name: 'reload', description: 'Reload extensions, skills and prompts' },
-	{ name: 'resume', description: 'Open an earlier conversation' },
-	{ name: 'login', description: 'Connect a provider' },
-	{ name: 'logout', description: 'Disconnect a provider' },
-	{ name: 'settings', description: 'Open PiCode’s settings' },
-	{ name: 'gentle:models', description: 'Choose the model of each Gentle agent' },
+	{ name: 'compact', description: l10n.t('Summarize the conversation so far to free up context'), argumentHint: l10n.t('[what to keep]') },
+	{ name: 'new', description: l10n.t('Start a new chat') },
+	{ name: 'model', description: l10n.t('Choose the model') },
+	{ name: 'thinking', description: l10n.t('Set how hard the model thinks'), argumentHint: '[off | minimal | low | medium | high | xhigh | max]' },
+	{ name: 'name', description: l10n.t('Rename this conversation'), argumentHint: '<name>' },
+	{ name: 'session', description: l10n.t('Show this conversation’s messages, tokens and cost') },
+	{ name: 'export', description: l10n.t('Save this conversation as a web page') },
+	{ name: 'copy', description: l10n.t('Copy the last answer') },
+	{ name: 'reload', description: l10n.t('Reload extensions, skills and prompts') },
+	{ name: 'resume', description: l10n.t('Open an earlier conversation') },
+	{ name: 'login', description: l10n.t('Connect a provider') },
+	{ name: 'logout', description: l10n.t('Disconnect a provider') },
+	{ name: 'settings', description: l10n.t('Open PiCode’s settings') },
+	{ name: 'gentle:models', description: l10n.t('Choose the model of each Gentle agent') },
 ];
 
 /** Where the chat sends someone for a command that has no answer in the editor. */
@@ -63,26 +65,26 @@ export interface UnavailableCommand {
  */
 export const TERMINAL_ONLY_COMMANDS: ReadonlyMap<string, UnavailableCommand> = new Map<string, UnavailableCommand>([
 	// pi's own terminal commands.
-	['tree', { message: 'Moving between branches of a conversation is only available in pi’s terminal.' }],
-	['fork', { message: 'Branching a conversation is only available in pi’s terminal.' }],
-	['clone', { message: 'Duplicating a conversation is only available in pi’s terminal.' }],
-	['import', { message: 'Importing a conversation file is only available in pi’s terminal.', action: 'sessions' }],
-	['scoped-models', { message: 'Model cycling is a terminal shortcut; choose the model from the chat’s model picker.' }],
-	['share', { message: 'Sharing a conversation is only available in pi’s terminal. Use /export to save it as a web page.' }],
-	['bug', { message: 'Reporting a bug to pi’s developers is only available in pi’s terminal.' }],
-	['trust', { message: 'Project trust is managed by the editor’s workspace trust.' }],
-	['changelog', { message: 'pi’s changelog is only shown in its terminal. Updates are listed under Updates.' }],
-	['hotkeys', { message: 'These are pi’s terminal shortcuts; the editor has its own keyboard shortcuts.' }],
-	['quit', { message: 'Close the chat or the window to quit.' }],
+	['tree', { message: l10n.t('Moving between branches of a conversation is only available in pi’s terminal.') }],
+	['fork', { message: l10n.t('Branching a conversation is only available in pi’s terminal.') }],
+	['clone', { message: l10n.t('Duplicating a conversation is only available in pi’s terminal.') }],
+	['import', { message: l10n.t('Importing a conversation file is only available in pi’s terminal.'), action: 'sessions' }],
+	['scoped-models', { message: l10n.t('Model cycling is a terminal shortcut; choose the model from the chat’s model picker.') }],
+	['share', { message: l10n.t('Sharing a conversation is only available in pi’s terminal. Use /export to save it as a web page.') }],
+	['bug', { message: l10n.t('Reporting a bug to pi’s developers is only available in pi’s terminal.') }],
+	['trust', { message: l10n.t('Project trust is managed by the editor’s workspace trust.') }],
+	['changelog', { message: l10n.t('pi’s changelog is only shown in its terminal. Updates are listed under Updates.') }],
+	['hotkeys', { message: l10n.t('These are pi’s terminal shortcuts; the editor has its own keyboard shortcuts.') }],
+	['quit', { message: l10n.t('Close the chat or the window to quit.') }],
 	// Extension commands that draw a terminal panel.
-	['intercom', { message: 'The intercom panel is only available in pi’s terminal. Use /intercom-pool, /alias or /handover here.' }],
-	['gentle:agents', { message: 'The agents panel is only available in pi’s terminal.', action: 'agentModels' }],
-	['gentle:jobs', { message: 'The jobs panel is only available in pi’s terminal.', action: 'tasks' }],
-	['gentle:review-session-permission', { message: 'Review permissions are only available in pi’s terminal.' }],
+	['intercom', { message: l10n.t('The intercom panel is only available in pi’s terminal. Use /intercom-pool, /alias or /handover here.') }],
+	['gentle:agents', { message: l10n.t('The agents panel is only available in pi’s terminal.'), action: 'agentModels' }],
+	['gentle:jobs', { message: l10n.t('The jobs panel is only available in pi’s terminal.'), action: 'tasks' }],
+	['gentle:review-session-permission', { message: l10n.t('Review permissions are only available in pi’s terminal.') }],
 	// Gentle commands that need the Gentle AI program, which PiCode does not install.
-	['gentle:review-mode', { message: 'Review mode needs the Gentle AI program, which PiCode does not include.' }],
-	['gentle:telemetry', { message: 'Gentle AI telemetry is off in PiCode.' }],
-	['gentle:dev-binary', { message: 'This command needs the Gentle AI program, which PiCode does not include.' }],
+	['gentle:review-mode', { message: l10n.t('Review mode needs the Gentle AI program, which PiCode does not include.') }],
+	['gentle:telemetry', { message: l10n.t('Gentle AI telemetry is off in PiCode.') }],
+	['gentle:dev-binary', { message: l10n.t('This command needs the Gentle AI program, which PiCode does not include.') }],
 ]);
 
 /** The names a request is resolved against: what the live session holds right now. */
@@ -96,7 +98,7 @@ export interface SlashContext {
 }
 
 /** What the chat says for a command it learned only works in pi's terminal. */
-export const LEARNED_TERMINAL_ONLY: UnavailableCommand = { message: 'This command only works in pi’s terminal.' };
+export const LEARNED_TERMINAL_ONLY: UnavailableCommand = { message: l10n.t('This command only works in pi’s terminal.') };
 
 export type SlashRoute =
 	| { readonly kind: 'editor'; readonly name: string; readonly args: string }
@@ -204,20 +206,20 @@ export interface SessionStatsView {
 export function sessionStatsMarkdown(stats: SessionStatsView): string {
 	const count = (value: number | undefined): string | undefined => value === undefined ? undefined : value.toLocaleString('en-US');
 	const rows: [string, string | undefined][] = [
-		['💬 Conversation', stats.name],
-		['🧠 Model', stats.model],
-		['🙋 Your messages', count(stats.userMessages)],
-		['🤖 Answers', count(stats.assistantMessages)],
-		['🛠️ Tool calls', count(stats.toolCalls)],
-		['📥 Tokens in', count(stats.input)],
-		['📤 Tokens out', count(stats.output)],
-		['♻️ Tokens from cache', count(stats.cacheRead)],
-		['📊 Context used', stats.contextPercent === undefined ? undefined : `${Math.round(stats.contextPercent)}%`],
-		['💲 Cost', stats.cost === undefined ? undefined : `$${stats.cost.toFixed(4)}`],
+		[l10n.t('💬 Conversation'), stats.name],
+		[l10n.t('🧠 Model'), stats.model],
+		[l10n.t('🙋 Your messages'), count(stats.userMessages)],
+		[l10n.t('🤖 Answers'), count(stats.assistantMessages)],
+		[l10n.t('🛠️ Tool calls'), count(stats.toolCalls)],
+		[l10n.t('📥 Tokens in'), count(stats.input)],
+		[l10n.t('📤 Tokens out'), count(stats.output)],
+		[l10n.t('♻️ Tokens from cache'), count(stats.cacheRead)],
+		[l10n.t('📊 Context used'), stats.contextPercent === undefined ? undefined : `${Math.round(stats.contextPercent)}%`],
+		[l10n.t('💲 Cost'), stats.cost === undefined ? undefined : `$${stats.cost.toFixed(4)}`],
 	];
 	const known = rows.filter((row): row is [string, string] => row[1] !== undefined && row[1] !== '');
 	if (known.length === 0) {
-		return 'Nothing to show yet: this conversation has no messages.';
+		return l10n.t('Nothing to show yet: this conversation has no messages.');
 	}
 	return ['| | |', '|---|---|', ...known.map(([label, value]) => `| ${label} | ${value.replace(/\|/g, '\\|')} |`)].join('\n');
 }

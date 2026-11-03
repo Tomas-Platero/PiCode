@@ -134,7 +134,7 @@ const importLog: { running: boolean; lines: string[]; step: number; total: numbe
 /** The import's own Output channel — what the pass brings, line by line, in one place. */
 let importChannel: vscode.OutputChannel | undefined;
 function importOutput(): vscode.OutputChannel {
-	importChannel ??= vscode.window.createOutputChannel('PiCode Import');
+	importChannel ??= vscode.window.createOutputChannel(vscode.l10n.t('PiCode Import'));
 	return importChannel;
 }
 
@@ -507,10 +507,10 @@ export function registerSetupCommands(deps: SetupDeps): vscode.Disposable[] {
 				throw new Error(`PiCode: the external pi's conversations could not be brought in — ${sessions?.reason ?? 'the copy reported nothing for them'}.`);
 			}
 			if (sessions.status === 'absent' || (sessions.files ?? 0) === 0) {
-				void vscode.window.showInformationMessage('PiCode: your external pi has no conversations to bring in.');
+				void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: your external pi has no conversations to bring in.'));
 				return;
 			}
-			void vscode.window.showInformationMessage(`PiCode: your external pi's ${sessions.files} conversation files are in this profile now, and the panel lists them. Nothing was moved or deleted.`);
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode: your external pi\'s {0} conversation files are in this profile now, and the panel lists them. Nothing was moved or deleted.', sessions.files ?? 0));
 		}),
 		vscode.commands.registerCommand(IMPORT_LOG_COMMAND, (): { running: boolean; lines: string[]; step: number; total: number } => ({ ...importLog, lines: [...importLog.lines] })),
 	];

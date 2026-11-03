@@ -81,7 +81,9 @@
    same place whatever the card says. */
 .picode-mcp-card {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 150px 120px;
+	/* The state column fits the longest badge ("Needs Sign-In" in the longest language) and the
+	 * action column fits the sign-in button beside the menu, so the two never overlap. */
+	grid-template-columns: minmax(0, 1fr) 190px 168px;
 	align-items: center;
 	gap: 12px;
 	padding: 10px 12px;

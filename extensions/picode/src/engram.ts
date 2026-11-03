@@ -27,6 +27,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { l10n } from './l10n.ts';
 
 /** Where a build puts the engine inside its own installation, under `resources/`. */
 export const SHIPPED_ENGRAM_FOLDER = 'memory';
@@ -153,6 +154,15 @@ export function engramServerUrl(env: Readonly<Record<string, string | undefined>
 	return `http://127.0.0.1:${port === '' ? ENGRAM_DEFAULT_PORT : port}`;
 }
 
+/** The port of a configured URL, or the default one when the setting is not a URL. */
+function portOf(url: string): string {
+	try {
+		return new URL(url).port;
+	} catch {
+		return String(ENGRAM_DEFAULT_PORT);
+	}
+}
+
 /** What a healthy engine answers. Only the fields this product acts on are kept. */
 export interface EngramHealth {
 	readonly version: string;
@@ -276,17 +286,19 @@ export type EngramState =
 /** The one line a status surface prints for {@link EngramState}. */
 export function engramStateLine(state: EngramState): string {	switch (state.kind) {
 		case 'ready':
-			return `Memory: ${state.memories} ${state.memories === 1 ? 'memory' : 'memories'}`;
+			return state.memories === 1
+				? l10n.t('Memory: {0} memory', state.memories)
+				: l10n.t('Memory: {0} memories', state.memories);
 		case 'empty':
-			return 'Memory: ready · nothing saved yet';
+			return l10n.t('Memory: ready · nothing saved yet');
 		case 'stopped':
-			return 'Memory: stopped';
+			return l10n.t('Memory: stopped');
 		case 'missing':
-			return 'Memory: unavailable — this installation has no memory engine';
+			return l10n.t('Memory: unavailable — this installation has no memory engine');
 		case 'foreign':
-			return 'Memory: unavailable — another engram answered on this machine';
+			return l10n.t('Memory: unavailable — another engram answered on this machine');
 		case 'error':
-			return `Memory: error — ${state.detail}`;
+			return l10n.t('Memory: error — {0}', state.detail);
 	}
 }
 
@@ -566,7 +578,7 @@ export async function ensureEngramServer(io: EngramProbeIo, options: EngramStart
 
 	const waitMs = options.waitMs ?? ENGRAM_START_TIMEOUT_MS;
 	const sleep = options.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
-	const port = new URL(engramServerUrl(io.env)).port;
+	const port = portOf(engramServerUrl(io.env));
 	options.spawn(first.binary, ['serve', port], io.env);
 
 	// A fixed number of attempts rather than a clock: the wait is the same, and a test that fakes

@@ -150,8 +150,10 @@ export class ProductContribution implements IWorkbenchContribution {
 			const shouldShowReleaseNotes = configurationService.getValue<boolean>('update.showReleaseNotes');
 			const releaseNotesUrl = productService.releaseNotesUrl;
 
-			// was there a major/minor update? if so, open the release notes page in the browser
-			if (shouldShowReleaseNotes && !environmentService.skipReleaseNotes && releaseNotesUrl && lastVersion && currentVersion && isMajorMinorUpdate(lastVersion, currentVersion)) {
+			// was there a major/minor update? if so, open the release notes page in the browser.
+			// PiCode shows its own What's New window instead (contrib/picode), so it never sends the
+			// person to the repository's release list.
+			if (shouldShowReleaseNotes && !productService.picodeVersion && !environmentService.skipReleaseNotes && releaseNotesUrl && lastVersion && currentVersion && isMajorMinorUpdate(lastVersion, currentVersion)) {
 				await openerService.open(URI.parse(releaseNotesUrl));
 			}
 

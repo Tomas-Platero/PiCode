@@ -105,6 +105,11 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 						// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 						h('div.title.original.show-file-icons@secondaryPath', [] as any),
 					]),
+					// PiCode: lines added and removed in this file, as Claude Code's change list shows them.
+					h('div.picode-line-counts@lineCounts', [
+						h('span.added@linesAdded'),
+						h('span.removed@linesRemoved'),
+					]),
 					h('div.actions@actions'),
 				]),
 			]),
@@ -117,6 +122,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 			overflowWidgetsDomNode: this._overflowWidgetsDomNode,
 			fixedOverflowWidgets: true
 		}, {}));
+		this._register(this.editor.onDidUpdateDiff(() => this._updateLineCounts()));
 		this.isModifedFocused = observableCodeEditor(this.editor.getModifiedEditor()).isFocused;
 		this.isOriginalFocused = observableCodeEditor(this.editor.getOriginalEditor()).isFocused;
 		this.isFocused = derived(this, reader => this.isModifedFocused.read(reader) || this.isOriginalFocused.read(reader));
@@ -259,8 +265,26 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 
 	private _data: TemplateData | undefined;
 
+	/** PiCode: the header's `+N −M`, from the diff the editor computed; empty until it has one. */
+	private _updateLineCounts(): void {
+		let added = 0;
+		let removed = 0;
+		for (const change of this.editor.getLineChanges() ?? []) {
+			if (change.modifiedEndLineNumber > 0) {
+				added += change.modifiedEndLineNumber - change.modifiedStartLineNumber + 1;
+			}
+			if (change.originalEndLineNumber > 0) {
+				removed += change.originalEndLineNumber - change.originalStartLineNumber + 1;
+			}
+		}
+		this._elements.linesAdded.textContent = added > 0 ? `+${added.toLocaleString()}` : '';
+		this._elements.linesRemoved.textContent = removed > 0 ? `−${removed.toLocaleString()}` : '';
+	}
+
 	public setData(data: TemplateData | undefined): void {
 		this._data = data;
+		this._elements.linesAdded.textContent = '';
+		this._elements.linesRemoved.textContent = '';
 		const optionsOverride = this._optionsOverride;
 		function updateOptions(options: IDiffEditorOptions): IDiffEditorOptions {
 			return {

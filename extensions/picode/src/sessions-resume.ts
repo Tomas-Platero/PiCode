@@ -95,11 +95,11 @@ function resumePermissionExtension(log: (line: string) => void): PiInlineExtensi
 					const answer = await stream.questionCarousel([new vscode.ChatQuestion(
 						PERMISSION_QUESTION_ID,
 						vscode.ChatQuestionType.SingleSelect,
-						`pi wants to run ${event.toolName}`,
+						vscode.l10n.t('pi wants to run {0}', event.toolName),
 						{
 							options: [
-								{ id: 'allow', label: 'Allow', value: PERMISSION_ALLOW },
-								{ id: 'deny', label: 'Deny', value: 'deny' },
+								{ id: 'allow', label: vscode.l10n.t('Allow'), value: PERMISSION_ALLOW },
+								{ id: 'deny', label: vscode.l10n.t('Deny'), value: 'deny' },
 							],
 						},
 					)]);
@@ -218,7 +218,7 @@ export function piResumeRequestHandler(file: string, deps: AgentDeps): vscode.Ch
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			deps.log(`resumed turn failed: ${message}`);
-			response.markdown(`\n\n> PiCode: the conversation could not continue — ${message}\n`);
+			response.markdown(`\n\n> ${vscode.l10n.t('PiCode: the conversation could not continue — {0}', message)}\n`);
 		}
 		return {};
 	};

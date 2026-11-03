@@ -26,15 +26,15 @@
  * to another origin, and asks for no stored copy. Nothing here logs, renders or persists the
  * key, and the cache is keyed by its **hash**, never by the key itself.
  *
- * ## Why this module has no `vscode` import — and no relative imports at all
+ * ## Why this module has no `vscode` import
  *
  * Everything that decides what a payload means, and everything that decides whether a cached
- * snapshot may still be shown, is here. Keeping it free of the editor — and of every local
- * import, so the file can be run on its own — is what lets the parsing, the selection and the
- * cache lifetime be exercised by running them, without an editor in the way.
+ * snapshot may still be shown, is here. Keeping it free of the editor is what lets the parsing, the
+ * selection and the cache lifetime be exercised by running them, without an editor in the way.
  */
 
 import { createHash } from 'node:crypto';
+import { l10n } from './l10n.ts';
 
 /** The dashboard's own quota endpoint, read with the same API key pi holds. */
 export const NAN_QUOTA_URL = 'https://cloud-api.nan.builders/api/usage/quota';
@@ -418,26 +418,26 @@ export function nanUsageSummary(usage: NanUsage, modelId: string | undefined): s
 	const unlabelled = limit.windows.filter(window => window.label.length === 0);
 	const parts = [...labelled, ...unlabelled].map(window =>
 		window.label.length > 0
-			? `${Math.round(window.usedPercent)}% of the ${spokenWindowLabel(window.label)} window`
-			: `${Math.round(window.usedPercent)}% of the billing period`);
-	return `${limit.name}: ${parts.join(' · ')}`;
+			? l10n.t('{0}% of the {1} window', Math.round(window.usedPercent), spokenWindowLabel(window.label))
+			: l10n.t('{0}% of the billing period', Math.round(window.usedPercent)));
+	return l10n.t('{0}: {1}', limit.name, parts.join(' · '));
 }
 
 /** A window label spoken as a length, so a part reads as time: `4h` becomes `4-hour`. */
 export function spokenWindowLabel(label: string): string {
 	// The week-long window is the one label that is not a count of hours, days or minutes.
 	if (label === 'week') {
-		return 'weekly';
+		return l10n.t('weekly');
 	}
 	const length = /^(?:(\d+)h|(\d+)d|(\d+)m)$/.exec(label);
 	if (length?.[1] !== undefined) {
-		return `${length[1]}-hour`;
+		return l10n.t('{0}-hour', length[1]);
 	}
 	if (length?.[2] !== undefined) {
-		return `${length[2]}-day`;
+		return l10n.t('{0}-day', length[2]);
 	}
 	if (length?.[3] !== undefined) {
-		return `${length[3]}-minute`;
+		return l10n.t('{0}-minute', length[3]);
 	}
 	// A label this does not know is passed through instead of guessed at: the sentence would then
 	// read oddly, which is better than reading wrongly. Every label `windowLabel` writes is above.

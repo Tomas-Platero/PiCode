@@ -10,8 +10,11 @@
  * This file is the part that decides how the runs are started and how the result reads; the
  * sessions themselves are built where the chat's pi lives (`agent.ts`).
  *
- * No `vscode` import, so `node --test` runs this file directly.
+ * No `vscode` import, so `node --test` runs this file directly. What it says in words goes through
+ * the editor's own translator.
  */
+
+import { l10n } from './l10n.ts';
 
 /** The fewest and most models one comparison takes: one is not a comparison, many are noise. */
 export const MIN_COMPARED_MODELS = 2;
@@ -49,13 +52,13 @@ export async function compareModels(
 			const durationMs = now() - started;
 			return text.length > 0
 				? { model, text, durationMs }
-				: { model, text: '', durationMs, problem: 'It did not answer.' };
+				: { model, text: '', durationMs, problem: l10n.t('It did not answer.') };
 		} catch (error) {
 			return {
 				model,
 				text: '',
 				durationMs: now() - started,
-				problem: signal.aborted ? 'Stopped before it answered.' : error instanceof Error ? error.message : String(error),
+				problem: signal.aborted ? l10n.t('Stopped before it answered.') : error instanceof Error ? error.message : String(error),
 			};
 		}
 	}));
@@ -65,10 +68,10 @@ export async function compareModels(
 export function durationLabel(durationMs: number): string {
 	const seconds = Math.max(0, durationMs) / 1000;
 	if (seconds < 60) {
-		return `${seconds.toFixed(1)}s`;
+		return l10n.t('{0}s', seconds.toFixed(1));
 	}
 	const minutes = Math.floor(seconds / 60);
-	return `${minutes}m ${String(Math.round(seconds - minutes * 60)).padStart(2, '0')}s`;
+	return l10n.t('{0}m {1}s', minutes, String(Math.round(seconds - minutes * 60)).padStart(2, '0'));
 }
 
 /** The comparison as one document: the question, then one section per model, fastest first. */
@@ -76,15 +79,15 @@ export function renderComparison(question: string, answers: readonly ComparedAns
 	const answered = answers.filter(answer => answer.problem === undefined).toSorted((a, b) => a.durationMs - b.durationMs);
 	const failed = answers.filter(answer => answer.problem !== undefined);
 	const lines = [
-		'# Model comparison',
+		l10n.t('# Model comparison'),
 		'',
 		`> ${question.trim().split('\n').join('\n> ')}`,
 		'',
 	];
 	if (answered.length > 0) {
-		lines.push('| Model | Time | Length |', '| --- | --- | --- |');
+		lines.push(`| ${l10n.t('Model')} | ${l10n.t('Time')} | ${l10n.t('Length')} |`, '| --- | --- | --- |');
 		for (const answer of answered) {
-			lines.push(`| ${answer.model} | ${durationLabel(answer.durationMs)} | ${answer.text.length} characters |`);
+			lines.push(`| ${answer.model} | ${durationLabel(answer.durationMs)} | ${l10n.t('{0} characters', answer.text.length)} |`);
 		}
 		lines.push('');
 	}

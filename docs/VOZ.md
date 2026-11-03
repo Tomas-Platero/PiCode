@@ -1,6 +1,6 @@
 # 🎙️ Dictado por voz en el chat del editor
 
-> **Estado: planteado y con diseño aprobado, sin empezar.** Este documento es el plan. Nada de lo que describe existe todavía.
+> **Estado: todas las fases hechas.** Se descarga (tarjeta *Dictation* en Status o desde el asistente de primer arranque) y el micrófono del chat dicta frase a frase. Quedan por ver en pantalla la tarjeta, el interruptor del asistente y el botón del micrófono.
 
 ## 🎯 Qué se quiere
 
@@ -62,11 +62,11 @@ Reglas: texto en inglés, icono en cada fila, sin rutas ni nombres internos, el 
 
 | # | Fase | Hecho cuando |
 |---|---|---|
-| 1 | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
-| 2 | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
-| 3 | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
-| 4 | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
-| 4b | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
+| 1 ✅ | **Prueba de viabilidad** | Parakeet carga y transcribe desde un proceso hijo de PiCode en Windows; se mide memoria, tiempo y descarga real; se prueba el español. |
+| 2 ✅ | Descarga y estado | Botón *Descargar* con progreso, firma verificada y cancelación; estado *Está / No está*. |
+| 3 ✅ | Grabación y transcripción | Del micrófono al texto, con corte automático a los 2 minutos como en Gentle. |
+| 4 ✅ | Pantalla | Micrófono del chat y ajuste conectados al proveedor propio. |
+| 4b ✅ | Primer arranque | Paso opcional del asistente con idioma y descarga; el mismo estado que Ajustes. |
 | 5 | Cierre | Pruebas, esta ficha puesta al día, `AGENTS.md` y `docs/MAPA.md` regenerado. |
 
 **La fase 1 decide todo.** Si el motor no funciona dentro de PiCode, se vuelve al camino A con otro motor antes de construir nada más.
@@ -100,3 +100,67 @@ El motor (sherpa-onnx) admite muchos modelos; Gentle solo trae Parakeet v3. Tama
 | Whisper tiny / base | multilingüe | ≈ 110 / ≈ 197 MB |
 
 **Propuesta:** el usuario elige idioma y se baja solo ese modelo (≈ 50–150 MB); Parakeet v3 queda como opción "todos los idiomas". Cuesta más: una lista de modelos propia que PiCode tiene que fijar con versión y firma, porque los de Gentle ya vienen fijados y estos no.
+
+## ✅ Resultados de la fase 1 (2026-10-30, a medias)
+
+Probado en **Node 24 normal**, en Windows, con el modelo y el motor fijados por Gentle (firma del modelo verificada). **Todavía no probado dentro de PiCode.**
+
+| Medida | Resultado |
+|---|---|
+| Español (frase de 5,3 s) | Transcrita sin errores, con tildes y puntuación, en 0,37 s |
+| Inglés (frase de 3,8 s) | Transcrita sin errores en 0,30 s |
+| Carga del modelo | ≈ 2 s |
+| Memoria | ≈ 750–800 MB |
+| Descarga real | modelo 670 MB + motor y micrófono ≈ 30 MB |
+
+**Conclusión:** Parakeet v3 entiende español bien y rápido en CPU. Con él **no hace falta** un modelo por idioma: un solo modelo cubre todos. Los modelos pequeños quedan solo como alternativa si 700 MB pesa demasiado.
+
+### Dentro de PiCode (2026-10-30)
+
+Probado con el Node que lleva el editor (Electron 42.8.1, build experimental), con el modelo y las dos librerías descargados de cero y sus firmas verificadas.
+
+| Medida | Resultado |
+|---|---|
+| Español (5,3 s) | «No preguntes que puede hacer tu país por ti, pregunta qué puedes hacer tú por tu país.» en 0,42 s |
+| Inglés (3,8 s) | Correcto en 0,34 s |
+| Carga del modelo | ≈ 2,4 s |
+| Memoria | ≈ 780 MB |
+| Micrófono (node-cpal) | Graba 6 s a 48 kHz desde el micrófono por defecto y se transcribe: «Hola, hola. Esto es una prueba de dictada de vos…» (hablando de verdad, con el nivel correcto) |
+
+**Hallazgo para el diseño:** la función `readWave` del motor falla dentro del editor («External buffers are not allowed»), porque Electron no admite esos buffers. Se evita leyendo el audio en JavaScript y pasándoselo al motor; con eso funciona igual que en Node normal. El audio del micrófono llegará ya como datos de JavaScript, así que no afecta, pero **nunca se debe usar `readWave`**.
+
+**Fase 1 completa:** motor, modelo y micrófono funcionan dentro de PiCode. Dos detalles para la fase 3: el micrófono entrega estéreo a 48 kHz (se mezcla a mono y el motor lo reduce solo a 16 kHz), y la calidad con micrófono real es algo peor que con audio limpio («dictada de vos» por «dictado de voz»), así que conviene cortar el silencio y probar con varios micrófonos.
+
+## ✅ Fase 2: descarga y estado (2026-10-30)
+
+- **Dónde:** `extensions/picode/src/voice-install.ts` (descarga, firmas, reanudación) y `voice-controller.ts` (qué está pasando ahora); la tarjeta *Dictation* de Status la dibuja `picodeStatusSection.ts`. Carpeta de destino: `~/.picode/voice`.
+- **Qué hace:** *Download* (se ve el tamaño antes, ≈ 700 MB) → progreso en la etiqueta de la tarjeta → *Ready*. *Cancel* conserva lo bajado y la siguiente vez continúa. *Remove* lo quita todo.
+- **Seguridad:** cada fichero se comprueba contra su firma (sha256 del modelo, sha512 de las librerías de npm) antes de usarse; uno que no coincide se borra. Solo se siguen redirecciones a Hugging Face, su red de descargas y npm. El marcador de "instalado" se escribe el último, así que una descarga a medias nunca figura como lista.
+- **Probado:** 16 pruebas del conector (firma, reanudación, servidor que ignora el rango, cancelar, hosts permitidos, estados) y una descarga real contra Hugging Face y npm en una carpeta limpia; lo instalado transcribe español e inglés dentro de PiCode.
+- **Fallo encontrado en la prueba real:** el `tar` que trae Git para Windows lee `C:\…` como una máquina remota. Se descomprime con rutas relativas, que valen para cualquier `tar`.
+- **Solo Windows x64 por ahora**, que es lo único probado. En otros sistemas la tarjeta no aparece.
+- **No probado todavía:** cómo se ve la tarjeta en pantalla y pulsar los botones en la app.
+
+## ✅ Fase 3: grabar y transcribir (2026-10-30)
+
+- **Dónde:** `voice-engine.ts` (mezclar a mono, distinguir voz de silencio, cortar en frases, parar a los 120 s), `voice-worker.ts` (el proceso hijo que carga el modelo y usa el micrófono), `voice-session.ts` (el lado del editor: arrancar, parar, reutilizar el proceso, soltarlo a los 5 minutos de calma) y `voice-fork.ts` (lo lanza con el Node del propio editor).
+- **Por frases, no de golpe:** el motor transcribe audio ya terminado, no un flujo. Mientras se habla, la frase hasta ahora se transcribe cada ≈ 1,2 s y se ofrece como *parcial*; en una pausa de 0,8 s se transcribe una última vez y se ofrece como *final*. Es lo que necesita el chat (ver fase 4).
+- **El audio no sale del proceso hijo:** el editor solo manda *empieza* y *para* y recibe texto. Si el motor se cae, el chat sigue y la siguiente pulsación arranca uno nuevo.
+- **Probado:** 13 pruebas del motor (mezcla, frases, pausa, clic corto, parar con frase abierta, trozos de tamaño raro, límite de 2 minutos, micrófono caído), 9 de la sesión, y una ejecución con **voz real** (los dos audios de ejemplo con una pausa en medio): salen 4 parciales que van creciendo y un final por idioma, con tildes y puntuación. El proceso real con el micrófono arranca en 2 s y la segunda vez es inmediata.
+- **Límite:** probado con un reloj simulado, no esperando 120 s reales.
+
+## ✅ Fase 4: el micrófono del chat (2026-10-30)
+
+- **Qué se descubrió:** el chat de VS Code corta la sesión en cuanto se pulsa parar y **descarta todo lo que llegue después**. Por eso el dictado va por frases: el texto se pega en el borrador mientras se habla, y al parar queda lo ya pegado (lo dicho en el último segundo, sin pausa, puede perderse).
+- **Cómo:** `picodeSpeech.ts` registra un proveedor de voz propio (`ISpeechService`), que habla con el conector con tres comandos: `picode.voice.listen` (empieza), `picode.voice.poll` (cada 300 ms: qué se oyó) y `picode.voice.finish` (para). El conector no puede empujar datos al chat, por eso se pregunta.
+- **No se envía solo:** el chat solo envía tras una pausa si `accessibility.voice.speechTimeout` es mayor que 0; por defecto es 0.
+- **Sin descargar:** pulsar el micrófono ofrece *Download* con el tamaño (≈ 700 MB) en un aviso; nada se baja sin confirmar. Si está descargando, lo dice.
+- **Solo Windows** por ahora: en otros sistemas el botón de micrófono no aparece.
+- **No hecho:** un ajuste de dictado aparte en Ajustes (la tarjeta de Status ya cubre estado, descarga y quitar).
+
+## ✅ Fase 4b: el asistente de primer arranque (2026-10-30)
+
+- **Qué es:** un interruptor más en el paso *Extras* del asistente: **Dictation** — «Talk to the chat instead of typing. It runs on your computer. Downloads about 700 MB once, when PiCode opens.» Apagado por defecto. Solo aparece donde el dictado existe (hoy Windows x64).
+- **Quién descarga:** el asistente **no descarga nada**: apuntar el deseo es todo lo que hace (`picode.voice.downloadOnStart` en los ajustes del editor). El editor lo lee al abrir, lo borra en el acto y arranca la descarga; así el progreso se ve en la tarjeta de Status y se puede cancelar, y cerrar el asistente sin terminar no baja nada.
+- **El idioma ya no se pregunta:** Parakeet v3 cubre todos con un solo modelo (resultado de la fase 1), así que no hay lista de idiomas ni de tamaños.
+- **Probado:** el interruptor escribe y apaga la nota; el editor solo descarga si se pidió y hay algo que bajar. **No visto en pantalla.**

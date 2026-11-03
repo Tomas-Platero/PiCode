@@ -175,6 +175,15 @@ jobs:
           PICODE_REQUIRE_CLI: 1
         run: ./build/build.sh
 
+      # PiCode's own words travel in 13 languages across four surfaces: the editor's
+      # `localize()`, the setup window, the connector's runtime bundle and its manifest
+      # titles. It reads the sources with `typescript`, so it runs once the Build step has
+      # installed the dependencies; no network. It counts keys, checks the `{0}`
+      # placeholders and fails when a language is half done or the bundle is stale.
+      - name: Translations
+        shell: bash
+        run: node build/l10n.mjs check
+
       - name: Connector tests
         shell: bash
         working-directory: extensions/picode

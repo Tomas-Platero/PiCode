@@ -22,6 +22,8 @@
  * No `vscode` import, so `node --test` runs this file directly.
  */
 
+import { l10n } from './l10n.ts';
+
 /** The tool whose calls and completions become a card. */
 export const BACKGROUND_TOOL = 'background';
 
@@ -200,7 +202,7 @@ export function backgroundCompletionOf(message: unknown): BackgroundCompletion |
 
 /** The sentence a card shows while a job is still running. */
 export function runningResultLine(jobNumber: string | undefined): string {
-	return jobNumber === undefined ? 'running' : `running · job ${jobNumber}`;
+	return jobNumber === undefined ? l10n.t('running') : l10n.t('running · job {0}', jobNumber);
 }
 
 /** The sentence a card shows when the job is over. */
@@ -210,10 +212,10 @@ export function finishedResultLine(completion: BackgroundCompletion): string {
 		parts.push(completion.state);
 	}
 	if (completion.exitCode !== undefined) {
-		parts.push(`exit ${completion.exitCode}`);
+		parts.push(l10n.t('exit {0}', completion.exitCode));
 	}
 	if (parts.length === 0) {
-		parts.push('finished');
+		parts.push(l10n.t('finished'));
 	}
 	return parts.join(' · ');
 }

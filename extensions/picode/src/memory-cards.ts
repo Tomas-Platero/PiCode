@@ -21,6 +21,8 @@
  * "saved" for a lookup teaches the reader to stop reading the announcements.
  */
 
+import { l10n } from './l10n.ts';
+
 /** The engine's tool names that create or change a memory. */
 const SAVE_TOOL = 'mem_save';
 const UPDATE_TOOL = 'mem_update';
@@ -139,29 +141,35 @@ export function memoryCard(toolName: unknown, args: unknown): MemoryCard | undef
 	const where = whereOf(args);
 
 	if (engineTool === UPDATE_TOOL) {
-		const subject = named ?? 'the memory';
+		const subject = named ?? l10n.t('the memory');
 		return {
 			toolName: String(toolName),
-			running: `Updating ${subject} in memory…`,
-			done: `Updated ${subject} in memory${where === undefined ? '' : ` · ${where}`}`,
-			failed: `Could not update ${subject} in memory`,
+			running: l10n.t('Updating {0} in memory…', subject),
+			done: where === undefined
+				? l10n.t('Updated {0} in memory', subject)
+				: l10n.t('Updated {0} in memory · {1}', subject, where),
+			failed: l10n.t('Could not update {0} in memory', subject),
 		};
 	}
 	if (engineTool === CONSOLIDATE_TOOL) {
-		const subject = named ?? 'memories';
+		const subject = named ?? l10n.t('memories');
 		return {
 			toolName: String(toolName),
-			running: `Merging memories into ${subject}…`,
-			done: `Merged memories into ${subject}${where === undefined ? '' : ` · ${where}`}`,
-			failed: `Could not merge memories into ${subject}`,
+			running: l10n.t('Merging memories into {0}…', subject),
+			done: where === undefined
+				? l10n.t('Merged memories into {0}', subject)
+				: l10n.t('Merged memories into {0} · {1}', subject, where),
+			failed: l10n.t('Could not merge memories into {0}', subject),
 		};
 	}
 
-	const subject = named ?? 'this memory';
+	const subject = named ?? l10n.t('this memory');
 	return {
 		toolName: String(toolName),
-		running: `Saving ${subject} to memory…`,
-		done: `Saved ${subject} to memory${where === undefined ? '' : ` · ${where}`}`,
-		failed: `Could not save ${subject} to memory`,
+		running: l10n.t('Saving {0} to memory…', subject),
+		done: where === undefined
+			? l10n.t('Saved {0} to memory', subject)
+			: l10n.t('Saved {0} to memory · {1}', subject, where),
+		failed: l10n.t('Could not save {0} to memory', subject),
 	};
 }

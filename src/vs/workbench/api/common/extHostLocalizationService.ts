@@ -79,7 +79,9 @@ export class ExtHostLocalizationService implements ExtHostLocalizationShape {
 			const response = await this._proxy.$fetchBundleContents(bundleUri);
 			const result = JSON.parse(response);
 			// 'contents.bundle' is a well-known key in the language pack json file that contains the _code_ translations for the extension
-			contents = extension.isBuiltin ? result.contents?.bundle : result;
+			// PiCode: a built-in extension that declares its own `l10n` folder (the connector) reads a
+			// plain bundle like any installed one; only the others come from the language pack.
+			contents = extension.isBuiltin && !extension.l10n ? result.contents?.bundle : result;
 		} catch (e) {
 			this.logService.error(`Failed to load translations for ${extension.identifier.value} from ${bundleUri}: ${e.message}`);
 			return;
@@ -94,7 +96,7 @@ export class ExtHostLocalizationService implements ExtHostLocalizationShape {
 	}
 
 	private async getBundleLocation(extension: IExtensionDescription): Promise<URI | undefined> {
-		if (extension.isBuiltin) {
+		if (extension.isBuiltin && !extension.l10n) {
 			const uri = await this._proxy.$fetchBuiltInBundleUri(extension.identifier.value, this.currentLanguage);
 			return URI.revive(uri);
 		}
