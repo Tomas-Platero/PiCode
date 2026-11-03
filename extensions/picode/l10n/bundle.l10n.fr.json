@@ -306,6 +306,7 @@
 	"Sign-in needed": "Connexion requise",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Ignorés (plus de 20 Mo) : {0} et {1} autres.",
 	"Skipped (larger than 20 MB): {0}.": "Ignoré (plus de 20 Mo) : {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Certaines images n’ont pas pu être lues et n’ont pas été envoyées : {0}. Joignez-les à nouveau en PNG, JPEG, WebP ou GIF.",
 	"Speech engine": "Moteur vocal",
 	"Speech model": "Modèle vocal",
 	"Start a new chat": "Démarrer un nouveau chat",

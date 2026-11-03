@@ -306,6 +306,7 @@
 	"Sign-in needed": "Je potřeba se přihlásit",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Přeskočeno (větší než 20 MB): {0} a další {1}.",
 	"Skipped (larger than 20 MB): {0}.": "Přeskočeno (větší než 20 MB): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Některé obrázky se nepodařilo přečíst a nebyly odeslány: {0}. Připojte je znovu jako PNG, JPEG, WebP nebo GIF.",
 	"Speech engine": "Řečové jádro",
 	"Speech model": "Řečový model",
 	"Start a new chat": "Začít nový chat",

@@ -92,3 +92,55 @@
 .monaco-workbench .interactive-session .interactive-response .chat-confirmation-widget-collapsible .chat-confirmation-widget-message h3:first-child + div .interactive-result-code-block {
 	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
 }
+
+/* While the agent works the input stops clipping its contents, so the editor row would show its
+ * own square top corners over the rounded border: it takes both corners of the input. */
+.monaco-workbench .interactive-session .chat-input-container.working > .chat-editor-container {
+	border-top-left-radius: inherit;
+	border-top-right-radius: inherit;
+}
+
+/* A pasted or attached image is a card with its picture, as in Claude Code, not a text pill. */
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment {
+	position: relative;
+	box-sizing: border-box;
+	width: 88px;
+	height: 88px;
+	padding: 0;
+	border-radius: 12px;
+	overflow: hidden;
+	justify-content: center;
+}
+
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment.warning {
+	border-color: var(--vscode-notificationsWarningIcon-foreground, #cca700);
+}
+
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment .chat-attached-context-pill {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	justify-content: center;
+}
+
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment .chat-attached-context-pill-image {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	border-radius: inherit;
+	object-fit: cover;
+}
+
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment .chat-attached-context-custom-text {
+	display: none;
+}
+
+.monaco-workbench .interactive-session .interactive-input-part .chat-attached-context .chat-attached-context-attachment.image-attachment .monaco-button.codicon-close-compact {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	z-index: 1;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
+}
