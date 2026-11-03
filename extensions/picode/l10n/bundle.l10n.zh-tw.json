@@ -306,6 +306,7 @@
 	"Sign-in needed": "需要登入",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "已略過 (大於 20 MB): {0} 及另外 {1} 個。",
 	"Skipped (larger than 20 MB): {0}.": "已略過 (大於 20 MB): {0}。",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "有些圖片無法讀取，未傳送：{0}。請以 PNG、JPEG、WebP 或 GIF 格式重新附加。",
 	"Speech engine": "語音引擎",
 	"Speech model": "語音模型",
 	"Start a new chat": "開始新對話",

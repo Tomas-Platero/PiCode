@@ -306,6 +306,7 @@
 	"Sign-in needed": "Wymagane zalogowanie",
 	"Skipped (larger than 20 MB): {0} and {1} more.": "Pominięto (większe niż 20 MB): {0} i jeszcze {1}.",
 	"Skipped (larger than 20 MB): {0}.": "Pominięto (większe niż 20 MB): {0}.",
+	"Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.": "Nie udało się odczytać niektórych obrazów i nie zostały wysłane: {0}. Dołącz je ponownie jako PNG, JPEG, WebP lub GIF.",
 	"Speech engine": "Silnik mowy",
 	"Speech model": "Model mowy",
 	"Start a new chat": "Zacznij nowy czat",

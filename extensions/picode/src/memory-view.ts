@@ -147,6 +147,8 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	private readonly pages = new Map<string, number>();
 	private readonly rows = new Map<string, readonly MemoryRow[]>();
 	private readonly titles = new Map<number, string>();
+	/** Projects unfolded in the status column, whose memories its summary lists. */
+	private readonly expanded = new Set<string>();
 	private retried = false;
 	/** The newest engine release, asked at most once an hour: GitHub rate-limits anonymous reads. */
 	private latestEngine: { readonly version: string | undefined; readonly at: number } | undefined;
@@ -276,8 +278,19 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		return {
 			state: 'ready',
 			heading: data.total === 0 ? vscode.l10n.t('Nothing saved yet') : `${memoryCount(data.total)} · ${projectCount(data.projects.length)}`,
-			detail: [data.version, data.lastSaved === undefined ? '' : vscode.l10n.t('last {0}', memoryWhen(data.lastSaved))].filter(part => part !== '' && part !== undefined).join(' · ') || undefined,
-			projects: data.projects.map(project => ({ name: project.name, memories: project.memories })),
+			detail: data.lastSaved === undefined ? undefined : vscode.l10n.t('last {0}', memoryWhen(data.lastSaved)),
+			projects: data.projects.map(project => {
+				const open = this.expanded.has(project.name);
+				if (open && !this.rows.has(project.name)) {
+					void this.loadProjectRows(project.name);
+				}
+				return {
+					name: project.name,
+					memories: project.memories,
+					open,
+					rows: open ? (this.rows.get(project.name) ?? []).slice(0, 20).map(row => ({ id: row.id, title: row.title, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) })) : undefined,
+				};
+			}),
 			search: data.search === undefined ? undefined : {
 				query: data.search.query,
 				rows: data.search.rows.slice(0, 20).map(row => ({ id: row.id, title: row.title, project: row.project, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) })),
@@ -527,6 +540,23 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		this.changed.fire();
 	}
 
+	/** Unfolds or folds one project in the status column. */
+	async toggleProject(project: string): Promise<void> {
+		if (this.expanded.delete(project)) {
+			return;
+		}
+		this.expanded.add(project);
+		await this.loadProjectRows(project);
+	}
+
+	private async loadProjectRows(project: string): Promise<void> {
+		const json = await this.getJson(`/observations?project=${encodeURIComponent(project)}&limit=${PAGE_SIZE}`);
+		const rows = json === undefined ? undefined : parseMemoryRows(json);
+		if (rows !== undefined) {
+			this.rows.set(project, rows);
+		}
+	}
+
 	showMore(project: string): void {
 		this.pages.set(project, (this.pages.get(project) ?? 1) + 1);
 		this.changed.fire();
@@ -656,6 +686,7 @@ export function registerMemoryView(): vscode.Disposable {
 		vscode.commands.registerCommand(MEMORY_SUMMARY_COMMAND, () => provider.summary()),
 		vscode.commands.registerCommand(MEMORY_SEARCH_COMMAND, () => provider.search()),
 		vscode.commands.registerCommand(MEMORY_CLEAR_SEARCH_COMMAND, () => provider.clearSearch()),
+		vscode.commands.registerCommand('picode.memory.toggleProject', (project: string) => provider.toggleProject(project)),
 		vscode.commands.registerCommand(MEMORY_OPEN_COMMAND, (row: Pick<MemoryRow, 'id'> | undefined) => {
 			if (row !== undefined && typeof row.id === 'number') {
 				return provider.open(row);
