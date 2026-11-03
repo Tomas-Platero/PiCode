@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.4-experimental",
+			"notes": "### 🐛 Fixed\n\n- chat, Status and memory polish, pasted images reach pi; release v1.0.4-experimental (#151)"
+		},
+		{
 			"version": "1.0.3-experimental",
 			"notes": "### ✨ New\n\n- **A cleaner Agent layout.** The chat no longer has a \"Chat / Ports\" row above it, the sessions column reaches the bottom of the window, and the \"Pi\" picker under the message box is gone.\n- **Thinking level as a dropdown.** Pick how hard the AI thinks from a small list under its button, like the model picker.\n- **Reasoning and command cards, tidied.** The AI's reasoning reads calmer, and an opened command card now shows the command that ran and what it printed.\n- **White logos on dark themes.** GitHub and similar dark logos are readable again.\n\n### 🐛 Fixed\n\n- The command box of a finished tool call no longer comes up empty.\n- On the MCP servers page, \"Needs sign-in\" no longer hides behind the sign-in button."
 		},
