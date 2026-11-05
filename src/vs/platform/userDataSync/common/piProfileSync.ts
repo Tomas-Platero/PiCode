@@ -94,6 +94,9 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 
 	protected readonly version: number = PI_PROFILE_DATA_VERSION;
 	private readonly piProfileFolder: URI;
+	// Last read of each file, reused while its size and modification time are unchanged so a
+	// sync cycle with no edits does not read the whole profile again.
+	private readonly contentCache = new Map<string, { mtime: number; size: number; content: IFileContent }>();
 
 	constructor(
 		profile: IUserDataProfile,
@@ -554,7 +557,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 	}
 
 	private async getLocalFileContents(): Promise<IStringDictionary<IFileContent>> {
-		let candidates: { key: string; resource: URI; size: number }[] = [];
+		let candidates: { key: string; resource: URI; size: number; mtime: number }[] = [];
 		for (const folder of PI_PROFILE_SYNCED_FOLDERS) {
 			const folderResource = this.extUri.joinPath(this.piProfileFolder, folder);
 			candidates = candidates.concat(await this.collectFiles(folderResource, [folder]));
@@ -568,7 +571,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 			try {
 				const stat = await this.fileService.stat(fileResource);
 				if (!stat.isDirectory) {
-					candidates.push({ key: fileName, resource: fileResource, size: stat.size ?? 0 });
+					candidates.push({ key: fileName, resource: fileResource, size: stat.size ?? 0, mtime: stat.mtime ?? 0 });
 				}
 			} catch {
 				// File does not exist — normal for optional config files.
@@ -584,7 +587,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 
 		const files: IStringDictionary<IFileContent> = {};
 		let total = 0;
-		for (const { key, resource, size } of candidates) {
+		for (const { key, resource, size, mtime } of candidates) {
 			if (size > MAX_FILE_SIZE) {
 				this.logService.warn(`${this.syncResourceLogLabel}: Skipping pi profile file because it is too large (${size} bytes): ${key}`);
 				continue;
@@ -594,7 +597,14 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				continue;
 			}
 			try {
+				const cached = this.contentCache.get(key);
+				if (cached && mtime > 0 && cached.mtime === mtime && cached.size === size) {
+					files[key] = cached.content;
+					total += cached.content.value.byteLength;
+					continue;
+				}
 				const content = await this.fileService.readFile(resource);
+				this.contentCache.set(key, { mtime, size, content });
 				if (content.value.byteLength > MAX_FILE_SIZE) {
 					this.logService.warn(`${this.syncResourceLogLabel}: Skipping pi profile file because it is too large: ${key}`);
 					continue;
@@ -606,11 +616,18 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 				this.logService.error(e);
 			}
 		}
+		// Forget files that no longer exist so the cache cannot grow without bound.
+		const present = new Set(candidates.map(c => c.key));
+		for (const key of this.contentCache.keys()) {
+			if (!present.has(key)) {
+				this.contentCache.delete(key);
+			}
+		}
 		return files;
 	}
 
-	private async collectFiles(folder: URI, segments: string[]): Promise<{ key: string; resource: URI; size: number }[]> {
-		const result: { key: string; resource: URI; size: number }[] = [];
+	private async collectFiles(folder: URI, segments: string[]): Promise<{ key: string; resource: URI; size: number; mtime: number }[]> {
+		const result: { key: string; resource: URI; size: number; mtime: number }[] = [];
 		let stat: IFileStat;
 		try {
 			stat = await this.fileService.resolve(folder, { resolveMetadata: true });
@@ -629,7 +646,7 @@ export class PiProfileSynchroniser extends AbstractSynchroniser implements IUser
 			if (child.isDirectory) {
 				result.push(...await this.collectFiles(child.resource, path));
 			} else if (!child.isSymbolicLink) {
-				result.push({ key: path.join('/'), resource: child.resource, size: child.size ?? 0 });
+				result.push({ key: path.join('/'), resource: child.resource, size: child.size ?? 0, mtime: child.mtime ?? 0 });
 			}
 		}
 		return result;

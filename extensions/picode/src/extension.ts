@@ -2797,7 +2797,7 @@ const setupDeps = {
 	// the per-file hash state that makes a run incremental lives in the window's global state.
 	context.subscriptions.push(...registerSessionsBackupCommands({
 		globalState: context.globalState,
-		sessionsDir: piSessionsDir(),
+		sessionsDir: piSessionsDir(profileDirectory(context.extensionUri)),
 	}));
 
 	// The update check: pi and the profile's packages, asked quietly on a schedule,

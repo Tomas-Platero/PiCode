@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
 	listSessionBackupFiles,
@@ -19,7 +18,7 @@ import {
  *
  * ## A backup channel, not a live sync
  *
- * Every session transcript under `~/.pi/agent/sessions/<project-slug>/` is uploaded **as its
+ * Every session transcript under `<profile>/sessions/<project-slug>/` (PiCode's own pi profile) is uploaded **as its
  * own opaque ref** on the `piSessionsBackup` resource: one POST per file, refs accumulating
  * on the resource's refs list. The server gzips and encrypts what it stores, so the body
  * travels as the raw transcript and nothing here sees or builds an envelope. Restoring is the
@@ -72,9 +71,12 @@ const QUOTA_SOFT_LIMIT_BYTES = 45 * 1024 * 1024;
 /** The global-state key the per-file incremental state lives under. */
 const BACKUP_STATE_KEY = 'picode.sessionsBackup.state.v1';
 
-/** pi's sessions, where the runtime keeps them on this machine. */
-export function piSessionsDir(): string {
-	return path.join(os.homedir(), '.pi', 'agent', 'sessions');
+/**
+ * The sessions of PiCode's own pi profile (`<profile>/sessions`). The pi on the PATH keeps its
+ * transcripts elsewhere and is never read or written here.
+ */
+export function piSessionsDir(profileDir: string): string {
+	return path.join(profileDir, 'sessions');
 }
 
 /* ------------------------------------------------------------------ *
@@ -267,6 +269,13 @@ export async function runSessionsBackup(deps: SessionsBackupDeps): Promise<Backu
 		// the newest sessions keep their place, the oldest ones yield.
 		if (estimatedBytes + file.bytes > QUOTA_SOFT_LIMIT_BYTES) {
 			skippedQuota.push(file.key);
+			continue;
+		}
+		// Same size and same modification time as the last upload: the transcript has not
+		// changed, so it is not read (and hashed) again.
+		const known = state[file.key];
+		if (known && known.mtime === file.mtime && known.bytes === file.bytes) {
+			unchanged++;
 			continue;
 		}
 		let content: Buffer;
