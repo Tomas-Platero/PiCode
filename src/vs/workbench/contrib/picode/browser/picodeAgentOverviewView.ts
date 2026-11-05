@@ -26,7 +26,7 @@ import { IWorkbenchEnvironmentService } from '../../../services/environment/comm
 import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
 import { ISCMService } from '../../scm/common/scm.js';
-import { onDidChangePicodeAgentStatus, picodeAgentStatus } from './picodeAgentStatusPill.js';
+import { onDidChangePicodeAgentStatus } from './picodeAgentStatusPill.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 
 /**
@@ -165,7 +165,10 @@ export class PicodeAgentOverview extends Disposable {
 		}
 	}
 
+	private disposed = false;
+
 	override dispose(): void {
+		this.disposed = true;
 		this.setLive(false);
 		super.dispose();
 	}
@@ -205,6 +208,10 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private paint(): void {
+		// A refresh still waiting for pi can answer after the column was closed.
+		if (this.disposed) {
+			return;
+		}
 		this.renderDisposables.clear();
 		clearNode(this.root);
 		this.renderEnvironment(this.root);
@@ -378,39 +385,25 @@ export class PicodeAgentOverview extends Disposable {
 
 	/** The chat's background work: what the connector's Tasks block shows, running first, then what finished. */
 	private renderTasks(parent: HTMLElement): void {
-		const status = picodeAgentStatus();
 		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
-		if (status?.running && status.activity) {
-			this.row(section, Codicon.loading, status.activity).classList.add('running');
-		}
-		const board = knownTasks;
-		if (board === undefined) {
-			// The connector has not answered yet: the jobs the chat reported stand in.
-			for (const job of status?.jobs ?? []) {
-				const minutes = Math.max(0, Math.round((Date.now() - job.startedAt) / 60_000));
-				const row = this.row(section, Codicon.terminal, job.label ?? job.command ?? localize('picode.overview.job', "Job {0}", job.jobNumber));
-				append(row, $('span.picode-overview-value')).textContent = minutes < 1 ? localize('picode.overview.justNow', "now") : localize('picode.overview.minutes', "{0} min", minutes);
-			}
-			if (!status?.running && (status?.jobs.length ?? 0) === 0) {
-				this.row(section, Codicon.check, localize('picode.overview.idle', "Nothing running"));
-			}
-			return;
-		}
-		for (const task of board.running) {
+		// Only agents (subagents and Gentle tasks) are tasks: shell commands and the current tool call are not.
+		const running = (knownTasks?.running ?? []).filter(task => task.agentId);
+		const finished = (knownTasks?.finished ?? []).filter(task => task.agentId);
+		for (const task of running) {
 			this.taskRow(section, task);
 		}
-		if (board.running.length === 0 && !status?.running) {
+		if (running.length === 0) {
 			this.row(section, Codicon.check, localize('picode.overview.idle', "Nothing running"));
 		}
-		if (board.finished.length > 0) {
+		if (finished.length > 0) {
 			const row = this.row(section, this.showFinished ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.finished', "Finished"));
-			append(row, $('span.picode-overview-value')).textContent = String(board.finished.length);
+			append(row, $('span.picode-overview-value')).textContent = String(finished.length);
 			this.clickable(row, () => {
 				this.showFinished = !this.showFinished;
 				this.paint();
 			});
 			if (this.showFinished) {
-				for (const task of board.finished) {
+				for (const task of finished) {
 					this.taskRow(section, task).classList.add('nested');
 				}
 			}
@@ -583,6 +576,11 @@ class PicodeSidebarStatusContribution extends Disposable implements IWorkbenchCo
 			return;
 		}
 		const previous = this.changesTab;
+		// Pressed again while the changes are open: close them instead of refreshing.
+		if (previous && this.editorService.findEditors(previous).length > 0) {
+			await this.editorService.closeEditors(this.editorService.findEditors(previous));
+			return;
+		}
 		this.changesTab = URI.parse(`multi-diff-editor:picode-changes-${Date.now()}`);
 		if (previous) {
 			await this.editorService.closeEditors(this.editorService.findEditors(previous));
