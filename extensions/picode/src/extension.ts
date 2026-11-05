@@ -82,6 +82,7 @@ import { REASONING_SETTING, THINKING_TOGGLE_COMMAND } from './piConfig';
 import { describeTargets, fetchNpmLatest, parseSnapshot, PI_RUNTIME_PACKAGE, runPiUpdate, updatableTargets, UPDATES_STATE_KEY, type CandidateTarget, type UpdatesSnapshot } from './updates-check';
 import { locateNpmCli } from './npm-run';
 import { diffStat, DIFF_STAT_COMMAND } from './diff-stat';
+import { recordTiming, timed, timingReport } from './perf-timings';
 import { modelPricing, type PiModelCost } from './model-info';
 
 /**
@@ -1110,7 +1111,12 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.commands.registerCommand(PACKAGES_COMMAND, async (): Promise<PiPackageRow[]> => packageRows()));
 
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
-	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? diffStat(folder) : undefined));
+	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
+	// Not in the palette: the table a performance change is compared with (docs/RENDIMIENTO.md).
+	disposables.push(vscode.commands.registerCommand('picode.perf.report', async () => {
+		const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: timingReport() });
+		await vscode.window.showTextDocument(document, { preview: true });
+	}));
 
 	// "Launched agents": the HOST panel's row opens this. The count the panel shows is the
 	// same listing read (`agents.ts`), so the picker answers what the number promises — the
@@ -2456,6 +2462,8 @@ function requireProfileUri(): vscode.Uri {
 const voice = new VoiceController(os.homedir(), voiceManifestFor(process.platform, process.arch), { install: installVoice, readState: readVoiceState, remove: removeVoice, downloadSize: voiceDownloadSize });
 
 export function activate(context: vscode.ExtensionContext): void {
+	const activationStart = performance.now();
+	queueMicrotask(() => recordTiming('activation', performance.now() - activationStart));
 	// Everything this window starts — pi in process, npm, the helpers a package may run — inherits
 	// the product's fixed environment: nothing is fetched by an install script, nothing reports usage.
 	applyProductEnv(process.env, profileDirectory(context.extensionUri));
@@ -2642,6 +2650,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		participant: piParticipant,
 		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },
 		profileDir: profileInForce,
+		listingCacheFile: path.join(context.globalStorageUri.fsPath, 'sessions-listing.json'),
 	});
 	context.subscriptions.push(piSessions, new vscode.Disposable(disposeResumedSessions));
 

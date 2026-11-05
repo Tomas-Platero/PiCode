@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { timed } from './perf-timings.ts';
 
 /**
  * pi's sessions, in the editor's Sessions panel.
@@ -262,7 +263,12 @@ export interface SessionsFs {
 	 */
 	list(dir: string): string[] | undefined;
 	mtime(file: string): number;
+	/** The two ends of a long transcript; undefined when it is short enough to read whole. */
+	readEnds?(file: string): { readonly head: string; readonly tail: string } | undefined;
 }
+
+/** How much of each end of a transcript is read to describe it. */
+const TRANSCRIPT_END_BYTES = 64 * 1024;
 
 /**
  * What a walk produced, and whether it could finish.
@@ -300,6 +306,27 @@ const nodeFs: SessionsFs = {
 			return 0;
 		}
 	},
+	readEnds: file => {
+		let handle: number | undefined;
+		try {
+			handle = openSync(file, 'r');
+			const size = fstatSync(handle).size;
+			if (size <= TRANSCRIPT_END_BYTES * 2) {
+				return undefined;
+			}
+			const head = Buffer.alloc(TRANSCRIPT_END_BYTES);
+			const tail = Buffer.alloc(TRANSCRIPT_END_BYTES);
+			readSync(handle, head, 0, TRANSCRIPT_END_BYTES, 0);
+			readSync(handle, tail, 0, TRANSCRIPT_END_BYTES, size - TRANSCRIPT_END_BYTES);
+			return { head: head.toString('utf8'), tail: tail.toString('utf8') };
+		} catch {
+			return undefined;
+		} finally {
+			if (handle !== undefined) {
+				closeSync(handle);
+			}
+		}
+	},
 };
 
 /**
@@ -313,6 +340,47 @@ const nodeFs: SessionsFs = {
  * moves with every write.
  */
 const listingCache = new Map<string, { mtime: number; label: string; id: string; parent?: string; lastRole?: PiSessionFile['lastRole'] }>();
+
+/** Whether `listingCache` holds something the saved copy does not. */
+let listingCacheChanged = false;
+
+const LISTING_CACHE_VERSION = 1;
+
+/** The cache as text, for the next window to start from. */
+export function serializeListingCache(): string {
+	return JSON.stringify({ version: LISTING_CACHE_VERSION, entries: [...listingCache] });
+}
+
+/** Starts from a saved cache. Each row is still checked against its file's mtime; a damaged one is simply not there. */
+export function restoreListingCache(text: string): void {
+	let saved: unknown;
+	try {
+		saved = JSON.parse(text);
+	} catch {
+		return;
+	}
+	if (!isRecord(saved) || saved['version'] !== LISTING_CACHE_VERSION || !Array.isArray(saved['entries'])) {
+		return;
+	}
+	for (const entry of saved['entries']) {
+		if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !isRecord(entry[1])) {
+			continue;
+		}
+		const { mtime, label, id, parent, lastRole } = entry[1];
+		if (typeof mtime === 'number' && typeof label === 'string' && typeof id === 'string'
+			&& (parent === undefined || typeof parent === 'string')
+			&& (lastRole === undefined || lastRole === 'user' || lastRole === 'assistant' || lastRole === 'toolResult')) {
+			listingCache.set(entry[0], { mtime, label, id, parent, lastRole });
+		}
+	}
+}
+
+/** Whether the cache changed since this was last asked. */
+export function takeListingCacheChange(): boolean {
+	const changed = listingCacheChanged;
+	listingCacheChanged = false;
+	return changed;
+}
 
 /** The project slug a transcript's own header records, cached against the mtime it was read at. */
 const headerSlugCache = new Map<string, { mtime: number; slug: string | undefined }>();
@@ -622,7 +690,7 @@ function listBySlugs(sessionsDir: string, slugs: ReadonlySet<string>, fs: Sessio
 			dirs.push(entry);
 		}
 	}
-	const walk = listFromDirs(dirs, rootFiles, fs);
+	const walk = timed('sessions: listing', () => listFromDirs(dirs, rootFiles, fs));
 	// The header cache keeps every root transcript seen this refresh, matched or not; the
 	// entries left over belong to files that are gone.
 	pruneHeaderSlugCache(rootEntries);
@@ -679,6 +747,7 @@ function listFromDirs(roots: readonly string[], extraFiles: readonly string[], f
 	for (const cached of listingCache.keys()) {
 		if (!seen.has(cached)) {
 			listingCache.delete(cached);
+			listingCacheChanged = true;
 		}
 	}
 	// Newest first, and **the same order every time**: the mtime alone leaves files written
@@ -724,6 +793,32 @@ export function reuseRows<T>(
 	});
 }
 
+interface TranscriptFacts {
+	readonly header: Record<string, unknown> | undefined;
+	readonly opening: string | undefined;
+	readonly lastRole: PiSessionFile['lastRole'];
+}
+
+function factsOf(text: string): TranscriptFacts {
+	return { header: sessionHeader(text), opening: firstUserPrompt(text), lastRole: lastMessageRole(text) };
+}
+
+/**
+ * The same facts from a long transcript's two ends: the opening is near the start and the last turn
+ * at the end, so the megabytes between say nothing. An answer an end cut in two reads as no answer,
+ * and that is the one case that still reads the whole file.
+ */
+function factsFromEnds(file: string, fs: SessionsFs): TranscriptFacts | undefined {
+	const ends = fs.readEnds?.(file);
+	if (ends === undefined) {
+		return undefined;
+	}
+	const header = sessionHeader(ends.head);
+	const opening = firstUserPrompt(ends.head);
+	const lastRole = lastMessageRole(ends.tail.slice(ends.tail.indexOf('\n') + 1));
+	return header === undefined || opening === undefined || lastRole === undefined ? undefined : { header, opening, lastRole };
+}
+
 /** One transcript's listing entry, from or into the mtime-keyed cache. */
 function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	const stat = fs.mtime(entry);
@@ -740,17 +835,16 @@ function describeTranscript(entry: string, fs: SessionsFs): PiSessionFile {
 	// New or modified file: read it once and remember what it says until it moves again. The
 	// three questions — which conversation this is, who launched it, and what its last turn is
 	// doing — are all answered from that one read.
-	const text = fs.read(entry);
-	const header = sessionHeader(text);
-	const opening = firstUserPrompt(text);
+	const facts = factsFromEnds(entry, fs) ?? factsOf(fs.read(entry));
+	const { header, opening, lastRole } = facts;
 	const firstPrompt = (opening === undefined ? '' : ownerPrompt(opening))
 		|| path.basename(entry).replace(/\.jsonl$/, '');
 	const idMatch = path.basename(entry).match(/([0-9a-f]{8}-[0-9a-f-]{27,})\.jsonl$/i);
 	const label = firstPrompt.length > 80 ? `${firstPrompt.slice(0, 80)}…` : firstPrompt;
 	const id = idMatch?.[1] ?? path.basename(entry, '.jsonl');
 	const parent = typeof header?.parentSession === 'string' ? header.parentSession : undefined;
-	const lastRole = lastMessageRole(text);
 	listingCache.set(entry, { mtime, label, id, parent, lastRole });
+	listingCacheChanged = true;
 	return { id, file: entry, label, mtime, parent, lastRole };
 }
 
@@ -815,7 +909,7 @@ export function listingForPanel<T>(built: T[], previous: T[] | undefined, publis
  * callers that genuinely want every project.
  */
 export function listSessionFiles(sessionsDir: string, fs: SessionsFs = nodeFs): PiSessionFile[] {
-	return listFromDirs([sessionsDir], [], fs).files;
+	return timed('sessions: listing', () => listFromDirs([sessionsDir], [], fs).files);
 }
 
 /* ------------------------------------------------------------------ *

@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { AgentDeps } from './agent';
 import { piResumeRequestHandler } from './sessions-resume';
-import { areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
+import { restoreListingCache, serializeListingCache, takeListingCacheChange, areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
 import { projectSlugsOfWindow, resolveProjectScope, windowSessionScope } from './runtime';
 import { coarseMinute, transcriptDigest } from './sessions-digest';
 
@@ -32,10 +32,35 @@ export interface PiSessionsOptions {
 	readonly deps: AgentDeps;
 	/** The profile whose `sessions/` folder is listed, read at each listing. */
 	readonly profileDir: () => string;
+	/** Where the listing's cache is kept between starts: the editor's own storage, never the profile of an external pi. */
+	readonly listingCacheFile: string;
 }
+
+/** How long the listing settles before its cache is saved. */
+const LISTING_CACHE_SAVE_DELAY_MS = 2_000;
 
 export function registerPiSessionsProvider(options: PiSessionsOptions): { fireChanged(): void } & vscode.Disposable {
 	const changed = new vscode.EventEmitter<void>();
+	try {
+		restoreListingCache(fs.readFileSync(options.listingCacheFile, 'utf8'));
+	} catch {
+		// No cache yet: the first listing reads the transcripts and writes one.
+	}
+	let saving: ReturnType<typeof setTimeout> | undefined;
+	/** Saves in the background; written aside first, so two windows or a crash never leave half a file. */
+	const saveListingCacheSoon = (): void => {
+		if (saving !== undefined || !takeListingCacheChange()) {
+			return;
+		}
+		saving = setTimeout(() => {
+			saving = undefined;
+			const aside = `${options.listingCacheFile}.${process.pid}`;
+			void fs.promises.mkdir(path.dirname(options.listingCacheFile), { recursive: true })
+				.then(() => fs.promises.writeFile(aside, serializeListingCache()))
+				.then(() => fs.promises.rename(aside, options.listingCacheFile))
+				.catch(() => fs.promises.rm(aside, { force: true }).catch(() => undefined));
+		}, LISTING_CACHE_SAVE_DELAY_MS);
+	};
 	// The last listing the panel accepted. A cancelled or unpublishable refresh returns it, not
 	// `[]`: the extension-host bridge diffs by reference and removes every item absent from the
 	// returned array, so an empty answer would clear the panel until the next good one.
@@ -58,6 +83,7 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 			const report = scope.mode === 'workspace' && scope.slugs[0] !== undefined
 				? areaConversationsReport(sessionsDir(), scope.slugs[0])
 				: conversationsReport(sessionsDir(), scope.slugs);
+			saveListingCacheSoon();
 			const built = report.files.map(file => ({
 				resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
 				label: file.label,
@@ -162,6 +188,9 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 		dispose: () => {
 			if (settle !== undefined) {
 				clearTimeout(settle);
+			}
+			if (saving !== undefined) {
+				clearTimeout(saving);
 			}
 			watcher?.close();
 			folders.dispose();
