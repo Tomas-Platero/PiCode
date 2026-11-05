@@ -213,6 +213,17 @@ export class ChatViewWelcomePart extends Disposable {
 				const tipsResult = this._register(this.markdownRendererService.render(content.tips));
 				tips.appendChild(tipsResult.element);
 			}
+
+			// PiCode: one-click starting points
+			if (content.suggestions?.length) {
+				const suggestions = dom.append(this.element, $('.chat-welcome-view-suggestions'));
+				for (const suggestion of content.suggestions) {
+					const button = dom.append(suggestions, $('button.chat-welcome-view-suggestion', { type: 'button' }));
+					button.appendChild(renderIcon(suggestion.icon));
+					dom.append(button, $('span.chat-welcome-view-suggestion-label')).textContent = suggestion.label;
+					this._register(dom.addDisposableListener(button, dom.EventType.CLICK, () => suggestion.run()));
+				}
+			}
 		} catch (err) {
 			this.logService.error('Failed to render chat view welcome content', err);
 		}
