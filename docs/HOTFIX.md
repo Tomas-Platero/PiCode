@@ -114,7 +114,8 @@ que la gente la descargue entera. Para ver un cambio mientras se trabaja sigue v
 
 - La parte **pública** vive en `product.json` (`hotfixPublicKey`).
 - La parte **privada** es el secreto del repositorio `HOTFIX_SIGNING_KEY` (el contenido del `.pem`).
-  Sin él, el pipeline no hace paquetes pequeños y las releases salen enteras.
+  **Es obligatorio:** el pipeline lo comprueba al empezar (`check-signing-key`) y se para si falta o no
+  coincide con la pública, porque también firma el aviso de actualización completa (ADR-040).
 - Se crea con `node build/hotfix.mjs keygen --out <fichero.pem>`, que imprime la clave pública.
 - Cambiar de clave exige una **release completa** con la nueva pública dentro: los paquetes
   firmados con la nueva no valen para quien lleve la vieja.

@@ -1718,3 +1718,34 @@ lo son. El arranque del asistente queda fuera: corre en la carpeta del propio pr
 - Una prueba (`extensions/picode/test/project-trust.test.ts`) falla si un arranque nuevo de pi no lo indica.
 - **Sigue sin cubrir:** los ficheros de contexto (`AGENTS.md`) se leen sin confianza, como hace el propio pi. No ejecutan
   código, pero sí pueden intentar engañar al modelo (riesgo pendiente de la revisión).
+
+---
+
+## ADR-040 — Inicio de sesión ligado a cada intento y actualizaciones completas firmadas
+
+> *"Ponte con esto"* — 2026-11-05, sobre dos riesgos de la revisión de seguridad: «El inicio de sesión se puede falsificar» y «Las actualizaciones completas no van firmadas».
+
+**Inicio de sesión.** Cualquier web podía abrir `picode://auth/callback?code=…` con un código de su propia cuenta y dejar el
+editor conectado a ella. Si nadie esperaba, el código se guardaba para el siguiente inicio de sesión. Ahora cada intento
+envía un valor aleatorio (`state`) que vuelve con la respuesta, y se ignora lo que no lo traiga. Ya no se guarda nada para
+después. La web no cambia, porque añade `&code=` a la dirección que recibe y el valor viaja dentro.
+
+**Actualizaciones completas.** Solo se comprobaban contra un código del propio aviso, así que quien pudiera cambiar el aviso
+decidía qué ejecutaba cada editor. Ahora el aviso va firmado con la misma clave que los hotfix (`updateSignature.ts`). La firma
+cubre el canal, el destino, las versiones y el código del fichero. Un editor que lleva la clave pública ignora el aviso que no
+la cumpla. Las copias compiladas en local también la llevan, así que también comprueban.
+
+**Consecuencias.**
+- El pipeline se para al empezar si la clave falta o no coincide. Antes solo se quedaba sin hotfix.
+- Si la clave se perdiera, una release con otra clave no llegaría sola a los editores ya instalados: habría que instalarla a mano.
+- La versión que trae esta comprobación se recibe con el actualizador de antes; desde ella, todo aviso ha de ir firmado.
+- Un aviso rechazado se apunta en el registro y, para la persona, es como si no hubiera actualización.
+- **Sigue sin cubrir:** la firma de Windows (Authenticode). Necesita comprar un certificado; sin ella, Windows sigue avisando de
+  editor desconocido al instalar. Es decisión del dueño.
+- **Sin probar de punta a punta:** la clave real del repositorio solo se comprueba en el pipeline, y el camino completo con la
+  primera release que lleve esto.
+
+**Adenda (2026-11-05): los comandos siguen sin confirmación.** *"Dejarlo como está"*. El dueño conoció el riesgo y lo aceptó: el
+chat no pregunta antes de ejecutar, igual que el terminal de pi, y el selector *Ask / Allow all* no cambia nada. Solo actúan las
+protecciones de gentle-pi, sin comprobar en un editor en marcha. Un `AGENTS.md` o una web maliciosa podrían engañar al modelo para
+ejecutar comandos que gentle-pi no considere peligrosos.

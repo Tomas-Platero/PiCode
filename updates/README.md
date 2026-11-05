@@ -108,3 +108,5 @@ feed carries one, falling back to `productVersion` for an older feed.
 **Not unified**: an installation released *before* the two-number split still reports
 VSCodium's `1.135.06055`. It sorts above a normal `1.135.x`, so those installs would never
 be offered an update. Nothing can be done from here — it is the version they already have.
+
+> Desde ADR-040 `update-feed` exige `HOTFIX_SIGNING_KEY` para firmar el aviso; `--unsigned` es solo para una copia compilada sin la clave pública.
