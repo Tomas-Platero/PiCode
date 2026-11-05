@@ -1693,3 +1693,28 @@ tenían traducción ninguna.
 - El título de un comando tiene que vivir en `package.nls.json` (`%clave%`): un texto suelto en
   `package.json` no se puede traducir.
 - El detalle, la herramienta y las reglas al escribir texto nuevo: [`IDIOMAS.md`](IDIOMAS.md).
+
+---
+
+## ADR-039 — pi solo carga el `.pi` de una carpeta si el editor confía en ella
+
+> *"Sí, arréglalo"* — 2026-11-05, sobre el hallazgo de la revisión de seguridad: abrir una carpeta podía ejecutar su código.
+
+**Contexto.** El `.pi` de un proyecto trae extensiones, paquetes, ajustes y servidores MCP: código que corre con los
+permisos del usuario. pi confía en todo proyecto salvo que se le diga lo contrario (`SettingsManager.create`, con
+`projectTrusted` a `true` por defecto), y su pregunta de confianza solo existe en su terminal. PiCode no le decía nada, así
+que un repositorio descargado ejecutaba sus extensiones aunque la ventana estuviera en modo restringido. Comprobado con la
+1.4.0 de pi: una extensión de prueba en `.pi/extensions` se ejecutó solo con crear los servicios.
+
+**Decisión.** La confianza del espacio de trabajo del editor es la única respuesta, y cada arranque de pi la pasa
+(`settingsForFolder`, en `extensions/picode/src/folder-trust.ts`). Una carpeta es de confianza solo si la ventana lo es y la
+carpeta es una de las abiertas o está dentro de una. Una conversación retomada en otra carpeta o una ventana sin carpeta no
+lo son. El arranque del asistente queda fuera: corre en la carpeta del propio producto.
+
+**Consecuencias.**
+- En modo restringido, el editor tampoco lista ni arranca los MCP, agentes y skills del `.pi` del proyecto.
+- Al conceder la confianza, las listas se recalculan y el siguiente turno arranca un pi que ya lo carga. Una conversación en
+  curso en esa ventana se reinicia.
+- Una prueba (`extensions/picode/test/project-trust.test.ts`) falla si un arranque nuevo de pi no lo indica.
+- **Sigue sin cubrir:** los ficheros de contexto (`AGENTS.md`) se leen sin confianza, como hace el propio pi. No ejecutan
+  código, pero sí pueden intentar engañar al modelo (riesgo pendiente de la revisión).

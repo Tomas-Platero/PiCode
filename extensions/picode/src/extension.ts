@@ -36,6 +36,7 @@ import {
 } from './packages-manage';
 import { packageSkillDirs, parsePackageSource, parseSettings, piPackages, projectPackageScope, userPackageScope, type PackageReadResult, type PiPackage } from './packages-data';
 import { loadPiSdk, mcpOauthModuleOf, importPiModule, sdkCandidates, type OfficialSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { offlineAccessScope } from './mcp-scopes';
 import { externalProfileDir } from './profile-import';
 import {
@@ -895,7 +896,7 @@ function mcpConfigFiles(profileDir: string): McpConfigFile[] {
 		}
 	};
 	add(path.join(profileDir, 'mcp.json'), 'user');
-	for (const folder of workspaceFolderPaths()) {
+	for (const folder of vscode.workspace.isTrusted ? workspaceFolderPaths() : []) {
 		add(path.join(folder, '.pi', 'mcp.json'), 'local');
 	}
 	return files;
@@ -985,13 +986,13 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	const agentsProvider: vscode.ChatCustomAgentProvider = {
 		onDidChangeCustomAgents: changed.event,
-		provideCustomAgents: (): NamedChatResource[] => discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader)
+		provideCustomAgents: (): NamedChatResource[] => discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader)
 			.map(agent => ({ uri: vscode.Uri.file(agent.file), name: agent.name, ...(agent.description === undefined ? {} : { description: agent.description }) })),
 	};
 
 	/** Where pi's skills are right now: the packages it has decide part of it. */
 	const currentSkillRoots = (): readonly ResourceRoot[] =>
-		skillRoots(profileInForce(), workspaceFolderPaths(), readPackages().packages.flatMap(found => packageSkillDirs(found.path, fsReader)));
+		skillRoots(profileInForce(), trustedWorkspaceDirs(), readPackages().packages.flatMap(found => packageSkillDirs(found.path, fsReader)));
 
 	const skillsProvider: vscode.ChatSkillProvider = {
 		onDidChangeSkills: changed.event,
@@ -1044,7 +1045,7 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	disposables.push(vscode.chat.registerChatSessionCustomizationProvider('pi', { label: 'PiCode' }, {
 		onDidChange: changed.event,
 		provideChatSessionCustomizations: async () => [
-			...discoverAgents(agentRoots(profileInForce(), workspaceFolderPaths()), fsReader).map(agent => ({
+			...discoverAgents(agentRoots(profileInForce(), trustedWorkspaceDirs()), fsReader).map(agent => ({
 				uri: vscode.Uri.file(agent.file),
 				type: customizationType.Agent,
 				name: agent.name,
@@ -1094,6 +1095,14 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 	// were already open stay where they are, which is enough: the event makes the page re-ask.
 	disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
 		packages = undefined;
+		changed.fire();
+	}));
+	// Trusting the folder opens its `.pi`: the lists re-ask, and the next turn starts a pi that loads it.
+	disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+		packages = undefined;
+		forgetPiRuntime();
+		resetChatSession();
+		disposeResumedSessions();
 		changed.fire();
 	}));
 
@@ -1540,6 +1549,7 @@ interface PiRuntimeServices {
 }
 
 interface PiRuntimeSdk {
+	SettingsManager: OfficialSdk['SettingsManager'];
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
@@ -1726,7 +1736,7 @@ async function subscriptionModels(distributionRoot: string, agentDir: string | u
 			// installed here (hidden, one run) rather than being left for pi's loader to install
 			// with its own process — and its own window — per package.
 			await ensureProfilePackages({ profileDir: profileDirectory(requireProfileUri()), runtimeRoot: piRuntimeRoot(distributionRoot), npmCli: locateNpmCli(), log: line => console.error(`[picode] ${line}`) });
-			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) }) };
+			runtimeCache = { cwd, agentDir, services: await sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }), ...settingsForFolder(sdk, cwd, agentDir) }) };
 		}
 	} catch {
 		// A runtime that cannot be built is "no models from pi": the declared providers are still
@@ -2635,6 +2645,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// A folder added or removed changes the working directory a discovery session would
 	// read, so the command list is read again.
 	context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => piCommands.refresh()));
+	context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => piCommands.refresh()));
 
 	// Connecting a provider with a subscription. It is a **list** and not a chain of windows: pi
 	// says which of its providers can be logged in with an account the owner already pays for,
