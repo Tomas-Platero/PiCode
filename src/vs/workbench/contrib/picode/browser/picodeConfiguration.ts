@@ -12,6 +12,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // startup (from the chat and preferences contributions). Keeping the registration inside
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
+import './account/picodeAccount.contribution.js';
 import './picodeMcpSection.js';
 import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';

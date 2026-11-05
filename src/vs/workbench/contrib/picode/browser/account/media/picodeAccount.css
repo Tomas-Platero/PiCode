@@ -1,0 +1,302 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.picode-account {
+	display: flex;
+	height: 100%;
+	color: var(--vscode-foreground);
+}
+
+/* Side list */
+.picode-account-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 0 0 188px;
+	padding: 20px 10px;
+	border-right: 1px solid var(--vscode-panel-border);
+}
+
+.picode-account-nav-title {
+	padding: 0 10px 14px;
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: 0.2px;
+}
+
+.picode-account-nav-item {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px;
+	border: none;
+	border-radius: 6px;
+	background: none;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-account-nav-item:hover {
+	background: var(--vscode-list-hoverBackground);
+	color: var(--vscode-foreground);
+}
+
+.picode-account-nav-item.selected {
+	background: var(--vscode-list-hoverBackground);
+	color: var(--vscode-foreground);
+	font-weight: 600;
+}
+
+.picode-account-nav-item.selected::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 7px;
+	bottom: 7px;
+	width: 3px;
+	border-radius: 2px;
+	background: var(--vscode-button-background);
+}
+
+.picode-account-nav-item:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+/* Page */
+.picode-account-content {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+}
+
+.picode-account-page {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	max-width: 680px;
+	padding: 28px 36px 36px;
+}
+
+.picode-account-page h2 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.picode-account-page h3 {
+	margin: 10px 0 0;
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-account-lead,
+.picode-account-muted {
+	margin: 0;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Cards */
+.picode-account-card {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 16px 18px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 10px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-account-card-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-account-avatar {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.picode-account-email {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-account-badge {
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-account-badge.pro {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-account-sync-state {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.picode-account-sync-state.ok .codicon {
+	color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.picode-account-sync-state.warn .codicon {
+	color: var(--vscode-editorWarning-foreground);
+}
+
+.picode-account-sync-state.busy .codicon {
+	color: var(--vscode-progressBar-background);
+}
+
+/* Buttons */
+.picode-account-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.picode-account-actions .monaco-button,
+.picode-account-tile-foot .monaco-button {
+	width: auto;
+	padding: 5px 16px;
+	border-radius: 6px;
+}
+
+/* Lists */
+.picode-account-list {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.picode-account-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 16px;
+}
+
+.picode-account-row + .picode-account-row {
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+label.picode-account-row:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-account-row-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-account-row-text span {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-account-state {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Connections */
+.picode-account-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 12px;
+}
+
+.picode-account-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 16px 18px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 10px;
+	background: var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-account-tile-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 14px;
+}
+
+.picode-account-tile .picode-account-muted {
+	flex: 1;
+}
+
+.picode-account-tile-foot {
+	display: flex;
+	align-items: center;
+	min-height: 28px;
+}
+
+/* A narrow window turns the side list into a row of tabs. */
+@media (max-width: 620px) {
+	.picode-account {
+		flex-direction: column;
+	}
+
+	.picode-account-nav {
+		flex: 0 0 auto;
+		flex-direction: row;
+		flex-wrap: wrap;
+		padding: 12px;
+		border-right: none;
+		border-bottom: 1px solid var(--vscode-panel-border);
+	}
+
+	.picode-account-nav-title {
+		flex: 1 0 100%;
+		padding-bottom: 6px;
+	}
+
+	.picode-account-page {
+		padding: 20px 16px 28px;
+	}
+}
