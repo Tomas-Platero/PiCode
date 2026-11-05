@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.5-experimental",
+			"notes": "### 🧠 Memory\n\n- Updating the memory engine now takes effect: after it downloads, PiCode offers **Restart engine** (and does it for you with **Update all**), so the new version runs without closing every window.\n- A version that is already downloaded is no longer offered again; the panel tells you a restart is all that's missing.\n- The update dialog shows a single **Cancel** button.\n\n### ✨ Chat\n\n- **Undo these changes** under a change card now asks first, turns grey once used, and says so if the changes were already undone. It is drawn as a quiet action with an icon instead of a solid blue button."
+		},
+		{
 			"version": "1.0.4-experimental",
 			"notes": "### 🐛 Fixed\n\n- chat, Status and memory polish, pasted images reach pi; release v1.0.4-experimental (#151)"
 		},
