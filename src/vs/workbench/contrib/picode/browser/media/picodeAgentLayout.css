@@ -556,3 +556,14 @@
 .monaco-workbench .chat-input-picker-item.chat-session-target-picker-item {
 	display: none;
 }
+
+/* -- legibility in the Agent layout --------------------------------------------------------- */
+
+/* The small grey texts (the chat's notice, the box's hint, the session groups) were nearly
+   invisible on the dark panels: they keep their quiet role but read clearly. */
+.monaco-workbench.picode-agent .disclaimer,
+.monaco-workbench.picode-agent .chat-input-container .editor-placeholder,
+.monaco-workbench.picode-agent .agent-session-section .agent-session-section-label,
+.monaco-workbench.picode-agent .agent-session-section .agent-session-section-count {
+	color: color-mix(in srgb, var(--vscode-foreground) 68%, transparent);
+}

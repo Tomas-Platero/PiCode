@@ -129,6 +129,14 @@ export interface IChatViewWelcomeContent {
 	readonly useLargeIcon?: boolean;
 	/** PiCode: draw PiCode's own mark (theme body, blue accents) instead of the icon. */
 	readonly picodeMark?: boolean;
+	/** PiCode: one-click starting points shown under the greeting. */
+	readonly suggestions?: ReadonlyArray<IChatViewWelcomeSuggestion>;
+}
+
+export interface IChatViewWelcomeSuggestion {
+	readonly icon: ThemeIcon;
+	readonly label: string;
+	readonly run: () => void;
 }
 
 export interface IChatViewWelcomeRenderOptions {

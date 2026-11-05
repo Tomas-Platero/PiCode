@@ -118,6 +118,7 @@ export class PicodeAgentOverview extends Disposable {
 	private readonly renderDisposables = this._register(new DisposableStore());
 	/** Whether the finished tasks are unfolded. */
 	private showFinished = false;
+	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
 
 	constructor(
@@ -217,8 +218,16 @@ export class PicodeAgentOverview extends Disposable {
 		this.renderEnvironment(this.root);
 		this.renderContext(this.root);
 		this.renderConnectors(this.root);
-		this.renderChanges(this.root);
-		this.renderTasks(this.root);
+		const tasks = this.agentTasks();
+		if (this.changedFiles() === 0 && tasks.running.length === 0 && tasks.finished.length === 0) {
+			// Nothing to show in either: one quiet block instead of two titled ones.
+			const quiet = this.section(this.root, undefined);
+			this.row(quiet, Codicon.diff, localize('picode.overview.noChanges', "Nothing changed"));
+			this.row(quiet, Codicon.check, localize('picode.overview.idle', "Nothing running"));
+		} else {
+			this.renderChanges(this.root);
+			this.renderTasks(this.root);
+		}
 		this.renderMemory(this.root);
 	}
 
@@ -241,10 +250,30 @@ export class PicodeAgentOverview extends Disposable {
 		await this.refreshConnectors();
 	}
 
-	private section(parent: HTMLElement, title: string): HTMLElement {
+	private section(parent: HTMLElement, title: string | undefined): HTMLElement {
 		const section = append(parent, $('.picode-overview-section'));
-		append(section, $('.picode-overview-title')).textContent = title;
+		if (title) {
+			append(section, $('.picode-overview-title')).textContent = title;
+		}
 		return section;
+	}
+
+	private changedFiles(): number {
+		let files = 0;
+		for (const repository of this.scmService.repositories) {
+			for (const group of repository.provider.groups) {
+				files += group.resources.length;
+			}
+		}
+		return files;
+	}
+
+	private agentTasks(): { running: ITaskRow[]; finished: ITaskRow[] } {
+		// Only agents (subagents and Gentle tasks) are tasks: shell commands and the current tool call are not.
+		return {
+			running: (knownTasks?.running ?? []).filter(task => task.agentId),
+			finished: (knownTasks?.finished ?? []).filter(task => task.agentId)
+		};
 	}
 
 	private row(parent: HTMLElement, icon: ThemeIcon, label: string, detail?: string): HTMLElement {
@@ -329,13 +358,26 @@ export class PicodeAgentOverview extends Disposable {
 		if (connectors === undefined) {
 			return;
 		}
-		const section = this.section(parent, localize('picode.overview.connectors', "MCPs"));
 		if (connectors.length === 0) {
-			const row = this.row(section, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
+			const empty = this.section(parent, localize('picode.overview.connectors', "MCPs"));
+			const row = this.row(empty, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
 			this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
 			return;
 		}
+		// Folded by default: only the ones that need the user (sign in, off) stay visible.
+		const section = append(parent, $('.picode-overview-section'));
+		const heading = this.row(section, this.showConnectors ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.connectors', "MCPs"));
+		heading.classList.add('picode-overview-title');
+		append(heading, $('span.picode-overview-value')).textContent = String(connectors.length);
+		this.clickable(heading, () => {
+			this.showConnectors = !this.showConnectors;
+			this.paint();
+		});
 		for (const connector of connectors) {
+			const needsYou = connector.signIn === 'needed' || connector.on === false;
+			if (!this.showConnectors && !needsYou) {
+				continue;
+			}
 			// The same mark the chat settings' MCP list shows: the service's own logo, or its initials.
 			const row = append(section, $('.picode-overview-row'));
 			append(row, $('span.picode-overview-logo')).appendChild(createServiceLogo(connector.name));
@@ -350,12 +392,7 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderChanges(parent: HTMLElement): void {
-		let files = 0;
-		for (const repository of this.scmService.repositories) {
-			for (const group of repository.provider.groups) {
-				files += group.resources.length;
-			}
-		}
+		const files = this.changedFiles();
 		const section = this.section(parent, localize('picode.overview.changes', "Changes"));
 		const filesLabel = files === 0
 			? localize('picode.overview.noChanges', "Nothing changed")
@@ -386,9 +423,7 @@ export class PicodeAgentOverview extends Disposable {
 	/** The chat's background work: what the connector's Tasks block shows, running first, then what finished. */
 	private renderTasks(parent: HTMLElement): void {
 		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
-		// Only agents (subagents and Gentle tasks) are tasks: shell commands and the current tool call are not.
-		const running = (knownTasks?.running ?? []).filter(task => task.agentId);
-		const finished = (knownTasks?.finished ?? []).filter(task => task.agentId);
+		const { running, finished } = this.agentTasks();
 		for (const task of running) {
 			this.taskRow(section, task);
 		}
@@ -457,7 +492,10 @@ export class PicodeAgentOverview extends Disposable {
 		} else {
 			for (const project of memory.projects ?? []) {
 				const row = this.row(section, project.open ? Codicon.folderOpened : Codicon.folder, project.name);
-				append(row, $('span.picode-overview-value')).textContent = String(project.memories);
+				// With one project the heading already says how many memories there are.
+				if ((memory.projects?.length ?? 0) > 1) {
+					append(row, $('span.picode-overview-value')).textContent = String(project.memories);
+				}
 				this.clickable(row, () => void this.runAndRefresh(MEMORY_TOGGLE_PROJECT_COMMAND, project.name));
 				for (const hit of project.open ? project.rows ?? [] : []) {
 					const memoryRow = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
