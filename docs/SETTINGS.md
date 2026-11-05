@@ -78,8 +78,9 @@ que configurarla para tenerla:
 ### Dos desviaciones, a propósito
 
 1. **No se aprueban terminales por adelantado.** El documento pedía permitir `ls`, `git status`,
-   `npm test` sin preguntar. PiCode pregunta siempre: es la promesa del producto («te pregunta antes
-   de hacer»), y una lista de comandos «seguros» envejece mal — `cat` sobre `.env` filtra secretos.
+   `npm test` sin preguntar. Hoy no aplica: el chat no pregunta por ningún comando, por decisión del dueño
+   (2026-11-05, ver ADR-040). Si algún día pregunta, una lista de comandos «seguros» envejece mal: `cat`
+   sobre `.env` filtra secretos.
 2. **`chat.mcp.autostart` sigue en `never`.** La guía pedía arrancar los servidores MCP con el
    editor. Se deja en nunca a propósito: arrancar servidores de terceros sin pedirlo es una decisión
    del dueño, y está a un ajuste de distancia.
