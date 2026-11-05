@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { fetchModelIds } from './endpoint';
 import { loadPiSdk, type OfficialSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { projectDeclaration } from './declarations';
@@ -113,6 +114,7 @@ interface CatalogShape {
 }
 
 interface RuntimeSdk {
+	SettingsManager: OfficialSdk['SettingsManager'];
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 
@@ -145,9 +147,11 @@ export async function listModels(deps: WizardModelDeps): Promise<{ models: Wizar
 			// here (hidden, one run) so pi's loader never installs one itself — its per-package
 			// installs each flashed a console window on Windows.
 			await ensureProfilePackages({ profileDir: deps.profileDir, runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli() });
+			const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 			const services = await loaded.sdk.createAgentSessionServices({
-				cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+				cwd,
 				agentDir: deps.profileDir,
+				...settingsForFolder(loaded.sdk, cwd, deps.profileDir),
 			});
 			// The view keeps the reads defensive: every member is optional here, so a pi without
 			// one of them is "no catalogue for that part", not a compile error against pi's own type.
