@@ -1749,3 +1749,30 @@ la cumpla. Las copias compiladas en local también la llevan, así que también 
 chat no pregunta antes de ejecutar, igual que el terminal de pi, y el selector *Ask / Allow all* no cambia nada. Solo actúan las
 protecciones de gentle-pi, sin comprobar en un editor en marcha. Un `AGENTS.md` o una web maliciosa podrían engañar al modelo para
 ejecutar comandos que gentle-pi no considere peligrosos.
+
+## ADR-041 — La cuenta tiene su propia ventana, y todo lo Pro vive en ella
+
+> *"Quiero un panel a parte solo para «Account» como el que tenemos de «Chat Settings» donde poder ver todo lo que se sincroniza bien, a parte todo lo «pro» de la app que quiero añadir debería ir ahí no solo la sync."* — 2026-11-06
+
+**Qué se decide.** La cuenta deja de ser un menú y una fila suelta: tiene una ventana modal propia, *Account*, con páginas
+laterales (Overview, Cloud sync, Connections, Pro features). Es un editor distinto del de Chat Settings, con su propio registro de
+páginas (`picodeAccountSections.ts`), para que lo de pi y lo de la cuenta no se mezclen. Detalle y uso: [`CUENTA.md`](CUENTA.md).
+
+**Una sola puerta Pro.** `IPicodeProEntitlement` responde «¿hay sesión? ¿es Pro?» a toda función Pro. Lee el plan que el inicio de
+sesión dejó guardado. **Es un reflejo, no un cerrojo:** quien manda sigue siendo el servidor (`402`, ADR-017), así que manipular el
+valor local solo cambia lo que se ve.
+
+**Los conectores (GitHub, Jira) caben sin tocar la ventana.** Se declaran con `registerConnector` y salen en *Connections* como
+«Coming soon»; quien construya uno solo pone `available` y su comando de conexión, y la tarjeta ya viene detrás del
+control Pro. Su lógica queda fuera de este ADR.
+
+**Consecuencias.**
+- La sesión de pi que se subía a la nube leía de `~/.pi/agent`, que PiCode no toca nunca (sección 4 de `AGENTS.md`). Ahora lee del
+  perfil propio (`<perfil>/sessions`). Quien hubiera subido sesiones del pi externo no las pierde en la nube, pero ya no se
+  renuevan desde ahí.
+- La sync del perfil reutiliza lo leído mientras el tamaño y la fecha del fichero no cambian, y el backup de sesiones no relee
+  los transcritos sin cambios. Es la primera mejora de rendimiento; la subida por fichero y por trozos sigue pendiente (necesita
+  un endpoint nuevo en `host/cloud/sync-api`).
+- **Sigue fuera de la sync, a propósito:** `mcp.json` puede llevar claves de servicios, y la nube solo cifra en el servidor, no
+  de extremo a extremo. Hasta decidir cómo limpiarlo o cifrarlo, no sube. Tampoco la memoria de engram (`~/.engram`, ADR-022):
+  es una base viva y compartida que pide su propio diseño.

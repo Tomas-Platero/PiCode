@@ -203,6 +203,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Valor comercial:** Sincronización y respaldo en la nube de toda la configuración (PiCode y Pi) como un único bloque.
 * **Unidad de perfil:** Toda la configuración vive en un perfil interno propio que se sube/baja como una unidad aislada.
 * **Seguridad de credenciales:** `auth.json` y tokens requieren cifrado y consentimiento explícito del usuario antes de subir a la nube.
+* **Todo lo Pro vive en la ventana Account** (2026-11-06): la sync y las funciones Pro futuras (por ejemplo, conectores con las issues de GitHub o Jira) se muestran y se activan ahí, detrás de una sola comprobación de plan. Ver [`docs/CUENTA.md`](docs/CUENTA.md).
 
 ---
 
@@ -454,3 +455,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **2026-11-05** · Inicio de sesión y actualizaciones más seguros («Ponte con esto», sobre el reporte de seguridad): una web ya no puede conectar el editor a otra cuenta, porque cada intento lleva un valor propio que debe volver con la respuesta; y las actualizaciones completas van firmadas, así que el editor ignora un aviso de actualización que no venga de PiCode. Falta la firma de Windows, que necesita certificado (ADR-040).
 * **2026-11-05** · Los comandos del chat siguen sin pedir confirmación («Dejarlo como está»): el dueño conoce el riesgo de que un fichero o una web engañen al modelo y lo acepta; solo actúan las protecciones de gentle-pi (ADR-040, adenda).
 * **2026-11-05** · Release 1.0.8 («saca la 1.0.8»): lleva el inicio de sesión ligado a cada intento y las actualizaciones completas firmadas (ADR-040). Es la primera release que firma su aviso de actualización.
+* **2026-11-06** · La cuenta tiene su propia ventana y todo lo Pro vive en ella («quiero un panel a parte solo para "Account" como el que tenemos de "Chat Settings»… todo lo "pro" de la app que quiero añadir debería ir ahí no solo la sync»): *Overview*, *Cloud sync* (qué se sincroniza, con interruptor por categoría), *Connections* y *Pro features*. Los conectores de issues de GitHub y Jira serán solo Pro y se enganchan a esa ventana sin tocarla. El backup de sesiones lee ya del perfil propio y no de `~/.pi` (ADR-041, [`docs/CUENTA.md`](docs/CUENTA.md)).
