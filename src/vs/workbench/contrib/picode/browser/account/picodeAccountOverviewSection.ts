@@ -55,16 +55,19 @@ class PicodeAccountOverviewSection extends Disposable {
 		const text = DOM.append(card, $('.picode-account-card-text'));
 		const name = DOM.append(text, $('span.picode-account-email'));
 		DOM.append(name, $('span')).textContent = email;
-		const badge = DOM.append(name, $(`span.picode-account-badge.${this.entitlement.isPro ? 'pro' : 'free'}`));
-		badge.textContent = this.entitlement.isPro ? localize('picodeAccountPlanPro', "Pro") : localize('picodeAccountPlanFree', "Free");
-		DOM.append(text, $('span.picode-account-muted')).textContent = this.entitlement.isPro
-			? localize('picodeAccountProLine', "Cloud sync and connections are included.")
-			: localize('picodeAccountFreeLine', "Upgrade to keep your setup in the cloud.");
+		const plan = this.entitlement.plan;
+		if (plan !== 'unknown') {
+			const badge = DOM.append(name, $(`span.picode-account-badge.${plan}`));
+			badge.textContent = plan === 'pro' ? localize('picodeAccountPlanPro', "Pro") : localize('picodeAccountPlanFree', "Free");
+		}
+		DOM.append(text, $('span.picode-account-muted')).textContent = plan === 'free'
+			? localize('picodeAccountFreeLine', "Upgrade to keep your setup in the cloud.")
+			: localize('picodeAccountProLine', "Cloud sync and connections are included.");
 
 		const actions = DOM.append(page, $('.picode-account-actions'));
 		const origin = this.productService.picode?.webOrigin;
 		if (origin) {
-			const isPro = this.entitlement.isPro;
+			const isPro = this.entitlement.plan !== 'free';
 			const plans = this.button(actions, isPro ? localize('picodeAccountManagePlan', "Manage plan") : localize('picodeAccountUpgrade', "Upgrade to Pro"), isPro);
 			this.renderStore.add(plans.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}/pricing`)); }));
 		}

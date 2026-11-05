@@ -13,7 +13,8 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
 import { PICODE_EMAIL_STORAGE_KEY, PICODE_PLAN_STORAGE_KEY } from '../picodeAccountProvider.js';
 
-export type PicodeAccountPlan = 'free' | 'pro';
+/** `unknown` is a session that was handed over by the setup window: it carries no plan until the next sign-in. */
+export type PicodeAccountPlan = 'free' | 'pro' | 'unknown';
 
 /**
  * What the signed-in account is entitled to, as the editor last saw it.
@@ -55,11 +56,16 @@ class PicodeProEntitlement extends Disposable implements IPicodeProEntitlement {
 	}
 
 	get plan(): PicodeAccountPlan {
-		return this.storageService.get(PICODE_PLAN_STORAGE_KEY, StorageScope.APPLICATION) === 'pro' ? 'pro' : 'free';
+		const stored = this.storageService.get(PICODE_PLAN_STORAGE_KEY, StorageScope.APPLICATION);
+		return stored === 'pro' ? 'pro' : stored === 'free' ? 'free' : 'unknown';
 	}
 
+	/**
+	 * Only a plan known to be Free locks a feature. When the plan is not known the screen stays
+	 * open and the service has the last word, so a Pro account is never shown a closed door.
+	 */
 	get isPro(): boolean {
-		return this.signedIn && this.plan === 'pro';
+		return this.signedIn && this.plan !== 'free';
 	}
 }
 
