@@ -25,7 +25,7 @@ export interface ConversationSource {
 	/** The transcript of the conversation asking, so it is not mistaken for an earlier one. */
 	current(): string | undefined;
 	/** The turns of one transcript, the owner's words without the editor's frame; empty when unreadable. */
-	turns(file: string): readonly PiSessionTurn[];
+	turns(file: string): readonly PiSessionTurn[] | Promise<readonly PiSessionTurn[]>;
 }
 
 export const LIST_TOOL = 'past_conversations';
@@ -55,7 +55,7 @@ export function conversationText(turns: readonly PiSessionTurn[]): string {
 }
 
 /** The list, or with a query the conversations whose text holds it, with a snippet of each hit. */
-export function listConversations(source: ConversationSource, query: string | undefined, limit = DEFAULT_LIMIT): string {
+export async function listConversations(source: ConversationSource, query: string | undefined, limit = DEFAULT_LIMIT): Promise<string> {
 	const files = source.list();
 	const current = source.current();
 	const cap = Math.max(1, Math.min(Math.floor(limit), 100));
@@ -73,7 +73,9 @@ export function listConversations(source: ConversationSource, query: string | un
 		if (hits.length >= cap) {
 			break;
 		}
-		const text = conversationText(source.turns(file.file));
+		// One transcript at a time, handing the turn back in between: a long search must not hold the chat up.
+		const text = conversationText(await source.turns(file.file));
+		await new Promise(resolve => setImmediate(resolve));
 		const lower = text.toLowerCase();
 		const snippets: string[] = [];
 		let at = lower.indexOf(needle);
@@ -92,7 +94,7 @@ export function listConversations(source: ConversationSource, query: string | un
 }
 
 /** One conversation's text, a page at a time. `id` may be the short id the list shows. */
-export function readConversation(source: ConversationSource, id: string, offset = 0): string {
+export async function readConversation(source: ConversationSource, id: string, offset = 0): Promise<string> {
 	const wanted = id.trim().toLowerCase();
 	const listed = source.list();
 	const exact = listed.filter(file => file.id.toLowerCase() === wanted);
@@ -104,7 +106,7 @@ export function readConversation(source: ConversationSource, id: string, offset 
 		throw new Error(`"${id}" matches more than one conversation; give more of the id.`);
 	}
 	const file = matches[0];
-	const text = conversationText(source.turns(file.file));
+	const text = conversationText(await source.turns(file.file));
 	const start = Math.max(0, Math.floor(offset));
 	const page = text.slice(start, start + READ_PAGE_CHARS);
 	const end = start + page.length;
@@ -136,7 +138,7 @@ export function pastConversationTools(source: ConversationSource): PiToolDefinit
 			},
 			execute: async (_id, params) => {
 				const input = (params ?? {}) as { query?: unknown; limit?: unknown };
-				return result(listConversations(
+				return result(await listConversations(
 					source,
 					typeof input.query === 'string' ? input.query : undefined,
 					typeof input.limit === 'number' ? input.limit : DEFAULT_LIMIT,
@@ -158,7 +160,7 @@ export function pastConversationTools(source: ConversationSource): PiToolDefinit
 			},
 			execute: async (_id, params) => {
 				const input = (params ?? {}) as { id?: unknown; offset?: unknown };
-				return result(readConversation(
+				return result(await readConversation(
 					source,
 					typeof input.id === 'string' ? input.id : '',
 					typeof input.offset === 'number' ? input.offset : 0,

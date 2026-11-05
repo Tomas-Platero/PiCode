@@ -15,7 +15,8 @@ import { readPiChatSettings } from './piConfig';
 import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFile } from './mcp-provider';
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
-import { STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
+import { timed } from './perf-timings';
+import { MCP_SERVERS_COMMAND, STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import type { VoiceStatus } from './voice-controller';
@@ -478,6 +479,16 @@ export function registerUsagePanelCommand(distributionRoot: string): vscode.Disp
 	return vscode.commands.registerCommand(USAGE_PANEL_COMMAND, () => readUsagePanel(distributionRoot));
 }
 
+/** The MCP rows of the profile in force, the project and the live sessions. */
+function readAllMcpServers(runtime: 'internal' | 'external', profileDir: string): readonly McpServerSwitch[] {
+	const profileMcpServers = readMcpServers(profileDir, runtime);
+	return mergeMcpServers(
+		profileMcpServers,
+		readProjectMcpServers(),
+		discoveredMcpServers(profileMcpServers.map(row => row.name), liveSessionMcpServers()),
+	);
+}
+
 /** Builds the one answer the status tree renders, from the profile in force. */
 export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	const runtime = readRuntimeMode();
@@ -488,12 +499,7 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 	// looking for exactly this.
 	const reasoning = readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).showReasoning ? 'shown' as const : 'hidden' as const;
 	const usage = getSessionUsage();
-	const profileMcpServers = readMcpServers(profileDir, runtime);
-	const mcpServers = mergeMcpServers(
-		profileMcpServers,
-		readProjectMcpServers(),
-		discoveredMcpServers(profileMcpServers.map(row => row.name), liveSessionMcpServers()),
-	);
+	const mcpServers = readAllMcpServers(runtime, profileDir);
 	const scope = resolveProjectScope();
 	const projects = scope.mode === 'workspace'
 		? await Promise.all(scope.folders.map(async folder => ({
@@ -544,5 +550,11 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 
 /** Registers the command the status surface calls; the caller collects the disposable. */
 export function registerStatusDataCommand(deps: StatusDeps): vscode.Disposable {
-	return vscode.commands.registerCommand(STATUS_DATA_COMMAND, (): Promise<StatusData> => buildStatusData(deps));
+	return vscode.Disposable.from(
+		vscode.commands.registerCommand(STATUS_DATA_COMMAND, (): Promise<StatusData> => timed('status: full reading', () => buildStatusData(deps))),
+		vscode.commands.registerCommand(MCP_SERVERS_COMMAND, () => timed('status: MCPs', () => {
+			const runtime = readRuntimeMode();
+			return readAllMcpServers(runtime, runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot));
+		})),
+	);
 }

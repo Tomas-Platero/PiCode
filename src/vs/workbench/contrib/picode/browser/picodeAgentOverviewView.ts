@@ -22,6 +22,8 @@ import { ViewContainerLocation } from '../../../common/views.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { PICODE_STATUS_CONTAINER_ID, sidebarSideColumn } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
@@ -34,14 +36,20 @@ import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
  * full its context is, which MCPs it has, what changed and what is still running.
  *
  * Every row is read from what the editor already knows — the workspace, source control, the chat's
- * last answer, pi's own status (`picode.setup.status`) and the jobs the connector pushes — and
+ * last answer, pi's own MCP list (`picode.setup.mcpServers`) and the jobs the connector pushes — and
  * nothing is guessed: a fact that is not there is left out rather than shown as a zero.
  */
-const STATUS_DATA_COMMAND = 'picode.setup.status';
+const MCP_SERVERS_COMMAND = 'picode.setup.mcpServers';
 const DIFF_STAT_COMMAND = 'picode.git.diffStat';
 
 /** How often the panel re-reads what has no event of its own (context use, pi's connectors). */
 const REFRESH_MS = 4000;
+
+/** The same, with the window in the background: still current, at a fraction of the work. */
+const BACKGROUND_REFRESH_MS = 30_000;
+
+/** The line count follows file changes; this is only the safety net for a change no event told of. */
+const DIFF_SAFETY_MS = 60_000;
 
 interface IConnector {
 	readonly name: string;
@@ -78,9 +86,10 @@ interface IMemorySummary {
 	readonly retried?: boolean;
 	readonly heading?: string;
 	readonly detail?: string;
-	readonly projects?: readonly { readonly name: string; readonly memories: number; readonly open?: boolean; readonly rows?: readonly { readonly id: number; readonly title: string; readonly when: string; readonly icon: string }[] }[];
-	readonly search?: { readonly query: string; readonly total: number; readonly rows: readonly { readonly id: number; readonly title: string; readonly project: string; readonly when: string; readonly icon: string }[] };
+	readonly projects?: readonly { readonly name: string; readonly memories: number; readonly open?: boolean; readonly moreLabel?: string; readonly emptyLabel?: string; readonly rows?: readonly { readonly id: number; readonly title: string; readonly when: string; readonly icon: string }[] }[];
+	readonly search?: { readonly query: string; readonly total: number; readonly capped?: boolean; readonly emptyLabel?: string; readonly moreLabel?: string; readonly rows: readonly { readonly id: number; readonly title: string; readonly project: string; readonly when: string; readonly icon: string }[] };
 	readonly newerEngine?: string;
+	readonly filter?: { readonly label: string; readonly detail?: string; readonly clearLabel?: string };
 }
 
 const TASKS_DATA_COMMAND = 'picode.tasks.data';
@@ -90,6 +99,9 @@ const MEMORY_SEARCH_COMMAND = 'picode.memory.search';
 const MEMORY_CLEAR_SEARCH_COMMAND = 'picode.memory.clearSearch';
 const MEMORY_OPEN_COMMAND = 'picode.memory.open';
 const MEMORY_TOGGLE_PROJECT_COMMAND = 'picode.memory.toggleProject';
+const MEMORY_SHOW_MORE_COMMAND = 'picode.memory.showMoreInColumn';
+const MEMORY_FILTER_COMMAND = 'picode.memory.filter';
+const MEMORY_CLEAR_FILTER_COMMAND = 'picode.memory.clearFilter';
 const MEMORY_CHECK_COMMAND = 'picode.memory.check';
 const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 
@@ -120,6 +132,13 @@ export class PicodeAgentOverview extends Disposable {
 	private showFinished = false;
 	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
+	/** The readings still waiting for an answer: a slow one is not asked again on top of itself. */
+	private readonly reading = new Set<string>();
+	/** Files changed since the line count was read. */
+	private diffStale = true;
+	private diffReadAt = 0;
+	/** What the column last drew, so a reading that changed nothing leaves it (and its hover) alone. */
+	private painted: string | undefined;
 
 	constructor(
 		parent: HTMLElement,
@@ -131,6 +150,8 @@ export class PicodeAgentOverview extends Disposable {
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IHostService private readonly hostService: IHostService,
+		@IFileService fileService: IFileService,
 	) {
 		super();
 		if (knownConnectors === undefined) {
@@ -146,7 +167,17 @@ export class PicodeAgentOverview extends Disposable {
 		this.root = append(parent, $('.picode-overview'));
 
 		this._register(onDidChangePicodeAgentStatus(() => this.paint()));
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this.paint()));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
+			this.diffStale = true;
+			this.paint();
+		}));
+		this._register(fileService.onDidFilesChange(event => {
+			const folder = this.workspaceService.getWorkspace().folders[0];
+			if (folder && event.affects(folder.uri)) {
+				this.diffStale = true;
+			}
+		}));
+		this._register(this.hostService.onDidChangeFocus(() => this.setLive(true)));
 		this._register(this.scmService.onDidAddRepository(() => this.paint()));
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
 		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => this.paint()));
@@ -161,8 +192,8 @@ export class PicodeAgentOverview extends Disposable {
 			this.timer = undefined;
 		}
 		if (live) {
-			void this.refreshConnectors();
-			this.timer = setInterval(() => void this.refreshConnectors(), REFRESH_MS);
+			this.refresh();
+			this.timer = setInterval(() => this.refresh(), this.hostService.hasFocus ? REFRESH_MS : BACKGROUND_REFRESH_MS);
 		}
 	}
 
@@ -174,38 +205,74 @@ export class PicodeAgentOverview extends Disposable {
 		super.dispose();
 	}
 
-	private async refreshConnectors(): Promise<void> {
-		try {
-			const data = await this.commandService.executeCommand<{ mcpServers?: readonly IConnector[] }>(STATUS_DATA_COMMAND);
-			knownConnectors = Array.isArray(data?.mcpServers) ? data.mcpServers : [];
-		} catch {
-			// pi is not answering yet: keep what it said last, if anything
-		}
-		const folder = this.workspaceService.getWorkspace().folders[0];
-		try {
-			knownDiff = folder ? await this.commandService.executeCommand<{ added: number; removed: number }>(DIFF_STAT_COMMAND, folder.uri.fsPath) : undefined;
-		} catch {
-			// pi is not answering yet: keep the last count
-		}
-		try {
+	private refresh(): void {
+		void this.read('connectors', async () => {
+			const servers = await this.commandService.executeCommand<readonly IConnector[]>(MCP_SERVERS_COMMAND);
+			knownConnectors = Array.isArray(servers) ? servers : [];
+		});
+		void this.read('tasks', async () => {
 			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
-		} catch {
-			// pi is not answering yet: the chat's own status stands in (see `renderTasks`)
+		});
+		void this.read('memory', () => this.readMemory());
+		// Only counted where it is drawn: with no changed file the column shows no lines at all.
+		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
+			void this.read('diff', async () => {
+				this.diffStale = false;
+				this.diffReadAt = Date.now();
+				const folder = this.workspaceService.getWorkspace().folders[0];
+				knownDiff = folder ? await this.commandService.executeCommand<{ added: number; removed: number }>(DIFF_STAT_COMMAND, folder.uri.fsPath) : undefined;
+			});
 		}
+		// Nothing to read for these, but the tick is what notices them.
+		this.publish();
+	}
+
+	/** One reading at a time per kind. pi not answering yet is no fault: what it said last stands. */
+	private async read(kind: string, work: () => Promise<void>): Promise<void> {
+		if (this.reading.has(kind)) {
+			return;
+		}
+		this.reading.add(kind);
 		try {
-			const memory = await this.commandService.executeCommand<IMemorySummary>(MEMORY_SUMMARY_COMMAND);
-			// While the engine wakes, what it said last stands; its first answer replaces it.
-			if (memory && (memory.state === 'ready' || knownMemory === undefined)) {
-				knownMemory = memory;
-			}
+			await work();
 		} catch {
-			// pi is not answering yet: keep what memory said last
+			// See above.
+		} finally {
+			this.reading.delete(kind);
+		}
+		this.publish();
+	}
+
+	private async readMemory(): Promise<void> {
+		const memory = await this.commandService.executeCommand<IMemorySummary>(MEMORY_SUMMARY_COMMAND);
+		// While the engine wakes, what it said last stands; its first answer replaces it.
+		if (memory && (memory.state === 'ready' || knownMemory === undefined)) {
+			knownMemory = memory;
+		}
+	}
+
+	/** Keeps what was read for the next start, and draws it if it differs from what is on screen. */
+	private publish(): void {
+		if (this.disposed) {
+			return;
 		}
 		const lastSeen = JSON.stringify({ connectors: knownConnectors, diff: knownDiff, memory: knownMemory?.state === 'ready' ? { ...knownMemory, search: undefined } : undefined });
 		if (lastSeen !== this.storageService.get(LAST_SEEN_KEY, StorageScope.WORKSPACE)) {
 			this.storageService.store(LAST_SEEN_KEY, lastSeen, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		}
-		this.paint();
+		if (this.fingerprint() !== this.painted) {
+			this.paint();
+		}
+	}
+
+	/** Everything `paint` draws from, apart from the folds, which repaint by themselves. */
+	private fingerprint(): string {
+		return JSON.stringify([
+			knownConnectors, knownDiff, knownTasks, knownMemory,
+			this.changedFiles(), this.currentBranch(), this.contextUsage(),
+			this.workspaceService.getWorkspace().folders[0]?.uri.toString(),
+			this.contextKeyService.getContextKeyValue<boolean>(MEMORY_ENABLED_CONTEXT),
+		]);
 	}
 
 	private paint(): void {
@@ -213,6 +280,7 @@ export class PicodeAgentOverview extends Disposable {
 		if (this.disposed) {
 			return;
 		}
+		this.painted = this.fingerprint();
 		this.renderDisposables.clear();
 		clearNode(this.root);
 		this.renderEnvironment(this.root);
@@ -244,10 +312,15 @@ export class PicodeAgentOverview extends Disposable {
 		}));
 	}
 
-	/** Runs one of the connector's commands, then reads again so the column shows its effect. */
-	private async runAndRefresh(command: string, ...args: unknown[]): Promise<void> {
+	/** Runs one of memory's commands and shows its effect at once, without waiting on anything else. */
+	private async runMemoryCommand(command: string, ...args: unknown[]): Promise<void> {
 		await this.commandService.executeCommand(command, ...args);
-		await this.refreshConnectors();
+		try {
+			await this.readMemory();
+		} catch {
+			// Not answering: the row that says so comes with the next reading.
+		}
+		this.publish();
 	}
 
 	private section(parent: HTMLElement, title: string | undefined): HTMLElement {
@@ -445,6 +518,13 @@ export class PicodeAgentOverview extends Disposable {
 		}
 	}
 
+	/** "Show N more" under a list of memories: a project's, or the search's without one. */
+	private moreRow(parent: HTMLElement, label: string, project?: string): void {
+		const row = this.row(parent, Codicon.ellipsis, label);
+		row.classList.add('nested');
+		this.clickable(row, () => void this.runMemoryCommand(MEMORY_SHOW_MORE_COMMAND, project));
+	}
+
 	private taskRow(parent: HTMLElement, task: ITaskRow): HTMLElement {
 		const row = this.row(parent, ThemeIcon.fromId(task.icon), task.title);
 		append(row, $('span.picode-overview-value')).textContent = task.detail;
@@ -473,21 +553,27 @@ export class PicodeAgentOverview extends Disposable {
 		if (memory.state === 'unavailable') {
 			const row = this.row(section, Codicon.warning, localize('picode.overview.memoryDown', "Memory is not answering"));
 			row.classList.add('attention');
-			this.action(row, localize('picode.overview.memoryCheck', "Check"), () => void this.runAndRefresh(MEMORY_CHECK_COMMAND));
+			this.action(row, localize('picode.overview.memoryCheck', "Check"), () => void this.runMemoryCommand(MEMORY_CHECK_COMMAND));
 			return;
 		}
 		const heading = this.row(section, Codicon.database, memory.heading ?? '', memory.detail);
 		if (memory.newerEngine) {
-			this.action(heading, localize('picode.overview.memoryUpdate', "Update"), () => void this.runAndRefresh(MEMORY_UPDATE_COMMAND));
+			this.action(heading, localize('picode.overview.memoryUpdate', "Update"), () => void this.runMemoryCommand(MEMORY_UPDATE_COMMAND));
 		}
 		if (memory.search) {
 			const results = this.row(section, Codicon.search, localize('picode.overview.memoryResults', "“{0}”", memory.search.query));
-			append(results, $('span.picode-overview-value')).textContent = String(memory.search.total);
-			this.action(results, localize('picode.overview.memoryClear', "Clear"), () => void this.runAndRefresh(MEMORY_CLEAR_SEARCH_COMMAND));
+			append(results, $('span.picode-overview-value')).textContent = `${memory.search.total}${memory.search.capped ? '+' : ''}`;
+			this.action(results, localize('picode.overview.memoryClear', "Clear"), () => void this.runMemoryCommand(MEMORY_CLEAR_SEARCH_COMMAND));
 			for (const hit of memory.search.rows) {
 				const row = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
 				row.classList.add('nested');
 				this.clickable(row, () => void this.commandService.executeCommand(MEMORY_OPEN_COMMAND, { id: hit.id }), hit.project);
+			}
+			if (memory.search.emptyLabel) {
+				this.row(section, Codicon.circleSlash, memory.search.emptyLabel).classList.add('nested');
+			}
+			if (memory.search.moreLabel) {
+				this.moreRow(section, memory.search.moreLabel);
 			}
 		} else {
 			for (const project of memory.projects ?? []) {
@@ -496,16 +582,29 @@ export class PicodeAgentOverview extends Disposable {
 				if ((memory.projects?.length ?? 0) > 1) {
 					append(row, $('span.picode-overview-value')).textContent = String(project.memories);
 				}
-				this.clickable(row, () => void this.runAndRefresh(MEMORY_TOGGLE_PROJECT_COMMAND, project.name));
+				this.clickable(row, () => void this.runMemoryCommand(MEMORY_TOGGLE_PROJECT_COMMAND, project.name));
 				for (const hit of project.open ? project.rows ?? [] : []) {
 					const memoryRow = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
 					memoryRow.classList.add('nested');
 					this.clickable(memoryRow, () => void this.commandService.executeCommand(MEMORY_OPEN_COMMAND, { id: hit.id }));
 				}
+				if (project.open && project.emptyLabel) {
+					this.row(section, Codicon.circleSlash, project.emptyLabel).classList.add('nested');
+				}
+				if (project.open && project.moreLabel) {
+					this.moreRow(section, project.moreLabel, project.name);
+				}
 			}
 		}
 		const search = this.row(section, Codicon.search, localize('picode.overview.memorySearch', "Search memories…"));
-		this.clickable(search, () => void this.runAndRefresh(MEMORY_SEARCH_COMMAND));
+		this.clickable(search, () => void this.runMemoryCommand(MEMORY_SEARCH_COMMAND));
+		if (memory.filter) {
+			const filter = this.row(section, Codicon.filter, memory.filter.label, memory.filter.detail);
+			this.clickable(filter, () => void this.runMemoryCommand(MEMORY_FILTER_COMMAND));
+			if (memory.filter.clearLabel) {
+				this.action(filter, memory.filter.clearLabel, () => void this.runMemoryCommand(MEMORY_CLEAR_FILTER_COMMAND));
+			}
+		}
 		const check = this.row(section, Codicon.pulse, localize('picode.overview.memoryCheckRow', "Check memory"));
 		this.clickable(check, () => void this.commandService.executeCommand(MEMORY_CHECK_COMMAND));
 	}
