@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { loadPiSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piRuntimeRoot, readRuntimeMode, sdkEntryCandidates } from './runtime';
@@ -151,9 +152,11 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 		// (hidden, one run) so pi's loader never installs one itself — its per-package installs
 		// each flashed a console window on Windows.
 		await ensureProfilePackages({ profileDir: deps.profileDir, runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli() });
+		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 		const services = await sdk.createAgentSessionServices({
-			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+			cwd,
 			agentDir: deps.profileDir,
+			...settingsForFolder(sdk, cwd, deps.profileDir),
 		});
 		runtime = services.modelRuntime;
 	} catch (error) {

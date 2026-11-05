@@ -61,6 +61,7 @@ import {
 	type BackgroundCall,
 } from './background-cards';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
@@ -266,6 +267,8 @@ interface PiSessionStats {
 export type PiServices = Awaited<ReturnType<OfficialSdk['createAgentSessionServices']>>;
 
 export interface PiSdk {
+	/** Told whether the folder is trusted, so pi does not load an untrusted folder's `.pi`. */
+	SettingsManager: OfficialSdk['SettingsManager'];
 	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP) (`resourceLoaderOptions`, see `mcp.ts`). */
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 	/** What this editor passes: `customTools` are the editor's MCP tools given to pi as its own (see `mcp.ts`), `excludeTools` the agent tools that stay off (see `piConfig.ts`). */
@@ -2029,6 +2032,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				chat.services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
+					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
 						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 					},
@@ -2259,7 +2263,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				const controller = new AbortController();
 				token.onCancellationRequested(() => controller.abort());
 				pinAgentDir(agentDir);
-				const services = await loaded.sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
+				const services = await loaded.sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }), ...settingsForFolder(loaded.sdk, cwd, agentDir) });
 				return compareModels(chosen.map(item => item.ref), async (ref, signal) => {
 					const slash = ref.indexOf('/');
 					const model = services.modelRuntime.getModel(ref.slice(0, slash), ref.slice(slash + 1));
