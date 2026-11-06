@@ -480,6 +480,49 @@ function offerSignIn(): void {
 	});
 }
 
+/** The setting the Account window's *Chats* switch writes. */
+const AUTO_BACKUP_SETTING = 'picode.sync.chats';
+const AUTO_BACKUP_FIRST_RUN_MS = 60_000;
+const AUTO_BACKUP_INTERVAL_MS = 10 * 60_000;
+
+/**
+ * Backs the recent chats up in the background while the *Chats* switch is on.
+ *
+ * Silent on purpose: no progress window, no message. A run only uploads what changed (the same
+ * incremental state as the manual command), runs one at a time, and every failure — signed out,
+ * offline, over quota — just waits for the next turn.
+ */
+export function registerAutomaticSessionsBackup(deps: SessionsBackupDeps): vscode.Disposable {
+	let running = false;
+	const run = async (): Promise<void> => {
+		if (running || vscode.workspace.getConfiguration().get<boolean>(AUTO_BACKUP_SETTING) !== true) {
+			return;
+		}
+		running = true;
+		try {
+			await runSessionsBackup(deps);
+		} catch (error) {
+			if (!(error instanceof NotSignedInError)) {
+				console.error('[pi] automatic chat backup failed:', error);
+			}
+		} finally {
+			running = false;
+		}
+	};
+	const first = setTimeout(() => void run(), AUTO_BACKUP_FIRST_RUN_MS);
+	const timer = setInterval(() => void run(), AUTO_BACKUP_INTERVAL_MS);
+	const onChange = vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration(AUTO_BACKUP_SETTING)) {
+			void run();
+		}
+	});
+	return new vscode.Disposable(() => {
+		clearTimeout(first);
+		clearInterval(timer);
+		onChange.dispose();
+	});
+}
+
 /**
  * The two backup commands, registered against the editor's own surfaces.
  *

@@ -12,9 +12,10 @@ import { localize } from '../../../../../nls.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
+import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
 import { defaultButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
-import { PICODE_AUTH_PROVIDER_ID } from '../picodeAccountProvider.js';
+import { PICODE_AUTH_PROVIDER_ID, PICODE_PICTURE_STORAGE_KEY } from '../picodeAccountProvider.js';
 import { registerAccountSection } from './picodeAccountSections.js';
 import { IPicodeProEntitlement } from './picodeProEntitlement.js';
 
@@ -30,6 +31,7 @@ class PicodeAccountOverviewSection extends Disposable {
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IProductService private readonly productService: IProductService,
+		@IStorageService private readonly storageService: IStorageService,
 	) {
 		super();
 		this.render();
@@ -51,7 +53,17 @@ class PicodeAccountOverviewSection extends Disposable {
 
 		const email = this.entitlement.email ?? '';
 		const card = DOM.append(page, $('.picode-account-card'));
-		DOM.append(card, $('span.picode-account-avatar')).textContent = email.charAt(0).toUpperCase();
+		const avatar = DOM.append(card, $('span.picode-account-avatar'));
+		avatar.textContent = email.charAt(0).toUpperCase();
+		const picture = this.storageService.get(PICODE_PICTURE_STORAGE_KEY, StorageScope.APPLICATION);
+		if (picture) {
+			// The photo replaces the initial; if it cannot be loaded the initial stays.
+			const image = $<HTMLImageElement>('img.picode-account-avatar-image');
+			image.alt = '';
+			image.referrerPolicy = 'no-referrer';
+			this.renderStore.add(DOM.addDisposableListener(image, DOM.EventType.LOAD, () => { avatar.textContent = ''; avatar.appendChild(image); }));
+			image.src = picture;
+		}
 		const text = DOM.append(card, $('.picode-account-card-text'));
 		const name = DOM.append(text, $('span.picode-account-email'));
 		DOM.append(name, $('span')).textContent = email;

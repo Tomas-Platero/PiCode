@@ -11,6 +11,7 @@ import { fromNow } from '../../../../../base/common/date.js';
 import { Disposable, DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { defaultButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { IUserDataSyncEnablementService, IUserDataSyncService, SyncResource, SyncStatus } from '../../../../../platform/userDataSync/common/userDataSync.js';
@@ -18,6 +19,9 @@ import { registerAccountSection } from './picodeAccountSections.js';
 import { IPicodeProEntitlement } from './picodeProEntitlement.js';
 
 const $ = DOM.$;
+
+/** The switch the Chats row flips; the connector reads it to back chats up in the background. */
+const CHATS_SETTING = 'picode.sync.chats';
 
 /** What the user can switch on or off, in the order they read it, said in plain words. */
 const CATEGORIES: readonly { readonly resource: SyncResource; readonly label: string; readonly description: string }[] = [
@@ -39,8 +43,10 @@ class PicodeAccountSyncSection extends Disposable {
 		@IUserDataSyncService private readonly userDataSyncService: IUserDataSyncService,
 		@IUserDataSyncEnablementService private readonly enablementService: IUserDataSyncEnablementService,
 		@ICommandService private readonly commandService: ICommandService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
+		this._register(this.configurationService.onDidChangeConfiguration(e => { if (e.affectsConfiguration(CHATS_SETTING)) { this.render(); } }));
 		this.render();
 		this._register(this.entitlement.onDidChange(() => this.render()));
 		this._register(this.userDataSyncService.onDidChangeStatus(() => this.render()));
@@ -109,19 +115,27 @@ class PicodeAccountSyncSection extends Disposable {
 			this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => this.enablementService.setResourceEnablement(resource, box.checked)));
 		}
 
-		this.renderConversations(page);
+		this.renderChats(list);
 	}
 
-	/** Conversations are backed up on request: each transcript is its own copy in the cloud. */
-	private renderConversations(page: HTMLElement): void {
-		DOM.append(page, $('h3')).textContent = localize('picodeSyncConversations', "Conversations");
-		const card = DOM.append(page, $('.picode-account-card'));
-		const text = DOM.append(card, $('.picode-account-card-text'));
-		DOM.append(text, $('strong')).textContent = localize('picodeSyncConversationsTitle', "Your recent chats");
-		DOM.append(text, $('span.picode-account-muted')).textContent = localize('picodeSyncConversationsDescription', "Keep the chats of the last 7 days in the cloud, or bring them back on this computer.");
-		const actions = DOM.append(card, $('.picode-account-actions'));
-		this.button(actions, localize('picodeSyncBackUp', "Back up"), false, 'picode.backupSessions');
-		this.button(actions, localize('picodeSyncRestore', "Restore"), true, 'picode.restoreSessions');
+	/**
+	 * Chats are one more row of the list. They are copied by the connector, one file per chat, while the
+	 * switch is on; *Restore* brings the copies back on this computer.
+	 */
+	private renderChats(list: HTMLElement): void {
+		// The button sits beside the label, not inside it, so pressing it does not flip the switch.
+		const row = DOM.append(list, $('.picode-account-row'));
+		const toggle = DOM.append(row, $('label.picode-account-row-label'));
+		const box = DOM.append(toggle, $('input')) as HTMLInputElement;
+		box.setAttribute('type', 'checkbox');
+		box.checked = this.configurationService.getValue<boolean>(CHATS_SETTING) === true;
+		const text = DOM.append(toggle, $('.picode-account-row-text'));
+		DOM.append(text, $('strong')).textContent = localize('picodeSyncChats', "Chats");
+		DOM.append(text, $('span')).textContent = localize('picodeSyncChatsDescription', "Your chats of the last 7 days.");
+		this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => { void this.configurationService.updateValue(CHATS_SETTING, box.checked); }));
+		const restore = this.renderStore.add(new Button(row, { ...defaultButtonStyles, secondary: true }));
+		restore.label = localize('picodeSyncRestore', "Restore");
+		this.renderStore.add(restore.onDidClick(() => { void this.commandService.executeCommand('picode.restoreSessions'); }));
 	}
 
 	private button(parent: HTMLElement, label: string, secondary: boolean, commandId: string): void {

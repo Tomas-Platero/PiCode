@@ -204,6 +204,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			default: false,
 			included: false,
 		},
+		// Switched from the Account window's sync list; the connector backs the recent chats up in the
+		// background while it is on. Hidden: the Account window is where it is changed.
+		'picode.sync.chats': {
+			type: 'boolean',
+			default: false,
+			included: false,
+		},
 		'picode.mcp.servers': {
 			type: 'array',
 			default: [],
