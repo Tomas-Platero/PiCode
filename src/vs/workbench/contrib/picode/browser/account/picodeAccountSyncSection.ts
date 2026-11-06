@@ -98,7 +98,8 @@ class PicodeAccountSyncSection extends Disposable {
 			this.button(actions, localize('picodeSyncNow', "Sync now"), false, 'workbench.userDataSync.actions.syncNow');
 			this.button(actions, localize('picodeSyncTurnOff', "Turn off"), true, 'workbench.userDataSync.actions.turnOff');
 		} else {
-			this.button(actions, localize('picodeSyncTurnOn', "Turn on sync"), false, 'workbench.userDataSync.actions.turnOn');
+			// The list below is what the owner chose, so VS Code's own list is not asked a second time.
+			this.button(actions, localize('picodeSyncTurnOn', "Turn on sync"), false, 'workbench.userDataSync.actions.turnOn', { skipConfigure: true });
 		}
 
 		DOM.append(page, $('h3')).textContent = localize('picodeSyncWhat', "What is synced");
@@ -108,7 +109,6 @@ class PicodeAccountSyncSection extends Disposable {
 			const box = DOM.append(row, $('input')) as HTMLInputElement;
 			box.setAttribute('type', 'checkbox');
 			box.checked = this.enablementService.isResourceEnabled(resource);
-			box.disabled = !enabled;
 			const text = DOM.append(row, $('.picode-account-row-text'));
 			DOM.append(text, $('strong')).textContent = label;
 			DOM.append(text, $('span')).textContent = description;
@@ -138,10 +138,10 @@ class PicodeAccountSyncSection extends Disposable {
 		this.renderStore.add(restore.onDidClick(() => { void this.commandService.executeCommand('picode.restoreSessions'); }));
 	}
 
-	private button(parent: HTMLElement, label: string, secondary: boolean, commandId: string): void {
+	private button(parent: HTMLElement, label: string, secondary: boolean, commandId: string, ...args: unknown[]): void {
 		const button = this.renderStore.add(new Button(parent, { ...defaultButtonStyles, secondary }));
 		button.label = label;
-		this.renderStore.add(button.onDidClick(() => { void this.commandService.executeCommand(commandId); }));
+		this.renderStore.add(button.onDidClick(() => { void this.commandService.executeCommand(commandId, ...args); }));
 	}
 }
 
