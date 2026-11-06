@@ -9,7 +9,7 @@
 | Página | Para qué |
 |---|---|
 | 👤 **Overview** | Correo, plan (Free / Pro), iniciar sesión, *Upgrade* o *Manage plan*, cerrar sesión. |
-| ☁️ **Cloud sync** | Estado (al día, sincronizando, necesita atención, apagada), última sincronización, *Sync now*, *Turn on / off* y un interruptor por categoría. Sin Pro, la página lo explica. |
+| ☁️ **Cloud sync** | Estado (al día, sincronizando, necesita atención, apagada), última sincronización, *Sync now*, *Turn on / off* y un interruptor por categoría y, aparte, las conversaciones recientes con *Back up* y *Restore*. Sin Pro, la página lo explica. |
 | 🔌 **Connections** | Los servicios Pro que traen trabajo al chat (issues de GitHub, Jira…). Cada uno dice si está incluido, bloqueado o próximo. |
 | ⭐ **Pro features** | Todo lo que incluye el plan Pro, de un vistazo. |
 
@@ -26,6 +26,6 @@
 
 ## Lo que falta
 
-- La sync por fichero y por trozos (hoy el perfil sube entero cada vez) y la sesión automática. Ver ADR-041.
+- La sync por fichero y por trozos (hoy el perfil sube entero cada vez) y que las conversaciones se respalden solas (hoy es a petición). Ver ADR-041.
 - Los conectores de issues son solo el hueco: su lógica llega en su propio trabajo.
 - La línea resumen de la cuenta en la columna *Status*.

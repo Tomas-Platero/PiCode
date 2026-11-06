@@ -108,6 +108,20 @@ class PicodeAccountSyncSection extends Disposable {
 			DOM.append(text, $('span')).textContent = description;
 			this.renderStore.add(DOM.addDisposableListener(box, DOM.EventType.CHANGE, () => this.enablementService.setResourceEnablement(resource, box.checked)));
 		}
+
+		this.renderConversations(page);
+	}
+
+	/** Conversations are backed up on request: each transcript is its own copy in the cloud. */
+	private renderConversations(page: HTMLElement): void {
+		DOM.append(page, $('h3')).textContent = localize('picodeSyncConversations', "Conversations");
+		const card = DOM.append(page, $('.picode-account-card'));
+		const text = DOM.append(card, $('.picode-account-card-text'));
+		DOM.append(text, $('strong')).textContent = localize('picodeSyncConversationsTitle', "Your recent chats");
+		DOM.append(text, $('span.picode-account-muted')).textContent = localize('picodeSyncConversationsDescription', "Keep the chats of the last 7 days in the cloud, or bring them back on this computer.");
+		const actions = DOM.append(card, $('.picode-account-actions'));
+		this.button(actions, localize('picodeSyncBackUp', "Back up"), false, 'picode.backupSessions');
+		this.button(actions, localize('picodeSyncRestore', "Restore"), true, 'picode.restoreSessions');
 	}
 
 	private button(parent: HTMLElement, label: string, secondary: boolean, commandId: string): void {

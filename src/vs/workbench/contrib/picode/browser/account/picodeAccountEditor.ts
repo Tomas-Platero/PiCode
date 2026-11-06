@@ -49,7 +49,6 @@ export class PicodeAccountEditor extends EditorPane {
 		this.nav.setAttribute('aria-label', localize('picodeAccountNavLabel', "Account sections"));
 		this.content = DOM.append(root, $('.picode-account-content'));
 
-		DOM.append(this.nav, $('.picode-account-nav-title')).textContent = localize('picodeAccountTitle', "Account");
 		const sections = getAccountSections();
 		for (const section of sections) {
 			this.renderNavItem(section);
