@@ -38,7 +38,7 @@
 		"webOrigin": "https://www.getpicode.app",
 		"firebaseApiKey": "AIzaSyD9-rAr8osUnCbCrnxBsKERgr3_CJvG75g",
 		"connectors": {
-			"github": { "clientId": "" },
+			"github": { "clientId": "Iv23liRr00evsVkdr5uG" },
 			"atlassian": { "clientId": "HU84kfMVJRYo7QcZZ7H6f8CMVQIQSPcN", "redirectUri": "https://www.getpicode.app/api/v1/connect/atlassian/callback" }
 		}
 	},
