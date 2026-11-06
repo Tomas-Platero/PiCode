@@ -59,6 +59,12 @@ export const GENTLE_PI_TERMINAL_EXTENSIONS: readonly string[] = [
 	'!extensions/gentle-music.ts',
 	'!extensions/gentle-voice.ts',
 	'!extensions/gentle-design.ts',
+	// New in 4.6.0: the Gentle Shell tour, its Herdr agent report, the terminal title widget and the
+	// star request (a terminal overlay that opens the browser).
+	'!extensions/gentle-guide.ts',
+	'!extensions/gentle-herdr-agent.ts',
+	'!extensions/gentle-program-identity.ts',
+	'!extensions/gentle-star-prompt.ts',
 ];
 
 /**
@@ -89,7 +95,7 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 
 /** What the product pins, in the order it declares them. */
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
-	{ name: 'gentle-pi', version: '4.5.1', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
+	{ name: 'gentle-pi', version: '4.6.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
 	{ name: 'gentle-engram', version: '0.6.0' },
 	{ name: 'pi-intercom', version: '0.18.1' },
 ];
