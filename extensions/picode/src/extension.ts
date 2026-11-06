@@ -21,7 +21,7 @@ import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRe
 import { cacheKey, cachedModels, deserialiseCache, sameIds, serialiseCache, singleFlight, storeModels, type CacheEntry } from './models-cache';
 import { installPackage, packagePreviews, searchPackages } from './packages-registry';
 import { checkPackageUpdates, clearPackageUpdateCache, updateCheckableSource, updatePackage, type PackageUpdateStatusRow } from './packages-updates';
-import { piSessionsDir, registerSessionsBackupCommands } from './sessions-backup';
+import { piSessionsDir, registerAutomaticSessionsBackup, registerSessionsBackupCommands } from './sessions-backup';
 import {
 	DISABLED_PACKAGES_KEY,
 	disablePackageSource,
@@ -2795,10 +2795,13 @@ const setupDeps = {
 	// pi's sessions, backed up to PiCode Cloud and restored from it. A **backup channel**, not a
 	// live sync: every transcript is its own opaque ref on the `piSessionsBackup` resource, and
 	// the per-file hash state that makes a run incremental lives in the window's global state.
-	context.subscriptions.push(...registerSessionsBackupCommands({
+	const sessionsBackupDeps = {
 		globalState: context.globalState,
-		sessionsDir: piSessionsDir(),
-	}));
+		sessionsDir: piSessionsDir(profileDirectory(context.extensionUri)),
+	};
+	context.subscriptions.push(...registerSessionsBackupCommands(sessionsBackupDeps));
+	// While the Chats switch (Account window) is on, the same backup also runs by itself.
+	context.subscriptions.push(registerAutomaticSessionsBackup(sessionsBackupDeps));
 
 	// The update check: pi and the profile's packages, asked quietly on a schedule,
 	// surfaced as a notification and a status-bar item, and run from there.

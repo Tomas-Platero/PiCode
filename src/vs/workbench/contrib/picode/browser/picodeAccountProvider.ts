@@ -211,10 +211,11 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		if (!refreshToken) {
 			return [];
 		}
-		const storedScopes = this._storedScopes();
-		if (scopes && !scopes.every(scope => storedScopes.includes(scope))) {
-			return [];
-		}
+		// The scopes are only a label here: the one token serves every feature and the server decides
+		// what the plan allows. A session created without them (the setup window and the adoption of
+		// its session store none) must still answer to a request for `sync`, or the sync engine would
+		// treat a signed-in owner as signed out and ask to sign in again.
+		const storedScopes = [...new Set([...this._storedScopes(), ...(scopes ?? [])])];
 
 		// Ensure a fresh ID token; refresh transparently when the cached one went stale.
 		const idToken = await this._ensureIdToken(refreshToken);

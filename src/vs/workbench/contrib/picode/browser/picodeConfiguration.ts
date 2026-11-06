@@ -12,6 +12,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 // startup (from the chat and preferences contributions). Keeping the registration inside
 // the contrib folder is deliberate — the provider is core code, not an extension.
 import './picodeAccount.js';
+import './account/picodeAccount.contribution.js';
 import './picodeMcpSection.js';
 import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';
@@ -202,6 +203,14 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: false,
 			included: false,
+		},
+		// Switched from the Account window's sync list; the connector backs the recent chats up in the
+		// background while it is on. It must stay registered (not `included: false`): a setting hidden
+		// that way is dropped from the registry and the editor refuses to write it.
+		'picode.sync.chats': {
+			type: 'boolean',
+			default: false,
+			description: localize('picodeSyncChatsDescription', "Your chats of the last 7 days."),
 		},
 		'picode.mcp.servers': {
 			type: 'array',
