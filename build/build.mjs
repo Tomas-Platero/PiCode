@@ -5,7 +5,7 @@
 
 // `npm run build`: the whole build in one command, on any channel and any operating system.
 //
-//   npm run build                       portable pack for the current branch's channel
+//   npm run build                       portable pack; the channel the branch owns, experimental elsewhere
 //   npm run build -- --channel beta     portable pack for another channel (stable | beta | experimental)
 //   npm run build -- --installer        also build the installer (off by default)
 //
@@ -42,6 +42,14 @@ for (let i = 0; i < args.length; i++) {
 	} else {
 		passthrough.push(arg);
 	}
+}
+
+// No channel named anywhere: take the one the branch owns, and `experimental` on any other branch,
+// so a build never comes out unsealed (a pack without a channel suffix, with the wrong update feed).
+if (!env.PICODE_CHANNEL) {
+	const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout?.trim() ?? '';
+	env.PICODE_CHANNEL = branch === 'master' ? 'stable' : branch === 'beta' ? 'beta' : 'experimental';
+	console.log(`-- channel: ${env.PICODE_CHANNEL} (pass --channel to change it)`);
 }
 
 if (!installer) {
