@@ -318,7 +318,10 @@ export class AccountsActivityActionViewItem extends AbstractGlobalActivityAction
 	 * always the full one.
 	 */
 	protected override async run(): Promise<void> {
-		if (this.groupedAccounts.get('picode')?.length) {
+		// A pending notice (a sign-in an extension asked for, sync needing a session) is answered from
+		// that menu, so while one is showing the click keeps opening it.
+		const hasNotice = (this.action as CompositeBarAction).activities.some(activity => activity.badge);
+		if (!hasNotice && this.groupedAccounts.get('picode')?.length) {
 			await this.commandService.executeCommand('picode.account.open');
 			return;
 		}
