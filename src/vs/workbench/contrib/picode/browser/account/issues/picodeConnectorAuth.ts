@@ -109,12 +109,14 @@ export function tokensFromResponse(data: Record<string, unknown>, now: number): 
  * was already percent-decoded once on the way in.
  */
 export function connectorCodeFromCallback(
-	uri: { readonly scheme: string; readonly path: string; readonly query: string },
+	uri: { readonly scheme: string; readonly authority?: string; readonly path: string; readonly query: string },
 	expectedScheme: string,
 	service: PicodeConnectorService,
 	expectedState: string,
 ): string | undefined {
-	if (uri.scheme.toLowerCase() !== expectedScheme.toLowerCase() || uri.path !== CONNECT_CALLBACK_PATH || expectedState.length === 0) {
+	// The cloud page sends `scheme://connect/callback`: `connect` arrives as the authority and `/callback` as the path.
+	const isConnectAddress = uri.path === CONNECT_CALLBACK_PATH || (uri.authority === 'connect' && uri.path === '/callback');
+	if (uri.scheme.toLowerCase() !== expectedScheme.toLowerCase() || !isConnectAddress || expectedState.length === 0) {
 		return undefined;
 	}
 	let code: string | undefined;

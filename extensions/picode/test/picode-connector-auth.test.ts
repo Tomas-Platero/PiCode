@@ -51,6 +51,12 @@ test('the callback of this attempt gives its code', () => {
 	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=S1&code=abc'), 'picode', 'atlassian', 'S1'), 'abc');
 });
 
+test('the address the cloud page really sends (connect as host, /callback as path) gives its code', () => {
+	const real = { scheme: 'picode', authority: 'connect', path: '/callback', query: 'service=atlassian&state=S1&code=abc' };
+	assert.strictEqual(connectorCodeFromCallback(real, 'picode', 'atlassian', 'S1'), 'abc');
+	assert.strictEqual(connectorCodeFromCallback({ ...real, authority: 'other' }, 'picode', 'atlassian', 'S1'), undefined);
+});
+
 test('a callback with another state, service, path or scheme is left alone', () => {
 	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=OTHER&code=abc'), 'picode', 'atlassian', 'S1'), undefined);
 	assert.strictEqual(connectorCodeFromCallback(callback('service=github&state=S1&code=abc'), 'picode', 'atlassian', 'S1'), undefined);
