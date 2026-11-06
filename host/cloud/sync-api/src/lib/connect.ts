@@ -118,6 +118,71 @@ export function readProviderTokens(json: unknown): ConnectTokens | undefined {
 }
 
 /**
+ * GitHub's one-time-code sign-in, asked through this server. GitHub's `login` pages do not allow
+ * calls from the editor's window (no cross-origin permission), so the editor cannot ask them
+ * itself; this server asks and passes the answer back. The client id is the server's own.
+ */
+export type GithubDeviceRequest =
+  | { readonly action: "start" }
+  | { readonly action: "poll"; readonly deviceCode: string };
+
+export function parseGithubDeviceRequest(raw: unknown): GithubDeviceRequest {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new HttpError(400, "BadRequest", "Expected a JSON object.");
+  }
+  const body = raw as Record<string, unknown>;
+  if (body.action === "start") {
+    return { action: "start" };
+  }
+  if (body.action === "poll" && typeof body.deviceCode === "string" && OPAQUE.test(body.deviceCode)) {
+    return { action: "poll", deviceCode: body.deviceCode };
+  }
+  throw new HttpError(400, "BadRequest", "Unknown action.");
+}
+
+export function buildGithubDeviceRequest(request: GithubDeviceRequest, env: Env): ProviderRequest {
+  const clientId = required(env, "GITHUB_CLIENT_ID");
+  if (request.action === "start") {
+    return { url: "https://github.com/login/device/code", body: { client_id: clientId } };
+  }
+  return {
+    url: "https://github.com/login/oauth/access_token",
+    body: { client_id: clientId, device_code: request.deviceCode, grant_type: "urn:ietf:params:oauth:grant-type:device_code" },
+  };
+}
+
+/**
+ * GitHub's answer, reduced to what the editor reads (same names GitHub uses, so the editor's
+ * reader works on it unchanged). `undefined` means the answer was not one GitHub gives.
+ */
+export function readGithubDeviceAnswer(action: GithubDeviceRequest["action"], json: unknown): Record<string, unknown> | undefined {
+  if (typeof json !== "object" || json === null) {
+    return undefined;
+  }
+  const data = json as Record<string, unknown>;
+  if (action === "start") {
+    if (typeof data.device_code !== "string" || typeof data.user_code !== "string" || typeof data.verification_uri !== "string") {
+      return undefined;
+    }
+    return {
+      device_code: data.device_code,
+      user_code: data.user_code,
+      verification_uri: data.verification_uri,
+      interval: typeof data.interval === "number" ? data.interval : undefined,
+      expires_in: typeof data.expires_in === "number" ? data.expires_in : undefined,
+    };
+  }
+  const tokens = readProviderTokens(data);
+  if (tokens) {
+    return { access_token: tokens.accessToken, refresh_token: tokens.refreshToken, expires_in: tokens.expiresIn };
+  }
+  if (typeof data.error === "string" && /^[a-z_]{1,64}$/.test(data.error)) {
+    return { error: data.error, interval: typeof data.interval === "number" ? data.interval : undefined };
+  }
+  return undefined;
+}
+
+/**
  * Where the browser goes after Atlassian: back into the editor, carrying the code and the
  * `state` it must recognise. Nothing but plain token characters is passed on, so the address
  * can not be bent into something else.

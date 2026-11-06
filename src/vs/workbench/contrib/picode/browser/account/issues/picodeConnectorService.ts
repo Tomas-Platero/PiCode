@@ -24,7 +24,7 @@ import { IAuthenticationService } from '../../../../../services/authentication/c
 import { PICODE_AUTH_PROVIDER_ID } from '../../picodeAccountProvider.js';
 import {
 	atlassianAuthorizeUrl, connectorCodeFromCallback, IPicodeConnectorTokens, IPicodeDeviceCode, needsRefresh,
-	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, tokensFromResponse,
+	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, tokensFromResponse,
 } from './picodeConnectorAuth.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -137,17 +137,18 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (!clientId) {
 			throw new Error('GitHub is not available yet.');
 		}
-		const asked = await this.http('POST', 'https://github.com/login/device/code', { body: `client_id=${encodeURIComponent(clientId)}`, form: true });
-		const code = parseDeviceCode(asked.json);
+		// GitHub's login pages do not accept calls from the editor's window, so PiCode's cloud service asks them.
+		const asked = await this.postCloud('/v1/connect/github', { action: 'start' });
+		const code = asked?.status === 200 ? parseDeviceCode(asked.json) : undefined;
 		if (!code) {
 			throw new Error('GitHub did not give a code.');
 		}
 		const source = new CancellationTokenSource();
-		const done = this.pollGithub(clientId, code, source.token).finally(() => source.dispose());
+		const done = this.pollGithub(code, source.token).finally(() => source.dispose());
 		return { code, done, cancel: () => source.cancel() };
 	}
 
-	private async pollGithub(clientId: string, code: IPicodeDeviceCode, token: CancellationToken): Promise<PicodeConnectOutcome> {
+	private async pollGithub(code: IPicodeDeviceCode, token: CancellationToken): Promise<PicodeConnectOutcome> {
 		const deadline = Date.now() + code.expiresInMs;
 		let wait = code.intervalMs;
 		while (Date.now() < deadline) {
@@ -155,17 +156,15 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			if (token.isCancellationRequested) {
 				return 'cancelled';
 			}
-			let poll;
-			try {
-				const answer = await this.http('POST', 'https://github.com/login/oauth/access_token', {
-					body: `client_id=${encodeURIComponent(clientId)}&device_code=${encodeURIComponent(code.deviceCode)}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
-					form: true,
-				});
-				poll = parseDevicePoll(answer.json, Date.now());
-			} catch {
-				// A dropped connection while waiting is not the end: the next round asks again.
+			// A dropped connection while waiting is not the end: the next round asks again.
+			const answer = await this.postCloud('/v1/connect/github', { action: 'poll', deviceCode: code.deviceCode });
+			if (!answer || answer.status >= 500) {
 				continue;
 			}
+			if (answer.status === 402) {
+				return 'notPro';
+			}
+			const poll: PicodeDevicePoll = answer.status === 200 ? parseDevicePoll(answer.json, Date.now()) : { kind: 'failed' };
 			switch (poll.kind) {
 				case 'tokens':
 					await this.save('github', poll.tokens);
@@ -288,6 +287,17 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 
 	/** Asks PiCode's cloud service to trade or renew a token (it holds the secret). `undefined` = refused or unreachable. */
 	private async askCloud(body: Record<string, string>): Promise<IPicodeConnectorTokens | 'notPro' | undefined> {
+		const answer = await this.postCloud('/v1/connect/token', body);
+		if (answer?.status === 402) {
+			return 'notPro';
+		}
+		const data = typeof answer?.json === 'object' && answer.json !== null ? answer.json as Record<string, unknown> : undefined;
+		const tokens = data ? tokensFromResponse(data, Date.now()) : undefined;
+		return answer?.status === 200 && tokens?.accessToken ? tokens : undefined;
+	}
+
+	/** One signed-in call to PiCode's cloud service. `undefined` = no session, no address or unreachable. */
+	private async postCloud(path: string, body: Record<string, string>): Promise<IHttpResult | undefined> {
 		const base = this.productService['configurationSync.store']?.url;
 		const sessions = await this.authenticationService.getSessions(PICODE_AUTH_PROVIDER_ID, [], { activateImmediate: true }).catch(() => []);
 		const session = sessions[0];
@@ -295,17 +305,11 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			return undefined;
 		}
 		try {
-			const answer = await this.http('POST', `${base.replace(/\/$/, '')}/v1/connect/token`, {
+			return await this.http('POST', `${base.replace(/\/$/, '')}${path}`, {
 				json: body,
 				bearer: session.idToken ?? session.accessToken,
 				headers: { 'X-Account-Type': PICODE_AUTH_PROVIDER_ID, 'X-Client-Name': 'picode', 'X-Client-Version': this.productService.version },
 			});
-			if (answer.status === 402) {
-				return 'notPro';
-			}
-			const data = typeof answer.json === 'object' && answer.json !== null ? answer.json as Record<string, unknown> : undefined;
-			const tokens = data ? tokensFromResponse(data, Date.now()) : undefined;
-			return answer.status === 200 && tokens?.accessToken ? tokens : undefined;
 		} catch (error) {
 			this.logService.warn('[picode.connectors] the cloud service could not be reached', error);
 			return undefined;

@@ -11,7 +11,7 @@ register(
     ),
 );
 
-const { buildProviderRequest, editorCallbackUrl, parseConnectRequest, readProviderTokens } = await import("../src/lib/connect.ts");
+const { buildGithubDeviceRequest, buildProviderRequest, editorCallbackUrl, parseConnectRequest, parseGithubDeviceRequest, readGithubDeviceAnswer, readProviderTokens } = await import("../src/lib/connect.ts");
 const { HttpError } = await import("../src/lib/errors.ts");
 
 const ENV = {
@@ -79,4 +79,30 @@ test("the callback address carries a plain code and state, or nothing", () => {
   assert.equal(editorCallbackUrl(new URLSearchParams("code=abc")), undefined);
   assert.equal(editorCallbackUrl(new URLSearchParams("code=a%22%3E%3Cscript%3E&state=0f8fad5b-d9cb")), undefined);
   assert.equal(editorCallbackUrl(new URLSearchParams("code=abc&state=short")), undefined);
+});
+
+test("GitHub's one-time-code steps are asked with the server's own client id", () => {
+  assert.deepEqual(buildGithubDeviceRequest(parseGithubDeviceRequest({ action: "start" }), ENV),
+    { url: "https://github.com/login/device/code", body: { client_id: "gh-id" } });
+  assert.deepEqual(buildGithubDeviceRequest(parseGithubDeviceRequest({ action: "poll", deviceCode: "dc123", clientId: "evil" }), ENV), {
+    url: "https://github.com/login/oauth/access_token",
+    body: { client_id: "gh-id", device_code: "dc123", grant_type: "urn:ietf:params:oauth:grant-type:device_code" },
+  });
+  rejects(() => parseGithubDeviceRequest({ action: "poll" }), 400);
+  rejects(() => parseGithubDeviceRequest({ action: "poll", deviceCode: "a b" }), 400);
+  rejects(() => parseGithubDeviceRequest({ action: "other" }), 400);
+  rejects(() => buildGithubDeviceRequest({ action: "start" }, {}), 503);
+});
+
+test("only what the editor reads goes back from GitHub's one-time-code steps", () => {
+  assert.deepEqual(
+    readGithubDeviceAnswer("start", { device_code: "d", user_code: "AB-12", verification_uri: "https://github.com/login/device", interval: 5, expires_in: 900, extra: 1 }),
+    { device_code: "d", user_code: "AB-12", verification_uri: "https://github.com/login/device", interval: 5, expires_in: 900 });
+  assert.equal(readGithubDeviceAnswer("start", { error: "x" }), undefined);
+  assert.deepEqual(readGithubDeviceAnswer("poll", { access_token: "a", refresh_token: "r", expires_in: 28800, scope: "" }),
+    { access_token: "a", refresh_token: "r", expires_in: 28800 });
+  assert.deepEqual(readGithubDeviceAnswer("poll", { error: "authorization_pending", error_description: "long" }),
+    { error: "authorization_pending", interval: undefined });
+  assert.equal(readGithubDeviceAnswer("poll", { error: "<script>" }), undefined);
+  assert.equal(readGithubDeviceAnswer("poll", null), undefined);
 });

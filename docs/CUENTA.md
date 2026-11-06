@@ -50,10 +50,10 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 | Login (tarjetas de Connections) | `account/picodeConnectionsSection.ts` |
 | Paneles de Status y *Fix with pi* | `account/issues/picodeStatusIssues.ts`, `picodeIssueActions.ts` |
 | Lógica pura con pruebas | `picodeConnectorAuth.ts`, `picodeIssueSources.ts`, `picodeIssuePrompt.ts` |
-| Servidor (secretos de Atlassian y renovación) | `host/cloud/sync-api`: `POST /api/v1/connect/token`, `GET /api/v1/connect/atlassian/callback` |
+| Servidor (secretos de Atlassian y renovación) | `host/cloud/sync-api`: `POST /api/v1/connect/token`, `POST /api/v1/connect/github`, `GET /api/v1/connect/atlassian/callback` |
 | Identificadores públicos | `product.json` → `picode.connectors` |
 
-- **GitHub:** GitHub App con inicio por código de un solo uso. Permisos mínimos: *Issues: lectura*. Los repos son los que el usuario eligió al instalarla (`/user/installations`).
+- **GitHub:** GitHub App con inicio por código de un solo uso. Las páginas de login de GitHub no admiten llamadas desde la ventana del editor (sin permiso entre orígenes: «Failed to fetch», visto el 2026-11-06), así que el editor pide el código y la espera por el servidor (`connect/github`), que no guarda nada. Permisos mínimos: *Issues: lectura*. Los repos son los que el usuario eligió al instalarla (`/user/installations`).
 - **Jira:** OAuth 2.0 (3LO) con el permiso `read:jira-work` y `offline_access`. El secreto lo guarda el servidor; el editor nunca lo ve. El token se renueva solo (y cambia en cada renovación).
 - **Servidor:** exige sesión y plan Pro (`402` si no). No guarda tokens.
 - **Tokens del usuario:** cifrados en el almacén de secretos del editor.

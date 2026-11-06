@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, requirePro } from "@/lib/auth";
+import { buildGithubDeviceRequest, parseGithubDeviceRequest, readGithubDeviceAnswer } from "@/lib/connect";
+import { HttpError } from "@/lib/errors";
+import { errorResponse, jsonResponse, operationIdHeaders } from "@/lib/http";
+
+export const dynamic = "force-dynamic";
+
+/** Called from the editor's renderer, so CORS applies (same reasoning as `/api/v1/connect/token`). */
+const CORS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-client-name, x-client-version, x-account-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+/**
+ * POST /api/v1/connect/github
+ * Asks GitHub for a one-time sign-in code (`start`) or whether it was entered (`poll`), for the
+ * signed-in Pro account. GitHub's login pages do not accept calls from the editor's window, so
+ * the editor asks here. Nothing is stored.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
+    const context = await authenticateRequest(request);
+    requirePro(context);
+    const device = parseGithubDeviceRequest(await request.json().catch(() => undefined));
+    const provider = buildGithubDeviceRequest(device, process.env);
+    let response: Response;
+    try {
+      response = await fetch(provider.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": "PiCode" },
+        body: JSON.stringify(provider.body),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new HttpError(502, "BadGateway", "The service could not be reached.");
+    }
+    const answer = readGithubDeviceAnswer(device.action, await response.json().catch(() => undefined));
+    if (!answer) {
+      throw new HttpError(502, "BadGateway", "The service gave an answer that could not be used.");
+    }
+    return jsonResponse(answer, 200, CORS);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export function OPTIONS(): NextResponse {
+  return new NextResponse(null, { status: 204, headers: { ...CORS, ...operationIdHeaders() } });
+}
