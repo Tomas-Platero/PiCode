@@ -197,7 +197,9 @@
 }
 
 .picode-account-actions .monaco-button,
+.picode-account-row > .monaco-button,
 .picode-account-tile-foot .monaco-button {
+	flex: 0 0 auto;
 	width: auto;
 	padding: 5px 16px;
 	border-radius: 6px;
