@@ -1,0 +1,132 @@
+import { HttpError } from "./errors";
+
+/**
+ * Connecting the editor to GitHub and Jira: the part that needs a secret.
+ *
+ * Atlassian will not trade a code for tokens (or renew them) without a client secret, and a secret
+ * inside an installed editor can be read by anyone. So the editor asks this server, which holds the
+ * secret in its environment and passes the tokens straight back: nothing is stored here.
+ * GitHub's one-time-code sign-in needs no secret to start, but renewing a token does.
+ *
+ * Pure (no Next.js, no network): the route does the call, this file decides what to ask and what
+ * to tell the editor, so `node --test` can check it.
+ */
+
+export type ConnectService = "github" | "atlassian";
+export type ConnectGrant = "authorization_code" | "refresh_token";
+
+export interface ConnectRequest {
+  readonly service: ConnectService;
+  readonly grant: ConnectGrant;
+  readonly code?: string;
+  readonly refreshToken?: string;
+}
+
+export interface ProviderRequest {
+  readonly url: string;
+  readonly body: Record<string, string>;
+}
+
+export interface ConnectTokens {
+  readonly accessToken: string;
+  readonly refreshToken?: string;
+  readonly expiresIn?: number;
+}
+
+/** Codes and tokens are opaque and short-lived; this only rules out anything that is not a plain token. */
+const OPAQUE = /^[A-Za-z0-9._~+/=-]{1,4096}$/;
+
+export function parseConnectRequest(raw: unknown): ConnectRequest {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new HttpError(400, "BadRequest", "Expected a JSON object.");
+  }
+  const body = raw as Record<string, unknown>;
+  const { service, grant, code, refreshToken } = body;
+  if (service !== "github" && service !== "atlassian") {
+    throw new HttpError(400, "BadRequest", "Unknown service.");
+  }
+  if (grant === "authorization_code") {
+    // GitHub's code is traded in the editor (one-time-code sign-in); only Atlassian's comes here.
+    if (service !== "atlassian" || typeof code !== "string" || !OPAQUE.test(code)) {
+      throw new HttpError(400, "BadRequest", "A code is only accepted for Atlassian.");
+    }
+    return { service, grant, code };
+  }
+  if (grant === "refresh_token") {
+    if (typeof refreshToken !== "string" || !OPAQUE.test(refreshToken)) {
+      throw new HttpError(400, "BadRequest", "Missing refresh token.");
+    }
+    return { service, grant, refreshToken };
+  }
+  throw new HttpError(400, "BadRequest", "Unknown grant.");
+}
+
+type Env = Readonly<Record<string, string | undefined>>;
+
+function required(env: Env, name: string): string {
+  const value = env[name]?.trim();
+  if (!value) {
+    // Not the person's doing and not fixable by them: say so, and say nothing about which variable.
+    throw new HttpError(503, "NotConfigured", "This connection is not available yet.");
+  }
+  return value;
+}
+
+/** What to ask the provider. The redirect address comes from the server, never from the editor. */
+export function buildProviderRequest(request: ConnectRequest, env: Env): ProviderRequest {
+  if (request.service === "github") {
+    return {
+      url: "https://github.com/login/oauth/access_token",
+      body: {
+        client_id: required(env, "GITHUB_CLIENT_ID"),
+        client_secret: required(env, "GITHUB_CLIENT_SECRET"),
+        grant_type: "refresh_token",
+        refresh_token: request.refreshToken ?? "",
+      },
+    };
+  }
+  const base = {
+    client_id: required(env, "ATLASSIAN_CLIENT_ID"),
+    client_secret: required(env, "ATLASSIAN_CLIENT_SECRET"),
+    grant_type: request.grant,
+  };
+  return {
+    url: "https://auth.atlassian.com/oauth/token",
+    body: request.grant === "authorization_code"
+      ? { ...base, code: request.code ?? "", redirect_uri: required(env, "ATLASSIAN_REDIRECT_URI") }
+      : { ...base, refresh_token: request.refreshToken ?? "" },
+  };
+}
+
+/**
+ * The provider's answer, reduced to the three things the editor keeps. Anything else it said
+ * (scopes, ids, errors with details) stays here.
+ */
+export function readProviderTokens(json: unknown): ConnectTokens | undefined {
+  if (typeof json !== "object" || json === null) {
+    return undefined;
+  }
+  const data = json as Record<string, unknown>;
+  if (typeof data.access_token !== "string" || data.access_token.length === 0) {
+    return undefined;
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: typeof data.refresh_token === "string" && data.refresh_token ? data.refresh_token : undefined,
+    expiresIn: typeof data.expires_in === "number" && data.expires_in > 0 ? data.expires_in : undefined,
+  };
+}
+
+/**
+ * Where the browser goes after Atlassian: back into the editor, carrying the code and the
+ * `state` it must recognise. Nothing but plain token characters is passed on, so the address
+ * can not be bent into something else.
+ */
+export function editorCallbackUrl(query: URLSearchParams): string | undefined {
+  const code = query.get("code");
+  const state = query.get("state");
+  if (!code || !state || !OPAQUE.test(code) || !/^[A-Za-z0-9-]{8,128}$/.test(state)) {
+    return undefined;
+  }
+  return `picode://connect/callback?service=atlassian&state=${encodeURIComponent(state)}&code=${encodeURIComponent(code)}`;
+}

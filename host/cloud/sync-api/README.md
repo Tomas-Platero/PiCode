@@ -56,6 +56,7 @@ test/                     # pure rules: plans, retention
 | `retention.ts` | Cuántas revisiones por recurso se conservan (20) y qué historial se suelta si la cuota se llena. |
 | `usage.ts` | 📊 Las reglas del uso anónimo: qué ruta del feed es válida, qué contadores suma cada comprobación y el resumen público. Sin Firestore. |
 | `usage-store.ts` | Los contadores diarios en Firestore (`usage/{día}`) y su lectura para el resumen. |
+| `connect.ts` | 🔌 Conectar GitHub y Jira: qué se le pide al proveedor (con el secreto del servidor), qué se devuelve al editor y la dirección `picode://` de vuelta. Sin red ni Next.js. |
 | `stats-auth.ts` | Quién puede leer `/api/stats`: solo quien lleve `STATS_TOKEN`; sin token configurado, nadie. |
 | `downloads.ts` | Las descargas de la release actual de cada canal, leídas de GitHub. |
 
@@ -73,6 +74,8 @@ test/                     # pure rules: plans, retention
 | `v1/resource/route.ts` | Borra todos los datos del usuario + manifiesto. |
 | `v1/collection/` · `v1/collection/[id]/` | Lista, crea y borra colecciones (idempotente). |
 | `v1/account/route.ts` | La cuenta, con CORS (la llama el renderer del editor). |
+| `v1/connect/token/route.ts` | 🔌 Cambia un código de Atlassian o renueva un token de Atlassian/GitHub con el secreto del servidor. Solo Pro (`402`); no guarda nada. |
+| `v1/connect/atlassian/callback/route.ts` | 🔌 A donde vuelve el navegador tras Atlassian: reenvía el código al editor por `picode://connect/callback`. |
 | `v1/download/` · `v1/download/latest/` | `404` en v1 (no se usa), pero autenticado y con control de plan. |
 
 La tabla completa de métodos y códigos de respuesta está más abajo, en *API endpoints*.
