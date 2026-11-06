@@ -108,5 +108,5 @@ registerProFeature({
 	label: localize('picodeProFeatureConnections', "Connections"),
 	description: localize('picodeProFeatureConnectionsDescription', "Bring the issues of GitHub and Jira into the chat."),
 	icon: Codicon.plug,
-	available: false,
+	available: true,
 });

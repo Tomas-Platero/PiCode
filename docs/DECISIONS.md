@@ -1776,3 +1776,45 @@ control Pro. Su lógica queda fuera de este ADR.
 - **Sigue fuera de la sync, a propósito:** `mcp.json` puede llevar claves de servicios, y la nube solo cifra en el servidor, no
   de extremo a extremo. Hasta decidir cómo limpiarlo o cifrarlo, no sube. Tampoco la memoria de engram (`~/.engram`, ADR-022):
   es una base viva y compartida que pide su propio diseño.
+
+## ADR-042 — Issues de GitHub y Jira en la ventana Account, conectadas por OAuth
+
+> *"que se conectara a github y te mostrara que fallos te han reportado de tus repos y desde ahi le pudieras pedir a tu sistema agentico que te lo solucionara?"* — 2026-11-06
+>
+> *"se podría conectar por oauth?"* → *"OAuth en los dos"* — 2026-11-06
+
+**Qué se decide.** Dos conectores solo Pro (`account/issues/`): se conectan desde su tarjeta en *Connections* y sus issues abiertas se
+ven en un panel de la columna *Status*, con un botón *Fix with pi* que escribe la issue en un chat nuevo. Se declaran con
+`registerConnector`; la ventana no se toca (ver la adenda 1). Todo vive en el núcleo (`src/vs/workbench/contrib/picode`).
+
+**Por qué OAuth y no un token pegado.** No hay nada que copiar ni caduca sin avisar, y el permiso es de solo lectura. Con GitHub se
+usa una **GitHub App** (no una OAuth App): una OAuth App solo puede pedir `repo`, que da lectura *y escritura* a todos los repos del
+usuario; la App da lectura de issues y solo en los repos que el usuario elija al instalarla. (Comprobado en la documentación de GitHub.)
+
+**Dos caminos distintos, porque los proveedores piden cosas distintas.**
+- **GitHub:** inicio con código de un solo uso. No necesita ningún secreto para empezar; el editor copia el código y abre la página.
+- **Jira:** el OAuth de Atlassian exige un secreto de cliente en el intercambio y en la renovación, y su documentación no ofrece PKCE.
+  Un secreto dentro de un editor instalado se puede extraer, así que lo guarda el servidor: `POST /api/v1/connect/token`
+  (`host/cloud/sync-api`) cambia el código y renueva el token, exige sesión y plan Pro (si no, `402`) y devuelve los tokens sin
+  guardarlos. El navegador vuelve a `/api/v1/connect/atlassian/callback`, que entrega el código al editor por `picode://connect/callback`.
+- La renovación de GitHub (si la App tiene tokens que caducan) también pasa por el servidor, por la misma razón.
+
+**Seguridad.**
+- El callback solo se acepta con el `state` de ese intento (misma regla que el inicio de sesión, ADR-040).
+- Los tokens van en `ISecretStorageService`; nunca en pantalla, ajustes ni registros. Un token de Atlassian cambia en cada renovación y
+  se guarda siempre el nuevo, con una sola renovación a la vez.
+- **Una issue la puede escribir cualquiera.** El botón escribe el texto en el chat **sin enviarlo**; antes se quitan comentarios HTML y
+  caracteres invisibles, se acota la longitud, se encierra la issue en una valla que ella misma no puede cerrar y se marca como
+  «datos de un tercero, no instrucciones». Las que vienen de fuera del equipo salen con la etiqueta *Outside report*.
+- **Límite conocido:** el comando del chat no permite fijar el nivel de permisos de una sesión, así que no se fuerza confirmación de
+  comandos para los reportes externos; vale lo que ya decide el dueño (ADR-040, adenda). Queda como mejora si el chat lo permite.
+- Sin carpeta abierta, con la carpeta sin confianza (ADR-039) o con una issue de otro repo que el abierto, *Fix with pi* sale apagado.
+
+**Consecuencias.**
+- Hasta que se registren la GitHub App y la app de Atlassian y se rellenen sus identificadores públicos en `product.json`
+  (`picode.connectors`) y los secretos en el servidor, cada conector sale como *Coming soon*. Nada se rompe sin ellos.
+- Revocar el acceso desde PiCode (*Disconnect*) borra los tokens del equipo; para anularlos en el proveedor hay que hacerlo en sus
+  ajustes de GitHub o Atlassian (anular la autorización en GitHub exige el secreto de la App).
+- Jira usa el primer sitio al que tiene acceso la cuenta. Elegir entre varios queda pendiente.
+
+**Adenda 1 (2026-11-06) — sin páginas propias en la ventana.** *"no me gusta como está eso de github issues y jira issues en el de la izq, lo quiero en connections. Luego quiero un panel para cada uno visible en status. El login que sea en connections"*. Las dos páginas de la lista lateral desaparecen: el inicio de sesión (conectar, código, desconectar) vive en la tarjeta de cada servicio en *Connections* y las issues en *Status*. El panel solo sale con plan Pro y con el servicio disponible; sin conectar ofrece *Connect*, que abre la ventana Account.

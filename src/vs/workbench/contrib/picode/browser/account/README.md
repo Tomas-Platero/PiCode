@@ -6,4 +6,5 @@ La ventana **Account**: correo y plan, la sync en la nube y la lista de funcione
 - `picodeAccountSections.ts`: el registro de páginas. Una función Pro nueva añade su página con `registerAccountSection`.
 - `picodeAccountEditor*.ts`: la ventana (lista lateral y página).
 - `picodeAccount*Section.ts`, `picodeProFeaturesSection.ts`: las páginas.
+- `issues/`: los conectores de GitHub y Jira: el servicio, los paneles de *Status* y *Fix with pi*. El login está en las tarjetas de `picodeConnectionsSection.ts`.
 - `picodeAccount.contribution.ts`: registro del editor y comando `picode.account.open`.

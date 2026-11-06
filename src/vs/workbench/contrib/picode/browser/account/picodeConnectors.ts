@@ -20,8 +20,13 @@ export interface IPicodeConnector {
 	readonly description: string;
 	/** False while the connector is announced but not built yet. */
 	readonly available: boolean;
-	/** Command that starts the connection. Required once `available` is true. */
+	/** Command that starts the connection, for a connector that has no page of its own. */
 	readonly connectCommand?: string;
+	/**
+	 * Set when the connector has its own page in the window (`registerAccountSection`) and its own
+	 * connection state: the card then shows that state instead of a button.
+	 */
+	readonly issues?: 'github' | 'atlassian';
 }
 
 const connectors: IPicodeConnector[] = [];
@@ -44,12 +49,14 @@ registerConnector({
 	serviceId: 'github',
 	label: localize('picodeConnectorGithub', "GitHub issues"),
 	description: localize('picodeConnectorGithubDescription', "Ask the chat about the issues of your repository and work on them."),
-	available: false,
+	available: true,
+	issues: 'github',
 });
 registerConnector({
 	id: 'jiraIssues',
 	serviceId: 'atlassian',
 	label: localize('picodeConnectorJira', "Jira issues"),
 	description: localize('picodeConnectorJiraDescription', "Bring the tickets of your Atlassian projects into the chat."),
-	available: false,
+	available: true,
+	issues: 'atlassian',
 });

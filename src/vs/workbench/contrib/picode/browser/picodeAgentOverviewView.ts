@@ -30,6 +30,7 @@ import { ILanguageModelsService } from '../../chat/common/languageModels.js';
 import { ISCMService } from '../../scm/common/scm.js';
 import { onDidChangePicodeAgentStatus } from './picodeAgentStatusPill.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
+import { PicodeStatusIssues } from './account/issues/picodeStatusIssues.js';
 
 /**
  * The Agent layout's status column, the first half of the review side bar once it is wide enough: where the agent works, how
@@ -127,6 +128,7 @@ const OPEN_CHANGES_COMMAND = 'picode.status.openChanges';
 export class PicodeAgentOverview extends Disposable {
 
 	private readonly root: HTMLElement;
+	private readonly issuesHost: HTMLElement;
 	private readonly renderDisposables = this._register(new DisposableStore());
 	/** Whether the finished tasks are unfolded. */
 	private showFinished = false;
@@ -152,6 +154,7 @@ export class PicodeAgentOverview extends Disposable {
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IHostService private readonly hostService: IHostService,
 		@IFileService fileService: IFileService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
 		if (knownConnectors === undefined) {
@@ -165,6 +168,9 @@ export class PicodeAgentOverview extends Disposable {
 			}
 		}
 		this.root = append(parent, $('.picode-overview'));
+		// The issue panels draw and refresh themselves; the column only puts their host back after each repaint.
+		this.issuesHost = $('.picode-overview-issues');
+		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost));
 
 		this._register(onDidChangePicodeAgentStatus(() => this.paint()));
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -296,6 +302,7 @@ export class PicodeAgentOverview extends Disposable {
 			this.renderChanges(this.root);
 			this.renderTasks(this.root);
 		}
+		this.root.appendChild(this.issuesHost);
 		this.renderMemory(this.root);
 	}
 

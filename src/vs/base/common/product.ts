@@ -276,7 +276,18 @@ export interface IProductConfiguration {
 	readonly 'configurationSync.store'?: ConfigurationSyncStore;
 
 	/** PiCode's cloud configuration: the web app origin and the public Firebase web API key. Present only in builds that ship the cloud. */
-	readonly picode?: { readonly webOrigin: string; readonly firebaseApiKey: string };
+	readonly picode?: {
+		readonly webOrigin: string;
+		readonly firebaseApiKey: string;
+		/**
+		 * The public side of the GitHub and Jira connections (Account window). A connection with no client id
+		 * is not offered yet. Secrets never live here: the cloud service holds them.
+		 */
+		readonly connectors?: {
+			readonly github?: { readonly clientId?: string };
+			readonly atlassian?: { readonly clientId?: string; readonly redirectUri?: string };
+		};
+	};
 
 	readonly 'editSessions.store'?: Omit<ConfigurationSyncStore, 'insidersUrl' | 'stableUrl'>;
 	readonly darwinUniversalAssetId?: string;

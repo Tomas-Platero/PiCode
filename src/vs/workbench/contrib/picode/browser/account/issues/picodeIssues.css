@@ -1,0 +1,68 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.picode-issues-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.picode-issues-head h2 {
+	margin: 0;
+}
+
+.picode-issues-notice {
+	margin: 0 0 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-code {
+	margin: 4px 0 16px;
+	font-family: var(--monaco-monospace-font);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	user-select: all;
+}
+
+.picode-issue-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.picode-issue-row .picode-account-row-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-issue-row .picode-account-row-text strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-issue-row .monaco-button {
+	flex: none;
+	width: auto;
+	padding: 4px 12px;
+}
+
+.picode-issue-label,
+.picode-issue-outsider {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: 11px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-issue-outsider {
+	background: var(--vscode-inputValidation-warningBackground);
+	color: var(--vscode-foreground);
+	border: 1px solid var(--vscode-inputValidation-warningBorder);
+}

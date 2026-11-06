@@ -314,6 +314,7 @@
 │   ├── build-run.sh
 │   ├── build-window.cmd
 │   ├── build-window.ps1
+│   ├── build.mjs
 │   ├── build.sh
 │   ├── buildConfig.ts
 │   ├── buildfile.ts
@@ -349,7 +350,7 @@
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 46 files in total
+│   └── … 47 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
