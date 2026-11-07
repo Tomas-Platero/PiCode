@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "모든 프로젝트",
 	"picodeIssuesScopeAllRepos": "모든 저장소",
 	"picodeIssuesScopeCreate": "Jira에서 스페이스 만들기…",
-	"picodeIssuesScopePick": "다음의 이슈 표시…",
 	"picodeIssuesScopeRepo": "이 저장소",
 	"picodeIssuesShowMore": "{0}개 더 보기",
 	"picodeIssuesViewAddDescription": "설명 추가",

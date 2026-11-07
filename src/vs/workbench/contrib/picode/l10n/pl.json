@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "Wszystkie projekty",
 	"picodeIssuesScopeAllRepos": "Wszystkie repozytoria",
 	"picodeIssuesScopeCreate": "Utwórz przestrzeń w Jirze…",
-	"picodeIssuesScopePick": "Pokaż zgłoszenia z…",
 	"picodeIssuesScopeRepo": "To repozytorium",
 	"picodeIssuesShowMore": "Pokaż jeszcze {0}",
 	"picodeIssuesViewAddDescription": "Dodaj opis",

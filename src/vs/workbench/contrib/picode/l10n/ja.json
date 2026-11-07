@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "すべてのプロジェクト",
 	"picodeIssuesScopeAllRepos": "すべてのリポジトリ",
 	"picodeIssuesScopeCreate": "Jira でスペースを作成…",
-	"picodeIssuesScopePick": "表示する Issue の対象…",
 	"picodeIssuesScopeRepo": "このリポジトリ",
 	"picodeIssuesShowMore": "さらに {0} 件を表示",
 	"picodeIssuesViewAddDescription": "説明を追加",

@@ -5,6 +5,8 @@
 
 import './picodeIssues.css';
 import { $, addDisposableListener, append, clearNode, EventType } from '../../../../../../base/browser/dom.js';
+import { AnchorAlignment } from '../../../../../../base/browser/ui/contextview/contextview.js';
+import { IAction, Separator, toAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { fromNow } from '../../../../../../base/common/date.js';
 import { Disposable, DisposableStore } from '../../../../../../base/common/lifecycle.js';
@@ -14,7 +16,7 @@ import { localize } from '../../../../../../nls.js';
 import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
 import { IInstantiationService } from '../../../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
-import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../../platform/quickinput/common/quickInput.js';
+import { IContextMenuService } from '../../../../../../platform/contextview/browser/contextView.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { IPicodeProEntitlement } from '../picodeProEntitlement.js';
 import { PicodeConnectorService } from './picodeConnectorAuth.js';
@@ -26,8 +28,6 @@ import { PICODE_OPEN_ISSUES_COMMAND } from './picodeIssues.contribution.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
-/** The last choice of the Jira space list: not a space, but the way to Jira to create one. */
-const CREATE_SPACE = '\u0000create';
 
 /** Issues shown before "Show N more": the column is narrow and is a first look, not a tracker. */
 const VISIBLE_ISSUES = 5;
@@ -70,7 +70,7 @@ export class PicodeStatusIssues extends Disposable {
 		@ICommandService private readonly commandService: ICommandService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 	) {
 		super();
 		this.actions = instantiationService.createInstance(PicodeIssueActions);
@@ -150,13 +150,17 @@ export class PicodeStatusIssues extends Disposable {
 			}
 			const all = this.storageService.get(GITHUB_SCOPE_KEY, StorageScope.WORKSPACE) === 'all';
 			const button = this.scopeButton(head, all ? localize('picodeIssuesScopeAllRepos', "All repositories") : localize('picodeIssuesScopeRepo', "This repository"));
-			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => {
-				this.storageService.store(GITHUB_SCOPE_KEY, all ? 'repo' : 'all', StorageScope.WORKSPACE, StorageTarget.MACHINE);
+			const choose = (scope: 'repo' | 'all') => () => {
+				this.storageService.store(GITHUB_SCOPE_KEY, scope, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 				this.render();
-			}));
+			};
+			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => this.showMenu(button, [
+				toAction({ id: 'picode.issues.scope.repo', label: localize('picodeIssuesScopeRepo', "This repository"), checked: !all, run: choose('repo') }),
+				toAction({ id: 'picode.issues.scope.all', label: localize('picodeIssuesScopeAllRepos', "All repositories"), checked: all, run: choose('all') }),
+			])));
 		} else {
 			const button = this.scopeButton(head, this.jiraChoice() || localize('picodeIssuesScopeAllProjects', "All projects"));
-			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => void this.pickJiraProject()));
+			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => void this.pickJiraProject(button)));
 		}
 	}
 
@@ -167,28 +171,38 @@ export class PicodeStatusIssues extends Disposable {
 		return button;
 	}
 
+	/** A drop-down under the button, with the current choice ticked. */
+	private showMenu(anchor: HTMLElement, actions: IAction[]): void {
+		this.contextMenuService.showContextMenu({
+			getAnchor: () => anchor,
+			anchorAlignment: AnchorAlignment.RIGHT,
+			getActions: () => actions,
+		});
+	}
+
 	/** Links this folder to one of the Jira spaces (or to all of them), or sends the person to Jira to create one. */
-	private async pickJiraProject(): Promise<void> {
+	private async pickJiraProject(button: HTMLElement): Promise<void> {
 		const projects = await this.connectors.listJiraProjects();
-		const items: (IQuickPickItem | IQuickPickSeparator)[] = [
-			{ id: '', label: localize('picodeIssuesScopeAllProjects', "All projects") },
-			...projects.map(project => ({ id: project.id, label: project.id, description: project.name })),
-			{ type: 'separator' },
-			{ id: CREATE_SPACE, label: `$(add) ${localize('picodeIssuesScopeCreate', "Create a space in Jira…")}` },
-		];
-		const pick = await this.quickInputService.pick(items, { placeHolder: localize('picodeIssuesScopePick', "Show the issues of…") });
-		if (!pick || pick.id === undefined) {
-			return;
-		}
-		if (pick.id === CREATE_SPACE) {
-			const url = await this.connectors.jiraProjectsUrl();
-			if (url) {
-				void this.openerService.open(URI.parse(url), { openExternal: true });
-			}
-			return;
-		}
-		this.storageService.store(JIRA_PROJECT_KEY, pick.id, StorageScope.WORKSPACE, StorageTarget.MACHINE);
-		this.render();
+		const current = this.jiraChoice() ?? '';
+		const choose = (key: string) => () => {
+			this.storageService.store(JIRA_PROJECT_KEY, key, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+			this.render();
+		};
+		this.showMenu(button, [
+			toAction({ id: 'picode.issues.project.all', label: localize('picodeIssuesScopeAllProjects', "All projects"), checked: current === '', run: choose('') }),
+			...projects.map(project => toAction({ id: `picode.issues.project.${project.id}`, label: `${project.id} · ${project.name}`, checked: current === project.id, run: choose(project.id) })),
+			new Separator(),
+			toAction({
+				id: 'picode.issues.project.create',
+				label: localize('picodeIssuesScopeCreate', "Create a space in Jira…"),
+				run: async () => {
+					const url = await this.connectors.jiraProjectsUrl();
+					if (url) {
+						void this.openerService.open(URI.parse(url), { openExternal: true });
+					}
+				},
+			}),
+		]);
 	}
 
 	/** A folder not linked yet whose branch names a space that exists (`ATW-52-…`) is linked to it, once. */

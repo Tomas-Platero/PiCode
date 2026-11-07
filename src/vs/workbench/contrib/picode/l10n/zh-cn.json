@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "所有项目",
 	"picodeIssuesScopeAllRepos": "所有仓库",
 	"picodeIssuesScopeCreate": "在 Jira 中创建空间…",
-	"picodeIssuesScopePick": "显示以下范围的 Issue…",
 	"picodeIssuesScopeRepo": "此仓库",
 	"picodeIssuesShowMore": "再显示 {0} 项",
 	"picodeIssuesViewAddDescription": "添加描述",

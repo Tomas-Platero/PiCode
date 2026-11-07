@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "Все проекты",
 	"picodeIssuesScopeAllRepos": "Все репозитории",
 	"picodeIssuesScopeCreate": "Создать пространство в Jira…",
-	"picodeIssuesScopePick": "Показывать issues из…",
 	"picodeIssuesScopeRepo": "Этот репозиторий",
 	"picodeIssuesShowMore": "Показать ещё {0}",
 	"picodeIssuesViewAddDescription": "Добавить описание",

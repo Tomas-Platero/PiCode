@@ -229,7 +229,6 @@
 	"picodeIssuesScopeAllProjects": "Tous les projets",
 	"picodeIssuesScopeAllRepos": "Tous les dépôts",
 	"picodeIssuesScopeCreate": "Créer un espace dans Jira…",
-	"picodeIssuesScopePick": "Afficher les issues de…",
 	"picodeIssuesScopeRepo": "Ce dépôt",
 	"picodeIssuesShowMore": "Afficher {0} de plus",
 	"picodeIssuesViewAddDescription": "Ajouter une description",
