@@ -22,6 +22,7 @@ import { IPaneCompositePartService } from '../../../services/panecomposite/brows
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { sidebarSideColumn } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 
 /**
  * How PiCode is laid out: **Agent** (the chat is the work) or **Editor** (the code is the work).
@@ -222,6 +223,12 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			this.hideEditorArea();
 		}
 		if (!firstTime) {
+			// Every start opens on Status, not on whichever tab the bar was left on (the workbench
+			// restores that one, usually the file explorer). A wide bar already shows Status as its column.
+			await timeout(0);
+			if (!sidebarSideColumn.visible) {
+				void this.paneCompositeService.openPaneComposite(STATUS_CONTAINER_ID, ViewContainerLocation.Sidebar);
+			}
 			return;
 		}
 		// After the settings above have moved the parts: sizes are only meaningful in the new grid.
