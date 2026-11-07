@@ -27,8 +27,8 @@ import {
 	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, tokensFromResponse,
 } from './picodeConnectorAuth.js';
 import {
-	GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapJiraBoardColumns, mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
+	buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
+	mapEditMetaTypes, mapJiraBoardColumns, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -50,6 +50,15 @@ export interface IPicodeProjectViewResult {
 
 /** How moving a Jira issue to another status ended. */
 export type PicodeMoveOutcome = 'moved' | 'needsPermission' | 'notAllowed' | 'failed';
+
+/** How saving a change to a Jira issue ended. */
+export type PicodeEditOutcome = 'saved' | 'needsPermission' | 'rejected' | 'failed';
+
+/** What an issue's type and priority can be changed to. Empty lists mean Jira did not say. */
+export interface IPicodeJiraEditOptions {
+	readonly types: readonly IPicodeNamed[];
+	readonly priorities: readonly IPicodeNamed[];
+}
 
 export type PicodeConnectOutcome = 'connected' | 'cancelled' | 'denied' | 'expired' | 'failed' | 'notPro';
 
@@ -77,6 +86,9 @@ export interface IPicodeConnectorService {
 	canMoveJiraIssues(): Promise<boolean>;
 	/** Moves the issue to the column (or status) `target`. */
 	moveJiraIssue(key: string, target: IPicodeBoardStatus): Promise<PicodeMoveOutcome>;
+	loadJiraEditOptions(key: string): Promise<IPicodeJiraEditOptions>;
+	/** Saves a change to one Jira issue (summary, type, priority, assignee, reporter or labels). */
+	updateJiraIssue(key: string, patch: IPicodeJiraPatch): Promise<PicodeEditOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
 	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
 	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
@@ -538,6 +550,76 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		}
 	}
 
+	async loadJiraEditOptions(key: string): Promise<IPicodeJiraEditOptions> {
+		const none: IPicodeJiraEditOptions = { types: [], priorities: [] };
+		if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key)) {
+			return none;
+		}
+		try {
+			const tokens = await this.validTokens('atlassian', false);
+			if (tokens === 'notPro' || !tokens?.site) {
+				return none;
+			}
+			const api = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3`;
+			const [meta, priorities] = await Promise.all([
+				this.http('GET', `${api}/issue/${key}/editmeta`, { bearer: tokens.accessToken }),
+				this.http('GET', `${api}/priority`, { bearer: tokens.accessToken }),
+			]);
+			let types = meta.status === 200 ? mapEditMetaTypes(meta.json) : [];
+			if (types.length === 0) {
+				const project = await this.http('GET', `${api}/project/${key.split('-')[0]}`, { bearer: tokens.accessToken });
+				types = project.status === 200 ? mapProjectIssueTypes(project.json) : [];
+			}
+			return { types, priorities: priorities.status === 200 ? mapNamedList(priorities.json) : [] };
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the options of an issue could not be read', error);
+			return none;
+		}
+	}
+
+	async updateJiraIssue(key: string, patch: IPicodeJiraPatch): Promise<PicodeEditOutcome> {
+		const body = buildJiraUpdate(patch);
+		if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key) || !body) {
+			return 'failed';
+		}
+		try {
+			let outcome = await this.update(key, body, false);
+			if (outcome === 'reconnect') {
+				outcome = await this.update(key, body, true);
+			}
+			// Atlassian answers 401 when the token lacks the permission to change issues.
+			return outcome === 'reconnect' ? 'needsPermission' : outcome;
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the issue could not be saved', error);
+			return 'failed';
+		}
+	}
+
+	private async update(key: string, body: unknown, forceRefresh: boolean): Promise<PicodeEditOutcome | 'reconnect'> {
+		const tokens = await this.validTokens('atlassian', forceRefresh);
+		if (tokens === 'notPro') {
+			return 'failed';
+		}
+		if (!tokens?.site) {
+			return 'reconnect';
+		}
+		if (!tokens.canWrite) {
+			return 'needsPermission';
+		}
+		const url = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3/issue/${key}`;
+		const done = await this.http('PUT', url, { bearer: tokens.accessToken, json: body });
+		if (done.status >= 200 && done.status < 300) {
+			return 'saved';
+		}
+		switch (done.status) {
+			case 401: return 'reconnect';
+			// Jira's own rules: no right to edit the issue, a field the screen does not have, a value it does not allow.
+			case 400:
+			case 403: return 'rejected';
+			default: return 'failed';
+		}
+	}
+
 	/** A failed read still shows the last list, marked as old, instead of an empty page. */
 	private failure(source: PicodeIssueSource, state: Exclude<PicodeIssuesState, 'ok' | 'notConnected'>): IPicodeIssuesResult {
 		const last = this.lastResults.get(source);
@@ -639,7 +721,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 
 	// -- HTTP -------------------------------------------------------------------------------------
 
-	private async http(method: 'GET' | 'POST', url: string, options: {
+	private async http(method: 'GET' | 'POST' | 'PUT', url: string, options: {
 		readonly bearer?: string;
 		readonly headers?: Record<string, string>;
 		readonly body?: string;

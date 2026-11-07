@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	mapJiraBoardColumns, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition, projectRefOf,
+	buildJiraUpdate, mapEditMetaTypes, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -95,7 +95,7 @@ test('a GitHub issue list keeps open and closed issues and drops pull requests',
 
 const issue = (key: string, status: string, category: IPicodeBoardIssue['category'], extra: Partial<IPicodeBoardIssue> = {}): IPicodeBoardIssue => ({
 	source: 'jira', key, title: `T ${key}`, body: '', url: `https://x/${key}`, project: 'ATW', author: '', external: false, updatedAt: '', labels: [],
-	status, statusId: '', category, type: '', priority: '', assignee: '', createdAt: '', comments: 0, ...extra,
+	status, statusId: '', category, type: '', typeId: '', priority: '', priorityId: '', assignee: '', assigneeId: '', reporterId: '', createdAt: '', comments: 0, ...extra,
 });
 
 test('the board keeps empty columns and adds a status the project no longer lists', () => {
@@ -173,4 +173,42 @@ test('without a board the statuses are ordered by group, then by when they were 
 		{ id: '10000', name: 'Todo', statusCategory: { key: 'new' } },
 	] }]);
 	assert.deepStrictEqual(statuses.map(status => status.name), ['Todo', 'Doing', 'Review', 'Done']);
+});
+
+test('a Jira issue also carries the ids an edit sends back', () => {
+	const [found] = mapJiraBoardIssues({ issues: [jiraIssue('ATW-9', 'Done', 'done', {
+		issuetype: { id: '10005', name: 'Error' }, priority: { id: '4', name: 'Low' },
+		assignee: { displayName: 'Tomás', accountId: 'acc-1' }, reporter: { displayName: 'Ana', accountId: 'acc-2', accountType: 'atlassian' },
+	})] }, SITE);
+	assert.deepStrictEqual([found.typeId, found.priorityId, found.assigneeId, found.reporterId], ['10005', '4', 'acc-1', 'acc-2']);
+});
+
+test('the lists an edit offers are read from what Jira answers', () => {
+	assert.deepStrictEqual(mapNamedList([{ id: '1', name: 'Highest' }, { id: '', name: 'x' }, { name: 'y' }]), [{ id: '1', name: 'Highest' }]);
+	assert.deepStrictEqual(mapEditMetaTypes({ fields: { issuetype: { allowedValues: [{ id: '10001', name: 'Epic' }] } } }), [{ id: '10001', name: 'Epic' }]);
+	assert.deepStrictEqual(mapEditMetaTypes({ fields: {} }), []);
+	assert.deepStrictEqual(mapProjectIssueTypes({ issueTypes: [{ id: '1', name: 'Task', subtask: false }, { id: '2', name: 'Sub-task', subtask: true }] }), [{ id: '1', name: 'Task' }]);
+});
+
+test('the people to choose from are whoever is assignee or reporter of an issue, once each', () => {
+	const people = peopleOf([
+		issue('A-1', 'To Do', 'todo', { assigneeId: 'b', assignee: 'Bea', reporterId: 'a', author: 'Ana' }),
+		issue('A-2', 'To Do', 'todo', { assigneeId: 'a', assignee: 'Ana' }),
+		issue('A-3', 'To Do', 'todo'),
+	]);
+	assert.deepStrictEqual(people, [{ id: 'a', name: 'Ana' }, { id: 'b', name: 'Bea' }]);
+});
+
+test('labels lose their spaces and repeats', () => {
+	assert.deepStrictEqual(normalizeLabels([' status page ', 'bug', 'bug', '', '  ']), ['status-page', 'bug']);
+});
+
+test('an edit sends only well-formed values, and can unassign or clear the labels', () => {
+	assert.deepStrictEqual(buildJiraUpdate({ summary: '  New title  ', typeId: '10005', priorityId: '3', assigneeId: 'acc-1', reporterId: 'acc-2', labels: ['a b'] }), {
+		fields: { summary: 'New title', issuetype: { id: '10005' }, priority: { id: '3' }, assignee: { accountId: 'acc-1' }, reporter: { accountId: 'acc-2' }, labels: ['a-b'] },
+	});
+	assert.deepStrictEqual(buildJiraUpdate({ assigneeId: null }), { fields: { assignee: { accountId: null } } });
+	assert.deepStrictEqual(buildJiraUpdate({ labels: [] }), { fields: { labels: [] } });
+	assert.strictEqual(buildJiraUpdate({ summary: '   ', typeId: 'abc', priorityId: '1;2', assigneeId: 'bad id!', reporterId: '' }), undefined);
+	assert.strictEqual(buildJiraUpdate({ summary: 'x'.repeat(256) }), undefined);
 });

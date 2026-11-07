@@ -46,7 +46,9 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 
 > *"Me gustaría que cuando le des a una issue se abra un visualizador. Dependiendo si es de github o jira se verán x cosas."* — 2026-11-07
 
-Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero y la issue pulsada abierta a la derecha (descripción, estado, tipo, prioridad, asignado, fechas y etiquetas, con *Fix with pi* y *Open in browser*). Pulsar otra issue del mismo proyecto reutiliza la pestaña.
+Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero y la issue pulsada en una **ventana flotante** en el centro (se cierra con la X, `Esc` o pulsando fuera): resumen, descripción, estado, tipo, prioridad, asignado, informador, etiquetas y fechas, con *Fix with pi* y *Open in browser*. Pulsar otra issue del mismo proyecto reutiliza la pestaña.
+
+**Editar una issue (solo Jira):** en la ventana se pueden cambiar el resumen, el tipo, la prioridad, el asignado, el informador y las etiquetas; cada cambio se guarda al hacerlo, se ve al instante y, si Jira lo rechaza, vuelve atrás y lo dice. Pide el mismo permiso de escritura que arrastrar tarjetas (*Allow* la primera vez). El asignado y el informador se eligen entre las personas que ya aparecen en las issues del proyecto.
 
 | | Jira | GitHub |
 |---|---|---|
@@ -60,7 +62,7 @@ Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero
 
 **Mover tarjetas (solo Jira):** en el tablero, arrastrar una tarjeta a otra columna cambia el estado de la issue en Jira. La primera vez el visor pide permiso para cambiar issues (*Allow*, vuelve a abrir la página de Atlassian) y reintenta el movimiento al aceptarlo. La tarjeta se mueve al instante; si Jira no permite ese paso desde el estado actual, vuelve a su columna y lo dice. Solo cambia de estado: no comenta, no edita, no crea.
 
-Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; solo lectura; sin el permiso de tableros el visor lo dice y usa los estados del proyecto, sin hacerlos pasar por las columnas de Jira.
+Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; en GitHub la ventana es de solo lectura; el asignado y el informador solo pueden elegirse entre quienes ya salen en las issues del proyecto; sin el permiso de tableros el visor lo dice y usa los estados del proyecto, sin hacerlos pasar por las columnas de Jira.
 
 **Cómo funciona por dentro**
 

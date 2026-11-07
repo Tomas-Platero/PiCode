@@ -33,6 +33,11 @@ export interface IPicodeBoardIssue extends IPicodeIssue {
 	readonly type: string;
 	readonly priority: string;
 	readonly assignee: string;
+	/** Jira: the ids behind the names above, which is what an edit sends back. */
+	readonly typeId: string;
+	readonly priorityId: string;
+	readonly assigneeId: string;
+	readonly reporterId: string;
 	readonly createdAt: string;
 	readonly comments: number;
 }
@@ -199,8 +204,12 @@ export function mapJiraBoardIssues(json: unknown, siteUrl: string): IPicodeBoard
 			statusId: asString(status?.id),
 			category: categoryOf(asRecord(status?.statusCategory)?.key),
 			type: asString(asRecord(fields?.issuetype)?.name),
+			typeId: asString(asRecord(fields?.issuetype)?.id),
 			priority: asString(asRecord(fields?.priority)?.name),
+			priorityId: asString(asRecord(fields?.priority)?.id),
 			assignee: asString(asRecord(fields?.assignee)?.displayName),
+			assigneeId: asString(asRecord(fields?.assignee)?.accountId),
+			reporterId: asString(asRecord(fields?.reporter)?.accountId),
 			createdAt: asString(fields?.created),
 			comments: 0,
 		});
@@ -233,8 +242,12 @@ export function mapGithubBoardIssues(json: unknown, repo: IPicodeRepo): IPicodeB
 			statusId: '',
 			category: closed ? 'done' : 'todo',
 			type: '',
+			typeId: '',
 			priority: '',
+			priorityId: '',
 			assignee: asString(asRecord(raw?.assignee)?.login),
+			assigneeId: '',
+			reporterId: '',
 			createdAt: asString(raw?.created_at),
 			comments: typeof raw?.comments === 'number' ? raw.comments : 0,
 		});
@@ -306,4 +319,106 @@ export function pickTransition(json: unknown, target: { readonly name: string; r
 		}
 	}
 	return undefined;
+}
+
+/** Something with an id and a name: an issue type, a priority or a person. */
+export interface IPicodeNamed {
+	readonly id: string;
+	readonly name: string;
+}
+
+/** `[{ id, name }]` (the priorities of `GET /priority`) → the entries that have both. */
+export function mapNamedList(json: unknown): IPicodeNamed[] {
+	if (!Array.isArray(json)) {
+		return [];
+	}
+	const list: IPicodeNamed[] = [];
+	for (const item of json) {
+		const id = asString(asRecord(item)?.id);
+		const name = asString(asRecord(item)?.name);
+		if (id && name) {
+			list.push({ id, name });
+		}
+	}
+	return list;
+}
+
+/** `GET /issue/{key}/editmeta` → the issue types the issue may be changed to, when Jira says. */
+export function mapEditMetaTypes(json: unknown): IPicodeNamed[] {
+	return mapNamedList(asRecord(asRecord(asRecord(json)?.fields)?.issuetype)?.allowedValues);
+}
+
+/** `GET /project/{key}` → the project's issue types, without sub-tasks (an issue is not turned into one by an edit). */
+export function mapProjectIssueTypes(json: unknown): IPicodeNamed[] {
+	const types = asRecord(json)?.issueTypes;
+	return mapNamedList(Array.isArray(types) ? types.filter(type => asRecord(type)?.subtask !== true) : []);
+}
+
+/**
+ * The people an issue can be given to, as far as the issues already read show them: whoever is
+ * the assignee or the reporter of one. Finding anyone else would need a permission to read users.
+ */
+export function peopleOf(issues: readonly IPicodeBoardIssue[]): IPicodeNamed[] {
+	const people = new Map<string, string>();
+	for (const issue of issues) {
+		if (issue.assigneeId && issue.assignee) {
+			people.set(issue.assigneeId, issue.assignee);
+		}
+		if (issue.reporterId && issue.author) {
+			people.set(issue.reporterId, issue.author);
+		}
+	}
+	return [...people].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** What an edit of a Jira issue changes. `assigneeId: null` leaves the issue unassigned. */
+export interface IPicodeJiraPatch {
+	readonly summary?: string;
+	readonly typeId?: string;
+	readonly priorityId?: string;
+	readonly assigneeId?: string | null;
+	readonly reporterId?: string;
+	readonly labels?: readonly string[];
+}
+
+/** Jira labels cannot hold spaces: they become dashes. Empty ones go, repeated ones are kept once. */
+export function normalizeLabels(labels: readonly string[]): string[] {
+	const seen = new Set<string>();
+	for (const label of labels) {
+		const clean = label.trim().replace(/\s+/g, '-');
+		if (clean.length > 0 && clean.length <= 255) {
+			seen.add(clean);
+		}
+	}
+	return [...seen];
+}
+
+const NUMERIC_ID = /^\d+$/;
+const ACCOUNT_ID = /^[A-Za-z0-9:_-]{1,128}$/;
+
+/** The body of `PUT /issue/{key}` for a patch; anything that is not a well-formed value is left out. */
+export function buildJiraUpdate(patch: IPicodeJiraPatch): { readonly fields: Record<string, unknown> } | undefined {
+	const fields: Record<string, unknown> = {};
+	const summary = patch.summary?.trim();
+	if (summary && summary.length <= 255) {
+		fields.summary = summary;
+	}
+	if (patch.typeId && NUMERIC_ID.test(patch.typeId)) {
+		fields.issuetype = { id: patch.typeId };
+	}
+	if (patch.priorityId && NUMERIC_ID.test(patch.priorityId)) {
+		fields.priority = { id: patch.priorityId };
+	}
+	if (patch.assigneeId === null) {
+		fields.assignee = { accountId: null };
+	} else if (patch.assigneeId && ACCOUNT_ID.test(patch.assigneeId)) {
+		fields.assignee = { accountId: patch.assigneeId };
+	}
+	if (patch.reporterId && ACCOUNT_ID.test(patch.reporterId)) {
+		fields.reporter = { accountId: patch.reporterId };
+	}
+	if (patch.labels) {
+		fields.labels = normalizeLabels(patch.labels);
+	}
+	return Object.keys(fields).length > 0 ? { fields } : undefined;
 }
