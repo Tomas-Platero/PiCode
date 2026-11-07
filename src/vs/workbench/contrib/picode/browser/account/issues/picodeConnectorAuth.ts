@@ -27,6 +27,8 @@ export interface IPicodeConnectorTokens {
 	readonly refreshToken?: string;
 	/** Milliseconds since the epoch; absent when the token does not expire. */
 	readonly expiresAt?: number;
+	/** Jira only: the account also allowed PiCode to move issues between statuses. */
+	readonly canWrite?: boolean;
 	/** Jira only: the site the account chose. */
 	readonly site?: { readonly cloudId: string; readonly url: string; readonly name: string };
 }
@@ -140,12 +142,12 @@ export function connectorCodeFromCallback(
 	return code && state === expectedState && from === service ? code : undefined;
 }
 
-/** The page Atlassian shows the person: where to ask for permission, and for what. */
-export function atlassianAuthorizeUrl(clientId: string, redirectUri: string, state: string): string {
+/** The page Atlassian shows the person: where to ask for permission, and for what. `write` adds changing issues (moving them between statuses). */
+export function atlassianAuthorizeUrl(clientId: string, redirectUri: string, state: string, write = false): string {
 	const query = [
 		['audience', 'api.atlassian.com'],
 		['client_id', clientId],
-		['scope', 'read:jira-work offline_access'],
+		['scope', write ? 'read:jira-work write:jira-work offline_access' : 'read:jira-work offline_access'],
 		['redirect_uri', redirectUri],
 		['state', state],
 		['response_type', 'code'],

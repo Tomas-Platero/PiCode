@@ -577,3 +577,31 @@
 	opacity: 0.5;
 	cursor: default;
 }
+
+/* Dragging a card to another column */
+
+.picode-issue-card[draggable="true"] {
+	cursor: grab;
+}
+
+.picode-issue-card.dragging {
+	opacity: 0.4;
+}
+
+.picode-issues-column.drop {
+	outline: 2px dashed var(--vscode-focusBorder);
+	outline-offset: -2px;
+}
+
+.picode-issues-banner {
+	display: none;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 16px;
+	background: var(--vscode-inputValidation-infoBackground);
+	border-bottom: 1px solid var(--vscode-inputValidation-infoBorder);
+}
+
+.picode-issues-banner.shown {
+	display: flex;
+}

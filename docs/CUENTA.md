@@ -56,6 +56,8 @@ Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero
 | Tarjeta / fila | Título, etiquetas, tipo, clave, prioridad y asignado | Número, título, etiquetas, asignado, comentarios y antigüedad |
 | Búsqueda | Por clave, título, estado, asignado, tipo o etiqueta | Igual |
 
+**Mover tarjetas (solo Jira):** en el tablero, arrastrar una tarjeta a otra columna cambia el estado de la issue en Jira. La primera vez el visor pide permiso para cambiar issues (*Allow*, vuelve a abrir la página de Atlassian) y reintenta el movimiento al aceptarlo. La tarjeta se mueve al instante; si Jira no permite ese paso desde el estado actual, vuelve a su columna y lo dice. Solo cambia de estado: no comenta, no edita, no crea.
+
 Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; solo lectura; el orden de las columnas sale del flujo de trabajo del proyecto, no de la configuración del tablero de Jira (eso pediría otro permiso y volver a conectar).
 
 **Cómo funciona por dentro**
@@ -78,7 +80,7 @@ Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como t
 **Para activarlo (lo hace el dueño, una vez)**
 
 1. Registrar una **GitHub App** (*Settings → Developer settings*): permiso *Issues: Read-only*, activar *Device flow* (y dejar los tokens con caducidad). Copiar el *Client ID* a `product.json` → `picode.connectors.github.clientId` y, para renovar, el *Client secret* a la variable `GITHUB_CLIENT_SECRET` del servidor (junto con `GITHUB_CLIENT_ID`).
-2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian: permiso *Jira API → read:jira-work*, y como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`.
+2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian: permisos *Jira API → read:jira-work* y *write:jira-work* (este último solo se pide al usuario la primera vez que arrastra una tarjeta), y como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`.
 3. Desplegar `host/cloud/sync-api` (`vercel deploy --prod`).
 
 Mientras falte el identificador, el conector sale como *Coming soon*.
@@ -97,7 +99,7 @@ Mientras falte el identificador, el conector sale como *Coming soon*.
 - No se fuerza confirmación de comandos para los reportes externos (el comando del chat no fija el permiso de la sesión): la defensa es no enviar solo, limpiar el texto y marcarlo como datos de un tercero (ADR-042).
 - Jira usa el primer sitio al que tiene acceso la cuenta.
 - GitHub: hasta 15 repos por lectura y 30 issues por repo.
-- Solo lectura: pi no comenta ni cierra la issue.
+- Pi no comenta ni cierra issues. Lo único que se escribe en Jira es el cambio de estado al arrastrar una tarjeta, y solo con el permiso que el usuario da la primera vez.
 
 ## Lo que falta
 

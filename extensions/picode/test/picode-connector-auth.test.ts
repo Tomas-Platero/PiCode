@@ -85,3 +85,8 @@ test('only Jira sites with a plain https address are offered', () => {
 	]);
 	assert.deepStrictEqual(sites, [{ cloudId: '1', url: 'https://acme.atlassian.net', name: 'Acme' }]);
 });
+
+test('the permission to change issues is asked only when it is wanted', () => {
+	assert.ok(!atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1').includes('write'));
+	assert.ok(atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1', true).includes('scope=read%3Ajira-work%20write%3Ajira-work%20offline_access'));
+});

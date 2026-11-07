@@ -28,7 +28,7 @@ import {
 } from './picodeConnectorAuth.js';
 import {
 	GITHUB_STATUSES, IPicodeBoardIssue, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef,
+	mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -47,6 +47,9 @@ export interface IPicodeProjectViewResult {
 	/** Present when `state` is `ok`. */
 	readonly view: IPicodeProjectView | undefined;
 }
+
+/** How moving a Jira issue to another status ended. */
+export type PicodeMoveOutcome = 'moved' | 'needsPermission' | 'notAllowed' | 'failed';
 
 export type PicodeConnectOutcome = 'connected' | 'cancelled' | 'denied' | 'expired' | 'failed' | 'notPro';
 
@@ -68,7 +71,11 @@ export interface IPicodeConnectorService {
 	/** The Jira site the account is connected to. */
 	readonly jiraSiteName: string | undefined;
 	beginGithub(): Promise<IPicodeGithubAttempt>;
-	connectAtlassian(token: CancellationToken): Promise<PicodeConnectOutcome>;
+	/** `write` also asks for the permission to move issues between statuses. */
+	connectAtlassian(token: CancellationToken, write?: boolean): Promise<PicodeConnectOutcome>;
+	/** Whether this Jira connection may move issues between statuses. */
+	canMoveJiraIssues(): Promise<boolean>;
+	moveJiraIssue(key: string, status: string): Promise<PicodeMoveOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
 	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
 	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
@@ -193,14 +200,14 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return 'expired';
 	}
 
-	async connectAtlassian(token: CancellationToken): Promise<PicodeConnectOutcome> {
+	async connectAtlassian(token: CancellationToken, write = false): Promise<PicodeConnectOutcome> {
 		const clientId = this.config?.atlassian?.clientId;
 		const redirectUri = this.config?.atlassian?.redirectUri;
 		if (!clientId || !redirectUri) {
 			return 'failed';
 		}
 		const state = generateUuid();
-		const code = await this.waitForAtlassianCode(atlassianAuthorizeUrl(clientId, redirectUri, state), state, token);
+		const code = await this.waitForAtlassianCode(atlassianAuthorizeUrl(clientId, redirectUri, state, write), state, token);
 		if (!code) {
 			return token.isCancellationRequested ? 'cancelled' : 'expired';
 		}
@@ -213,7 +220,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			return 'failed';
 		}
 		// The first site is used; an account with several can switch later (the name is shown on the page).
-		await this.save('atlassian', { ...traded, site: sites[0] });
+		await this.save('atlassian', { ...traded, site: sites[0], canWrite: write });
 		return 'connected';
 	}
 
@@ -288,7 +295,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 					if (renewed === 'notPro' || renewed === undefined) {
 						return undefined;
 					}
-					const next = { ...renewed, site: tokens.site };
+					const next = { ...renewed, site: tokens.site, canWrite: tokens.canWrite };
 					await this.save(service, next);
 					return next;
 				})
@@ -440,6 +447,63 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			truncated = page === MAX_VIEW_PAGES;
 		}
 		return { source: 'github', ref, name: ref, layout: 'list', statuses: GITHUB_STATUSES, issues, truncated };
+	}
+
+	async canMoveJiraIssues(): Promise<boolean> {
+		return (await this.load('atlassian'))?.canWrite === true;
+	}
+
+	async moveJiraIssue(key: string, status: string): Promise<PicodeMoveOutcome> {
+		if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key)) {
+			return 'failed';
+		}
+		try {
+			let outcome = await this.move(key, status, false);
+			if (outcome === 'reconnect') {
+				outcome = await this.move(key, status, true);
+			}
+			// Atlassian answers 401 when the token lacks the permission to change issues.
+			return outcome === 'reconnect' ? 'needsPermission' : outcome;
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the issue could not be moved', error);
+			return 'failed';
+		}
+	}
+
+	private async move(key: string, status: string, forceRefresh: boolean): Promise<PicodeMoveOutcome | 'reconnect'> {
+		const tokens = await this.validTokens('atlassian', forceRefresh);
+		if (tokens === 'notPro') {
+			return 'failed';
+		}
+		if (!tokens?.site) {
+			return 'reconnect';
+		}
+		if (!tokens.canWrite) {
+			return 'needsPermission';
+		}
+		const url = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3/issue/${key}/transitions`;
+		const options = await this.http('GET', url, { bearer: tokens.accessToken });
+		if (options.status === 401) {
+			return 'reconnect';
+		}
+		if (options.status < 200 || options.status >= 300) {
+			return options.status === 403 ? 'needsPermission' : 'failed';
+		}
+		const id = pickTransition(options.json, status);
+		if (!id) {
+			return 'notAllowed';
+		}
+		const done = await this.http('POST', url, { bearer: tokens.accessToken, json: { transition: { id } } });
+		if (done.status >= 200 && done.status < 300) {
+			return 'moved';
+		}
+		switch (done.status) {
+			case 401: return 'reconnect';
+			case 403: return 'needsPermission';
+			// The move needs a field filled in (a resolution, say) that only Jira's own screen asks for.
+			case 400: return 'notAllowed';
+			default: return 'failed';
+		}
 	}
 
 	/** A failed read still shows the last list, marked as old, instead of an empty page. */

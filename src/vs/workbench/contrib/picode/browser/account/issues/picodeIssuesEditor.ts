@@ -5,7 +5,7 @@
 
 import './picodeIssues.css';
 import { $, addDisposableListener, append, clearNode, EventType } from '../../../../../../base/browser/dom.js';
-import { CancellationToken } from '../../../../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { fromNow } from '../../../../../../base/common/date.js';
 import { DisposableStore } from '../../../../../../base/common/lifecycle.js';
@@ -24,10 +24,10 @@ import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
 import {
-	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeProjectView, PicodeBoardLayout,
+	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeProjectView, PicodeBoardLayout, PicodeStatusCategory,
 } from './picodeIssueBoard.js';
 import { IPicodeConnectorService, IPicodeProjectViewResult } from './picodeConnectorService.js';
-import { PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
+import { outcomeMessage, PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
 import { IPicodeIssuesEditorOptions, PICODE_ISSUES_EDITOR_ID, PicodeIssuesEditorInput } from './picodeIssuesEditorInput.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
@@ -62,6 +62,10 @@ export class PicodeIssuesEditor extends EditorPane {
 	private selectedKey: string | undefined;
 	private workspaceRepo: string | undefined;
 	private readonly items = new Map<string, HTMLElement>();
+	/** Cards moved by hand and not yet confirmed by a fresh read: the board shows them in their new column. */
+	private readonly moved = new Map<string, { readonly status: string; readonly category: PicodeStatusCategory }>();
+	private dragKey: string | undefined;
+	private bannerHost: HTMLElement | undefined;
 	private readonly actions: PicodeIssueActions;
 
 	constructor(
@@ -81,6 +85,7 @@ export class PicodeIssuesEditor extends EditorPane {
 	protected createEditor(parent: HTMLElement): void {
 		this.root = append(parent, $('.picode-issues-view'));
 		this.headerHost = append(this.root, $('.picode-issues-header'));
+		this.bannerHost = append(this.root, $('.picode-issues-banner'));
 		this.bodyHost = append(this.root, $('.picode-issues-main'));
 		this._register(this.connectors.onDidChange(() => { if (this.current) { void this.load(); } }));
 	}
@@ -121,15 +126,18 @@ export class PicodeIssuesEditor extends EditorPane {
 		// The page is laid out by CSS.
 	}
 
-	private async load(): Promise<void> {
+	/** `quiet` re-reads without the loading screen: the board stays as it is until the answer comes. */
+	private async load(quiet = false): Promise<void> {
 		const input = this.current;
 		if (!input) {
 			return;
 		}
 		const generation = ++this.generation;
-		this.loading = true;
-		this.renderHeader();
-		this.renderBody();
+		if (!quiet) {
+			this.loading = true;
+			this.renderHeader();
+			this.renderBody();
+		}
 		const [result, repo] = await Promise.all([
 			this.connectors.loadProjectView(input.source, input.ref),
 			input.source === 'github' ? this.connectors.workspaceRepoKey() : Promise.resolve(undefined),
@@ -138,6 +146,7 @@ export class PicodeIssuesEditor extends EditorPane {
 			return;
 		}
 		this.loading = false;
+		this.moved.clear();
 		this.result = result;
 		this.workspaceRepo = repo;
 		if (result.view) {
@@ -236,7 +245,7 @@ export class PicodeIssuesEditor extends EditorPane {
 			return;
 		}
 		const content = append(host, $('.picode-issues-content'));
-		let issues = filterIssues(view.issues, this.query);
+		let issues = filterIssues(this.issuesOf(view), this.query);
 		if (view.source === 'github') {
 			issues = issues.filter(issue => (issue.status === 'closed') === (this.githubState === 'closed'));
 		}
@@ -252,6 +261,14 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 		this.detailHost = append(host, $('.picode-issues-detail'));
 		this.renderDetail(view);
+	}
+
+	/** The issues as the board shows them: the ones moved by hand already in their new status. */
+	private issuesOf(view: IPicodeProjectView): readonly IPicodeBoardIssue[] {
+		return this.moved.size === 0 ? view.issues : view.issues.map(issue => {
+			const move = this.moved.get(issue.key);
+			return move ? { ...issue, ...move } : issue;
+		});
 	}
 
 	private renderProblem(host: HTMLElement, input: PicodeIssuesEditorInput): void {
@@ -288,12 +305,14 @@ export class PicodeIssuesEditor extends EditorPane {
 		const board = append(parent, $('.picode-issues-board'));
 		for (const column of buildColumns(view.statuses, issues)) {
 			const element = append(board, $('.picode-issues-column'));
+			this.dropTarget(element, column.status);
 			const head = append(element, $('.picode-issues-column-head'));
 			append(head, $('span.picode-issues-column-name')).textContent = column.status.name;
 			append(head, $('span.picode-issues-column-count')).textContent = String(column.issues.length);
 			const body = append(element, $('.picode-issues-column-body'));
 			for (const issue of column.issues) {
 				const card = append(body, $('.picode-issue-card'));
+				this.draggable(card, issue.key);
 				append(card, $('.picode-issue-card-title')).textContent = issue.title;
 				if (issue.labels.length > 0) {
 					const tags = append(card, $('.picode-issue-card-tags'));
@@ -354,6 +373,121 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 	}
 
+	// -- Moving a card to another column ----------------------------------------------------------------
+
+	private draggable(card: HTMLElement, key: string): void {
+		card.draggable = true;
+		this.bodyStore.add(addDisposableListener(card, EventType.DRAG_START, e => {
+			this.dragKey = key;
+			e.dataTransfer?.setData('text/plain', key);
+			if (e.dataTransfer) {
+				e.dataTransfer.effectAllowed = 'move';
+			}
+			card.classList.add('dragging');
+		}));
+		this.bodyStore.add(addDisposableListener(card, EventType.DRAG_END, () => {
+			this.dragKey = undefined;
+			card.classList.remove('dragging');
+		}));
+	}
+
+	private dropTarget(column: HTMLElement, status: IPicodeBoardStatus): void {
+		this.bodyStore.add(addDisposableListener(column, EventType.DRAG_OVER, e => {
+			if (this.dragKey) {
+				e.preventDefault();
+				column.classList.add('drop');
+			}
+		}));
+		this.bodyStore.add(addDisposableListener(column, EventType.DRAG_LEAVE, e => {
+			if (!(e.relatedTarget instanceof Node && column.contains(e.relatedTarget))) {
+				column.classList.remove('drop');
+			}
+		}));
+		this.bodyStore.add(addDisposableListener(column, EventType.DROP, e => {
+			e.preventDefault();
+			column.classList.remove('drop');
+			const key = this.dragKey;
+			this.dragKey = undefined;
+			if (key) {
+				void this.moveCard(key, status);
+			}
+		}));
+	}
+
+	private async moveCard(key: string, status: IPicodeBoardStatus): Promise<void> {
+		const view = this.result?.view;
+		const issue = view ? this.issuesOf(view).find(candidate => candidate.key === key) : undefined;
+		if (!view || !issue || issue.status === status.name) {
+			return;
+		}
+		this.clearBanner();
+		if (!(await this.connectors.canMoveJiraIssues())) {
+			this.askToAllowMoving(key, status);
+			return;
+		}
+		// The card moves at once; if Jira says no it goes back and the reason is shown.
+		const before = this.moved.get(key);
+		this.moved.set(key, { status: status.name, category: status.category });
+		this.renderBody();
+		const outcome = await this.connectors.moveJiraIssue(key, status.name);
+		if (outcome === 'moved') {
+			void this.load(true);
+			return;
+		}
+		if (before) {
+			this.moved.set(key, before);
+		} else {
+			this.moved.delete(key);
+		}
+		this.renderBody();
+		if (outcome === 'needsPermission') {
+			this.askToAllowMoving(key, status);
+		} else {
+			this.showBanner(outcome === 'notAllowed'
+				? localize('picodeIssuesViewMoveBlocked', "Jira does not allow moving this issue to {0} from here.", status.name)
+				: localize('picodeIssuesViewMoveFailed', "The issue could not be moved. Try again."));
+		}
+	}
+
+	/** Moving issues changes them in Jira, so the permission is asked the first time it is needed, not when connecting. */
+	private askToAllowMoving(key: string, status: IPicodeBoardStatus): void {
+		this.showBanner(localize('picodeIssuesViewNeedsWrite', "To move issues, PiCode needs permission to change them in Jira."), localize('picodeIssuesViewAllow', "Allow"), () => {
+			const source = new CancellationTokenSource();
+			this.showBanner(localize('picodeIssuesWaiting', "Waiting for {0}…", 'Jira'));
+			void this.connectors.connectAtlassian(source.token, true).then(outcome => {
+				source.dispose();
+				if (outcome === 'connected') {
+					this.clearBanner();
+					return this.moveCard(key, status);
+				}
+				this.showBanner(outcomeMessage(outcome, 'Jira') ?? localize('picodeIssuesViewMoveFailed', "The issue could not be moved. Try again."));
+				return undefined;
+			});
+		});
+	}
+
+	private showBanner(text: string, actionLabel?: string, run?: () => void): void {
+		const host = this.bannerHost;
+		if (!host) {
+			return;
+		}
+		clearNode(host);
+		host.classList.add('shown');
+		append(host, $('span')).textContent = text;
+		if (actionLabel && run) {
+			const button = append(host, $('button.picode-overview-action', { type: 'button' })) as HTMLButtonElement;
+			button.textContent = actionLabel;
+			button.addEventListener('click', run, { once: true });
+		}
+	}
+
+	private clearBanner(): void {
+		if (this.bannerHost) {
+			clearNode(this.bannerHost);
+			this.bannerHost.classList.remove('shown');
+		}
+	}
+
 	private pickable(element: HTMLElement, key: string): void {
 		this.items.set(key, element);
 		element.classList.toggle('selected', key === this.selectedKey);
@@ -398,7 +532,7 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 		this.detailStore.clear();
 		clearNode(host);
-		const issue = view.issues.find(candidate => candidate.key === this.selectedKey);
+		const issue = this.issuesOf(view).find(candidate => candidate.key === this.selectedKey);
 		host.classList.toggle('open', !!issue);
 		if (!issue) {
 			return;

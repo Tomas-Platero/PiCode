@@ -236,3 +236,22 @@ export function initialsOf(name: string): string {
 	}
 	return (parts[0][0] + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
 }
+
+/**
+ * `GET /issue/{key}/transitions` → the id of the transition that ends in `targetStatus`, or
+ * `undefined` when the project's workflow does not allow going there from where the issue is.
+ */
+export function pickTransition(json: unknown, targetStatus: string): string | undefined {
+	const list = asRecord(json)?.transitions;
+	if (!Array.isArray(list)) {
+		return undefined;
+	}
+	for (const item of list) {
+		const transition = asRecord(item);
+		const id = asString(transition?.id);
+		if (/^\d+$/.test(id) && asString(asRecord(transition?.to)?.name) === targetStatus) {
+			return id;
+		}
+	}
+	return undefined;
+}

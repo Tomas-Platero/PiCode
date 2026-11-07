@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	nextJiraPageToken, parseGithubRepoRef, projectRefOf,
+	nextJiraPageToken, parseGithubRepoRef, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -118,4 +118,17 @@ test('initials are the first letters of the first two words', () => {
 	assert.strictEqual(initialsOf('Tomás Platero Ortega'), 'TP');
 	assert.strictEqual(initialsOf('ana'), 'A');
 	assert.strictEqual(initialsOf('  '), '');
+});
+
+test('the transition to a status is found by where it ends, not by its own name', () => {
+	const transitions = { transitions: [
+		{ id: '11', name: 'Start', to: { name: 'In Progress' } },
+		{ id: '31', name: 'Finish it', to: { name: 'Done' } },
+		{ id: 'x', name: 'Odd', to: { name: 'Blocked' } },
+	] };
+	assert.strictEqual(pickTransition(transitions, 'Done'), '31');
+	assert.strictEqual(pickTransition(transitions, 'In Progress'), '11');
+	assert.strictEqual(pickTransition(transitions, 'Blocked'), undefined);
+	assert.strictEqual(pickTransition(transitions, 'In Review'), undefined);
+	assert.strictEqual(pickTransition(null, 'Done'), undefined);
 });

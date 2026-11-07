@@ -558,6 +558,7 @@
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
 │   │   │   ├── picode-connector-auth.test.ts
+│   │   │   ├── picode-issue-board.test.ts
 │   │   │   ├── picode-issue-prompt.test.ts
 │   │   │   ├── picode-issue-sources.test.ts
 │   │   │   ├── pin-sync.test.ts
@@ -585,7 +586,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 80 files in total
+│   │   │   └── … 81 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
