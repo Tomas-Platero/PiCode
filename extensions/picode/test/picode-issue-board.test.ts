@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	adfToEditableText, buildGithubUpdate, buildJiraUpdate, isPlainAdf, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraUsers, textToAdf, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
+	adfToEditableText, buildGithubUpdate, jiraKeyFromBranch, mapJiraProjectList, buildJiraUpdate, isPlainAdf, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraUsers, textToAdf, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -268,4 +268,16 @@ test('a GitHub edit sends only well-formed values and can clear the description'
 		{ title: 'New', body: '', labels: ['bug'], assignees: ['tom'] });
 	assert.deepStrictEqual(buildGithubUpdate({ assignees: [] }), { assignees: [] });
 	assert.strictEqual(buildGithubUpdate({ title: '   ' }), undefined);
+});
+
+test("Jira's spaces are listed by key and name", () => {
+	assert.deepStrictEqual(mapJiraProjectList({ values: [{ key: 'ATW', name: 'Artic Tempest' }, { key: 'bad key', name: 'x' }, { key: 'OPS' }] }), [{ id: 'ATW', name: 'Artic Tempest' }]);
+	assert.deepStrictEqual(mapJiraProjectList(null), []);
+});
+
+test('the branch a folder is on can hint at its Jira space', () => {
+	assert.strictEqual(jiraKeyFromBranch('ref: refs/heads/feature/ATW-52-fix-roster\n'), 'ATW');
+	assert.strictEqual(jiraKeyFromBranch('ref: refs/heads/ATW-7'), 'ATW');
+	assert.strictEqual(jiraKeyFromBranch('ref: refs/heads/main\n'), undefined);
+	assert.strictEqual(jiraKeyFromBranch('0f8fad5bd9cb469f2c1a3e4d5b6a7c8d9e0f1a2b'), undefined);
 });

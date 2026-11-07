@@ -543,3 +543,30 @@ export function buildGithubUpdate(patch: IPicodeGithubPatch): Record<string, unk
 	}
 	return Object.keys(body).length > 0 ? body : undefined;
 }
+
+/** `GET /project/search` → the Jira spaces, as `{ id: key, name }`. */
+export function mapJiraProjectList(json: unknown): IPicodeNamed[] {
+	const values = asRecord(json)?.values;
+	if (!Array.isArray(values)) {
+		return [];
+	}
+	const projects: IPicodeNamed[] = [];
+	for (const item of values) {
+		const key = asString(asRecord(item)?.key);
+		const name = asString(asRecord(item)?.name);
+		if (isJiraProjectKey(key) && name) {
+			projects.push({ id: key, name });
+		}
+	}
+	return projects;
+}
+
+/**
+ * A Jira project key named by the branch the folder is on (`.git/HEAD` holding
+ * `ref: refs/heads/feature/ATW-52-fix` gives `ATW`). Only a hint: whoever uses it checks the key
+ * against the projects that really exist.
+ */
+export function jiraKeyFromBranch(head: string): string | undefined {
+	const branch = /^ref:\s*refs\/heads\/(.+?)\s*$/m.exec(head)?.[1];
+	return branch ? /(?:^|[^A-Za-z0-9])([A-Z][A-Z0-9_]*)-\d+/.exec(branch)?.[1] : undefined;
+}

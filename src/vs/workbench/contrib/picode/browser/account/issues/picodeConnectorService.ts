@@ -28,13 +28,22 @@ import {
 } from './picodeConnectorAuth.js';
 import {
 	buildGithubUpdate, buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraBoardColumns, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
+	mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, jiraKeyFromBranch, mapJiraBoardColumns, mapJiraProjectList, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
-/** How the last attempt to read issues ended. The page turns each into one plain sentence. */
-/** `notInstalled`: GitHub is connected, but the PiCode app is installed on none of the person's accounts, so no repository is visible. */
-export type PicodeIssuesState = 'ok' | 'notConnected' | 'reconnect' | 'offline' | 'rateLimited' | 'notPro' | 'notInstalled';
+/**
+ * How the last attempt to read issues ended. The page turns each into one plain sentence.
+ * `notInstalled`: GitHub is connected, but the PiCode app is installed on none of the person's accounts, so no repository is visible.
+ * `notVisible`: the app is installed, but not on the repository that was asked for.
+ */
+export type PicodeIssuesState = 'ok' | 'notConnected' | 'reconnect' | 'offline' | 'rateLimited' | 'notPro' | 'notInstalled' | 'notVisible';
+
+/** What a list is narrowed to: one GitHub repository (`owner/repo`, lower case) or one Jira space (its key). Nothing means everything. */
+export interface IPicodeIssuesScope {
+	readonly repo?: string;
+	readonly project?: string;
+}
 
 export interface IPicodeIssuesResult {
 	readonly state: PicodeIssuesState;
@@ -106,7 +115,13 @@ export interface IPicodeConnectorService {
 	/** Saves a change to one GitHub issue (`owner/repo#12`): title, description, labels or assignee. */
 	updateGithubIssue(key: string, patch: IPicodeGithubPatch): Promise<PicodeEditOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
-	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
+	listIssues(source: PicodeIssueSource, scope?: IPicodeIssuesScope): Promise<IPicodeIssuesResult>;
+	/** The Jira spaces of the connected site (`id` is the key), to link the open folder to one. */
+	listJiraProjects(): Promise<readonly IPicodeNamed[]>;
+	/** The page of the connected Jira site where spaces are listed and created. */
+	jiraProjectsUrl(): Promise<string | undefined>;
+	/** The Jira space the open folder's current branch names (`ATW-52-…`), if any: only a hint. */
+	workspaceJiraKeyHint(): Promise<string | undefined>;
 	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
 	loadProjectView(source: PicodeIssueSource, ref: string): Promise<IPicodeProjectViewResult>;
 	/** `owner/repo` (lower case) of the open project when it is a GitHub repository. */
@@ -142,7 +157,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 	private readonly refreshing = new Map<PicodeConnectorService, Promise<IPicodeConnectorTokens | undefined>>();
 	/** `If-None-Match` answers: a 304 does not count against GitHub's hourly limit. */
 	private readonly etags = new Map<string, { readonly etag: string; readonly json: unknown }>();
-	private readonly lastResults = new Map<PicodeIssueSource, readonly IPicodeIssue[]>();
+	private readonly lastResults = new Map<string, readonly IPicodeIssue[]>();
 
 	constructor(
 		@IProductService private readonly productService: IProductService,
@@ -328,7 +343,11 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (service === 'atlassian') {
 			this.storageService.remove(JIRA_SITE_NAME_KEY, StorageScope.APPLICATION);
 		}
-		this.lastResults.delete(service === 'github' ? 'github' : 'jira');
+		for (const key of [...this.lastResults.keys()]) {
+			if (key.startsWith(`${service === 'github' ? 'github' : 'jira'}|`)) {
+				this.lastResults.delete(key);
+			}
+		}
 		this.etags.clear();
 		this._onDidChange.fire();
 	}
@@ -414,25 +433,26 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 
 	// -- Reading issues ---------------------------------------------------------------------------
 
-	async listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult> {
+	async listIssues(source: PicodeIssueSource, scope: IPicodeIssuesScope = {}): Promise<IPicodeIssuesResult> {
+		const cacheKey = `${source}|${scope.repo ?? ''}|${scope.project ?? ''}`;
 		const service: PicodeConnectorService = source === 'github' ? 'github' : 'atlassian';
 		if (!this.isConnected(service)) {
 			return { state: 'notConnected', issues: [], stale: false };
 		}
 		try {
-			let outcome = await this.read(source, service, false);
+			let outcome = await this.read(source, service, false, scope);
 			if (outcome === 'reconnect') {
 				// One renewal and one more try; a second refusal means the person must connect again.
-				outcome = await this.read(source, service, true);
+				outcome = await this.read(source, service, true, scope);
 			}
 			if (typeof outcome !== 'string') {
-				this.lastResults.set(source, outcome);
+				this.lastResults.set(cacheKey, outcome);
 				return { state: 'ok', issues: outcome, stale: false };
 			}
-			return this.failure(source, outcome);
+			return this.failure(cacheKey, outcome);
 		} catch (error) {
 			this.logService.warn('[picode.connectors] issues could not be read', error);
-			return this.failure(source, 'offline');
+			return this.failure(cacheKey, 'offline');
 		}
 	}
 
@@ -678,6 +698,39 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		}
 	}
 
+	async listJiraProjects(): Promise<readonly IPicodeNamed[]> {
+		try {
+			const tokens = await this.validTokens('atlassian', false);
+			if (tokens === 'notPro' || !tokens?.site) {
+				return [];
+			}
+			const api = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3`;
+			const found = await this.http('GET', `${api}/project/search?maxResults=50&orderBy=name`, { bearer: tokens.accessToken });
+			return found.status === 200 ? mapJiraProjectList(found.json) : [];
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the spaces could not be listed', error);
+			return [];
+		}
+	}
+
+	async jiraProjectsUrl(): Promise<string | undefined> {
+		const site = (await this.load('atlassian'))?.site;
+		return site ? `${site.url}/jira/projects` : undefined;
+	}
+
+	async workspaceJiraKeyHint(): Promise<string | undefined> {
+		const folder = this.workspaceContextService.getWorkspace().folders[0];
+		if (!folder) {
+			return undefined;
+		}
+		try {
+			const head = await this.fileService.readFile(URI.joinPath(folder.uri, '.git', 'HEAD'));
+			return jiraKeyFromBranch(head.value.toString());
+		} catch {
+			return undefined;
+		}
+	}
+
 	async canSearchJiraUsers(): Promise<boolean> {
 		return (await this.load('atlassian'))?.canSearchUsers === true;
 	}
@@ -778,12 +831,12 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 	}
 
 	/** A failed read still shows the last list, marked as old, instead of an empty page. */
-	private failure(source: PicodeIssueSource, state: Exclude<PicodeIssuesState, 'ok' | 'notConnected'>): IPicodeIssuesResult {
-		const last = this.lastResults.get(source);
+	private failure(cacheKey: string, state: Exclude<PicodeIssuesState, 'ok' | 'notConnected'>): IPicodeIssuesResult {
+		const last = this.lastResults.get(cacheKey);
 		return { state, issues: last ?? [], stale: last !== undefined };
 	}
 
-	private async read(source: PicodeIssueSource, service: PicodeConnectorService, forceRefresh: boolean): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notPro' | 'notInstalled'> {
+	private async read(source: PicodeIssueSource, service: PicodeConnectorService, forceRefresh: boolean, scope: IPicodeIssuesScope): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notPro' | 'notInstalled' | 'notVisible'> {
 		const tokens = await this.validTokens(service, forceRefresh);
 		if (tokens === 'notPro') {
 			return 'notPro';
@@ -791,10 +844,10 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (!tokens) {
 			return 'reconnect';
 		}
-		return source === 'github' ? this.readGithub(tokens.accessToken) : this.readJira(tokens);
+		return source === 'github' ? this.readGithub(tokens.accessToken, scope.repo) : this.readJira(tokens, scope.project);
 	}
 
-	private async readGithub(accessToken: string): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notInstalled'> {
+	private async readGithub(accessToken: string, only?: string): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notInstalled' | 'notVisible'> {
 		const installations = await this.getJson(`${GITHUB_API}/user/installations?per_page=100`, accessToken);
 		if (!installations.ok) {
 			return installations.reason;
@@ -813,6 +866,13 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			}
 			repos.push(...mapGithubRepos(page.json));
 		}
+		if (only) {
+			const wanted = repos.filter(repo => `${repo.owner}/${repo.repo}`.toLowerCase() === only);
+			if (wanted.length === 0) {
+				return 'notVisible';
+			}
+			repos.splice(0, repos.length, ...wanted);
+		}
 		const here = await this.workspaceRepo();
 		// The open project comes first: it is the one the person is most likely to fix.
 		repos.sort((a, b) => Number(sameRepo(b, here)) - Number(sameRepo(a, here)));
@@ -828,13 +888,13 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return issues;
 	}
 
-	private async readJira(tokens: IPicodeConnectorTokens): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited'> {
+	private async readJira(tokens: IPicodeConnectorTokens, project?: string): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited'> {
 		const site = tokens.site;
 		if (!site) {
 			return 'reconnect';
 		}
 		const fields = 'summary,description,project,reporter,updated,labels';
-		const jql = encodeURIComponent('resolution = Unresolved ORDER BY updated DESC');
+		const jql = encodeURIComponent(project && isJiraProjectKey(project) ? `project = ${project} AND resolution = Unresolved ORDER BY updated DESC` : 'resolution = Unresolved ORDER BY updated DESC');
 		const json = await this.getJson(`${ATLASSIAN_API}/ex/jira/${encodeURIComponent(site.cloudId)}/rest/api/3/search/jql?jql=${jql}&fields=${fields}&maxResults=50`, tokens.accessToken);
 		return json.ok ? mapJiraIssues(json.json, site.url) : json.reason;
 	}

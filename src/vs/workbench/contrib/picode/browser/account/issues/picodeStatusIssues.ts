@@ -14,9 +14,11 @@ import { localize } from '../../../../../../nls.js';
 import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
 import { IInstantiationService } from '../../../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
+import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../../platform/quickinput/common/quickInput.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { IPicodeProEntitlement } from '../picodeProEntitlement.js';
 import { PicodeConnectorService } from './picodeConnectorAuth.js';
-import { IPicodeConnectorService, IPicodeIssuesResult } from './picodeConnectorService.js';
+import { IPicodeConnectorService, IPicodeIssuesResult, IPicodeIssuesScope } from './picodeConnectorService.js';
 import { PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
 import { projectRefOf } from './picodeIssueBoard.js';
 import { IPicodeIssue, PicodeIssueSource, splitTitleTag } from './picodeIssueSources.js';
@@ -24,9 +26,14 @@ import { PICODE_OPEN_ISSUES_COMMAND } from './picodeIssues.contribution.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
+/** The last choice of the Jira space list: not a space, but the way to Jira to create one. */
+const CREATE_SPACE = '\u0000create';
 
 /** Issues shown before "Show N more": the column is narrow and is a first look, not a tracker. */
 const VISIBLE_ISSUES = 5;
+/** What each folder was narrowed to: GitHub `repo` or `all`; the Jira space's key, or empty for every space. */
+const GITHUB_SCOPE_KEY = 'picode.issues.githubScope';
+const JIRA_PROJECT_KEY = 'picode.issues.jiraProject';
 /** How often a connected list is read again while the column is open. */
 const REFRESH_MS = 5 * 60_000;
 
@@ -62,6 +69,8 @@ export class PicodeStatusIssues extends Disposable {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ICommandService private readonly commandService: ICommandService,
 		@IOpenerService private readonly openerService: IOpenerService,
+		@IStorageService private readonly storageService: IStorageService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
 	) {
 		super();
 		this.actions = instantiationService.createInstance(PicodeIssueActions);
@@ -94,7 +103,8 @@ export class PicodeStatusIssues extends Disposable {
 
 	private renderSource(text: ISourceText, generation: number): void {
 		const section = append(this.host, $('.picode-overview-section'));
-		const heading = append(section, $('.picode-overview-title'));
+		const head = append(section, $('.picode-issues-title-row'));
+		const heading = append(head, $('.picode-overview-title'));
 		heading.textContent = text.title;
 		if (!this.connectors.isConnected(text.service)) {
 			const row = this.row(section, Codicon.plug, localize('picodeConnectorNotConnected', "Not connected"));
@@ -102,23 +112,99 @@ export class PicodeStatusIssues extends Disposable {
 			return;
 		}
 		const loading = this.row(section, Codicon.loading, localize('picodeIssuesLoading', "Loading issues…"));
-		void this.connectors.listIssues(text.source).then(async result => {
+		void (async () => {
+			// The folder open decides what the list is narrowed to (see `scopeOf`).
+			const here = text.source === 'github' ? await this.connectors.workspaceRepoKey() : undefined;
+			const result = await this.connectors.listIssues(text.source, this.scopeOf(text.source, here));
 			if (generation !== this.generation) {
 				return;
 			}
-			const here = text.source === 'github' ? await this.connectors.workspaceRepoKey() : undefined;
-			if (generation === this.generation) {
-				loading.remove();
-				this.renderResult(section, heading, text, result, here);
+			loading.remove();
+			this.renderScopeButton(head, text, here);
+			this.renderResult(section, heading, text, result, here);
+			if (text.source === 'jira' && this.jiraChoice() === undefined) {
+				void this.suggestJiraProject(result, generation);
 			}
-		});
+		})();
+	}
+
+	// -- Which project the list is about ---------------------------------------------------------------
+
+	private jiraChoice(): string | undefined {
+		return this.storageService.get(JIRA_PROJECT_KEY, StorageScope.WORKSPACE);
+	}
+
+	/** GitHub: this folder's repository, unless the person asked for all. Jira: the space linked to this folder, if any. */
+	private scopeOf(source: PicodeIssueSource, here: string | undefined): IPicodeIssuesScope {
+		if (source === 'github') {
+			return here && this.storageService.get(GITHUB_SCOPE_KEY, StorageScope.WORKSPACE) !== 'all' ? { repo: here } : {};
+		}
+		const project = this.jiraChoice();
+		return project ? { project } : {};
+	}
+
+	private renderScopeButton(head: HTMLElement, text: ISourceText, here: string | undefined): void {
+		if (text.source === 'github') {
+			if (!here) {
+				return; // The folder is not a GitHub repository: nothing to narrow to.
+			}
+			const all = this.storageService.get(GITHUB_SCOPE_KEY, StorageScope.WORKSPACE) === 'all';
+			const button = this.scopeButton(head, all ? localize('picodeIssuesScopeAllRepos', "All repositories") : localize('picodeIssuesScopeRepo', "This repository"));
+			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => {
+				this.storageService.store(GITHUB_SCOPE_KEY, all ? 'repo' : 'all', StorageScope.WORKSPACE, StorageTarget.MACHINE);
+				this.render();
+			}));
+		} else {
+			const button = this.scopeButton(head, this.jiraChoice() || localize('picodeIssuesScopeAllProjects', "All projects"));
+			this.renderStore.add(addDisposableListener(button, EventType.CLICK, () => void this.pickJiraProject()));
+		}
+	}
+
+	private scopeButton(head: HTMLElement, label: string): HTMLButtonElement {
+		const button = append(head, $('button.picode-overview-action.picode-issues-scope', { type: 'button' })) as HTMLButtonElement;
+		append(button, $('span')).textContent = label;
+		append(button, $(`span${ThemeIcon.asCSSSelector(Codicon.chevronDown)}`));
+		return button;
+	}
+
+	/** Links this folder to one of the Jira spaces (or to all of them), or sends the person to Jira to create one. */
+	private async pickJiraProject(): Promise<void> {
+		const projects = await this.connectors.listJiraProjects();
+		const items: (IQuickPickItem | IQuickPickSeparator)[] = [
+			{ id: '', label: localize('picodeIssuesScopeAllProjects', "All projects") },
+			...projects.map(project => ({ id: project.id, label: project.id, description: project.name })),
+			{ type: 'separator' },
+			{ id: CREATE_SPACE, label: `$(add) ${localize('picodeIssuesScopeCreate', "Create a space in Jira…")}` },
+		];
+		const pick = await this.quickInputService.pick(items, { placeHolder: localize('picodeIssuesScopePick', "Show the issues of…") });
+		if (!pick || pick.id === undefined) {
+			return;
+		}
+		if (pick.id === CREATE_SPACE) {
+			const url = await this.connectors.jiraProjectsUrl();
+			if (url) {
+				void this.openerService.open(URI.parse(url), { openExternal: true });
+			}
+			return;
+		}
+		this.storageService.store(JIRA_PROJECT_KEY, pick.id, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		this.render();
+	}
+
+	/** A folder not linked yet whose branch names a space that exists (`ATW-52-…`) is linked to it, once. */
+	private async suggestJiraProject(result: IPicodeIssuesResult, generation: number): Promise<void> {
+		const hint = await this.connectors.workspaceJiraKeyHint();
+		if (hint && generation === this.generation && this.jiraChoice() === undefined && result.issues.some(issue => issue.project === hint)) {
+			this.storageService.store(JIRA_PROJECT_KEY, hint, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+			this.render();
+		}
 	}
 
 	private renderResult(section: HTMLElement, heading: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined): void {
 		const note = stateMessage(result, text.name);
 		if (note) {
 			const row = this.row(section, Codicon.warning, note);
-			const install = result.state === 'notInstalled' ? this.connectors.githubInstallUrl() : undefined;
+			const install = result.state === 'notInstalled' || result.state === 'notVisible' ? this.connectors.githubInstallUrl() : undefined;
 			if (install) {
 				this.button(row, localize('picodeIssuesInstall', "Install on GitHub"), () => void this.openerService.open(URI.parse(install), { openExternal: true }));
 			}

@@ -42,6 +42,12 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 4. *Fix with pi* abre un chat nuevo y **escribe** la issue sin enviarla. El usuario la lee y envía. Sin carpeta abierta, con la carpeta sin confianza o con una issue de otro repo, el botón sale apagado con su motivo.
 5. Sin red se enseña la última lista, avisando de que es la última. La lista se vuelve a leer cada 5 minutos mientras la columna está abierta.
 
+**Qué proyecto enseña cada panel de Status**
+
+> *"sería factible que solo se vean los issues del proyecto en el que estamos"* — 2026-11-07
+
+Cada panel se limita a **la carpeta abierta**, y la elección se recuerda por carpeta. **GitHub:** solo el repositorio de la carpeta (se sabe por su `origin`); un botón en el título cambia entre *This repository* y *All repositories*, y solo sale si la carpeta es un repositorio de GitHub. Si la App no está instalada en ese repositorio, lo dice y ofrece instalarla. **Jira:** una carpeta no está ligada a ningún espacio, así que se **vincula una vez**: el botón del título (*All projects*) abre un selector con los espacios del sitio de Jira; elegir uno lo recuerda para esa carpeta y el panel solo enseña sus issues. Si la rama actual se llama como una issue (`feature/ATW-52-…`) y ese espacio existe, se vincula solo la primera vez. El último elemento del selector, *Create a space in Jira…*, abre la página de espacios de Jira para crear uno; crearlo desde PiCode pediría permisos de administrador de Jira que no se han comprobado. Al volver, se elige en el mismo selector.
+
 **El visor de issues**
 
 > *"Me gustaría que cuando le des a una issue se abra un visualizador. Dependiendo si es de github o jira se verán x cosas."* — 2026-11-07

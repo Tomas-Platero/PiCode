@@ -867,3 +867,32 @@
 .picode-issues-people-note:empty {
 	display: none;
 }
+
+/* The title of an issues panel, with the button that says which project it is about */
+
+.picode-issues-title-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.picode-issues-title-row .picode-overview-title {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+
+.picode-issues-scope {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 55%;
+	font-size: 11px;
+}
+
+.picode-issues-scope > span:first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
