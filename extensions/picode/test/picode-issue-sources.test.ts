@@ -7,7 +7,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { adfToText, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueSources.ts';
+import { adfToText, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, splitTitleTag } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueSources.ts';
 
 test('every common remote spelling names the same repository', () => {
 	for (const remote of ['https://github.com/o/r.git', 'https://tok@github.com/o/r', 'git@github.com:o/r.git', 'ssh://git@github.com/o/r', 'https://github.com/o/r/']) {
@@ -79,4 +79,12 @@ test('a site that is not an https host gives nothing', () => {
 
 test('a key that is not a Jira key is dropped', () => {
 	assert.deepStrictEqual(mapJiraIssues({ issues: [{ key: '../../x', fields: {} }] }, 'https://a.atlassian.net'), []);
+});
+
+test('a leading [tag] moves out of the title, and nothing else does', () => {
+	assert.deepStrictEqual(splitTitleTag('[recruiting]: Open the call'), { tag: 'recruiting', text: 'Open the call' });
+	assert.deepStrictEqual(splitTitleTag('[deps] bump lodash'), { tag: 'deps', text: 'bump lodash' });
+	assert.deepStrictEqual(splitTitleTag('Fix the [x] button'), { tag: undefined, text: 'Fix the [x] button' });
+	assert.deepStrictEqual(splitTitleTag('[only a tag]'), { tag: undefined, text: '[only a tag]' });
+	assert.deepStrictEqual(splitTitleTag('[' + 'a'.repeat(30) + '] long tag'), { tag: undefined, text: '[' + 'a'.repeat(30) + '] long tag' });
 });

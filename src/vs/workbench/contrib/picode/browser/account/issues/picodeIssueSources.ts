@@ -174,3 +174,13 @@ export function mapJiraIssues(json: unknown, siteUrl: string): IPicodeIssue[] {
 	}
 	return issues;
 }
+
+/**
+ * A title that starts with a bracketed tag (`[recruiting]: Open the call`) split in two, so the
+ * list can show the tag as a label and give the whole line to what the issue says. A title that
+ * is only a tag, or whose tag is long, is left as it is.
+ */
+export function splitTitleTag(title: string): { readonly tag: string | undefined; readonly text: string } {
+	const match = /^\[([^\]]{1,24})\]\s*:?\s*(\S[\s\S]*)$/.exec(title.trim());
+	return match ? { tag: match[1].trim(), text: match[2].trim() } : { tag: undefined, text: title };
+}

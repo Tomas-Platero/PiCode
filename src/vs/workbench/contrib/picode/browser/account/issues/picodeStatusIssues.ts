@@ -6,6 +6,7 @@
 import './picodeIssues.css';
 import { $, addDisposableListener, append, clearNode, EventType } from '../../../../../../base/browser/dom.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
+import { fromNow } from '../../../../../../base/common/date.js';
 import { Disposable, DisposableStore } from '../../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
 import { URI } from '../../../../../../base/common/uri.js';
@@ -17,7 +18,7 @@ import { IPicodeProEntitlement } from '../picodeProEntitlement.js';
 import { PicodeConnectorService } from './picodeConnectorAuth.js';
 import { IPicodeConnectorService, IPicodeIssuesResult } from './picodeConnectorService.js';
 import { PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
-import { IPicodeIssue, PicodeIssueSource } from './picodeIssueSources.js';
+import { IPicodeIssue, PicodeIssueSource, splitTitleTag } from './picodeIssueSources.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
@@ -91,7 +92,8 @@ export class PicodeStatusIssues extends Disposable {
 
 	private renderSource(text: ISourceText, generation: number): void {
 		const section = append(this.host, $('.picode-overview-section'));
-		append(section, $('.picode-overview-title')).textContent = text.title;
+		const heading = append(section, $('.picode-overview-title'));
+		heading.textContent = text.title;
 		if (!this.connectors.isConnected(text.service)) {
 			const row = this.row(section, Codicon.plug, localize('picodeConnectorNotConnected', "Not connected"));
 			this.button(row, localize('picodeConnectorConnect', "Connect"), () => void this.commandService.executeCommand(OPEN_ACCOUNT_COMMAND));
@@ -105,12 +107,12 @@ export class PicodeStatusIssues extends Disposable {
 			const here = text.source === 'github' ? await this.connectors.workspaceRepoKey() : undefined;
 			if (generation === this.generation) {
 				loading.remove();
-				this.renderResult(section, text, result, here);
+				this.renderResult(section, heading, text, result, here);
 			}
 		});
 	}
 
-	private renderResult(section: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined): void {
+	private renderResult(section: HTMLElement, heading: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined): void {
 		const note = stateMessage(result, text.name);
 		if (note) {
 			this.row(section, Codicon.warning, note);
@@ -126,6 +128,7 @@ export class PicodeStatusIssues extends Disposable {
 			}
 			return;
 		}
+		append(heading, $('span.picode-overview-detail')).textContent = ` · ${result.issues.length}`;
 		const unfolded = this.unfolded.has(text.source);
 		const shown = unfolded ? result.issues : result.issues.slice(0, VISIBLE_ISSUES);
 		for (const issue of shown) {
@@ -140,12 +143,37 @@ export class PicodeStatusIssues extends Disposable {
 		this.clickable(refresh, () => this.render());
 	}
 
+	/**
+	 * Two lines, so the title gets the whole width: what the issue says (up to two lines), then a
+	 * small line with its tag, key and age. *Fix with pi* is an icon, its words are the tooltip.
+	 */
 	private renderIssue(section: HTMLElement, issue: IPicodeIssue, workspaceRepo: string | undefined): void {
-		const row = this.row(section, Codicon.issues, issue.title || issue.key, issue.external ? localize('picodeIssueOutside', "Outside report") : issue.key);
-		row.title = issue.key;
-		this.clickable(row, () => void this.openerService.open(URI.parse(issue.url), { openExternal: true }));
+		const item = append(section, $('.picode-issue-item'));
+		item.title = `${issue.title}
+${issue.key}`;
+		append(item, $(`span.picode-overview-icon${ThemeIcon.asCSSSelector(Codicon.issues)}`));
+		const body = append(item, $('.picode-issue-body'));
+		const { tag, text } = splitTitleTag(issue.title || issue.key);
+		append(body, $('.picode-issue-title')).textContent = text;
+		const meta = append(body, $('.picode-issue-meta'));
+		if (issue.external) {
+			append(meta, $('span.picode-issue-tag.outside')).textContent = localize('picodeIssueOutside', "Outside report");
+		}
+		if (tag) {
+			append(meta, $('span.picode-issue-tag')).textContent = tag;
+		}
+		append(meta, $('span.picode-issue-key')).textContent = issue.key;
+		const updated = Date.parse(issue.updatedAt);
+		if (!Number.isNaN(updated)) {
+			append(meta, $('span')).textContent = fromNow(updated, true);
+		}
+		this.clickable(item, () => void this.openerService.open(URI.parse(issue.url), { openExternal: true }));
+		const fixLabel = localize('picodeIssueFix', "Fix with pi");
+		const fix = append(item, $('button.picode-issue-fix', { type: 'button', 'aria-label': fixLabel })) as HTMLButtonElement;
+		append(fix, $(`span${ThemeIcon.asCSSSelector(Codicon.sparkle)}`));
+		fix.title = fixLabel;
+		this.renderStore.add(addDisposableListener(fix, EventType.CLICK, () => void this.actions.fix(issue)));
 		const blocked = this.actions.fixBlockedReason(issue, workspaceRepo);
-		const fix = this.button(row, localize('picodeIssueFix', "Fix with pi"), () => void this.actions.fix(issue));
 		if (blocked) {
 			fix.disabled = true;
 			fix.title = blocked;

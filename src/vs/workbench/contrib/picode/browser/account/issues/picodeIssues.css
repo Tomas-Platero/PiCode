@@ -66,3 +66,88 @@
 	color: var(--vscode-foreground);
 	border: 1px solid var(--vscode-inputValidation-warningBorder);
 }
+
+/* An issue in the Status column: title on top, small details below, a one-icon action on the right. */
+.picode-issue-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 5px 0;
+	border-radius: 4px;
+}
+
+.picode-issue-item .picode-overview-icon {
+	margin-top: 2px;
+}
+
+.picode-issue-item.clickable {
+	cursor: pointer;
+}
+
+.picode-issue-item.clickable:hover .picode-issue-title {
+	text-decoration: underline;
+}
+
+.picode-issue-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-issue-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+}
+
+.picode-issue-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-key {
+	font-family: var(--monaco-monospace-font);
+}
+
+.picode-issue-tag {
+	padding: 0 6px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.picode-issue-tag.outside {
+	background: var(--vscode-inputValidation-warningBackground);
+	border: 1px solid var(--vscode-inputValidation-warningBorder);
+}
+
+.picode-issue-fix {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-issue-fix:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-issue-fix:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
