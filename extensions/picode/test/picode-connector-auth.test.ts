@@ -88,5 +88,8 @@ test('only Jira sites with a plain https address are offered', () => {
 
 test('the permission to change issues is asked only when it is wanted', () => {
 	assert.ok(!atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1').includes('write'));
-	assert.ok(atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1', true).includes('scope=read%3Ajira-work%20write%3Ajira-work%20offline_access'));
+	assert.ok(atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1', { write: true }).includes('scope=read%3Ajira-work%20write%3Ajira-work%20offline_access'));
+	const boards = atlassianAuthorizeUrl('cid', 'https://x.example/cb', 'S1', { boards: true });
+	assert.ok(boards.includes('read%3Aboard-scope%3Ajira-software%20read%3Aboard-scope.admin%3Ajira-software%20read%3Aproject%3Ajira'));
+	assert.ok(!boards.includes('write'));
 });

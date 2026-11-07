@@ -41,9 +41,9 @@ export class PicodeIssuesEditorInput extends EditorInput {
 		return super.matches(otherInput) || (otherInput instanceof PicodeIssuesEditorInput && otherInput.resource.toString() === this.resource.toString());
 	}
 
-	/** `ATW` for a Jira project, the repository's own name (`PiCode`) for GitHub. */
+	/** The tab's name: `Jira - ATW`, or `GitHub - PiCode` (the repository's own name). */
 	override getName(): string {
-		return this.source === 'github' ? this.ref.slice(this.ref.indexOf('/') + 1) : this.ref;
+		return this.source === 'github' ? `GitHub - ${this.ref.slice(this.ref.indexOf('/') + 1)}` : `Jira - ${this.ref}`;
 	}
 
 	override getTitle(): string {

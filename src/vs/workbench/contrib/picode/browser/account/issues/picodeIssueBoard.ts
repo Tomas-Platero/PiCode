@@ -14,15 +14,20 @@ import { type IPicodeIssue, type IPicodeRepo, mapGithubIssues, mapJiraIssues, ty
 /** The three groups every tracker's states fall into; Jira calls them To Do, In Progress and Done. */
 export type PicodeStatusCategory = 'todo' | 'progress' | 'done';
 
+/** A status, or a column of a board that holds one or several statuses. */
 export interface IPicodeBoardStatus {
 	readonly name: string;
 	readonly category: PicodeStatusCategory;
+	/** Jira: the ids of the statuses this column holds. Empty for GitHub. */
+	readonly ids?: readonly string[];
 }
 
 /** An issue with what a board or a list needs on top of what the Status column shows. */
 export interface IPicodeBoardIssue extends IPicodeIssue {
 	/** Jira: the workflow status. GitHub: `open` or `closed`. */
 	readonly status: string;
+	/** Jira: the status's id, which tells the board which column the issue is in. */
+	readonly statusId: string;
 	readonly category: PicodeStatusCategory;
 	/** Jira's issue type (Bug, Task…); empty on GitHub. */
 	readonly type: string;
@@ -46,6 +51,8 @@ export interface IPicodeProjectView {
 	readonly issues: readonly IPicodeBoardIssue[];
 	/** True when the tracker has more issues than were read. */
 	readonly truncated: boolean;
+	/** Where `statuses` come from: the project's board (the columns as Jira shows them), or its statuses because the board could not be read. */
+	readonly columns: 'board' | 'needsPermission' | 'statuses';
 }
 
 export interface IPicodeBoardColumn {
@@ -111,7 +118,11 @@ export function mapJiraProject(json: unknown): { readonly name: string; readonly
 	return { name, layout: project.projectTypeKey === 'software' ? 'kanban' : 'list' };
 }
 
-/** `GET /project/{key}/statuses` (one entry per issue type) → every status once, to-do first and done last. */
+/**
+ * `GET /project/{key}/statuses` (one entry per issue type) → every status once. Used when the
+ * project has no board to read the columns from: to-do first and done last, and inside a group
+ * in the order the statuses were created (Jira lists them in no useful order).
+ */
 export function mapJiraStatuses(json: unknown): IPicodeBoardStatus[] {
 	if (!Array.isArray(json)) {
 		return [];
@@ -125,11 +136,47 @@ export function mapJiraStatuses(json: unknown): IPicodeBoardStatus[] {
 			const name = asString(status?.name);
 			if (name && !seen.has(name)) {
 				seen.add(name);
-				statuses.push({ name, category: categoryOf(asRecord(status?.statusCategory)?.key) });
+				const id = asString(status?.id);
+				statuses.push({ name, category: categoryOf(asRecord(status?.statusCategory)?.key), ids: id ? [id] : [] });
 			}
 		}
 	}
-	return sortedByCategory(statuses);
+	const created = (status: IPicodeBoardStatus): number => Number(status.ids?.[0]) || 0;
+	return sortedByCategory(statuses.sort((a, b) => created(a) - created(b)));
+}
+
+/** `GET /board?projectKeyOrId=…` → the id of the project's board, when it has one. */
+export function pickJiraBoardId(json: unknown): number | undefined {
+	const boards = asRecord(json)?.values;
+	const id = Array.isArray(boards) ? asRecord(boards[0])?.id : undefined;
+	return typeof id === 'number' ? id : undefined;
+}
+
+/**
+ * `GET /board/{id}/configuration` → the board's columns, in the order Jira shows them. A column
+ * that holds no status (a kanban backlog) is left out. The first column counts as to-do, the last
+ * as done and the ones between as in progress: a project's own status categories are often not
+ * set up that way.
+ */
+export function mapJiraBoardColumns(json: unknown): IPicodeBoardStatus[] {
+	const columns = asRecord(asRecord(json)?.columnConfig)?.columns;
+	if (!Array.isArray(columns)) {
+		return [];
+	}
+	const found: { name: string; ids: string[] }[] = [];
+	for (const item of columns) {
+		const column = asRecord(item);
+		const name = asString(column?.name);
+		const statuses = Array.isArray(column?.statuses) ? column.statuses : [];
+		const ids = statuses.map(status => asString(asRecord(status)?.id)).filter(id => id.length > 0);
+		if (name && ids.length > 0) {
+			found.push({ name, ids });
+		}
+	}
+	return found.map((column, index) => ({
+		...column,
+		category: index === 0 ? 'todo' : index === found.length - 1 ? 'done' : 'progress',
+	}));
 }
 
 /** `GET /search/jql` answer → issues with status, type, priority and assignee. */
@@ -149,6 +196,7 @@ export function mapJiraBoardIssues(json: unknown, siteUrl: string): IPicodeBoard
 		issues.push({
 			...base,
 			status: asString(status?.name),
+			statusId: asString(status?.id),
 			category: categoryOf(asRecord(status?.statusCategory)?.key),
 			type: asString(asRecord(fields?.issuetype)?.name),
 			priority: asString(asRecord(fields?.priority)?.name),
@@ -182,6 +230,7 @@ export function mapGithubBoardIssues(json: unknown, repo: IPicodeRepo): IPicodeB
 		issues.push({
 			...base,
 			status: closed ? 'closed' : 'open',
+			statusId: '',
 			category: closed ? 'done' : 'todo',
 			type: '',
 			priority: '',
@@ -200,20 +249,20 @@ export const GITHUB_STATUSES: readonly IPicodeBoardStatus[] = [
 ];
 
 /**
- * The board's columns: the project's statuses in workflow order (empty ones too, as in Jira),
- * plus any status an issue has that the project no longer lists.
+ * The board's columns, in the order they were given (a board's own order is kept, empty columns
+ * too, as in Jira). An issue is in the column that holds its status; a status no column holds
+ * gets a column of its own at the end.
  */
 export function buildColumns(statuses: readonly IPicodeBoardStatus[], issues: readonly IPicodeBoardIssue[]): IPicodeBoardColumn[] {
-	const known = new Map<string, IPicodeBoardStatus>(statuses.map(status => [status.name, status]));
-	const extra: IPicodeBoardStatus[] = [];
+	const holds = (status: IPicodeBoardStatus, issue: IPicodeBoardIssue): boolean =>
+		(issue.statusId !== '' && (status.ids?.includes(issue.statusId) ?? false)) || (!status.ids?.length && issue.status === status.name);
+	const columns = [...statuses];
 	for (const issue of issues) {
-		if (!known.has(issue.status)) {
-			const status = { name: issue.status, category: issue.category };
-			known.set(issue.status, status);
-			extra.push(status);
+		if (!columns.some(status => holds(status, issue))) {
+			columns.push({ name: issue.status, category: issue.category, ids: issue.statusId ? [issue.statusId] : [] });
 		}
 	}
-	return sortedByCategory([...statuses, ...extra]).map(status => ({ status, issues: issues.filter(issue => issue.status === status.name) }));
+	return columns.map(status => ({ status, issues: issues.filter(issue => holds(status, issue)) }));
 }
 
 /** The issues that mention `query` (key, title, status, assignee, type or a label), any case. */
@@ -238,10 +287,11 @@ export function initialsOf(name: string): string {
 }
 
 /**
- * `GET /issue/{key}/transitions` → the id of the transition that ends in `targetStatus`, or
- * `undefined` when the project's workflow does not allow going there from where the issue is.
+ * `GET /issue/{key}/transitions` → the id of the transition that ends in the target column (by the
+ * ids of its statuses, or by the status name when the target has none), or `undefined` when the
+ * project's workflow does not allow going there from where the issue is.
  */
-export function pickTransition(json: unknown, targetStatus: string): string | undefined {
+export function pickTransition(json: unknown, target: { readonly name: string; readonly ids?: readonly string[] }): string | undefined {
 	const list = asRecord(json)?.transitions;
 	if (!Array.isArray(list)) {
 		return undefined;
@@ -249,7 +299,9 @@ export function pickTransition(json: unknown, targetStatus: string): string | un
 	for (const item of list) {
 		const transition = asRecord(item);
 		const id = asString(transition?.id);
-		if (/^\d+$/.test(id) && asString(asRecord(transition?.to)?.name) === targetStatus) {
+		const to = asRecord(transition?.to);
+		const ends = target.ids?.length ? target.ids.includes(asString(to?.id)) : asString(to?.name) === target.name;
+		if (/^\d+$/.test(id) && ends) {
 			return id;
 		}
 	}

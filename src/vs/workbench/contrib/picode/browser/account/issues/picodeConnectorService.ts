@@ -27,8 +27,8 @@ import {
 	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, tokensFromResponse,
 } from './picodeConnectorAuth.js';
 import {
-	GITHUB_STATUSES, IPicodeBoardIssue, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef, pickTransition,
+	GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
+	mapJiraBoardColumns, mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -71,11 +71,12 @@ export interface IPicodeConnectorService {
 	/** The Jira site the account is connected to. */
 	readonly jiraSiteName: string | undefined;
 	beginGithub(): Promise<IPicodeGithubAttempt>;
-	/** `write` also asks for the permission to move issues between statuses. */
-	connectAtlassian(token: CancellationToken, write?: boolean): Promise<PicodeConnectOutcome>;
+	/** `write` also asks for the permission to move issues between statuses and `boards` for reading the board's columns; what was granted before is kept. */
+	connectAtlassian(token: CancellationToken, options?: { readonly write?: boolean; readonly boards?: boolean }): Promise<PicodeConnectOutcome>;
 	/** Whether this Jira connection may move issues between statuses. */
 	canMoveJiraIssues(): Promise<boolean>;
-	moveJiraIssue(key: string, status: string): Promise<PicodeMoveOutcome>;
+	/** Moves the issue to the column (or status) `target`. */
+	moveJiraIssue(key: string, target: IPicodeBoardStatus): Promise<PicodeMoveOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
 	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
 	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
@@ -200,14 +201,18 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return 'expired';
 	}
 
-	async connectAtlassian(token: CancellationToken, write = false): Promise<PicodeConnectOutcome> {
+	async connectAtlassian(token: CancellationToken, options: { readonly write?: boolean; readonly boards?: boolean } = {}): Promise<PicodeConnectOutcome> {
 		const clientId = this.config?.atlassian?.clientId;
 		const redirectUri = this.config?.atlassian?.redirectUri;
 		if (!clientId || !redirectUri) {
 			return 'failed';
 		}
+		// Asking again must not take back what the account already allowed.
+		const before = await this.load('atlassian');
+		const write = options.write === true || before?.canWrite === true;
+		const boards = options.boards === true || before?.canReadBoards === true;
 		const state = generateUuid();
-		const code = await this.waitForAtlassianCode(atlassianAuthorizeUrl(clientId, redirectUri, state, write), state, token);
+		const code = await this.waitForAtlassianCode(atlassianAuthorizeUrl(clientId, redirectUri, state, { write, boards }), state, token);
 		if (!code) {
 			return token.isCancellationRequested ? 'cancelled' : 'expired';
 		}
@@ -220,7 +225,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			return 'failed';
 		}
 		// The first site is used; an account with several can switch later (the name is shown on the page).
-		await this.save('atlassian', { ...traded, site: sites[0], canWrite: write });
+		await this.save('atlassian', { ...traded, site: sites[0], canWrite: write, canReadBoards: boards });
 		return 'connected';
 	}
 
@@ -295,7 +300,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 					if (renewed === 'notPro' || renewed === undefined) {
 						return undefined;
 					}
-					const next = { ...renewed, site: tokens.site, canWrite: tokens.canWrite };
+					const next = { ...renewed, site: tokens.site, canWrite: tokens.canWrite, canReadBoards: tokens.canReadBoards };
 					await this.save(service, next);
 					return next;
 				})
@@ -423,7 +428,34 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			}
 		}
 		const info = mapJiraProject(project.json);
-		return { source: 'jira', ref, name: info?.name ?? ref, layout: info?.layout ?? 'list', statuses: mapJiraStatuses(statuses.json), issues, truncated: pageToken !== undefined };
+		const board = await this.readJiraBoardColumns(tokens, ref);
+		return { source: 'jira', ref, name: info?.name ?? ref, layout: info?.layout ?? 'list', statuses: board.columns.length > 0 ? board.columns : mapJiraStatuses(statuses.json), issues, truncated: pageToken !== undefined, columns: board.columns.length > 0 ? 'board' : board.permission ? 'statuses' : 'needsPermission' };
+	}
+
+	/**
+	 * The columns of the project's board, in Jira's order. Reading a board needs permissions the
+	 * connection only has after the person allowed them (`permission` tells whether it does); when
+	 * the board cannot be read, the caller says so instead of showing an order made up from statuses.
+	 */
+	private async readJiraBoardColumns(tokens: IPicodeConnectorTokens, ref: string): Promise<{ readonly columns: IPicodeBoardStatus[]; readonly permission: boolean }> {
+		const site = tokens.site;
+		const permission = tokens.canReadBoards === true;
+		if (!site || !permission) {
+			return { columns: [], permission };
+		}
+		try {
+			const agile = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(site.cloudId)}/rest/agile/1.0`;
+			const boards = await this.http('GET', `${agile}/board?projectKeyOrId=${ref}&maxResults=10`, { bearer: tokens.accessToken });
+			const id = boards.status === 200 ? pickJiraBoardId(boards.json) : undefined;
+			if (id === undefined) {
+				return { columns: [], permission };
+			}
+			const config = await this.http('GET', `${agile}/board/${id}/configuration`, { bearer: tokens.accessToken });
+			return { columns: config.status === 200 ? mapJiraBoardColumns(config.json) : [], permission };
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the board could not be read', error);
+			return { columns: [], permission };
+		}
 	}
 
 	private async readGithubView(accessToken: string, ref: string): Promise<IPicodeProjectView | 'reconnect' | 'rateLimited'> {
@@ -446,21 +478,21 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			}
 			truncated = page === MAX_VIEW_PAGES;
 		}
-		return { source: 'github', ref, name: ref, layout: 'list', statuses: GITHUB_STATUSES, issues, truncated };
+		return { source: 'github', ref, name: ref, layout: 'list', statuses: GITHUB_STATUSES, issues, truncated, columns: 'statuses' };
 	}
 
 	async canMoveJiraIssues(): Promise<boolean> {
 		return (await this.load('atlassian'))?.canWrite === true;
 	}
 
-	async moveJiraIssue(key: string, status: string): Promise<PicodeMoveOutcome> {
+	async moveJiraIssue(key: string, target: IPicodeBoardStatus): Promise<PicodeMoveOutcome> {
 		if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key)) {
 			return 'failed';
 		}
 		try {
-			let outcome = await this.move(key, status, false);
+			let outcome = await this.move(key, target, false);
 			if (outcome === 'reconnect') {
-				outcome = await this.move(key, status, true);
+				outcome = await this.move(key, target, true);
 			}
 			// Atlassian answers 401 when the token lacks the permission to change issues.
 			return outcome === 'reconnect' ? 'needsPermission' : outcome;
@@ -470,7 +502,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		}
 	}
 
-	private async move(key: string, status: string, forceRefresh: boolean): Promise<PicodeMoveOutcome | 'reconnect'> {
+	private async move(key: string, target: IPicodeBoardStatus, forceRefresh: boolean): Promise<PicodeMoveOutcome | 'reconnect'> {
 		const tokens = await this.validTokens('atlassian', forceRefresh);
 		if (tokens === 'notPro') {
 			return 'failed';
@@ -489,7 +521,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		if (options.status < 200 || options.status >= 300) {
 			return options.status === 403 ? 'needsPermission' : 'failed';
 		}
-		const id = pickTransition(options.json, status);
+		const id = pickTransition(options.json, target);
 		if (!id) {
 			return 'notAllowed';
 		}

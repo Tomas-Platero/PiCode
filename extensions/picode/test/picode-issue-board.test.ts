@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	nextJiraPageToken, parseGithubRepoRef, pickTransition, projectRefOf,
+	mapJiraBoardColumns, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -95,7 +95,7 @@ test('a GitHub issue list keeps open and closed issues and drops pull requests',
 
 const issue = (key: string, status: string, category: IPicodeBoardIssue['category'], extra: Partial<IPicodeBoardIssue> = {}): IPicodeBoardIssue => ({
 	source: 'jira', key, title: `T ${key}`, body: '', url: `https://x/${key}`, project: 'ATW', author: '', external: false, updatedAt: '', labels: [],
-	status, category, type: '', priority: '', assignee: '', createdAt: '', comments: 0, ...extra,
+	status, statusId: '', category, type: '', priority: '', assignee: '', createdAt: '', comments: 0, ...extra,
 });
 
 test('the board keeps empty columns and adds a status the project no longer lists', () => {
@@ -103,7 +103,7 @@ test('the board keeps empty columns and adds a status the project no longer list
 		[{ name: 'To Do', category: 'todo' }, { name: 'Blocked', category: 'progress' }, { name: 'Done', category: 'done' }],
 		[issue('A-1', 'To Do', 'todo'), issue('A-2', 'Old state', 'progress'), issue('A-3', 'Done', 'done')],
 	);
-	assert.deepStrictEqual(columns.map(column => [column.status.name, column.issues.length]), [['To Do', 1], ['Blocked', 0], ['Old state', 1], ['Done', 1]]);
+	assert.deepStrictEqual(columns.map(column => [column.status.name, column.issues.length]), [['To Do', 1], ['Blocked', 0], ['Done', 1], ['Old state', 1]]);
 });
 
 test('a search matches every word in the key, title, status, assignee, type or labels', () => {
@@ -122,13 +122,55 @@ test('initials are the first letters of the first two words', () => {
 
 test('the transition to a status is found by where it ends, not by its own name', () => {
 	const transitions = { transitions: [
-		{ id: '11', name: 'Start', to: { name: 'In Progress' } },
-		{ id: '31', name: 'Finish it', to: { name: 'Done' } },
+		{ id: '11', name: 'Start', to: { id: '10001', name: 'In Progress' } },
+		{ id: '31', name: 'Finish it', to: { id: '10003', name: 'Done' } },
 		{ id: 'x', name: 'Odd', to: { name: 'Blocked' } },
 	] };
-	assert.strictEqual(pickTransition(transitions, 'Done'), '31');
-	assert.strictEqual(pickTransition(transitions, 'In Progress'), '11');
-	assert.strictEqual(pickTransition(transitions, 'Blocked'), undefined);
-	assert.strictEqual(pickTransition(transitions, 'In Review'), undefined);
-	assert.strictEqual(pickTransition(null, 'Done'), undefined);
+	assert.strictEqual(pickTransition(transitions, { name: 'Done' }), '31');
+	assert.strictEqual(pickTransition(transitions, { name: 'In Progress' }), '11');
+	assert.strictEqual(pickTransition(transitions, { name: 'Blocked' }), undefined);
+	assert.strictEqual(pickTransition(transitions, { name: 'In Review' }), undefined);
+	assert.strictEqual(pickTransition(null, { name: 'Done' }), undefined);
+});
+
+test('a transition is also found by the ids of the target column, whatever the statuses are called', () => {
+	const transitions = { transitions: [{ id: '31', name: 'Go', to: { id: '10003', name: 'Finalizada' } }] };
+	assert.strictEqual(pickTransition(transitions, { name: 'Done', ids: ['10003'] }), '31');
+	assert.strictEqual(pickTransition(transitions, { name: 'Done', ids: ['10009'] }), undefined);
+});
+
+test("a board's columns keep Jira's order and the first is to-do, the last done", () => {
+	const columns = mapJiraBoardColumns({ columnConfig: { columns: [
+		{ name: 'Backlog', statuses: [] },
+		{ name: 'To Do', statuses: [{ id: '10000' }] },
+		{ name: 'In Progress', statuses: [{ id: '10001' }] },
+		{ name: 'In Review', statuses: [{ id: '10002' }] },
+		{ name: 'Blocked', statuses: [{ id: '10004' }] },
+		{ name: 'Done', statuses: [{ id: '10003' }, { id: '10005' }] },
+	] } });
+	assert.deepStrictEqual(columns.map(column => [column.name, column.category, column.ids]), [
+		['To Do', 'todo', ['10000']], ['In Progress', 'progress', ['10001']], ['In Review', 'progress', ['10002']],
+		['Blocked', 'progress', ['10004']], ['Done', 'done', ['10003', '10005']],
+	]);
+	assert.deepStrictEqual(mapJiraBoardColumns({}), []);
+	assert.strictEqual(pickJiraBoardId({ values: [{ id: 7 }, { id: 8 }] }), 7);
+	assert.strictEqual(pickJiraBoardId({ values: [] }), undefined);
+});
+
+test('an issue goes to the column that holds its status id, even when the names differ', () => {
+	const columns = buildColumns(
+		[{ name: 'To Do', category: 'todo', ids: ['10000'] }, { name: 'Done', category: 'done', ids: ['10003'] }],
+		[issue('A-1', 'Tareas por hacer', 'todo', { statusId: '10000' }), issue('A-2', 'Finalizada', 'progress', { statusId: '10003' }), issue('A-3', 'Rara', 'progress', { statusId: '99' })],
+	);
+	assert.deepStrictEqual(columns.map(column => [column.status.name, column.issues.map(found => found.key)]), [['To Do', ['A-1']], ['Done', ['A-2']], ['Rara', ['A-3']]]);
+});
+
+test('without a board the statuses are ordered by group, then by when they were created', () => {
+	const statuses = mapJiraStatuses([{ statuses: [
+		{ id: '10002', name: 'Review', statusCategory: { key: 'indeterminate' } },
+		{ id: '10001', name: 'Doing', statusCategory: { key: 'indeterminate' } },
+		{ id: '10003', name: 'Done', statusCategory: { key: 'done' } },
+		{ id: '10000', name: 'Todo', statusCategory: { key: 'new' } },
+	] }]);
+	assert.deepStrictEqual(statuses.map(status => status.name), ['Todo', 'Doing', 'Review', 'Done']);
 });

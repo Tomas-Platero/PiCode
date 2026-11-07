@@ -63,7 +63,7 @@ export class PicodeIssuesEditor extends EditorPane {
 	private workspaceRepo: string | undefined;
 	private readonly items = new Map<string, HTMLElement>();
 	/** Cards moved by hand and not yet confirmed by a fresh read: the board shows them in their new column. */
-	private readonly moved = new Map<string, { readonly status: string; readonly category: PicodeStatusCategory }>();
+	private readonly moved = new Map<string, { readonly status: string; readonly statusId: string; readonly category: PicodeStatusCategory }>();
 	private dragKey: string | undefined;
 	private bannerHost: HTMLElement | undefined;
 	private readonly actions: PicodeIssueActions;
@@ -154,6 +154,7 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 		this.renderHeader();
 		this.renderBody();
+		this.updateBoardBanner();
 	}
 
 	// -- Header -------------------------------------------------------------------------------------
@@ -211,6 +212,7 @@ export class PicodeIssuesEditor extends EditorPane {
 		this.layoutMode = layout;
 		this.renderHeader();
 		this.renderBody();
+		this.updateBoardBanner();
 	}
 
 	private setGithubState(state: 'open' | 'closed'): void {
@@ -427,9 +429,9 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 		// The card moves at once; if Jira says no it goes back and the reason is shown.
 		const before = this.moved.get(key);
-		this.moved.set(key, { status: status.name, category: status.category });
+		this.moved.set(key, { status: status.name, statusId: status.ids?.[0] ?? '', category: status.category });
 		this.renderBody();
-		const outcome = await this.connectors.moveJiraIssue(key, status.name);
+		const outcome = await this.connectors.moveJiraIssue(key, status);
 		if (outcome === 'moved') {
 			void this.load(true);
 			return;
@@ -449,12 +451,37 @@ export class PicodeIssuesEditor extends EditorPane {
 		}
 	}
 
+	/** The board shows Jira's own columns only when the account allowed reading boards: when not, it says so. */
+	private updateBoardBanner(): void {
+		const view = this.result?.view;
+		this.clearBanner();
+		if (!view || view.source !== 'jira' || this.layoutMode !== 'kanban' || view.columns === 'board') {
+			return;
+		}
+		if (view.columns === 'needsPermission') {
+			this.showBanner(localize('picodeIssuesViewNeedsBoards', "To show the same columns as Jira, PiCode needs permission to read your boards."), localize('picodeIssuesViewAllow', "Allow"), () => {
+				const source = new CancellationTokenSource();
+				this.showBanner(localize('picodeIssuesWaiting', "Waiting for {0}…", 'Jira'));
+				void this.connectors.connectAtlassian(source.token, { boards: true }).then(outcome => {
+					source.dispose();
+					if (outcome === 'connected') {
+						return this.load();
+					}
+					this.showBanner(outcomeMessage(outcome, 'Jira') ?? localize('picodeIssuesViewMoveFailed', "The issue could not be moved. Try again."));
+					return undefined;
+				});
+			});
+		} else {
+			this.showBanner(localize('picodeIssuesViewColumnsFromStatuses', "The board's columns could not be read, so these come from the project's statuses."));
+		}
+	}
+
 	/** Moving issues changes them in Jira, so the permission is asked the first time it is needed, not when connecting. */
 	private askToAllowMoving(key: string, status: IPicodeBoardStatus): void {
 		this.showBanner(localize('picodeIssuesViewNeedsWrite', "To move issues, PiCode needs permission to change them in Jira."), localize('picodeIssuesViewAllow', "Allow"), () => {
 			const source = new CancellationTokenSource();
 			this.showBanner(localize('picodeIssuesWaiting', "Waiting for {0}…", 'Jira'));
-			void this.connectors.connectAtlassian(source.token, true).then(outcome => {
+			void this.connectors.connectAtlassian(source.token, { write: true }).then(outcome => {
 				source.dispose();
 				if (outcome === 'connected') {
 					this.clearBanner();

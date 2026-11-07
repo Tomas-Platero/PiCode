@@ -52,13 +52,15 @@ Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero
 |---|---|---|
 | Qué se abre | El proyecto (*Space*) de la issue | El repositorio de la issue |
 | Vista | **Board** (Kanban) para espacios de software, **List** para el resto; un interruptor cambia de una a otra | **List**, con *Open* y *Closed* y su recuento |
-| Columnas | Los estados del proyecto en su orden, de por hacer a hecho, con las vacías también | — |
+| Columnas | Las del tablero de Jira, en su orden y con las vacías también (se lee la configuración del tablero; pide un permiso aparte, ver abajo) | — |
 | Tarjeta / fila | Título, etiquetas, tipo, clave, prioridad y asignado | Número, título, etiquetas, asignado, comentarios y antigüedad |
 | Búsqueda | Por clave, título, estado, asignado, tipo o etiqueta | Igual |
 
+**Permisos de Jira que se piden aparte (solo cuando hacen falta):** leer el tablero, para pintar sus columnas (*Allow* en el aviso del tablero: `read:board-scope:jira-software`, `read:board-scope.admin:jira-software`, `read:project:jira`), y cambiar de estado, para mover tarjetas (`write:jira-work`). Un nuevo *Allow* mantiene lo ya permitido.
+
 **Mover tarjetas (solo Jira):** en el tablero, arrastrar una tarjeta a otra columna cambia el estado de la issue en Jira. La primera vez el visor pide permiso para cambiar issues (*Allow*, vuelve a abrir la página de Atlassian) y reintenta el movimiento al aceptarlo. La tarjeta se mueve al instante; si Jira no permite ese paso desde el estado actual, vuelve a su columna y lo dice. Solo cambia de estado: no comenta, no edita, no crea.
 
-Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; solo lectura; el orden de las columnas sale del flujo de trabajo del proyecto, no de la configuración del tablero de Jira (eso pediría otro permiso y volver a conectar).
+Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; solo lectura; sin el permiso de tableros el visor lo dice y usa los estados del proyecto, sin hacerlos pasar por las columnas de Jira.
 
 **Cómo funciona por dentro**
 
@@ -80,7 +82,7 @@ Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como t
 **Para activarlo (lo hace el dueño, una vez)**
 
 1. Registrar una **GitHub App** (*Settings → Developer settings*): permiso *Issues: Read-only*, activar *Device flow* (y dejar los tokens con caducidad). Copiar el *Client ID* a `product.json` → `picode.connectors.github.clientId` y, para renovar, el *Client secret* a la variable `GITHUB_CLIENT_SECRET` del servidor (junto con `GITHUB_CLIENT_ID`).
-2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian: permisos *Jira API → read:jira-work* y *write:jira-work* (este último solo se pide al usuario la primera vez que arrastra una tarjeta), y como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`.
+2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian: permisos *Jira API → read:jira-work* y, para el visor, los de tableros (*read:board-scope:jira-software*, *read:board-scope.admin:jira-software*, *read:project:jira*) y *write:jira-work*; estos últimos solo se piden al usuario cuando los necesita (ADR-042, adendas 4 y 5), y como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`.
 3. Desplegar `host/cloud/sync-api` (`vercel deploy --prod`).
 
 Mientras falte el identificador, el conector sale como *Coming soon*.
