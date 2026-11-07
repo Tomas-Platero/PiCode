@@ -38,6 +38,10 @@ export interface IPicodeBoardIssue extends IPicodeIssue {
 	readonly priorityId: string;
 	readonly assigneeId: string;
 	readonly reporterId: string;
+	/** The description as it is edited: Jira's when it is plain text (see `descriptionEditable`), GitHub's Markdown. */
+	readonly description: string;
+	/** False for a Jira description with formatting (lists, links, code…) that plain text would flatten. */
+	readonly descriptionEditable: boolean;
 	readonly createdAt: string;
 	readonly comments: number;
 }
@@ -210,6 +214,8 @@ export function mapJiraBoardIssues(json: unknown, siteUrl: string): IPicodeBoard
 			assignee: asString(asRecord(fields?.assignee)?.displayName),
 			assigneeId: asString(asRecord(fields?.assignee)?.accountId),
 			reporterId: asString(asRecord(fields?.reporter)?.accountId),
+			description: isPlainAdf(fields?.description) ? adfToEditableText(fields?.description) : '',
+			descriptionEditable: isPlainAdf(fields?.description),
 			createdAt: asString(fields?.created),
 			comments: 0,
 		});
@@ -248,6 +254,8 @@ export function mapGithubBoardIssues(json: unknown, repo: IPicodeRepo): IPicodeB
 			assignee: asString(asRecord(raw?.assignee)?.login),
 			assigneeId: '',
 			reporterId: '',
+			description: base.body,
+			descriptionEditable: true,
 			createdAt: asString(raw?.created_at),
 			comments: typeof raw?.comments === 'number' ? raw.comments : 0,
 		});
@@ -371,9 +379,10 @@ export function peopleOf(issues: readonly IPicodeBoardIssue[]): IPicodeNamed[] {
 	return [...people].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** What an edit of a Jira issue changes. `assigneeId: null` leaves the issue unassigned. */
+/** What an edit of a Jira issue changes (the description is plain text here and becomes Jira's own format when saved). `assigneeId: null` leaves the issue unassigned. */
 export interface IPicodeJiraPatch {
 	readonly summary?: string;
+	readonly description?: string;
 	readonly typeId?: string;
 	readonly priorityId?: string;
 	readonly assigneeId?: string | null;
@@ -403,6 +412,9 @@ export function buildJiraUpdate(patch: IPicodeJiraPatch): { readonly fields: Rec
 	if (summary && summary.length <= 255) {
 		fields.summary = summary;
 	}
+	if (patch.description !== undefined) {
+		fields.description = patch.description.trim() ? textToAdf(patch.description) : null;
+	}
 	if (patch.typeId && NUMERIC_ID.test(patch.typeId)) {
 		fields.issuetype = { id: patch.typeId };
 	}
@@ -421,4 +433,113 @@ export function buildJiraUpdate(patch: IPicodeJiraPatch): { readonly fields: Rec
 		fields.labels = normalizeLabels(patch.labels);
 	}
 	return Object.keys(fields).length > 0 ? { fields } : undefined;
+}
+
+/**
+ * Whether a Jira description is only paragraphs of unformatted text (and line breaks). Anything
+ * else (lists, links, code, images, mentions) would be flattened by saving it as plain text, so
+ * such a description is not edited here.
+ */
+export function isPlainAdf(doc: unknown): boolean {
+	if (doc === null || doc === undefined) {
+		return true;
+	}
+	const root = asRecord(doc);
+	if (root?.type !== 'doc' || !Array.isArray(root.content)) {
+		return false;
+	}
+	return root.content.every(node => {
+		const paragraph = asRecord(node);
+		if (paragraph?.type !== 'paragraph') {
+			return false;
+		}
+		const children: unknown = paragraph.content === undefined ? [] : paragraph.content;
+		return Array.isArray(children) && children.every(child => {
+			const item = asRecord(child);
+			return item?.type === 'hardBreak' || (item?.type === 'text' && typeof item.text === 'string' && item.marks === undefined);
+		});
+	});
+}
+
+/** A plain description as text: paragraphs apart by a blank line, line breaks as new lines. */
+export function adfToEditableText(doc: unknown): string {
+	const content = asRecord(doc)?.content;
+	if (!Array.isArray(content)) {
+		return '';
+	}
+	return content.map(node => {
+		const children = asRecord(node)?.content;
+		return Array.isArray(children) ? children.map(child => asRecord(child)?.type === 'hardBreak' ? '\n' : asString(asRecord(child)?.text)).join('') : '';
+	}).join('\n\n').trim();
+}
+
+/** The other way round: the text of `adfToEditableText` as Jira's document format. */
+export function textToAdf(text: string): { readonly type: 'doc'; readonly version: 1; readonly content: readonly unknown[] } {
+	const paragraphs = text.replace(/\r\n?/g, '\n').trim().split(/\n{2,}/).filter(paragraph => paragraph.length > 0);
+	return {
+		type: 'doc',
+		version: 1,
+		content: paragraphs.map(paragraph => ({
+			type: 'paragraph',
+			content: paragraph.split('\n').flatMap((line, index) => [
+				...(index > 0 ? [{ type: 'hardBreak' }] : []),
+				...(line.length > 0 ? [{ type: 'text', text: line }] : []),
+			]),
+		})),
+	};
+}
+
+/** Jira's people (`GET /user/search`, `/user/assignable/search`): active people of the site, not apps or portal customers. */
+export function mapJiraUsers(json: unknown): IPicodeNamed[] {
+	if (!Array.isArray(json)) {
+		return [];
+	}
+	const people: IPicodeNamed[] = [];
+	for (const item of json) {
+		const user = asRecord(item);
+		const id = asString(user?.accountId);
+		const name = asString(user?.displayName);
+		const type = asString(user?.accountType);
+		if (id && name && user?.active !== false && (type === '' || type === 'atlassian')) {
+			people.push({ id, name });
+		}
+	}
+	return people;
+}
+
+/** `GET /repos/{o}/{r}/labels` → the label names. */
+export function mapGithubLabelNames(json: unknown): string[] {
+	return Array.isArray(json) ? json.map(label => asString(asRecord(label)?.name)).filter(name => name.length > 0) : [];
+}
+
+/** `GET /repos/{o}/{r}/assignees` → the people an issue of the repository can be given to (their login is both id and name). */
+export function mapGithubAssignees(json: unknown): IPicodeNamed[] {
+	return Array.isArray(json) ? json.map(user => asString(asRecord(user)?.login)).filter(login => login.length > 0).map(login => ({ id: login, name: login })) : [];
+}
+
+/** What an edit of a GitHub issue changes. */
+export interface IPicodeGithubPatch {
+	readonly title?: string;
+	readonly body?: string;
+	readonly labels?: readonly string[];
+	readonly assignees?: readonly string[];
+}
+
+/** The body of `PATCH /repos/{o}/{r}/issues/{n}`; anything that is not a well-formed value is left out. */
+export function buildGithubUpdate(patch: IPicodeGithubPatch): Record<string, unknown> | undefined {
+	const body: Record<string, unknown> = {};
+	const title = patch.title?.trim();
+	if (title && title.length <= 256) {
+		body.title = title;
+	}
+	if (patch.body !== undefined && patch.body.length <= 65_536) {
+		body.body = patch.body;
+	}
+	if (patch.labels) {
+		body.labels = [...new Set(patch.labels.map(label => label.trim()).filter(label => label.length > 0 && label.length <= 50))];
+	}
+	if (patch.assignees) {
+		body.assignees = patch.assignees.filter(login => /^[A-Za-z0-9-]{1,39}$/.test(login));
+	}
+	return Object.keys(body).length > 0 ? body : undefined;
 }

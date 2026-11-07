@@ -757,3 +757,113 @@
 	background: var(--vscode-input-background);
 	outline: none;
 }
+
+/* Description editor, person picker */
+
+.picode-issues-description-edit {
+	width: 100%;
+	min-height: 140px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	font: inherit;
+	line-height: 1.5;
+	resize: vertical;
+	box-sizing: border-box;
+}
+
+.picode-issues-description-edit:focus {
+	border-color: var(--vscode-focusBorder);
+	background: var(--vscode-input-background);
+	outline: none;
+}
+
+.picode-issues-hint {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-person {
+	position: relative;
+}
+
+.picode-issues-person-button {
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-issues-people {
+	display: none;
+	position: absolute;
+	z-index: 20;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	min-width: 220px;
+	padding: 6px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	box-shadow: 0 6px 20px color-mix(in srgb, #000 45%, transparent);
+}
+
+.picode-issues-people.open {
+	display: block;
+}
+
+.picode-issues-people-search {
+	width: 100%;
+	padding: 3px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 6px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	box-sizing: border-box;
+}
+
+.picode-issues-people-list {
+	max-height: 200px;
+	margin: 6px 0 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.picode-issues-people-item,
+.picode-issues-people-empty {
+	padding: 4px 8px;
+	border-radius: 4px;
+}
+
+.picode-issues-people-item {
+	cursor: pointer;
+}
+
+.picode-issues-people-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-issues-people-item.current {
+	font-weight: 600;
+}
+
+.picode-issues-people-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-people-note {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-people-note:empty {
+	display: none;
+}

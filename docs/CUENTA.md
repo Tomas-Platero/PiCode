@@ -48,7 +48,7 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 
 Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero y la issue pulsada en una **ventana flotante** en el centro (se cierra con la X, `Esc` o pulsando fuera): resumen, descripción, estado, tipo, prioridad, asignado, informador, etiquetas y fechas, con *Fix with pi* y *Open in browser*. Pulsar otra issue del mismo proyecto reutiliza la pestaña.
 
-**Editar una issue (solo Jira):** en la ventana se pueden cambiar el resumen, el tipo, la prioridad, el asignado, el informador y las etiquetas; cada cambio se guarda al hacerlo, se ve al instante y, si Jira lo rechaza, vuelve atrás y lo dice. Pide el mismo permiso de escritura que arrastrar tarjetas (*Allow* la primera vez). El asignado y el informador se eligen entre las personas que ya aparecen en las issues del proyecto.
+**Editar una issue:** en la ventana todo se cambia en el sitio y cada cambio se guarda al hacerlo, se ve al instante y, si el servicio lo rechaza, vuelve atrás y lo dice. **Jira:** resumen, descripción, tipo, prioridad, asignado, informador y etiquetas. **GitHub:** título, descripción, etiquetas (con las del repositorio como sugerencia) y asignado. El asignado y el informador de Jira se eligen en una lista que ya trae a las personas del proyecto y busca en Jira a quien se escriba (pide un permiso aparte, ver abajo). La descripción de Jira solo se edita si es texto sin formato; si trae listas, enlaces, código o menciones se muestra tal cual y se dice que se edita en Jira, para no aplanarla al guardar. En Jira se pide el mismo permiso de escritura que arrastrar tarjetas (*Allow* la primera vez); en GitHub, que la App tenga permiso de escritura de issues (ver abajo).
 
 | | Jira | GitHub |
 |---|---|---|
@@ -58,11 +58,11 @@ Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero
 | Tarjeta / fila | Título, etiquetas, tipo, clave, prioridad y asignado | Número, título, etiquetas, asignado, comentarios y antigüedad |
 | Búsqueda | Por clave, título, estado, asignado, tipo o etiqueta | Igual |
 
-**Permisos de Jira que se piden aparte (solo cuando hacen falta):** leer el tablero, para pintar sus columnas (*Allow* en el aviso del tablero: `read:board-scope:jira-software`, `read:board-scope.admin:jira-software`, `read:project:jira`), y cambiar de estado, para mover tarjetas (`write:jira-work`). Un nuevo *Allow* mantiene lo ya permitido.
+**Permisos de Jira que se piden aparte (solo cuando hacen falta):** leer el tablero, para pintar sus columnas (*Allow* en el aviso del tablero: `read:board-scope:jira-software`, `read:board-scope.admin:jira-software`, `read:project:jira`), y cambiar issues (`write:jira-work`) junto con buscar personas (`read:jira-user`), la primera vez que se arrastra una tarjeta o se edita un campo. Un nuevo *Allow* mantiene lo ya permitido. Los nombres vienen de las listas de la propia consola de Atlassian y de su especificación; `read:jira-user` para buscar usuarios no se pudo confirmar en su documentación, así que si Atlassian lo rechazara, el visor lo diría.
 
 **Mover tarjetas (solo Jira):** en el tablero, arrastrar una tarjeta a otra columna cambia el estado de la issue en Jira. La primera vez el visor pide permiso para cambiar issues (*Allow*, vuelve a abrir la página de Atlassian) y reintenta el movimiento al aceptarlo. La tarjeta se mueve al instante; si Jira no permite ese paso desde el estado actual, vuelve a su columna y lo dice. Solo cambia de estado: no comenta, no edita, no crea.
 
-Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; en GitHub la ventana es de solo lectura; el asignado y el informador solo pueden elegirse entre quienes ya salen en las issues del proyecto; sin el permiso de tableros el visor lo dice y usa los estados del proyecto, sin hacerlos pasar por las columnas de Jira.
+Límites: hasta 300 issues por proyecto (lo avisa); sin el permiso de tableros el visor lo dice y usa los estados del proyecto, sin hacerlos pasar por las columnas de Jira; la descripción de GitHub se edita como Markdown sin vista previa.
 
 **Cómo funciona por dentro**
 
@@ -83,8 +83,8 @@ Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como t
 
 **Para activarlo (lo hace el dueño, una vez)**
 
-1. Registrar una **GitHub App** (*Settings → Developer settings*): permiso *Issues: Read-only*, activar *Device flow* (y dejar los tokens con caducidad). Copiar el *Client ID* a `product.json` → `picode.connectors.github.clientId` y, para renovar, el *Client secret* a la variable `GITHUB_CLIENT_SECRET` del servidor (junto con `GITHUB_CLIENT_ID`).
-2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian: permisos *Jira API → read:jira-work* y, para el visor, los de tableros (*read:board-scope:jira-software*, *read:board-scope.admin:jira-software*, *read:project:jira*) y *write:jira-work*; estos últimos solo se piden al usuario cuando los necesita (ADR-042, adendas 4 y 5), y como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`.
+1. Registrar una **GitHub App** (*Settings → Developer settings*): permiso *Issues: Read and write* (*Read-only* basta para ver las issues; para editarlas desde el visor hace falta escritura, y el dueño de cada instalación debe aceptar el cambio), activar *Device flow* (y dejar los tokens con caducidad). Copiar el *Client ID* a `product.json` → `picode.connectors.github.clientId` y, para renovar, el *Client secret* a la variable `GITHUB_CLIENT_SECRET` del servidor (junto con `GITHUB_CLIENT_ID`).
+2. Registrar una app **OAuth 2.0 (3LO)** en la consola de Atlassian. En *Permissions → Jira API → Configure*: en **Classic scopes** `read:jira-work`, `write:jira-work` y `read:jira-user`; en **Granular scopes** `read:board-scope:jira-software`, `read:board-scope.admin:jira-software` y `read:project:jira`. Como *Callback URL* `https://www.getpicode.app/api/v1/connect/atlassian/callback`. Copiar el *Client ID* a `product.json` → `picode.connectors.atlassian.clientId`, y en el servidor `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET` y `ATLASSIAN_REDIRECT_URI`. Los permisos de escribir, de buscar personas y de tableros solo se piden al usuario cuando los necesita (ADR-042, adendas 4 a 7).
 3. Desplegar `host/cloud/sync-api` (`vercel deploy --prod`).
 
 Mientras falte el identificador, el conector sale como *Coming soon*.

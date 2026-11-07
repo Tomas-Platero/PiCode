@@ -24,9 +24,9 @@ import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
 import {
-	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, normalizeLabels, peopleOf, PicodeBoardLayout,
+	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, normalizeLabels, peopleOf, PicodeBoardLayout,
 } from './picodeIssueBoard.js';
-import { IPicodeConnectorService, IPicodeJiraEditOptions, IPicodeProjectViewResult } from './picodeConnectorService.js';
+import { IPicodeConnectorService, IPicodeGithubEditOptions, IPicodeJiraEditOptions, IPicodeProjectViewResult } from './picodeConnectorService.js';
 import { outcomeMessage, PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
 import { IPicodeIssuesEditorOptions, PICODE_ISSUES_EDITOR_ID, PicodeIssuesEditorInput } from './picodeIssuesEditorInput.js';
 
@@ -68,6 +68,8 @@ export class PicodeIssuesEditor extends EditorPane {
 	/** What a type and a priority can be changed to, read when the first issue is opened. */
 	private editOptions: IPicodeJiraEditOptions | undefined;
 	private editOptionsPending = false;
+	private githubOptions: IPicodeGithubEditOptions | undefined;
+	private githubOptionsPending = false;
 	private dragKey: string | undefined;
 	private bannerHost: HTMLElement | undefined;
 	private readonly actions: PicodeIssueActions;
@@ -108,6 +110,8 @@ export class PicodeIssuesEditor extends EditorPane {
 		this.selectedKey = (options as IPicodeIssuesEditorOptions | undefined)?.selectKey;
 		this.editOptions = undefined;
 		this.editOptionsPending = false;
+		this.githubOptions = undefined;
+		this.githubOptionsPending = false;
 		await this.load();
 	}
 
@@ -562,7 +566,7 @@ export class PicodeIssuesEditor extends EditorPane {
 
 	// -- The issue in its own window ---------------------------------------------------------------
 
-	/** The clicked issue opens in a window over the viewer; in Jira its fields can be changed there. */
+	/** The clicked issue opens in a window over the viewer, where its fields can be changed. */
 	private renderDialog(): void {
 		const host = this.dialogHost;
 		if (!host) {
@@ -577,7 +581,7 @@ export class PicodeIssuesEditor extends EditorPane {
 		if (!view || !issue) {
 			return;
 		}
-		const editable = issue.source === 'jira';
+		const jira = issue.source === 'jira';
 		this.dialogStore.add(addDisposableListener(host, EventType.MOUSE_DOWN, e => {
 			if (e.target === host) {
 				this.closeDialog();
@@ -605,35 +609,38 @@ export class PicodeIssuesEditor extends EditorPane {
 		const main = append(body, $('.picode-issues-dialog-main'));
 		const side = append(body, $('.picode-issues-dialog-side'));
 
-		// The summary is the title: a field in Jira, plain text on GitHub.
-		if (editable) {
-			const summary = append(main, $('input.picode-issues-summary', { type: 'text', 'aria-label': localize('picodeIssuesViewSummary', "Summary") })) as HTMLInputElement;
-			summary.value = issue.title;
-			this.dialogStore.add(addDisposableListener(summary, EventType.BLUR, () => {
-				const value = summary.value.trim();
-				const latest = this.currentIssue(issue.key) ?? issue;
-				if (value && value !== latest.title) {
-					void this.save(latest, { summary: value }, { title: value });
-				} else {
-					summary.value = latest.title;
-				}
-			}));
-			this.dialogStore.add(addDisposableListener(summary, EventType.KEY_DOWN, e => {
-				if (e.key === 'Enter') {
-					summary.blur();
-				}
-			}));
-		} else {
-			append(main, $('h3.picode-issues-detail-title')).textContent = issue.title;
-		}
+		// The summary is the title.
+		const summary = append(main, $('input.picode-issues-summary', { type: 'text', 'aria-label': localize('picodeIssuesViewSummary', "Summary") })) as HTMLInputElement;
+		summary.value = issue.title;
+		this.dialogStore.add(addDisposableListener(summary, EventType.BLUR, () => {
+			const value = summary.value.trim();
+			const latest = this.currentIssue(issue.key) ?? issue;
+			if (value && value !== latest.title) {
+				void this.save(latest, { jira: { summary: value }, github: { title: value } }, { title: value });
+			} else {
+				summary.value = latest.title;
+			}
+		}));
+		this.dialogStore.add(addDisposableListener(summary, EventType.KEY_DOWN, e => {
+			if (e.key === 'Enter') {
+				summary.blur();
+			}
+		}));
 
 		append(main, $('h4.picode-issues-section')).textContent = localize('picodeIssuesViewDescription', "Description");
-		const description = append(main, $('.picode-issues-description'));
-		if (issue.body) {
-			description.textContent = issue.body;
+		if (issue.descriptionEditable) {
+			const description = append(main, $('textarea.picode-issues-description-edit', { rows: '9', placeholder: localize('picodeIssuesViewAddDescription', "Add a description") })) as HTMLTextAreaElement;
+			description.value = issue.description;
+			this.dialogStore.add(addDisposableListener(description, EventType.BLUR, () => {
+				const latest = this.currentIssue(issue.key) ?? issue;
+				if (description.value !== latest.description) {
+					void this.save(latest, { jira: { description: description.value }, github: { body: description.value } }, { description: description.value, body: description.value });
+				}
+			}));
 		} else {
-			description.classList.add('empty');
-			description.textContent = localize('picodeIssuesViewNoDescription', "No description.");
+			const description = append(main, $('.picode-issues-description'));
+			description.textContent = issue.body;
+			append(main, $('.picode-issues-hint')).textContent = localize('picodeIssuesViewRichDescription', "This description has formatting that can only be edited in Jira.");
 		}
 		const actions = append(main, $('.picode-issues-detail-actions'));
 		const fix = append(actions, $('button.picode-issues-primary', { type: 'button' })) as HTMLButtonElement;
@@ -657,33 +664,27 @@ export class PicodeIssuesEditor extends EditorPane {
 			append(facts, $('dt')).textContent = label;
 			return append(facts, $('dd'));
 		};
-		if (editable) {
-			this.loadEditOptions(issue.key);
+		this.loadEditOptions(issue);
+		const unassigned = { id: '', name: localize('picodeIssuesViewUnassigned', "Unassigned") };
+		if (jira) {
 			const people = peopleOf(this.issuesOf(view));
 			this.selectField(row(localize('picodeIssuesViewType', "Type")), issue.type, issue.typeId, this.editOptions?.types ?? [],
-				choice => void this.save(issue, { typeId: choice.id }, { typeId: choice.id, type: choice.name }));
+				choice => void this.save(issue, { jira: { typeId: choice.id } }, { typeId: choice.id, type: choice.name }));
 			this.selectField(row(localize('picodeIssuesViewPriority', "Priority")), issue.priority, issue.priorityId, this.editOptions?.priorities ?? [],
-				choice => void this.save(issue, { priorityId: choice.id }, { priorityId: choice.id, priority: choice.name }));
-			this.selectField(row(localize('picodeIssuesViewAssignee', "Assignee")), issue.assignee, issue.assigneeId,
-				[{ id: '', name: localize('picodeIssuesViewUnassigned', "Unassigned") }, ...people],
-				choice => void this.save(issue, { assigneeId: choice.id || null }, { assigneeId: choice.id, assignee: choice.id ? choice.name : '' }));
-			this.selectField(row(localize('picodeIssuesViewReporter', "Reporter")), issue.author, issue.reporterId, people,
-				choice => void this.save(issue, { reporterId: choice.id }, { reporterId: choice.id, author: choice.name }));
-			this.labelsField(row(localize('picodeIssuesViewLabels', "Labels")), issue);
+				choice => void this.save(issue, { jira: { priorityId: choice.id } }, { priorityId: choice.id, priority: choice.name }));
+			this.personField(row(localize('picodeIssuesViewAssignee', "Assignee")), issue, 'assignee', issue.assigneeId, issue.assignee || unassigned.name, people, unassigned,
+				person => void this.save(issue, { jira: { assigneeId: person.id || null } }, { assigneeId: person.id, assignee: person.id ? person.name : '' }));
+			this.personField(row(localize('picodeIssuesViewReporter', "Reporter")), issue, 'reporter', issue.reporterId, issue.author, people, undefined,
+				person => void this.save(issue, { jira: { reporterId: person.id } }, { reporterId: person.id, author: person.name }));
+			this.labelsField(row(localize('picodeIssuesViewLabels', "Labels")), issue, []);
 		} else {
-			const fact = (label: string, value: string): void => {
-				if (value) {
-					row(label).textContent = value;
-				}
-			};
-			fact(localize('picodeIssuesViewAssignee', "Assignee"), issue.assignee || localize('picodeIssuesViewUnassigned', "Unassigned"));
-			fact(localize('picodeIssuesViewAuthor', "Author"), issue.author);
-			if (issue.labels.length > 0) {
-				const tags = append(row(localize('picodeIssuesViewLabels', "Labels")), $('.picode-issue-card-tags'));
-				for (const label of issue.labels) {
-					append(tags, $('span.picode-issue-tag')).textContent = label;
-				}
+			const assignees = this.githubOptions?.assignees ?? [];
+			this.personField(row(localize('picodeIssuesViewAssignee', "Assignee")), issue, 'assignee', issue.assignee, issue.assignee || unassigned.name, assignees, unassigned,
+				person => void this.save(issue, { github: { assignees: person.id ? [person.id] : [] } }, { assigneeId: person.id, assignee: person.id ? person.name : '' }));
+			if (issue.author) {
+				row(localize('picodeIssuesViewAuthor', "Author")).textContent = issue.author;
 			}
+			this.labelsField(row(localize('picodeIssuesViewLabels', "Labels")), issue, this.githubOptions?.labels ?? []);
 		}
 		row(localize('picodeIssuesViewCreated', "Created")).textContent = ageOf(issue.createdAt);
 		row(localize('picodeIssuesViewUpdated', "Updated")).textContent = ageOf(issue.updatedAt);
@@ -711,19 +712,33 @@ export class PicodeIssuesEditor extends EditorPane {
 		this.dialogStore.add(addDisposableListener(button, EventType.CLICK, run));
 	}
 
-	/** What a type or a priority can be changed to is read once, when the first issue is opened. */
-	private loadEditOptions(key: string): void {
-		if (this.editOptions || this.editOptionsPending) {
-			return;
-		}
-		this.editOptionsPending = true;
-		void this.connectors.loadJiraEditOptions(key).then(options => {
-			this.editOptionsPending = false;
-			this.editOptions = options;
-			if (this.selectedKey) {
-				this.renderDialog();
+	/** What a type, a priority, a label or a person can be changed to is read once, when the first issue is opened. */
+	private loadEditOptions(issue: IPicodeBoardIssue): void {
+		if (issue.source === 'jira') {
+			if (this.editOptions || this.editOptionsPending) {
+				return;
 			}
-		});
+			this.editOptionsPending = true;
+			void this.connectors.loadJiraEditOptions(issue.key).then(options => {
+				this.editOptionsPending = false;
+				this.editOptions = options;
+				if (this.selectedKey) {
+					this.renderDialog();
+				}
+			});
+		} else {
+			if (this.githubOptions || this.githubOptionsPending) {
+				return;
+			}
+			this.githubOptionsPending = true;
+			void this.connectors.loadGithubEditOptions(issue.project).then(options => {
+				this.githubOptionsPending = false;
+				this.githubOptions = options;
+				if (this.selectedKey) {
+					this.renderDialog();
+				}
+			});
+		}
 	}
 
 	/** A drop-down: the current value always shows, even before the list of choices arrives. */
@@ -745,10 +760,104 @@ export class PicodeIssuesEditor extends EditorPane {
 		}));
 	}
 
-	private labelsField(cell: HTMLElement, issue: IPicodeBoardIssue): void {
+	/**
+	 * A person: a button with the current name that opens a list with a search box. The people the
+	 * project already has come first; in Jira, typing also looks anyone up (that needs a permission
+	 * the account is asked for the first time).
+	 */
+	private personField(cell: HTMLElement, issue: IPicodeBoardIssue, mode: 'assignee' | 'reporter', currentId: string, currentName: string,
+		known: readonly IPicodeNamed[], nobody: IPicodeNamed | undefined, onChoose: (person: IPicodeNamed) => void): void {
+		cell.classList.add('picode-issues-person');
+		const button = append(cell, $('button.picode-issues-select.picode-issues-person-button', { type: 'button' })) as HTMLButtonElement;
+		button.textContent = currentName;
+		const popup = append(cell, $('.picode-issues-people'));
+		const search = append(popup, $('input.picode-issues-people-search', { type: 'text', placeholder: localize('picodeIssuesViewSearchPeople', "Search people") })) as HTMLInputElement;
+		const results = append(popup, $('ul.picode-issues-people-list'));
+		const note = append(popup, $('.picode-issues-people-note'));
+		let generation = 0;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const close = (): void => popup.classList.remove('open');
+		const show = (people: readonly IPicodeNamed[]): void => {
+			clearNode(results);
+			const text = search.value.trim().toLowerCase();
+			for (const person of [...(nobody && !text ? [nobody] : []), ...people]) {
+				const item = append(results, $('li.picode-issues-people-item'));
+				item.textContent = person.name;
+				item.classList.toggle('current', person.id === currentId);
+				this.dialogStore.add(addDisposableListener(item, EventType.CLICK, () => {
+					close();
+					if (person.id !== currentId) {
+						onChoose(person);
+					}
+				}));
+			}
+			if (results.childElementCount === 0) {
+				append(results, $('li.picode-issues-people-empty')).textContent = localize('picodeIssuesViewNoPeople', "No one found.");
+			}
+		};
+		const refresh = async (): Promise<void> => {
+			const text = search.value.trim();
+			const mine = ++generation;
+			clearNode(note);
+			show(text ? known.filter(person => person.name.toLowerCase().includes(text.toLowerCase())) : known);
+			if (!text || issue.source !== 'jira') {
+				return;
+			}
+			const found = await this.connectors.searchJiraUsers(issue.key, text, mode);
+			if (mine !== generation) {
+				return;
+			}
+			if (found === 'needsPermission') {
+				this.askToAllowWriting(localize('picodeIssuesViewNeedsUsers', "To find other people, PiCode needs permission to read users in Jira."),
+					(message, label, run) => {
+						clearNode(note);
+						append(note, $('span')).textContent = message;
+						if (label && run) {
+							const allow = append(note, $('button.picode-overview-action', { type: 'button' })) as HTMLButtonElement;
+							allow.textContent = label;
+							allow.addEventListener('click', run, { once: true });
+						}
+					},
+					() => void refresh());
+			} else {
+				show(found);
+			}
+		};
+		this.dialogStore.add(addDisposableListener(button, EventType.CLICK, () => {
+			const opening = !popup.classList.contains('open');
+			popup.classList.toggle('open', opening);
+			if (opening) {
+				search.value = '';
+				void refresh();
+				search.focus();
+			}
+		}));
+		this.dialogStore.add(addDisposableListener(search, EventType.INPUT, () => {
+			clearTimeout(timer);
+			timer = setTimeout(() => void refresh(), 250);
+		}));
+		this.dialogStore.add(addDisposableListener(search, EventType.KEY_DOWN, e => {
+			if (e.key === 'Escape') {
+				e.stopPropagation();
+				close();
+				button.focus();
+			}
+		}));
+		// A click anywhere else in the window closes the list.
+		if (this.dialogHost) {
+			this.dialogStore.add(addDisposableListener(this.dialogHost, EventType.MOUSE_DOWN, e => {
+				if (e.target instanceof Node && !cell.contains(e.target)) {
+					close();
+				}
+			}));
+		}
+		this.dialogStore.add({ dispose: () => clearTimeout(timer) });
+	}
+
+	private labelsField(cell: HTMLElement, issue: IPicodeBoardIssue, suggestions: readonly string[]): void {
 		const box = append(cell, $('.picode-issues-labels'));
 		const apply = (labels: readonly string[]): void => {
-			void this.save(issue, { labels }, { labels });
+			void this.save(issue, { jira: { labels }, github: { labels } }, { labels });
 			this.renderDialog();
 			(this.dialogHost?.querySelector('.picode-issues-label-input') as HTMLInputElement | null)?.focus();
 		};
@@ -761,11 +870,19 @@ export class PicodeIssuesEditor extends EditorPane {
 			this.dialogStore.add(addDisposableListener(remove, EventType.CLICK, () => apply(issue.labels.filter(existing => existing !== label))));
 		}
 		const input = append(box, $('input.picode-issues-label-input', { type: 'text', placeholder: localize('picodeIssuesViewAddLabel', "Add a label") })) as HTMLInputElement;
+		if (suggestions.length > 0) {
+			const list = append(box, $('datalist', { id: 'picode-issues-label-suggestions' }));
+			for (const suggestion of suggestions) {
+				append(list, $('option')).setAttribute('value', suggestion);
+			}
+			input.setAttribute('list', 'picode-issues-label-suggestions');
+		}
 		this.dialogStore.add(addDisposableListener(input, EventType.KEY_DOWN, e => {
 			if (e.key !== 'Enter') {
 				return;
 			}
-			const [added] = normalizeLabels([input.value]);
+			// Jira labels cannot hold spaces; GitHub's can.
+			const [added] = issue.source === 'jira' ? normalizeLabels([input.value]) : [input.value.trim()];
 			if (added && !issue.labels.includes(added)) {
 				apply([...issue.labels, added]);
 			}
@@ -774,11 +891,12 @@ export class PicodeIssuesEditor extends EditorPane {
 	}
 
 	/**
-	 * Saves a change. The board and the window show it at once; if Jira says no, it goes back and
-	 * the reason is shown in the window.
+	 * Saves a change. The board and the window show it at once; if the service says no, it goes back
+	 * and the reason is shown in the window. \`edit\` holds the change in each service's own terms.
 	 */
-	private async save(issue: IPicodeBoardIssue, patch: IPicodeJiraPatch, local: Partial<IPicodeBoardIssue>): Promise<void> {
+	private async save(issue: IPicodeBoardIssue, edit: { readonly jira?: IPicodeJiraPatch; readonly github?: IPicodeGithubPatch }, local: Partial<IPicodeBoardIssue>): Promise<void> {
 		this.dialogNotice();
+		const jira = issue.source === 'jira';
 		const before = this.moved.get(issue.key);
 		this.moved.set(issue.key, { ...before, ...local });
 		this.renderBody();
@@ -791,16 +909,28 @@ export class PicodeIssuesEditor extends EditorPane {
 			this.renderBody();
 			this.renderDialog();
 		};
-		const askToAllow = (): void => this.askToAllowWriting(
-			localize('picodeIssuesViewNeedsEdit', "To edit issues, PiCode needs permission to change them in Jira."),
-			(text, label, run) => this.dialogNotice(text, label, run),
-			() => { this.dialogNotice(); void this.save(issue, patch, local); });
-		if (!(await this.connectors.canMoveJiraIssues())) {
+		const askToAllow = (): void => {
+			if (jira) {
+				this.askToAllowWriting(
+					localize('picodeIssuesViewNeedsEdit', "To edit issues, PiCode needs permission to change them in Jira."),
+					(text, label, run) => this.dialogNotice(text, label, run),
+					() => { this.dialogNotice(); void this.save(issue, edit, local); });
+			} else {
+				// GitHub's permissions belong to the App: whoever installed it has to accept the change on GitHub.
+				this.dialogNotice(
+					localize('picodeIssuesViewGithubNeedsEdit', "GitHub has not allowed PiCode to edit issues in this repository yet."),
+					localize('picodeIssuesViewGithubReview', "Review permissions"),
+					() => void this.openerService.open(URI.parse('https://github.com/settings/installations'), { openExternal: true }));
+			}
+		};
+		if (jira && !(await this.connectors.canMoveJiraIssues())) {
 			revert();
 			askToAllow();
 			return;
 		}
-		const outcome = await this.connectors.updateJiraIssue(issue.key, patch);
+		const outcome = jira
+			? await this.connectors.updateJiraIssue(issue.key, edit.jira ?? {})
+			: await this.connectors.updateGithubIssue(issue.key, edit.github ?? {});
 		if (outcome === 'saved') {
 			void this.load(true);
 			return;
@@ -810,7 +940,7 @@ export class PicodeIssuesEditor extends EditorPane {
 			askToAllow();
 		} else {
 			this.dialogNotice(outcome === 'rejected'
-				? localize('picodeIssuesViewEditRejected', "Jira did not accept this change.")
+				? (jira ? localize('picodeIssuesViewEditRejected', "Jira did not accept this change.") : localize('picodeIssuesViewEditRejectedGithub', "GitHub did not accept this change."))
 				: localize('picodeIssuesViewSaveFailed', "The change could not be saved. Try again."));
 		}
 	}

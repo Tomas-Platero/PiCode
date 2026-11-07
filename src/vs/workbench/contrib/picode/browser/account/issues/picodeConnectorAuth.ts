@@ -31,6 +31,8 @@ export interface IPicodeConnectorTokens {
 	readonly canWrite?: boolean;
 	/** Jira only: the account also allowed PiCode to read boards, so the viewer can show the same columns as Jira. */
 	readonly canReadBoards?: boolean;
+	/** Jira only: the account also allowed PiCode to look people up, to give an issue to someone or name a reporter. */
+	readonly canSearchUsers?: boolean;
 	/** Jira only: the site the account chose. */
 	readonly site?: { readonly cloudId: string; readonly url: string; readonly name: string };
 }
@@ -147,12 +149,12 @@ export function connectorCodeFromCallback(
 /** What reading a board's columns needs (Atlassian's own list for `GET /board` and `GET /board/{id}/configuration`). */
 const BOARD_SCOPES = ['read:board-scope:jira-software', 'read:board-scope.admin:jira-software', 'read:project:jira'];
 
-/** The page Atlassian shows the person: where to ask for permission, and for what. `write` adds moving issues between statuses; `boards` adds reading the board's columns. */
+/** The page Atlassian shows the person: where to ask for permission, and for what. `write` adds changing issues (moving them between statuses, editing their fields) and looking people up; `boards` adds reading the board's columns. */
 export function atlassianAuthorizeUrl(clientId: string, redirectUri: string, state: string, extra: { readonly write?: boolean; readonly boards?: boolean } = {}): string {
 	const query = [
 		['audience', 'api.atlassian.com'],
 		['client_id', clientId],
-		['scope', ['read:jira-work', ...(extra.boards ? BOARD_SCOPES : []), ...(extra.write ? ['write:jira-work'] : []), 'offline_access'].join(' ')],
+		['scope', ['read:jira-work', ...(extra.boards ? BOARD_SCOPES : []), ...(extra.write ? ['write:jira-work', 'read:jira-user'] : []), 'offline_access'].join(' ')],
 		['redirect_uri', redirectUri],
 		['state', state],
 		['response_type', 'code'],

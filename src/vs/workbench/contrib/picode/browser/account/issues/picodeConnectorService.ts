@@ -27,8 +27,8 @@ import {
 	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, tokensFromResponse,
 } from './picodeConnectorAuth.js';
 import {
-	buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapEditMetaTypes, mapJiraBoardColumns, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
+	buildGithubUpdate, buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
+	mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraBoardColumns, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -60,6 +60,12 @@ export interface IPicodeJiraEditOptions {
 	readonly priorities: readonly IPicodeNamed[];
 }
 
+/** What a GitHub issue's labels and assignee can be changed to. Empty lists mean GitHub did not say. */
+export interface IPicodeGithubEditOptions {
+	readonly labels: readonly string[];
+	readonly assignees: readonly IPicodeNamed[];
+}
+
 export type PicodeConnectOutcome = 'connected' | 'cancelled' | 'denied' | 'expired' | 'failed' | 'notPro';
 
 export interface IPicodeGithubAttempt {
@@ -89,6 +95,13 @@ export interface IPicodeConnectorService {
 	loadJiraEditOptions(key: string): Promise<IPicodeJiraEditOptions>;
 	/** Saves a change to one Jira issue (summary, type, priority, assignee, reporter or labels). */
 	updateJiraIssue(key: string, patch: IPicodeJiraPatch): Promise<PicodeEditOutcome>;
+	/** People of the site whose name matches `query`, to give the issue to them (`assignee`) or name them reporter. */
+	searchJiraUsers(key: string, query: string, mode: 'assignee' | 'reporter'): Promise<readonly IPicodeNamed[] | 'needsPermission'>;
+	/** Whether this Jira connection may look people up. */
+	canSearchJiraUsers(): Promise<boolean>;
+	loadGithubEditOptions(repo: string): Promise<IPicodeGithubEditOptions>;
+	/** Saves a change to one GitHub issue (`owner/repo#12`): title, description, labels or assignee. */
+	updateGithubIssue(key: string, patch: IPicodeGithubPatch): Promise<PicodeEditOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
 	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
 	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
@@ -237,7 +250,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			return 'failed';
 		}
 		// The first site is used; an account with several can switch later (the name is shown on the page).
-		await this.save('atlassian', { ...traded, site: sites[0], canWrite: write, canReadBoards: boards });
+		await this.save('atlassian', { ...traded, site: sites[0], canWrite: write, canReadBoards: boards, canSearchUsers: write });
 		return 'connected';
 	}
 
@@ -312,7 +325,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 					if (renewed === 'notPro' || renewed === undefined) {
 						return undefined;
 					}
-					const next = { ...renewed, site: tokens.site, canWrite: tokens.canWrite, canReadBoards: tokens.canReadBoards };
+					const next = { ...renewed, site: tokens.site, canWrite: tokens.canWrite, canReadBoards: tokens.canReadBoards, canSearchUsers: tokens.canSearchUsers };
 					await this.save(service, next);
 					return next;
 				})
@@ -620,6 +633,105 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		}
 	}
 
+	async canSearchJiraUsers(): Promise<boolean> {
+		return (await this.load('atlassian'))?.canSearchUsers === true;
+	}
+
+	async searchJiraUsers(key: string, query: string, mode: 'assignee' | 'reporter'): Promise<readonly IPicodeNamed[] | 'needsPermission'> {
+		if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(key) || query.trim().length === 0) {
+			return [];
+		}
+		try {
+			const tokens = await this.validTokens('atlassian', false);
+			if (tokens === 'notPro' || !tokens?.site) {
+				return [];
+			}
+			if (!tokens.canSearchUsers) {
+				return 'needsPermission';
+			}
+			const api = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3`;
+			const text = encodeURIComponent(query.trim());
+			const url = mode === 'assignee'
+				? `${api}/user/assignable/search?issueKey=${key}&query=${text}&maxResults=20`
+				: `${api}/user/search?query=${text}&maxResults=20`;
+			const found = await this.http('GET', url, { bearer: tokens.accessToken });
+			if (found.status === 401) {
+				return 'needsPermission';
+			}
+			return found.status === 200 ? mapJiraUsers(found.json) : [];
+		} catch (error) {
+			this.logService.warn('[picode.connectors] people could not be searched', error);
+			return [];
+		}
+	}
+
+	async loadGithubEditOptions(repo: string): Promise<IPicodeGithubEditOptions> {
+		const none: IPicodeGithubEditOptions = { labels: [], assignees: [] };
+		if (!parseGithubRepoRef(repo)) {
+			return none;
+		}
+		try {
+			const tokens = await this.validTokens('github', false);
+			if (tokens === 'notPro' || !tokens) {
+				return none;
+			}
+			const [labels, assignees] = await Promise.all([
+				this.http('GET', `${GITHUB_API}/repos/${repo}/labels?per_page=100`, { bearer: tokens.accessToken }),
+				this.http('GET', `${GITHUB_API}/repos/${repo}/assignees?per_page=100`, { bearer: tokens.accessToken }),
+			]);
+			return {
+				labels: labels.status === 200 ? mapGithubLabelNames(labels.json) : [],
+				assignees: assignees.status === 200 ? mapGithubAssignees(assignees.json) : [],
+			};
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the options of a repository could not be read', error);
+			return none;
+		}
+	}
+
+	async updateGithubIssue(key: string, patch: IPicodeGithubPatch): Promise<PicodeEditOutcome> {
+		const match = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)$/.exec(key);
+		const body = buildGithubUpdate(patch);
+		if (!match || !body) {
+			return 'failed';
+		}
+		try {
+			let outcome = await this.patchGithub(match[1], match[2], body, false);
+			if (outcome === 'reconnect') {
+				outcome = await this.patchGithub(match[1], match[2], body, true);
+			}
+			return outcome === 'reconnect' ? 'needsPermission' : outcome;
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the issue could not be saved', error);
+			return 'failed';
+		}
+	}
+
+	private async patchGithub(repo: string, number: string, body: unknown, forceRefresh: boolean): Promise<PicodeEditOutcome | 'reconnect'> {
+		const tokens = await this.validTokens('github', forceRefresh);
+		if (tokens === 'notPro') {
+			return 'failed';
+		}
+		if (!tokens) {
+			return 'reconnect';
+		}
+		const done = await this.http('PATCH', `${GITHUB_API}/repos/${repo}/issues/${number}`, { bearer: tokens.accessToken, json: body });
+		if (done.status >= 200 && done.status < 300) {
+			return 'saved';
+		}
+		if (done.rateLimited) {
+			return 'failed';
+		}
+		switch (done.status) {
+			case 401: return 'reconnect';
+			// GitHub answers 403 when the App has not been allowed to write issues (or the person may not).
+			case 403: return 'needsPermission';
+			case 404:
+			case 422: return 'rejected';
+			default: return 'failed';
+		}
+	}
+
 	/** A failed read still shows the last list, marked as old, instead of an empty page. */
 	private failure(source: PicodeIssueSource, state: Exclude<PicodeIssuesState, 'ok' | 'notConnected'>): IPicodeIssuesResult {
 		const last = this.lastResults.get(source);
@@ -721,7 +833,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 
 	// -- HTTP -------------------------------------------------------------------------------------
 
-	private async http(method: 'GET' | 'POST' | 'PUT', url: string, options: {
+	private async http(method: 'GET' | 'POST' | 'PUT' | 'PATCH', url: string, options: {
 		readonly bearer?: string;
 		readonly headers?: Record<string, string>;
 		readonly body?: string;

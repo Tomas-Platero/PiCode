@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	buildJiraUpdate, mapEditMetaTypes, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
+	adfToEditableText, buildGithubUpdate, buildJiraUpdate, isPlainAdf, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraUsers, textToAdf, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -95,7 +95,7 @@ test('a GitHub issue list keeps open and closed issues and drops pull requests',
 
 const issue = (key: string, status: string, category: IPicodeBoardIssue['category'], extra: Partial<IPicodeBoardIssue> = {}): IPicodeBoardIssue => ({
 	source: 'jira', key, title: `T ${key}`, body: '', url: `https://x/${key}`, project: 'ATW', author: '', external: false, updatedAt: '', labels: [],
-	status, statusId: '', category, type: '', typeId: '', priority: '', priorityId: '', assignee: '', assigneeId: '', reporterId: '', createdAt: '', comments: 0, ...extra,
+	status, statusId: '', category, type: '', typeId: '', priority: '', priorityId: '', assignee: '', assigneeId: '', reporterId: '', description: '', descriptionEditable: true, createdAt: '', comments: 0, ...extra,
 });
 
 test('the board keeps empty columns and adds a status the project no longer lists', () => {
@@ -211,4 +211,61 @@ test('an edit sends only well-formed values, and can unassign or clear the label
 	assert.deepStrictEqual(buildJiraUpdate({ labels: [] }), { fields: { labels: [] } });
 	assert.strictEqual(buildJiraUpdate({ summary: '   ', typeId: 'abc', priorityId: '1;2', assigneeId: 'bad id!', reporterId: '' }), undefined);
 	assert.strictEqual(buildJiraUpdate({ summary: 'x'.repeat(256) }), undefined);
+});
+
+const plainDoc = { type: 'doc', version: 1, content: [
+	{ type: 'paragraph', content: [{ type: 'text', text: 'first' }, { type: 'hardBreak' }, { type: 'text', text: 'second' }] },
+	{ type: 'paragraph', content: [{ type: 'text', text: 'third' }] },
+] };
+
+test('a plain description is edited as text and goes back to the same document', () => {
+	assert.strictEqual(isPlainAdf(plainDoc), true);
+	assert.strictEqual(adfToEditableText(plainDoc), 'first\nsecond\n\nthird');
+	assert.deepStrictEqual(textToAdf('first\nsecond\n\nthird'), plainDoc);
+	assert.strictEqual(isPlainAdf(null), true);
+	assert.deepStrictEqual(textToAdf('   '), { type: 'doc', version: 1, content: [] });
+});
+
+test('a description with formatting is not edited as text, so it is never flattened', () => {
+	const withMark = { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'bold', marks: [{ type: 'strong' }] }] }] };
+	const withList = { type: 'doc', version: 1, content: [{ type: 'bulletList', content: [] }] };
+	assert.strictEqual(isPlainAdf(withMark), false);
+	assert.strictEqual(isPlainAdf(withList), false);
+	assert.strictEqual(isPlainAdf('text'), false);
+});
+
+test('a Jira issue carries its description and whether it can be edited', () => {
+	const [plain, rich] = mapJiraBoardIssues({ issues: [
+		jiraIssue('ATW-1', 'To Do', 'new', { description: plainDoc }),
+		jiraIssue('ATW-2', 'To Do', 'new', { description: { type: 'doc', version: 1, content: [{ type: 'bulletList', content: [] }] } }),
+	] }, SITE);
+	assert.deepStrictEqual([plain.description, plain.descriptionEditable], ['first\nsecond\n\nthird', true]);
+	assert.deepStrictEqual([rich.description, rich.descriptionEditable], ['', false]);
+});
+
+test('an empty description is sent as null, a written one as a document', () => {
+	assert.deepStrictEqual(buildJiraUpdate({ description: '  ' }), { fields: { description: null } });
+	assert.deepStrictEqual(buildJiraUpdate({ description: 'hi' }), { fields: { description: textToAdf('hi') } });
+});
+
+test("Jira's people are the active people of the site", () => {
+	assert.deepStrictEqual(mapJiraUsers([
+		{ accountId: 'a', displayName: 'Ana', active: true, accountType: 'atlassian' },
+		{ accountId: 'b', displayName: 'Bot', active: true, accountType: 'app' },
+		{ accountId: 'c', displayName: 'Gone', active: false, accountType: 'atlassian' },
+		{ displayName: 'No id' },
+	]), [{ id: 'a', name: 'Ana' }]);
+	assert.deepStrictEqual(mapJiraUsers(null), []);
+});
+
+test("GitHub's labels and assignees are read as names", () => {
+	assert.deepStrictEqual(mapGithubLabelNames([{ name: 'bug' }, { name: '' }, {}]), ['bug']);
+	assert.deepStrictEqual(mapGithubAssignees([{ login: 'tom' }, { login: '' }]), [{ id: 'tom', name: 'tom' }]);
+});
+
+test('a GitHub edit sends only well-formed values and can clear the description', () => {
+	assert.deepStrictEqual(buildGithubUpdate({ title: ' New ', body: '', labels: [' bug ', 'bug', ''], assignees: ['tom', 'bad login!'] }),
+		{ title: 'New', body: '', labels: ['bug'], assignees: ['tom'] });
+	assert.deepStrictEqual(buildGithubUpdate({ assignees: [] }), { assignees: [] });
+	assert.strictEqual(buildGithubUpdate({ title: '   ' }), undefined);
 });
