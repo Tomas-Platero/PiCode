@@ -117,7 +117,11 @@ export class PicodeStatusIssues extends Disposable {
 	private renderResult(section: HTMLElement, heading: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined): void {
 		const note = stateMessage(result, text.name);
 		if (note) {
-			this.row(section, Codicon.warning, note);
+			const row = this.row(section, Codicon.warning, note);
+			const install = result.state === 'notInstalled' ? this.connectors.githubInstallUrl() : undefined;
+			if (install) {
+				this.button(row, localize('picodeIssuesInstall', "Install on GitHub"), () => void this.openerService.open(URI.parse(install), { openExternal: true }));
+			}
 		}
 		if (result.state === 'reconnect') {
 			const row = this.row(section, Codicon.plug, localize('picodeConnectorNotConnected', "Not connected"));

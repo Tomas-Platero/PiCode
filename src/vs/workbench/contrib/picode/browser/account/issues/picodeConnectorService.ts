@@ -33,7 +33,8 @@ import {
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
 /** How the last attempt to read issues ended. The page turns each into one plain sentence. */
-export type PicodeIssuesState = 'ok' | 'notConnected' | 'reconnect' | 'offline' | 'rateLimited' | 'notPro';
+/** `notInstalled`: GitHub is connected, but the PiCode app is installed on none of the person's accounts, so no repository is visible. */
+export type PicodeIssuesState = 'ok' | 'notConnected' | 'reconnect' | 'offline' | 'rateLimited' | 'notPro' | 'notInstalled';
 
 export interface IPicodeIssuesResult {
 	readonly state: PicodeIssuesState;
@@ -83,6 +84,8 @@ export interface IPicodeConnectorService {
 	/** False until the product ships the public identifiers of that service (it is then shown as coming soon). */
 	isAvailable(service: PicodeConnectorService): boolean;
 	isConnected(service: PicodeConnectorService): boolean;
+	/** Where the PiCode app is installed on GitHub, when the product knows its address. */
+	githubInstallUrl(): string | undefined;
 	/** The Jira site the account is connected to. */
 	readonly jiraSiteName: string | undefined;
 	beginGithub(): Promise<IPicodeGithubAttempt>;
@@ -169,6 +172,11 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			: !!this.config?.atlassian?.clientId && !!this.config.atlassian.redirectUri;
 	}
 
+	githubInstallUrl(): string | undefined {
+		const slug = this.config?.github?.appSlug;
+		return slug && /^[a-z0-9][a-z0-9-]{0,38}$/.test(slug) ? `https://github.com/apps/${slug}/installations/new` : undefined;
+	}
+
 	isConnected(service: PicodeConnectorService): boolean {
 		return this.storageService.getBoolean(CONNECTED_KEY(service), StorageScope.APPLICATION, false);
 	}
@@ -215,6 +223,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			switch (poll.kind) {
 				case 'tokens':
 					await this.save('github', poll.tokens);
+					void this.guideGithubInstallation(poll.tokens.accessToken);
 					return 'connected';
 				case 'slowDown': wait = poll.intervalMs ?? wait + 5000; break;
 				case 'denied': return 'denied';
@@ -224,6 +233,42 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			}
 		}
 		return 'expired';
+	}
+
+	/**
+	 * Connecting GitHub shows no issue until the PiCode app is installed on the person's
+	 * repositories. So when it is not, its install page opens right away, and the issues appear (the
+	 * panels are told) as soon as the installation exists.
+	 */
+	private async guideGithubInstallation(accessToken: string): Promise<void> {
+		const url = this.githubInstallUrl();
+		if (!url || (await this.installationCount(accessToken)) !== 0) {
+			return;
+		}
+		void this.openerService.open(URI.parse(url), { openExternal: true });
+		// About five minutes, one look every six seconds; it stops if GitHub is disconnected meanwhile.
+		for (let attempt = 0; attempt < 50; attempt++) {
+			await timeout(6000);
+			const tokens = this._store.isDisposed ? undefined : await this.load('github');
+			if (!tokens) {
+				return;
+			}
+			if ((await this.installationCount(tokens.accessToken)) > 0) {
+				this._onDidChange.fire();
+				return;
+			}
+		}
+	}
+
+	/** How many places the PiCode app is installed on for this person; -1 when GitHub could not say. */
+	private async installationCount(accessToken: string): Promise<number> {
+		try {
+			const answer = await this.http('GET', `${GITHUB_API}/user/installations?per_page=1`, { bearer: accessToken });
+			const total = (answer.json as { total_count?: unknown } | undefined)?.total_count;
+			return answer.status === 200 && typeof total === 'number' ? total : -1;
+		} catch {
+			return -1;
+		}
 	}
 
 	async connectAtlassian(token: CancellationToken, options: { readonly write?: boolean; readonly boards?: boolean } = {}): Promise<PicodeConnectOutcome> {
@@ -738,7 +783,7 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return { state, issues: last ?? [], stale: last !== undefined };
 	}
 
-	private async read(source: PicodeIssueSource, service: PicodeConnectorService, forceRefresh: boolean): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notPro'> {
+	private async read(source: PicodeIssueSource, service: PicodeConnectorService, forceRefresh: boolean): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notPro' | 'notInstalled'> {
 		const tokens = await this.validTokens(service, forceRefresh);
 		if (tokens === 'notPro') {
 			return 'notPro';
@@ -749,13 +794,17 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return source === 'github' ? this.readGithub(tokens.accessToken) : this.readJira(tokens);
 	}
 
-	private async readGithub(accessToken: string): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited'> {
+	private async readGithub(accessToken: string): Promise<readonly IPicodeIssue[] | 'reconnect' | 'rateLimited' | 'notInstalled'> {
 		const installations = await this.getJson(`${GITHUB_API}/user/installations?per_page=100`, accessToken);
 		if (!installations.ok) {
 			return installations.reason;
 		}
 		const ids = (installations.json as { installations?: { id?: unknown }[] } | undefined)?.installations
 			?.map(item => item.id).filter((id): id is number => typeof id === 'number') ?? [];
+		if (ids.length === 0) {
+			// An empty list here is not "no issues": the app sees no repository at all.
+			return 'notInstalled';
+		}
 		const repos: IPicodeRepo[] = [];
 		for (const id of ids) {
 			const page = await this.getJson(`${GITHUB_API}/user/installations/${id}/repositories?per_page=100`, accessToken);

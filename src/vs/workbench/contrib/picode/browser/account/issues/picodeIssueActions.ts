@@ -33,6 +33,7 @@ export function stateMessage(result: IPicodeIssuesResult, name: string): string 
 		case 'notConnected': return undefined;
 		case 'reconnect': return localize('picodeIssuesEnded', "The connection ended.");
 		case 'notPro': return localize('picodeIssuesNotPro', "Issues come with the Pro plan.");
+		case 'notInstalled': return localize('picodeIssuesNotInstalled', "PiCode cannot see any of your repositories yet.");
 		case 'rateLimited': return localize('picodeIssuesRateLimited', "{0} asked to wait a few minutes.", name);
 		case 'offline': return result.stale
 			? localize('picodeIssuesOfflineStale', "Could not reach {0}. This is the last list.", name)

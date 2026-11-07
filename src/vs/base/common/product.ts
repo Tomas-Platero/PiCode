@@ -284,7 +284,8 @@ export interface IProductConfiguration {
 		 * is not offered yet. Secrets never live here: the cloud service holds them.
 		 */
 		readonly connectors?: {
-			readonly github?: { readonly clientId?: string };
+			/** `appSlug`: the GitHub App's name in its public address (`github.com/apps/<slug>`), where people install it on their repositories. */
+			readonly github?: { readonly clientId?: string; readonly appSlug?: string };
 			readonly atlassian?: { readonly clientId?: string; readonly redirectUri?: string };
 		};
 	};
