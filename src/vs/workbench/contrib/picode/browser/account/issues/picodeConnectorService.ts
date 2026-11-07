@@ -26,6 +26,10 @@ import {
 	atlassianAuthorizeUrl, connectorCodeFromCallback, IPicodeConnectorTokens, IPicodeDeviceCode, needsRefresh,
 	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, tokensFromResponse,
 } from './picodeConnectorAuth.js';
+import {
+	GITHUB_STATUSES, IPicodeBoardIssue, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
+	mapJiraStatuses, nextJiraPageToken, parseGithubRepoRef,
+} from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
 /** How the last attempt to read issues ended. The page turns each into one plain sentence. */
@@ -36,6 +40,12 @@ export interface IPicodeIssuesResult {
 	readonly issues: readonly IPicodeIssue[];
 	/** True when `issues` is the last list that was read, shown because the new read failed. */
 	readonly stale: boolean;
+}
+
+export interface IPicodeProjectViewResult {
+	readonly state: PicodeIssuesState;
+	/** Present when `state` is `ok`. */
+	readonly view: IPicodeProjectView | undefined;
 }
 
 export type PicodeConnectOutcome = 'connected' | 'cancelled' | 'denied' | 'expired' | 'failed' | 'notPro';
@@ -61,6 +71,8 @@ export interface IPicodeConnectorService {
 	connectAtlassian(token: CancellationToken): Promise<PicodeConnectOutcome>;
 	disconnect(service: PicodeConnectorService): Promise<void>;
 	listIssues(source: PicodeIssueSource): Promise<IPicodeIssuesResult>;
+	/** Every issue of one Jira project (`ATW`) or GitHub repository (`owner/repo`), open and closed, for the issues viewer. */
+	loadProjectView(source: PicodeIssueSource, ref: string): Promise<IPicodeProjectViewResult>;
 	/** `owner/repo` (lower case) of the open project when it is a GitHub repository. */
 	workspaceRepoKey(): Promise<string | undefined>;
 }
@@ -73,6 +85,8 @@ const GITHUB_API = 'https://api.github.com';
 const ATLASSIAN_API = 'https://api.atlassian.com';
 /** Most repositories read in one go: each is a request, and the list is only a first look. */
 const MAX_REPOS = 15;
+/** The viewer reads up to this many pages of 100 issues; a bigger project is shown as its latest issues. */
+const MAX_VIEW_PAGES = 3;
 const ATLASSIAN_WAIT_MS = 5 * 60_000;
 
 interface IHttpResult {
@@ -338,6 +352,94 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			this.logService.warn('[picode.connectors] issues could not be read', error);
 			return this.failure(source, 'offline');
 		}
+	}
+
+	async loadProjectView(source: PicodeIssueSource, ref: string): Promise<IPicodeProjectViewResult> {
+		const service: PicodeConnectorService = source === 'github' ? 'github' : 'atlassian';
+		if (!this.isConnected(service)) {
+			return { state: 'notConnected', view: undefined };
+		}
+		try {
+			let outcome = await this.readView(source, service, ref, false);
+			if (outcome === 'reconnect') {
+				outcome = await this.readView(source, service, ref, true);
+			}
+			return typeof outcome === 'string' ? { state: outcome, view: undefined } : { state: 'ok', view: outcome };
+		} catch (error) {
+			this.logService.warn('[picode.connectors] the project could not be read', error);
+			return { state: 'offline', view: undefined };
+		}
+	}
+
+	private async readView(source: PicodeIssueSource, service: PicodeConnectorService, ref: string, forceRefresh: boolean): Promise<IPicodeProjectView | 'reconnect' | 'rateLimited' | 'notPro'> {
+		const tokens = await this.validTokens(service, forceRefresh);
+		if (tokens === 'notPro') {
+			return 'notPro';
+		}
+		if (!tokens) {
+			return 'reconnect';
+		}
+		return source === 'github' ? this.readGithubView(tokens.accessToken, ref) : this.readJiraView(tokens, ref);
+	}
+
+	private async readJiraView(tokens: IPicodeConnectorTokens, ref: string): Promise<IPicodeProjectView | 'reconnect' | 'rateLimited'> {
+		const site = tokens.site;
+		if (!site) {
+			return 'reconnect';
+		}
+		if (!isJiraProjectKey(ref)) {
+			throw new Error('That is not a Jira project.');
+		}
+		const api = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(site.cloudId)}/rest/api/3`;
+		const project = await this.getJson(`${api}/project/${ref}`, tokens.accessToken);
+		if (!project.ok) {
+			return project.reason;
+		}
+		const statuses = await this.getJson(`${api}/project/${ref}/statuses`, tokens.accessToken);
+		if (!statuses.ok) {
+			return statuses.reason;
+		}
+		const fields = 'summary,description,project,reporter,assignee,status,issuetype,priority,labels,created,updated';
+		const jql = encodeURIComponent(`project = ${ref} ORDER BY updated DESC`);
+		const issues: IPicodeBoardIssue[] = [];
+		let pageToken: string | undefined;
+		for (let page = 0; page < MAX_VIEW_PAGES; page++) {
+			const more = pageToken ? `&nextPageToken=${encodeURIComponent(pageToken)}` : '';
+			const read = await this.getJson(`${api}/search/jql?jql=${jql}&fields=${fields}&maxResults=100${more}`, tokens.accessToken);
+			if (!read.ok) {
+				return read.reason;
+			}
+			issues.push(...mapJiraBoardIssues(read.json, site.url));
+			pageToken = nextJiraPageToken(read.json);
+			if (!pageToken) {
+				break;
+			}
+		}
+		const info = mapJiraProject(project.json);
+		return { source: 'jira', ref, name: info?.name ?? ref, layout: info?.layout ?? 'list', statuses: mapJiraStatuses(statuses.json), issues, truncated: pageToken !== undefined };
+	}
+
+	private async readGithubView(accessToken: string, ref: string): Promise<IPicodeProjectView | 'reconnect' | 'rateLimited'> {
+		const repo = parseGithubRepoRef(ref);
+		if (!repo) {
+			throw new Error('That is not a GitHub repository.');
+		}
+		const issues: IPicodeBoardIssue[] = [];
+		let truncated = false;
+		// One request after another, never several at once (GitHub asks for this).
+		for (let page = 1; page <= MAX_VIEW_PAGES; page++) {
+			const read = await this.getJson(`${GITHUB_API}/repos/${repo.owner}/${repo.repo}/issues?state=all&sort=updated&per_page=100&page=${page}`, accessToken);
+			if (!read.ok) {
+				return read.reason;
+			}
+			issues.push(...mapGithubBoardIssues(read.json, repo));
+			const received = Array.isArray(read.json) ? read.json.length : 0;
+			if (received < 100) {
+				break;
+			}
+			truncated = page === MAX_VIEW_PAGES;
+		}
+		return { source: 'github', ref, name: ref, layout: 'list', statuses: GITHUB_STATUSES, issues, truncated };
 	}
 
 	/** A failed read still shows the last list, marked as old, instead of an empty page. */

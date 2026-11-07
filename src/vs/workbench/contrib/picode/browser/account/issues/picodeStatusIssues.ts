@@ -18,7 +18,9 @@ import { IPicodeProEntitlement } from '../picodeProEntitlement.js';
 import { PicodeConnectorService } from './picodeConnectorAuth.js';
 import { IPicodeConnectorService, IPicodeIssuesResult } from './picodeConnectorService.js';
 import { PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
+import { projectRefOf } from './picodeIssueBoard.js';
 import { IPicodeIssue, PicodeIssueSource, splitTitleTag } from './picodeIssueSources.js';
+import { PICODE_OPEN_ISSUES_COMMAND } from './picodeIssues.contribution.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
@@ -167,7 +169,11 @@ ${issue.key}`;
 		if (!Number.isNaN(updated)) {
 			append(meta, $('span')).textContent = fromNow(updated, true);
 		}
-		this.clickable(item, () => void this.openerService.open(URI.parse(issue.url), { openExternal: true }));
+		// The click opens the whole project in the viewer with this issue selected; without a project it opens the issue's page.
+		const project = projectRefOf(issue);
+		this.clickable(item, () => void (project
+			? this.commandService.executeCommand(PICODE_OPEN_ISSUES_COMMAND, issue.source, project, issue.key)
+			: this.openerService.open(URI.parse(issue.url), { openExternal: true })));
 		const fixLabel = localize('picodeIssueFix', "Fix with pi");
 		const fix = append(item, $('button.picode-issue-fix', { type: 'button', 'aria-label': fixLabel })) as HTMLButtonElement;
 		append(fix, $(`span${ThemeIcon.asCSSSelector(Codicon.sparkle)}`));

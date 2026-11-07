@@ -6,6 +6,8 @@ Las issues de GitHub y los tickets de Jira (solo Pro): conectar desde *Connectio
 - `picodeStatusIssues.ts`: un panel por servicio en la columna *Status* (lista, *Show N more*, *Refresh*, *Fix with pi*).
 - `picodeIssueActions.ts`: qué hace *Fix with pi*, cuándo sale apagado y las frases de los fallos.
 - `picodeConnectorAuth.ts`, `picodeIssueSources.ts`, `picodeIssuePrompt.ts`: la lógica pura (lectura de las respuestas, callback con `state`, limpieza del texto de la issue). Sin imports del editor para poder probarla con `node --test` (`extensions/picode/test/picode-issue-*.test.ts`, `picode-connector-auth.test.ts`).
-- `picodeIssues.css`: estilos del código de conexión y de los avisos.
+- `picodeIssuesEditor.ts`, `picodeIssuesEditorInput.ts`, `picodeIssues.contribution.ts`: el visor, una pestaña del editor por proyecto de Jira o repositorio de GitHub (tablero o listado, con la issue pulsada a la derecha). Se abre con el comando `picode.issues.open`.
+- `picodeIssueBoard.ts`: la lógica pura del visor (estados del proyecto, columnas, filtros, iniciales). `extensions/picode/test/picode-issue-board.test.ts`.
+- `picodeIssues.css`: estilos del código de conexión, de las filas de *Status* y del visor.
 
 Detalle y límites: [`docs/CUENTA.md`](../../../../../../../docs/CUENTA.md) · decisión: ADR-042.

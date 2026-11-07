@@ -38,9 +38,25 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 
 1. En *Connections*, cada tarjeta (GitHub, Jira) tiene *Connect*. En GitHub, el editor copia un código, abre la página de GitHub y deja el código en la tarjeta por si hace falta de nuevo. En Jira se abre la página de Atlassian y, al aceptar, vuelve solo al editor. Conectada, la tarjeta dice *Connected* (en Jira, a qué sitio) y tiene *Disconnect*. Un intento fallido lo dice en una frase.
 2. En *Status* aparece un panel por servicio conectado (*GitHub issues*, *Jira issues*): las 5 issues abiertas más recientes, con *Show N more*, y *Refresh*. Las del proyecto abierto van primero; en GitHub, hasta 15 repos. Sin conectar, el panel dice *Not connected* y su botón *Connect* abre la ventana Account. Sin plan Pro o sin identificadores registrados, el panel no sale.
-3. Cada issue ocupa dos líneas: el título entero (hasta dos líneas) y debajo, en pequeño, su etiqueta (si el título empieza por `[algo]`, sale como etiqueta y no come espacio), la clave, la antigüedad y *Outside report* si la escribió alguien ajeno al equipo. A la derecha, *Fix with pi* es un botón solo de icono (el texto sale al pasar el ratón). El título del panel lleva el total de issues abiertas. Pulsar la fila abre la issue en el navegador.
+3. Pulsar una issue abre el visor (ver abajo). Cada issue ocupa dos líneas: el título entero (hasta dos líneas) y debajo, en pequeño, su etiqueta (si el título empieza por `[algo]`, sale como etiqueta y no come espacio), la clave, la antigüedad y *Outside report* si la escribió alguien ajeno al equipo. A la derecha, *Fix with pi* es un botón solo de icono (el texto sale al pasar el ratón). El título del panel lleva el total de issues abiertas.
 4. *Fix with pi* abre un chat nuevo y **escribe** la issue sin enviarla. El usuario la lee y envía. Sin carpeta abierta, con la carpeta sin confianza o con una issue de otro repo, el botón sale apagado con su motivo.
 5. Sin red se enseña la última lista, avisando de que es la última. La lista se vuelve a leer cada 5 minutos mientras la columna está abierta.
+
+**El visor de issues**
+
+> *"Me gustaría que cuando le des a una issue se abra un visualizador. Dependiendo si es de github o jira se verán x cosas."* — 2026-11-07
+
+Pulsar una issue de *Status* abre una pestaña del editor con el proyecto entero y la issue pulsada abierta a la derecha (descripción, estado, tipo, prioridad, asignado, fechas y etiquetas, con *Fix with pi* y *Open in browser*). Pulsar otra issue del mismo proyecto reutiliza la pestaña.
+
+| | Jira | GitHub |
+|---|---|---|
+| Qué se abre | El proyecto (*Space*) de la issue | El repositorio de la issue |
+| Vista | **Board** (Kanban) para espacios de software, **List** para el resto; un interruptor cambia de una a otra | **List**, con *Open* y *Closed* y su recuento |
+| Columnas | Los estados del proyecto en su orden, de por hacer a hecho, con las vacías también | — |
+| Tarjeta / fila | Título, etiquetas, tipo, clave, prioridad y asignado | Número, título, etiquetas, asignado, comentarios y antigüedad |
+| Búsqueda | Por clave, título, estado, asignado, tipo o etiqueta | Igual |
+
+Límites: hasta 300 issues por proyecto (lo avisa); la descripción se ve como texto plano; solo lectura; el orden de las columnas sale del flujo de trabajo del proyecto, no de la configuración del tablero de Jira (eso pediría otro permiso y volver a conectar).
 
 **Cómo funciona por dentro**
 
@@ -49,7 +65,8 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 | Servicio (conectar, renovar, leer) | `account/issues/picodeConnectorService.ts` |
 | Login (tarjetas de Connections) | `account/picodeConnectionsSection.ts` |
 | Paneles de Status y *Fix with pi* | `account/issues/picodeStatusIssues.ts`, `picodeIssueActions.ts` |
-| Lógica pura con pruebas | `picodeConnectorAuth.ts`, `picodeIssueSources.ts`, `picodeIssuePrompt.ts` |
+| Visor (pestaña del editor) | `account/issues/picodeIssuesEditor.ts`, `picodeIssuesEditorInput.ts`, `picodeIssues.contribution.ts` (comando `picode.issues.open`) |
+| Lógica pura con pruebas | `picodeConnectorAuth.ts`, `picodeIssueSources.ts`, `picodeIssueBoard.ts`, `picodeIssuePrompt.ts` |
 | Servidor (secretos de Atlassian y renovación) | `host/cloud/sync-api`: `POST /api/v1/connect/token`, `POST /api/v1/connect/github`, `GET /api/v1/connect/atlassian/callback` |
 | Identificadores públicos | `product.json` → `picode.connectors` |
 

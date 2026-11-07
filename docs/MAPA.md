@@ -557,6 +557,9 @@
 │   │   │   ├── pi-locate.test.ts
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
+│   │   │   ├── picode-connector-auth.test.ts
+│   │   │   ├── picode-issue-prompt.test.ts
+│   │   │   ├── picode-issue-sources.test.ts
 │   │   │   ├── pin-sync.test.ts
 │   │   │   ├── product-packages.test.ts
 │   │   │   ├── progress.test.ts
@@ -582,7 +585,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 77 files in total
+│   │   │   └── … 80 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
@@ -624,6 +627,7 @@
 │   │   │   │   │       └── v1/
 │   │   │   │   └── lib/
 │   │   │   │       ├── auth.ts
+│   │   │   │       ├── connect.ts
 │   │   │   │       ├── contract.ts
 │   │   │   │       ├── crypto.ts
 │   │   │   │       ├── downloads.ts
@@ -638,6 +642,7 @@
 │   │   │   │       ├── usage-store.ts
 │   │   │   │       └── usage.ts
 │   │   │   ├── test/
+│   │   │   │   ├── connect.test.ts
 │   │   │   │   ├── crypto.test.ts
 │   │   │   │   ├── plans.test.ts
 │   │   │   │   ├── retention.test.ts
