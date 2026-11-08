@@ -2068,8 +2068,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
 		const chat = chatFor(request);
 		toolToken.current = request.toolInvocationToken;
-		// The picker's two positions name the four level names the host has shipped; see
-		// `permissions.ts`. The setting covers a request that arrives without a level.
+		// The four level names the host has shipped; see `permissions.ts`. The setting covers a
+		// request that arrives without a level.
 		turnContext.current = {
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
