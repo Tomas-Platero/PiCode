@@ -5,22 +5,38 @@
 
 import { localize, localize2 } from '../../../../nls.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
-import { MarkdownString } from '../../../../base/common/htmlContent.js';
-import { URI } from '../../../../base/common/uri.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IMarkdownRendererService } from '../../../../platform/markdown/browser/markdownRenderer.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
+import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
-import { composeWhatsNew, extractWhatChanged, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { composeWhatsNew, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { whatsNewHighlights } from './picodeWhatsNewHighlights.js';
+import { IPicodeProEntitlement } from './account/picodeProEntitlement.js';
+import { IWhatsNewWindowServices, showWhatsNewWindow } from './picodeWhatsNewWindow.js';
+
+function windowServices(accessor: ServicesAccessor): IWhatsNewWindowServices {
+	return {
+		layoutService: accessor.get(IWorkbenchLayoutService),
+		commandService: accessor.get(ICommandService),
+		configurationService: accessor.get(IConfigurationService),
+		openerService: accessor.get(IOpenerService),
+		markdownRendererService: accessor.get(IMarkdownRendererService),
+		paneCompositeService: accessor.get(IPaneCompositePartService),
+		entitlement: accessor.get(IPicodeProEntitlement),
+		productService: accessor.get(IProductService),
+	};
+}
 
 const LAST_VERSION_KEY = 'picode.whatsNew.lastVersion';
 /** The core's own key (`ProductContribution` in contrib/update): the editor version of the last start. */
@@ -28,40 +44,29 @@ const EDITOR_LAST_VERSION_KEY = 'releaseNotes/lastVersion';
 const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases/tags/';
 
 /**
- * Looks up what changed and shows it in a small window. `last` is the version the person updated
- * from: every version they skipped since then is shown too, below this one. Returns false when
- * there is nothing to show.
+ * Opens the What's New window. `last` is the version the person updated from: what is new since
+ * then gets its own page, and the releases' raw list of changes comes under "All changes", once it
+ * arrives. Returns false when there is nothing to show.
  */
-async function showWhatsNew(version: string, last: string, requestService: IRequestService, dialogService: IDialogService, openerService: IOpenerService, productService: IProductService, configurationService: IConfigurationService, commandService: ICommandService, manual = false): Promise<boolean> {
-	const [notes, history] = await Promise.all([fetchNotes(requestService, version), fetchHistory(requestService, productService.quality)]);
-	// Asked for by hand (Help menu), a version without its own summary shows the newest one the
-	// channel has, so the window is never empty when something is on record.
-	const current = notes ? { version, notes } : history.find(entry => entry.version === version) ?? (manual ? history[0] : undefined);
-	if (!current) {
+async function showWhatsNew(version: string, last: string, accessor: { readonly requestService: IRequestService; readonly productService: IProductService; readonly services: IWhatsNewWindowServices }, manual = false): Promise<boolean> {
+	const { requestService, productService, services } = accessor;
+	const changes = (async () => {
+		const [notes, history] = await Promise.all([fetchNotes(requestService, version), fetchHistory(requestService, productService.quality)]);
+		// Asked for by hand (Help menu), a version without its own summary shows the newest one the
+		// channel has, so the window is never empty when something is on record.
+		const current = notes ? { version, notes } : history.find(entry => entry.version === version) ?? (manual ? history[0] : undefined);
+		return current ? composeWhatsNew(whatsNewSince(last, current, history)) : undefined;
+	})();
+	const highlights = highlightsSince(whatsNewHighlights(), last, version);
+	// With nothing of our own to tell, the window is only worth opening if the release has something.
+	if (highlights.length === 0 && !(await changes)) {
 		return false;
 	}
-	const entries = whatsNewSince(last, current, history);
-	const markdown = composeWhatsNew(entries);
-	if (!markdown) {
-		return false;
-	}
-
 	const releaseUrl = `${productService.releaseNotesUrl ?? 'https://github.com/Tomas-Platero/PiCode/releases'}/tag/v${version}`;
-	// The notes tell about the Agent layout: someone still on the Editor layout gets the button
-	// that switches to it right here, instead of having to find the robot in the title bar.
-	const offerAgent = /Agent/.test(markdown) && configurationService.getValue<string>('picode.appearance.layout') !== 'agent';
-	await dialogService.prompt({
-		message: localize('picodeWhatsNew.title', "PiCode {0} is ready", version),
-		detail: entries.length > 1
-			? localize('picodeWhatsNew.subtitleSince', "Here is what changed since {0}.", last)
-			: localize('picodeWhatsNew.subtitle', "Here is what changed since the last version."),
-		buttons: [
-			...(offerAgent ? [{ label: localize('picodeWhatsNew.tryAgent', "Try the Agent layout"), run: () => commandService.executeCommand('picode.appearance.switchLayout') }] : []),
-			{ label: localize('picodeWhatsNew.close', "Close"), run: () => undefined },
-			{ label: localize('picodeWhatsNew.full', "Full release notes"), run: () => openerService.open(URI.parse(releaseUrl)) },
-		],
-		custom: { markdownDetails: [{ markdown: new MarkdownString(markdown) }] },
-	});
+	const subtitle = last
+		? localize('picodeWhatsNew.subtitleSince', "New since {0}", last)
+		: localize('picodeWhatsNew.subtitleAll', "Try each one right here.");
+	showWhatsNewWindow({ version, subtitle, highlights, changes, releaseUrl }, services);
 	return true;
 }
 
@@ -120,9 +125,7 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IHostService hostService: IHostService,
 		@IRequestService private readonly requestService: IRequestService,
-		@IDialogService private readonly dialogService: IDialogService,
-		@IOpenerService private readonly openerService: IOpenerService,
-		@ICommandService private readonly commandService: ICommandService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILifecycleService lifecycleService: ILifecycleService,
 	) {
 		// Read now, at startup: the core's release-notes check stores this start's version over
@@ -150,7 +153,7 @@ export class PicodeWhatsNewContribution implements IWorkbenchContribution {
 			return;
 		}
 
-		await showWhatsNew(current, last, this.requestService, this.dialogService, this.openerService, this.productService, this.configurationService, this.commandService);
+		await showWhatsNew(current, last, { requestService: this.requestService, productService: this.productService, services: this.instantiationService.invokeFunction(windowServices) });
 	}
 }
 
@@ -174,7 +177,7 @@ registerAction2(class ShowWhatsNewAction extends Action2 {
 		const productService = accessor.get(IProductService);
 		const notificationService = accessor.get(INotificationService);
 		const version = productService.picodeVersion;
-		const shown = version && await showWhatsNew(version, '', accessor.get(IRequestService), accessor.get(IDialogService), accessor.get(IOpenerService), productService, accessor.get(IConfigurationService), accessor.get(ICommandService), true);
+		const shown = version && await showWhatsNew(version, '', { requestService: accessor.get(IRequestService), productService, services: windowServices(accessor) }, true);
 		if (!shown) {
 			notificationService.info(localize('picodeWhatsNew.none', "There are no release notes for this version yet."));
 		}
