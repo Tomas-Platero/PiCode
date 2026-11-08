@@ -8,6 +8,7 @@ import { $, addDisposableListener, append, clearNode, EventType } from '../../..
 import { AnchorAlignment } from '../../../../../../base/browser/ui/contextview/contextview.js';
 import { IAction, Separator, toAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
+import { equals } from '../../../../../../base/common/objects.js';
 import { fromNow } from '../../../../../../base/common/date.js';
 import { Disposable, DisposableStore } from '../../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
@@ -50,9 +51,16 @@ const SOURCES: readonly ISourceText[] = [
 ];
 
 /**
+ * When to ask for the list: `whenOld` if the known one is not recent, `quietly` always but without
+ * showing it, and `visibly` always, saying so (the person pressed *Refresh*).
+ */
+type PicodeIssuesRead = 'whenOld' | 'quietly' | 'visibly';
+
+/**
  * One panel per issue tracker in the Status column: the open issues with *Fix with pi*.
  * It lives in its own host element, which the column puts back after every repaint, so the
- * lists are not read again each time the column redraws.
+ * lists are not read again each time the column redraws. The panel is thrown away when its view
+ * is hidden, so coming back paints the last list at once and only repaints if a new read differs.
  */
 export class PicodeStatusIssues extends Disposable {
 
@@ -60,7 +68,8 @@ export class PicodeStatusIssues extends Disposable {
 	private readonly actions: PicodeIssueActions;
 	/** Bumped on every repaint, so an answer that arrives after the panel changed is thrown away. */
 	private generation = 0;
-	private readonly unfolded = new Set<PicodeIssueSource>();
+	/** Kept across panels, like the list itself: coming back to the view does not fold it again. */
+	private static readonly unfolded = new Set<PicodeIssueSource>();
 
 	constructor(
 		private readonly host: HTMLElement,
@@ -75,8 +84,8 @@ export class PicodeStatusIssues extends Disposable {
 		super();
 		this.actions = instantiationService.createInstance(PicodeIssueActions);
 		this.render();
-		this._register(this.entitlement.onDidChange(() => this.render()));
-		this._register(this.connectors.onDidChange(() => this.render()));
+		this._register(this.entitlement.onDidChange(() => this.render('quietly')));
+		this._register(this.connectors.onDidChange(() => this.render('quietly')));
 		const timer = setInterval(() => { if (this.host.isConnected) { this.render(); } }, REFRESH_MS);
 		this._register({ dispose: () => clearInterval(timer) });
 	}
@@ -86,7 +95,7 @@ export class PicodeStatusIssues extends Disposable {
 		super.dispose();
 	}
 
-	private render(): void {
+	private render(read: PicodeIssuesRead = 'whenOld'): void {
 		const generation = ++this.generation;
 		this.renderStore.clear();
 		clearNode(this.host);
@@ -96,12 +105,12 @@ export class PicodeStatusIssues extends Disposable {
 		}
 		for (const text of SOURCES) {
 			if (this.connectors.isAvailable(text.service)) {
-				this.renderSource(text, generation);
+				this.renderSource(text, generation, read);
 			}
 		}
 	}
 
-	private renderSource(text: ISourceText, generation: number): void {
+	private renderSource(text: ISourceText, generation: number, read: PicodeIssuesRead): void {
 		const section = append(this.host, $('.picode-overview-section'));
 		const head = append(section, $('.picode-issues-title-row'));
 		const heading = append(head, $('.picode-overview-title'));
@@ -111,7 +120,16 @@ export class PicodeStatusIssues extends Disposable {
 			this.button(row, localize('picodeConnectorConnect', "Connect"), () => void this.commandService.executeCommand(OPEN_ACCOUNT_COMMAND));
 			return;
 		}
-		const loading = this.row(section, Codicon.loading, localize('picodeIssuesLoading', "Loading issues…"));
+		const knownHere = text.source === 'github' ? this.connectors.knownWorkspaceRepoKey : undefined;
+		const known = this.connectors.knownIssues(text.source, this.scopeOf(text.source, knownHere));
+		if (known) {
+			this.renderScopeButton(head, text, knownHere);
+			this.renderResult(section, heading, text, known.result, knownHere, read === 'visibly');
+			if (known.fresh && read === 'whenOld') {
+				return;
+			}
+		}
+		const loading = known ? undefined : this.row(section, Codicon.loading, localize('picodeIssuesLoading', "Loading issues…"));
 		void (async () => {
 			// The folder open decides what the list is narrowed to (see `scopeOf`).
 			const here = text.source === 'github' ? await this.connectors.workspaceRepoKey() : undefined;
@@ -119,9 +137,16 @@ export class PicodeStatusIssues extends Disposable {
 			if (generation !== this.generation) {
 				return;
 			}
-			loading.remove();
+			if (known) {
+				// The answer is known now, so this repaint asks for nothing.
+				if (read === 'visibly' || here !== knownHere || !equals(result, known.result)) {
+					this.render();
+				}
+				return;
+			}
+			loading?.remove();
 			this.renderScopeButton(head, text, here);
-			this.renderResult(section, heading, text, result, here);
+			this.renderResult(section, heading, text, result, here, false);
 			if (text.source === 'jira' && this.jiraChoice() === undefined) {
 				void this.suggestJiraProject(result, generation);
 			}
@@ -214,7 +239,7 @@ export class PicodeStatusIssues extends Disposable {
 		}
 	}
 
-	private renderResult(section: HTMLElement, heading: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined): void {
+	private renderResult(section: HTMLElement, heading: HTMLElement, text: ISourceText, result: IPicodeIssuesResult, workspaceRepo: string | undefined, reading: boolean): void {
 		const note = stateMessage(result, text.name);
 		if (note) {
 			const row = this.row(section, Codicon.warning, note);
@@ -235,7 +260,7 @@ export class PicodeStatusIssues extends Disposable {
 			return;
 		}
 		append(heading, $('span.picode-overview-detail')).textContent = ` · ${result.issues.length}`;
-		const unfolded = this.unfolded.has(text.source);
+		const unfolded = PicodeStatusIssues.unfolded.has(text.source);
 		const shown = unfolded ? result.issues : result.issues.slice(0, VISIBLE_ISSUES);
 		for (const issue of shown) {
 			this.renderIssue(section, issue, workspaceRepo);
@@ -243,10 +268,13 @@ export class PicodeStatusIssues extends Disposable {
 		const hidden = result.issues.length - shown.length;
 		if (hidden > 0) {
 			const more = this.row(section, Codicon.ellipsis, localize('picodeIssuesShowMore', "Show {0} more", hidden));
-			this.clickable(more, () => { this.unfolded.add(text.source); this.render(); });
+			this.clickable(more, () => { PicodeStatusIssues.unfolded.add(text.source); this.render(); });
 		}
-		const refresh = this.row(section, Codicon.sync, localize('picodeIssuesRefresh', "Refresh"));
-		this.clickable(refresh, () => this.render());
+		if (reading) {
+			this.row(section, Codicon.loading, localize('picodeIssuesLoading', "Loading issues…"));
+		} else {
+			this.clickable(this.row(section, Codicon.sync, localize('picodeIssuesRefresh', "Refresh")), () => this.render('visibly'));
+		}
 	}
 
 	/**
