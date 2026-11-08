@@ -9,7 +9,6 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { atlassianAuthorizeUrl, connectorCodeFromCallback, parseAtlassianSites, parseDeviceCode, parseDevicePoll } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
 
-const NOW = 1_000_000;
 const callback = (query: string, path = '/connect/callback', scheme = 'picode') => ({ scheme, path, query });
 
 test('a device code from GitHub is read, with its wait in milliseconds', () => {
