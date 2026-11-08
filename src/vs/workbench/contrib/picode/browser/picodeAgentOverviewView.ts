@@ -6,7 +6,7 @@
 import { $, append, addDisposableListener, clearNode, EventType } from '../../../../base/browser/dom.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
-import { basename } from '../../../../base/common/resources.js';
+import { basename, dirname } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
@@ -22,26 +22,35 @@ import { ViewContainerLocation } from '../../../common/views.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { PICODE_STATUS_CONTAINER_ID, sidebarSideColumn } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IChatWidgetService } from '../../chat/browser/chat.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
 import { ISCMService } from '../../scm/common/scm.js';
-import { onDidChangePicodeAgentStatus, picodeAgentStatus } from './picodeAgentStatusPill.js';
+import { onDidChangePicodeAgentStatus } from './picodeAgentStatusPill.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
+import { PicodeStatusIssues } from './account/issues/picodeStatusIssues.js';
 
 /**
  * The Agent layout's status column, the first half of the review side bar once it is wide enough: where the agent works, how
  * full its context is, which MCPs it has, what changed and what is still running.
  *
  * Every row is read from what the editor already knows — the workspace, source control, the chat's
- * last answer, pi's own status (`picode.setup.status`) and the jobs the connector pushes — and
+ * last answer, pi's own MCP list (`picode.setup.mcpServers`) and the jobs the connector pushes — and
  * nothing is guessed: a fact that is not there is left out rather than shown as a zero.
  */
-const STATUS_DATA_COMMAND = 'picode.setup.status';
+const MCP_SERVERS_COMMAND = 'picode.setup.mcpServers';
 const DIFF_STAT_COMMAND = 'picode.git.diffStat';
 
 /** How often the panel re-reads what has no event of its own (context use, pi's connectors). */
 const REFRESH_MS = 4000;
+
+/** The same, with the window in the background: still current, at a fraction of the work. */
+const BACKGROUND_REFRESH_MS = 30_000;
+
+/** The line count follows file changes; this is only the safety net for a change no event told of. */
+const DIFF_SAFETY_MS = 60_000;
 
 interface IConnector {
 	readonly name: string;
@@ -57,6 +66,15 @@ interface IConnector {
 let knownConnectors: readonly IConnector[] | undefined;
 
 /** One row of the connector's task board (`picode.tasks.data`). */
+/** One fact under an open row of the Tasks block. */
+interface ITaskFact {
+	readonly label: string;
+	readonly detail: string;
+	readonly icon: string;
+	readonly tooltip?: string;
+	readonly openFile?: string;
+}
+
 interface ITaskRow {
 	readonly title: string;
 	readonly detail: string;
@@ -64,12 +82,22 @@ interface ITaskRow {
 	readonly agentId?: string;
 	readonly outputFile?: string;
 	readonly tooltip?: string;
+	readonly facts?: readonly ITaskFact[];
 }
 
 /** The connector's task board: what its Tasks block shows. */
+/** The agent's own task list: `progress` is `2/5`, each row is one step of its plan. */
+interface ITaskTodos {
+	readonly progress: string;
+	readonly rows: readonly { readonly title: string; readonly status: string; readonly icon: string; readonly detail?: string; readonly working?: boolean }[];
+}
+
 interface ITaskBoard {
+	/** `Nothing running` or `2 running`. */
+	readonly summary?: string;
 	readonly running: readonly ITaskRow[];
 	readonly finished: readonly ITaskRow[];
+	readonly todos?: ITaskTodos;
 }
 
 /** What the connector's Memory block shows (`picode.memory.summary`). */
@@ -78,9 +106,10 @@ interface IMemorySummary {
 	readonly retried?: boolean;
 	readonly heading?: string;
 	readonly detail?: string;
-	readonly projects?: readonly { readonly name: string; readonly memories: number }[];
-	readonly search?: { readonly query: string; readonly total: number; readonly rows: readonly { readonly id: number; readonly title: string; readonly project: string; readonly when: string; readonly icon: string }[] };
+	readonly projects?: readonly { readonly name: string; readonly memories: number; readonly open?: boolean; readonly moreLabel?: string; readonly emptyLabel?: string; readonly rows?: readonly { readonly id: number; readonly title: string; readonly when: string; readonly icon: string }[] }[];
+	readonly search?: { readonly query: string; readonly total: number; readonly capped?: boolean; readonly emptyLabel?: string; readonly moreLabel?: string; readonly rows: readonly { readonly id: number; readonly title: string; readonly project: string; readonly when: string; readonly icon: string }[] };
 	readonly newerEngine?: string;
+	readonly filter?: { readonly label: string; readonly detail?: string; readonly clearLabel?: string };
 }
 
 const TASKS_DATA_COMMAND = 'picode.tasks.data';
@@ -89,6 +118,10 @@ const MEMORY_SUMMARY_COMMAND = 'picode.memory.summary';
 const MEMORY_SEARCH_COMMAND = 'picode.memory.search';
 const MEMORY_CLEAR_SEARCH_COMMAND = 'picode.memory.clearSearch';
 const MEMORY_OPEN_COMMAND = 'picode.memory.open';
+const MEMORY_TOGGLE_PROJECT_COMMAND = 'picode.memory.toggleProject';
+const MEMORY_SHOW_MORE_COMMAND = 'picode.memory.showMoreInColumn';
+const MEMORY_FILTER_COMMAND = 'picode.memory.filter';
+const MEMORY_CLEAR_FILTER_COMMAND = 'picode.memory.clearFilter';
 const MEMORY_CHECK_COMMAND = 'picode.memory.check';
 const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 
@@ -114,10 +147,22 @@ const OPEN_CHANGES_COMMAND = 'picode.status.openChanges';
 export class PicodeAgentOverview extends Disposable {
 
 	private readonly root: HTMLElement;
+	private readonly issuesHost: HTMLElement;
 	private readonly renderDisposables = this._register(new DisposableStore());
 	/** Whether the finished tasks are unfolded. */
+	private showRunning = true;
 	private showFinished = false;
+	/** The task rows opened to their facts: they stay open while the board repaints. */
+	private readonly openTasks = new Set<string>();
+	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
+	/** The readings still waiting for an answer: a slow one is not asked again on top of itself. */
+	private readonly reading = new Set<string>();
+	/** Files changed since the line count was read. */
+	private diffStale = true;
+	private diffReadAt = 0;
+	/** What the column last drew, so a reading that changed nothing leaves it (and its hover) alone. */
+	private painted: string | undefined;
 
 	constructor(
 		parent: HTMLElement,
@@ -129,6 +174,9 @@ export class PicodeAgentOverview extends Disposable {
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IHostService private readonly hostService: IHostService,
+		@IFileService fileService: IFileService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
 		if (knownConnectors === undefined) {
@@ -142,9 +190,26 @@ export class PicodeAgentOverview extends Disposable {
 			}
 		}
 		this.root = append(parent, $('.picode-overview'));
+		// The issue panels draw and refresh themselves; the column only puts their host back after each repaint.
+		this.issuesHost = $('.picode-overview-issues');
+		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost));
 
-		this._register(onDidChangePicodeAgentStatus(() => this.paint()));
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this.paint()));
+		// What the agent is doing changed: the plan says so without waiting for the next reading.
+		this._register(onDidChangePicodeAgentStatus(() => {
+			this.paint();
+			void this.readTasks();
+		}));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
+			this.diffStale = true;
+			this.paint();
+		}));
+		this._register(fileService.onDidFilesChange(event => {
+			const folder = this.workspaceService.getWorkspace().folders[0];
+			if (folder && event.affects(folder.uri)) {
+				this.diffStale = true;
+			}
+		}));
+		this._register(this.hostService.onDidChangeFocus(() => this.setLive(true)));
 		this._register(this.scmService.onDidAddRepository(() => this.paint()));
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
 		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => this.paint()));
@@ -159,51 +224,99 @@ export class PicodeAgentOverview extends Disposable {
 			this.timer = undefined;
 		}
 		if (live) {
-			void this.refreshConnectors();
-			this.timer = setInterval(() => void this.refreshConnectors(), REFRESH_MS);
+			this.refresh();
+			this.timer = setInterval(() => this.refresh(), this.hostService.hasFocus ? REFRESH_MS : BACKGROUND_REFRESH_MS);
 		}
 	}
 
+	private disposed = false;
+
 	override dispose(): void {
+		this.disposed = true;
 		this.setLive(false);
 		super.dispose();
 	}
 
-	private async refreshConnectors(): Promise<void> {
-		try {
-			const data = await this.commandService.executeCommand<{ mcpServers?: readonly IConnector[] }>(STATUS_DATA_COMMAND);
-			knownConnectors = Array.isArray(data?.mcpServers) ? data.mcpServers : [];
-		} catch {
-			// pi is not answering yet: keep what it said last, if anything
+	private refresh(): void {
+		void this.read('connectors', async () => {
+			const servers = await this.commandService.executeCommand<readonly IConnector[]>(MCP_SERVERS_COMMAND);
+			knownConnectors = Array.isArray(servers) ? servers : [];
+		});
+		void this.readTasks();
+		void this.read('memory', () => this.readMemory());
+		// Only counted where it is drawn: with no changed file the column shows no lines at all.
+		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
+			void this.read('diff', async () => {
+				this.diffStale = false;
+				this.diffReadAt = Date.now();
+				const folder = this.workspaceService.getWorkspace().folders[0];
+				knownDiff = folder ? await this.commandService.executeCommand<{ added: number; removed: number }>(DIFF_STAT_COMMAND, folder.uri.fsPath) : undefined;
+			});
 		}
-		const folder = this.workspaceService.getWorkspace().folders[0];
-		try {
-			knownDiff = folder ? await this.commandService.executeCommand<{ added: number; removed: number }>(DIFF_STAT_COMMAND, folder.uri.fsPath) : undefined;
-		} catch {
-			// pi is not answering yet: keep the last count
-		}
-		try {
+		// Nothing to read for these, but the tick is what notices them.
+		this.publish();
+	}
+
+	private readTasks(): Promise<void> {
+		return this.read('tasks', async () => {
 			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
-		} catch {
-			// pi is not answering yet: the chat's own status stands in (see `renderTasks`)
+		});
+	}
+
+	/** One reading at a time per kind. pi not answering yet is no fault: what it said last stands. */
+	private async read(kind: string, work: () => Promise<void>): Promise<void> {
+		if (this.reading.has(kind)) {
+			return;
 		}
+		this.reading.add(kind);
 		try {
-			const memory = await this.commandService.executeCommand<IMemorySummary>(MEMORY_SUMMARY_COMMAND);
-			// While the engine wakes, what it said last stands; its first answer replaces it.
-			if (memory && (memory.state === 'ready' || knownMemory === undefined)) {
-				knownMemory = memory;
-			}
+			await work();
 		} catch {
-			// pi is not answering yet: keep what memory said last
+			// See above.
+		} finally {
+			this.reading.delete(kind);
+		}
+		this.publish();
+	}
+
+	private async readMemory(): Promise<void> {
+		const memory = await this.commandService.executeCommand<IMemorySummary>(MEMORY_SUMMARY_COMMAND);
+		// While the engine wakes, what it said last stands; its first answer replaces it.
+		if (memory && (memory.state === 'ready' || knownMemory === undefined)) {
+			knownMemory = memory;
+		}
+	}
+
+	/** Keeps what was read for the next start, and draws it if it differs from what is on screen. */
+	private publish(): void {
+		if (this.disposed) {
+			return;
 		}
 		const lastSeen = JSON.stringify({ connectors: knownConnectors, diff: knownDiff, memory: knownMemory?.state === 'ready' ? { ...knownMemory, search: undefined } : undefined });
 		if (lastSeen !== this.storageService.get(LAST_SEEN_KEY, StorageScope.WORKSPACE)) {
 			this.storageService.store(LAST_SEEN_KEY, lastSeen, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		}
-		this.paint();
+		if (this.fingerprint() !== this.painted) {
+			this.paint();
+		}
+	}
+
+	/** Everything `paint` draws from, apart from the folds, which repaint by themselves. */
+	private fingerprint(): string {
+		return JSON.stringify([
+			knownConnectors, knownDiff, knownTasks, knownMemory,
+			this.changedFiles(), this.currentBranch(), this.contextUsage(),
+			this.workspaceService.getWorkspace().folders[0]?.uri.toString(),
+			this.contextKeyService.getContextKeyValue<boolean>(MEMORY_ENABLED_CONTEXT),
+		]);
 	}
 
 	private paint(): void {
+		// A refresh still waiting for pi can answer after the column was closed.
+		if (this.disposed) {
+			return;
+		}
+		this.painted = this.fingerprint();
 		this.renderDisposables.clear();
 		clearNode(this.root);
 		this.renderEnvironment(this.root);
@@ -211,6 +324,7 @@ export class PicodeAgentOverview extends Disposable {
 		this.renderConnectors(this.root);
 		this.renderChanges(this.root);
 		this.renderTasks(this.root);
+		this.root.appendChild(this.issuesHost);
 		this.renderMemory(this.root);
 	}
 
@@ -227,16 +341,33 @@ export class PicodeAgentOverview extends Disposable {
 		}));
 	}
 
-	/** Runs one of the connector's commands, then reads again so the column shows its effect. */
-	private async runAndRefresh(command: string, ...args: unknown[]): Promise<void> {
+	/** Runs one of memory's commands and shows its effect at once, without waiting on anything else. */
+	private async runMemoryCommand(command: string, ...args: unknown[]): Promise<void> {
 		await this.commandService.executeCommand(command, ...args);
-		await this.refreshConnectors();
+		try {
+			await this.readMemory();
+		} catch {
+			// Not answering: the row that says so comes with the next reading.
+		}
+		this.publish();
 	}
 
-	private section(parent: HTMLElement, title: string): HTMLElement {
+	private section(parent: HTMLElement, title: string | undefined): HTMLElement {
 		const section = append(parent, $('.picode-overview-section'));
-		append(section, $('.picode-overview-title')).textContent = title;
+		if (title) {
+			append(section, $('.picode-overview-title')).textContent = title;
+		}
 		return section;
+	}
+
+	private changedFiles(): number {
+		let files = 0;
+		for (const repository of this.scmService.repositories) {
+			for (const group of repository.provider.groups) {
+				files += group.resources.length;
+			}
+		}
+		return files;
 	}
 
 	private row(parent: HTMLElement, icon: ThemeIcon, label: string, detail?: string): HTMLElement {
@@ -263,7 +394,9 @@ export class PicodeAgentOverview extends Disposable {
 
 		const folder = this.workspaceService.getWorkspace().folders[0];
 		if (folder) {
-			this.row(section, Codicon.folder, folder.name, basename(folder.uri) !== folder.name ? basename(folder.uri) : undefined);
+			// The folder's parent says which "PiCode-Website" this is, without the whole path.
+			const parent = basename(dirname(folder.uri));
+			this.row(section, Codicon.folder, folder.name, parent && parent !== folder.name ? parent : undefined);
 		} else {
 			const row = this.row(section, Codicon.folder, localize('picode.overview.noFolder', "No folder open"));
 			this.action(row, localize('picode.overview.openFolder', "Open"), () => void this.commandService.executeCommand('workbench.action.files.openFolder'));
@@ -319,13 +452,26 @@ export class PicodeAgentOverview extends Disposable {
 		if (connectors === undefined) {
 			return;
 		}
-		const section = this.section(parent, localize('picode.overview.connectors', "MCPs"));
 		if (connectors.length === 0) {
-			const row = this.row(section, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
+			const empty = this.section(parent, localize('picode.overview.connectors', "MCPs"));
+			const row = this.row(empty, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
 			this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
 			return;
 		}
+		// Folded by default: only the ones that need the user (sign in, off) stay visible.
+		const section = append(parent, $('.picode-overview-section'));
+		const heading = this.row(section, this.showConnectors ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.connectors', "MCPs"));
+		heading.classList.add('picode-overview-title');
+		append(heading, $('span.picode-overview-value')).textContent = String(connectors.length);
+		this.clickable(heading, () => {
+			this.showConnectors = !this.showConnectors;
+			this.paint();
+		});
 		for (const connector of connectors) {
+			const needsYou = connector.signIn === 'needed' || connector.on === false;
+			if (!this.showConnectors && !needsYou) {
+				continue;
+			}
 			// The same mark the chat settings' MCP list shows: the service's own logo, or its initials.
 			const row = append(section, $('.picode-overview-row'));
 			append(row, $('span.picode-overview-logo')).appendChild(createServiceLogo(connector.name));
@@ -340,13 +486,9 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderChanges(parent: HTMLElement): void {
-		let files = 0;
-		for (const repository of this.scmService.repositories) {
-			for (const group of repository.provider.groups) {
-				files += group.resources.length;
-			}
-		}
-		const section = this.section(parent, localize('picode.overview.changes', "Changes"));
+		const files = this.changedFiles();
+		// Nothing changed is one quiet line: a title over it would only repeat the word.
+		const section = this.section(parent, files === 0 ? undefined : localize('picode.overview.changes', "Changes"));
 		const filesLabel = files === 0
 			? localize('picode.overview.noChanges', "Nothing changed")
 			: files === 1 ? localize('picode.overview.oneChange', "1 file changed") : localize('picode.overview.manyChanges', "{0} files changed", files);
@@ -373,59 +515,91 @@ export class PicodeAgentOverview extends Disposable {
 		}
 	}
 
-	/** The chat's background work: what the connector's Tasks block shows, running first, then what finished. */
+	/** The same block as the connector's Tasks view: the plan, what is running, and what finished. */
 	private renderTasks(parent: HTMLElement): void {
-		const status = picodeAgentStatus();
 		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
-		if (status?.running && status.activity) {
-			this.row(section, Codicon.loading, status.activity).classList.add('running');
+		const running = knownTasks?.running ?? [];
+		const finished = knownTasks?.finished ?? [];
+		const todos = knownTasks?.todos;
+		this.row(section, Codicon.dashboard, knownTasks?.summary ?? localize('picode.overview.idle', "Nothing running"));
+		if (todos) {
+			const plan = this.row(section, Codicon.checklist, localize('picode.overview.plan', "Plan"));
+			append(plan, $('span.picode-overview-value')).textContent = todos.progress;
+			for (const step of todos.rows) {
+				const row = this.row(section, ThemeIcon.fromId(step.icon), step.title, step.detail);
+				row.classList.add('nested', `todo-${step.status}`);
+				row.title = step.detail ? `${step.title}\n${step.detail}` : step.title;
+				if (step.working) {
+					row.classList.add('running');
+				}
+			}
 		}
-		const board = knownTasks;
-		if (board === undefined) {
-			// The connector has not answered yet: the jobs the chat reported stand in.
-			for (const job of status?.jobs ?? []) {
-				const minutes = Math.max(0, Math.round((Date.now() - job.startedAt) / 60_000));
-				const row = this.row(section, Codicon.terminal, job.label ?? job.command ?? localize('picode.overview.job', "Job {0}", job.jobNumber));
-				append(row, $('span.picode-overview-value')).textContent = minutes < 1 ? localize('picode.overview.justNow', "now") : localize('picode.overview.minutes', "{0} min", minutes);
-			}
-			if (!status?.running && (status?.jobs.length ?? 0) === 0) {
-				this.row(section, Codicon.check, localize('picode.overview.idle', "Nothing running"));
-			}
+		this.taskGroup(section, localize('picode.overview.running', "Running"), Codicon.sync, running, this.showRunning, () => this.showRunning = !this.showRunning);
+		this.taskGroup(section, localize('picode.overview.finished', "Finished"), Codicon.history, finished, this.showFinished, () => this.showFinished = !this.showFinished);
+	}
+
+	private taskGroup(section: HTMLElement, label: string, icon: ThemeIcon, tasks: readonly ITaskRow[], open: boolean, toggle: () => void): void {
+		if (tasks.length === 0) {
 			return;
 		}
-		for (const task of board.running) {
-			this.taskRow(section, task);
-		}
-		if (board.running.length === 0 && !status?.running) {
-			this.row(section, Codicon.check, localize('picode.overview.idle', "Nothing running"));
-		}
-		if (board.finished.length > 0) {
-			const row = this.row(section, this.showFinished ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.finished', "Finished"));
-			append(row, $('span.picode-overview-value')).textContent = String(board.finished.length);
-			this.clickable(row, () => {
-				this.showFinished = !this.showFinished;
-				this.paint();
-			});
-			if (this.showFinished) {
-				for (const task of board.finished) {
-					this.taskRow(section, task).classList.add('nested');
-				}
+		const row = this.foldRow(section, open, icon, label, toggle);
+		append(row, $('span.picode-overview-value')).textContent = String(tasks.length);
+		if (open) {
+			for (const task of tasks) {
+				this.taskRow(section, task);
 			}
 		}
 	}
 
-	private taskRow(parent: HTMLElement, task: ITaskRow): HTMLElement {
-		const row = this.row(parent, ThemeIcon.fromId(task.icon), task.title);
+	/** A row with the arrow that opens and closes what is under it. */
+	private foldRow(parent: HTMLElement, open: boolean, icon: ThemeIcon, label: string, toggle: () => void): HTMLElement {
+		const row = this.row(parent, icon, label);
+		row.prepend($(`span.picode-overview-twistie${ThemeIcon.asCSSSelector(open ? Codicon.chevronDown : Codicon.chevronRight)}`));
+		this.clickable(row, () => {
+			toggle();
+			this.paint();
+		});
+		return row;
+	}
+
+	/** "Show N more" under a list of memories: a project's, or the search's without one. */
+	private moreRow(parent: HTMLElement, label: string, project?: string): void {
+		const row = this.row(parent, Codicon.ellipsis, label);
+		row.classList.add('nested');
+		this.clickable(row, () => void this.runMemoryCommand(MEMORY_SHOW_MORE_COMMAND, project));
+	}
+
+	private taskRow(parent: HTMLElement, task: ITaskRow): void {
+		const key = task.agentId ?? task.outputFile ?? task.title;
+		const open = this.openTasks.has(key);
+		const row = this.foldRow(parent, open, ThemeIcon.fromId(task.icon), task.title, () => {
+			if (!this.openTasks.delete(key)) {
+				this.openTasks.add(key);
+			}
+		});
+		row.classList.add('nested');
 		append(row, $('span.picode-overview-value')).textContent = task.detail;
-		if (task.agentId) {
-			this.clickable(row, () => void this.commandService.executeCommand(TASKS_TRANSCRIPT_COMMAND, task.agentId), task.tooltip ?? localize('picode.overview.openAgent', "Follow what this agent does"));
-		} else if (task.outputFile) {
-			const output = URI.file(task.outputFile);
-			this.clickable(row, () => void this.commandService.executeCommand('vscode.open', output), task.tooltip ?? localize('picode.overview.openOutput', "Open what this job prints"));
-		} else if (task.tooltip) {
+		if (task.tooltip) {
 			row.title = task.tooltip;
 		}
-		return row;
+		if (task.agentId) {
+			const agentId = task.agentId;
+			const follow = append(row, $(`button.picode-overview-icon-action${ThemeIcon.asCSSSelector(Codicon.book)}`, { type: 'button', title: localize('picode.overview.openAgent', "Follow what this agent does") }));
+			this.renderDisposables.add(addDisposableListener(follow, EventType.CLICK, () => void this.commandService.executeCommand(TASKS_TRANSCRIPT_COMMAND, agentId)));
+		}
+		if (open) {
+			for (const fact of task.facts ?? []) {
+				const line = this.row(parent, ThemeIcon.fromId(fact.icon), fact.label, fact.detail);
+				line.classList.add('nested-deep');
+				if (fact.tooltip) {
+					line.title = fact.tooltip;
+				}
+				if (fact.openFile) {
+					const output = URI.file(fact.openFile);
+					this.clickable(line, () => void this.commandService.executeCommand('vscode.open', output), fact.tooltip);
+				}
+			}
+		}
 	}
 
 	/** What memory holds for the open folders, its search and its check: the connector's Memory block. */
@@ -442,30 +616,58 @@ export class PicodeAgentOverview extends Disposable {
 		if (memory.state === 'unavailable') {
 			const row = this.row(section, Codicon.warning, localize('picode.overview.memoryDown', "Memory is not answering"));
 			row.classList.add('attention');
-			this.action(row, localize('picode.overview.memoryCheck', "Check"), () => void this.runAndRefresh(MEMORY_CHECK_COMMAND));
+			this.action(row, localize('picode.overview.memoryCheck', "Check"), () => void this.runMemoryCommand(MEMORY_CHECK_COMMAND));
 			return;
 		}
 		const heading = this.row(section, Codicon.database, memory.heading ?? '', memory.detail);
 		if (memory.newerEngine) {
-			this.action(heading, localize('picode.overview.memoryUpdate', "Update"), () => void this.runAndRefresh(MEMORY_UPDATE_COMMAND));
+			this.action(heading, localize('picode.overview.memoryUpdate', "Update"), () => void this.runMemoryCommand(MEMORY_UPDATE_COMMAND));
 		}
 		if (memory.search) {
 			const results = this.row(section, Codicon.search, localize('picode.overview.memoryResults', "“{0}”", memory.search.query));
-			append(results, $('span.picode-overview-value')).textContent = String(memory.search.total);
-			this.action(results, localize('picode.overview.memoryClear', "Clear"), () => void this.runAndRefresh(MEMORY_CLEAR_SEARCH_COMMAND));
+			append(results, $('span.picode-overview-value')).textContent = `${memory.search.total}${memory.search.capped ? '+' : ''}`;
+			this.action(results, localize('picode.overview.memoryClear', "Clear"), () => void this.runMemoryCommand(MEMORY_CLEAR_SEARCH_COMMAND));
 			for (const hit of memory.search.rows) {
 				const row = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
 				row.classList.add('nested');
 				this.clickable(row, () => void this.commandService.executeCommand(MEMORY_OPEN_COMMAND, { id: hit.id }), hit.project);
 			}
+			if (memory.search.emptyLabel) {
+				this.row(section, Codicon.circleSlash, memory.search.emptyLabel).classList.add('nested');
+			}
+			if (memory.search.moreLabel) {
+				this.moreRow(section, memory.search.moreLabel);
+			}
 		} else {
 			for (const project of memory.projects ?? []) {
-				const row = this.row(section, Codicon.folder, project.name);
-				append(row, $('span.picode-overview-value')).textContent = String(project.memories);
+				const row = this.row(section, project.open ? Codicon.folderOpened : Codicon.folder, project.name);
+				// With one project the heading already says how many memories there are.
+				if ((memory.projects?.length ?? 0) > 1) {
+					append(row, $('span.picode-overview-value')).textContent = String(project.memories);
+				}
+				this.clickable(row, () => void this.runMemoryCommand(MEMORY_TOGGLE_PROJECT_COMMAND, project.name));
+				for (const hit of project.open ? project.rows ?? [] : []) {
+					const memoryRow = this.row(section, ThemeIcon.fromId(hit.icon), hit.title, hit.when || undefined);
+					memoryRow.classList.add('nested');
+					this.clickable(memoryRow, () => void this.commandService.executeCommand(MEMORY_OPEN_COMMAND, { id: hit.id }));
+				}
+				if (project.open && project.emptyLabel) {
+					this.row(section, Codicon.circleSlash, project.emptyLabel).classList.add('nested');
+				}
+				if (project.open && project.moreLabel) {
+					this.moreRow(section, project.moreLabel, project.name);
+				}
 			}
 		}
 		const search = this.row(section, Codicon.search, localize('picode.overview.memorySearch', "Search memories…"));
-		this.clickable(search, () => void this.runAndRefresh(MEMORY_SEARCH_COMMAND));
+		this.clickable(search, () => void this.runMemoryCommand(MEMORY_SEARCH_COMMAND));
+		if (memory.filter) {
+			const filter = this.row(section, Codicon.filter, memory.filter.label, memory.filter.detail);
+			this.clickable(filter, () => void this.runMemoryCommand(MEMORY_FILTER_COMMAND));
+			if (memory.filter.clearLabel) {
+				this.action(filter, memory.filter.clearLabel, () => void this.runMemoryCommand(MEMORY_CLEAR_FILTER_COMMAND));
+			}
+		}
 		const check = this.row(section, Codicon.pulse, localize('picode.overview.memoryCheckRow', "Check memory"));
 		this.clickable(check, () => void this.commandService.executeCommand(MEMORY_CHECK_COMMAND));
 	}
@@ -574,6 +776,11 @@ class PicodeSidebarStatusContribution extends Disposable implements IWorkbenchCo
 			return;
 		}
 		const previous = this.changesTab;
+		// Pressed again while the changes are open: close them instead of refreshing.
+		if (previous && this.editorService.findEditors(previous).length > 0) {
+			await this.editorService.closeEditors(this.editorService.findEditors(previous));
+			return;
+		}
 		this.changesTab = URI.parse(`multi-diff-editor:picode-changes-${Date.now()}`);
 		if (previous) {
 			await this.editorService.closeEditors(this.editorService.findEditors(previous));

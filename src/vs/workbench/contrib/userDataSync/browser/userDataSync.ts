@@ -511,12 +511,16 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 		return origin ? `${origin}/pricing` : undefined;
 	}
 
-	private async turnOn(): Promise<void> {
+	/**
+	 * `skipConfigure` is for a caller that already shows what is synced and lets the owner choose it
+	 * (the Account window): the list of categories is not asked a second time.
+	 */
+	private async turnOn(skipConfigure = false): Promise<void> {
 		try {
 			if (!this.userDataSyncWorkbenchService.authenticationProviders.length) {
 				throw new Error(localize('no authentication providers', "No authentication providers are available."));
 			}
-			const turnOn = await this.askToConfigure();
+			const turnOn = skipConfigure || await this.askToConfigure();
 			if (!turnOn) {
 				return;
 			}
@@ -839,8 +843,8 @@ export class UserDataSyncWorkbenchContribution extends Disposable implements IWo
 					}]
 				});
 			}
-			async run(): Promise<void> {
-				return that.turnOn();
+			async run(_accessor: ServicesAccessor, options?: { skipConfigure?: boolean }): Promise<void> {
+				return that.turnOn(options?.skipConfigure === true);
 			}
 		}));
 	}

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, DisposableStore, dispose, IDisposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, dispose, IDisposable } from '../../../../base/common/lifecycle.js';
 import { scopesMatch } from '../../../../base/common/oauth.js';
 import * as nls from '../../../../nls.js';
 import { MenuId, MenuRegistry } from '../../../../platform/actions/common/actions.js';
@@ -13,7 +13,6 @@ import { InstantiationType, registerSingleton } from '../../../../platform/insta
 import { Severity } from '../../../../platform/notification/common/notification.js';
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
-import { IActivityService, NumberBadge } from '../../activity/common/activity.js';
 import { IAuthenticationMcpAccessService } from './authenticationMcpAccessService.js';
 import { IAuthenticationMcpUsageService } from './authenticationMcpUsageService.js';
 import { AuthenticationSession, IAuthenticationProvider, IAuthenticationService, AuthenticationSessionAccount } from '../common/authentication.js';
@@ -96,7 +95,6 @@ export class AuthenticationMcpService extends Disposable implements IAuthenticat
 	declare readonly _serviceBrand: undefined;
 	private _signInRequestItems = new Map<string, SessionRequestInfo>();
 	private _sessionAccessRequestItems = new Map<string, { [mcpServerId: string]: { disposables: IDisposable[]; possibleSessions: AuthenticationSession[] } }>();
-	private readonly _accountBadgeDisposable = this._register(new MutableDisposable());
 
 	private _onDidAccountPreferenceChange: Emitter<{ providerId: string; mcpServerIds: string[] }> = this._register(new Emitter<{ providerId: string; mcpServerIds: string[] }>());
 	readonly onDidChangeAccountPreference = this._onDidAccountPreferenceChange.event;
@@ -105,7 +103,6 @@ export class AuthenticationMcpService extends Disposable implements IAuthenticat
 	private _inheritAuthAccountPreferenceChildToParent: { [mcpServerId: string]: string };
 
 	constructor(
-		@IActivityService private readonly activityService: IActivityService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
@@ -187,25 +184,11 @@ export class AuthenticationMcpService extends Disposable implements IAuthenticat
 		}
 	}
 
-	private updateBadgeCount(): void {
-		this._accountBadgeDisposable.clear();
-
-		let numberOfRequests = 0;
-		this._signInRequestItems.forEach(providerRequests => {
-			Object.keys(providerRequests).forEach(request => {
-				numberOfRequests += providerRequests[request].requestingMcpServerIds.length;
-			});
-		});
-
-		this._sessionAccessRequestItems.forEach(accessRequest => {
-			numberOfRequests += Object.keys(accessRequest).length;
-		});
-
-		if (numberOfRequests > 0) {
-			const badge = new NumberBadge(numberOfRequests, () => nls.localize('sign in', "Sign in requested"));
-			this._accountBadgeDisposable.value = this.activityService.showAccountsActivity({ badge });
-		}
-	}
+	/**
+	 * PiCode shows no number on the account icon for pending sign-in requests: the account icon opens the
+	 * Account window, and a count nobody can act on from there is only noise.
+	 */
+	private updateBadgeCount(): void { }
 
 	private removeAccessRequest(providerId: string, mcpServerId: string): void {
 		const providerRequests = this._sessionAccessRequestItems.get(providerId) || {};

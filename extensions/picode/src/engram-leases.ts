@@ -51,6 +51,39 @@ export function markEngineStarted(dir: string, enginePid: number): void {
 	fs.writeFileSync(path.join(dir, OWNER_FILE), String(enginePid));
 }
 
+/** The engine PiCode started in this folder, without taking the marker away; `undefined` when there is none. */
+export function startedEngine(dir: string): number | undefined {
+	try {
+		const pid = Number(fs.readFileSync(path.join(dir, OWNER_FILE), 'utf8').trim());
+		return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Forgets the engine PiCode started in this folder (it was stopped on purpose). */
+export function forgetStartedEngine(dir: string): void {
+	try {
+		fs.rmSync(path.join(dir, OWNER_FILE), { force: true });
+	} catch {
+		// A marker that stays names a process that is gone; the next stop finds nothing to signal.
+	}
+}
+
+/** Hands the leases of windows that are still running over to another folder, when the engine moved there. */
+export function moveLeases(from: string, to: string, isAlive: IsAlive = processIsAlive): void {
+	if (path.resolve(from) === path.resolve(to)) {
+		return;
+	}
+	for (const pid of liveLeases(from, isAlive)) {
+		try {
+			takeLease(to, pid);
+		} catch {
+			// A window that cannot be recorded here is left to the folder it already uses.
+		}
+	}
+}
+
 /** The leases of windows that are still running, after removing the ones that are not. */
 function liveLeases(dir: string, isAlive: IsAlive): number[] {
 	const folder = leasesDir(dir);

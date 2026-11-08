@@ -195,6 +195,7 @@ eliminó, y [`docs/CI.md`](CI.md) lo explica.
 ## Cómo compilar
 
 ```bash
+npm run build                      # lo mismo, en un comando y con cualquier canal (--channel stable|beta|experimental; --installer añade el instalador)
 ./build/build.sh          # comprueba la fuente, instala si falta, compila, empaqueta y remata
 ./build/build.sh -o       # solo comprobación: segundos, sin instalar ni compilar
 ./build/build.sh -i       # fuerza la instalación de dependencias aunque el estado cuadre

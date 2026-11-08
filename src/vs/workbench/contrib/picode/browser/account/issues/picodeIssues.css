@@ -1,0 +1,937 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.picode-issues-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.picode-issues-head h2 {
+	margin: 0;
+}
+
+.picode-issues-notice {
+	margin: 0 0 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-code {
+	margin: 4px 0 16px;
+	font-family: var(--monaco-monospace-font);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	user-select: all;
+}
+
+.picode-issue-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.picode-issue-row .picode-account-row-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-issue-row .picode-account-row-text strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-issue-row .monaco-button {
+	flex: none;
+	width: auto;
+	padding: 4px 12px;
+}
+
+.picode-issue-label,
+.picode-issue-outsider {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: 11px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+}
+
+.picode-issue-outsider {
+	background: var(--vscode-inputValidation-warningBackground);
+	color: var(--vscode-foreground);
+	border: 1px solid var(--vscode-inputValidation-warningBorder);
+}
+
+/* An issue in the Status column: title on top, small details below, a one-icon action on the right. */
+.picode-issue-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 5px 0;
+	border-radius: 4px;
+}
+
+.picode-issue-item .picode-overview-icon {
+	margin-top: 2px;
+}
+
+.picode-issue-item.clickable {
+	cursor: pointer;
+}
+
+.picode-issue-item.clickable:hover .picode-issue-title {
+	text-decoration: underline;
+}
+
+.picode-issue-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-issue-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+}
+
+.picode-issue-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-key {
+	font-family: var(--monaco-monospace-font);
+}
+
+.picode-issue-tag {
+	padding: 0 6px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.picode-issue-tag.outside {
+	background: var(--vscode-inputValidation-warningBackground);
+	border: 1px solid var(--vscode-inputValidation-warningBorder);
+}
+
+.picode-issue-fix {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-issue-fix:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-issue-fix:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+/* -- The issues viewer (a tab of the editor) ----------------------------------------------------- */
+
+.picode-issues-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	color: var(--vscode-foreground);
+}
+
+.picode-issues-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.picode-issues-header-icon {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-heading {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.picode-issues-ref {
+	margin-left: 8px;
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-spacer {
+	flex: 1;
+}
+
+.picode-issues-search {
+	width: 220px;
+	padding: 3px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 6px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+}
+
+.picode-issues-search:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.picode-issues-segment {
+	display: flex;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.picode-issues-segment-button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
+	border: none;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-issues-segment-button.active {
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	font-weight: 600;
+}
+
+.picode-issues-segment-button:not(.active):hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-issues-main {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.picode-issues-content {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.picode-issues-message {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	flex: 1;
+	padding: 24px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-note {
+	padding: 6px 16px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	border-top: 1px solid var(--vscode-panel-border);
+}
+
+/* Board */
+
+.picode-issues-board {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	min-height: 0;
+	padding: 14px 16px;
+	overflow: auto;
+}
+
+.picode-issues-column {
+	display: flex;
+	flex: 0 0 280px;
+	flex-direction: column;
+	min-height: 0;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}
+
+.picode-issues-column-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 10px 12px 6px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-column-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 0;
+	padding: 4px 8px 10px;
+	overflow-y: auto;
+}
+
+.picode-issue-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: var(--vscode-editor-background);
+	box-shadow: 0 1px 2px color-mix(in srgb, #000 25%, transparent);
+	cursor: pointer;
+}
+
+.picode-issue-card:hover {
+	border-color: color-mix(in srgb, var(--vscode-foreground) 25%, transparent);
+}
+
+.picode-issue-card.selected {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-issue-card-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
+}
+
+.picode-issue-card-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.picode-issue-card-foot {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-avatar {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+	font-size: 9px;
+	font-weight: 600;
+	overflow: hidden;
+	flex: none;
+}
+
+.picode-issue-avatar-picture {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.picode-issue-assignee-cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+/* List */
+
+.picode-issues-table {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	--picode-issues-columns: 96px minmax(0, 1fr) 150px 110px 130px 110px;
+}
+
+.picode-issues-table.github {
+	--picode-issues-columns: 70px minmax(0, 1fr) 130px 60px 110px;
+}
+
+.picode-issues-row {
+	display: grid;
+	grid-template-columns: var(--picode-issues-columns);
+	align-items: center;
+	gap: 12px;
+	padding: 7px 16px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-issues-row.head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--vscode-editor-background);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-row.item {
+	cursor: pointer;
+}
+
+.picode-issues-row.item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-issues-row.item.selected {
+	background: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+.picode-issues-row > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-issue-key-cell {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-key {
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+}
+
+.picode-issue-title-cell {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-issue-title-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.picode-issue-comments-cell {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-updated-cell {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-status {
+	display: inline-block;
+	max-width: 100%;
+	padding: 0 8px;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+}
+
+.picode-issue-status.progress {
+	background: color-mix(in srgb, var(--vscode-charts-blue) 30%, transparent);
+}
+
+.picode-issue-status.done {
+	background: color-mix(in srgb, var(--vscode-charts-green) 30%, transparent);
+}
+
+.picode-issue-priority {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issue-priority.highest {
+	color: var(--vscode-charts-red);
+	font-weight: 600;
+}
+
+.picode-issue-priority.high {
+	color: var(--vscode-charts-orange);
+}
+
+.picode-issue-priority.medium {
+	color: var(--vscode-charts-yellow);
+}
+
+.picode-issue-priority.low {
+	color: var(--vscode-charts-blue);
+}
+
+.picode-issue-priority.lowest {
+	color: color-mix(in srgb, var(--vscode-charts-blue) 60%, var(--vscode-descriptionForeground));
+}
+
+/* The issue on the right */
+
+.picode-issues-detail-title {
+	margin: 0;
+	font-size: 16px;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+.picode-issues-detail-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.picode-issues-facts {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 6px 14px;
+	margin: 0;
+}
+
+.picode-issues-facts dt {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.picode-issues-description {
+	padding-top: 10px;
+	border-top: 1px solid var(--vscode-panel-border);
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.picode-issues-description.empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-detail-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: auto;
+	padding-top: 6px;
+}
+
+.picode-issues-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 12px;
+	border: none;
+	border-radius: 6px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-issues-primary:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.picode-issues-primary:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* Dragging a card to another column */
+
+.picode-issue-card[draggable="true"] {
+	cursor: grab;
+}
+
+.picode-issue-card.dragging {
+	opacity: 0.4;
+}
+
+.picode-issues-column.drop {
+	outline: 2px dashed var(--vscode-focusBorder);
+	outline-offset: -2px;
+}
+
+.picode-issues-banner {
+	display: none;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 16px;
+	background: var(--vscode-inputValidation-infoBackground);
+	border-bottom: 1px solid var(--vscode-inputValidation-infoBorder);
+}
+
+.picode-issues-banner.shown {
+	display: flex;
+}
+
+/* The issue in its own window, over the viewer */
+
+.picode-issues-view {
+	position: relative;
+}
+
+.picode-issues-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: color-mix(in srgb, #000 55%, transparent);
+}
+
+.picode-issues-overlay.open {
+	display: flex;
+}
+
+.picode-issues-dialog {
+	display: flex;
+	flex-direction: column;
+	width: min(1000px, 100%);
+	max-height: 100%;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 12px;
+	background: var(--vscode-editor-background);
+	box-shadow: 0 12px 40px color-mix(in srgb, #000 55%, transparent);
+	outline: none;
+}
+
+.picode-issues-dialog-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-dialog-notice {
+	display: none;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 16px;
+	background: var(--vscode-inputValidation-infoBackground);
+	border-top: 1px solid var(--vscode-inputValidation-infoBorder);
+	border-bottom: 1px solid var(--vscode-inputValidation-infoBorder);
+}
+
+.picode-issues-dialog-notice.shown {
+	display: flex;
+}
+
+.picode-issues-dialog-body {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 24px;
+	min-height: 0;
+	padding: 8px 16px 20px;
+	overflow-y: auto;
+}
+
+.picode-issues-dialog-main {
+	display: flex;
+	flex: 1 1 380px;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+
+.picode-issues-dialog-side {
+	flex: 0 1 300px;
+	min-width: 240px;
+	padding: 12px 14px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 8px;
+	align-self: flex-start;
+}
+
+.picode-issues-dialog-side > .picode-issues-facts {
+	margin-top: 12px;
+}
+
+.picode-issues-section {
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-summary {
+	width: 100%;
+	padding: 4px 8px;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 18px;
+	font-weight: 600;
+	box-sizing: border-box;
+}
+
+.picode-issues-summary:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+}
+
+.picode-issues-summary:focus {
+	border-color: var(--vscode-focusBorder);
+	background: var(--vscode-input-background);
+	outline: none;
+}
+
+.picode-issues-select {
+	width: 100%;
+	padding: 3px 24px 3px 8px;
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, color-mix(in srgb, var(--vscode-foreground) 25%, transparent)));
+	border-radius: 6px;
+	background-color: var(--vscode-dropdown-background);
+	/* The arrow that says "this opens a list", the same on the lists and on the people buttons. */
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%239d9d9d' d='M3.15 5.65a.5.5 0 0 1 .7 0L8 9.8l4.15-4.15a.5.5 0 0 1 .7.7l-4.5 4.5a.5.5 0 0 1-.7 0l-4.5-4.5a.5.5 0 0 1 0-.7z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 6px center;
+	-webkit-appearance: none;
+	appearance: none;
+	color: var(--vscode-dropdown-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-issues-select:hover:not(:disabled) {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-issues-select:focus {
+	border-color: var(--vscode-focusBorder);
+	outline: none;
+}
+
+.picode-issues-select:disabled {
+	opacity: 0.6;
+}
+
+.picode-issues-labels {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+}
+
+.picode-issue-tag.removable {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.picode-issue-tag.removable button {
+	display: inline-flex;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	opacity: 0.7;
+}
+
+.picode-issue-tag.removable button:hover {
+	opacity: 1;
+}
+
+.picode-issues-label-input {
+	flex: 1 1 90px;
+	min-width: 90px;
+	padding: 2px 6px;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+}
+
+.picode-issues-label-input:focus {
+	border-color: var(--vscode-focusBorder);
+	background: var(--vscode-input-background);
+	outline: none;
+}
+
+/* Description editor, person picker */
+
+.picode-issues-description-edit {
+	width: 100%;
+	min-height: 140px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	font: inherit;
+	line-height: 1.5;
+	resize: vertical;
+	box-sizing: border-box;
+}
+
+.picode-issues-description-edit:focus {
+	border-color: var(--vscode-focusBorder);
+	background: var(--vscode-input-background);
+	outline: none;
+}
+
+.picode-issues-person {
+	position: relative;
+}
+
+.picode-issues-person-button {
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-issues-people {
+	display: none;
+	position: absolute;
+	z-index: 20;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	min-width: 220px;
+	padding: 6px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	box-shadow: 0 6px 20px color-mix(in srgb, #000 45%, transparent);
+}
+
+.picode-issues-people.open {
+	display: block;
+}
+
+.picode-issues-people-search {
+	width: 100%;
+	padding: 3px 8px;
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 6px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	box-sizing: border-box;
+}
+
+.picode-issues-people-list {
+	max-height: 200px;
+	margin: 6px 0 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.picode-issues-people-item,
+.picode-issues-people-empty {
+	padding: 4px 8px;
+	border-radius: 4px;
+}
+
+.picode-issues-people-item {
+	cursor: pointer;
+}
+
+.picode-issues-people-item:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.picode-issues-people-item.current {
+	font-weight: 600;
+}
+
+.picode-issues-people-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-people-note {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-issues-people-note:empty {
+	display: none;
+}
+
+/* The title of an issues panel, with the button that says which project it is about */
+
+.picode-issues-title-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.picode-issues-title-row .picode-overview-title {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+
+.picode-issues-scope {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 55%;
+	font-size: 11px;
+}
+
+.picode-issues-scope > span:first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

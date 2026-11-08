@@ -45,6 +45,16 @@ export function userEngineBinary(home: string): string {
 	return path.join(userEngineDir(home), engramBinaryName());
 }
 
+/** The version of the engine an update left in the profile, or `undefined` when there is none. */
+export function installedEngineVersion(home: string): string | undefined {
+	try {
+		const text = fs.readFileSync(path.join(userEngineDir(home), ENGRAM_VERSION_FILE), 'utf8').trim();
+		return /^v?\d+\.\d+\.\d+/.test(text) && fs.existsSync(userEngineBinary(home)) ? text.replace(/^v/i, '') : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Parses "3.4.0" / "v3.5.1" into comparable numbers; missing parts are zero. */
 export function parseVersion(value: string): number[] {
 	return value.replace(/^v/i, '').split('.').map(part => {
@@ -222,7 +232,7 @@ export async function updateEngine(options: {
 	readonly currentVersion: string | undefined;
 	readonly confirm: (message: string) => Promise<boolean>;
 	readonly progress: (line: string) => void;
-}): Promise<{ readonly ok: boolean; readonly message: string }> {
+}): Promise<{ readonly ok: boolean; readonly message: string; /** The new engine is on disk but the running one is the old one. */ readonly restart?: boolean }> {
 	const { home, currentVersion, confirm, progress } = options;
 
 	progress('Checking for a newer memory engine…');
@@ -238,6 +248,11 @@ export async function updateEngine(options: {
 	}
 	if (currentVersion !== undefined && compareVersions(release.version, currentVersion) <= 0) {
 		return { ok: true, message: l10n.t('Already up to date ({0}).', currentVersion) };
+	}
+	// Downloaded already, but the engine that is running is the old one: only a restart is missing.
+	const downloaded = installedEngineVersion(home);
+	if (downloaded !== undefined && compareVersions(release.version, downloaded) <= 0) {
+		return { ok: true, restart: true, message: l10n.t('Memory engine {0} is already downloaded. Restart the engine to use it.', downloaded) };
 	}
 
 	const current = currentVersion ?? l10n.t('an unknown version');
@@ -358,7 +373,8 @@ export async function updateEngine(options: {
 
 		return {
 			ok: true,
-			message: l10n.t('Memory engine {0} is installed. Restart PiCode to use it (it will be picked up automatically).', release.version),
+			restart: true,
+			message: l10n.t('Memory engine {0} is installed. Restart the engine to use it.', release.version),
 		};
 	} finally {
 		try { fs.rmSync(tempRoot, { recursive: true, force: true }); } catch { /* best effort */ }

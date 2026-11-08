@@ -137,6 +137,18 @@ class PicodeAgentSessionsView extends ViewPane {
 		const identity = append(footer, $('.picode-sessions-identity'));
 		const name = append(identity, $('span.picode-sessions-account-name'));
 		const plan = append(identity, $('span.picode-sessions-plan'));
+		// The name opens the Account window: plan, cloud sync and the Pro features.
+		identity.style.cursor = 'pointer';
+		identity.setAttribute('role', 'button');
+		identity.tabIndex = 0;
+		identity.title = localize('picode.sessions.openAccount', "Open your account");
+		this._register(addDisposableListener(identity, EventType.CLICK, () => this.commandService.executeCommand('picode.account.open')));
+		this._register(addDisposableListener(identity, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				void this.commandService.executeCommand('picode.account.open');
+			}
+		}));
 
 		const render = (label: string | undefined) => {
 			name.textContent = label ?? localize('picode.sessions.signedOut', "Not signed in");

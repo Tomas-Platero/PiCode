@@ -7,6 +7,7 @@
  *
  * Usage:
  *   node build/release.mjs update-feed
+ *   node build/release.mjs check-signing-key
  *   node build/release.mjs release-notes
  *   node build/release.mjs whats-new-history
  *
@@ -41,7 +42,10 @@ import { pathToFileURL } from 'node:url';
 	 *     --version 1.135.1 --commit <sha> \
 	 *     --url https://github.com/TomasPlatero/PiCode/releases/download/v1.135.1/PiCode-win32-x64-1.135.1.zip \
 	 *     --sha256 <hex> --platform win32 --arch x64 [--target user] \
-	 *     [--picode-version 0.1.0-beta] [--installed 1.135.0] [--out updates] [--force]
+	 *     [--picode-version 0.1.0-beta] [--installed 1.135.0] [--out updates] [--force] [--unsigned]
+	 *
+	 * The feed is signed with HOTFIX_SIGNING_KEY (the PEM itself): a build that carries the public
+	 * key ignores a feed without a valid signature. `--unsigned` is for a build made without that public key.
 	 *
 	 * `--version` is the editor's number the updater compares; `--picode-version` is PiCode's own
 	 * number the updater UI shows. They are different on purpose (see updates/README.md).
@@ -104,6 +108,10 @@ import { pathToFileURL } from 'node:url';
 	      usage(`unexpected argument "${token}"`);
 	    }
 	    const name = token.slice(2);
+	    if (name === "unsigned") {
+	      flags.unsigned = true;
+	      continue;
+	    }
 	    if (name === "force") {
 	      flags.force = true;
 	      continue;
@@ -146,7 +154,7 @@ import { pathToFileURL } from 'node:url';
 	  return value.trim();
 	}
 
-	function main() {
+	async function main() {
 	  const flags = parseArgs(cli);
 
 	  const version = required(flags, "version");
@@ -219,6 +227,16 @@ import { pathToFileURL } from 'node:url';
 	      : {}),
 	  };
 
+	  // Checked before anything is written: an unsigned feed offers nothing to a released build.
+	  const signingKey = process.env.HOTFIX_SIGNING_KEY;
+	  if (!signingKey && !flags.unsigned) {
+	    usage("HOTFIX_SIGNING_KEY is not set; released builds ignore an unsigned feed (--unsigned for a build without the public key)");
+	  }
+	  if (signingKey && !flags.unsigned) {
+	    const { signUpdate } = await import("../src/vs/platform/update/node/updateSignature.ts");
+	    feed.signature = signUpdate(feed, directory.slice(1).join("/"), signingKey);
+	  }
+
 	  const target = path.join(...directory, "latest.json");
 	  mkdirSync(path.dirname(target), { recursive: true });
 	  writeFileSync(target, `${JSON.stringify(feed, null, 2)}\n`);
@@ -227,7 +245,34 @@ import { pathToFileURL } from 'node:url';
 	  console.log(`served at ${["<updateUrl>", ...directory.slice(1), "latest.json"].join("/")}`);
 	}
 
-	main();
+	await main();
+	}
+
+	// check-signing-key -- whether the release can sign what it publishes
+	/*
+	 * Run first in the release pipeline: finding out after the build and the publishing that the
+	 * key is missing or belongs to another product would leave a release nobody is offered.
+	 *
+	 * Usage: HOTFIX_SIGNING_KEY=<pem> node build/release.mjs check-signing-key [--public-key <base64>]
+	 */
+	async function cmdCheckSigningKey(cli) {
+	const { readFileSync } = await import("node:fs");
+	const { signUpdate, verifyUpdateSignature } = await import("../src/vs/platform/update/node/updateSignature.ts");
+	const index = cli.indexOf("--public-key");
+	const publicKey = index === -1 ? JSON.parse(readFileSync(new URL("../product.json", import.meta.url), "utf8")).hotfixPublicKey : cli[index + 1];
+	const update = { version: "check", productVersion: "0.0.0", sha256hash: "0".repeat(64) };
+	let signature;
+	try {
+		signature = signUpdate(update, "check", process.env.HOTFIX_SIGNING_KEY ?? "");
+	} catch {
+		console.error("error: HOTFIX_SIGNING_KEY is missing or is not a private key.");
+		process.exit(1);
+	}
+	if (!verifyUpdateSignature({ ...update, signature }, "check", publicKey)) {
+		console.error("error: HOTFIX_SIGNING_KEY does not match the public key in product.json (hotfixPublicKey).");
+		process.exit(1);
+	}
+	console.log("the signing key matches the product");
 	}
 
 	// kind -- what to call an update: hotfix, minor update or release
@@ -433,13 +478,15 @@ import { pathToFileURL } from 'node:url';
 	}
 
 
-const USAGE = `usage: node build/release.mjs <update-feed|release-notes|whats-new-history|kind>\n`;
+const USAGE = `usage: node build/release.mjs <update-feed|check-signing-key|release-notes|whats-new-history|kind>\n`;
 const cli = process.argv.slice(2);
 
 async function dispatch() {
 	switch (cli[0]) {
 		case 'update-feed':
 			return cmdUpdateFeed(cli.slice(1));
+		case 'check-signing-key':
+			return cmdCheckSigningKey(cli.slice(1));
 		case 'release-notes':
 			return cmdReleaseNotes(cli.slice(1));
 		case 'whats-new-history':

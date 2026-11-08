@@ -26,6 +26,8 @@ export interface IUpdate {
 	timestamp?: number;
 	url?: string;
 	sha256hash?: string;
+	/** Signature over what this update is and its hash (`updateSignature.ts`). */
+	signature?: string;
 }
 
 export type UpdateKind = 'hotfix' | 'minor' | 'release';

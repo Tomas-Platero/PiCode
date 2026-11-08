@@ -1693,3 +1693,153 @@ tenían traducción ninguna.
 - El título de un comando tiene que vivir en `package.nls.json` (`%clave%`): un texto suelto en
   `package.json` no se puede traducir.
 - El detalle, la herramienta y las reglas al escribir texto nuevo: [`IDIOMAS.md`](IDIOMAS.md).
+
+---
+
+## ADR-039 — pi solo carga el `.pi` de una carpeta si el editor confía en ella
+
+> *"Sí, arréglalo"* — 2026-11-05, sobre el hallazgo de la revisión de seguridad: abrir una carpeta podía ejecutar su código.
+
+**Contexto.** El `.pi` de un proyecto trae extensiones, paquetes, ajustes y servidores MCP: código que corre con los
+permisos del usuario. pi confía en todo proyecto salvo que se le diga lo contrario (`SettingsManager.create`, con
+`projectTrusted` a `true` por defecto), y su pregunta de confianza solo existe en su terminal. PiCode no le decía nada, así
+que un repositorio descargado ejecutaba sus extensiones aunque la ventana estuviera en modo restringido. Comprobado con la
+1.4.0 de pi: una extensión de prueba en `.pi/extensions` se ejecutó solo con crear los servicios.
+
+**Decisión.** La confianza del espacio de trabajo del editor es la única respuesta, y cada arranque de pi la pasa
+(`settingsForFolder`, en `extensions/picode/src/folder-trust.ts`). Una carpeta es de confianza solo si la ventana lo es y la
+carpeta es una de las abiertas o está dentro de una. Una conversación retomada en otra carpeta o una ventana sin carpeta no
+lo son. El arranque del asistente queda fuera: corre en la carpeta del propio producto.
+
+**Consecuencias.**
+- En modo restringido, el editor tampoco lista ni arranca los MCP, agentes y skills del `.pi` del proyecto.
+- Al conceder la confianza, las listas se recalculan y el siguiente turno arranca un pi que ya lo carga. Una conversación en
+  curso en esa ventana se reinicia.
+- Una prueba (`extensions/picode/test/project-trust.test.ts`) falla si un arranque nuevo de pi no lo indica.
+- **Sigue sin cubrir:** los ficheros de contexto (`AGENTS.md`) se leen sin confianza, como hace el propio pi. No ejecutan
+  código, pero sí pueden intentar engañar al modelo (riesgo pendiente de la revisión).
+
+---
+
+## ADR-040 — Inicio de sesión ligado a cada intento y actualizaciones completas firmadas
+
+> *"Ponte con esto"* — 2026-11-05, sobre dos riesgos de la revisión de seguridad: «El inicio de sesión se puede falsificar» y «Las actualizaciones completas no van firmadas».
+
+**Inicio de sesión.** Cualquier web podía abrir `picode://auth/callback?code=…` con un código de su propia cuenta y dejar el
+editor conectado a ella. Si nadie esperaba, el código se guardaba para el siguiente inicio de sesión. Ahora cada intento
+envía un valor aleatorio (`state`) que vuelve con la respuesta, y se ignora lo que no lo traiga. Ya no se guarda nada para
+después. La web no cambia, porque añade `&code=` a la dirección que recibe y el valor viaja dentro.
+
+**Actualizaciones completas.** Solo se comprobaban contra un código del propio aviso, así que quien pudiera cambiar el aviso
+decidía qué ejecutaba cada editor. Ahora el aviso va firmado con la misma clave que los hotfix (`updateSignature.ts`). La firma
+cubre el canal, el destino, las versiones y el código del fichero. Un editor que lleva la clave pública ignora el aviso que no
+la cumpla. Las copias compiladas en local también la llevan, así que también comprueban.
+
+**Consecuencias.**
+- El pipeline se para al empezar si la clave falta o no coincide. Antes solo se quedaba sin hotfix.
+- Si la clave se perdiera, una release con otra clave no llegaría sola a los editores ya instalados: habría que instalarla a mano.
+- La versión que trae esta comprobación se recibe con el actualizador de antes; desde ella, todo aviso ha de ir firmado.
+- Un aviso rechazado se apunta en el registro y, para la persona, es como si no hubiera actualización.
+- **Sigue sin cubrir:** la firma de Windows (Authenticode). Necesita comprar un certificado; sin ella, Windows sigue avisando de
+  editor desconocido al instalar. Es decisión del dueño.
+- **Sin probar de punta a punta:** la clave real del repositorio solo se comprueba en el pipeline, y el camino completo con la
+  primera release que lleve esto.
+
+**Adenda (2026-11-05): los comandos siguen sin confirmación.** *"Dejarlo como está"*. El dueño conoció el riesgo y lo aceptó: el
+chat no pregunta antes de ejecutar, igual que el terminal de pi, y el selector *Ask / Allow all* no cambia nada. Solo actúan las
+protecciones de gentle-pi, sin comprobar en un editor en marcha. Un `AGENTS.md` o una web maliciosa podrían engañar al modelo para
+ejecutar comandos que gentle-pi no considere peligrosos.
+
+**Adenda (2026-11-08): fuera el selector.** *"Sí, quítalo"*. El selector *Ask / Allow all* desaparece del chat, porque prometía una
+elección que no existía para las herramientas de pi. Matiz a la adenda anterior, que decía que no cambiaba nada: sí decidía una cosa,
+si el editor pregunta antes de usar los MCP conectados en el propio editor, que no pasan por pi. Esos siguen preguntando; quien no lo
+quiera lo cambia en el ajuste `chat.permissions.default`.
+
+## ADR-041 — La cuenta tiene su propia ventana, y todo lo Pro vive en ella
+
+> *"Quiero un panel a parte solo para «Account» como el que tenemos de «Chat Settings» donde poder ver todo lo que se sincroniza bien, a parte todo lo «pro» de la app que quiero añadir debería ir ahí no solo la sync."* — 2026-11-06
+
+**Qué se decide.** La cuenta deja de ser un menú y una fila suelta: tiene una ventana modal propia, *Account*, con páginas
+laterales (Overview, Cloud sync, Connections, Pro features). Es un editor distinto del de Chat Settings, con su propio registro de
+páginas (`picodeAccountSections.ts`), para que lo de pi y lo de la cuenta no se mezclen. Detalle y uso: [`CUENTA.md`](CUENTA.md).
+
+**Una sola puerta Pro.** `IPicodeProEntitlement` responde «¿hay sesión? ¿es Pro?» a toda función Pro. Lee el plan que el inicio de
+sesión dejó guardado. **Es un reflejo, no un cerrojo:** quien manda sigue siendo el servidor (`402`, ADR-017), así que manipular el
+valor local solo cambia lo que se ve.
+
+**Los conectores (GitHub, Jira) caben sin tocar la ventana.** Se declaran con `registerConnector` y salen en *Connections* como
+«Coming soon»; quien construya uno solo pone `available` y su comando de conexión, y la tarjeta ya viene detrás del
+control Pro. Su lógica queda fuera de este ADR.
+
+**Consecuencias.**
+- La sesión de pi que se subía a la nube leía de `~/.pi/agent`, que PiCode no toca nunca (sección 4 de `AGENTS.md`). Ahora lee del
+  perfil propio (`<perfil>/sessions`). Quien hubiera subido sesiones del pi externo no las pierde en la nube, pero ya no se
+  renuevan desde ahí.
+- La sync del perfil reutiliza lo leído mientras el tamaño y la fecha del fichero no cambian, y el backup de sesiones no relee
+  los transcritos sin cambios. Es la primera mejora de rendimiento; la subida por fichero y por trozos sigue pendiente (necesita
+  un endpoint nuevo en `host/cloud/sync-api`).
+- **Sigue fuera de la sync, a propósito:** `mcp.json` puede llevar claves de servicios, y la nube solo cifra en el servidor, no
+  de extremo a extremo. Hasta decidir cómo limpiarlo o cifrarlo, no sube. Tampoco la memoria de engram (`~/.engram`, ADR-022):
+  es una base viva y compartida que pide su propio diseño.
+
+## ADR-042 — Issues de GitHub y Jira en la ventana Account, conectadas por OAuth
+
+> *"que se conectara a github y te mostrara que fallos te han reportado de tus repos y desde ahi le pudieras pedir a tu sistema agentico que te lo solucionara?"* — 2026-11-06
+>
+> *"se podría conectar por oauth?"* → *"OAuth en los dos"* — 2026-11-06
+
+**Qué se decide.** Dos conectores solo Pro (`account/issues/`): se conectan desde su tarjeta en *Connections* y sus issues abiertas se
+ven en un panel de la columna *Status*, con un botón *Fix with pi* que escribe la issue en un chat nuevo. Se declaran con
+`registerConnector`; la ventana no se toca (ver la adenda 1). Todo vive en el núcleo (`src/vs/workbench/contrib/picode`).
+
+**Por qué OAuth y no un token pegado.** No hay nada que copiar ni caduca sin avisar, y el permiso es de solo lectura. Con GitHub se
+usa una **GitHub App** (no una OAuth App): una OAuth App solo puede pedir `repo`, que da lectura *y escritura* a todos los repos del
+usuario; la App da lectura de issues y solo en los repos que el usuario elija al instalarla. (Comprobado en la documentación de GitHub.)
+
+**Dos caminos distintos, porque los proveedores piden cosas distintas.**
+- **GitHub:** inicio con código de un solo uso. No necesita ningún secreto para empezar; el editor copia el código y abre la página.
+- **Jira:** el OAuth de Atlassian exige un secreto de cliente en el intercambio y en la renovación, y su documentación no ofrece PKCE.
+  Un secreto dentro de un editor instalado se puede extraer, así que lo guarda el servidor: `POST /api/v1/connect/token`
+  (`host/cloud/sync-api`) cambia el código y renueva el token, exige sesión y plan Pro (si no, `402`) y devuelve los tokens sin
+  guardarlos. El navegador vuelve a `/api/v1/connect/atlassian/callback`, que entrega el código al editor por `picode://connect/callback`.
+- La renovación de GitHub (si la App tiene tokens que caducan) también pasa por el servidor, por la misma razón.
+
+**Seguridad.**
+- El callback solo se acepta con el `state` de ese intento (misma regla que el inicio de sesión, ADR-040).
+- Los tokens van en `ISecretStorageService`; nunca en pantalla, ajustes ni registros. Un token de Atlassian cambia en cada renovación y
+  se guarda siempre el nuevo, con una sola renovación a la vez.
+- **Una issue la puede escribir cualquiera.** El botón escribe el texto en el chat **sin enviarlo**; antes se quitan comentarios HTML y
+  caracteres invisibles, se acota la longitud, se encierra la issue en una valla que ella misma no puede cerrar y se marca como
+  «datos de un tercero, no instrucciones». Las que vienen de fuera del equipo salen con la etiqueta *Outside report*.
+- **Límite conocido:** el comando del chat no permite fijar el nivel de permisos de una sesión, así que no se fuerza confirmación de
+  comandos para los reportes externos; vale lo que ya decide el dueño (ADR-040, adenda). Queda como mejora si el chat lo permite.
+- Sin carpeta abierta, con la carpeta sin confianza (ADR-039) o con una issue de otro repo que el abierto, *Fix with pi* sale apagado.
+
+**Consecuencias.**
+- Hasta que se registren la GitHub App y la app de Atlassian y se rellenen sus identificadores públicos en `product.json`
+  (`picode.connectors`) y los secretos en el servidor, cada conector sale como *Coming soon*. Nada se rompe sin ellos.
+- Revocar el acceso desde PiCode (*Disconnect*) borra los tokens del equipo; para anularlos en el proveedor hay que hacerlo en sus
+  ajustes de GitHub o Atlassian (anular la autorización en GitHub exige el secreto de la App).
+- Jira usa el primer sitio al que tiene acceso la cuenta. Elegir entre varios queda pendiente.
+
+**Adenda 1 (2026-11-06) — sin páginas propias en la ventana.** *"no me gusta como está eso de github issues y jira issues en el de la izq, lo quiero en connections. Luego quiero un panel para cada uno visible en status. El login que sea en connections"*. Las dos páginas de la lista lateral desaparecen: el inicio de sesión (conectar, código, desconectar) vive en la tarjeta de cada servicio en *Connections* y las issues en *Status*. El panel solo sale con plan Pro y con el servicio disponible; sin conectar ofrece *Connect*, que abre la ventana Account.
+
+**Adenda 2 (2026-11-06) — GitHub pide su código por el servidor.** Al probarlo de verdad, *Connect* en GitHub fallaba con «Failed to fetch»: las páginas de login de GitHub (`github.com/login/…`) no dan permiso a las llamadas que salen de la ventana del editor, así que la petición ni salía (curl sí funcionaba). El servidor de PiCode, que ya atendía `connect/token`, atiende también `POST /api/v1/connect/github` (pedir el código y preguntar si ya se escribió); exige sesión y plan Pro, usa su propio `GITHUB_CLIENT_ID` y no guarda nada. Los tokens de GitHub pasan por él una vez al conectar, igual que ya pasaban los de Jira.
+
+**Adenda 3 (2026-11-07) — el visor de issues.** *"Me gustaría que cuando le des a una issue se abra un visualizador. Dependiendo si es de github o jira se verán x cosas. En Jira quiero que se vea dependiendo del tipo de «espacio» que se elije… podríamos añadir un kanban y un listado de incidencias."* Pulsar una issue de *Status* abre una pestaña normal del editor con todo el proyecto (Jira) o repositorio (GitHub) y la issue pulsada abierta a la derecha. Jira: tablero para los espacios de software y listado para el resto (`projectTypeKey`), con interruptor para cambiar. Las columnas salen de los estados del proyecto (`/project/{key}/statuses`) en su orden, de por hacer a hecho, sin la API de tableros: así basta el permiso `read:jira-work` que ya tienen las conexiones y nadie tiene que reconectar (el orden de las columnas de un tablero a medida puede diferir del de Jira). GitHub: listado con abiertas y cerradas. Lee hasta 300 issues por proyecto y lo dice si hay más. La descripción se enseña como texto plano.
+
+**Adenda 4 (2026-11-07) — arrastrar tarjetas cambia el estado en Jira.** *"En el tablero kanban quiero que se deje arrastrar las tarjetas entre columnas"*. Mover una tarjeta es escribir en Jira (cambiar el estado de la issue), y hasta ahora la conexión era solo de lectura. El permiso de escritura (`write:jira-work`) **se pide aparte, la primera vez que alguien arrastra**, con un botón *Allow* en el propio visor; quien nunca arrastra sigue con solo lectura y su pantalla de consentimiento no cambia. Solo se usa para cambiar de estado (`GET/POST /issue/{key}/transitions`): ni comentar, ni editar, ni crear. La tarjeta se mueve al instante; si Jira no permite ese paso desde el estado actual (los flujos lo restringen) o pide un campo que solo su pantalla pide, vuelve a su sitio y lo dice. Requiere que el dueño añada ese permiso a la app de Atlassian (*Permissions → Jira API → write:jira-work*). Las conexiones anteriores siguen leyendo y piden el permiso al primer arrastre.
+
+**Adenda 5 (2026-11-07) — las columnas del tablero son las de Jira, y leerlas pide un permiso.** *"tiene que pintar las mismas columnas que hay en jira"*, *"no te las inventes a pelo"*. Corrige la adenda 3: las columnas **no** pueden salir de los estados del proyecto. Se comprobó con un Jira real que la lista de estados llega en orden arbitrario y con categorías cambiadas (*Finalizada* figuraba como «en curso» y *Blocked* como «hecho»), así que cualquier orden deducido de ahí era inventado. Las columnas de verdad están en la configuración del tablero (`GET /rest/agile/1.0/board` y `/board/{id}/configuration`). Según la especificación OpenAPI de Atlassian esas llamadas piden `read:board-scope:jira-software`, `read:board-scope.admin:jira-software` y `read:project:jira`; `read:jira-work` solo no basta. Como el de escribir, **ese permiso se pide aparte** desde el visor (botón *Allow*, que mantiene lo ya permitido) y no al conectar, para que ninguna conexión nueva falle si faltara en la consola de Atlassian. Sin el permiso, o si Jira no deja leer el tablero, el visor lo dice con una línea y usa los estados del proyecto (ordenados por grupo y por antigüedad), sin hacerlos pasar por las columnas de Jira. Para mover tarjetas se elige la transición que acaba en alguno de los estados de la columna destino.
+
+**Adenda 6 (2026-11-07) — la issue se abre en una ventana flotante y se puede editar.** *"En vez de así haz que salga como ventanita central flotante y que pueda cambiar el tipo, prioridad, asignación, informador, etiquetas y resumen"*. Sustituye al panel lateral de la adenda 3: pulsar una issue abre una ventana centrada sobre el visor (se cierra con la X, `Esc` o pulsando fuera). En Jira cada campo se guarda al cambiarlo (`PUT /issue/{key}`, permiso `write:jira-work`, el mismo que el de arrastrar; se pide aparte la primera vez, con *Allow*): el cambio se ve al instante y, si Jira lo rechaza, vuelve atrás y lo dice dentro de la ventana. Los tipos salen de `editmeta` (o de los tipos del proyecto) y las prioridades de `GET /priority`. **Asignado e informador se eligen entre las personas que ya aparecen en las issues del proyecto**: buscar a cualquier otra persona pediría el permiso `read:jira-user`, que no se ha añadido (queda como mejora). En GitHub la ventana es de solo lectura: editar allí pediría cambiar el permiso de la GitHub App de lectura a escritura de issues, y eso lo decide el dueño.
+
+**Adenda 7 (2026-11-07) — editar también la descripción, buscar personas y editar en GitHub.** *"Sobre el informador, sí hazlo. Sobre github dime qué tengo que añadir y quiero edición también. Y si la descripción también"*. (1) **Personas de Jira:** asignado e informador se eligen en una lista con buscador; la búsqueda (`GET /user/assignable/search` y `/user/search`) pide `read:jira-user`, que se pide junto con `write:jira-work` en el mismo *Allow* (no se pudo confirmar en la documentación de Atlassian: si lo rechazara, la lista lo dice y sigue con las personas ya conocidas). (2) **Descripción de Jira:** vive en el formato de documento de Atlassian; guardarla como texto plano aplanaría listas, enlaces, código y menciones. Por eso solo se edita cuando es texto sin formato (párrafos y saltos de línea, que se reconstruyen igual) y, si no, se muestra y se avisa. (3) **GitHub:** título, descripción, etiquetas y asignado con `PATCH /repos/{o}/{r}/issues/{n}`; las etiquetas y asignados posibles salen de `/labels` y `/assignees`. Esto exige que la GitHub App pase de *Issues: Read-only* a *Issues: Read and write*, y que el dueño de cada instalación acepte el cambio (GitHub no lo aplica solo; así lo dice su documentación sobre aprobar permisos nuevos; si un token ya emitido lo recoge sin volver a conectar no se pudo confirmar, y si hiciera falta bastaría desconectar y conectar). Mientras falte, el visor lo dice con un botón que abre los ajustes de instalaciones de GitHub.
+
+**Adenda 8 (2026-11-07) — conectar GitHub tiene que dejar ver las issues.** *"quiero que al conectar con GitHub las issues se vean"*. Al probarlo se vio que conectar (el código de un solo uso) solo autoriza a la persona: una GitHub App además tiene que estar **instalada** en sus repositorios, y sin instalación `/user/installations` devuelve cero repositorios y el panel decía «No hay issues abiertas», que era falso. Ahora ese caso es un estado propio (*PiCode cannot see any of your repositories yet*, con el botón *Install on GitHub*) y, al terminar de conectar, PiCode abre la página de instalación (`github.com/apps/<appSlug>/installations/new`) y mira cada 6 segundos, hasta 5 minutos, si ya está instalada para refrescar los paneles. Para que otros usuarios puedan instalarla, la App tiene que ser **pública** (decisión del dueño, en los ajustes de la App). La alternativa de una OAuth App evitaría la instalación, pero obligaría a pedir acceso de lectura y escritura a todos los repositorios (ver la decisión de GitHub App frente a OAuth App del inicio).
+
+**Adenda 9 (2026-11-07) — cada panel enseña el proyecto de la carpeta abierta.** *"sería factible que solo se vean los issues del proyecto en el que estamos"*, *"y en jira si no hay space o algo conectado al proyecto se podría crear o vincular"*. GitHub: la carpeta ya dice su repositorio (`origin`), así que el panel lee solo ese (con interruptor para ver todos). Jira: no hay nada en una carpeta que diga su espacio, así que se **vincula a mano una vez por carpeta** (almacenamiento del espacio de trabajo, no un fichero del repositorio, para no ensuciar el proyecto), con una pista automática solo si la rama nombra una issue de un espacio que existe. **Crear** un espacio desde PiCode (`POST /project`) exige ser administrador de Jira y un permiso más amplio que no se pudo confirmar, así que el selector solo lleva a la página de espacios de Jira. El estado nuevo *notVisible* distingue «la App no ve este repositorio» de «no hay issues».
+
+**Adenda 10 (2026-11-08) — las issues también en el diseño Editor, y el plan del agente en Status.** *"en la ventana editor no hay nada de las issues de jira y github, quiero… que solo se activa si tienes cuenta pro"*. Una vista nativa del editor (`picodeIssuesView.ts`) pinta el mismo panel dentro del contenedor de PiCode; se une a él cuando el conector lo declara (el contenedor viene de su manifiesto) y se muestra con la clave `picode.account.isPro`. Además, *Status* y *Tasks* enseñan el plan del agente (la herramienta `todo` de gentle-pi), leído del resultado de cada llamada, que trae la lista entera: no se reconstruye nada. La lista queda mientras haya una tarea abierta y 5 minutos después de cerrarse la última. El fichero de estado de gentle-pi 4.7.0 no sirve para esto: solo se escribe cuando pi corre en la terminal.
+
+**Adenda 11 (2026-11-08) — los tokens de GitHub y Jira pasan al servidor.** *"protégelo anti hacks"*, *"Sí, en el servidor"*. El editor llamaba directo a GitHub y Jira con un token guardado en el equipo, así que cualquier comprobación de Pro se podía quitar parcheando el código. Ahora el servidor guarda los tokens cifrados y hace cada llamada, comprobando el plan cada vez y solo para las llamadas de una lista cerrada. **Alternativa descartada por el dueño:** dejarlos en el equipo, sin credenciales ajenas que custodiar, a costa de que parchear la app permitiera ver las propias issues. **Coste:** responsabilidad sobre credenciales de terceros, más tráfico de servidor y ninguna lectura sin conexión. Se quitan las rutas que devolvían tokens: ninguna release publicada las usaba.

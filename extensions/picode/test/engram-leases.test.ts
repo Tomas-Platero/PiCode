@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { leaveEngine, markEngineStarted, takeLease } from '../src/engram-leases.ts';
+import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, startedEngine, takeLease } from '../src/engram-leases.ts';
 
 function withDir(body: (dir: string) => void): void {
 	const dir = mkdtempSync(join(tmpdir(), 'picode-leases-'));
@@ -55,4 +55,24 @@ test('two windows closing together ask for the stop only once', () => {
 		assert.equal(leaveEngine(dir, 100, () => true), 999);
 		assert.equal(leaveEngine(dir, 100, () => true), undefined);
 	});
+});
+
+test('the engine PiCode started can be read and forgotten without leaving a window', () => {
+	withDir(dir => {
+		assert.equal(startedEngine(dir), undefined);
+		markEngineStarted(dir, 321);
+		assert.equal(startedEngine(dir), 321);
+		forgetStartedEngine(dir);
+		assert.equal(startedEngine(dir), undefined);
+	});
+});
+
+test('windows still open follow the engine to its new folder, closed ones do not', () => {
+	withDir(from => withDir(to => {
+		takeLease(from, 100);
+		takeLease(from, 200);
+		moveLeases(from, to, pid => pid === 100);
+		markEngineStarted(to, 999);
+		assert.equal(leaveEngine(to, 100, pid => pid === 100), 999);
+	}));
 });

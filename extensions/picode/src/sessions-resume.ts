@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { settingsForFolder } from './folder-trust';
 import * as os from 'node:os';
 import {
 	bindSessionExtensions,
@@ -136,6 +137,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 	const services = await loaded.sdk.createAgentSessionServices({
 		cwd: picked.cwd,
 		...(agentDir === undefined ? {} : { agentDir }),
+		...settingsForFolder(loaded.sdk, picked.cwd, agentDir),
 		resourceLoaderOptions: {
 			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 		},
