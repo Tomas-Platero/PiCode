@@ -20,10 +20,10 @@
  */
 
 import * as vscode from 'vscode';
+import { todoDetail, todoIcon, todoProgress, type TodoBoard, type TodoRow } from './agent-todo';
 import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
-import { elapsedLabel, taskBoard, taskDetail, taskState, taskTitle, type TaskBoard, type TaskRow } from './tasks-rows';
-import { GENERIC_PROVIDER_ERROR } from './subagent-failure';
+import { rowIcon, taskBoard, taskDetail, taskFacts, taskSummary, taskTitle, type TaskBoard, type TaskFact, type TaskRow } from './tasks-rows';
 
 /** The view id, which the manifest also declares: the two must not drift. */
 export const TASKS_VIEW_ID = 'picode.status.tasks';
@@ -46,16 +46,35 @@ export interface TaskDataRow {
 	readonly outputFile?: string;
 	/** Hover text: a job's command, an agent's problem. */
 	readonly tooltip?: string;
+	/** What the row opens to. */
+	readonly facts: readonly TaskFact[];
+}
+
+/** The agent's own task list as the editor's column draws it. */
+export interface TaskDataTodos {
+	/** `2/5`: how many of the tasks are done. */
+	readonly progress: string;
+	readonly rows: ReadonlyArray<{ readonly title: string; readonly status: string; /** A codicon name. */ readonly icon: string; /** What is happening with this step, when something is. */ readonly detail?: string; /** Whether a turn is working on it now. */ readonly working: boolean }>;
 }
 
 /** The board as plain data; the rows read the same as the tree's. */
-export function taskBoardData(deps: TasksViewDeps): { readonly running: readonly TaskDataRow[]; readonly finished: readonly TaskDataRow[] } {
+export function taskBoardData(deps: TasksViewDeps): { readonly summary: string; readonly running: readonly TaskDataRow[]; readonly finished: readonly TaskDataRow[]; readonly todos?: TaskDataTodos } {
 	const board = taskBoard(deps.runningJobs(), deps.agents?.() ?? [], deps.finishedJobs?.() ?? []);
 	const now = deps.now?.() ?? Date.now();
 	const toData = (row: TaskRow): TaskDataRow => row.kind === 'job'
-		? { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), outputFile: row.job.outputPath, tooltip: row.job.command }
-		: { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), agentId: row.agent.id, tooltip: row.agent.error ?? (row.agent.lastStep.length > 0 ? row.agent.lastStep : undefined) };
-	return { running: board.running.map(toData), finished: board.finished.map(toData) };
+		? { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), outputFile: row.job.outputPath, tooltip: row.job.command, facts: taskFacts(row, now, deps.explainFailure) }
+		: { title: taskTitle(row), detail: taskDetail(row, now), icon: rowIcon(row), agentId: row.agent.id, tooltip: row.agent.error ?? (row.agent.lastStep.length > 0 ? row.agent.lastStep : undefined), facts: taskFacts(row, now, deps.explainFailure) };
+	const todos = deps.todos?.();
+	return {
+		summary: taskSummary(board),
+		running: board.running.map(toData),
+		finished: board.finished.map(toData),
+		...(todos === undefined ? {} : { todos: { progress: todoProgress(todos.tasks), rows: todos.tasks.map(task => {
+			const detail = todoDetail(task, todos);
+			const working = task.status === 'in_progress' && todos.working === true;
+			return { title: task.title, status: task.status, icon: todoIcon(task.status, working), working, ...(detail === undefined ? {} : { detail }) };
+		}) } }),
+	};
 }
 
 /** How often a visible block asks again. Folded away, the timer is cleared. */
@@ -64,7 +83,8 @@ const REFRESH_MS = 5_000;
 type TasksNode =
 	| { readonly kind: 'heading' }
 	| { readonly kind: 'message'; readonly text: string }
-	| { readonly kind: 'group'; readonly group: 'running' | 'finished'; readonly count: number }
+	| { readonly kind: 'group'; readonly group: 'todos' | 'running' | 'finished'; readonly count: number }
+	| { readonly kind: 'todo'; readonly row: TodoRow }
 	| { readonly kind: 'row'; readonly row: TaskRow }
 	| { readonly kind: 'fact'; readonly label: string; readonly detail: string; readonly icon: string; readonly tooltip?: string; readonly openFile?: string };
 
@@ -75,6 +95,10 @@ export interface TasksViewDeps {
 	readonly finishedJobs?: () => ReadonlyArray<BackgroundJobStatus & { readonly endedAt: number }>;
 	/** The subagents gentle-pi last published. */
 	readonly agents?: () => readonly AgentTaskRow[];
+	/** The task list the agent keeps while it works, when it has one. */
+	readonly todos?: () => TodoBoard | undefined;
+	/** Calls the listener when what the agent is doing changes; returns how to stop. */
+	readonly onWorkChange?: (listener: () => void) => () => void;
 	/** Calls the listener when the agents change; returns how to stop. */
 	readonly onAgentsChange?: (listener: () => void) => () => void;
 	/** Opens the page that follows what one agent does (by its task id). */
@@ -85,25 +109,12 @@ export interface TasksViewDeps {
 	readonly now?: () => number;
 }
 
-/** One icon per kind of row: a row's icon is read before its label is. */
-function rowIcon(row: TaskRow): string {
-	if (row.kind === 'job') {
-		return 'terminal';
-	}
-	switch (row.agent.status) {
-		case 'queued': return 'clock';
-		case 'running': return 'sync';
-		case 'waiting': return 'bell';
-		case 'completed': return 'check';
-		default: return 'error';
-	}
-}
-
 class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	private readonly changed = new vscode.EventEmitter<TasksNode | undefined | void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
 	private board: TaskBoard | undefined;
+	private todos: TodoBoard | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
 
 	constructor(private readonly deps: TasksViewDeps) { }
@@ -116,6 +127,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 	/** Reads the board from the tracker and from what gentle-pi published. */
 	refresh(): void {
 		this.board = taskBoard(this.deps.runningJobs(), this.deps.agents?.() ?? [], this.deps.finishedJobs?.() ?? []);
+		this.todos = this.deps.todos?.();
 		this.changed.fire();
 	}
 
@@ -151,9 +163,7 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				const board = this.board;
 				const label = board === undefined
 					? vscode.l10n.t('Tasks')
-					: board.running.length === 0
-						? vscode.l10n.t('Nothing running')
-						: vscode.l10n.t('{0} running', board.running.length);
+					: taskSummary(board);
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon('dashboard');
 				item.contextValue = 'picode.tasks.heading';
@@ -166,7 +176,27 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 				item.contextValue = 'picode.tasks.message';
 				return item;
 			}
+			case 'todo': {
+				const item = new vscode.TreeItem(node.row.title, vscode.TreeItemCollapsibleState.None);
+				const working = node.row.status === 'in_progress' && this.todos?.working === true;
+				item.iconPath = new vscode.ThemeIcon(working ? 'loading~spin' : todoIcon(node.row.status));
+				item.contextValue = 'picode.tasks.todo';
+				const detail = this.todos === undefined ? undefined : todoDetail(node.row, this.todos);
+				if (detail !== undefined) {
+					item.description = detail;
+				}
+				item.tooltip = detail === undefined ? node.row.title : `${node.row.title}\n${detail}`;
+				return item;
+			}
 			case 'group': {
+				if (node.group === 'todos') {
+					const item = new vscode.TreeItem(vscode.l10n.t('Plan'), vscode.TreeItemCollapsibleState.Expanded);
+					item.description = this.todos === undefined ? String(node.count) : todoProgress(this.todos.tasks);
+					item.iconPath = new vscode.ThemeIcon('checklist');
+					item.contextValue = 'picode.tasks.group';
+					item.tooltip = vscode.l10n.t('The steps the agent plans for what you asked, and how far it got.');
+					return item;
+				}
 				const running = node.group === 'running';
 				const item = new vscode.TreeItem(running ? vscode.l10n.t('Running') : vscode.l10n.t('Finished'), running ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
 				item.description = String(node.count);
@@ -214,6 +244,9 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 		}
 		switch (node.kind) {
 			case 'group': {
+				if (node.group === 'todos') {
+					return (this.todos?.tasks ?? []).map(row => ({ kind: 'todo', row }));
+				}
 				const rows = node.group === 'running' ? this.board?.running ?? [] : this.board?.finished ?? [];
 				return rows.map(row => ({ kind: 'row', row }));
 			}
@@ -229,54 +262,24 @@ class TasksProvider implements vscode.TreeDataProvider<TasksNode> {
 		if (this.board === undefined) {
 			return nodes;
 		}
+		if (this.todos !== undefined) {
+			nodes.push({ kind: 'group', group: 'todos', count: this.todos.tasks.length });
+		}
 		if (this.board.running.length > 0) {
 			nodes.push({ kind: 'group', group: 'running', count: this.board.running.length });
 		}
 		if (this.board.finished.length > 0) {
 			nodes.push({ kind: 'group', group: 'finished', count: this.board.finished.length });
 		}
-		if (this.board.total === 0) {
+		if (this.board.total === 0 && this.todos === undefined) {
 			nodes.push({ kind: 'message', text: vscode.l10n.t('No background jobs or agents running.') });
 		}
 		return nodes;
 	}
 
-	/** What a row opens to: the facts a person asks about work they did not start themselves. */
+	/** What a row opens to; the status column reads the same facts. */
 	private details(row: TaskRow): TasksNode[] {
-		if (row.kind === 'job') {
-			const facts: TasksNode[] = [
-				{ kind: 'fact', label: row.job.endedAt === undefined ? vscode.l10n.t('Running for') : vscode.l10n.t('Ran for'), detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? this.now()), icon: 'watch' },
-			];
-			if (row.job.command !== undefined) {
-				facts.push({ kind: 'fact', label: vscode.l10n.t('Command'), detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });
-			}
-			if (row.job.outputPath !== undefined) {
-				facts.push({ kind: 'fact', label: vscode.l10n.t('Live output'), detail: vscode.l10n.t('Open'), icon: 'output', tooltip: vscode.l10n.t('Opens what the job prints; it keeps updating while the job runs.'), openFile: row.job.outputPath });
-			}
-			return facts;
-		}
-		const { agent } = row;
-		const facts: TasksNode[] = [
-			{ kind: 'fact', label: vscode.l10n.t('State'), detail: taskState(row), icon: rowIcon(row) },
-		];
-		if (agent.agent.length > 0) {
-			facts.push({ kind: 'fact', label: vscode.l10n.t('Agent'), detail: agent.agent, icon: 'person' });
-		}
-		if (agent.startedAt !== undefined) {
-			facts.push({ kind: 'fact', label: agent.endedAt === undefined ? vscode.l10n.t('Running for') : vscode.l10n.t('Took'), detail: elapsedLabel(agent.startedAt, agent.endedAt ?? this.now()), icon: 'watch' });
-		}
-		const turns = agent.turns === 1 ? vscode.l10n.t('{0} turn', agent.turns) : vscode.l10n.t('{0} turns', agent.turns);
-		const calls = agent.toolCalls === 1 ? vscode.l10n.t('{0} tool call', agent.toolCalls) : vscode.l10n.t('{0} tool calls', agent.toolCalls);
-		facts.push({ kind: 'fact', label: vscode.l10n.t('Steps'), detail: `${turns} · ${calls}`, icon: 'list-ordered' });
-		// A failed task's last step is its error: one row says it.
-		if (agent.lastStep.length > 0 && agent.lastStep !== agent.error) {
-			facts.push({ kind: 'fact', label: vscode.l10n.t('Last step'), detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
-		}
-		if (agent.error !== undefined) {
-			const problem = (agent.error === GENERIC_PROVIDER_ERROR ? this.deps.explainFailure?.(agent.id) : undefined) ?? agent.error;
-			facts.push({ kind: 'fact', label: vscode.l10n.t('Problem'), detail: problem, icon: 'warning', tooltip: problem });
-		}
-		return facts;
+		return taskFacts(row, this.now(), this.deps.explainFailure).map(fact => ({ kind: 'fact', ...fact }));
 	}
 }
 
@@ -304,6 +307,7 @@ export function registerTasksView(deps: TasksViewDeps): vscode.Disposable {
 		// The agents are pushed, and this block is polled: without this, an agent that just ended
 		// kept its row at "running" for up to one tick.
 		{ dispose: deps.onAgentsChange?.(() => provider.refreshIfVisible()) ?? (() => undefined) },
+		{ dispose: deps.onWorkChange?.(() => provider.refreshIfVisible()) ?? (() => undefined) },
 		// Reading costs, so the clock runs only while the block is on screen: opening it reads
 		// once and keeps asking; folding it away stops everything and leaves the last answer.
 		view.onDidChangeVisibility(event => {

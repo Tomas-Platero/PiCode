@@ -4,6 +4,7 @@ Las issues de GitHub y los tickets de Jira (solo Pro): conectar desde *Connectio
 
 - `picodeConnectorService.ts`: el servicio `IPicodeConnectorService`. Conecta (código de un solo uso en GitHub; navegador y servidor de PiCode en Jira), guarda los tokens cifrados, los renueva y lee las issues. Sin red enseña la última lista.
 - `picodeStatusIssues.ts`: un panel por servicio en la columna *Status* (lista, *Show N more*, *Refresh*, *Fix with pi*).
+- `picodeIssuesView.ts`: el mismo panel como una vista más del contenedor de PiCode en el diseño *Editor*, solo para cuentas Pro (clave de contexto `picode.account.isPro`).
 - `picodeIssueActions.ts`: qué hace *Fix with pi*, cuándo sale apagado y las frases de los fallos.
 - `picodeConnectorAuth.ts`, `picodeIssueSources.ts`, `picodeIssuePrompt.ts`: la lógica pura (lectura de las respuestas, callback con `state`, limpieza del texto de la issue). Sin imports del editor para poder probarla con `node --test` (`extensions/picode/test/picode-issue-*.test.ts`, `picode-connector-auth.test.ts`).
 - `picodeIssuesEditor.ts`, `picodeIssuesEditorInput.ts`, `picodeIssues.contribution.ts`: el visor, una pestaña del editor por proyecto de Jira o repositorio de GitHub (tablero o listado, con la issue pulsada a la derecha). Se abre con el comando `picode.issues.open`.

@@ -205,3 +205,73 @@ export function finishedJobRows(jobs: ReadonlyArray<BackgroundJob & { readonly e
 }
 
 export { recordOf, textOf };
+
+/** gentle-pi's tools that start a job, and the one that stops it. */
+const GENTLE_JOB_START_TOOLS: ReadonlySet<string> = new Set(['bash_background', 'monitor']);
+const GENTLE_JOB_STOP_TOOL = 'job_stop';
+
+/** The message gentle-pi posts when a job ends or a monitor reports lines. */
+const GENTLE_JOB_NOTICE_TYPE = 'gentle-jobs.notice';
+
+/** What gentle-pi says about one job (`details.gentleJobs`). */
+export interface GentleJob {
+	/**
+	 * What the job is known by here. gentle-pi numbers jobs per chat, so `job-1` repeats across chats;
+	 * its output file does not.
+	 */
+	readonly key: string;
+	readonly label?: string;
+	readonly outputPath?: string;
+	/** False once it exited, failed or was stopped. */
+	readonly running: boolean;
+	/** How it stands: an exit with an error counts as failed. */
+	readonly outcome: 'running' | 'finished' | 'failed' | 'stopped';
+}
+
+function gentleJobOutcome(status: unknown, exitCode: unknown): GentleJob['outcome'] {
+	switch (status) {
+		case 'running': return 'running';
+		case 'stopped': return 'stopped';
+		case 'failed': return 'failed';
+		default: return typeof exitCode === 'number' && exitCode !== 0 ? 'failed' : 'finished';
+	}
+}
+
+function gentleJobOf(details: unknown): GentleJob | undefined {
+	const job = (details as { gentleJobs?: Record<string, unknown> } | null | undefined)?.gentleJobs;
+	const id = textOf(job?.['jobId']);
+	if (job === undefined || id === undefined) {
+		return undefined;
+	}
+	const outputPath = textOf(job['outputPath']);
+	const label = textOf(job['label']);
+	return {
+		key: outputPath ?? id,
+		...(label === undefined ? {} : { label }),
+		...(outputPath === undefined ? {} : { outputPath }),
+		running: job['status'] === 'running',
+		outcome: gentleJobOutcome(job['status'], job['exitCode']),
+	};
+}
+
+/** The job a finished tool call started or stopped, or `undefined` when the call has nothing to do with jobs. */
+export function gentleJobOfToolResult(toolName: unknown, result: unknown): GentleJob | undefined {
+	if (typeof toolName !== 'string' || !(GENTLE_JOB_START_TOOLS.has(toolName) || toolName === GENTLE_JOB_STOP_TOOL)) {
+		return undefined;
+	}
+	const job = gentleJobOf((result as { details?: unknown } | null | undefined)?.details);
+	// Only a start can open a job.
+	return job !== undefined && job.running && toolName === GENTLE_JOB_STOP_TOOL ? undefined : job;
+}
+
+/** The job a notice is about: one that ended, or a monitor reporting new lines. */
+export function gentleJobNoticeOf(message: unknown): GentleJob | undefined {
+	const record = message as { customType?: unknown; details?: unknown } | null | undefined;
+	return record?.customType === GENTLE_JOB_NOTICE_TYPE ? gentleJobOf(record.details) : undefined;
+}
+
+/** The job a notice says has ended. A monitor's report of new lines is not an ending. */
+export function gentleJobEndedBy(message: unknown): GentleJob | undefined {
+	const job = gentleJobNoticeOf(message);
+	return job === undefined || job.running ? undefined : job;
+}

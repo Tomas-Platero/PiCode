@@ -31,7 +31,9 @@ import {
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
-import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
+import { LateTurnCollector, type LateTurnEvent } from './late-turn';
+import { TODO_TOOL_NAME, TodoTracker, todoFromResult, type TodoBoard } from './agent-todo';
+import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, gentleJobEndedBy, gentleJobOfToolResult, type BackgroundJobCompletion } from './background-jobs';
 import {
 	beforeUriPathOf,
 	clearTurnEdits,
@@ -645,6 +647,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 	clearTurnEdits();
 	// The answer's own text, as it streamed.
 	let answer = '';
+	sessionsInChatTurn.add(session);
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		// Whether pi began an agent run for this prompt. A slash command that an extension runs by
@@ -834,7 +837,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 			}, COMMAND_GRACE_MS);
 		}, reject);
 		void cancellation;
-	});
+	}).finally(() => sessionsInChatTurn.delete(session));
 	return answer;
 }
 
@@ -1363,6 +1366,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * still runs.
  */
 export async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+	watchAgentWork(session);
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
@@ -1635,6 +1639,24 @@ let sessionMcpProvider: (() => readonly string[] | undefined) | undefined;
 /** The background jobs this window's agent left running, as the pill above the chat input reads them. */
 const backgroundJobs = new BackgroundJobTracker();
 
+/** The task list the agent keeps while it works: the Tasks block and the status column draw it. */
+const agentTodos = new TodoTracker();
+
+/** The core's command that adds a finished entry to a conversation. */
+const LATE_TURN_COMMAND = 'picode.chat.addLateTurn';
+
+/** The list to show now, or `undefined` when there is none (or it ended long ago). */
+export function currentTodos(): TodoBoard | undefined {
+	const board = agentTodos.current(Date.now());
+	const activity = agentActivity ?? lateTurnActivity;
+	return board === undefined ? undefined : { ...board, working: agentRunning || lateTurnsRunning > 0, ...(activity === undefined ? {} : { activity }) };
+}
+
+const agentWorkChanged = new vscode.EventEmitter<void>();
+
+/** Fires when what the agent is doing changed: the Tasks block repaints its plan at once. */
+export const onDidChangeAgentWork = agentWorkChanged.event;
+
 /** The command id the pill above the chat input polls for the jobs still running. */
 export const BACKGROUND_JOBS_COMMAND = 'picode.backgroundJobs';
 
@@ -1656,6 +1678,95 @@ export interface AgentStatusPush {
 /** What the agent is doing this instant, as the tool's progress line says it. */
 let agentActivity: string | undefined;
 
+/** The sessions with a chat answer open: what they do reaches the chat through that answer. */
+const sessionsInChatTurn = new WeakSet<PiSession>();
+
+/** How many chats have a turn running that pi started on its own. */
+let lateTurnsRunning = 0;
+
+/** What the latest of those turns is doing. */
+let lateTurnActivity: string | undefined;
+
+/**
+ * Shows what pi does on its own once a chat's answer has closed, as an entry of that conversation:
+ * without this, what it says when a background job ends reaches nobody until the chat is reopened.
+ */
+function watchLateTurns(session: PiSession, chatKey: string, log: (line: string) => void): void {
+	const collector = new LateTurnCollector();
+	session.subscribe(event => {
+		const wasRunning = collector.running;
+		const turn = collector.accept(event as LateTurnEvent, sessionsInChatTurn.has(session));
+		if (collector.running !== wasRunning) {
+			lateTurnsRunning += collector.running ? 1 : -1;
+		}
+		if (collector.running || wasRunning) {
+			lateTurnActivity = collector.activity;
+			notifyAgentStatus();
+		}
+		if (turn !== undefined) {
+			void vscode.commands.executeCommand(LATE_TURN_COMMAND, chatKey, turn.request, turn.answer)
+				.then(undefined, error => log(`a late turn could not be shown: ${error}`));
+		}
+	});
+}
+
+/**
+ * The plan and the jobs of one chat, for as long as its session lives. A turn's own listener is not
+ * enough: a job usually ends after its turn did, and pi's notice about it (and the turn it starts)
+ * would reach nobody.
+ */
+function watchAgentWork(session: PiSession): void {
+	const commands = new Map<string, unknown>();
+	session.subscribe(event => {
+		if (event.type === 'tool_execution_start' && typeof event.toolCallId === 'string') {
+			commands.set(event.toolCallId, event.args);
+			return;
+		}
+		if (event.type === 'message_end') {
+			const ended = gentleJobEndedBy(event.message);
+			if (ended !== undefined) {
+				backgroundJobs.complete({ id: ended.key });
+				notifyAgentStatus();
+			}
+			return;
+		}
+		if (event.type !== 'tool_execution_end' || typeof event.toolCallId !== 'string') {
+			return;
+		}
+		const args = event.args ?? commands.get(event.toolCallId);
+		commands.delete(event.toolCallId);
+		if (event.isError === true) {
+			return;
+		}
+		// The agent's own task list: every call answers with the whole list.
+		if (event.toolName === TODO_TOOL_NAME) {
+			const list = todoFromResult(event.result);
+			if (list !== undefined) {
+				agentTodos.set(list, Date.now());
+				notifyAgentStatus();
+			}
+			return;
+		}
+		// A job of gentle-pi's: its result says whether it now runs or has ended.
+		const job = gentleJobOfToolResult(event.toolName, event.result);
+		if (job === undefined) {
+			return;
+		}
+		if (job.running) {
+			const command = backgroundCallOf(args).command;
+			backgroundJobs.start({
+				jobNumber: job.key,
+				...(job.label === undefined ? {} : { label: job.label }),
+				...(command === undefined ? {} : { command }),
+				...(job.outputPath === undefined ? {} : { outputPath: job.outputPath }),
+			}, Date.now());
+		} else {
+			backgroundJobs.complete({ id: job.key });
+		}
+		notifyAgentStatus();
+	});
+}
+
 /** The arguments of the tool calls that have started and not ended yet, by call id: pi's end event does not repeat them. */
 const toolCallArgs = new Map<string, unknown>();
 /** Whether a turn is in flight in this window. */
@@ -1676,6 +1787,7 @@ const waitingTurns = new Set<WaitingTurn>();
  * push is told once and never again — the pill is a nicety, not something to retry.
  */
 const notifyAgentStatus = (): void => {
+	agentWorkChanged.fire();
 	const status: AgentStatusPush = {
 		backgroundJobs: runningBackgroundJobs(),
 		running: agentRunning,
@@ -2098,6 +2210,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				chat.session = created.session;
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
+				watchLateTurns(chat.session, chat.key, deps.log);
 				await bindSessionExtensions(chat.session, deps.log);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;

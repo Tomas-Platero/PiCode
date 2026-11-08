@@ -42,6 +42,8 @@ El login vive en las tarjetas de *Connections* y las issues se ven en la columna
 4. *Fix with pi* abre un chat nuevo y **escribe** la issue sin enviarla. El usuario la lee y envía. Sin carpeta abierta, con la carpeta sin confianza o con una issue de otro repo, el botón sale apagado con su motivo.
 5. Sin red se enseña la última lista, avisando de que es la última. La lista se vuelve a leer cada 5 minutos mientras la columna está abierta.
 
+**Las issues en el diseño *Editor*** (2026-11-08): el panel es el mismo y vive como una vista más (*Issues*) del contenedor de PiCode, junto a *Tasks* y *Memory*. Solo existe para cuentas Pro: sin Pro la vista ni se lista (clave de contexto `picode.account.isPro`) y la ventana Account explica el plan.
+
 **Qué proyecto enseña cada panel de Status**
 
 > *"sería factible que solo se vean los issues del proyecto en el que estamos"* — 2026-11-07

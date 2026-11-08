@@ -94,6 +94,9 @@ const TABS_TRIMMED_KEY = 'picode.layout.reviewTabsTrimmed';
 /** Where the panel's position before the Agent layout is kept. */
 const SAVED_PANEL_POSITION_KEY = 'picode.layout.editorPanelPosition';
 
+/** Whether the bottom panel was open in the Editor layout: the Agent layout uses it for the chat and always shows it. */
+const SAVED_PANEL_VISIBLE_KEY = 'picode.layout.editorPanelVisible';
+
 /** The sessions column's width when the Agent layout starts. */
 const AGENT_SESSIONS_WIDTH = 260;
 
@@ -201,6 +204,12 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 		// The panel's position belongs to each window (it is kept per workspace), so each keeps its own.
 		if (this.storageService.get(SAVED_PANEL_POSITION_KEY, StorageScope.WORKSPACE) === undefined && this.layoutService.getPanelPosition() !== Position.LEFT) {
 			this.storageService.store(SAVED_PANEL_POSITION_KEY, positionToString(this.layoutService.getPanelPosition()), StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		}
+
+		// Read only while the panel is still the Editor layout's: once the chat lives in it, it is always open.
+		const chatContainer = this.viewDescriptorService.getViewContainerById(CHAT_CONTAINER_ID);
+		if (this.storageService.get(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE) === undefined && chatContainer !== null && this.viewDescriptorService.getViewContainerLocation(chatContainer) !== ViewContainerLocation.Panel) {
+			this.storageService.store(SAVED_PANEL_VISIBLE_KEY, this.layoutService.isVisible(Parts.PANEL_PART), StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		}
 
 		// The columns' sizes and the bar's open view are set the first time only: after that the
@@ -323,6 +332,9 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			return;
 		}
 		this.arranged = false;
+		// Closed unless the person had it open: the Agent layout's chat is no reason to show the terminal.
+		const panelWasOpen = this.storageService.getBoolean(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE, false);
+		this.storageService.remove(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE);
 		this.storageService.remove(SAVED_PANEL_POSITION_KEY, StorageScope.WORKSPACE);
 		this.storageService.remove(AGENT_ARRANGED_KEY, StorageScope.WORKSPACE);
 		this.moveContainer(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);
@@ -330,6 +342,7 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			this.moveContainer(id, ViewContainerLocation.Panel);
 		}
 		this.layoutService.setPanelPosition(positionFromString(panelPosition ?? 'bottom'));
+		this.layoutService.setPartHidden(!panelWasOpen, Parts.PANEL_PART);
 		this.layoutService.setPartHidden(false, Parts.EDITOR_PART);
 		this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
 		void this.paneCompositeService.openPaneComposite(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);

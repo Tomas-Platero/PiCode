@@ -66,6 +66,15 @@ interface IConnector {
 let knownConnectors: readonly IConnector[] | undefined;
 
 /** One row of the connector's task board (`picode.tasks.data`). */
+/** One fact under an open row of the Tasks block. */
+interface ITaskFact {
+	readonly label: string;
+	readonly detail: string;
+	readonly icon: string;
+	readonly tooltip?: string;
+	readonly openFile?: string;
+}
+
 interface ITaskRow {
 	readonly title: string;
 	readonly detail: string;
@@ -73,12 +82,22 @@ interface ITaskRow {
 	readonly agentId?: string;
 	readonly outputFile?: string;
 	readonly tooltip?: string;
+	readonly facts?: readonly ITaskFact[];
 }
 
 /** The connector's task board: what its Tasks block shows. */
+/** The agent's own task list: `progress` is `2/5`, each row is one step of its plan. */
+interface ITaskTodos {
+	readonly progress: string;
+	readonly rows: readonly { readonly title: string; readonly status: string; readonly icon: string; readonly detail?: string; readonly working?: boolean }[];
+}
+
 interface ITaskBoard {
+	/** `Nothing running` or `2 running`. */
+	readonly summary?: string;
 	readonly running: readonly ITaskRow[];
 	readonly finished: readonly ITaskRow[];
+	readonly todos?: ITaskTodos;
 }
 
 /** What the connector's Memory block shows (`picode.memory.summary`). */
@@ -131,7 +150,10 @@ export class PicodeAgentOverview extends Disposable {
 	private readonly issuesHost: HTMLElement;
 	private readonly renderDisposables = this._register(new DisposableStore());
 	/** Whether the finished tasks are unfolded. */
+	private showRunning = true;
 	private showFinished = false;
+	/** The task rows opened to their facts: they stay open while the board repaints. */
+	private readonly openTasks = new Set<string>();
 	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	/** The readings still waiting for an answer: a slow one is not asked again on top of itself. */
@@ -172,7 +194,11 @@ export class PicodeAgentOverview extends Disposable {
 		this.issuesHost = $('.picode-overview-issues');
 		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost));
 
-		this._register(onDidChangePicodeAgentStatus(() => this.paint()));
+		// What the agent is doing changed: the plan says so without waiting for the next reading.
+		this._register(onDidChangePicodeAgentStatus(() => {
+			this.paint();
+			void this.readTasks();
+		}));
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
 			this.diffStale = true;
 			this.paint();
@@ -216,9 +242,7 @@ export class PicodeAgentOverview extends Disposable {
 			const servers = await this.commandService.executeCommand<readonly IConnector[]>(MCP_SERVERS_COMMAND);
 			knownConnectors = Array.isArray(servers) ? servers : [];
 		});
-		void this.read('tasks', async () => {
-			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
-		});
+		void this.readTasks();
 		void this.read('memory', () => this.readMemory());
 		// Only counted where it is drawn: with no changed file the column shows no lines at all.
 		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
@@ -231,6 +255,12 @@ export class PicodeAgentOverview extends Disposable {
 		}
 		// Nothing to read for these, but the tick is what notices them.
 		this.publish();
+	}
+
+	private readTasks(): Promise<void> {
+		return this.read('tasks', async () => {
+			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
+		});
 	}
 
 	/** One reading at a time per kind. pi not answering yet is no fault: what it said last stands. */
@@ -292,16 +322,8 @@ export class PicodeAgentOverview extends Disposable {
 		this.renderEnvironment(this.root);
 		this.renderContext(this.root);
 		this.renderConnectors(this.root);
-		const tasks = this.agentTasks();
-		if (this.changedFiles() === 0 && tasks.running.length === 0 && tasks.finished.length === 0) {
-			// Nothing to show in either: one quiet block instead of two titled ones.
-			const quiet = this.section(this.root, undefined);
-			this.row(quiet, Codicon.diff, localize('picode.overview.noChanges', "Nothing changed"));
-			this.row(quiet, Codicon.check, localize('picode.overview.idle', "Nothing running"));
-		} else {
-			this.renderChanges(this.root);
-			this.renderTasks(this.root);
-		}
+		this.renderChanges(this.root);
+		this.renderTasks(this.root);
 		this.root.appendChild(this.issuesHost);
 		this.renderMemory(this.root);
 	}
@@ -346,14 +368,6 @@ export class PicodeAgentOverview extends Disposable {
 			}
 		}
 		return files;
-	}
-
-	private agentTasks(): { running: ITaskRow[]; finished: ITaskRow[] } {
-		// Only agents (subagents and Gentle tasks) are tasks: shell commands and the current tool call are not.
-		return {
-			running: (knownTasks?.running ?? []).filter(task => task.agentId),
-			finished: (knownTasks?.finished ?? []).filter(task => task.agentId)
-		};
 	}
 
 	private row(parent: HTMLElement, icon: ThemeIcon, label: string, detail?: string): HTMLElement {
@@ -473,7 +487,8 @@ export class PicodeAgentOverview extends Disposable {
 
 	private renderChanges(parent: HTMLElement): void {
 		const files = this.changedFiles();
-		const section = this.section(parent, localize('picode.overview.changes', "Changes"));
+		// Nothing changed is one quiet line: a title over it would only repeat the word.
+		const section = this.section(parent, files === 0 ? undefined : localize('picode.overview.changes', "Changes"));
 		const filesLabel = files === 0
 			? localize('picode.overview.noChanges', "Nothing changed")
 			: files === 1 ? localize('picode.overview.oneChange', "1 file changed") : localize('picode.overview.manyChanges', "{0} files changed", files);
@@ -500,29 +515,51 @@ export class PicodeAgentOverview extends Disposable {
 		}
 	}
 
-	/** The chat's background work: what the connector's Tasks block shows, running first, then what finished. */
+	/** The same block as the connector's Tasks view: the plan, what is running, and what finished. */
 	private renderTasks(parent: HTMLElement): void {
 		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
-		const { running, finished } = this.agentTasks();
-		for (const task of running) {
-			this.taskRow(section, task);
-		}
-		if (running.length === 0) {
-			this.row(section, Codicon.check, localize('picode.overview.idle', "Nothing running"));
-		}
-		if (finished.length > 0) {
-			const row = this.row(section, this.showFinished ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.finished', "Finished"));
-			append(row, $('span.picode-overview-value')).textContent = String(finished.length);
-			this.clickable(row, () => {
-				this.showFinished = !this.showFinished;
-				this.paint();
-			});
-			if (this.showFinished) {
-				for (const task of finished) {
-					this.taskRow(section, task).classList.add('nested');
+		const running = knownTasks?.running ?? [];
+		const finished = knownTasks?.finished ?? [];
+		const todos = knownTasks?.todos;
+		this.row(section, Codicon.dashboard, knownTasks?.summary ?? localize('picode.overview.idle', "Nothing running"));
+		if (todos) {
+			const plan = this.row(section, Codicon.checklist, localize('picode.overview.plan', "Plan"));
+			append(plan, $('span.picode-overview-value')).textContent = todos.progress;
+			for (const step of todos.rows) {
+				const row = this.row(section, ThemeIcon.fromId(step.icon), step.title, step.detail);
+				row.classList.add('nested', `todo-${step.status}`);
+				row.title = step.detail ? `${step.title}\n${step.detail}` : step.title;
+				if (step.working) {
+					row.classList.add('running');
 				}
 			}
 		}
+		this.taskGroup(section, localize('picode.overview.running', "Running"), Codicon.sync, running, this.showRunning, () => this.showRunning = !this.showRunning);
+		this.taskGroup(section, localize('picode.overview.finished', "Finished"), Codicon.history, finished, this.showFinished, () => this.showFinished = !this.showFinished);
+	}
+
+	private taskGroup(section: HTMLElement, label: string, icon: ThemeIcon, tasks: readonly ITaskRow[], open: boolean, toggle: () => void): void {
+		if (tasks.length === 0) {
+			return;
+		}
+		const row = this.foldRow(section, open, icon, label, toggle);
+		append(row, $('span.picode-overview-value')).textContent = String(tasks.length);
+		if (open) {
+			for (const task of tasks) {
+				this.taskRow(section, task);
+			}
+		}
+	}
+
+	/** A row with the arrow that opens and closes what is under it. */
+	private foldRow(parent: HTMLElement, open: boolean, icon: ThemeIcon, label: string, toggle: () => void): HTMLElement {
+		const row = this.row(parent, icon, label);
+		row.prepend($(`span.picode-overview-twistie${ThemeIcon.asCSSSelector(open ? Codicon.chevronDown : Codicon.chevronRight)}`));
+		this.clickable(row, () => {
+			toggle();
+			this.paint();
+		});
+		return row;
 	}
 
 	/** "Show N more" under a list of memories: a project's, or the search's without one. */
@@ -532,18 +569,37 @@ export class PicodeAgentOverview extends Disposable {
 		this.clickable(row, () => void this.runMemoryCommand(MEMORY_SHOW_MORE_COMMAND, project));
 	}
 
-	private taskRow(parent: HTMLElement, task: ITaskRow): HTMLElement {
-		const row = this.row(parent, ThemeIcon.fromId(task.icon), task.title);
+	private taskRow(parent: HTMLElement, task: ITaskRow): void {
+		const key = task.agentId ?? task.outputFile ?? task.title;
+		const open = this.openTasks.has(key);
+		const row = this.foldRow(parent, open, ThemeIcon.fromId(task.icon), task.title, () => {
+			if (!this.openTasks.delete(key)) {
+				this.openTasks.add(key);
+			}
+		});
+		row.classList.add('nested');
 		append(row, $('span.picode-overview-value')).textContent = task.detail;
-		if (task.agentId) {
-			this.clickable(row, () => void this.commandService.executeCommand(TASKS_TRANSCRIPT_COMMAND, task.agentId), task.tooltip ?? localize('picode.overview.openAgent', "Follow what this agent does"));
-		} else if (task.outputFile) {
-			const output = URI.file(task.outputFile);
-			this.clickable(row, () => void this.commandService.executeCommand('vscode.open', output), task.tooltip ?? localize('picode.overview.openOutput', "Open what this job prints"));
-		} else if (task.tooltip) {
+		if (task.tooltip) {
 			row.title = task.tooltip;
 		}
-		return row;
+		if (task.agentId) {
+			const agentId = task.agentId;
+			const follow = append(row, $(`button.picode-overview-icon-action${ThemeIcon.asCSSSelector(Codicon.book)}`, { type: 'button', title: localize('picode.overview.openAgent', "Follow what this agent does") }));
+			this.renderDisposables.add(addDisposableListener(follow, EventType.CLICK, () => void this.commandService.executeCommand(TASKS_TRANSCRIPT_COMMAND, agentId)));
+		}
+		if (open) {
+			for (const fact of task.facts ?? []) {
+				const line = this.row(parent, ThemeIcon.fromId(fact.icon), fact.label, fact.detail);
+				line.classList.add('nested-deep');
+				if (fact.tooltip) {
+					line.title = fact.tooltip;
+				}
+				if (fact.openFile) {
+					const output = URI.file(fact.openFile);
+					this.clickable(line, () => void this.commandService.executeCommand('vscode.open', output), fact.tooltip);
+				}
+			}
+		}
 	}
 
 	/** What memory holds for the open folders, its search and its check: the connector's Memory block. */
