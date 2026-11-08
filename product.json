@@ -36,7 +36,11 @@
 	"urlProtocol": "picode",
 	"picode": {
 		"webOrigin": "https://www.getpicode.app",
-		"firebaseApiKey": "AIzaSyD9-rAr8osUnCbCrnxBsKERgr3_CJvG75g"
+		"firebaseApiKey": "AIzaSyD9-rAr8osUnCbCrnxBsKERgr3_CJvG75g",
+		"connectors": {
+			"github": { "clientId": "Iv23liRr00evsVkdr5uG", "appSlug": "picode-editor" },
+			"atlassian": { "clientId": "HU84kfMVJRYo7QcZZ7H6f8CMVQIQSPcN", "redirectUri": "https://www.getpicode.app/api/v1/connect/atlassian/callback" }
+		}
 	},
 	"configurationSync.store": {
 		"url": "https://www.getpicode.app/api",
@@ -754,7 +758,7 @@
 			"default": false
 		}
 	},
-	"version": "1.144.4",
-	"picodeVersion": "1.0.4-beta",
+	"version": "1.144.9",
+	"picodeVersion": "2.0.0-beta",
 	"hotfixPublicKey": "MCowBQYDK2VwAyEAZes8irGrgqOvvCEWRBn3rwOG6qxSNp+zxWOX3HqXyjo="
 }

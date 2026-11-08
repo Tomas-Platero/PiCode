@@ -184,6 +184,9 @@ jobs:
         shell: bash
         run: node build/l10n.mjs check
 
+      - name: Release tests
+        run: node --test build/release.test.mjs
+
       - name: Connector tests
         shell: bash
         working-directory: extensions/picode

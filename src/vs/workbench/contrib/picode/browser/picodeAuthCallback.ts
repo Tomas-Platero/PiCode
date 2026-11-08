@@ -6,10 +6,10 @@
 /**
  * The editor side of the one-time-code sign-in contract, as pure logic.
  *
- * The editor hands the web app a `picode://auth/callback?flow=editor` address; after sign-in
- * the page ends with `window.location.assign(`${callback}&code=…`)`, so the OS delivers
- * `picode://auth/callback?flow=editor&code=<code>` to whatever installation currently owns
- * the `picode` protocol handler (registered in
+ * The editor hands the web app a `picode://auth/callback?flow=editor&state=<state>` address; after
+ * sign-in the page ends with `window.location.assign(`${callback}&code=…`)`, so the OS delivers
+ * `picode://auth/callback?flow=editor&state=<state>&code=<code>` to whatever installation currently
+ * owns the `picode` protocol handler (registered in
  * `src/vs/platform/url/electron-main/electronUrlListener.ts`). This file holds the one piece
  * of that contract that must be exact — which URIs the sign-in handler claims, and the code
  * it extracts — kept free of editor imports so `node --test` can exercise it directly
@@ -23,11 +23,13 @@ export const AUTH_CALLBACK_PATH = '/auth/callback';
  * Returns the one-time code from a callback URI, or `undefined` when the URI is not the
  * editor's sign-in callback and must be left for another handler.
  *
- * The match is on scheme and path only — deliberately not on the query: the web app builds
- * its redirect by appending `&code=` to the callback we sent, so `flow=editor` travels along
- * but is not part of the contract, and unknown additional parameters must not break the
- * hand-off. A missing or empty `code` also yields `undefined`: without a code the URI cannot
- * complete a sign-in and claiming it would just swallow it.
+ * The match is on scheme, path and `state`. Any web page can open a `picode://` address, so a
+ * code alone proves nothing: a page could hand over a code for its own account and sign the
+ * editor in to it. The `state` is random, sent only to the page this sign-in opened, and comes
+ * back because the web app builds its redirect by appending `&code=` to the callback we sent.
+ * Other parameters are not part of the contract and must not break the hand-off. A missing or
+ * empty `code` also yields `undefined`: without a code the URI cannot complete a sign-in and
+ * claiming it would just swallow it.
  *
  * The query is parsed by hand, not with `URLSearchParams`, for one reason: by the time the
  * URI reaches the handler, `URI.parse` has already percent-decoded the query exactly once
@@ -41,6 +43,7 @@ export const AUTH_CALLBACK_PATH = '/auth/callback';
 export function oneTimeCodeFromCallback(
 	uri: { readonly scheme: string; readonly path: string; readonly query: string },
 	expectedScheme: string,
+	expectedState: string,
 ): string | undefined {
 	if (uri.scheme.toLowerCase() !== expectedScheme.toLowerCase()) {
 		return undefined;
@@ -49,13 +52,17 @@ export function oneTimeCodeFromCallback(
 		return undefined;
 	}
 	try {
+		let code: string | undefined;
+		let state: string | undefined;
 		for (const pair of uri.query.split('&')) {
 			const eq = pair.indexOf('=');
 			if (eq !== -1 && pair.slice(0, eq) === 'code') {
-				const value = pair.slice(eq + 1);
-				return value ? value : undefined;
+				code ??= pair.slice(eq + 1);
+			} else if (eq !== -1 && pair.slice(0, eq) === 'state') {
+				state ??= pair.slice(eq + 1);
 			}
 		}
+		return code && state === expectedState ? code : undefined;
 	} catch {
 		// Splitting cannot throw on a string, but keep the promise: a malformed query
 		// means "not our callback", never a crash.

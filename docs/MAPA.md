@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **16** folders documented · **21** without a README.
+- **17** folders documented · **21** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -314,6 +314,7 @@
 │   ├── build-run.sh
 │   ├── build-window.cmd
 │   ├── build-window.ps1
+│   ├── build.mjs
 │   ├── build.sh
 │   ├── buildConfig.ts
 │   ├── buildfile.ts
@@ -336,6 +337,7 @@
 │   ├── hotfix.mjs
 │   ├── hotfix.test.mjs
 │   ├── hygiene.ts
+│   ├── l10n.mjs
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── pi-runtime.sh
@@ -348,11 +350,12 @@
 │   ├── stage-distribution.sh
 │   ├── stylelint.ts
 │   └── tsconfig.json
-│   └── … 45 files in total
+│   └── … 47 files in total
 ├── cli/ — Carpeta upstream: aquí no se documenta fichero a fichero. Es el código fuente del comando code (VS Code CLI) tal como desciende de… · ⬆️ upstream, no breakdown
 ├── docs/ — Los papeles que deciden cómo se junta todo. Las palabras del dueño viven en AGENTS.md; la cara pública (README, wiki) se escribe desde aquí, no al…
 │   ├── ARCHITECTURE.md
 │   ├── CI.md
+│   ├── CUENTA.md
 │   ├── DECISIONS.md
 │   ├── DISENO.md
 │   ├── DISTRIBUTION.md
@@ -361,16 +364,34 @@
 │   ├── HARNESS.md
 │   ├── HOTFIX.md
 │   ├── howto-build.md
+│   ├── IDIOMAS.md
 │   ├── MAPA.md
 │   ├── PINS.md
 │   ├── README.md
 │   ├── RELEASES.md
+│   ├── RENDIMIENTO.md
 │   ├── SETTINGS.md
 │   ├── TAREAS.md
 │   ├── VISION.md
 │   └── VOZ.md
 ├── extensions/ — Casi todo lo que hay aquí es upstream: las extensiones que VS Code trae de serie (git, json, markdown, typescript-language-features…), tal como…
 │   ├── picode/ — La pieza que hace que el chat exista. Es el puente entre el editor y pi: registra al agente en el chat, descubre proveedores y modelos, entrega MCP,…
+│   │   ├── l10n/ — Todo lo que el conector dice al usuario, en los 13 idiomas de PiCode. El código pide la frase con vscode.l10n.t(''); el editor busca esa frase en el…
+│   │   │   ├── bundle.l10n.cs.json
+│   │   │   ├── bundle.l10n.de.json
+│   │   │   ├── bundle.l10n.es.json
+│   │   │   ├── bundle.l10n.fr.json
+│   │   │   ├── bundle.l10n.it.json
+│   │   │   ├── bundle.l10n.ja.json
+│   │   │   ├── bundle.l10n.json
+│   │   │   ├── bundle.l10n.ko.json
+│   │   │   ├── bundle.l10n.pl.json
+│   │   │   ├── bundle.l10n.pt-br.json
+│   │   │   ├── bundle.l10n.ru.json
+│   │   │   ├── bundle.l10n.tr.json
+│   │   │   ├── bundle.l10n.zh-cn.json
+│   │   │   ├── bundle.l10n.zh-tw.json
+│   │   │   └── README.md
 │   │   ├── media/
 │   │   │   ├── picode-activity.svg
 │   │   │   ├── picode-light.svg
@@ -385,6 +406,7 @@
 │   │   │   ├── background-jobs.ts
 │   │   │   ├── chat-commands.ts
 │   │   │   ├── chat-edits.ts
+│   │   │   ├── chat-images.ts
 │   │   │   ├── child-trace.ts
 │   │   │   ├── command-registry.ts
 │   │   │   ├── commands.ts
@@ -392,6 +414,8 @@
 │   │   │   ├── context.ts
 │   │   │   ├── customizations.ts
 │   │   │   ├── declarations.ts
+│   │   │   ├── diff-stat.ts
+│   │   │   ├── display-language.ts
 │   │   │   ├── distribution-root.ts
 │   │   │   ├── editor-context.ts
 │   │   │   ├── endpoint.ts
@@ -400,12 +424,14 @@
 │   │   │   ├── engram.ts
 │   │   │   ├── extension-notices.ts
 │   │   │   ├── extension.ts
+│   │   │   ├── folder-trust.ts
 │   │   │   ├── gentle-agents-store.ts
 │   │   │   ├── gentle-models-ui.ts
 │   │   │   ├── gentle-models.ts
 │   │   │   ├── gentle-settings.ts
 │   │   │   ├── import-project.ts
 │   │   │   ├── intercom-config.ts
+│   │   │   ├── l10n.ts
 │   │   │   ├── learned-commands.ts
 │   │   │   ├── left-behind-packages.ts
 │   │   │   ├── login.ts
@@ -419,6 +445,7 @@
 │   │   │   ├── mcpTools.ts
 │   │   │   ├── memory-cards.ts
 │   │   │   ├── memory-client.ts
+│   │   │   ├── memory-paging.ts
 │   │   │   ├── memory-update.ts
 │   │   │   ├── memory-view.ts
 │   │   │   ├── model-info.ts
@@ -434,6 +461,7 @@
 │   │   │   ├── packages-updates.ts
 │   │   │   ├── past-conversations-window.ts
 │   │   │   ├── past-conversations.ts
+│   │   │   ├── perf-timings.ts
 │   │   │   ├── permissions.ts
 │   │   │   ├── piConfig.ts
 │   │   │   ├── piLocate.ts
@@ -442,6 +470,7 @@
 │   │   │   ├── product-packages.ts
 │   │   │   ├── profile-import.ts
 │   │   │   ├── progress.ts
+│   │   │   ├── project-trust.ts
 │   │   │   ├── provider-stream.ts
 │   │   │   ├── providerIds.ts
 │   │   │   ├── providers-list.ts
@@ -474,7 +503,7 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 97 files in total
+│   │   │   └── … 105 files in total
 │   │   ├── test/
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
@@ -482,13 +511,16 @@
 │   │   │   ├── background-jobs.test.ts
 │   │   │   ├── chat-commands.test.ts
 │   │   │   ├── chat-edits.test.ts
+│   │   │   ├── chat-images.test.ts
 │   │   │   ├── child-trace.test.ts
 │   │   │   ├── command-registry.test.ts
 │   │   │   ├── compare-models.test.ts
 │   │   │   ├── context.test.ts
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
+│   │   │   ├── diff-stat.test.ts
 │   │   │   ├── disabled-tools.test.ts
+│   │   │   ├── display-language.test.ts
 │   │   │   ├── distribution-root.test.ts
 │   │   │   ├── engram-leases.test.ts
 │   │   │   ├── engram-runtime.test.ts
@@ -509,6 +541,7 @@
 │   │   │   ├── mcp-signin.test.ts
 │   │   │   ├── memory-cards.test.ts
 │   │   │   ├── memory-client.test.ts
+│   │   │   ├── memory-paging.test.ts
 │   │   │   ├── model-info.test.ts
 │   │   │   ├── models-cache.test.ts
 │   │   │   ├── npm-run.test.ts
@@ -519,19 +552,26 @@
 │   │   │   ├── packages-registry.test.ts
 │   │   │   ├── packages-updates.test.ts
 │   │   │   ├── past-conversations.test.ts
+│   │   │   ├── perf-timings.test.ts
 │   │   │   ├── permissions.test.ts
 │   │   │   ├── pi-locate.test.ts
 │   │   │   ├── pi-sdk-builtins.test.ts
 │   │   │   ├── picode-auth-callback.test.ts
+│   │   │   ├── picode-connector-auth.test.ts
+│   │   │   ├── picode-issue-board.test.ts
+│   │   │   ├── picode-issue-prompt.test.ts
+│   │   │   ├── picode-issue-sources.test.ts
 │   │   │   ├── pin-sync.test.ts
 │   │   │   ├── product-packages.test.ts
 │   │   │   ├── progress.test.ts
+│   │   │   ├── project-trust.test.ts
 │   │   │   ├── provider-stream.test.ts
 │   │   │   ├── providers-list.test.ts
 │   │   │   ├── session-cwd.test.ts
 │   │   │   ├── session-listing.test.ts
 │   │   │   ├── sessions-backup.test.ts
 │   │   │   ├── sessions-digest.test.ts
+│   │   │   ├── sessions-listing-cache.test.ts
 │   │   │   ├── sessions-provider.test.ts
 │   │   │   ├── setup-host-no-editor.test.ts
 │   │   │   ├── status-layout.test.ts
@@ -546,8 +586,22 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 70 files in total
+│   │   │   └── … 81 files in total
 │   │   ├── package.json
+│   │   ├── package.nls.cs.json
+│   │   ├── package.nls.de.json
+│   │   ├── package.nls.es.json
+│   │   ├── package.nls.fr.json
+│   │   ├── package.nls.it.json
+│   │   ├── package.nls.ja.json
+│   │   ├── package.nls.json
+│   │   ├── package.nls.ko.json
+│   │   ├── package.nls.pl.json
+│   │   ├── package.nls.pt-br.json
+│   │   ├── package.nls.ru.json
+│   │   ├── package.nls.tr.json
+│   │   ├── package.nls.zh-cn.json
+│   │   ├── package.nls.zh-tw.json
 │   │   ├── README.md
 │   │   ├── tsconfig.json
 │   │   └── tsconfig.test.json
@@ -574,6 +628,7 @@
 │   │   │   │   │       └── v1/
 │   │   │   │   └── lib/
 │   │   │   │       ├── auth.ts
+│   │   │   │       ├── connect.ts
 │   │   │   │       ├── contract.ts
 │   │   │   │       ├── crypto.ts
 │   │   │   │       ├── downloads.ts
@@ -588,6 +643,7 @@
 │   │   │   │       ├── usage-store.ts
 │   │   │   │       └── usage.ts
 │   │   │   ├── test/
+│   │   │   │   ├── connect.test.ts
 │   │   │   │   ├── crypto.test.ts
 │   │   │   │   ├── plans.test.ts
 │   │   │   │   ├── retention.test.ts

@@ -12,7 +12,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf } from '../src/background-jobs.ts';
+import { BackgroundJobTracker, backgroundJobRows, backgroundJobStartOf, gentleJobEndedBy, gentleJobOfToolResult } from '../src/background-jobs.ts';
 
 const T0 = 1_000_000;
 
@@ -105,4 +105,33 @@ test('a completed job is remembered as ended, newest first, and capped', () => {
 	assert.strictEqual(tracker.finished()[0].endedAt, T0 + 107);
 	tracker.clear();
 	assert.deepStrictEqual(tracker.finished(), []);
+});
+
+// The answers below are the shapes a real gentle-pi 4.7.0 session wrote.
+const OUTPUT = 'D:/data/tmp/gentle-jobs-07wfvo/job-1.log';
+const details = (status: string, event?: string) => ({ gentleJobs: { jobId: 'job-1', kind: 'command', label: 'UI test job', status, exitCode: null, outputPath: OUTPUT, ...(event === undefined ? {} : { event }) } });
+
+test('a job of gentle-pi opens from the answer of the tool that started it', () => {
+	const job = gentleJobOfToolResult('bash_background', { content: [], details: details('running') });
+	assert.deepStrictEqual(job, { key: OUTPUT, label: 'UI test job', outputPath: OUTPUT, running: true, outcome: 'running' });
+	assert.strictEqual(gentleJobOfToolResult('monitor', { details: details('running') })?.running, true);
+});
+
+test('job_stop closes a job and can never open one', () => {
+	assert.strictEqual(gentleJobOfToolResult('job_stop', { details: details('stopped') })?.running, false);
+	assert.strictEqual(gentleJobOfToolResult('job_stop', { details: details('running') }), undefined);
+});
+
+test('any other tool, or an answer without a job, says nothing', () => {
+	assert.strictEqual(gentleJobOfToolResult('bash', { details: details('running') }), undefined);
+	assert.strictEqual(gentleJobOfToolResult('bash_background', { details: {} }), undefined);
+	assert.strictEqual(gentleJobOfToolResult('bash_background', undefined), undefined);
+});
+
+test('the notice of an ended job closes it; a monitor reporting lines does not', () => {
+	const notice = (status: string, event?: string) => ({ role: 'custom', customType: 'gentle-jobs.notice', display: true, content: 'text', details: details(status, event) });
+	assert.strictEqual(gentleJobEndedBy(notice('exited'))?.key, OUTPUT);
+	assert.strictEqual(gentleJobEndedBy(notice('failed'))?.key, OUTPUT);
+	assert.strictEqual(gentleJobEndedBy(notice('running', 'events')), undefined);
+	assert.strictEqual(gentleJobEndedBy({ customType: 'another', details: details('exited') }), undefined);
 });

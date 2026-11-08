@@ -1,0 +1,523 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* What's New: a window centred over a dimmed editor (picodeWhatsNewWindow.ts). */
+
+.picode-whatsnew-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 2550;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.picode-whatsnew {
+	display: flex;
+	flex-direction: column;
+	width: min(920px, calc(100% - 48px));
+	height: min(640px, calc(100% - 64px));
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 14px;
+	background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background));
+	color: var(--vscode-foreground);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+	overflow: hidden;
+	outline: none;
+}
+
+.picode-whatsnew-header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 18px;
+	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.picode-whatsnew-header-icon.codicon {
+	font-size: 20px;
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-whatsnew-heading {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-whatsnew-title {
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.picode-whatsnew-subtitle {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-whatsnew-close {
+	padding: 4px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-whatsnew-close:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.picode-whatsnew-body {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.picode-whatsnew-nav {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 250px;
+	padding: 10px;
+	border-right: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	overflow-y: auto;
+}
+
+.picode-whatsnew-nav-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 8px 10px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	line-height: 18px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-whatsnew-nav-row .codicon {
+	flex: none;
+	margin-top: 1px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-whatsnew-nav-row:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+}
+
+.picode-whatsnew-nav-row.active {
+	background: color-mix(in srgb, var(--vscode-focusBorder) 22%, transparent);
+	font-weight: 600;
+}
+
+.picode-whatsnew-nav-row.active .codicon {
+	color: var(--vscode-foreground);
+}
+
+.picode-whatsnew-page {
+	flex: 1;
+	min-width: 0;
+	padding: 18px 24px;
+	overflow-y: auto;
+	outline: none;
+}
+
+.picode-whatsnew-page-title {
+	margin: 0 0 6px;
+	font-size: 19px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.picode-whatsnew-summary {
+	margin: 0 0 14px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.5;
+}
+
+.picode-whatsnew-points {
+	margin: 14px 0;
+	padding-left: 18px;
+	line-height: 1.55;
+}
+
+.picode-whatsnew-points li {
+	margin-bottom: 4px;
+}
+
+.picode-whatsnew-changes {
+	line-height: 1.5;
+}
+
+.picode-whatsnew-footer {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 18px;
+	border-top: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.picode-whatsnew-spacer {
+	flex: 1;
+}
+
+.picode-whatsnew-counter {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-whatsnew-button {
+	padding: 5px 14px;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-whatsnew-button:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.picode-whatsnew-button.secondary {
+	border-color: color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
+	background: transparent;
+	color: var(--vscode-foreground);
+}
+
+.picode-whatsnew-button.secondary:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-whatsnew-link {
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--vscode-textLink-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-whatsnew-link:hover {
+	text-decoration: underline;
+}
+
+/* -- the demos ---------------------------------------------------------------------------------- */
+
+.picode-whatsnew-demo {
+	padding: 12px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+}
+
+.picode-whatsnew-demo-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-whatsnew-demo-caption {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-whatsnew-tabs {
+	display: inline-flex;
+	gap: 2px;
+	margin-bottom: 10px;
+	padding: 2px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-whatsnew-tab {
+	padding: 3px 14px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-whatsnew-tab.active {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-whatsnew-layout {
+	display: grid;
+	gap: 6px;
+	height: 170px;
+}
+
+.picode-whatsnew-layout.agent {
+	grid-template-columns: 1fr 3fr 1.4fr;
+	grid-template-areas: "sessions chat side";
+}
+
+.picode-whatsnew-layout.editor {
+	grid-template-columns: 1fr 3fr 1.2fr;
+	grid-template-rows: 3fr 1fr;
+	grid-template-areas: "explorer code chat" "explorer terminal chat";
+}
+
+.picode-whatsnew-zone {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+	font-size: 12px;
+	text-align: center;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-zone.accent {
+	background: color-mix(in srgb, var(--vscode-focusBorder) 30%, transparent);
+	font-weight: 600;
+}
+
+.picode-whatsnew-zone.sessions { grid-area: sessions; }
+.picode-whatsnew-zone.chat { grid-area: chat; }
+.picode-whatsnew-zone.side { grid-area: side; }
+.picode-whatsnew-zone.explorer { grid-area: explorer; }
+.picode-whatsnew-zone.code { grid-area: code; }
+.picode-whatsnew-zone.terminal { grid-area: terminal; }
+
+@keyframes picode-whatsnew-appear {
+	from { opacity: 0; transform: translateY(3px); }
+	to { opacity: 1; transform: none; }
+}
+
+.picode-whatsnew-board {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 8px;
+}
+
+.picode-whatsnew-column {
+	min-height: 130px;
+	padding: 8px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+}
+
+.picode-whatsnew-column.over {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-whatsnew-column-title {
+	margin-bottom: 6px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.picode-whatsnew-card {
+	margin-bottom: 6px;
+	padding: 7px 9px;
+	border-left: 3px solid var(--vscode-charts-yellow);
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background);
+	font-size: 12px;
+	cursor: grab;
+}
+
+.picode-whatsnew-card.high { border-left-color: var(--vscode-charts-orange); }
+.picode-whatsnew-card.low { border-left-color: var(--vscode-charts-blue); }
+
+.picode-whatsnew-card.dragging {
+	opacity: 0.5;
+}
+
+.picode-whatsnew-card-key {
+	margin-top: 3px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-whatsnew-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 26px;
+	font-size: 13px;
+}
+
+.picode-whatsnew-row.step {
+	padding-left: 18px;
+}
+
+.picode-whatsnew-row-label {
+	min-width: 0;
+}
+
+.picode-whatsnew-row.head .picode-whatsnew-row-label {
+	flex: 1;
+	font-weight: 600;
+}
+
+.picode-whatsnew-row-detail {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-whatsnew-row.done .picode-whatsnew-row-label {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-whatsnew-row.doing .picode-whatsnew-row-label {
+	font-weight: 600;
+}
+
+.picode-whatsnew-row.doing .picode-whatsnew-row-icon {
+	animation: codicon-spin 1.5s steps(30) infinite;
+}
+
+.picode-whatsnew-chat {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 10px;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-bubble {
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+	font-size: 12px;
+}
+
+.picode-whatsnew-bubble.event {
+	align-self: flex-end;
+	background: color-mix(in srgb, var(--vscode-focusBorder) 22%, transparent);
+}
+
+/* -- who gets it: Pro or everyone ----------------------------------------------------------------- */
+
+.picode-whatsnew-nav-group {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 10px 0 2px;
+	padding: 0 10px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.picode-whatsnew-nav-group:first-child {
+	margin-top: 0;
+}
+
+.picode-whatsnew-nav-group .codicon {
+	font-size: 12px;
+}
+
+.picode-whatsnew-nav-group.pro,
+.picode-whatsnew-tag.pro {
+	color: var(--vscode-charts-yellow);
+}
+
+.picode-whatsnew-nav-group.free,
+.picode-whatsnew-tag.free {
+	color: var(--vscode-charts-green);
+}
+
+.picode-whatsnew-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+	padding: 2px 10px 2px 8px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.picode-whatsnew-tag .codicon {
+	font-size: 12px;
+}
+
+.picode-whatsnew-row.feature {
+	padding: 3px 0;
+}
+
+.picode-whatsnew-row-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.picode-whatsnew-row.toggle {
+	cursor: pointer;
+}
+
+.picode-whatsnew-sync-result {
+	margin-top: 8px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+/* -- the version beside the title, and a page that looks like the rest ------------------------------ */
+
+.picode-whatsnew-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.picode-whatsnew-version {
+	padding: 0 7px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	font-weight: 400;
+	line-height: 18px;
+}
+
+.monaco-workbench .picode-whatsnew:focus,
+.monaco-workbench .picode-whatsnew-page:focus {
+	outline: none !important;
+}
+
+.picode-whatsnew-page::-webkit-scrollbar,
+.picode-whatsnew-nav::-webkit-scrollbar {
+	width: 8px;
+}
+
+.picode-whatsnew-page::-webkit-scrollbar-track,
+.picode-whatsnew-nav::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.picode-whatsnew-page::-webkit-scrollbar-thumb,
+.picode-whatsnew-nav::-webkit-scrollbar-thumb {
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--vscode-foreground) 20%, transparent);
+}
+
+.picode-whatsnew-page::-webkit-scrollbar-thumb:hover,
+.picode-whatsnew-nav::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 32%, transparent);
+}

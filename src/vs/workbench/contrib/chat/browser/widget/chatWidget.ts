@@ -1557,6 +1557,16 @@ export class ChatWidget extends Disposable implements IChatWidget {
 			message: new MarkdownString(DISCLAIMER),
 			icon: FileAccess.asBrowserUri('vs/workbench/contrib/picode/browser/media/picode.svg'),
 			picodeMark: true,
+			suggestions: [
+				{ icon: Codicon.search, label: localize('picode.chat.suggestExplore.label', "Explore the code"), prompt: localize('picode.chat.suggestExplore.prompt', "Explore this project and explain how it is organized.") },
+				{ icon: Codicon.bug, label: localize('picode.chat.suggestFix.label', "Fix a bug"), prompt: localize('picode.chat.suggestFix.prompt', "Help me find and fix a bug: ") },
+				{ icon: Codicon.diff, label: localize('picode.chat.suggestReview.label', "Review changes"), prompt: localize('picode.chat.suggestReview.prompt', "Review my uncommitted changes and point out any problems.") },
+			].map(({ icon, label, prompt }) => ({
+				icon, label, run: () => {
+					this.setInput(prompt);
+					this.focusInput();
+				}
+			})),
 			additionalMessage,
 		};
 	}

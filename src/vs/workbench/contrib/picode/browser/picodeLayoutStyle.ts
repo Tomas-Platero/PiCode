@@ -22,6 +22,7 @@ import { IPaneCompositePartService } from '../../../services/panecomposite/brows
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { sidebarSideColumn } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 
 /**
  * How PiCode is laid out: **Agent** (the chat is the work) or **Editor** (the code is the work).
@@ -92,6 +93,9 @@ const TABS_TRIMMED_KEY = 'picode.layout.reviewTabsTrimmed';
 
 /** Where the panel's position before the Agent layout is kept. */
 const SAVED_PANEL_POSITION_KEY = 'picode.layout.editorPanelPosition';
+
+/** Whether the bottom panel was open in the Editor layout: the Agent layout uses it for the chat and always shows it. */
+const SAVED_PANEL_VISIBLE_KEY = 'picode.layout.editorPanelVisible';
 
 /** The sessions column's width when the Agent layout starts. */
 const AGENT_SESSIONS_WIDTH = 260;
@@ -202,6 +206,12 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			this.storageService.store(SAVED_PANEL_POSITION_KEY, positionToString(this.layoutService.getPanelPosition()), StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		}
 
+		// Read only while the panel is still the Editor layout's: once the chat lives in it, it is always open.
+		const chatContainer = this.viewDescriptorService.getViewContainerById(CHAT_CONTAINER_ID);
+		if (this.storageService.get(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE) === undefined && chatContainer !== null && this.viewDescriptorService.getViewContainerLocation(chatContainer) !== ViewContainerLocation.Panel) {
+			this.storageService.store(SAVED_PANEL_VISIBLE_KEY, this.layoutService.isVisible(Parts.PANEL_PART), StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		}
+
 		// The columns' sizes and the bar's open view are set the first time only: after that the
 		// workbench restores what the user left, and a start never undoes it.
 		const firstTime = this.storageService.get(AGENT_ARRANGED_KEY, StorageScope.WORKSPACE) === undefined;
@@ -222,6 +232,12 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			this.hideEditorArea();
 		}
 		if (!firstTime) {
+			// Every start opens on Status, not on whichever tab the bar was left on (the workbench
+			// restores that one, usually the file explorer). A wide bar already shows Status as its column.
+			await timeout(0);
+			if (!sidebarSideColumn.visible) {
+				void this.paneCompositeService.openPaneComposite(STATUS_CONTAINER_ID, ViewContainerLocation.Sidebar);
+			}
 			return;
 		}
 		// After the settings above have moved the parts: sizes are only meaningful in the new grid.
@@ -316,6 +332,9 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			return;
 		}
 		this.arranged = false;
+		// Closed unless the person had it open: the Agent layout's chat is no reason to show the terminal.
+		const panelWasOpen = this.storageService.getBoolean(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE, false);
+		this.storageService.remove(SAVED_PANEL_VISIBLE_KEY, StorageScope.WORKSPACE);
 		this.storageService.remove(SAVED_PANEL_POSITION_KEY, StorageScope.WORKSPACE);
 		this.storageService.remove(AGENT_ARRANGED_KEY, StorageScope.WORKSPACE);
 		this.moveContainer(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);
@@ -323,6 +342,7 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			this.moveContainer(id, ViewContainerLocation.Panel);
 		}
 		this.layoutService.setPanelPosition(positionFromString(panelPosition ?? 'bottom'));
+		this.layoutService.setPartHidden(!panelWasOpen, Parts.PANEL_PART);
 		this.layoutService.setPartHidden(false, Parts.EDITOR_PART);
 		this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
 		void this.paneCompositeService.openPaneComposite(CHAT_CONTAINER_ID, ViewContainerLocation.AuxiliaryBar);

@@ -24,6 +24,7 @@
 import type { AgentTaskRow } from './gentle-agents-store';
 import type { BackgroundJobStatus } from './status-contract';
 import { l10n } from './l10n.ts';
+import { GENERIC_PROVIDER_ERROR } from './subagent-failure.ts';
 
 /** One row of the Tasks block: a background job, or a subagent. */
 export type TaskRow =
@@ -129,4 +130,75 @@ export function elapsedLabel(startedAt: number, now: number): string {
 		return l10n.t('{0}h {1}m', hours, minutes % 60);
 	}
 	return l10n.t('{0}d {1}h', Math.floor(hours / 24), hours % 24);
+}
+
+/** The line that sums the board up: what is out right now. */
+export function taskSummary(board: TaskBoard): string {
+	return board.running.length === 0 ? l10n.t('Nothing running') : l10n.t('{0} running', board.running.length);
+}
+
+/** One icon per kind of row: a row's icon is read before its label is. */
+export function rowIcon(row: TaskRow): string {
+	if (row.kind === 'job') {
+		return 'terminal';
+	}
+	switch (row.agent.status) {
+		case 'queued': return 'clock';
+		case 'running': return 'sync';
+		case 'waiting': return 'bell';
+		case 'completed': return 'check';
+		default: return 'error';
+	}
+}
+
+/** One fact under an open row. */
+export interface TaskFact {
+	readonly label: string;
+	readonly detail: string;
+	/** A codicon name. */
+	readonly icon: string;
+	readonly tooltip?: string;
+	/** A file that opens on a click: a job's live output. */
+	readonly openFile?: string;
+}
+
+/**
+ * What a row opens to: the facts a person asks about work they did not start themselves.
+ * `explainFailure` says why an agent failed, in the provider's terms, when gentle-pi only recorded that it did.
+ */
+export function taskFacts(row: TaskRow, now: number, explainFailure?: (id: string) => string | undefined): TaskFact[] {
+	if (row.kind === 'job') {
+		const facts: TaskFact[] = [
+			{ label: row.job.endedAt === undefined ? l10n.t('Running for') : l10n.t('Ran for'), detail: elapsedLabel(row.job.startedAt, row.job.endedAt ?? now), icon: 'watch' },
+		];
+		if (row.job.command !== undefined) {
+			facts.push({ label: l10n.t('Command'), detail: row.job.command, icon: 'symbol-field', tooltip: row.job.command });
+		}
+		if (row.job.outputPath !== undefined) {
+			facts.push({ label: l10n.t('Live output'), detail: l10n.t('Open'), icon: 'output', tooltip: l10n.t('Opens what the job prints; it keeps updating while the job runs.'), openFile: row.job.outputPath });
+		}
+		return facts;
+	}
+	const { agent } = row;
+	const facts: TaskFact[] = [
+		{ label: l10n.t('State'), detail: taskState(row), icon: rowIcon(row) },
+	];
+	if (agent.agent.length > 0) {
+		facts.push({ label: l10n.t('Agent'), detail: agent.agent, icon: 'person' });
+	}
+	if (agent.startedAt !== undefined) {
+		facts.push({ label: agent.endedAt === undefined ? l10n.t('Running for') : l10n.t('Took'), detail: elapsedLabel(agent.startedAt, agent.endedAt ?? now), icon: 'watch' });
+	}
+	const turns = agent.turns === 1 ? l10n.t('{0} turn', agent.turns) : l10n.t('{0} turns', agent.turns);
+	const calls = agent.toolCalls === 1 ? l10n.t('{0} tool call', agent.toolCalls) : l10n.t('{0} tool calls', agent.toolCalls);
+	facts.push({ label: l10n.t('Steps'), detail: `${turns} · ${calls}`, icon: 'list-ordered' });
+	// A failed task's last step is its error: one row says it.
+	if (agent.lastStep.length > 0 && agent.lastStep !== agent.error) {
+		facts.push({ label: l10n.t('Last step'), detail: agent.lastStep, icon: 'history', tooltip: agent.lastStep });
+	}
+	if (agent.error !== undefined) {
+		const problem = (agent.error === GENERIC_PROVIDER_ERROR ? explainFailure?.(agent.id) : undefined) ?? agent.error;
+		facts.push({ label: l10n.t('Problem'), detail: problem, icon: 'warning', tooltip: problem });
+	}
+	return facts;
 }

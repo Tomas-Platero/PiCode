@@ -8,6 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { chatAgentDir, internalProfileDir, piRuntimeRoot, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
@@ -62,6 +63,7 @@ interface NamedChatResource extends vscode.ChatResource {
 
 /** pi's SDK, reduced to what opening a throwaway session for its command registry needs: pi's own three members, so the services and manager this creates hand straight back to pi. */
 interface DiscoverySdk {
+	SettingsManager: OfficialSdk['SettingsManager'];
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 	createAgentSessionFromServices: OfficialSdk['createAgentSessionFromServices'];
 	SessionManager: OfficialSdk['SessionManager'];
@@ -119,6 +121,7 @@ async function discoverCommands(deps: PiCommandDeps, cwd: string, agentDir: stri
 		const services = await sdk.createAgentSessionServices({
 			cwd,
 			...(agentDir === undefined ? {} : { agentDir }),
+			...settingsForFolder(sdk, cwd, agentDir),
 			...(builtinFactories.length === 0 ? {} : { resourceLoaderOptions: { extensionFactories: builtinFactories } }),
 		});
 		// pi's own session home for this project — the same shape the chat's live session
@@ -210,7 +213,7 @@ export function registerPiCommandPromptFiles(context: vscode.ExtensionContext, d
 		const agentDir = chatAgentDir(deps.distributionRoot);
 		// The packages are part of the key: one installed or removed (from the app or from pi's
 		// terminal) changes what the session holds, and an old listing would hide its commands.
-		const key = [readRuntimeMode(), cwd, agentDir ?? '', packagesFingerprint(packageSettingsFiles(agentDir, cwd))].join('\u0000');
+		const key = [String(vscode.workspace.isTrusted), readRuntimeMode(), cwd, agentDir ?? '', packagesFingerprint(packageSettingsFiles(agentDir, cwd))].join('\u0000');
 		if (discovery?.key === key) {
 			return Promise.resolve(discovery.commands);
 		}

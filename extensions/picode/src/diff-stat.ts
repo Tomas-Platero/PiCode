@@ -20,6 +20,9 @@ export interface DiffStat {
 	readonly removed: number;
 }
 
+/** A git that hangs must not hold the panel's next reading back for ever. */
+const GIT_TIMEOUT_MS = 15_000;
+
 /** New files bigger than this are skipped: they are build output or data, not code to review. */
 const MAX_NEW_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -50,7 +53,7 @@ export function countLines(text: string): number {
 
 function git(cwd: string, args: readonly string[]): Promise<string> {
 	return new Promise((resolve, reject) => {
-		execFile('git', args, { cwd, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout));
+		execFile('git', args, { cwd, windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: GIT_TIMEOUT_MS }, (error, stdout) => error ? reject(error) : resolve(stdout));
 	});
 }
 
