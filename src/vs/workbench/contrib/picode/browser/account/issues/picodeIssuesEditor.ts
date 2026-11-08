@@ -24,7 +24,7 @@ import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
 import {
-	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, normalizeLabels, peopleOf, PicodeBoardLayout,
+	buildColumns, filterIssues, initialsOf, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, normalizeLabels, peopleOf, PicodeBoardLayout, priorityLevelOf,
 } from './picodeIssueBoard.js';
 import { IPicodeConnectorService, IPicodeGithubEditOptions, IPicodeJiraEditOptions, IPicodeProjectViewResult } from './picodeConnectorService.js';
 import { outcomeMessage, PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
@@ -338,9 +338,7 @@ export class PicodeIssuesEditor extends EditorPane {
 				append(foot, $('.picode-issues-spacer'));
 				this.priorityMark(foot, issue.priority);
 				if (issue.assignee) {
-					const avatar = append(foot, $('span.picode-issue-avatar'));
-					avatar.textContent = initialsOf(issue.assignee);
-					avatar.title = issue.assignee;
+					this.avatar(foot, issue);
 				}
 				this.pickable(card, issue.key);
 			}
@@ -369,7 +367,11 @@ export class PicodeIssuesEditor extends EditorPane {
 					append(title, $('span.picode-issue-tag')).textContent = label;
 				}
 			}
-			append(row, $('span.picode-issue-assignee-cell')).textContent = issue.assignee;
+			const person = append(row, $('span.picode-issue-assignee-cell'));
+			if (issue.assignee) {
+				this.avatar(person, issue);
+				append(person, $('span')).textContent = issue.assignee;
+			}
 			if (github) {
 				const comments = append(row, $('span.picode-issue-comments-cell'));
 				if (issue.comments > 0) {
@@ -549,14 +551,30 @@ export class PicodeIssuesEditor extends EditorPane {
 		if (!priority) {
 			return;
 		}
-		const level = priorityLevel(priority);
+		const level = priorityLevelOf(priority);
 		const mark = append(parent, $(`span.picode-issue-priority.${level}`));
-		append(mark, $(`span${ThemeIcon.asCSSSelector(level === 'high' ? Codicon.arrowUp : level === 'low' ? Codicon.arrowDown : Codicon.remove)}`));
+		append(mark, $(`span${ThemeIcon.asCSSSelector(level === 'highest' || level === 'high' ? Codicon.arrowUp : level === 'low' || level === 'lowest' ? Codicon.arrowDown : Codicon.remove)}`));
 		if (withName) {
-			append(mark, $('span')).textContent = priority;
+			append(mark, $('span')).textContent = priorityLabel(priority);
 		} else {
-			mark.title = priority;
+			mark.title = priorityLabel(priority);
 		}
+	}
+
+	/** The person's picture, or their initials when the service has none (or it cannot be loaded). */
+	private avatar(parent: HTMLElement, issue: IPicodeBoardIssue): void {
+		const avatar = append(parent, $('span.picode-issue-avatar'));
+		avatar.title = issue.assignee;
+		const initials = (): void => {
+			clearNode(avatar);
+			avatar.textContent = initialsOf(issue.assignee);
+		};
+		if (!issue.assigneeAvatar) {
+			initials();
+			return;
+		}
+		const picture = append(avatar, $('img.picode-issue-avatar-picture', { src: issue.assigneeAvatar, alt: '' })) as HTMLImageElement;
+		this.bodyStore.add(addDisposableListener(picture, 'error', initials));
 	}
 
 	private statusChip(parent: HTMLElement, issue: IPicodeBoardIssue): void {
@@ -640,7 +658,6 @@ export class PicodeIssuesEditor extends EditorPane {
 		} else {
 			const description = append(main, $('.picode-issues-description'));
 			description.textContent = issue.body;
-			append(main, $('.picode-issues-hint')).textContent = localize('picodeIssuesViewRichDescription', "This description has formatting that can only be edited in Jira.");
 		}
 		const actions = append(main, $('.picode-issues-detail-actions'));
 		const fix = append(actions, $('button.picode-issues-primary', { type: 'button' })) as HTMLButtonElement;
@@ -671,7 +688,7 @@ export class PicodeIssuesEditor extends EditorPane {
 			this.selectField(row(localize('picodeIssuesViewType', "Type")), issue.type, issue.typeId, this.editOptions?.types ?? [],
 				choice => void this.save(issue, { jira: { typeId: choice.id } }, { typeId: choice.id, type: choice.name }));
 			this.selectField(row(localize('picodeIssuesViewPriority', "Priority")), issue.priority, issue.priorityId, this.editOptions?.priorities ?? [],
-				choice => void this.save(issue, { jira: { priorityId: choice.id } }, { priorityId: choice.id, priority: choice.name }));
+				choice => void this.save(issue, { jira: { priorityId: choice.id } }, { priorityId: choice.id, priority: choice.name }), priorityLabel);
 			this.personField(row(localize('picodeIssuesViewAssignee', "Assignee")), issue, 'assignee', issue.assigneeId, issue.assignee || unassigned.name, people, unassigned,
 				person => void this.save(issue, { jira: { assigneeId: person.id || null } }, { assigneeId: person.id, assignee: person.id ? person.name : '' }));
 			this.personField(row(localize('picodeIssuesViewReporter', "Reporter")), issue, 'reporter', issue.reporterId, issue.author, people, undefined,
@@ -742,13 +759,13 @@ export class PicodeIssuesEditor extends EditorPane {
 	}
 
 	/** A drop-down: the current value always shows, even before the list of choices arrives. */
-	private selectField(cell: HTMLElement, currentName: string, currentId: string, choices: readonly IPicodeNamed[], onChange: (choice: IPicodeNamed) => void): void {
+	private selectField(cell: HTMLElement, currentName: string, currentId: string, choices: readonly IPicodeNamed[], onChange: (choice: IPicodeNamed) => void, labelOf: (name: string) => string = name => name): void {
 		const select = append(cell, $('select.picode-issues-select')) as HTMLSelectElement;
 		const all = !currentName || choices.some(choice => choice.id === currentId) ? choices : [{ id: currentId, name: currentName }, ...choices];
 		for (const choice of all) {
 			const option = append(select, $('option')) as HTMLOptionElement;
 			option.value = choice.id;
-			option.textContent = choice.name;
+			option.textContent = labelOf(choice.name);
 		}
 		select.value = currentId;
 		select.disabled = choices.length === 0;
@@ -982,10 +999,19 @@ function typeIcon(type: string): ThemeIcon {
 	}
 }
 
-function priorityLevel(priority: string): 'high' | 'medium' | 'low' {
-	const name = priority.toLowerCase();
-	if (name === 'highest' || name === 'high' || name === 'critical' || name === 'blocker') {
-		return 'high';
+/** The standard priorities of Jira, in the person's language; a name the space made up stays as it is. */
+function priorityLabel(name: string): string {
+	switch (name.trim().toLowerCase()) {
+		case 'highest': return localize('picodeIssuesPriorityHighest', "Highest");
+		case 'high': return localize('picodeIssuesPriorityHigh', "High");
+		case 'medium': return localize('picodeIssuesPriorityMedium', "Medium");
+		case 'low': return localize('picodeIssuesPriorityLow', "Low");
+		case 'lowest': return localize('picodeIssuesPriorityLowest', "Lowest");
+		case 'critical': return localize('picodeIssuesPriorityCritical', "Critical");
+		case 'blocker': return localize('picodeIssuesPriorityBlocker', "Blocker");
+		case 'major': return localize('picodeIssuesPriorityMajor', "Major");
+		case 'minor': return localize('picodeIssuesPriorityMinor', "Minor");
+		case 'trivial': return localize('picodeIssuesPriorityTrivial', "Trivial");
+		default: return name;
 	}
-	return name === 'low' || name === 'lowest' || name === 'minor' || name === 'trivial' ? 'low' : 'medium';
 }

@@ -16,7 +16,7 @@ register('data:text/javascript,' + encodeURIComponent(
 
 const {
 	buildColumns, filterIssues, initialsOf, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject, mapJiraStatuses,
-	adfToEditableText, buildGithubUpdate, jiraKeyFromBranch, mapJiraProjectList, buildJiraUpdate, isPlainAdf, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, mapJiraUsers, textToAdf, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
+	adfToEditableText, buildGithubUpdate, jiraKeyFromBranch, mapJiraProjectList, buildJiraUpdate, isPlainAdf, mapEditMetaTypes, mapEditMetaPriorities, priorityLevelOf, jiraAvatarOf, httpsUrl, mapGithubAssignees, mapGithubLabelNames, mapJiraUsers, textToAdf, mapJiraBoardColumns, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, normalizeLabels, parseGithubRepoRef, peopleOf, pickJiraBoardId, pickTransition, projectRefOf,
 } = await import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts');
 type IPicodeBoardIssue = import('../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeIssueBoard.ts').IPicodeBoardIssue;
 
@@ -95,7 +95,7 @@ test('a GitHub issue list keeps open and closed issues and drops pull requests',
 
 const issue = (key: string, status: string, category: IPicodeBoardIssue['category'], extra: Partial<IPicodeBoardIssue> = {}): IPicodeBoardIssue => ({
 	source: 'jira', key, title: `T ${key}`, body: '', url: `https://x/${key}`, project: 'ATW', author: '', external: false, updatedAt: '', labels: [],
-	status, statusId: '', category, type: '', typeId: '', priority: '', priorityId: '', assignee: '', assigneeId: '', reporterId: '', description: '', descriptionEditable: true, createdAt: '', comments: 0, ...extra,
+	status, statusId: '', category, type: '', typeId: '', priority: '', priorityId: '', assignee: '', assigneeAvatar: '', assigneeId: '', reporterId: '', description: '', descriptionEditable: true, createdAt: '', comments: 0, ...extra,
 });
 
 test('the board keeps empty columns and adds a status the project no longer lists', () => {
@@ -280,4 +280,21 @@ test('the branch a folder is on can hint at its Jira space', () => {
 	assert.strictEqual(jiraKeyFromBranch('ref: refs/heads/ATW-7'), 'ATW');
 	assert.strictEqual(jiraKeyFromBranch('ref: refs/heads/main\n'), undefined);
 	assert.strictEqual(jiraKeyFromBranch('0f8fad5bd9cb469f2c1a3e4d5b6a7c8d9e0f1a2b'), undefined);
+});
+
+test('the priorities of the space and the strength of each one', () => {
+	const meta = { fields: { priority: { allowedValues: [{ id: '1', name: 'Highest' }, { id: '3', name: 'Medium' }, { id: 'x' }] } } };
+	assert.deepStrictEqual(mapEditMetaPriorities(meta), [{ id: '1', name: 'Highest' }, { id: '3', name: 'Medium' }]);
+	assert.deepStrictEqual(mapEditMetaPriorities({ fields: {} }), []);
+	assert.deepStrictEqual(['Highest', 'Blocker', 'High', 'Major', 'Medium', 'Something else', 'Low', 'Minor', 'Lowest', 'Trivial'].map(priorityLevelOf),
+		['highest', 'highest', 'high', 'high', 'medium', 'medium', 'low', 'low', 'lowest', 'lowest']);
+});
+
+test('the assignee picture is kept only when it is an https address', () => {
+	assert.strictEqual(jiraAvatarOf({ '24x24': 'https://avatar.example/a.png', '48x48': 'https://avatar.example/b.png' }), 'https://avatar.example/a.png');
+	assert.strictEqual(jiraAvatarOf({ '24x24': 'http://avatar.example/a.png', '32x32': 'https://avatar.example/c.png' }), 'https://avatar.example/c.png');
+	assert.strictEqual(jiraAvatarOf(undefined), '');
+	assert.strictEqual(httpsUrl('javascript:alert(1)'), '');
+	const [jira] = mapJiraBoardIssues({ issues: [jiraIssue('ATW-1', 'To Do', 'new', { assignee: { displayName: 'Ana', accountId: 'a1', avatarUrls: { '24x24': 'https://avatar.example/ana.png' } } })] }, SITE);
+	assert.strictEqual(jira.assigneeAvatar, 'https://avatar.example/ana.png');
 });

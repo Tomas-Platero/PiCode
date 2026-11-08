@@ -28,7 +28,7 @@ import {
 } from './picodeConnectorAuth.js';
 import {
 	buildGithubUpdate, buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
-	mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, jiraKeyFromBranch, mapJiraBoardColumns, mapJiraProjectList, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
+	mapEditMetaPriorities, mapEditMetaTypes, mapGithubAssignees, mapGithubLabelNames, jiraKeyFromBranch, mapJiraBoardColumns, mapJiraProjectList, mapJiraUsers, mapJiraStatuses, mapNamedList, mapProjectIssueTypes, nextJiraPageToken, parseGithubRepoRef, pickJiraBoardId, pickTransition,
 } from './picodeIssueBoard.js';
 import { IPicodeIssue, IPicodeRepo, mapGithubIssues, mapGithubRepos, mapJiraIssues, originFromGitConfig, parseGithubRemote, PicodeIssueSource } from './picodeIssueSources.js';
 
@@ -639,16 +639,19 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 				return none;
 			}
 			const api = `${ATLASSIAN_API}/ex/jira/${encodeURIComponent(tokens.site.cloudId)}/rest/api/3`;
-			const [meta, priorities] = await Promise.all([
-				this.http('GET', `${api}/issue/${key}/editmeta`, { bearer: tokens.accessToken }),
-				this.http('GET', `${api}/priority`, { bearer: tokens.accessToken }),
-			]);
+			const meta = await this.http('GET', `${api}/issue/${key}/editmeta`, { bearer: tokens.accessToken });
 			let types = meta.status === 200 ? mapEditMetaTypes(meta.json) : [];
 			if (types.length === 0) {
 				const project = await this.http('GET', `${api}/project/${key.split('-')[0]}`, { bearer: tokens.accessToken });
 				types = project.status === 200 ? mapProjectIssueTypes(project.json) : [];
 			}
-			return { types, priorities: priorities.status === 200 ? mapNamedList(priorities.json) : [] };
+			// The priorities of the issue's own space; the site-wide list only when Jira does not say.
+			let priorities = meta.status === 200 ? mapEditMetaPriorities(meta.json) : [];
+			if (priorities.length === 0) {
+				const all = await this.http('GET', `${api}/priority`, { bearer: tokens.accessToken });
+				priorities = all.status === 200 ? mapNamedList(all.json) : [];
+			}
+			return { types, priorities };
 		} catch (error) {
 			this.logService.warn('[picode.connectors] the options of an issue could not be read', error);
 			return none;

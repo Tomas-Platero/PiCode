@@ -360,6 +360,21 @@
 	color: var(--vscode-badge-foreground);
 	font-size: 9px;
 	font-weight: 600;
+	overflow: hidden;
+	flex: none;
+}
+
+.picode-issue-avatar-picture {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.picode-issue-assignee-cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
 }
 
 /* List */
@@ -475,12 +490,25 @@
 	color: var(--vscode-descriptionForeground);
 }
 
-.picode-issue-priority.high {
+.picode-issue-priority.highest {
 	color: var(--vscode-charts-red);
+	font-weight: 600;
+}
+
+.picode-issue-priority.high {
+	color: var(--vscode-charts-orange);
+}
+
+.picode-issue-priority.medium {
+	color: var(--vscode-charts-yellow);
 }
 
 .picode-issue-priority.low {
 	color: var(--vscode-charts-blue);
+}
+
+.picode-issue-priority.lowest {
+	color: color-mix(in srgb, var(--vscode-charts-blue) 60%, var(--vscode-descriptionForeground));
 }
 
 /* The issue on the right */
@@ -702,12 +730,28 @@
 
 .picode-issues-select {
 	width: 100%;
-	padding: 3px 6px;
-	border: 1px solid var(--vscode-dropdown-border, transparent);
+	padding: 3px 24px 3px 8px;
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, color-mix(in srgb, var(--vscode-foreground) 25%, transparent)));
 	border-radius: 6px;
-	background: var(--vscode-dropdown-background);
+	background-color: var(--vscode-dropdown-background);
+	/* The arrow that says "this opens a list", the same on the lists and on the people buttons. */
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%239d9d9d' d='M3.15 5.65a.5.5 0 0 1 .7 0L8 9.8l4.15-4.15a.5.5 0 0 1 .7.7l-4.5 4.5a.5.5 0 0 1-.7 0l-4.5-4.5a.5.5 0 0 1 0-.7z'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 6px center;
+	-webkit-appearance: none;
+	appearance: none;
 	color: var(--vscode-dropdown-foreground);
 	font: inherit;
+	cursor: pointer;
+}
+
+.picode-issues-select:hover:not(:disabled) {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-issues-select:focus {
+	border-color: var(--vscode-focusBorder);
+	outline: none;
 }
 
 .picode-issues-select:disabled {
@@ -778,11 +822,6 @@
 	border-color: var(--vscode-focusBorder);
 	background: var(--vscode-input-background);
 	outline: none;
-}
-
-.picode-issues-hint {
-	font-size: 11px;
-	color: var(--vscode-descriptionForeground);
 }
 
 .picode-issues-person {

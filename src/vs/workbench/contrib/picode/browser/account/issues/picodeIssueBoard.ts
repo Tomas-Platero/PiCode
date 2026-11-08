@@ -33,6 +33,8 @@ export interface IPicodeBoardIssue extends IPicodeIssue {
 	readonly type: string;
 	readonly priority: string;
 	readonly assignee: string;
+	/** The assignee's picture when the service has one (an https address), else empty. */
+	readonly assigneeAvatar: string;
 	/** Jira: the ids behind the names above, which is what an edit sends back. */
 	readonly typeId: string;
 	readonly priorityId: string;
@@ -212,6 +214,7 @@ export function mapJiraBoardIssues(json: unknown, siteUrl: string): IPicodeBoard
 			priority: asString(asRecord(fields?.priority)?.name),
 			priorityId: asString(asRecord(fields?.priority)?.id),
 			assignee: asString(asRecord(fields?.assignee)?.displayName),
+			assigneeAvatar: jiraAvatarOf(asRecord(fields?.assignee)?.avatarUrls),
 			assigneeId: asString(asRecord(fields?.assignee)?.accountId),
 			reporterId: asString(asRecord(fields?.reporter)?.accountId),
 			description: isPlainAdf(fields?.description) ? adfToEditableText(fields?.description) : '',
@@ -252,6 +255,7 @@ export function mapGithubBoardIssues(json: unknown, repo: IPicodeRepo): IPicodeB
 			priority: '',
 			priorityId: '',
 			assignee: asString(asRecord(raw?.assignee)?.login),
+			assigneeAvatar: httpsUrl(asRecord(raw?.assignee)?.avatar_url),
 			assigneeId: '',
 			reporterId: '',
 			description: base.body,
@@ -354,6 +358,40 @@ export function mapNamedList(json: unknown): IPicodeNamed[] {
 /** `GET /issue/{key}/editmeta` → the issue types the issue may be changed to, when Jira says. */
 export function mapEditMetaTypes(json: unknown): IPicodeNamed[] {
 	return mapNamedList(asRecord(asRecord(asRecord(json)?.fields)?.issuetype)?.allowedValues);
+}
+
+/** `GET /issue/{key}/editmeta` → the priorities the issue may be changed to (the ones its space allows), when Jira says. */
+export function mapEditMetaPriorities(json: unknown): IPicodeNamed[] {
+	return mapNamedList(asRecord(asRecord(asRecord(json)?.fields)?.priority)?.allowedValues);
+}
+
+/** An address only when it is https: a picture is never loaded from anywhere less safe. */
+export function httpsUrl(value: unknown): string {
+	const url = asString(value);
+	return /^https:\/\//i.test(url) ? url : '';
+}
+
+/** Jira's `avatarUrls` (one address per size) → the small one. */
+export function jiraAvatarOf(urls: unknown): string {
+	const sizes = asRecord(urls);
+	return httpsUrl(sizes?.['24x24']) || httpsUrl(sizes?.['32x32']) || httpsUrl(sizes?.['48x48']);
+}
+
+/** How strong a priority is, whatever the space calls it: five steps from the names Jira and its older schemes use. */
+export type PicodePriorityLevel = 'highest' | 'high' | 'medium' | 'low' | 'lowest';
+
+export function priorityLevelOf(priority: string): PicodePriorityLevel {
+	const name = priority.trim().toLowerCase();
+	if (['highest', 'critical', 'blocker', 'urgent', 'más alta', 'crítica', 'bloqueante'].includes(name)) {
+		return 'highest';
+	}
+	if (['high', 'major', 'alta', 'mayor'].includes(name)) {
+		return 'high';
+	}
+	if (['lowest', 'trivial', 'más baja', 'mínima'].includes(name)) {
+		return 'lowest';
+	}
+	return ['low', 'minor', 'baja', 'menor'].includes(name) ? 'low' : 'medium';
 }
 
 /** `GET /project/{key}` → the project's issue types, without sub-tasks (an issue is not turned into one by an edit). */
