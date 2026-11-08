@@ -22,7 +22,7 @@
 
 ## La puerta Pro
 
-`IPicodeProEntitlement` lee el correo y el plan que el inicio de sesión dejó guardados. **Es un reflejo para la pantalla, no un cerrojo:** el plan es una foto del último inicio de sesión y quien manda es el servidor, que contesta `402` a cualquier cuenta que no sea Pro (ADR-017). **Si no se conoce el plan** (una sesión que dejó la ventana de primer arranque no lo trae hasta el siguiente inicio de sesión), nada se bloquea: la pantalla queda abierta y el servidor decide, para no enseñar una puerta cerrada a quien sí paga. Si alguien manipulara el valor local, solo vería una pantalla distinta: el servidor seguiría negando el servicio.
+`IPicodeProEntitlement` lee el correo y el plan guardados. **Es un reflejo para la pantalla, no un cerrojo:** quien manda es el servidor, que contesta `402` a cualquier cuenta que no sea Pro (ADR-017). El editor vuelve a preguntar el plan al arrancar y al volver a su ventana, como mucho una vez por minuto (`picodePlanRefresh.ts`), porque Pro se compra y se cancela en el navegador. **Si no se conoce el plan** (sin red, o hasta la primera respuesta), nada se bloquea: la pantalla queda abierta y el servidor decide, para no enseñar una puerta cerrada a quien sí paga. Si alguien manipulara el valor local, solo vería una pantalla distinta: el servidor seguiría negando el servicio.
 
 ### Qué impide usar Pro sin pagar (2026-11-08)
 

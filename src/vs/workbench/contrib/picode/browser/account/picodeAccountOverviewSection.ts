@@ -81,7 +81,8 @@ class PicodeAccountOverviewSection extends Disposable {
 		if (origin) {
 			const isPro = this.entitlement.plan !== 'free';
 			const plans = this.button(actions, isPro ? localize('picodeAccountManagePlan', "Manage plan") : localize('picodeAccountUpgrade', "Upgrade to Pro"), isPro);
-			this.renderStore.add(plans.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}/pricing`)); }));
+			// A Pro account manages its subscription on its account page; the plans would only offer what it already has.
+			this.renderStore.add(plans.onDidClick(() => { void this.openerService.open(URI.parse(`${origin}${isPro ? '/account#plan' : '/pricing'}`)); }));
 		}
 		const signOut = this.button(actions, localize('picodeAccountSignOut', "Sign out"), true);
 		this.renderStore.add(signOut.onDidClick(async () => {

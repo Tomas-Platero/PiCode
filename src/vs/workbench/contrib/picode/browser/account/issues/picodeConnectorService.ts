@@ -138,6 +138,8 @@ export interface IPicodeConnectorService {
 	workspaceRepoKey(): Promise<string | undefined>;
 	/** What `workspaceRepoKey` last answered, without reading anything. */
 	readonly knownWorkspaceRepoKey: string | undefined;
+	/** Asks the cloud service which plan the account is on, and remembers the answer. */
+	refreshPlan(): Promise<void>;
 }
 
 /** Where earlier versions kept tokens on this computer: wiped, they are no use to anyone now. */
@@ -452,6 +454,15 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 			etag: typeof inner.etag === 'string' ? inner.etag : undefined,
 			rateLimited: inner.rateLimited === true,
 		};
+	}
+
+	async refreshPlan(): Promise<void> {
+		const answer = await this.callCloud('GET', '/v1/account');
+		const plan = answer?.status === 200 ? (answer.json as { plan?: unknown } | undefined)?.plan : undefined;
+		// Anything else says nothing about the account: what is known stays as it is.
+		if ((plan === 'pro' || plan === 'free') && plan !== this.storageService.get(PICODE_PLAN_STORAGE_KEY, StorageScope.APPLICATION)) {
+			this.storageService.store(PICODE_PLAN_STORAGE_KEY, plan, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		}
 	}
 
 	/** One signed-in call to PiCode's cloud service. `undefined` = no session, no address or unreachable. */

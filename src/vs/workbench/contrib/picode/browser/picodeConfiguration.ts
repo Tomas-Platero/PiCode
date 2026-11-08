@@ -14,6 +14,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import './picodeAccount.js';
 import './account/picodeAccount.contribution.js';
 import './account/issues/picodeIssues.contribution.js';
+import './account/picodePlanRefresh.js';
 import './picodeChatLateTurn.js';
 import './account/issues/picodeIssuesView.js';
 import './picodeMcpSection.js';
