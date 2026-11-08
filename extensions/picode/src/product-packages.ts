@@ -65,6 +65,10 @@ export const GENTLE_PI_TERMINAL_EXTENSIONS: readonly string[] = [
 	'!extensions/gentle-herdr-agent.ts',
 	'!extensions/gentle-program-identity.ts',
 	'!extensions/gentle-star-prompt.ts',
+	// New in 4.7.0: the agent-status file for other terminal tools (Herdr and the like) and the
+	// tokens-per-second notice after every turn, which would be noise in the editor chat.
+	'!extensions/gentle-agent-status.ts',
+	'!extensions/gentle-tps.ts',
 ];
 
 /**
@@ -95,8 +99,8 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 
 /** What the product pins, in the order it declares them. */
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
-	{ name: 'gentle-pi', version: '4.6.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
-	{ name: 'gentle-engram', version: '0.6.0' },
+	{ name: 'gentle-pi', version: '4.7.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
+	{ name: 'gentle-engram', version: '0.7.0' },
 	{ name: 'pi-intercom', version: '0.18.1' },
 ];
 

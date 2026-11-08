@@ -1,10 +1,10 @@
 {
-  "version": "3.6.2",
-  "asset": "engram_3.6.2_windows_amd64.zip",
-  "sha256": "2e1b2355ce6e21c14733e3dd7736a88a729f84fa9ec26f0f87747e71922a4491",
-  "assetArm64": "engram_3.6.2_windows_arm64.zip",
-  "sha256Arm64": "59375fce07b000d2610e7af431764040d524090a07f7bb9e4efe74a842c1a3e9",
+  "version": "3.7.0",
+  "asset": "engram_3.7.0_windows_amd64.zip",
+  "sha256": "0798d5805e7128c52bd4121bdef0a25c8712b7edf55129fb9f8789c1c0ec2013",
+  "assetArm64": "engram_3.7.0_windows_arm64.zip",
+  "sha256Arm64": "fd0aaa5a5cf6868f21f14a244664ede13082e8cbee4f762b92e888f189470d36",
   "binary": "engram.exe",
   "notice": "Engram is a third-party MIT program (Gentleman-Programming/engram). PiCode ships its engine unchanged: the name and logo are its author's trademarks, so no surface here is dressed as their product.",
-  "note": "The pinned memory engine, fetched from its own release by build/engram-runtime.sh and carried at `<pack>/resources/memory/engram.exe`. Pinned, never `latest`: an editor built today must behave the same in six months, and the store it writes is shared with whatever other agent on the machine points at `~/.engram` — a version that moves on its own is a version that can migrate somebody else's memory without asking. 3.6.2 follows 3.6.0 (the first step past 3.5.1, the release the owner already ran): 3.6.1 hardens soft deletes against stale snapshots and folds accents in search, and 3.6.2 only lines the engine up with gentle-engram 0.6.0. Like 3.6.0, its changes carry no store migration, so PiCode keeps joining the store it has rather than opening a second one on it. It is the `gentle-engram` pi package is pinned separately in the profile (product-packages.ts) and pointed at this engine through ENGRAM_BIN."
+  "note": "The pinned memory engine, fetched from its own release by build/engram-runtime.sh and carried at `<pack>/resources/memory/engram.exe`. Pinned, never `latest`: an editor built today must behave the same in six months, and the store it writes is shared with whatever other agent on the machine points at `~/.engram` — a version that moves on its own is a version that can migrate somebody else's memory without asking. 3.7.0 follows 3.6.2 and pairs with gentle-engram 0.7.0: it adds an optional organization field to memories, a background daemon mode and a faster store and sync path. Existing rows and clients without the new field behave as before, so it carries no store migration, so PiCode keeps joining the store it has rather than opening a second one on it. It is the `gentle-engram` pi package is pinned separately in the profile (product-packages.ts) and pointed at this engine through ENGRAM_BIN."
 }

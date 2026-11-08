@@ -54,8 +54,8 @@ test('the product carries gentle-pi and gentle-engram, and leaves the durable ag
 	assert.strictEqual(isLeftBehindPackage('npm:@earendil-works/pi-durable'), true);
 	assert.strictEqual(isLeftBehindPackage({ source: 'npm:@earendil-works/pi-durable@1.4.0' }), true);
 	assert.strictEqual(isLeftBehindPackage('npm:gentle-pi'), false);
-	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.6.0' }), false);
-	const source = JSON.stringify({ packages: ['npm:gentle-pi', 'npm:gentle-engram@0.6.0'] });
+	assert.strictEqual(isLeftBehindPackage({ source: 'npm:gentle-engram@0.7.0' }), false);
+	const source = JSON.stringify({ packages: ['npm:gentle-pi', 'npm:gentle-engram@0.7.0'] });
 	assert.deepStrictEqual(filteredSettingsText(source), { text: source, leftBehind: [] });
 });
 
