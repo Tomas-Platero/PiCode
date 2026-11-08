@@ -1,0 +1,471 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* About: a window centred over a dimmed editor (electron-browser/picodeAbout.ts). */
+
+.picode-about-backdrop {
+	--picode-about-brand: #3b9bff;
+	position: absolute;
+	inset: 0;
+	z-index: 2550;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.5);
+	animation: picode-about-fade 160ms ease-out;
+}
+
+.picode-about {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: min(480px, calc(100% - 32px));
+	max-height: calc(100% - 48px);
+	overflow-y: auto;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 16px;
+	background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background));
+	color: var(--vscode-foreground);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+	outline: none;
+	animation: picode-about-rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+
+.picode-about-close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-about-close:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	color: var(--vscode-foreground);
+}
+
+/* -- The top ------------------------------------------------------------------------------------ */
+
+.picode-about-hero {
+	--picode-about-x: 50%;
+	--picode-about-y: 30%;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-height: 262px;
+	padding: 28px 24px 18px;
+	box-sizing: border-box;
+	text-align: center;
+	overflow: hidden;
+	background:
+		radial-gradient(240px circle at var(--picode-about-x) var(--picode-about-y), color-mix(in srgb, var(--picode-about-brand) 28%, transparent), transparent 75%),
+		linear-gradient(180deg, color-mix(in srgb, var(--picode-about-brand) 10%, transparent), transparent);
+}
+
+.picode-about-mascot {
+	--picode-about-charge: 0;
+	width: 104px;
+	height: 104px;
+	padding: 0;
+	border: none;
+	border-radius: 24px;
+	background: transparent;
+	cursor: pointer;
+}
+
+.picode-about-mascot:focus-visible,
+.picode-about-version:focus-visible,
+.picode-about-link:focus-visible,
+.picode-about-row:focus-visible,
+.picode-about-button:focus-visible,
+.picode-about-details-toggle:focus-visible,
+.picode-about-copy-all:focus-visible,
+.picode-about-close:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.picode-about-mascot svg {
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--picode-about-brand) 40%, transparent));
+}
+
+.picode-about-body {
+	stroke: color-mix(in srgb, var(--vscode-foreground) 62%, transparent);
+}
+
+.picode-about-chevron {
+	stroke: var(--picode-about-brand);
+}
+
+.picode-about-eye,
+.picode-about-antenna {
+	fill: var(--picode-about-brand);
+	stroke: none;
+}
+
+.picode-about-antenna {
+	transform-box: fill-box;
+	transform-origin: center;
+	transform: scale(calc(1 + var(--picode-about-charge) * 0.6));
+	transition: transform 120ms ease-out;
+	animation: picode-about-glow 2.6s ease-in-out infinite;
+}
+
+.picode-about-blink {
+	transform-box: fill-box;
+	transform-origin: center;
+	animation: picode-about-blink 4.8s infinite;
+}
+
+.picode-about-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+	font-size: 26px;
+	font-weight: 650;
+	letter-spacing: -0.02em;
+}
+
+.picode-about-channel {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--picode-about-brand) 22%, transparent);
+	color: var(--picode-about-brand);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0;
+}
+
+.picode-about-tagline {
+	margin-top: 4px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12.5px;
+}
+
+.picode-about-version {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 12px;
+	padding: 4px 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+	transition: background 120ms ease-out;
+}
+
+.picode-about-version:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+}
+
+.picode-about-version .codicon {
+	font-size: 12px;
+	opacity: 0.75;
+}
+
+/* -- The game ----------------------------------------------------------------------------------- */
+
+.picode-about-game {
+	display: none;
+}
+
+.picode-about-hero.playing .picode-about-game {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: color-mix(in srgb, var(--vscode-quickInput-background, var(--vscode-editorWidget-background)) 97%, transparent);
+	animation: picode-about-fade 160ms ease-out;
+}
+
+.picode-about-game-status {
+	padding-top: 12px;
+	font-size: 13px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-about-game-field {
+	position: relative;
+	flex: 1;
+	margin: 6px;
+}
+
+.picode-about-bug {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 20%, transparent);
+	color: var(--vscode-errorForeground, #f14c4c);
+	font-size: 20px !important;
+	cursor: crosshair;
+	animation: picode-about-pop 180ms ease-out, picode-about-wiggle 320ms ease-in-out infinite 180ms;
+}
+
+.picode-about-game-result {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+
+.picode-about-game-score {
+	font-size: 20px;
+	font-weight: 650;
+}
+
+.picode-about-game-best {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12.5px;
+}
+
+.picode-about-game-buttons {
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+/* -- Updates ------------------------------------------------------------------------------------ */
+
+.picode-about-update {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 32px;
+	margin: 0 18px;
+	padding: 8px 10px 8px 12px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	border-radius: 10px;
+	font-size: 12.5px;
+}
+
+.picode-about-update-icon {
+	flex: none;
+	color: var(--picode-about-brand);
+}
+
+.picode-about-update-icon.codicon-pass-filled {
+	color: var(--vscode-testing-iconPassed, #3fb950);
+}
+
+.picode-about-update-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.picode-about-button {
+	flex: none;
+	padding: 5px 12px;
+	border: none;
+	border-radius: 6px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-about-button:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.picode-about-button.secondary {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+.picode-about-button.secondary:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* -- Links -------------------------------------------------------------------------------------- */
+
+.picode-about-links {
+	display: flex;
+	gap: 6px;
+	margin: 12px 18px 0;
+}
+
+.picode-about-link {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 10px 4px 8px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	cursor: pointer;
+	transition: transform 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out;
+}
+
+.picode-about-link:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in srgb, var(--picode-about-brand) 50%, transparent);
+	background: color-mix(in srgb, var(--picode-about-brand) 12%, transparent);
+}
+
+.picode-about-link .codicon {
+	font-size: 18px;
+}
+
+.picode-about-link-label {
+	font-size: 11px;
+	line-height: 1.25;
+}
+
+/* -- Details ------------------------------------------------------------------------------------ */
+
+.picode-about-details-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 10px 14px 12px;
+}
+
+.picode-about-details:not([hidden]) {
+	display: flex;
+	flex-direction: column;
+	margin: -8px 14px 14px;
+}
+
+.picode-about-details-toggle,
+.picode-about-copy-all {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 6px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.picode-about-details-toggle:hover,
+.picode-about-copy-all:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.picode-about-details-toggle .codicon {
+	transition: transform 120ms ease-out;
+}
+
+.picode-about-details-toggle .codicon.picode-about-open {
+	transform: rotate(90deg);
+}
+
+.picode-about-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 4px 6px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-about-row:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-about-row-label {
+	flex: none;
+	width: 96px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-about-row-value {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	font-variant-numeric: tabular-nums;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-about-row-icon {
+	flex: none;
+	font-size: 12px;
+	opacity: 0;
+}
+
+.picode-about-row:hover .picode-about-row-icon,
+.picode-about-row-icon.codicon-check {
+	opacity: 0.8;
+}
+
+@keyframes picode-about-fade {
+	from { opacity: 0; }
+}
+
+@keyframes picode-about-rise {
+	from { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+
+@keyframes picode-about-blink {
+	0%, 94%, 100% { transform: scaleY(1); }
+	97% { transform: scaleY(0.08); }
+}
+
+@keyframes picode-about-glow {
+	50% { opacity: 0.65; }
+}
+
+@keyframes picode-about-pop {
+	from { transform: scale(0.2); }
+}
+
+@keyframes picode-about-wiggle {
+	25% { transform: rotate(-9deg); }
+	75% { transform: rotate(9deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-about-backdrop,
+	.picode-about,
+	.picode-about-blink,
+	.picode-about-antenna,
+	.picode-about-bug,
+	.picode-about-link {
+		animation: none;
+		transition: none;
+	}
+}
