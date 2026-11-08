@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { quotaBytesFor, readPlanId } from "../src/lib/plans.ts";
+import { quotaBytesFor, readPlanFromProfile, readPlanId } from "../src/lib/plans.ts";
 
 const PRO_LIMIT_BYTES = 52_428_800; // 50 MiB — what the product promises Pro
 
@@ -92,4 +92,22 @@ test("only Pro reads a quota variable", () => {
       assert.equal(quotaBytesFor("free"), 0);
     });
   });
+});
+
+test("a cancelled plan runs until its day and then ends, even if Stripe's message was lost", () => {
+  const dayX = Date.UTC(2026, 11, 8);
+  const day = 86_400_000;
+  const profile = { plan: "pro", cancelAtPeriodEnd: true, currentPeriodEnd: { toMillis: () => dayX } };
+  assert.equal(readPlanFromProfile(profile, dayX - day), "pro");
+  assert.equal(readPlanFromProfile(profile, dayX), "pro");
+  assert.equal(readPlanFromProfile(profile, dayX + 2 * day), "free");
+});
+
+test("a plan that renews is never ended by the date alone", () => {
+  const dayX = Date.UTC(2026, 11, 8);
+  const profile = { plan: "pro", cancelAtPeriodEnd: false, currentPeriodEnd: { toMillis: () => dayX } };
+  assert.equal(readPlanFromProfile(profile, dayX + 30 * 86_400_000), "pro");
+  assert.equal(readPlanFromProfile({ plan: "pro" }, dayX), "pro");
+  assert.equal(readPlanFromProfile({ plan: "free", cancelAtPeriodEnd: true, currentPeriodEnd: { toMillis: () => dayX } }, dayX), "free");
+  assert.equal(readPlanFromProfile(undefined, dayX), "free");
 });

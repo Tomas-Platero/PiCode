@@ -30,6 +30,24 @@ export function readPlanId(plan: unknown): PlanId {
     : "free";
 }
 
+/** Stripe retries its messages for days; a day after the date, a cancelled plan has ended either way. */
+const CANCELLED_GRACE_MS = 86_400_000;
+
+/**
+ * The plan of a profile document. A plan already cancelled ends by its date even if Stripe's last
+ * message never arrived, so a lost message cannot give Pro away for ever. A plan that renews never
+ * ends by the date alone: a late message must not take Pro from someone who is paying.
+ * Same rule as the website's `effectivePlan`.
+ */
+export function readPlanFromProfile(profile: Record<string, unknown> | undefined, nowMs: number): PlanId {
+  const plan = readPlanId(profile?.plan);
+  const end = profile?.currentPeriodEnd as { toMillis?: () => number } | null | undefined;
+  const endMs = typeof end?.toMillis === "function" ? end.toMillis() : undefined;
+  return plan === "pro" && profile?.cancelAtPeriodEnd === true && endMs !== undefined && nowMs > endMs + CANCELLED_GRACE_MS
+    ? "free"
+    : plan;
+}
+
 /**
  * The byte ceiling for a plan.
  *

@@ -10,6 +10,7 @@ import { IPicodeConnectorService } from './issues/picodeConnectorService.js';
 
 /** Coming back to the window often is normal; the plan rarely changes. */
 const AT_MOST_EVERY_MS = 60_000;
+const EVERY_MS = 60 * 60_000;
 
 /**
  * Keeps the plan the editor shows up to date. People buy or cancel Pro in their browser, so the
@@ -34,6 +35,9 @@ class PicodePlanRefresh extends Disposable implements IWorkbenchContribution {
 				this.refresh();
 			}
 		}));
+		// A window left open for days also has to learn that a cancelled plan reached its day.
+		const timer = setInterval(() => this.refresh(), EVERY_MS);
+		this._register({ dispose: () => clearInterval(timer) });
 	}
 
 	private refresh(): void {
