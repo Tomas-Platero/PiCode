@@ -41,17 +41,11 @@ export class ShowReleaseNotesAction extends Action2 {
 	constructor() {
 		super({
 			id: ShowCurrentReleaseNotesActionId,
-			title: {
-				...localize2('showReleaseNotes', "Show Release Notes"),
-				mnemonicTitle: localize({ key: 'mshowReleaseNotes', comment: ['&& denotes a mnemonic'] }, "Show &&Release Notes"),
-			},
+			title: localize2('showReleaseNotes', "Show Release Notes"),
 			category: { value: product.nameShort, original: product.nameShort },
-			f1: true,
-			menu: [{
-				id: MenuId.MenubarHelpMenu,
-				group: '1_welcome',
-				order: 5,
-			}]
+			// PiCode: not offered in the Help menu or the palette; Show What's New says what changed.
+			// It stays registered for the links that call it (the extension editor's changelog).
+			f1: false,
 		});
 	}
 
