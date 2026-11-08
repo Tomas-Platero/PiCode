@@ -5,8 +5,8 @@ import { HttpError } from "./errors";
  *
  * Atlassian will not trade a code for tokens (or renew them) without a client secret, and a secret
  * inside an installed editor can be read by anyone. So the editor asks this server, which holds the
- * secret in its environment and passes the tokens straight back: nothing is stored here.
- * GitHub's one-time-code sign-in needs no secret to start, but renewing a token does.
+ * secret in its environment. The tokens stay here too (`connect-store.ts`, sealed): they never go
+ * back to the editor, which asks this server to make each call. That is what keeps the issues Pro.
  *
  * Pure (no Next.js, no network): the route does the call, this file decides what to ask and what
  * to tell the editor, so `node --test` can check it.
@@ -41,24 +41,19 @@ export function parseConnectRequest(raw: unknown): ConnectRequest {
     throw new HttpError(400, "BadRequest", "Expected a JSON object.");
   }
   const body = raw as Record<string, unknown>;
-  const { service, grant, code, refreshToken } = body;
+  const { service, grant, code } = body;
   if (service !== "github" && service !== "atlassian") {
     throw new HttpError(400, "BadRequest", "Unknown service.");
   }
-  if (grant === "authorization_code") {
-    // GitHub's code is traded in the editor (one-time-code sign-in); only Atlassian's comes here.
-    if (service !== "atlassian" || typeof code !== "string" || !OPAQUE.test(code)) {
-      throw new HttpError(400, "BadRequest", "A code is only accepted for Atlassian.");
-    }
-    return { service, grant, code };
+  // Renewing is this server's own business (`connect-store.ts`): the editor has no token to renew.
+  if (grant !== "authorization_code") {
+    throw new HttpError(400, "BadRequest", "Unknown grant.");
   }
-  if (grant === "refresh_token") {
-    if (typeof refreshToken !== "string" || !OPAQUE.test(refreshToken)) {
-      throw new HttpError(400, "BadRequest", "Missing refresh token.");
-    }
-    return { service, grant, refreshToken };
+  // GitHub's sign-in comes through the one-time-code route; only Atlassian's code comes here.
+  if (service !== "atlassian" || typeof code !== "string" || !OPAQUE.test(code)) {
+    throw new HttpError(400, "BadRequest", "A code is only accepted for Atlassian.");
   }
-  throw new HttpError(400, "BadRequest", "Unknown grant.");
+  return { service, grant, code };
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -118,6 +113,16 @@ export function readProviderTokens(json: unknown): ConnectTokens | undefined {
 }
 
 /**
+ * Whether the provider says this refresh token is no good, which is the only thing that ends a
+ * connection: Atlassian answers `invalid_grant`, GitHub `bad_refresh_token`. Anything else (a rate
+ * limit, an error page, our own wrong secret) says nothing about the person's account.
+ */
+export function isRefreshRefused(json: unknown): boolean {
+  const error = typeof json === "object" && json !== null ? (json as Record<string, unknown>).error : undefined;
+  return error === "invalid_grant" || error === "bad_refresh_token";
+}
+
+/**
  * GitHub's one-time-code sign-in, asked through this server. GitHub's `login` pages do not allow
  * calls from the editor's window (no cross-origin permission), so the editor cannot ask them
  * itself; this server asks and passes the answer back. The client id is the server's own.
@@ -152,8 +157,9 @@ export function buildGithubDeviceRequest(request: GithubDeviceRequest, env: Env)
 }
 
 /**
- * GitHub's answer, reduced to what the editor reads (same names GitHub uses, so the editor's
- * reader works on it unchanged). `undefined` means the answer was not one GitHub gives.
+ * GitHub's answer, reduced to what the editor reads (same names GitHub uses). Tokens are never
+ * part of it: the route stores them and only says it is connected. `undefined` means the answer
+ * was not one GitHub gives.
  */
 export function readGithubDeviceAnswer(action: GithubDeviceRequest["action"], json: unknown): Record<string, unknown> | undefined {
   if (typeof json !== "object" || json === null) {
@@ -171,10 +177,6 @@ export function readGithubDeviceAnswer(action: GithubDeviceRequest["action"], js
       interval: typeof data.interval === "number" ? data.interval : undefined,
       expires_in: typeof data.expires_in === "number" ? data.expires_in : undefined,
     };
-  }
-  const tokens = readProviderTokens(data);
-  if (tokens) {
-    return { access_token: tokens.accessToken, refresh_token: tokens.refreshToken, expires_in: tokens.expiresIn };
   }
   if (typeof data.error === "string" && /^[a-z_]{1,64}$/.test(data.error)) {
     return { error: data.error, interval: typeof data.interval === "number" ? data.interval : undefined };

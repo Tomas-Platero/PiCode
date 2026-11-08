@@ -141,7 +141,19 @@ class PicodeConnectionsSection extends Disposable {
 				? localize('picodeIssuesConnectedTo', "Connected to {0}.", site)
 				: localize('picodeConnectorConnected', "Connected");
 			const disconnect = this.button(foot, localize('picodeIssuesDisconnect', "Disconnect"), true);
-			this.renderStore.add(disconnect.onDidClick(() => { void this.connectorService.disconnect(service); }));
+			const failed = this.messages.get(service);
+			if (failed) {
+				DOM.append(card, $('p.picode-issues-notice')).textContent = failed;
+			}
+			this.renderStore.add(disconnect.onDidClick(() => {
+				this.messages.delete(service);
+				void this.connectorService.disconnect(service).then(done => {
+					if (!done) {
+						this.messages.set(service, localize('picodeConnectorDisconnectFailed', "Could not disconnect. Check your connection and try again."));
+						this.render();
+					}
+				});
+			}));
 			return;
 		}
 		const message = this.messages.get(service);

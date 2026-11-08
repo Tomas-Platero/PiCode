@@ -7,7 +7,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { atlassianAuthorizeUrl, connectorCodeFromCallback, needsRefresh, parseAtlassianSites, parseDeviceCode, parseDevicePoll } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
+import { atlassianAuthorizeUrl, connectorCodeFromCallback, parseAtlassianSites, parseDeviceCode, parseDevicePoll } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
 
 const NOW = 1_000_000;
 const callback = (query: string, path = '/connect/callback', scheme = 'picode') => ({ scheme, path, query });
@@ -23,28 +23,20 @@ test('a device code pointing anywhere but GitHub is refused', () => {
 });
 
 test('each state of the wait is told apart', () => {
-	assert.deepStrictEqual(parseDevicePoll({ error: 'authorization_pending' }, NOW), { kind: 'pending' });
-	assert.deepStrictEqual(parseDevicePoll({ error: 'slow_down', interval: 10 }, NOW), { kind: 'slowDown', intervalMs: 10_000 });
-	assert.deepStrictEqual(parseDevicePoll({ error: 'access_denied' }, NOW), { kind: 'denied' });
-	assert.deepStrictEqual(parseDevicePoll({ error: 'expired_token' }, NOW), { kind: 'expired' });
-	assert.deepStrictEqual(parseDevicePoll({ error: 'incorrect_client_credentials' }, NOW), { kind: 'failed' });
-	assert.deepStrictEqual(parseDevicePoll('nope', NOW), { kind: 'failed' });
+	assert.deepStrictEqual(parseDevicePoll({ error: 'authorization_pending' }), { kind: 'pending' });
+	assert.deepStrictEqual(parseDevicePoll({ error: 'slow_down', interval: 10 }), { kind: 'slowDown', intervalMs: 10_000 });
+	assert.deepStrictEqual(parseDevicePoll({ error: 'access_denied' }), { kind: 'denied' });
+	assert.deepStrictEqual(parseDevicePoll({ error: 'expired_token' }), { kind: 'expired' });
+	assert.deepStrictEqual(parseDevicePoll({ error: 'incorrect_client_credentials' }), { kind: 'failed' });
+	assert.deepStrictEqual(parseDevicePoll('nope'), { kind: 'failed' });
 });
 
-test('the token comes with when it dies', () => {
-	const result = parseDevicePoll({ access_token: 'a', refresh_token: 'r', expires_in: 28800 }, NOW);
-	assert.deepStrictEqual(result, { kind: 'tokens', tokens: { accessToken: 'a', refreshToken: 'r', expiresAt: NOW + 28_800_000 } });
+test('the server says it is connected, and that is all the editor learns', () => {
+	assert.deepStrictEqual(parseDevicePoll({ connected: true }), { kind: 'connected' });
 });
 
-test('a token that never expires has no deadline', () => {
-	const result = parseDevicePoll({ access_token: 'a' }, NOW);
-	assert.ok(result.kind === 'tokens' && result.tokens.expiresAt === undefined && result.tokens.refreshToken === undefined);
-});
-
-test('a token is renewed a minute before it dies', () => {
-	assert.strictEqual(needsRefresh({ accessToken: 'a', expiresAt: NOW + 120_000 }, NOW), false);
-	assert.strictEqual(needsRefresh({ accessToken: 'a', expiresAt: NOW + 30_000 }, NOW), true);
-	assert.strictEqual(needsRefresh({ accessToken: 'a' }, NOW), false);
+test('a token in the answer is not taken for a connection, nor kept', () => {
+	assert.deepStrictEqual(parseDevicePoll({ access_token: 'a', refresh_token: 'r' }), { kind: 'failed' });
 });
 
 test('the callback of this attempt gives its code', () => {
@@ -93,3 +85,4 @@ test('the permission to change issues is asked only when it is wanted', () => {
 	assert.ok(boards.includes('read%3Aboard-scope%3Ajira-software%20read%3Aboard-scope.admin%3Ajira-software%20read%3Aproject%3Ajira'));
 	assert.ok(!boards.includes('write'));
 });
+

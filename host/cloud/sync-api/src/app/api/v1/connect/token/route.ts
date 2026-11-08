@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, requirePro } from "@/lib/auth";
 import { buildProviderRequest, parseConnectRequest, readProviderTokens } from "@/lib/connect";
+import { connectorKey } from "@/lib/connect-seal";
+import { saveConnection } from "@/lib/connect-store";
 import { HttpError } from "@/lib/errors";
 import { errorResponse, jsonResponse, operationIdHeaders } from "@/lib/http";
 
@@ -15,15 +17,16 @@ const CORS: Record<string, string> = {
 
 /**
  * POST /api/v1/connect/token
- * Trades a code (Atlassian) or renews a token (Atlassian, GitHub) for the signed-in Pro account.
- * The provider's secret lives in this server's environment; the tokens go back to the editor
- * and are not stored here.
+ * Trades a Jira code for the connection of the signed-in Pro account. The provider's secret lives
+ * in this server's environment and the tokens stay here, sealed: the editor is only told it worked.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const context = await authenticateRequest(request);
     requirePro(context);
     const connect = parseConnectRequest(await request.json().catch(() => undefined));
+    // Before the one-use code is spent: with no way to store the tokens, there is no point.
+    connectorKey(process.env);
     const provider = buildProviderRequest(connect, process.env);
     let response: Response;
     try {
@@ -41,7 +44,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // The provider refused (revoked, expired, wrong code). The editor treats 401 as "connect again".
       throw new HttpError(401, "Unauthorized", "The connection needs to be made again.");
     }
-    return jsonResponse(tokens, 200, CORS);
+    await saveConnection(context.uid, connect.service, tokens);
+    return jsonResponse({ connected: true }, 200, CORS);
   } catch (error) {
     return errorResponse(error);
   }

@@ -28,10 +28,9 @@ test("an Atlassian code is accepted, a GitHub code is not (GitHub trades its own
   rejects(() => parseConnectRequest({ service: "github", grant: "authorization_code", code: "abc" }), 400);
 });
 
-test("a refresh token is accepted for both services", () => {
-  for (const service of ["github", "atlassian"]) {
-    assert.equal(parseConnectRequest({ service, grant: "refresh_token", refreshToken: "r1" }).refreshToken, "r1");
-  }
+test("the editor cannot ask to renew a token: it has none", () => {
+  rejects(() => parseConnectRequest({ service: "atlassian", grant: "refresh_token", refreshToken: "r1" }), 400);
+  rejects(() => parseConnectRequest({ service: "github", grant: "refresh_token", refreshToken: "r1" }), 400);
 });
 
 test("anything that is not a plain request is refused", () => {
@@ -39,7 +38,6 @@ test("anything that is not a plain request is refused", () => {
   rejects(() => parseConnectRequest([]), 400);
   rejects(() => parseConnectRequest({ service: "gitlab", grant: "refresh_token", refreshToken: "r" }), 400);
   rejects(() => parseConnectRequest({ service: "atlassian", grant: "password" }), 400);
-  rejects(() => parseConnectRequest({ service: "atlassian", grant: "refresh_token", refreshToken: "a b" }), 400);
   rejects(() => parseConnectRequest({ service: "atlassian", grant: "authorization_code", code: "x".repeat(5000) }), 400);
 });
 
@@ -99,8 +97,8 @@ test("only what the editor reads goes back from GitHub's one-time-code steps", (
     readGithubDeviceAnswer("start", { device_code: "d", user_code: "AB-12", verification_uri: "https://github.com/login/device", interval: 5, expires_in: 900, extra: 1 }),
     { device_code: "d", user_code: "AB-12", verification_uri: "https://github.com/login/device", interval: 5, expires_in: 900 });
   assert.equal(readGithubDeviceAnswer("start", { error: "x" }), undefined);
-  assert.deepEqual(readGithubDeviceAnswer("poll", { access_token: "a", refresh_token: "r", expires_in: 28800, scope: "" }),
-    { access_token: "a", refresh_token: "r", expires_in: 28800 });
+  // Tokens never go back to the editor, whatever GitHub answered.
+  assert.equal(readGithubDeviceAnswer("poll", { access_token: "a", refresh_token: "r", expires_in: 28800, scope: "" }), undefined);
   assert.deepEqual(readGithubDeviceAnswer("poll", { error: "authorization_pending", error_description: "long" }),
     { error: "authorization_pending", interval: undefined });
   assert.equal(readGithubDeviceAnswer("poll", { error: "<script>" }), undefined);

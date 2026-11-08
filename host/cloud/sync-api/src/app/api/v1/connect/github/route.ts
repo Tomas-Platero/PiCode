@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, requirePro } from "@/lib/auth";
-import { buildGithubDeviceRequest, parseGithubDeviceRequest, readGithubDeviceAnswer } from "@/lib/connect";
+import { buildGithubDeviceRequest, parseGithubDeviceRequest, readGithubDeviceAnswer, readProviderTokens } from "@/lib/connect";
+import { saveConnection } from "@/lib/connect-store";
 import { HttpError } from "@/lib/errors";
 import { errorResponse, jsonResponse, operationIdHeaders } from "@/lib/http";
 
@@ -17,7 +18,8 @@ const CORS: Record<string, string> = {
  * POST /api/v1/connect/github
  * Asks GitHub for a one-time sign-in code (`start`) or whether it was entered (`poll`), for the
  * signed-in Pro account. GitHub's login pages do not accept calls from the editor's window, so
- * the editor asks here. Nothing is stored.
+ * the editor asks here. When the code was entered the tokens stay here, sealed, and the editor is
+ * only told it worked.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -36,7 +38,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } catch {
       throw new HttpError(502, "BadGateway", "The service could not be reached.");
     }
-    const answer = readGithubDeviceAnswer(device.action, await response.json().catch(() => undefined));
+    const json = await response.json().catch(() => undefined);
+    const tokens = device.action === "poll" ? readProviderTokens(json) : undefined;
+    if (tokens) {
+      await saveConnection(context.uid, "github", tokens);
+      return jsonResponse({ connected: true }, 200, CORS);
+    }
+    const answer = readGithubDeviceAnswer(device.action, json);
     if (!answer) {
       throw new HttpError(502, "BadGateway", "The service gave an answer that could not be used.");
     }

@@ -10,7 +10,11 @@
  * - GitHub uses the one-time-code ("device") flow: no secret is needed to start it.
  * - Jira uses the browser flow. Atlassian demands a client secret, so PiCode's server holds it:
  *   the browser comes back to the server, which hands the editor a `picode://` address carrying
- *   the code; the editor trades that code for tokens through the server.
+ *   the code; the editor hands that code to the server.
+ *
+ * The tokens stay on the server, sealed. The editor never holds one: it asks the server to make each
+ * call, and the server checks the plan every time. That is what makes the issues a Pro feature for
+ * real, since anything kept on this computer could be read or changed.
  *
  * Any web page can open a `picode://` address, so a code alone proves nothing: the callback is
  * claimed only when it carries the `state` this attempt generated (same rule as the sign-in, ADR-040).
@@ -21,12 +25,8 @@ export type PicodeConnectorService = 'github' | 'atlassian';
 /** The path on the `picode` scheme that carries a connector callback. */
 export const CONNECT_CALLBACK_PATH = '/connect/callback';
 
-/** What is kept (encrypted) for a connected service. */
-export interface IPicodeConnectorTokens {
-	readonly accessToken: string;
-	readonly refreshToken?: string;
-	/** Milliseconds since the epoch; absent when the token does not expire. */
-	readonly expiresAt?: number;
+/** What the editor remembers about a connection: no secret, only what decides what the screen offers. */
+export interface IPicodeConnection {
 	/** Jira only: the account also allowed PiCode to move issues between statuses. */
 	readonly canWrite?: boolean;
 	/** Jira only: the account also allowed PiCode to read boards, so the viewer can show the same columns as Jira. */
@@ -35,13 +35,6 @@ export interface IPicodeConnectorTokens {
 	readonly canSearchUsers?: boolean;
 	/** Jira only: the site the account chose. */
 	readonly site?: { readonly cloudId: string; readonly url: string; readonly name: string };
-}
-
-/** Refresh a little early, so a request never leaves with a token that dies on the way. */
-const EXPIRY_MARGIN_MS = 60_000;
-
-export function needsRefresh(tokens: IPicodeConnectorTokens, now: number): boolean {
-	return tokens.expiresAt !== undefined && tokens.expiresAt - EXPIRY_MARGIN_MS <= now;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -72,7 +65,7 @@ export function parseDeviceCode(json: unknown): IPicodeDeviceCode | undefined {
 }
 
 export type PicodeDevicePoll =
-	| { readonly kind: 'tokens'; readonly tokens: IPicodeConnectorTokens }
+	| { readonly kind: 'connected' }
 	| { readonly kind: 'pending' }
 	| { readonly kind: 'slowDown'; readonly intervalMs: number | undefined }
 	| { readonly kind: 'denied' }
@@ -80,13 +73,13 @@ export type PicodeDevicePoll =
 	| { readonly kind: 'failed' };
 
 /** GitHub answers 200 for every state of the wait; the state is in the body. */
-export function parseDevicePoll(json: unknown, now: number): PicodeDevicePoll {
+export function parseDevicePoll(json: unknown): PicodeDevicePoll {
 	const data = asRecord(json);
 	if (!data) {
 		return { kind: 'failed' };
 	}
-	if (typeof data.access_token === 'string' && data.access_token.length > 0) {
-		return { kind: 'tokens', tokens: tokensFromResponse(data, now) };
+	if (data.connected === true) {
+		return { kind: 'connected' };
 	}
 	switch (data.error) {
 		case 'authorization_pending': return { kind: 'pending' };
@@ -95,18 +88,6 @@ export function parseDevicePoll(json: unknown, now: number): PicodeDevicePoll {
 		case 'expired_token': return { kind: 'expired' };
 		default: return { kind: 'failed' };
 	}
-}
-
-/** The token answer of GitHub (`snake_case`) and of PiCode's server (`camelCase`) both end up here. */
-export function tokensFromResponse(data: Record<string, unknown>, now: number): IPicodeConnectorTokens {
-	const access = data.access_token ?? data.accessToken;
-	const refresh = data.refresh_token ?? data.refreshToken;
-	const expires = data.expires_in ?? data.expiresIn;
-	return {
-		accessToken: typeof access === 'string' ? access : '',
-		refreshToken: typeof refresh === 'string' && refresh.length > 0 ? refresh : undefined,
-		expiresAt: typeof expires === 'number' && expires > 0 ? now + expires * 1000 : undefined,
-	};
 }
 
 /**

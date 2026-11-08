@@ -24,6 +24,28 @@
 
 `IPicodeProEntitlement` lee el correo y el plan que el inicio de sesión dejó guardados. **Es un reflejo para la pantalla, no un cerrojo:** el plan es una foto del último inicio de sesión y quien manda es el servidor, que contesta `402` a cualquier cuenta que no sea Pro (ADR-017). **Si no se conoce el plan** (una sesión que dejó la ventana de primer arranque no lo trae hasta el siguiente inicio de sesión), nada se bloquea: la pantalla queda abierta y el servidor decide, para no enseñar una puerta cerrada a quien sí paga. Si alguien manipulara el valor local, solo vería una pantalla distinta: el servidor seguiría negando el servicio.
 
+### Qué impide usar Pro sin pagar (2026-11-08)
+
+> *"revisa que las cosas pro solo se puedan usar en una cuenta pro"*, *"protégelo anti hacks"*, *"Sí, en el servidor"*
+
+Todo lo que está en el equipo de una persona se puede leer o cambiar, así que **ningún control del editor protege nada**: solo decide qué se enseña. Lo que protege está en el servidor.
+
+| Función | Quién decide | ¿Se puede saltar tocando la app? |
+|---|---|---|
+| Sincronización | El servidor en cada petición (402), y los datos están allí | No |
+| Conectar GitHub o Jira | El servidor (402), que además se queda los tokens | No |
+| Leer y editar issues | El servidor en **cada llamada** (402): el editor no tiene token y no puede hablar con GitHub ni Jira | No |
+
+**El plan** vive en el servidor: las reglas de Firestore prohíben escribirlo a cualquier cliente y solo lo cambia el aviso firmado de Stripe.
+
+**Los tokens** (`host/cloud/sync-api/src/lib/connect-seal.ts`, `connect-store.ts`): en `/users/{uid}/connectors/{service}`, cifrados con AES-256-GCM con una clave propia derivada de la del servidor, ligados a su dueño y a su servicio. Sin clave no se guarda nada. Se borran al desconectar, al borrar la cuenta y en cuanto una cuenta sin Pro llama. El editor no recibe nunca un token.
+
+**Solo las llamadas necesarias** (`connect-proxy.ts`): el servidor solo hace las que usan los paneles, siempre a la dirección fija del servicio. Una sesión robada no sirve para leer el código de un repositorio ni para cambiar su configuración. Si el editor necesita una llamada nueva, **hay que añadirla a esa lista**.
+
+**Lo que sigue siendo posible:** alguien puede usar su propio token de GitHub con su propia herramienta para ver sus issues, igual que puede abrir github.com. Eso no es saltarse PiCode, y dentro del editor no le sirve de nada.
+
+**Coste aceptado:** guardar credenciales de terceros es una responsabilidad nueva (hay que decirlo en la política de privacidad), y cada llamada pasa por el servidor, así que sin conexión o con el servidor caído las issues solo enseñan la última lista.
+
 ## Issues de GitHub y Jira (solo Pro)
 
 > *"que se conectara a github y te mostrara que fallos te han reportado de tus repos y desde ahi le pudieras pedir a tu sistema agentico que te lo solucionara?"* — 2026-11-06

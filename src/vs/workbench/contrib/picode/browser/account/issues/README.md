@@ -2,7 +2,7 @@
 
 Las issues de GitHub y los tickets de Jira (solo Pro): conectar desde *Connections*, verlos en un panel de *Status* y pasar uno al chat con *Fix with pi*.
 
-- `picodeConnectorService.ts`: el servicio `IPicodeConnectorService`. Conecta (código de un solo uso en GitHub; navegador y servidor de PiCode en Jira), guarda los tokens cifrados, los renueva y lee las issues. Sin red enseña la última lista.
+- `picodeConnectorService.ts`: el servicio `IPicodeConnectorService`. Conecta (código de un solo uso en GitHub; navegador en Jira) y lee y edita las issues **a través del servidor de PiCode**: no guarda ningún token y no habla directamente con GitHub ni Jira. Sin red enseña la última lista.
 - `picodeStatusIssues.ts`: un panel por servicio en la columna *Status* (lista, *Show N more*, *Refresh*, *Fix with pi*).
 - `picodeIssuesView.ts`: el mismo panel como una vista más del contenedor de PiCode en el diseño *Editor*, solo para cuentas Pro (clave de contexto `picode.account.isPro`).
 - `picodeIssueActions.ts`: qué hace *Fix with pi*, cuándo sale apagado y las frases de los fallos.
