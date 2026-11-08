@@ -155,6 +155,8 @@ MenuRegistry.appendMenuItem(MenuId.ChatViewSessionTitleToolbar, {
 	group: 'navigation',
 	order: 1,
 	when: ContextKeyExpr.and(
+		// PiCode Agent layout has its own sessions column, so no toggle here.
+		ContextKeyExpr.notEquals('config.picode.appearance.layout', 'agent'),
 		ContextKeyExpr.or(
 			ChatContextKeys.agentSessionsViewerVisible.negate(),
 			ChatContextKeys.agentSessionsViewerOrientation.isEqualTo(AgentSessionsViewerOrientation.Stacked),
@@ -172,6 +174,8 @@ MenuRegistry.appendMenuItem(MenuId.ChatViewSessionTitleToolbar, {
 	group: 'navigation',
 	order: 1,
 	when: ContextKeyExpr.and(
+		// PiCode Agent layout has its own sessions column, so no toggle here.
+		ContextKeyExpr.notEquals('config.picode.appearance.layout', 'agent'),
 		ContextKeyExpr.or(
 			ChatContextKeys.agentSessionsViewerVisible.negate(),
 			ChatContextKeys.agentSessionsViewerOrientation.isEqualTo(AgentSessionsViewerOrientation.Stacked),

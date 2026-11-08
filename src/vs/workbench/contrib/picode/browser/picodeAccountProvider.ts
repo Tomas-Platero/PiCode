@@ -9,6 +9,7 @@ import { Disposable, DisposableStore, toDisposable } from '../../../../base/comm
 import { localize } from '../../../../nls.js';
 import { IRequestContext } from '../../../../base/parts/request/common/request.js';
 import { URI } from '../../../../base/common/uri.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { AUTH_CALLBACK_PATH, oneTimeCodeFromCallback } from './picodeAuthCallback.js';
 import { decodeBase64 } from '../../../../base/common/buffer.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
@@ -210,10 +211,11 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		if (!refreshToken) {
 			return [];
 		}
-		const storedScopes = this._storedScopes();
-		if (scopes && !scopes.every(scope => storedScopes.includes(scope))) {
-			return [];
-		}
+		// The scopes are only a label here: the one token serves every feature and the server decides
+		// what the plan allows. A session created without them (the setup window and the adoption of
+		// its session store none) must still answer to a request for `sync`, or the sync engine would
+		// treat a signed-in owner as signed out and ask to sign in again.
+		const storedScopes = [...new Set([...this._storedScopes(), ...(scopes ?? [])])];
 
 		// Ensure a fresh ID token; refresh transparently when the cached one went stale.
 		const idToken = await this._ensureIdToken(refreshToken);
@@ -367,10 +369,11 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 		// the query, which fragmented the callback once `&code=` was appended by the web
 		// app. A plain URI keeps the callback deterministic: the provider handler matches
 		// on scheme+path (not query), and the router hands it to the active window.
+		const state = generateUuid();
 		const callbackUri = URI.from({
 			scheme: this._productService.urlProtocol,
 			path: AUTH_CALLBACK_PATH,
-			query: 'flow=editor',
+			query: `flow=editor&state=${state}`,
 		});
 		const authUrl = `${this._config.webOrigin}/auth/editor?callback=${encodeURIComponent(callbackUri.toString())}`;
 		const disposables = new DisposableStore();
@@ -391,7 +394,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 			// what we wait for, the timeout and the recovery are all logged below.
 			disposables.add(this._urlService.registerHandler({
 				handleURL: async uri => {
-					const code = oneTimeCodeFromCallback(uri, callbackUri.scheme);
+					const code = oneTimeCodeFromCallback(uri, callbackUri.scheme, state);
 					if (!code) {
 						return false;
 					}
@@ -403,7 +406,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 
 			const timeoutHandle = setTimeout(() => {
 				this._logService.warn(
-					`[picode.account] no sign-in callback arrived within 5 minutes (waiting for ${callbackUri.toString(true)}). ` +
+					`[picode.account] no sign-in callback arrived within 5 minutes (waiting for ${callbackUri.scheme}:${AUTH_CALLBACK_PATH}). ` +
 					'If the browser page finished but nothing happened here, the protocol handler probably points to an old installation: ' +
 					'start this PiCode once so it claims the protocol again, then sign in again.');
 				settle(() => reject(new Error(localize('picode.account.signInTimeout', "Sign-in did not finish within 5 minutes. Please try signing in again."))));
@@ -411,7 +414,7 @@ export class PiCodeAccountProvider extends Disposable implements IAuthentication
 			disposables.add(toDisposable(() => clearTimeout(timeoutHandle)));
 
 			// The handler is in place: now send the user to the web app.
-			this._logService.info(`[picode.account] sign-in started; waiting for the browser to call back ${callbackUri.toString(true)} (5 minute timeout).`);
+			this._logService.info(`[picode.account] sign-in started; waiting for the browser to call back ${callbackUri.scheme}:${AUTH_CALLBACK_PATH} (5 minute timeout).`);
 			this._openerService.open(authUrl, { openExternal: true }).then(undefined, err => {
 				this._logService.error('[picode.account] the browser could not be opened for sign-in.', err);
 				settle(() => reject(new Error(localize('picode.account.browserOpenFailed', "Could not open your browser to sign in. Please try again."), { cause: err })));

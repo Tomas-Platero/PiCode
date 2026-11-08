@@ -55,7 +55,7 @@ Este documento describe cómo está montado.
 | Módulo | Qué hace |
 | --- | --- |
 | `agent.ts` | El participante `@pi` del chat: crea la sesión, traduce los eventos de pi al stream del chat (texto, thinking citado, tarjetas de herramientas), gestiona la cola de turnos por ventana, el steer, y **empuja** el estado a la píldora |
-| `permissions.ts` | La puerta de permisos: `bash`, `edit`, `write` y toda tool `mcp__…` preguntan antes, con niveles (default/assisted); los comandos de solo lectura pasan sin preguntar |
+| `permissions.ts` | La puerta de permisos, **apagada por decisión del dueño** (2026-11-05): el chat no pregunta y el selector no cambia nada. Solo actúan las protecciones de gentle-pi |
 | `mcp-provider.ts` / `mcpTools.ts` | Los servidores MCP del **editor** entran a pi como tools propias; los del perfil los carga pi con su conector builtin |
 | `background-jobs.ts` / `background-cards.ts` | Los trabajos en background: tarjeta en el transcript y registro vivo para la píldora |
 | `sessions-provider.ts` / `sessions-register.ts` / `sessions-resume.ts` | Los transcríptos JSONL del perfil (`sessions/`): se leen y se listan, son la lista única del panel y se continúan en el sitio |

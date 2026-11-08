@@ -78,7 +78,7 @@ export class LaunchMainService implements ILaunchMainService {
 				// window behind the setup is the one thing this must never do, so it is dropped here
 				// and picked up by the window that already exists.
 				if (isSetupWindowOpen()) {
-					this.logService.info(`[picode.url] link ignored while the setup is on screen: ${candidate.slice(0, 120)}`);
+					this.logService.info(`[picode.url] link ignored while the setup is on screen: ${candidate.split('?')[0].slice(0, 120)}`);
 					continue;
 				}
 			}

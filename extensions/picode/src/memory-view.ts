@@ -16,18 +16,20 @@
  *    empty list that reads as "your memory is empty"; a session id never reaches the screen, only
  *    the name of the agent that wrote the memory.
  *  * **Nothing is fetched twice.** Projects, the review queue and conflicts arrive together; the
- *    memories of a project arrive when it is opened, fifty at a time, and stay cached until the
- *    next refresh.
+ *    memories of a project arrive when it is opened and stay cached until the next refresh. The
+ *    engine has no working `offset`, so a further page asks for a longer list.
  *
  * The words are English, the icons are codicons, and the only number a folded block carries is in
  * its own rows — the editor draws the block's header, not us.
  */
 
 import * as vscode from 'vscode';
+import { execFile } from 'node:child_process';
 import * as os from 'os';
 import { engramServerUrl } from './engram';
 import { parseEngramHealth, parseEngramProjects } from './engram';
-import { compareVersions, fetchLatestRelease, updateEngine } from './memory-update';
+import { restartMemory } from './engram-activation';
+import { compareVersions, fetchLatestRelease, installedEngineVersion, updateEngine } from './memory-update';
 import type { EngramProject } from './engram';
 import {
 	memoryDetailMarkdown,
@@ -43,6 +45,8 @@ import {
 	type MemoryReviewQueue,
 	type MemoryRow
 } from './memory-client';
+import { isFiltering, matchesFilter, NO_FILTER, openProjects, remainingMemories, SEARCH_LIMIT, searchFilterParams, type MemoryFilter, type OpenFolder } from './memory-paging';
+import { timed } from './perf-timings';
 
 /** The view id, which the manifest also declares: the two must not drift. */
 export const MEMORY_VIEW_ID = 'picode.status.memory';
@@ -60,6 +64,13 @@ export const MEMORY_DELETE_COMMAND = 'picode.memory.delete';
 /** What the block shows, as plain data, for the Agent layout's status column. */
 export const MEMORY_SUMMARY_COMMAND = 'picode.memory.summary';
 
+/** Chooses what the lists and the search show, and lets it all through again. */
+export const MEMORY_FILTER_COMMAND = 'picode.memory.filter';
+export const MEMORY_CLEAR_FILTER_COMMAND = 'picode.memory.clearFilter';
+
+/** One more stretch of a list in the status column: a project's, or the search's without a project. */
+export const MEMORY_SHOW_MORE_IN_COLUMN_COMMAND = 'picode.memory.showMoreInColumn';
+
 /** How old the block's last reading may be before the status column asks for a fresh one. */
 const SUMMARY_STALE_MS = 30_000;
 
@@ -75,6 +86,12 @@ export const MEMORY_ENABLED_CONTEXT = 'picode.memory.enabled';
 
 /** How many memories one page of a project holds. */
 const PAGE_SIZE = 50;
+
+/** How many rows of a list the status column shows at a time. */
+const COLUMN_PAGE = 20;
+
+/** How much of a project is read while a filter is on: the engine cannot narrow by type or date, so the rows are narrowed here. */
+const FILTERED_READ = 500;
 
 /** How many conflicts are resolved to their titles when the group is opened. */
 const CONFLICT_TITLES = 10;
@@ -92,7 +109,7 @@ function projectCount(total: number): string {
 type MemoryNode =
 	| { readonly kind: 'heading' }
 	| { readonly kind: 'message'; readonly text: string }
-	| { readonly kind: 'action'; readonly action: 'search' | 'clear' | 'check' | 'update' }
+	| { readonly kind: 'action'; readonly action: 'search' | 'clear' | 'check' | 'update' | 'filter' | 'clearFilter' }
 	| { readonly kind: 'project'; readonly project: EngramProject }
 	| { readonly kind: 'more'; readonly project: string; readonly remaining: number }
 	| { readonly kind: 'memory'; readonly row: MemoryRow; readonly showProject?: boolean }
@@ -108,7 +125,6 @@ type MemoryData =
 		readonly projects: readonly EngramProject[];
 		readonly review?: MemoryReviewQueue;
 		readonly conflicts?: MemoryConflictList;
-		readonly search?: { readonly query: string; readonly rows: readonly MemoryRow[] };
 		/** What the engine says it is, and when the newest memory was written. */
 		readonly version?: string;
 		readonly lastSaved?: string;
@@ -138,6 +154,47 @@ function memoryTypeIcon(type: string): string {
 	}
 }
 
+/** What a search answered, and whether a project's answer hit the engine's ceiling. */
+interface MemorySearch {
+	readonly query: string;
+	readonly rows: readonly MemoryRow[];
+	readonly capped: boolean;
+}
+
+/** The choices of the filter, in the words the person reads; the types are the engine's. */
+function filterChoices(): { readonly group: 'type' | 'scope' | 'days'; readonly value: string; readonly label: string }[] {
+	return [
+		{ group: 'type', value: 'decision', label: vscode.l10n.t('Decisions') },
+		{ group: 'type', value: 'bugfix', label: vscode.l10n.t('Bug fixes') },
+		{ group: 'type', value: 'pattern', label: vscode.l10n.t('Patterns') },
+		{ group: 'type', value: 'preference', label: vscode.l10n.t('Preferences') },
+		{ group: 'type', value: 'learning', label: vscode.l10n.t('Learnings') },
+		{ group: 'type', value: 'discovery', label: vscode.l10n.t('Discoveries') },
+		{ group: 'type', value: 'session-summary', label: vscode.l10n.t('Session summaries') },
+		{ group: 'scope', value: 'project', label: vscode.l10n.t('Project') },
+		{ group: 'scope', value: 'personal', label: vscode.l10n.t('Personal') },
+		{ group: 'scope', value: 'global', label: vscode.l10n.t('Global') },
+		{ group: 'days', value: '7', label: vscode.l10n.t('Last 7 days') },
+		{ group: 'days', value: '30', label: vscode.l10n.t('Last 30 days') },
+	];
+}
+
+/** The URL of a folder's `origin`, if it has one. */
+function originOf(folder: string): Promise<string | undefined> {
+	return new Promise(resolve => {
+		try {
+			execFile('git', ['config', '--get', 'remote.origin.url'], { cwd: folder, windowsHide: true, timeout: 5_000 }, (error, stdout) => resolve(error ? undefined : stdout));
+		} catch {
+			resolve(undefined);
+		}
+	});
+}
+
+/** One row as the status column draws it. */
+function columnRow(row: MemoryRow) {
+	return { id: row.id, title: row.title, project: row.project, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) };
+}
+
 class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	private readonly changed = new vscode.EventEmitter<MemoryNode | undefined | void>();
 	readonly onDidChangeTreeData = this.changed.event;
@@ -146,6 +203,22 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	private loadedAt = 0;
 	private readonly pages = new Map<string, number>();
 	private readonly rows = new Map<string, readonly MemoryRow[]>();
+	/** How long a list each project's `rows` was asked for: a shorter answer means it has no more. */
+	private readonly askedFor = new Map<string, number>();
+	/** How many rows the status column shows per project. */
+	private readonly columnLimits = new Map<string, number>();
+	private searchColumnLimit = COLUMN_PAGE;
+	private filter: MemoryFilter = NO_FILTER;
+	/** Bumped when the filter changes: a read begun under the old one must not fill the cache. */
+	private filterEpoch = 0;
+	/** Lives apart from `data`: a reading that fails or arrives late must not lose or revive it. */
+	private activeSearch: MemorySearch | undefined;
+	/** Only the newest reading publishes. */
+	private loadSequence = 0;
+	/** The store's project behind each open folder, as of the last reading. */
+	private openProjectNames: readonly string[] | undefined;
+	private readonly origins = new Map<string, Promise<string | undefined>>();
+	private askingLatestEngine = false;
 	private readonly titles = new Map<number, string>();
 	/** Projects unfolded in the status column, whose memories its summary lists. */
 	private readonly expanded = new Set<string>();
@@ -153,50 +226,142 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	/** The newest engine release, asked at most once an hour: GitHub rate-limits anonymous reads. */
 	private latestEngine: { readonly version: string | undefined; readonly at: number } | undefined;
 
-	/** The folder names this window has open: the only projects the panel shows. */
-	private workspaceNames(): string[] {
-		return (vscode.workspace.workspaceFolders ?? []).map(folder => folder.name);
+	/** The rows the filter lets through. */
+	private visible(rows: readonly MemoryRow[]): readonly MemoryRow[] {
+		if (!isFiltering(this.filter)) {
+			return rows;
+		}
+		const now = Date.now();
+		return rows.filter(row => matchesFilter(row, this.filter, now));
 	}
 
-	private async newerEngine(installed: string | undefined): Promise<string | undefined> {
-		if (installed === undefined) {
+	/** How long a list to ask a project for, at the least. */
+	private readLimit(wanted: number): number {
+		return isFiltering(this.filter) ? Math.max(wanted, FILTERED_READ) : wanted;
+	}
+
+	/** What is left to show of a project: a filter has already read all it can narrow. */
+	private remainingIn(project: EngramProject, shown: number, passing: number, loaded: number): number {
+		return isFiltering(this.filter) ? passing - shown : remainingMemories(shown, loaded, this.askedFor.get(project.name) ?? PAGE_SIZE, project.memories);
+	}
+
+	/** What the filter is set to, as the row beside it says it. */
+	private filterDetail(): string | undefined {
+		const on = filterChoices().filter(choice => choice.group === 'type' ? this.filter.types.includes(choice.value)
+			: choice.group === 'scope' ? this.filter.scopes.includes(choice.value)
+				: this.filter.days === Number(choice.value));
+		return on.length === 0 ? undefined : on.map(choice => choice.label).join(' · ');
+	}
+
+	/** Asks what to show, in one list: several of a kind add up, and no choice on a side leaves it open. */
+	async chooseFilter(): Promise<void> {
+		const separator = (label: string): vscode.QuickPickItem => ({ label, kind: vscode.QuickPickItemKind.Separator });
+		const row = (choice: ReturnType<typeof filterChoices>[number], picked: boolean) => ({ label: choice.label, picked, choice });
+		const choices = filterChoices();
+		const items: (vscode.QuickPickItem & { choice?: ReturnType<typeof filterChoices>[number] })[] = [
+			separator(vscode.l10n.t('Type')),
+			...choices.filter(choice => choice.group === 'type').map(choice => row(choice, this.filter.types.includes(choice.value))),
+			separator(vscode.l10n.t('Scope')),
+			...choices.filter(choice => choice.group === 'scope').map(choice => row(choice, this.filter.scopes.includes(choice.value))),
+			separator(vscode.l10n.t('Date')),
+			...choices.filter(choice => choice.group === 'days').map(choice => row(choice, this.filter.days === Number(choice.value))),
+		];
+		const picked = await vscode.window.showQuickPick(items, { canPickMany: true, placeHolder: vscode.l10n.t('Show only these memories') });
+		if (picked === undefined) {
+			return;
+		}
+		const of = (group: string) => picked.flatMap(item => item.choice?.group === group ? [item.choice.value] : []);
+		const days = of('days').map(Number);
+		await this.setFilter({ types: of('type'), scopes: of('scope'), ...(days.length === 0 ? {} : { days: Math.max(...days) }) });
+	}
+
+	async clearFilter(): Promise<void> {
+		await this.setFilter(NO_FILTER);
+	}
+
+	/** The lists are read again for the new filter, and a search asked again: its ceiling applies after the narrowing. */
+	private async setFilter(filter: MemoryFilter): Promise<void> {
+		this.filter = filter;
+		this.filterEpoch++;
+		this.rows.clear();
+		this.askedFor.clear();
+		this.columnLimits.clear();
+		this.searchColumnLimit = COLUMN_PAGE;
+		await this.load();
+	}
+
+	/** The folders this window has open: the only projects the panel shows. */
+	private async openFolders(): Promise<OpenFolder[]> {
+		return Promise.all((vscode.workspace.workspaceFolders ?? []).map(async folder => {
+			const path = folder.uri.fsPath;
+			let origin = this.origins.get(path);
+			if (origin === undefined) {
+				origin = originOf(path);
+				this.origins.set(path, origin);
+			}
+			return { name: folder.name, remote: await origin };
+		}));
+	}
+
+	/** The newer engine, from what is known now: an update already downloaded is not offered again, what is missing is the restart. */
+	private newerEngine(installed: string | undefined): string | undefined {
+		const latest = this.latestEngine?.version;
+		if (installed === undefined || latest === undefined) {
 			return undefined;
 		}
-		if (this.latestEngine === undefined || Date.now() - this.latestEngine.at > 3_600_000) {
-			let version: string | undefined;
-			try {
-				version = (await fetchLatestRelease())?.version;
-			} catch {
-				version = undefined;
-			}
-			this.latestEngine = { version, at: Date.now() };
+		const downloaded = installedEngineVersion(os.homedir());
+		const have = downloaded !== undefined && compareVersions(downloaded, installed) > 0 ? downloaded : installed;
+		return compareVersions(have, latest) < 0 ? latest : undefined;
+	}
+
+	/** Asks GitHub in the background, at most once an hour, so a slow network never holds the counts back. */
+	private async askLatestEngine(): Promise<void> {
+		if (this.askingLatestEngine || (this.latestEngine !== undefined && Date.now() - this.latestEngine.at <= 3_600_000)) {
+			return;
 		}
-		const latest = this.latestEngine.version;
-		return latest !== undefined && compareVersions(installed, latest) < 0 ? latest : undefined;
+		this.askingLatestEngine = true;
+		let version: string | undefined;
+		try {
+			version = (await fetchLatestRelease())?.version;
+		} catch {
+			version = undefined;
+		}
+		this.askingLatestEngine = false;
+		this.latestEngine = { version, at: Date.now() };
+		if (this.data.kind === 'ready') {
+			const newerEngine = this.newerEngine(this.data.version);
+			if (newerEngine !== this.data.newerEngine) {
+				this.data = { ...this.data, newerEngine };
+				this.changed.fire();
+			}
+		}
 	}
 
 	/** A search limited to the open projects; the engine's answer is narrowed again here to be safe. */
-	private async searchOpenProjects(query: string): Promise<readonly MemoryRow[] | undefined> {
-		const names = this.workspaceNames();
+	private async searchOpenProjects(query: string): Promise<Omit<MemorySearch, 'query'> | undefined> {
+		const names = this.openProjectNames ?? (await this.openFolders()).map(folder => folder.name);
 		if (names.length === 0) {
-			return [];
+			return { rows: [], capped: false };
 		}
-		const answers = await Promise.all(names.map(name => this.getJson(`/search?q=${encodeURIComponent(query)}&project=${encodeURIComponent(name)}`)));
+		const answers = await Promise.all(names.map(name => this.getJson(`/search?q=${encodeURIComponent(query)}&project=${encodeURIComponent(name)}&limit=${SEARCH_LIMIT}${searchFilterParams(this.filter)}`)));
 		if (answers.every(answer => answer === undefined)) {
 			return undefined;
 		}
 		const wanted = new Set(names.map(name => name.toLowerCase()));
 		const seen = new Set<number>();
 		const rows: MemoryRow[] = [];
+		let capped = false;
 		for (const answer of answers) {
-			for (const row of parseMemoryRows(answer) ?? []) {
+			const answered = parseMemoryRows(answer) ?? [];
+			capped ||= answered.length >= SEARCH_LIMIT;
+			for (const row of answered) {
 				if (wanted.has(row.project.toLowerCase()) && !seen.has(row.id)) {
 					seen.add(row.id);
 					rows.push(row);
 				}
 			}
 		}
-		return rows;
+		return { rows, capped };
 	}
 
 	dispose(): void {
@@ -207,18 +372,29 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 	refresh(): void {
 		this.pages.clear();
 		this.rows.clear();
+		this.askedFor.clear();
+		this.columnLimits.clear();
+		this.openProjectNames = undefined;
 		void this.load();
 	}
 
-	private async load(): Promise<void> {
-		const previous = this.data.kind === 'ready' ? this.data.search : undefined;
-		const [projectsJson, reviewJson, conflictsJson, healthJson, newestJson] = await Promise.all([
+	private load(): Promise<void> {
+		return timed('memory: reading', () => this.readAll());
+	}
+
+	private async readAll(): Promise<void> {
+		const sequence = ++this.loadSequence;
+		const [projectsJson, reviewJson, conflictsJson, healthJson, newestJson, folders] = await Promise.all([
 			this.getJson('/projects'),
 			this.getJson('/review'),
 			this.getJson('/conflicts'),
 			this.getJson('/health'),
 			this.getJson('/observations?limit=1'),
+			this.openFolders(),
 		]);
+		if (sequence !== this.loadSequence) {
+			return;
+		}
 		const listed = parseEngramProjects(projectsJson);
 		if (listed === undefined) {
 			this.data = { kind: 'unavailable' };
@@ -232,33 +408,40 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			}
 			return;
 		}
+		// Only the folders open in this window, in the order they were opened; one with nothing saved yet still shows, at zero.
+		const projects = openProjects(folders, listed.projects);
+		this.openProjectNames = projects.map(project => project.name);
+		// The status column's unfolded lists follow the counts beside them.
+		const unfolded = projects.filter(project => this.expanded.has(project.name)).map(project => this.readProjectRows(project.name, this.askedFor.get(project.name) ?? this.readLimit(PAGE_SIZE)));
 		// A search stays on across a refresh, and is asked again: a deleted memory must leave the
 		// results, or the panel would keep handing out a row that no longer exists.
-		let search = previous;
-		if (previous !== undefined) {
-			const answered = await this.searchOpenProjects(previous.query);
-			if (answered !== undefined) {
-				search = { query: previous.query, rows: answered };
-			}
+		const asked = this.activeSearch;
+		const answered = asked === undefined ? undefined : await this.searchOpenProjects(asked.query);
+		await Promise.all(unfolded);
+		if (sequence !== this.loadSequence) {
+			return;
+		}
+		// Cleared or replaced while the engine was answering: the person's last word stands.
+		if (asked !== undefined && answered !== undefined && this.activeSearch?.query === asked.query) {
+			this.activeSearch = { query: asked.query, ...answered };
 		}
 		const newest = parseMemoryRows(newestJson)?.[0];
 		const version = parseEngramHealth(healthJson)?.version;
-		// Only the folders open in this window, in the order they were opened; one with nothing saved yet still shows, at zero.
-		const openProjects = this.workspaceNames().map(name =>
-			listed.projects.find(project => project.name.toLowerCase() === name.toLowerCase()) ?? { name, memories: 0 });
 		this.data = {
 			kind: 'ready',
-			total: openProjects.reduce((sum, project) => sum + project.memories, 0),
-			projects: openProjects,
-			newerEngine: await this.newerEngine(version),
+			total: projects.reduce((sum, project) => sum + project.memories, 0),
+			projects,
+			newerEngine: this.newerEngine(version),
 			review: parseMemoryReview(reviewJson),
 			conflicts: parseMemoryConflicts(conflictsJson),
-			search,
 			version,
 			lastSaved: newest === undefined ? undefined : newest.updatedAt || newest.createdAt,
 		};
 		this.loadedAt = Date.now();
 		this.changed.fire();
+		if (version !== undefined) {
+			void this.askLatestEngine();
+		}
 	}
 
 	/**
@@ -275,29 +458,58 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		if (data.kind !== 'ready') {
 			return { state: data.kind, retried: this.retried };
 		}
+		const search = this.activeSearch;
+		const searchRows = search === undefined ? [] : this.visible(search.rows);
 		return {
 			state: 'ready',
 			heading: data.total === 0 ? vscode.l10n.t('Nothing saved yet') : `${memoryCount(data.total)} · ${projectCount(data.projects.length)}`,
 			detail: data.lastSaved === undefined ? undefined : vscode.l10n.t('last {0}', memoryWhen(data.lastSaved)),
 			projects: data.projects.map(project => {
 				const open = this.expanded.has(project.name);
-				if (open && !this.rows.has(project.name)) {
-					void this.loadProjectRows(project.name);
+				if (!open) {
+					return { name: project.name, memories: project.memories, open };
 				}
+				if (!this.rows.has(project.name)) {
+					void this.readProjectRows(project.name, this.readLimit(PAGE_SIZE));
+				}
+				const loaded = this.rows.get(project.name) ?? [];
+				const passing = this.visible(loaded);
+				const rows = passing.slice(0, this.columnLimits.get(project.name) ?? COLUMN_PAGE);
+				const remaining = this.remainingIn(project, rows.length, passing.length, loaded.length);
 				return {
 					name: project.name,
 					memories: project.memories,
 					open,
-					rows: open ? (this.rows.get(project.name) ?? []).slice(0, 20).map(row => ({ id: row.id, title: row.title, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) })) : undefined,
+					rows: rows.map(columnRow),
+					emptyLabel: isFiltering(this.filter) && this.rows.has(project.name) && rows.length === 0 ? vscode.l10n.t('Nothing matches that.') : undefined,
+					moreLabel: remaining > 0 ? vscode.l10n.t('Show {0} more', Math.min(COLUMN_PAGE, remaining)) : undefined,
 				};
 			}),
-			search: data.search === undefined ? undefined : {
-				query: data.search.query,
-				rows: data.search.rows.slice(0, 20).map(row => ({ id: row.id, title: row.title, project: row.project, when: memoryWhen(row.updatedAt) || memoryWhen(row.createdAt), icon: memoryTypeIcon(row.type) })),
-				total: data.search.rows.length,
+			search: search === undefined ? undefined : {
+				query: search.query,
+				rows: searchRows.slice(0, this.searchColumnLimit).map(columnRow),
+				total: searchRows.length,
+				capped: search.capped,
+				emptyLabel: searchRows.length === 0 ? vscode.l10n.t('Nothing matches that.') : undefined,
+				moreLabel: searchRows.length > this.searchColumnLimit ? vscode.l10n.t('Show {0} more', Math.min(COLUMN_PAGE, searchRows.length - this.searchColumnLimit)) : undefined,
 			},
+			filter: { label: vscode.l10n.t('Filter memories…'), detail: this.filterDetail(), clearLabel: isFiltering(this.filter) ? vscode.l10n.t('Clear filter') : undefined },
 			newerEngine: data.newerEngine,
 		};
+	}
+
+	/** One more stretch of a list in the status column; without a project, the search's. */
+	async showMoreInColumn(project: string | undefined): Promise<void> {
+		if (project === undefined) {
+			this.searchColumnLimit += COLUMN_PAGE;
+			return;
+		}
+		const limit = (this.columnLimits.get(project) ?? COLUMN_PAGE) + COLUMN_PAGE;
+		this.columnLimits.set(project, limit);
+		const asked = this.askedFor.get(project) ?? 0;
+		if (limit > asked) {
+			await this.readProjectRows(project, asked + PAGE_SIZE);
+		}
 	}
 
 	getTreeItem(node: MemoryNode): vscode.TreeItem {
@@ -328,21 +540,33 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				return item;
 			}
 			case 'action': {
-				const label = node.action === 'search'
+				const label = node.action === 'filter'
+					? vscode.l10n.t('Filter memories…')
+					: node.action === 'clearFilter'
+						? vscode.l10n.t('Clear filter')
+						: node.action === 'search'
 					? vscode.l10n.t('Search memories…')
 					: node.action === 'clear'
 						? vscode.l10n.t('Clear search')
 						: node.action === 'check'
 							? vscode.l10n.t('Check memory')
 							: vscode.l10n.t('Update memory engine');
-				const icon = node.action === 'search'
+				const icon = node.action === 'filter'
+					? 'filter'
+					: node.action === 'clearFilter'
+						? 'clear-all'
+						: node.action === 'search'
 					? 'search'
 					: node.action === 'clear'
 						? 'close'
 						: node.action === 'check'
 							? 'pulse'
 							: 'cloud-download';
-				const command = node.action === 'search'
+				const command = node.action === 'filter'
+					? MEMORY_FILTER_COMMAND
+					: node.action === 'clearFilter'
+						? MEMORY_CLEAR_FILTER_COMMAND
+						: node.action === 'search'
 					? MEMORY_SEARCH_COMMAND
 					: node.action === 'clear'
 						? MEMORY_CLEAR_SEARCH_COMMAND
@@ -352,6 +576,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 				item.iconPath = new vscode.ThemeIcon(icon);
 				item.command = { command, title: label };
+				item.description = node.action === 'filter' ? this.filterDetail() : undefined;
 				item.contextValue = 'picode.memory.action';
 				return item;
 			}
@@ -390,7 +615,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 						: vscode.l10n.t('Conflicts');
 				const icon = node.section === 'search' ? 'search' : node.section === 'review' ? 'eye' : 'warning';
 				const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
-				item.description = String(node.count);
+				item.description = node.section === 'search' && this.activeSearch?.capped ? `${node.count}+` : String(node.count);
 				item.iconPath = new vscode.ThemeIcon(icon);
 				item.contextValue = 'picode.memory.section';
 				return item;
@@ -417,10 +642,14 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		const data = this.data;
 		if (element === undefined) {
 			const nodes: MemoryNode[] = [{ kind: 'heading' }];
-			if (data.search !== undefined) {
-				nodes.push({ kind: 'section', section: 'search', count: data.search.rows.length });
+			if (this.activeSearch !== undefined) {
+				nodes.push({ kind: 'section', section: 'search', count: this.visible(this.activeSearch.rows).length });
 			} else {
 				nodes.push({ kind: 'action', action: 'search' });
+			}
+			nodes.push({ kind: 'action', action: 'filter' });
+			if (isFiltering(this.filter)) {
+				nodes.push({ kind: 'action', action: 'clearFilter' });
 			}
 			for (const project of data.projects) {
 				nodes.push({ kind: 'project', project });
@@ -442,7 +671,7 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 				return this.projectChildren(element.project);
 			case 'section':
 				if (element.section === 'search') {
-					const rows = data.search?.rows ?? [];
+					const rows = this.visible(this.activeSearch?.rows ?? []);
 					return rows.length === 0
 						? [{ kind: 'message', text: vscode.l10n.t('Nothing matches that.') }]
 						: [...rows.map(row => ({ kind: 'memory' as const, row, showProject: true })), { kind: 'action', action: 'clear' as const }];
@@ -458,25 +687,24 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 
 	/** A project's memories, fifty at a time, read once and kept until the next refresh. */
 	private async projectChildren(project: EngramProject): Promise<MemoryNode[]> {
-		const page = this.pages.get(project.name) ?? 1;
-		const limit = page * PAGE_SIZE;
+		const limit = (this.pages.get(project.name) ?? 1) * PAGE_SIZE;
 		let rows = this.rows.get(project.name);
-		if (rows === undefined || rows.length < limit) {
-			const json = await this.getJson(`/observations?project=${encodeURIComponent(project.name)}&limit=${limit}`);
-			if (json === undefined) {
+		if (rows === undefined || (this.askedFor.get(project.name) ?? 0) < limit) {
+			rows = await this.readProjectRows(project.name, this.readLimit(limit));
+			if (rows === undefined) {
 				// A failed read is said as a failed read. Showing "nothing here yet" over a project
 				// the engine counted a moment ago would be the panel telling a lie about memory.
 				return [{ kind: 'message', text: vscode.l10n.t('These memories could not be read. Try again in a moment.') }];
 			}
-			rows = parseMemoryRows(json) ?? [];
-			this.rows.set(project.name, rows);
 		}
-		const nodes: MemoryNode[] = rows.slice(0, limit).map(row => ({ kind: 'memory' as const, row }));
-		if (project.memories > nodes.length) {
-			nodes.push({ kind: 'more', project: project.name, remaining: project.memories - nodes.length });
+		const passing = this.visible(rows);
+		const nodes: MemoryNode[] = passing.slice(0, limit).map(row => ({ kind: 'memory' as const, row }));
+		const remaining = this.remainingIn(project, nodes.length, passing.length, rows.length);
+		if (remaining > 0) {
+			nodes.push({ kind: 'more', project: project.name, remaining });
 		}
 		if (nodes.length === 0) {
-			nodes.push({ kind: 'message', text: vscode.l10n.t('Nothing here yet.') });
+			nodes.push({ kind: 'message', text: isFiltering(this.filter) ? vscode.l10n.t('Nothing matches that.') : vscode.l10n.t('Nothing here yet.') });
 		}
 		return nodes;
 	}
@@ -507,9 +735,9 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		return detail.title;
 	}
 
-	/** A search replaces the project rows while it is on: the answer, where the question was. */
+	/** A search's answer sits above the project rows while it is on. */
 	async search(): Promise<void> {
-		const current = this.data.kind === 'ready' ? this.data.search?.query : undefined;
+		const current = this.activeSearch?.query;
 		const query = await vscode.window.showInputBox({
 			prompt: vscode.l10n.t('Search the memories of the projects open in this window'),
 			placeHolder: vscode.l10n.t('a decision, a convention, a trap you hit before…'),
@@ -518,24 +746,22 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 		if (query === undefined || query.trim() === '') {
 			return;
 		}
-		const rows = await this.searchOpenProjects(query.trim());
-		if (rows === undefined) {
+		const answer = await this.searchOpenProjects(query.trim());
+		if (answer === undefined) {
 			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine did not answer the search. Nothing was changed.'));
 			return;
 		}
-		if (this.data.kind !== 'ready') {
-			return;
-		}
-		this.data = { ...this.data, search: { query: query.trim(), rows } };
+		this.activeSearch = { query: query.trim(), ...answer };
+		this.searchColumnLimit = COLUMN_PAGE;
 		await vscode.commands.executeCommand('setContext', MEMORY_SEARCH_CONTEXT, true);
 		this.changed.fire();
 	}
 
 	async clearSearch(): Promise<void> {
-		if (this.data.kind !== 'ready' || this.data.search === undefined) {
+		if (this.activeSearch === undefined) {
 			return;
 		}
-		this.data = { ...this.data, search: undefined };
+		this.activeSearch = undefined;
 		await vscode.commands.executeCommand('setContext', MEMORY_SEARCH_CONTEXT, false);
 		this.changed.fire();
 	}
@@ -546,15 +772,23 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			return;
 		}
 		this.expanded.add(project);
-		await this.loadProjectRows(project);
+		await this.readProjectRows(project, this.askedFor.get(project) ?? this.readLimit(PAGE_SIZE));
 	}
 
-	private async loadProjectRows(project: string): Promise<void> {
-		const json = await this.getJson(`/observations?project=${encodeURIComponent(project)}&limit=${PAGE_SIZE}`);
-		const rows = json === undefined ? undefined : parseMemoryRows(json);
-		if (rows !== undefined) {
-			this.rows.set(project, rows);
+	/** Reads one project's list and keeps it; a failed read leaves what was there. */
+	private async readProjectRows(project: string, limit: number): Promise<readonly MemoryRow[] | undefined> {
+		const epoch = this.filterEpoch;
+		const json = await this.getJson(`/observations?project=${encodeURIComponent(project)}&limit=${limit}`);
+		if (json === undefined) {
+			return undefined;
 		}
+		const rows = parseMemoryRows(json) ?? [];
+		if (epoch !== this.filterEpoch) {
+			return rows;
+		}
+		this.rows.set(project, rows);
+		this.askedFor.set(project, limit);
+		return rows;
 	}
 
 	showMore(project: string): void {
@@ -599,15 +833,34 @@ class MemoryProvider implements vscode.TreeDataProvider<MemoryNode> {
 			currentVersion,
 			confirm: async message => {
 				const update = vscode.l10n.t('Update');
-				const answer = await vscode.window.showInformationMessage(message, { modal: true }, update, vscode.l10n.t('Cancel'));
+				const answer = await vscode.window.showInformationMessage(message, { modal: true }, update);
 				return answer === update;
 			},
 			progress: line => console.log(`[memory] ${line}`)
 		});
-		if (result.ok) {
+		if (result.ok && result.restart === true) {
+			const restart = vscode.l10n.t('Restart engine');
+			const answer = await vscode.window.showInformationMessage(result.message, restart);
+			if (answer === restart) {
+				await this.restartEngine();
+			}
+		} else if (result.ok) {
 			void vscode.window.showInformationMessage(result.message);
 		} else {
 			void vscode.window.showWarningMessage(result.message);
+		}
+		this.refresh();
+	}
+
+	/** Starts the engine again so the downloaded version is the one that runs; one somebody else started is left alone. */
+	private async restartEngine(): Promise<void> {
+		const outcome = await restartMemory(line => console.log(`[memory] ${line}`));
+		if (outcome === 'restarted') {
+			void vscode.window.showInformationMessage(vscode.l10n.t('The memory engine was restarted.'));
+		} else if (outcome === 'not-ours') {
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine was started by another program, so PiCode does not stop it. Close all PiCode windows to use the new version.'));
+		} else {
+			void vscode.window.showWarningMessage(vscode.l10n.t('The memory engine did not start again.'));
 		}
 		this.refresh();
 	}
@@ -684,6 +937,9 @@ export function registerMemoryView(): vscode.Disposable {
 		view,
 		vscode.commands.registerCommand(MEMORY_REFRESH_COMMAND, () => provider.refresh()),
 		vscode.commands.registerCommand(MEMORY_SUMMARY_COMMAND, () => provider.summary()),
+		vscode.commands.registerCommand(MEMORY_FILTER_COMMAND, () => provider.chooseFilter()),
+		vscode.commands.registerCommand(MEMORY_CLEAR_FILTER_COMMAND, () => provider.clearFilter()),
+		vscode.commands.registerCommand(MEMORY_SHOW_MORE_IN_COLUMN_COMMAND, (project: string | undefined) => provider.showMoreInColumn(project)),
 		vscode.commands.registerCommand(MEMORY_SEARCH_COMMAND, () => provider.search()),
 		vscode.commands.registerCommand(MEMORY_CLEAR_SEARCH_COMMAND, () => provider.clearSearch()),
 		vscode.commands.registerCommand('picode.memory.toggleProject', (project: string) => provider.toggleProject(project)),
@@ -721,6 +977,8 @@ export function registerMemoryView(): vscode.Disposable {
 		}),
 		// The switch is a fact of the settings: flicked on, the block reads again; flicked off,
 		// the manifest hides it and there is nothing left to read.
+		// Other folders, other projects: what the last reading resolved no longer holds.
+		vscode.workspace.onDidChangeWorkspaceFolders(() => provider.refresh()),
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('picode.memory.enabled')) {
 				provider.refresh();

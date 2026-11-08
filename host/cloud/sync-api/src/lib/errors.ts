@@ -3,13 +3,15 @@
  * needs Next.js, so pure modules (crypto) can throw it and be tested under plain node.
  */
 export class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly retryAfterSeconds?: number,
-  ) {
+  readonly status: number;
+  readonly code: string;
+  readonly retryAfterSeconds?: number;
+
+  constructor(status: number, code: string, message: string, retryAfterSeconds?: number) {
     super(message);
+    this.status = status;
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
     this.name = "HttpError";
   }
 }

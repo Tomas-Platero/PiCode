@@ -241,7 +241,7 @@ abstract class AbstractGlobalActivityActionViewItem extends CompositeBarActionVi
 		return this.contextMenuActionsProvider();
 	}
 
-	private async run(): Promise<void> {
+	protected async run(): Promise<void> {
 		const disposables = new DisposableStore();
 		const menu = disposables.add(this.menuService.createMenu(this.menuId, this.contextKeyService));
 		const actions = await this.resolveMainMenuActions(menu, disposables);
@@ -309,6 +309,20 @@ export class AccountsActivityActionViewItem extends AbstractGlobalActivityAction
 		this._register(action);
 		this.registerListeners();
 		this.initialize();
+	}
+
+	/**
+	 * With a PiCode account signed in, the avatar opens the Account window: it is the home of the
+	 * account, the sync and everything Pro, so a menu of its entries in front of it only adds a step.
+	 * Signed out, the click keeps showing the menu (it carries the sign-in); the right-click menu is
+	 * always the full one.
+	 */
+	protected override async run(): Promise<void> {
+		if (this.groupedAccounts.get('picode')?.length) {
+			await this.commandService.executeCommand('picode.account.open');
+			return;
+		}
+		return super.run();
 	}
 
 	private registerListeners(): void {

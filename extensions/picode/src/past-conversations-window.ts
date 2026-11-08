@@ -28,10 +28,10 @@ export function windowPastConversationTools(agentDir: string | undefined, curren
 				: conversationsReport(sessionsDir, scope.slugs).files;
 		},
 		current,
-		turns: file => {
+		turns: async file => {
 			let text: string;
 			try {
-				text = fs.readFileSync(file, 'utf8');
+				text = await fs.promises.readFile(file, 'utf8');
 			} catch {
 				return [];
 			}

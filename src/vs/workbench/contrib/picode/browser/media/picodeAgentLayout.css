@@ -141,6 +141,23 @@
 	box-sizing: border-box;
 }
 
+.picode-overview::-webkit-scrollbar {
+	width: 8px;
+}
+
+.picode-overview::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.picode-overview::-webkit-scrollbar-thumb {
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--vscode-foreground) 20%, transparent);
+}
+
+.picode-overview::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 32%, transparent);
+}
+
 .picode-overview-section {
 	padding: 10px 0;
 	border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
@@ -531,6 +548,20 @@
 	display: none;
 }
 
+/* Its title row has nothing in it, so it is taken out and the panel takes its height. */
+.monaco-workbench.picode-agent .part.sidebar:has(.composite[id="workbench.view.picodeStatus"]) > .composite.title {
+	display: none;
+}
+
+/* The bar was sized with that row, and it is no longer a row: it still fills the column down to the same edge. */
+.monaco-workbench.picode-agent .part.sidebar:has(.composite[id="workbench.view.picodeStatus"]) {
+	height: -webkit-fill-available;
+}
+
+.monaco-workbench.picode-agent .part.sidebar:has(.composite[id="workbench.view.picodeStatus"]) .picode-overview {
+	height: calc(100% + 32px);
+}
+
 /* The `+N −M` row opens the changes. */
 .picode-overview-row.clickable {
 	cursor: pointer;
@@ -546,6 +577,50 @@
 	padding-left: 18px;
 }
 
+/* A task's facts sit one step further in. */
+.picode-overview-row.nested-deep {
+	padding-left: 36px;
+}
+
+.picode-overview-twistie {
+	flex: none;
+	margin-right: -4px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-overview-icon-action {
+	flex: none;
+	padding: 2px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-overview-icon-action:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	color: var(--vscode-foreground);
+}
+
+/* The agent's plan: what is done fades, the step in progress keeps the eye, a dropped one is struck through. */
+.picode-overview-row.todo-done .picode-overview-label {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-overview-row.todo-dropped .picode-overview-label {
+	color: var(--vscode-descriptionForeground);
+	text-decoration: line-through;
+}
+
+.picode-overview-row.todo-in_progress .picode-overview-label {
+	font-weight: 600;
+}
+
+.picode-overview-row.todo-blocked .picode-overview-icon {
+	color: var(--vscode-editorWarning-foreground);
+}
+
 /* The sessions column holds one view: its row of tab icons has nothing to choose between. */
 .monaco-workbench.picode-agent .part.auxiliarybar > .header-or-footer {
 	display: none;
@@ -555,4 +630,15 @@
  * choose between: it is left out in both layouts. */
 .monaco-workbench .chat-input-picker-item.chat-session-target-picker-item {
 	display: none;
+}
+
+/* -- legibility in the Agent layout --------------------------------------------------------- */
+
+/* The small grey texts (the chat's notice, the box's hint, the session groups) were nearly
+   invisible on the dark panels: they keep their quiet role but read clearly. */
+.monaco-workbench.picode-agent .disclaimer,
+.monaco-workbench.picode-agent .chat-input-container .editor-placeholder,
+.monaco-workbench.picode-agent .agent-session-section .agent-session-section-label,
+.monaco-workbench.picode-agent .agent-session-section .agent-session-section-count {
+	color: color-mix(in srgb, var(--vscode-foreground) 68%, transparent);
 }

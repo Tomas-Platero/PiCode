@@ -597,6 +597,10 @@ export class UserDataSyncWorkbenchService extends Disposable implements IUserDat
 
 		if (authenticationProviders.length === 1) {
 			const accounts = await this.getAccounts(authenticationProviders[0].id, authenticationProviders[0].scopes);
+			if (accounts.length === 1) {
+				// One provider and one account: there is nothing to choose, so use it instead of asking.
+				return accounts[0];
+			}
 			if (accounts.length) {
 				allAccounts.set(authenticationProviders[0].id, accounts);
 			} else {
