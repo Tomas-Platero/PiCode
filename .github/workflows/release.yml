@@ -77,6 +77,12 @@ jobs:
           path: ~\AppData\Local\electron\Cache
           key: picode-electron-${{ runner.os }}-${{ env.LOCK }}
 
+      # Before the long build: a release that cannot sign its feed would be offered to nobody.
+      - name: Check the signing key
+        env:
+          HOTFIX_SIGNING_KEY: ${{ secrets.HOTFIX_SIGNING_KEY }}
+        run: node build/release.mjs check-signing-key
+
       - name: Resolve and guard the version
         shell: bash
         env:
@@ -565,6 +571,8 @@ jobs:
           gh release edit "v${PICODE_VERSION}" --notes-file release-notes.md
 
       - name: Generate the update feed
+        env:
+          HOTFIX_SIGNING_KEY: ${{ secrets.HOTFIX_SIGNING_KEY }}
         shell: bash
         run: |
           # One line: a trailing backslash inside quotes keeps the next

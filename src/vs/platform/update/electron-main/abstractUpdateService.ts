@@ -23,6 +23,7 @@ import { IApplicationStorageMainService } from '../../storage/electron-main/stor
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { Architecture, AvailableForDownload, DisablementReason, IUpdate, IUpdateService, Platform, State, StateType, Target, UpdateType } from '../common/update.js';
 import * as semver from 'semver';
+import { feedPathOf, verifyUpdateSignature } from '../node/updateSignature.js';
 
 const LAST_KNOWN_VERSION_STORAGE_KEY = 'abstractUpdateService/lastKnownVersion';
 const LAST_ACTIVE_DAY_STORAGE_KEY = 'abstractUpdateService/lastActiveDay';
@@ -728,6 +729,17 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 					this.setState(State.Idle(UpdateType.Setup, undefined, explicit || undefined));
 
 					return Promise.resolve(undefined);
+				}
+
+				// Whoever can change the feed decides what gets downloaded and run, so a build that
+				// carries the key takes nothing the feed does not prove.
+				const publicKey = this.productService.hotfixPublicKey;
+				if (publicKey) {
+					const feedPath = feedPathOf(url, this.productService.updateUrl ?? '');
+					if (feedPath === undefined || !verifyUpdateSignature(update, feedPath, publicKey)) {
+						this.logService.error('update#isLatestVersion() - the update feed is not signed by PiCode; ignoring it', { url });
+						return Promise.resolve(undefined);
+					}
 				}
 
 				const fetchedVersion = normalizeVersion(update.productVersion);

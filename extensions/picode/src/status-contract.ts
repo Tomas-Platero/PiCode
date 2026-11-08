@@ -21,6 +21,9 @@ import type { VoiceStatus } from './voice-controller';
 
 export const STATUS_DATA_COMMAND = 'picode.setup.status';
 
+/** Only the MCP rows of the status, for a panel that re-reads often: no git, no network. */
+export const MCP_SERVERS_COMMAND = 'picode.setup.mcpServers';
+
 /**
  * One allowance window of the model's subscription, as the provider reported it.
  */

@@ -1,5 +1,5 @@
 import { firestore } from "./firebase-admin";
-import { readPlanId, type PlanId } from "./plans";
+import { readPlanFromProfile, readPlanId, type PlanId } from "./plans";
 
 /**
  * Reading the user's plan, and remembering it for a moment.
@@ -45,7 +45,7 @@ export async function readUserPlan(uid: string): Promise<PlanId> {
     return cached.plan;
   }
   const snapshot = await firestore().collection("users").doc(uid).get();
-  const plan = readPlanId(snapshot.data()?.plan);
+  const plan = readPlanFromProfile(snapshot.data(), now);
   // A plain Map in a long-lived function instance: bounded so a busy instance cannot grow without
   // limit, and evicted from the front when it would.
   if (planCache.size >= PLAN_CACHE_MAX) {

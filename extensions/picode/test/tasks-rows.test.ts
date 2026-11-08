@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { AgentTaskRow } from '../src/gentle-agents-store.ts';
 import type { BackgroundJobStatus } from '../src/status-contract.ts';
-import { FINISHED_AGENTS_SHOWN, elapsedLabel, taskBoard, taskDetail, taskState, taskTitle } from '../src/tasks-rows.ts';
+import { FINISHED_AGENTS_SHOWN, elapsedLabel, rowIcon, taskBoard, taskDetail, taskFacts, taskState, taskSummary, taskTitle } from '../src/tasks-rows.ts';
 
 const job = (jobNumber: string, label?: string): BackgroundJobStatus =>
 	({ jobNumber, ...(label === undefined ? {} : { label }), startedAt: 1_000 });
@@ -90,4 +90,33 @@ test('a job that ended is listed among the finished, newest first, with its own 
 	assert.deepEqual(board.finished.map(row => taskTitle(row)), ['lint', board.finished[1].kind === 'agent' ? taskTitle(board.finished[1]) : '']);
 	assert.equal(taskState(board.finished[0]), 'done');
 	assert.equal(taskDetail(board.finished[0], 9_999_999), 'done · 1m');
+});
+
+const failedAgent: AgentTaskRow = { id: 'a1', agent: 'gentle-ai-worker', label: 'Fix it', status: 'failed', startedAt: 1_000, endedAt: 61_000, lastStep: 'assistant reported an error', turns: 1, toolCalls: 2, error: 'assistant reported an error' };
+
+test('the summary says what is out, and both surfaces read it', () => {
+	assert.equal(taskSummary(taskBoard([])), 'Nothing running');
+	assert.equal(taskSummary(taskBoard([job('1'), job('2')])), '2 running');
+});
+
+test('a job opens to how long it ran, its command and its live output', () => {
+	const [row] = taskBoard([{ jobNumber: '1', startedAt: 1_000, command: 'npm test', outputPath: 'C:/tmp/job.log' }]).running;
+	assert.equal(rowIcon(row), 'terminal');
+	assert.deepEqual(taskFacts(row, 61_000).map(fact => [fact.label, fact.detail, fact.openFile]), [
+		['Running for', '1m', undefined],
+		['Command', 'npm test', undefined],
+		['Live output', 'Open', 'C:/tmp/job.log'],
+	]);
+});
+
+test('an agent opens to its state, role, time and steps, and a failure says one reason', () => {
+	const [row] = taskBoard([], [failedAgent]).finished;
+	assert.deepEqual(taskFacts(row, 100_000, () => 'The provider refused the key').map(fact => [fact.label, fact.detail]), [
+		['State', 'failed'],
+		['Agent', 'gentle-ai-worker'],
+		['Took', '1m'],
+		['Steps', '1 turn · 2 tool calls'],
+		['Problem', 'The provider refused the key'],
+	]);
+	assert.equal(taskFacts(row, 100_000).at(-1)?.detail, 'assistant reported an error');
 });

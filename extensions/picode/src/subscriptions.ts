@@ -94,6 +94,7 @@ export interface PiModelRuntime {
 
 /** The SDK slice: the one step that builds a runtime over PiCode's own profile. */
 export interface PiLoginSdk {
+	SettingsManager: OfficialSdk['SettingsManager'];
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 }
 

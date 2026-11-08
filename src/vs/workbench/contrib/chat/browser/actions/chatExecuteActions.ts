@@ -434,22 +434,8 @@ export class OpenPermissionPickerAction extends Action2 {
 			category: CHAT_CATEGORY,
 			f1: false,
 			precondition: ChatContextKeys.enabled,
-			menu: {
-				id: MenuId.ChatInputSecondary,
-				order: 1,
-				group: 'navigation',
-				when:
-					ContextKeyExpr.and(
-						ChatContextKeys.enabled,
-						ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
-						ChatContextKeys.chatModeKind.notEqualsTo(ChatModeKind.Ask),
-						ChatContextKeys.inQuickChat.negate(),
-						ContextKeyExpr.or(
-							ChatContextKeys.lockedToCodingAgent.negate(),
-							ChatContextKeys.lockedCodingAgentId.isEqualTo(AgentSessionProviders.Background),
-						),
-					)
-			}
+			// PiCode: not in the chat input. pi runs its tools without asking (ADR-040), so the picker
+			// promised a choice that did not exist.
 		});
 	}
 

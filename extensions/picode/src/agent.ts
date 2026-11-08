@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { withContext } from './context';
 import { contextBlockFor } from './editor-context';
+import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
 import { compareModels, MAX_COMPARED_MODELS, MIN_COMPARED_MODELS, renderComparison } from './compare-models';
 import { listModels } from './wizard-models';
@@ -30,7 +31,9 @@ import {
 import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
-import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, type BackgroundJobCompletion } from './background-jobs';
+import { LateTurnCollector, type LateTurnEvent } from './late-turn';
+import { TODO_TOOL_NAME, TodoTracker, todoFromResult, type TodoBoard } from './agent-todo';
+import { BackgroundJobTracker, backgroundJobRows, finishedJobRows, backgroundJobStartOf, gentleJobEndedBy, gentleJobOfToolResult, type BackgroundJobCompletion } from './background-jobs';
 import {
 	beforeUriPathOf,
 	clearTurnEdits,
@@ -44,6 +47,7 @@ import {
 	turnFileEdits,
 	undoableTurn,
 	undoEdits,
+	wasUndone,
 	whenEditsSettled,
 } from './chat-edits';
 import {
@@ -59,6 +63,7 @@ import {
 	type BackgroundCall,
 } from './background-cards';
 import { builtinsModuleOf, loadPiSdk, piBuiltinExtensions, type OfficialSdk } from './piSdk';
+import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piProjectSlug } from './sessions-provider';
@@ -211,7 +216,7 @@ export interface PiSession {
 	 * 'followUp') to queue the message» — which is what the owner read when he asked how it was going
 	 * while a background job's result was being processed.
 	 */
-	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp' }): Promise<void>;
+	prompt(text: string, options?: { readonly streamingBehavior?: 'steer' | 'followUp'; readonly images?: readonly PiImage[] }): Promise<void>;
 	abort(): Promise<void>;
 	subscribe(listener: (event: PiEvent) => void): () => void;
 	setModel(model: PiModel): Promise<void>;
@@ -264,6 +269,8 @@ interface PiSessionStats {
 export type PiServices = Awaited<ReturnType<OfficialSdk['createAgentSessionServices']>>;
 
 export interface PiSdk {
+	/** Told whether the folder is trusted, so pi does not load an untrusted folder's `.pi`. */
+	SettingsManager: OfficialSdk['SettingsManager'];
 	/** The options this editor passes: inline extensions of this embedded session (the permission gate and pi's MCP) (`resourceLoaderOptions`, see `mcp.ts`). */
 	createAgentSessionServices: OfficialSdk['createAgentSessionServices'];
 	/** What this editor passes: `customTools` are the editor's MCP tools given to pi as its own (see `mcp.ts`), `excludeTools` the agent tools that stay off (see `piConfig.ts`). */
@@ -533,18 +540,39 @@ function recordToolResult(toolName: string, args: unknown, isError: boolean | un
 /** The title the multi-diff editor opens with; the card's own header is the renderer's. */
 const TURN_EDITS_TITLE = vscode.l10n.t('Changed files');
 
-/** The button under the change card: puts the turn's files back as they were. */
 /** Opens the model comparison from the palette. */
 const COMPARE_MODELS_COMMAND_ID = 'picode.compareModels';
 
+/** The button under the change card: puts the turn's files back as they were. */
 export const UNDO_TURN_EDITS_COMMAND_ID = 'picode.undoTurnEdits';
 
-/** Runs the card's undo and tells the owner what happened, in the words they care about. */
-export async function undoTurnEditsCommand(key: unknown): Promise<void> {
+/**
+ * Asks, then runs the card's undo and tells the owner what happened, in the words they care about.
+ *
+ * Resolves to `true` only when the changes were put back: the chat greys the button out on that
+ * answer, so a card that was undone cannot be clicked again.
+ */
+export async function undoTurnEditsCommand(key: unknown): Promise<boolean> {
+	if (typeof key === 'string' && wasUndone(key)) {
+		void vscode.window.showInformationMessage(vscode.l10n.t('These changes were already undone.'));
+		return true;
+	}
 	const edits = typeof key === 'string' ? undoableTurn(key) : undefined;
 	if (edits === undefined) {
 		void vscode.window.showInformationMessage(vscode.l10n.t('These changes can no longer be undone.'));
-		return;
+		return false;
+	}
+	const count = edits.length;
+	const undo = vscode.l10n.t('Undo');
+	const answer = await vscode.window.showWarningMessage(
+		count === 1
+			? vscode.l10n.t('Undo the changes in {0} file?', count)
+			: vscode.l10n.t('Undo the changes in {0} files?', count),
+		{ modal: true, detail: vscode.l10n.t('Files go back to how they were before this answer. Files you changed since are left as they are.') },
+		undo
+	);
+	if (answer !== undo) {
+		return false;
 	}
 	const results = await undoEdits(edits, {
 		read: async absolutePath => fs.promises.readFile(absolutePath, 'utf8').catch(() => undefined),
@@ -560,6 +588,7 @@ export async function undoTurnEditsCommand(key: unknown): Promise<void> {
 			? vscode.l10n.t('Undid the changes in {0}.', files(undone))
 			: vscode.l10n.t('Undid {0}. {1} changed since and were left as they are.', files(undone), files(skipped)),
 	);
+	return true;
 }
 
 /**
@@ -593,7 +622,7 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 			};
 		});
 		stream.push(new vscode.ChatResponseMultiDiffPart(entries, TURN_EDITS_TITLE));
-		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: vscode.l10n.t('Undo these changes'), arguments: [rememberTurnForUndo(edits)] });
+		stream.button({ command: UNDO_TURN_EDITS_COMMAND_ID, title: vscode.l10n.t('$(discard) Undo these changes'), arguments: [rememberTurnForUndo(edits)] });
 	} catch (error) {
 		log(`turn edits card failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
@@ -612,12 +641,13 @@ async function pushTurnEditsCard(stream: vscode.ChatResponseStream, log: (line: 
 /** How long a slash command that began no agent run is given before its turn is ended, in milliseconds. */
 const COMMAND_GRACE_MS = 1_500;
 
-export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string): Promise<string> {
+export async function runTurn(session: PiSession, prompt: string, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, showReasoning: boolean, log: (line: string) => void, sessionCwd: string, images: readonly PiImage[] = []): Promise<string> {
 	// One ledger per turn: the card says what THIS answer changed, and the queue above
 	// (`turnChain`) guarantees two turns never overlap.
 	clearTurnEdits();
 	// The answer's own text, as it streamed.
 	let answer = '';
+	sessionsInChatTurn.add(session);
 	await new Promise<void>((resolve, reject) => {
 		let settled = false;
 		// Whether pi began an agent run for this prompt. A slash command that an extension runs by
@@ -785,7 +815,10 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 		// once, after everything queued has run (`_runAgentPrompt` loops on `hasQueuedMessages` and calls
 		// `_emitAgentSettled` in its `finally`), so the single `agent_settled` this awaits is the end of
 		// the work that includes this prompt.
-		session.prompt(prompt, session.isStreaming ? { streamingBehavior: 'followUp' } : undefined).then(() => {
+		const promptOptions = session.isStreaming || images.length > 0
+			? { ...(session.isStreaming ? { streamingBehavior: 'followUp' as const } : {}), ...(images.length > 0 ? { images } : {}) }
+			: undefined;
+		session.prompt(prompt, promptOptions).then(() => {
 			// A command an extension answers itself ends when its handler does: no agent run begins, so
 			// pi never says `agent_settled` and the turn would stay "working" for ever. A moment is
 			// allowed for a command that hands its text on to the agent (a skill) to start its run.
@@ -804,7 +837,7 @@ export async function runTurn(session: PiSession, prompt: string, stream: vscode
 			}, COMMAND_GRACE_MS);
 		}, reject);
 		void cancellation;
-	});
+	}).finally(() => sessionsInChatTurn.delete(session));
 	return answer;
 }
 
@@ -1333,6 +1366,7 @@ const EXTENSION_START_TIMEOUT_MS = 15_000;
  * still runs.
  */
 export async function bindSessionExtensions(session: PiSession, log: (line: string) => void): Promise<void> {
+	watchAgentWork(session);
 	if (typeof session.bindExtensions !== 'function') {
 		return;
 	}
@@ -1605,6 +1639,24 @@ let sessionMcpProvider: (() => readonly string[] | undefined) | undefined;
 /** The background jobs this window's agent left running, as the pill above the chat input reads them. */
 const backgroundJobs = new BackgroundJobTracker();
 
+/** The task list the agent keeps while it works: the Tasks block and the status column draw it. */
+const agentTodos = new TodoTracker();
+
+/** The core's command that adds a finished entry to a conversation. */
+const LATE_TURN_COMMAND = 'picode.chat.addLateTurn';
+
+/** The list to show now, or `undefined` when there is none (or it ended long ago). */
+export function currentTodos(): TodoBoard | undefined {
+	const board = agentTodos.current(Date.now());
+	const activity = agentActivity ?? lateTurnActivity;
+	return board === undefined ? undefined : { ...board, working: agentRunning || lateTurnsRunning > 0, ...(activity === undefined ? {} : { activity }) };
+}
+
+const agentWorkChanged = new vscode.EventEmitter<void>();
+
+/** Fires when what the agent is doing changed: the Tasks block repaints its plan at once. */
+export const onDidChangeAgentWork = agentWorkChanged.event;
+
 /** The command id the pill above the chat input polls for the jobs still running. */
 export const BACKGROUND_JOBS_COMMAND = 'picode.backgroundJobs';
 
@@ -1626,6 +1678,95 @@ export interface AgentStatusPush {
 /** What the agent is doing this instant, as the tool's progress line says it. */
 let agentActivity: string | undefined;
 
+/** The sessions with a chat answer open: what they do reaches the chat through that answer. */
+const sessionsInChatTurn = new WeakSet<PiSession>();
+
+/** How many chats have a turn running that pi started on its own. */
+let lateTurnsRunning = 0;
+
+/** What the latest of those turns is doing. */
+let lateTurnActivity: string | undefined;
+
+/**
+ * Shows what pi does on its own once a chat's answer has closed, as an entry of that conversation:
+ * without this, what it says when a background job ends reaches nobody until the chat is reopened.
+ */
+function watchLateTurns(session: PiSession, chatKey: string, log: (line: string) => void): void {
+	const collector = new LateTurnCollector();
+	session.subscribe(event => {
+		const wasRunning = collector.running;
+		const turn = collector.accept(event as LateTurnEvent, sessionsInChatTurn.has(session));
+		if (collector.running !== wasRunning) {
+			lateTurnsRunning += collector.running ? 1 : -1;
+		}
+		if (collector.running || wasRunning) {
+			lateTurnActivity = collector.activity;
+			notifyAgentStatus();
+		}
+		if (turn !== undefined) {
+			void vscode.commands.executeCommand(LATE_TURN_COMMAND, chatKey, turn.request, turn.answer)
+				.then(undefined, error => log(`a late turn could not be shown: ${error}`));
+		}
+	});
+}
+
+/**
+ * The plan and the jobs of one chat, for as long as its session lives. A turn's own listener is not
+ * enough: a job usually ends after its turn did, and pi's notice about it (and the turn it starts)
+ * would reach nobody.
+ */
+function watchAgentWork(session: PiSession): void {
+	const commands = new Map<string, unknown>();
+	session.subscribe(event => {
+		if (event.type === 'tool_execution_start' && typeof event.toolCallId === 'string') {
+			commands.set(event.toolCallId, event.args);
+			return;
+		}
+		if (event.type === 'message_end') {
+			const ended = gentleJobEndedBy(event.message);
+			if (ended !== undefined) {
+				backgroundJobs.complete({ id: ended.key });
+				notifyAgentStatus();
+			}
+			return;
+		}
+		if (event.type !== 'tool_execution_end' || typeof event.toolCallId !== 'string') {
+			return;
+		}
+		const args = event.args ?? commands.get(event.toolCallId);
+		commands.delete(event.toolCallId);
+		if (event.isError === true) {
+			return;
+		}
+		// The agent's own task list: every call answers with the whole list.
+		if (event.toolName === TODO_TOOL_NAME) {
+			const list = todoFromResult(event.result);
+			if (list !== undefined) {
+				agentTodos.set(list, Date.now());
+				notifyAgentStatus();
+			}
+			return;
+		}
+		// A job of gentle-pi's: its result says whether it now runs or has ended.
+		const job = gentleJobOfToolResult(event.toolName, event.result);
+		if (job === undefined) {
+			return;
+		}
+		if (job.running) {
+			const command = backgroundCallOf(args).command;
+			backgroundJobs.start({
+				jobNumber: job.key,
+				...(job.label === undefined ? {} : { label: job.label }),
+				...(command === undefined ? {} : { command }),
+				...(job.outputPath === undefined ? {} : { outputPath: job.outputPath }),
+			}, Date.now());
+		} else {
+			backgroundJobs.complete({ id: job.key });
+		}
+		notifyAgentStatus();
+	});
+}
+
 /** The arguments of the tool calls that have started and not ended yet, by call id: pi's end event does not repeat them. */
 const toolCallArgs = new Map<string, unknown>();
 /** Whether a turn is in flight in this window. */
@@ -1646,6 +1787,7 @@ const waitingTurns = new Set<WaitingTurn>();
  * push is told once and never again — the pill is a nicety, not something to retry.
  */
 const notifyAgentStatus = (): void => {
+	agentWorkChanged.fire();
 	const status: AgentStatusPush = {
 		backgroundJobs: runningBackgroundJobs(),
 		running: agentRunning,
@@ -1926,8 +2068,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
 		const chat = chatFor(request);
 		toolToken.current = request.toolInvocationToken;
-		// The picker's two positions name the four level names the host has shipped; see
-		// `permissions.ts`. The setting covers a request that arrives without a level.
+		// The four level names the host has shipped; see `permissions.ts`. The setting covers a
+		// request that arrives without a level.
 		turnContext.current = {
 				stream,
 				level: permissionLevelOf(request.permissionLevel, vscode.workspace.getConfiguration('chat').get('permissions.default')),
@@ -2002,6 +2144,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				chat.services = await loaded.sdk.createAgentSessionServices({
 					cwd,
 					...(agentDir === undefined ? {} : { agentDir }),
+					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
 						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
 					},
@@ -2067,6 +2210,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				chat.session = created.session;
 				// The session exists and its extensions are loaded; this is what starts them. Called
 				// before the first turn, because `session_start` is where they do their startup work.
+				watchLateTurns(chat.session, chat.key, deps.log);
 				await bindSessionExtensions(chat.session, deps.log);
 				chat.sessionFolder = cwd;
 				chat.sessionScopeKey = scopeKey;
@@ -2159,7 +2303,17 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				if (turnContext.current !== undefined) {
 					turnContext.current.command = watched;
 				}
-				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd);
+				// Pasted or attached images travel as images, whole or not at all: a cut-off one would make the
+				// provider refuse every later turn of the conversation.
+				const attached = await imagesOf(request.references);
+				// The model decides what it can read: pi's own terminal sends images to deepseek-v4-flash although its
+				// catalogue says text only, so nothing is held back here by what the catalogue declares.
+				if (attached.skipped.length > 0) {
+					stream.markdown(`${vscode.l10n.t('Some images could not be read and were not sent: {0}. Attach them again as PNG, JPEG, WebP or GIF.', attached.skipped.join(', '))}
+
+`);
+				}
+				await runTurn(chat.session, framed, stream, token, settings.showReasoning, deps.log, cwd, attached.images);
 				if (watched !== undefined && slash !== undefined && !token.isCancellationRequested
 					&& await judgeCommandRun(chat.session, slash.name, slash.args, watched, stream)) {
 					sessionChangedEmitter.fire();
@@ -2222,7 +2376,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				const controller = new AbortController();
 				token.onCancellationRequested(() => controller.abort());
 				pinAgentDir(agentDir);
-				const services = await loaded.sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }) });
+				const services = await loaded.sdk.createAgentSessionServices({ cwd, ...(agentDir === undefined ? {} : { agentDir }), ...settingsForFolder(loaded.sdk, cwd, agentDir) });
 				return compareModels(chosen.map(item => item.ref), async (ref, signal) => {
 					const slash = ref.indexOf('/');
 					const model = services.modelRuntime.getModel(ref.slice(0, slash), ref.slice(slash + 1));

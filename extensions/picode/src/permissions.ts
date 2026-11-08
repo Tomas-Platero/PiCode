@@ -6,8 +6,8 @@
 /**
  * The chat's "Default permissions" control, as it reaches pi's native tools.
  *
- * The picker offers two positions — Ask (Default) and Allow all — but the host has shipped
- * four level names over time (`default`, `assisted`, `autoApprove`, `autopilot`) and a stale
+ * The chat input no longer shows a picker (see `shouldAsk`); the level still arrives on the
+ * request and through the setting. The host has shipped four level names over time (`default`, `assisted`, `autoApprove`, `autopilot`) and a stale
  * `chat.permissions.default` can still name one the picker no longer shows. So the mapping
  * stays four-way: ask for the mutating tools at the asking levels, run free at the
  * approving ones, and degrade to asking only where a level is explicitly known to ask.

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { randomUUID } from 'crypto';
 
 /** What the window is told when a sign-in finishes (or does not). */
 export interface AccountSignInResult {
@@ -73,11 +74,18 @@ export async function signInFromSetup(options: {
 				resolve(value);
 			}
 		};
+		// Any web page can open a `picode://` address, and a code for the page's own account would
+		// sign the editor in to it. Only the page this attempt opened knows this value.
+		const state = randomUUID();
 		// The callback arrives through the launch path, not through a channel of ours.
 		removeWaiter = installCallbackWaiter(url => {
 			const received = codeFromCallbackUrl(url);
 			if (received === undefined) {
 				return false;
+			}
+			if (new URL(url).searchParams.get('state') !== state) {
+				options.log('[picode-onboarding] sign-in: ignored a callback from another page');
+				return true;
 			}
 			options.log('[picode-onboarding] sign-in: the browser called back');
 			settle(received);
@@ -89,15 +97,7 @@ export async function signInFromSetup(options: {
 		const registered = options.registerProtocol();
 		options.log(`[picode-onboarding] sign-in: picode:// ${registered ? 'claimed for this executable' : 'could NOT be claimed'}`);
 
-		// An answer that arrived before this attempt was made is used instead of sending the browser
-		// round again: the code is one-time and it belongs to this sign-in.
-		const early = takeBufferedCode();
-		if (early !== undefined) {
-			options.log('[picode-onboarding] sign-in: using the callback that arrived before the click');
-			settle(early);
-			return;
-		}
-		const authUrl = `${options.webOrigin}/auth/editor?callback=${encodeURIComponent('picode://auth/callback?flow=editor')}`;
+		const authUrl = `${options.webOrigin}/auth/editor?callback=${encodeURIComponent(`picode://auth/callback?flow=editor&state=${state}`)}`;
 		options.log(`[picode-onboarding] sign-in: opening the browser`);
 		options.onStart?.(() => settle(undefined), authUrl);
 		void options.openExternal(authUrl).catch(error => {
@@ -167,30 +167,16 @@ export function tryConsumeAccountCallback(url: string): boolean {
 		lastRejectedUrl = url;
 		return false;
 	}
-	if (waitingForCallback === undefined) {
-		// A callback with nobody waiting is kept, not thrown away: the sign-in may have been
-		// restarted, and a one-time code that arrives early is still that sign-in's answer.
-		bufferedCode = payload;
-		return true;
-	}
-	return waitingForCallback(url) === true;
+	// With nobody waiting here it is not this window's: an editor window may be the one signing in.
+	return waitingForCallback?.(url) === true;
 }
 
-/** The last code that arrived with nobody waiting, for the next sign-in to use. */
-let bufferedCode: string | undefined;
 /** The last callback address that carried no code, kept for the log. */
 let lastRejectedUrl: string | undefined;
 
 /** Whether a callback arrived that carried no code (used by the debug line in the caller). */
 export function lastRejectedCallback(): string | undefined {
 	return lastRejectedUrl;
-}
-
-/** Takes the buffered code, if any: a sign-in that starts after its answer arrived. */
-export function takeBufferedCode(): string | undefined {
-	const code = bufferedCode;
-	bufferedCode = undefined;
-	return code;
 }
 
 /** The predicate above, installed for the duration of one sign-in. */

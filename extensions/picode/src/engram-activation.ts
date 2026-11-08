@@ -35,7 +35,7 @@ import {
 	SHIPPED_ENGRAM_FOLDER,
 	type EngramProbeIo
 } from './engram';
-import { leaveEngine, markEngineStarted, takeLease } from './engram-leases';
+import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, processIsAlive, startedEngine, takeLease } from './engram-leases';
 import { mcpServersTextWithRemoved, serverEntry } from './mcp-add';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
@@ -106,14 +106,62 @@ export function stopStartedMemory(): void {
 	if (memoryDir === undefined) {
 		return;
 	}
-	const enginePid = leaveEngine(memoryDir, process.pid);
-	if (enginePid !== undefined && isEngineProcess(enginePid)) {
-		try {
-			process.kill(enginePid);
-		} catch {
-			// Already gone: nothing is left to stop.
+	// The engine may have moved to another folder since this window opened (an update restarts it
+	// from the new binary), so both the folder this window knows and the one it would pick now count.
+	const current = firstEngramBinary(memoryIo());
+	const folders = new Set([memoryDir, ...(current === undefined ? [] : [path.dirname(current)])]);
+	for (const folder of folders) {
+		const enginePid = leaveEngine(folder, process.pid);
+		if (enginePid !== undefined && isEngineProcess(enginePid)) {
+			try {
+				process.kill(enginePid);
+			} catch {
+				// Already gone: nothing is left to stop.
+			}
 		}
 	}
+}
+
+/** What a restart of the memory engine came to. */
+export type MemoryRestart = 'restarted' | 'not-ours' | 'failed';
+
+/**
+ * Stops the engine PiCode started and starts it again from the newest binary, so an update is used
+ * without closing every window. An engine somebody else started is never stopped: `'not-ours'`.
+ */
+export async function restartMemory(log: (line: string) => void): Promise<MemoryRestart> {
+	const io = memoryIo();
+	const previous = memoryDir;
+	const enginePid = previous === undefined ? undefined : startedEngine(previous);
+	if (previous === undefined || enginePid === undefined || !isEngineProcess(enginePid)) {
+		return 'not-ours';
+	}
+	try {
+		process.kill(enginePid);
+	} catch {
+		// Already gone: the start below is what matters.
+	}
+	// The old engine must be gone before the new one starts, or the probe joins it.
+	for (let attempt = 0; attempt < 20 && processIsAlive(enginePid); attempt++) {
+		await new Promise<void>(resolve => setTimeout(resolve, 250));
+	}
+	forgetStartedEngine(previous);
+
+	const binary = firstEngramBinary(io);
+	if (binary === undefined) {
+		return 'failed';
+	}
+	process.env['ENGRAM_BIN'] = binary;
+	memoryDir = path.dirname(binary);
+	moveLeases(previous, memoryDir);
+	try {
+		takeLease(memoryDir, process.pid);
+	} catch (error) {
+		log(`memory: this window could not be recorded as using the engine (${error instanceof Error ? error.message : String(error)})`);
+	}
+	const settled = await ensureEngramServer(io, { spawn: spawnDetached });
+	log(`memory: ${engramStateLine(settled.state)}`);
+	return settled.server !== undefined ? 'restarted' : 'failed';
 }
 
 /**

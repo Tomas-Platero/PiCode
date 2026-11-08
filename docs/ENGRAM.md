@@ -229,8 +229,9 @@ para hacerlo desde el editor.
 | --- | --- | --- |
 | ¿Está viva? versión e identidad | `GET /health` | `service`, `status`, `version`, `instance_id` |
 | Recuento por proyecto | `GET /projects` | nombre + recuerdos, sesiones y prompts |
-| **Listar** recuerdos (por proyecto) | `GET /observations?project=…&limit=…&offset=…` | **corregido el 2026-10-20**: sí existe; devuelve la fila entera, incluido el cuerpo |
-| Buscar | `GET /search?q=…&project=…` | sin `q` responde 400; con `q=*` devuelve todo |
+| **Listar** recuerdos (por proyecto) | `GET /observations?project=…&limit=…` | **corregido el 2026-10-20**: sí existe; devuelve la fila entera, incluido el cuerpo. **Medido el 2026-11-05 (3.6.0):** `offset` se ignora, así que otra página es un `limit` mayor |
+| Filtrar | `type=` y `scope=` en `/search`; `scope=` en `/observations` | **Medido el 2026-11-05 (3.6.0):** `/observations` ignora `type` y ninguna de las dos rutas cambia el orden; el resto de filtros (varios tipos, fecha) se aplican en el editor |
+| Buscar | `GET /search?q=…&project=…&limit=…` | sin `q` responde 400. **Medido el 2026-11-05 (3.6.0):** 10 filas por defecto y 20 como máximo por proyecto, aunque `limit` pida más; el proyecto no distingue mayúsculas |
 | Un recuerdo entero | `GET /observations/{id}` | cuerpo, alcance, revisión, duplicados y de qué sesión salió |
 | Contexto para el prompt | `GET /context` | el bloque «Memory from Previous Sessions» |
 | Conflictos | `GET /conflicts` | `relations` con `from_id`/`to_id` |

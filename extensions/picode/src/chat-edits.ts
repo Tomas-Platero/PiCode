@@ -349,7 +349,24 @@ export function undoableTurn(key: string): readonly TurnFileEdit[] | undefined {
 	return undoable.get(key);
 }
 
+/** Keys of turns that were undone, so a second click can say so instead of "no longer possible". */
+const undone = new Set<string>();
+
 /** Forgets a turn after it was undone, so a second click cannot act on stale content. */
 export function forgetUndoableTurn(key: string): void {
 	undoable.delete(key);
+	undone.add(key);
+	// Bounded like the turns themselves: an old key is only ever clicked from an old card.
+	while (undone.size > MAX_UNDOABLE_TURNS * 4) {
+		const oldest = undone.values().next().value;
+		if (oldest === undefined) {
+			break;
+		}
+		undone.delete(oldest);
+	}
+}
+
+/** Whether this card's changes were already put back. */
+export function wasUndone(key: string): boolean {
+	return undone.has(key);
 }

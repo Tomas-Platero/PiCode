@@ -13,6 +13,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+import { IHostService } from '../../../services/host/browser/host.js';
 import { URI } from '../../../../base/common/uri.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
@@ -286,6 +287,7 @@ class PicodeUsageStatusContribution extends Disposable {
 		@ICommandService private readonly commandService: ICommandService,
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 		@IOpenerService openerService: IOpenerService,
+		@IHostService hostService: IHostService,
 	) {
 		super();
 		this.panel = this._register(new UsagePanel(layoutService.mainContainer, () => void this.refresh(), () => this.paint(), openerService));
@@ -302,7 +304,17 @@ class PicodeUsageStatusContribution extends Disposable {
 			this.paint();
 			void this.refresh();
 		}));
-		const handle = setInterval(() => void this.refresh(), REFRESH_MS);
+		// In the background nobody is reading the counter; coming back reads it at once.
+		const handle = setInterval(() => {
+			if (hostService.hasFocus || this.panel.visible) {
+				void this.refresh();
+			}
+		}, REFRESH_MS);
+		this._register(hostService.onDidChangeFocus(focused => {
+			if (focused) {
+				void this.refresh();
+			}
+		}));
 		this._register(toDisposable(() => clearInterval(handle)));
 		this._register(toDisposable(() => this.entry?.dispose()));
 		void this.refresh();

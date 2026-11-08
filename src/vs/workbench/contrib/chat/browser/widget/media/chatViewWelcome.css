@@ -244,3 +244,35 @@ div.chat-welcome-view {
 		background-color: var(--vscode-list-hoverBackground);
 	}
 }
+
+/* PiCode: one-click starting points under the greeting */
+.chat-welcome-view .chat-welcome-view-suggestions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 16px;
+	max-width: 480px;
+}
+
+.chat-welcome-view .chat-welcome-view-suggestion {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 12px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 16%, transparent);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.chat-welcome-view .chat-welcome-view-suggestion:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.chat-welcome-view .chat-welcome-view-suggestion .codicon {
+	color: var(--vscode-descriptionForeground);
+}

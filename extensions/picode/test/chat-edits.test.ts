@@ -160,7 +160,7 @@ test('the before-scheme provider can still serve a kept snapshot', async () => {
 	assert.strictEqual(beforeContentFor('/w/keep.ts'), 'old\n');
 });
 
-import { undoEdits, rememberTurnForUndo, undoableTurn, forgetUndoableTurn, type TurnFileEdit, type UndoIo } from '../src/chat-edits.ts';
+import { undoEdits, rememberTurnForUndo, undoableTurn, forgetUndoableTurn, wasUndone, type TurnFileEdit, type UndoIo } from '../src/chat-edits.ts';
 
 function fakeDisk(files: Record<string, string>): UndoIo & { files: Record<string, string> } {
 	return {
@@ -202,4 +202,12 @@ test('only the last turns stay undoable, and an undone turn is forgotten', () =>
 	assert.notStrictEqual(undoableTurn(keys[6]), undefined);
 	forgetUndoableTurn(keys[6]);
 	assert.strictEqual(undoableTurn(keys[6]), undefined);
+});
+
+test('a card that was undone says so instead of looking forgotten', () => {
+	const key = rememberTurnForUndo([]);
+	assert.strictEqual(wasUndone(key), false);
+	forgetUndoableTurn(key);
+	assert.strictEqual(undoableTurn(key), undefined);
+	assert.strictEqual(wasUndone(key), true);
 });
