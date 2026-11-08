@@ -64,7 +64,7 @@ test('progress counts what is done out of what still counts', () => {
 });
 
 test('every state has its own icon', () => {
-	const icons = (['pending', 'in_progress', 'blocked', 'done', 'dropped'] as const).map(todoIcon);
+	const icons = (['pending', 'in_progress', 'blocked', 'done', 'dropped'] as const).map(status => todoIcon(status));
 	assert.equal(new Set(icons).size, 5);
 });
 

@@ -38,7 +38,7 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
 		{
 			id: 'issues',
-			since: '1.0.9',
+			since: '2.0.0',
 			plan: 'pro',
 			icon: Codicon.issues,
 			title: localize('picodeWhatsNew.issues.title', "GitHub and Jira issues"),
@@ -53,7 +53,7 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 		},
 		{
 			id: 'sync',
-			since: '1.0.9',
+			since: '2.0.0',
 			plan: 'pro',
 			icon: Codicon.cloud,
 			title: localize('picodeWhatsNew.sync.title', "Pick what syncs"),
@@ -68,7 +68,7 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 		},
 		{
 			id: 'account',
-			since: '1.0.9',
+			since: '2.0.0',
 			plan: 'free',
 			icon: Codicon.account,
 			title: localize('picodeWhatsNew.account.title', "Your account, in one place"),
@@ -83,7 +83,7 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 		},
 		{
 			id: 'plan',
-			since: '1.0.9',
+			since: '2.0.0',
 			plan: 'free',
 			icon: Codicon.checklist,
 			title: localize('picodeWhatsNew.plan.title', "See the agent's plan"),
@@ -98,7 +98,7 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 		},
 		{
 			id: 'job',
-			since: '1.0.9',
+			since: '2.0.0',
 			plan: 'free',
 			icon: Codicon.terminal,
 			title: localize('picodeWhatsNew.job.title', "Background jobs in view"),
