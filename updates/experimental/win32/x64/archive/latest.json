@@ -1,15 +1,10 @@
 {
-  "version": "61344f6ea5158e7e21f49fa9d38f291ddcf6c05c",
-  "productVersion": "1.144.8",
-  "picodeVersion": "1.0.8-experimental",
-  "kind": "hotfix",
-  "timestamp": 1793912861114,
-  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v1.0.8-experimental/PiCode-win32-x64-1.0.8-experimental.zip",
-  "sha256hash": "0ba2a1a8b7aa59d34ae0b9a1296b2f8976a712f52b0332504df8caffadace580",
-  "delta": {
-    "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v1.0.8-experimental/PiCode-win32-x64-1.0.8-experimental-update-from-1.0.7-experimental.zip",
-    "sha256hash": "9f22e013558fbe80953a97b4a17610ad8e132b7f9b491793c453fb0282310200",
-    "from": "1.0.7-experimental"
-  },
-  "signature": "RWCUBD9VpOzIV0VqBbvp8uzCl9SfIgsHWqb7yAmJJwgUGJtIG3k/xh8Ht4v5bLtIsO5Q2lEVcnPdAwj02c4fCw=="
+  "version": "e920ff007d758dd16c268f1737a667c484b956d0",
+  "productVersion": "1.144.9",
+  "picodeVersion": "2.0.0-experimental",
+  "kind": "release",
+  "timestamp": 1794174131420,
+  "url": "https://github.com/Tomas-Platero/PiCode/releases/download/v2.0.0-experimental/PiCode-win32-x64-2.0.0-experimental.zip",
+  "sha256hash": "01d7722da3803bf542700141026e70fb3f1417844a61edbf123a0451f7080903",
+  "signature": "aZCruNyzkrLI01zwH4AUzPwD6qihvM8LnzxrY/OnMUFpFyraV4Avrgg3Q0VScAWH2HR6yHFzJL7M5CHbZhlUBw=="
 }

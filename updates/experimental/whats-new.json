@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "1.0.8-experimental",
+			"notes": "### 🔒 Security\n\n- **Safer sign-in:** a web page can no longer sign the editor in to someone else's account. Each sign-in now only accepts the answer to its own request.\n- **Signed updates:** PiCode now checks that an update notice really comes from PiCode, and ignores it if it doesn't."
+		},
+		{
 			"version": "1.0.7-experimental",
 			"notes": "### 🔒 Security\n\n- **Opening a folder no longer runs its code without your permission.** A project's own extensions, packages, settings and MCP servers only load once you trust the folder. In Restricted Mode, its MCP servers, agents and skills are left out too. When you trust the folder, they load on your next message.\n\n### ✨ New\n\n- **Memory filters:** filter your memories by type, scope and date. In the Agent layout, long lists now have *Show N more*, and search finds more results per project.\n- **A better empty chat:** new chats now suggest starting points.\n- **Clearer text in the Agent layout.**\n\n### ⚡ Faster\n\n- **A quieter Status column:** it checks for changes less often, doesn't redraw when nothing has changed, and refreshes every 30 seconds when the window is in the background.\n- **Lighter background work:** memory lists aren't downloaded again without need, usage limits aren't read while the window is in the background, and searching past conversations no longer blocks the chat.\n- **Faster session list:** it's kept between starts, so it appears sooner."
 		},
