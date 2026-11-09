@@ -637,6 +637,7 @@
 	"picodeWhatsNew.board.doing": "In progress",
 	"picodeWhatsNew.board.done": "Done",
 	"picodeWhatsNew.board.todo": "To do",
+	"picodeWhatsNew.bugsFixed": "Bugs fixed",
 	"picodeWhatsNew.close": "Close",
 	"picodeWhatsNew.command": "Show What's New",
 	"picodeWhatsNew.connect": "Connect GitHub or Jira",
