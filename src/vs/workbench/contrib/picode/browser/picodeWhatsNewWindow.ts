@@ -33,6 +33,8 @@ export interface IWhatsNewWindowOptions {
 	readonly highlights: readonly IWhatsNewHighlight[];
 	/** The releases' list of changes, as Markdown; it may arrive after the window opened. */
 	readonly changes: Promise<string | undefined>;
+	/** The update stays inside one line of versions (2.0.0 to 2.0.1): that list is the bugs fixed since. */
+	readonly fixesOnly: boolean;
 	readonly releaseUrl: string;
 }
 
@@ -94,6 +96,7 @@ export function showWhatsNewWindow(options: IWhatsNewWindowOptions, services: IW
 	const highlights = [...options.highlights.filter(h => h.plan === 'pro'), ...options.highlights.filter(h => h.plan === 'free')];
 	let changes: string | undefined;
 	let active = 0;
+	const changesTitle = () => options.fixesOnly ? localize('picodeWhatsNew.bugsFixed', "Bugs fixed") : localize('picodeWhatsNew.allChanges', "All changes");
 	const pageCount = () => highlights.length + (changes ? 1 : 0);
 
 	const renderNav = () => {
@@ -109,7 +112,7 @@ export function showWhatsNewWindow(options: IWhatsNewWindowOptions, services: IW
 			navRow(highlight.icon, highlight.title, index);
 		});
 		if (changes) {
-			navRow(Codicon.listUnordered, localize('picodeWhatsNew.allChanges', "All changes"), highlights.length);
+			navRow(Codicon.listUnordered, changesTitle(), highlights.length);
 		}
 	};
 	const navRow = (icon: ThemeIcon, label: string, index: number) => {
@@ -134,7 +137,7 @@ export function showWhatsNewWindow(options: IWhatsNewWindowOptions, services: IW
 		if (highlight) {
 			renderHighlight(page, highlight, pageStore, services, close, render);
 		} else if (changes) {
-			append(page, $('h2.picode-whatsnew-page-title')).textContent = localize('picodeWhatsNew.allChanges', "All changes");
+			append(page, $('h2.picode-whatsnew-page-title')).textContent = changesTitle();
 			const rendered = services.markdownRendererService.render(new MarkdownString(changes));
 			pageStore.add(rendered);
 			page.appendChild(rendered.element).classList.add('picode-whatsnew-changes');
@@ -186,9 +189,14 @@ export function showWhatsNewWindow(options: IWhatsNewWindowOptions, services: IW
 	void options.changes.then(markdown => {
 		if (markdown && !disposables.isDisposed) {
 			changes = markdown;
-			// One more page in the list; the one being read (and its demo) is left as it is.
-			renderNav();
-			renderFooter();
+			if (highlights[active]) {
+				// One more page in the list; the one being read (and its demo) is left as it is.
+				renderNav();
+				renderFooter();
+			} else {
+				// Nothing of our own to show: this is the only page, and it was blank until now.
+				render();
+			}
 		}
 	});
 
