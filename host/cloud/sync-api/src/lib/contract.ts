@@ -71,6 +71,8 @@ export interface SyncRequestContext {
   uid: string;
   /** Email claim of the verified Firebase ID token, when present. */
   email?: string;
+  /** Whether the identity provider vouches for that email; an unverified one could be someone else's. */
+  emailVerified: boolean;
   /** X-Account-Type header value (authentication provider id, e.g. "picode"). */
   accountType: string;
   /** X-Client-Name header value, e.g. "picode". */
