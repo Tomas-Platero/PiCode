@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { composeWhatsNew, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
+import { composeWhatsNew, extractWhatChanged, highlightsSince, readHistory, sameVersionLine, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
 
 test('returns the grouped summary without its heading or the sections after it', () => {
 	const body = ['Channel text', '', '## What changed', '', '### ✨ New', '', '- A thing', '', '## What\'s Changed', '', '* raw changelog'].join('\n');
@@ -47,6 +47,15 @@ test('stays quiet on a first install', () => {
 	assert.strictEqual(shouldShowWhatsNew({ last: '', current: '0.7.3', editorLast: '', editorCurrent: '1.142.15' }), false);
 	assert.strictEqual(shouldShowWhatsNew({ last: '', current: '0.7.3', editorLast: '1.142.15', editorCurrent: '1.142.15' }), false);
 	assert.strictEqual(shouldShowWhatsNew({ last: '', current: '', editorLast: '1.142.14', editorCurrent: '1.142.15' }), false);
+});
+
+test('versions share their news when only the last number differs', () => {
+	assert.strictEqual(sameVersionLine('2.0.0-experimental', '2.0.1-experimental'), true);
+	assert.strictEqual(sameVersionLine('2.0.1', '2.0.12'), true);
+	assert.strictEqual(sameVersionLine('2.0.9', '2.1.0'), false);
+	assert.strictEqual(sameVersionLine('1.9.9', '2.0.0'), false);
+	assert.strictEqual(sameVersionLine('', '2.0.0'), false);
+	assert.strictEqual(sameVersionLine('junk', 'junk'), false);
 });
 
 const entry = (version: string) => ({ version, notes: `- change in ${version}` });
