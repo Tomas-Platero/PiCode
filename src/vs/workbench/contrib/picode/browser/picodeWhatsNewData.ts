@@ -96,6 +96,21 @@ export function sameVersionLine(a: string, b: string): boolean {
 	return left !== undefined && left === line(b);
 }
 
+/** What belongs to the line of `current` (`2.0.x`) and came by it, newest first: the news and fixes a fix release keeps showing. */
+export function inVersionLine<T extends { readonly since: string }>(all: readonly T[], current: string): T[] {
+	return all
+		.filter(item => sameVersionLine(item.since, current) && compareVersions(item.since, current) <= 0)
+		.sort((a, b) => compareVersions(b.since, a.since));
+}
+
+/**
+ * The fixes of the line up to `current`, as a Markdown list. Undefined when there are none.
+ */
+export function fixesMarkdown(fixes: readonly { readonly since: string; readonly text: string }[], current: string): string | undefined {
+	const list = inVersionLine(fixes, current).map(fix => `- ${fix.text}`);
+	return list.length > 0 ? list.join('\n') : undefined;
+}
+
 /**
  * Whether the window opens after this start.
  *
