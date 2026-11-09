@@ -20,7 +20,7 @@ import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
-import { composeWhatsNew, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { composeWhatsNew, sameVersionLine, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
 import { whatsNewHighlights } from './picodeWhatsNewHighlights.js';
 import { IPicodeProEntitlement } from './account/picodeProEntitlement.js';
 import { IWhatsNewWindowServices, showWhatsNewWindow } from './picodeWhatsNewWindow.js';
@@ -66,7 +66,9 @@ async function showWhatsNew(version: string, last: string, accessor: { readonly 
 	const subtitle = last
 		? localize('picodeWhatsNew.subtitleSince', "New since {0}", last)
 		: localize('picodeWhatsNew.subtitleAll', "Try each one right here.");
-	showWhatsNewWindow({ version, subtitle, highlights, changes, releaseUrl }, services);
+	// Inside one line of versions (2.0.0 to 2.0.1) the list is the fixes that came since: the page says so.
+	const fixesOnly = !manual && sameVersionLine(last, version);
+	showWhatsNewWindow({ version, subtitle, highlights, changes, fixesOnly, releaseUrl }, services);
 	return true;
 }
 
