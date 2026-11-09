@@ -20,7 +20,8 @@ import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
-import { composeWhatsNew, sameVersionLine, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { composeWhatsNew, fixesMarkdown, inVersionLine, sameVersionLine, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { whatsNewFixes } from './picodeWhatsNewFixes.js';
 import { whatsNewHighlights } from './picodeWhatsNewHighlights.js';
 import { IPicodeProEntitlement } from './account/picodeProEntitlement.js';
 import { IWhatsNewWindowServices, showWhatsNewWindow } from './picodeWhatsNewWindow.js';
@@ -50,14 +51,16 @@ const RELEASES_API = 'https://api.github.com/repos/Tomas-Platero/PiCode/releases
  */
 async function showWhatsNew(version: string, last: string, accessor: { readonly requestService: IRequestService; readonly productService: IProductService; readonly services: IWhatsNewWindowServices }, manual = false): Promise<boolean> {
 	const { requestService, productService, services } = accessor;
-	const changes = (async () => {
+	// Inside one line of versions (2.0.0 to 2.0.2) the window keeps the line's pages and lists every fix the line brought, in the person's language.
+	const fixesOnly = !manual && sameVersionLine(last, version);
+	const changes = fixesOnly ? Promise.resolve(fixesMarkdown(whatsNewFixes(), version)) : (async () => {
 		const [notes, history] = await Promise.all([fetchNotes(requestService, version), fetchHistory(requestService, productService.quality)]);
 		// Asked for by hand (Help menu), a version without its own summary shows the newest one the
 		// channel has, so the window is never empty when something is on record.
 		const current = notes ? { version, notes } : history.find(entry => entry.version === version) ?? (manual ? history[0] : undefined);
 		return current ? composeWhatsNew(whatsNewSince(last, current, history)) : undefined;
 	})();
-	const highlights = highlightsSince(whatsNewHighlights(), last, version);
+	const highlights = fixesOnly ? inVersionLine(whatsNewHighlights(), version) : highlightsSince(whatsNewHighlights(), last, version);
 	// With nothing of our own to tell, the window is only worth opening if the release has something.
 	if (highlights.length === 0 && !(await changes)) {
 		return false;
@@ -66,8 +69,6 @@ async function showWhatsNew(version: string, last: string, accessor: { readonly 
 	const subtitle = last
 		? localize('picodeWhatsNew.subtitleSince', "New since {0}", last)
 		: localize('picodeWhatsNew.subtitleAll', "Try each one right here.");
-	// Inside one line of versions (2.0.0 to 2.0.1) the list is the fixes that came since: the page says so.
-	const fixesOnly = !manual && sameVersionLine(last, version);
 	showWhatsNewWindow({ version, subtitle, highlights, changes, fixesOnly, releaseUrl }, services);
 	return true;
 }
