@@ -184,15 +184,23 @@ export function readGithubDeviceAnswer(action: GithubDeviceRequest["action"], js
   return undefined;
 }
 
+export function isCallbackCode(code: unknown): code is string {
+  return typeof code === "string" && OPAQUE.test(code);
+}
+
+export function isCallbackState(state: unknown): state is string {
+  return typeof state === "string" && /^[A-Za-z0-9-]{8,128}$/.test(state);
+}
+
 /**
- * Where the browser goes after Atlassian: back into the editor, carrying the code and the
- * `state` it must recognise. Nothing but plain token characters is passed on, so the address
- * can not be bent into something else.
+ * Where the browser goes after Atlassian when the editor is from before connection attempts: back
+ * into it, carrying the code and the `state` it must recognise. Nothing but plain token characters
+ * is passed on, so the address can not be bent into something else.
  */
 export function editorCallbackUrl(query: URLSearchParams): string | undefined {
   const code = query.get("code");
   const state = query.get("state");
-  if (!code || !state || !OPAQUE.test(code) || !/^[A-Za-z0-9-]{8,128}$/.test(state)) {
+  if (!isCallbackCode(code) || !isCallbackState(state)) {
     return undefined;
   }
   return `picode://connect/callback?service=atlassian&state=${encodeURIComponent(state)}&code=${encodeURIComponent(code)}`;
