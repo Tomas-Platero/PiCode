@@ -86,6 +86,17 @@ export function composeWhatsNew(entries: readonly WhatsNewEntry[]): string | und
 }
 
 /**
+ * Whether two versions are in the same line of news (`2.0.0` and `2.0.1`): the first two numbers
+ * decide it. The last one is for fixes: their list comes under "Bugs fixed", and the news of the
+ * line (the pages with a demo) only change when the line does.
+ */
+export function sameVersionLine(a: string, b: string): boolean {
+	const line = (version: string) => /^(\d+)\.(\d+)/.exec(version)?.slice(1, 3).join('.');
+	const left = line(a);
+	return left !== undefined && left === line(b);
+}
+
+/**
  * Whether the window opens after this start.
  *
  * `last` is the PiCode version this window was last seen at, kept by the window itself. It is
