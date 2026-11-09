@@ -637,6 +637,7 @@
 	"picodeWhatsNew.board.doing": "進行中",
 	"picodeWhatsNew.board.done": "完了",
 	"picodeWhatsNew.board.todo": "未着手",
+	"picodeWhatsNew.bugsFixed": "修正されたバグ",
 	"picodeWhatsNew.close": "閉じる",
 	"picodeWhatsNew.command": "新着情報を表示",
 	"picodeWhatsNew.connect": "GitHub または Jira を接続",

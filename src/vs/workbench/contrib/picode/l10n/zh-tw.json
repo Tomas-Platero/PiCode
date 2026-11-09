@@ -637,6 +637,7 @@
 	"picodeWhatsNew.board.doing": "進行中",
 	"picodeWhatsNew.board.done": "已完成",
 	"picodeWhatsNew.board.todo": "待辦",
+	"picodeWhatsNew.bugsFixed": "已修復的問題",
 	"picodeWhatsNew.close": "關閉",
 	"picodeWhatsNew.command": "顯示新功能",
 	"picodeWhatsNew.connect": "連接 GitHub 或 Jira",

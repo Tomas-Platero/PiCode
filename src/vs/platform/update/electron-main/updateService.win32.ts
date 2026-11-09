@@ -24,6 +24,7 @@ import { killTree } from '../../../base/node/processes.js';
 import { getWindowsRelease } from '../../../base/node/windowsVersion.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
+import { memoryFolderOf, stopEnginesInside, systemMemoryEngines } from './picodeMemoryEngine.js';
 import { IFileService } from '../../files/common/files.js';
 import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions, LifecycleMainPhase } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
@@ -845,12 +846,29 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		this.availableUpdate = undefined;
 	}
 
+	/**
+	 * PiCode: every window is gone by now, and the installer is about to replace the folder the memory
+	 * engine runs from. One that outlived its window would keep those files open and the update would
+	 * stop at "Access denied", so it is closed here, by where it runs from, before anything else.
+	 */
+	private stopMemoryEngine(): void {
+		try {
+			const stopped = stopEnginesInside(memoryFolderOf(this.environmentMainService.appRoot), systemMemoryEngines);
+			if (stopped.length > 0) {
+				this.logService.info(`update#quitAndInstall(): stopped the memory engine still running from this installation (${stopped.join(', ')})`);
+			}
+		} catch (error) {
+			this.logService.warn('update#quitAndInstall(): could not check for a memory engine still running', error);
+		}
+	}
+
 	protected override doQuitAndInstall(): void {
 		if ((this.state.type !== StateType.Ready && this.state.type !== StateType.Restarting) || !this.availableUpdate) {
 			return;
 		}
 
 		this.logService.trace('update#quitAndInstall(): running raw#quitAndInstall()');
+		this.stopMemoryEngine();
 
 		// The portable build has no installer to run: the staged copy is swapped in
 		// by its script once this process quits, and the new build starts itself.

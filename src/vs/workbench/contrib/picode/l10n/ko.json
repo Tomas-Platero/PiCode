@@ -637,6 +637,7 @@
 	"picodeWhatsNew.board.doing": "진행 중",
 	"picodeWhatsNew.board.done": "완료",
 	"picodeWhatsNew.board.todo": "할 일",
+	"picodeWhatsNew.bugsFixed": "수정된 버그",
 	"picodeWhatsNew.close": "닫기",
 	"picodeWhatsNew.command": "새 소식 보기",
 	"picodeWhatsNew.connect": "GitHub 또는 Jira 연결",
