@@ -5,9 +5,8 @@
 
 import { CancellationToken, CancellationTokenSource } from '../../../../../../base/common/cancellation.js';
 import { Emitter, Event } from '../../../../../../base/common/event.js';
-import { Disposable, DisposableStore } from '../../../../../../base/common/lifecycle.js';
+import { Disposable } from '../../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../../base/common/uri.js';
-import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { timeout } from '../../../../../../base/common/async.js';
 import { InstantiationType, registerSingleton } from '../../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../../platform/instantiation/common/instantiation.js';
@@ -18,13 +17,12 @@ import { IProductService } from '../../../../../../platform/product/common/produ
 import { asText, IRequestService } from '../../../../../../platform/request/common/request.js';
 import { ISecretStorageService } from '../../../../../../platform/secrets/common/secrets.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
-import { IURLService } from '../../../../../../platform/url/common/url.js';
 import { IWorkspaceContextService } from '../../../../../../platform/workspace/common/workspace.js';
 import { IAuthenticationService } from '../../../../../services/authentication/common/authentication.js';
 import { PICODE_AUTH_PROVIDER_ID, PICODE_PLAN_STORAGE_KEY } from '../../picodeAccountProvider.js';
 import {
-	atlassianAuthorizeUrl, connectorCodeFromCallback, IPicodeConnection, IPicodeDeviceCode,
-	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll,
+	atlassianAuthorizeUrl, IPicodeConnection, IPicodeDeviceCode,
+	parseAtlassianSites, parseDeviceCode, parseDevicePoll, PicodeConnectorService, PicodeDevicePoll, readAtlassianAttemptState, readAtlassianAttemptStatus,
 } from './picodeConnectorAuth.js';
 import {
 	buildGithubUpdate, buildJiraUpdate, GITHUB_STATUSES, IPicodeBoardIssue, IPicodeBoardStatus, IPicodeGithubPatch, IPicodeJiraPatch, IPicodeNamed, IPicodeProjectView, isJiraProjectKey, mapGithubBoardIssues, mapJiraBoardIssues, mapJiraProject,
@@ -155,7 +153,9 @@ const ATLASSIAN_API = 'https://api.atlassian.com';
 const MAX_REPOS = 15;
 /** The viewer reads up to this many pages of 100 issues; a bigger project is shown as its latest issues. */
 const MAX_VIEW_PAGES = 3;
-const ATLASSIAN_WAIT_MS = 5 * 60_000;
+/** As long as the server keeps an attempt open. */
+const ATLASSIAN_WAIT_MS = 10 * 60_000;
+const ATLASSIAN_POLL_MS = 2_500;
 /** How long a list counts as just read: going back and forth between views does not ask for it again. */
 const ISSUES_FRESH_MS = 60_000;
 
@@ -191,7 +191,6 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		@ISecretStorageService secretStorageService: ISecretStorageService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
-		@IURLService private readonly urlService: IURLService,
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IFileService private readonly fileService: IFileService,
@@ -329,17 +328,24 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		const before = this.load('atlassian');
 		const write = options.write === true || before?.canWrite === true;
 		const boards = options.boards === true || before?.canReadBoards === true;
-		const state = generateUuid();
-		const code = await this.waitForAtlassianCode(atlassianAuthorizeUrl(clientId, redirectUri, state, { write, boards }), state, token);
-		if (!code) {
-			return token.isCancellationRequested ? 'cancelled' : 'expired';
-		}
-		const traded = await this.postCloud('/v1/connect/token', { service: 'atlassian', grant: 'authorization_code', code });
-		if (traded?.status === 402) {
+		// The server tracks the attempt and trades the code, so nothing depends on the browser being
+		// able to open the editor again (it may refuse the link; another copy may have claimed it).
+		const begun = await this.postCloud('/v1/connect/atlassian', { action: 'begin' });
+		if (begun?.status === 402) {
 			return 'notPro';
 		}
-		if (traded?.status !== 200) {
+		const state = begun?.status === 200 ? readAtlassianAttemptState(begun.json) : undefined;
+		if (!state) {
 			return 'failed';
+		}
+		try {
+			await this.openerService.open(URI.parse(atlassianAuthorizeUrl(clientId, redirectUri, state, { write, boards })), { openExternal: true });
+		} catch {
+			return 'failed';
+		}
+		const finished = await this.waitForAtlassian(state, token);
+		if (finished !== 'connected') {
+			return finished;
 		}
 		const sites = await this.remote('GET', `${ATLASSIAN_API}/oauth/token/accessible-resources`).then(r => parseAtlassianSites(r.json), () => []);
 		if (sites.length === 0) {
@@ -350,27 +356,26 @@ class PicodeConnectorServiceImpl extends Disposable implements IPicodeConnectorS
 		return 'connected';
 	}
 
-	private waitForAtlassianCode(authorizeUrl: string, state: string, token: CancellationToken): Promise<string | undefined> {
-		const scheme = this.productService.urlProtocol;
-		const store = new DisposableStore();
-		return new Promise<string | undefined>(resolve => {
-			const finish = (code: string | undefined) => { store.dispose(); resolve(code); };
-			// The handler listens before the browser opens, so the first callback cannot be missed.
-			store.add(this.urlService.registerHandler({
-				handleURL: async uri => {
-					const code = connectorCodeFromCallback(uri, scheme, 'atlassian', state);
-					if (!code) {
-						return false;
-					}
-					finish(code);
-					return true;
-				},
-			}));
-			store.add(token.onCancellationRequested(() => finish(undefined)));
-			const timer = setTimeout(() => finish(undefined), ATLASSIAN_WAIT_MS);
-			store.add({ dispose: () => clearTimeout(timer) });
-			this.openerService.open(URI.parse(authorizeUrl), { openExternal: true }).catch(() => finish(undefined));
-		});
+	/** Asks the server how the attempt is going until it ends. A failed look is only a look: the next one may work. */
+	private async waitForAtlassian(state: string, token: CancellationToken): Promise<PicodeConnectOutcome> {
+		const deadline = Date.now() + ATLASSIAN_WAIT_MS;
+		while (Date.now() < deadline) {
+			await timeout(ATLASSIAN_POLL_MS, token).catch(() => undefined);
+			if (token.isCancellationRequested) {
+				void this.postCloud('/v1/connect/atlassian', { action: 'cancel', state });
+				return 'cancelled';
+			}
+			const answer = await this.postCloud('/v1/connect/atlassian', { action: 'poll', state });
+			if (answer?.status === 402) {
+				return 'notPro';
+			}
+			const status = answer?.status === 200 ? readAtlassianAttemptStatus(answer.json) : 'waiting';
+			if (status !== 'waiting') {
+				return status;
+			}
+		}
+		void this.postCloud('/v1/connect/atlassian', { action: 'cancel', state });
+		return 'expired';
 	}
 
 	async disconnect(service: PicodeConnectorService): Promise<boolean> {
