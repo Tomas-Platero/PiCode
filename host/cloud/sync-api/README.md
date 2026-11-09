@@ -58,8 +58,9 @@ test/                     # pure rules: plans, retention
 | `usage-store.ts` | Los contadores diarios en Firestore (`usage/{día}`) y su lectura para el resumen. |
 | `connect.ts` | 🔌 Conectar GitHub y Jira: qué se le pide al proveedor (con el secreto del servidor) y la dirección `picode://` de vuelta. Los tokens nunca vuelven al editor. Sin red ni Next.js. |
 | `connect-proxy.ts` | 🔌 La lista cerrada de llamadas a GitHub y Jira que el editor puede pedir. Sin red ni Next.js. |
+| `connect-attempts.ts` | 🔌 Cada intento de conectar Jira: la cuenta que lo abrió, cómo va y quién puede preguntarlo. Sin Firestore ni red. |
 | `connect-seal.ts` | 🔐 Cifrado de los tokens, con clave propia y ligados a su dueño y servicio. Sin clave no se guarda nada. |
-| `connect-store.ts` | 🔌 Las conexiones en `/users/{uid}/connectors/{service}`. |
+| `connect-store.ts` | 🔌 Las conexiones en `/users/{uid}/connectors/{service}`, los intentos en `/connectAttempts` y el canje del código de Jira. |
 | `connect-renewal.ts` | 🔌 La renovación de los tokens, una a la vez, sin perder una conexión por un fallo pasajero. Sin Firestore ni red. |
 | `stats-auth.ts` | Quién puede leer `/api/stats`: solo quien lleve `STATS_TOKEN`; sin token configurado, nadie. |
 | `downloads.ts` | Las descargas de la release actual de cada canal, leídas de GitHub. |
@@ -78,10 +79,11 @@ test/                     # pure rules: plans, retention
 | `v1/resource/route.ts` | Borra todos los datos del usuario + manifiesto. |
 | `v1/collection/` · `v1/collection/[id]/` | Lista, crea y borra colecciones (idempotente). |
 | `v1/account/route.ts` | La cuenta, con CORS (la llama el renderer del editor). |
-| `v1/connect/token/route.ts` | 🔌 Cambia un código de Atlassian por la conexión y la guarda. Solo Pro (`402`); no devuelve tokens. |
+| `v1/connect/atlassian/route.ts` | 🔌 Abre un intento de conectar Jira y dice cómo va. Solo Pro (`402`). |
+| `v1/connect/token/route.ts` | 🔌 Para versiones anteriores a los intentos: cambia un código de Atlassian por la conexión y la guarda. Solo Pro (`402`); no devuelve tokens. |
 | `v1/connect/proxy/route.ts` | 🔌 Hace una llamada a GitHub o Jira con la conexión guardada. Solo Pro (`402`), en cada llamada; sin Pro, borra las conexiones. |
 | `v1/connect/disconnect/route.ts` | 🔌 Borra una conexión. Para cualquier plan. |
-| `v1/connect/atlassian/callback/route.ts` | 🔌 A donde vuelve el navegador tras Atlassian: reenvía el código al editor por `picode://connect/callback`. |
+| `v1/connect/atlassian/callback/route.ts` | 🔌 A donde vuelve el navegador tras Atlassian: pide confirmar la cuenta y canjea el código. Sin intento abierto (versiones anteriores), lo reenvía al editor por `picode://connect/callback`. |
 | `v1/download/` · `v1/download/latest/` | `404` en v1 (no se usa), pero autenticado y con control de plan. |
 
 La tabla completa de métodos y códigos de respuesta está más abajo, en *API endpoints*.

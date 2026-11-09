@@ -101,6 +101,7 @@ export async function authenticateRequest(
   return {
     uid: decoded.uid,
     email: typeof decoded.email === "string" && decoded.email ? decoded.email : undefined,
+    emailVerified: decoded.email_verified === true,
     accountType,
     clientName,
     clientVersion: request.headers.get("x-client-version") ?? "0",
