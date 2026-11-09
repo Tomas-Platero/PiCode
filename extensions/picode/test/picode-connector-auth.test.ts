@@ -9,8 +9,6 @@ import assert from 'assert';
 import { test } from 'node:test';
 import { atlassianAuthorizeUrl, parseAtlassianSites, parseDeviceCode, parseDevicePoll, readAtlassianAttemptState, readAtlassianAttemptStatus } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
 
-const callback = (query: string, path = '/connect/callback', scheme = 'picode') => ({ scheme, path, query });
-
 test('a device code from GitHub is read, with its wait in milliseconds', () => {
 	const code = parseDeviceCode({ device_code: 'd', user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', interval: 5, expires_in: 900 });
 	assert.deepStrictEqual(code, { deviceCode: 'd', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', intervalMs: 5000, expiresInMs: 900_000 });
