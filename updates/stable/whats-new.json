@@ -1,11 +1,7 @@
 {
 	"versions": [
 		{
-			"version": "2.0.2-beta",
-			"notes": "### 🐛 Fixed\n\n- **The What's New window lists fixes under \"Bugs fixed\".** When an update only brings fixes, the window still opens and shows them in their own page, and it no longer appears blank when a version has no pages of its own.\n- **Updating no longer stops at \"Access denied\".** The memory engine that PiCode carries is now closed right before the update replaces its folder, so it can no longer keep files open. An engine installed by another program is left alone."
-		},
-		{
-			"version": "2.0.1-beta",
+			"version": "2.0.1",
 			"notes": "### 🐛 Fixed\n\n- **Connecting Jira no longer depends on your browser.** Some browsers never opened PiCode again after you agreed on Atlassian's page, so the connection never finished. Now a PiCode page shows which account gets the connection, you confirm it there, and the editor notices by itself."
 		},
 		{
