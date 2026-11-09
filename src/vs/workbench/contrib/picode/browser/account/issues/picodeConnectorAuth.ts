@@ -9,21 +9,16 @@
  *
  * - GitHub uses the one-time-code ("device") flow: no secret is needed to start it.
  * - Jira uses the browser flow. Atlassian demands a client secret, so PiCode's server holds it:
- *   the browser comes back to the server, which hands the editor a `picode://` address carrying
- *   the code; the editor hands that code to the server.
+ *   the browser comes back to the server, the person confirms the account there and the server
+ *   trades the code. The editor only asks how the attempt is going, so it never sees the code and
+ *   does not depend on the browser opening a `picode://` address.
  *
  * The tokens stay on the server, sealed. The editor never holds one: it asks the server to make each
  * call, and the server checks the plan every time. That is what makes the issues a Pro feature for
  * real, since anything kept on this computer could be read or changed.
- *
- * Any web page can open a `picode://` address, so a code alone proves nothing: the callback is
- * claimed only when it carries the `state` this attempt generated (same rule as the sign-in, ADR-040).
  */
 
 export type PicodeConnectorService = 'github' | 'atlassian';
-
-/** The path on the `picode` scheme that carries a connector callback. */
-export const CONNECT_CALLBACK_PATH = '/connect/callback';
 
 /** What the editor remembers about a connection: no secret, only what decides what the screen offers. */
 export interface IPicodeConnection {
@@ -90,41 +85,23 @@ export function parseDevicePoll(json: unknown): PicodeDevicePoll {
 	}
 }
 
-/**
- * The code in a connector callback, or `undefined` when the address is not the one this attempt is
- * waiting for. The query is read by hand for the reason given in `picodeAuthCallback.ts`: the URI
- * was already percent-decoded once on the way in.
- */
-export function connectorCodeFromCallback(
-	uri: { readonly scheme: string; readonly authority?: string; readonly path: string; readonly query: string },
-	expectedScheme: string,
-	service: PicodeConnectorService,
-	expectedState: string,
-): string | undefined {
-	// The cloud page sends `scheme://connect/callback`: `connect` arrives as the authority and `/callback` as the path.
-	const isConnectAddress = uri.path === CONNECT_CALLBACK_PATH || (uri.authority === 'connect' && uri.path === '/callback');
-	if (uri.scheme.toLowerCase() !== expectedScheme.toLowerCase() || !isConnectAddress || expectedState.length === 0) {
-		return undefined;
+/** The `state` the server opened a Jira attempt with; it is sent to Atlassian as it is. */
+export function readAtlassianAttemptState(json: unknown): string | undefined {
+	const state = asRecord(json)?.state;
+	return typeof state === 'string' && /^[A-Za-z0-9-]{8,128}$/.test(state) ? state : undefined;
+}
+
+export type PicodeAtlassianAttempt = 'waiting' | 'connected' | 'failed' | 'notPro' | 'expired';
+
+/** How the server says a Jira attempt is going. An answer it does not give counts as still waiting: only the server ends an attempt. */
+export function readAtlassianAttemptStatus(json: unknown): PicodeAtlassianAttempt {
+	switch (asRecord(json)?.status) {
+		case 'connected': return 'connected';
+		case 'failed': return 'failed';
+		case 'notPro': return 'notPro';
+		case 'expired': return 'expired';
+		default: return 'waiting';
 	}
-	let code: string | undefined;
-	let state: string | undefined;
-	let from: string | undefined;
-	for (const pair of uri.query.split('&')) {
-		const eq = pair.indexOf('=');
-		if (eq === -1) {
-			continue;
-		}
-		const name = pair.slice(0, eq);
-		const value = pair.slice(eq + 1);
-		if (name === 'code') {
-			code ??= value;
-		} else if (name === 'state') {
-			state ??= value;
-		} else if (name === 'service') {
-			from ??= value;
-		}
-	}
-	return code && state === expectedState && from === service ? code : undefined;
 }
 
 /** What reading a board's columns needs (Atlassian's own list for `GET /board` and `GET /board/{id}/configuration`). */

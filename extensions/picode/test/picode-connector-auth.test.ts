@@ -7,9 +7,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { atlassianAuthorizeUrl, connectorCodeFromCallback, parseAtlassianSites, parseDeviceCode, parseDevicePoll } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
-
-const callback = (query: string, path = '/connect/callback', scheme = 'picode') => ({ scheme, path, query });
+import { atlassianAuthorizeUrl, parseAtlassianSites, parseDeviceCode, parseDevicePoll, readAtlassianAttemptState, readAtlassianAttemptStatus } from '../../../src/vs/workbench/contrib/picode/browser/account/issues/picodeConnectorAuth.ts';
 
 test('a device code from GitHub is read, with its wait in milliseconds', () => {
 	const code = parseDeviceCode({ device_code: 'd', user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', interval: 5, expires_in: 900 });
@@ -38,26 +36,22 @@ test('a token in the answer is not taken for a connection, nor kept', () => {
 	assert.deepStrictEqual(parseDevicePoll({ access_token: 'a', refresh_token: 'r' }), { kind: 'failed' });
 });
 
-test('the callback of this attempt gives its code', () => {
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=S1&code=abc'), 'picode', 'atlassian', 'S1'), 'abc');
+test('the state of a Jira attempt is taken only when it is plain', () => {
+	assert.strictEqual(readAtlassianAttemptState({ state: '0f8fad5b-d9cb-469f' }), '0f8fad5b-d9cb-469f');
+	assert.strictEqual(readAtlassianAttemptState({ state: 'short' }), undefined);
+	assert.strictEqual(readAtlassianAttemptState({ state: 'a&redirect_uri=https://evil' }), undefined);
+	assert.strictEqual(readAtlassianAttemptState({}), undefined);
+	assert.strictEqual(readAtlassianAttemptState(undefined), undefined);
 });
 
-test('the address the cloud page really sends (connect as host, /callback as path) gives its code', () => {
-	const real = { scheme: 'picode', authority: 'connect', path: '/callback', query: 'service=atlassian&state=S1&code=abc' };
-	assert.strictEqual(connectorCodeFromCallback(real, 'picode', 'atlassian', 'S1'), 'abc');
-	assert.strictEqual(connectorCodeFromCallback({ ...real, authority: 'other' }, 'picode', 'atlassian', 'S1'), undefined);
-});
-
-test('a callback with another state, service, path or scheme is left alone', () => {
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=OTHER&code=abc'), 'picode', 'atlassian', 'S1'), undefined);
-	assert.strictEqual(connectorCodeFromCallback(callback('service=github&state=S1&code=abc'), 'picode', 'atlassian', 'S1'), undefined);
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=S1&code=abc', '/auth/callback'), 'picode', 'atlassian', 'S1'), undefined);
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=S1&code=abc', '/connect/callback', 'other'), 'picode', 'atlassian', 'S1'), undefined);
-});
-
-test('a callback without a code, or with no state expected, is not claimed', () => {
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=S1'), 'picode', 'atlassian', 'S1'), undefined);
-	assert.strictEqual(connectorCodeFromCallback(callback('service=atlassian&state=&code=abc'), 'picode', 'atlassian', ''), undefined);
+test('a Jira attempt ends only when the server says so', () => {
+	for (const status of ['connected', 'failed', 'notPro', 'expired'] as const) {
+		assert.strictEqual(readAtlassianAttemptStatus({ status }), status);
+	}
+	assert.strictEqual(readAtlassianAttemptStatus({ status: 'pending' }), 'waiting');
+	assert.strictEqual(readAtlassianAttemptStatus({ status: 'trading' }), 'waiting');
+	assert.strictEqual(readAtlassianAttemptStatus({ status: 'other' }), 'waiting');
+	assert.strictEqual(readAtlassianAttemptStatus(undefined), 'waiting');
 });
 
 test('the permission page asks only to read issues, and renews itself', () => {

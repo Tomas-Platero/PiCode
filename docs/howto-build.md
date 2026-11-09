@@ -84,6 +84,16 @@ salida —build bueno, build fallido o `Ctrl-C`—, así que después de compila
 limpio. Si el build muere de golpe (sin trampa de salida), la copia sigue ahí y la siguiente
 fase 1 la devuelve **antes** de leer nada.
 
+### Un build local no se hace pasar por la copia instalada
+
+Un build portable hecho en tu equipo (`PICODE_SKIP_INSTALLER=yes`, fuera de GitHub Actions) sale
+como `PiCode Experimental - … (local build)`, con su propia identidad para Windows. Con la misma,
+Windows los trataba como un solo programa y sus accesos terminaban abriendo el build de `D:`.
+
+Tampoco se queda con los enlaces `picode://` si ya los tiene otra copia. Para probar el inicio de
+sesión con un build local, arráncalo con `PICODE_CLAIM_LINKS=1`, y abre después la copia instalada
+para que los recupere.
+
 ## Dependencias en Windows
 
 Los scripts están en **Bash**, así que en Windows se ejecutan desde **Git Bash**
