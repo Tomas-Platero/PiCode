@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { composeWhatsNew, extractWhatChanged, highlightsSince, readHistory, sameVersionLine, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
+import { composeWhatsNew, extractWhatChanged, fixesMarkdown, highlightsSince, inVersionLine, readHistory, sameVersionLine, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
 
 test('returns the grouped summary without its heading or the sections after it', () => {
 	const body = ['Channel text', '', '## What changed', '', '### ✨ New', '', '- A thing', '', '## What\'s Changed', '', '* raw changelog'].join('\n');
@@ -111,4 +111,15 @@ test('an update tells only what is new to that person', () => {
 test('asked for by hand, everything on record, newest first', () => {
 	const all = [{ id: 'old', since: '1.0.0' }, { id: 'new', since: '1.0.9' }];
 	assert.deepStrictEqual(highlightsSince(all, '', '1.0.8').map(h => h.id), ['new', 'old']);
+});
+
+test('a fix release keeps the pages of its line and drops those of other lines', () => {
+	const pages = [{ since: '2.0.0' }, { since: '1.0.0' }, { since: '2.1.0' }];
+	assert.deepStrictEqual(inVersionLine(pages, '2.0.2'), [{ since: '2.0.0' }]);
+});
+
+test('the fixes of the whole line are listed, newest first, and nothing from later versions', () => {
+	const fixes = [{ since: '2.0.3', text: 'c' }, { since: '2.0.2', text: 'b' }, { since: '2.0.1', text: 'a' }, { since: '1.9.9', text: 'old' }];
+	assert.strictEqual(fixesMarkdown(fixes, '2.0.2'), '- b\n- a');
+	assert.strictEqual(fixesMarkdown(fixes, '2.2.0'), undefined);
 });
