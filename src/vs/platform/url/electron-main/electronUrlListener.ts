@@ -59,7 +59,12 @@ export class ElectronURLListener extends Disposable {
 		// `data` folder next to the executable by whatever process the OS launches, so
 		// the URL is forwarded to the running instance with the same portable settings.
 		if (isWindows) {
-			if (environmentMainService.isBuilt) {
+			if (productService.picodeLocalBuild && !process.env['PICODE_CLAIM_LINKS'] && app.getApplicationNameForProtocol(`${productService.urlProtocol}://`)) {
+				// A build made to test a change leaves the links with the copy installed here: taking
+				// them would send that copy's sign-ins to this one, and to nothing once it is deleted.
+				// To test signing in with this build, start it with PICODE_CLAIM_LINKS=1.
+				logService.info(`Local build: the ${productService.urlProtocol}:// links stay with the installed copy.`);
+			} else if (environmentMainService.isBuilt) {
 				// Built: register the executable directly. Electron quotes argument
 				// values itself when writing the registry entry — do not pre-quote
 				// them here, nested quotes break the registration.

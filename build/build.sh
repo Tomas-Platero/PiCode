@@ -575,6 +575,18 @@ product.dataFolderName = `.${CHANNEL.slug}`;
 product.sharedDataFolderName = `.${CHANNEL.slug}-shared`;
 product.serverDataFolderName = `.${CHANNEL.slug}-server`;
 
+// A portable build made on this machine, to test a change: it must not pass for the copy installed
+// here. With the same name and user model id, Windows treats both as one program and its shortcuts
+// and pins end up opening the test build. Releases and installers never get this.
+if (!process.env.GITHUB_ACTIONS && process.env.PICODE_SKIP_INSTALLER === 'yes') {
+  product.picodeLocalBuild = true;
+  product.nameLong = `${product.nameLong} (local build)`;
+  product.win32AppUserModelId = `${product.win32AppUserModelId}.LocalBuild`;
+  product.win32RegValueName = `${product.win32RegValueName}LocalBuild`;
+  product.win32MutexName = `${product.win32MutexName}-local-build`;
+  console.log('  local build: its own name and identity, beside the installed copy');
+}
+
 // The AppIds are derived, not random: a channel always gets the same
 // identifiers, so a rebuild is the same installer, and two channels can sit
 // side by side. One hash per key, so x64 and arm64 never share an id.
