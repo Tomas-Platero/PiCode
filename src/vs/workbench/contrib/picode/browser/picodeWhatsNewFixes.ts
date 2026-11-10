@@ -24,6 +24,14 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.0.4',
+			text: localize('picodeWhatsNew.fix.lostFolder', "**Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently."),
+		},
+		{
+			since: '2.0.4',
+			text: localize('picodeWhatsNew.fix.cacheCost', "**The cost in Status counts the cache warm-ups.** What pi spends between turns to keep the prompt cache warm is now added, so the total is no longer too low."),
+		},
+		{
 			since: '2.0.3',
 			text: localize('picodeWhatsNew.fix.language', "**What's New now speaks your language.** The list of fixes is translated, and the window keeps the news of this version line together with every fix since."),
 		},

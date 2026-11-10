@@ -6,8 +6,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { AgentDeps } from './agent';
-import { piResumeRequestHandler } from './sessions-resume';
-import { restoreListingCache, serializeListingCache, takeListingCacheChange, areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionTurns } from './sessions-provider';
+import { piResumeRequestHandler, transcriptAfterLostFolderQuestion } from './sessions-resume';
+import { restoreListingCache, serializeListingCache, takeListingCacheChange, areaConversationsReport, areaFamilySlugs, conversationsReport, listProjectSessionFiles, listingForPanel, reuseRows, sessionHeader, sessionTurns } from './sessions-provider';
 import { projectSlugsOfWindow, resolveProjectScope, windowSessionScope } from './runtime';
 import { coarseMinute, transcriptDigest } from './sessions-digest';
 
@@ -147,8 +147,14 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 					));
 				}
 			}
+			// A conversation whose folder is gone asks first: carry on here, or copy it into the open
+			// folder. Backing out leaves it readable but closed to new prompts.
+			const transcript = await transcriptAfterLostFolderQuestion(file.file, sessionHeader(text)?.['cwd'], options.deps);
+			if (transcript === undefined) {
+				return { history, requestHandler: undefined };
+			}
 			// The next prompt appends to this same transcript: the conversation goes on.
-			return { history, requestHandler: piResumeRequestHandler(file.file, options.deps) };
+			return { history, requestHandler: piResumeRequestHandler(transcript, options.deps) };
 		},
 	};
 
