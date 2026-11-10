@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.0.3-experimental",
+			"notes": "### 🐛 Fixed\n\n- **What's New now speaks your language.** The list of fixes is translated into all 13 languages, and the window keeps the news of the 2.0 line together with every fix since, so nothing disappears when you update between fixes."
+		},
+		{
 			"version": "2.0.2-experimental",
 			"notes": "### 🐛 Fixed\n\n- **The What's New window lists fixes under \"Bugs fixed\".** When an update only brings fixes, the window still opens and shows them in their own page, and it no longer appears blank when a version has no pages of its own.\n- **Updating no longer stops at \"Access denied\".** The memory engine that PiCode carries is now closed right before the update replaces its folder, so it can no longer keep files open. An engine installed by another program is left alone."
 		},
