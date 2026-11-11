@@ -109,6 +109,8 @@ for f in test/*.test.ts; do node --experimental-strip-types --test "$f"; done
 | `onboarding.ts` | La configuración de primer arranque, como puente de la página de bienvenida. |
 | `profile-import.ts` | La copia única de un perfil y el escaneo que la previsualiza. |
 | `import-project.ts` | Lo que un perfil importado significa para los ajustes del editor. |
+| `import-catalog.ts` | La ventana Import: qué trae pi o VS Code elemento a elemento, y la copia de solo lo marcado sin pisar lo tuyo. |
+| `import-extensions.ts` | Instala en el editor las extensiones que la ventana Import dejó en cola. |
 
 ### 📚 Sesiones de pi
 

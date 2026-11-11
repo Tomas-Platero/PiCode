@@ -55,6 +55,7 @@ const DEMO_STEP_MS = 1600;
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
 const SWITCH_LAYOUT_COMMAND = 'picode.appearance.switchLayout';
 const EDITOR_TASKS_COMMAND = 'workbench.view.extension.picode-status';
+const OPEN_IMPORT_COMMAND = 'picode.import.open';
 
 /**
  * What changed, as a window over the editor: one page per novelty, each explained for the person
@@ -242,6 +243,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openAccount', "Open my account");
 		case 'showTasks':
 			return localize('picodeWhatsNew.showTasks', "Show my tasks");
+		case 'openImport':
+			return localize('picodeWhatsNew.openImport', "Open Import");
 	}
 }
 
@@ -267,6 +270,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(OPEN_ACCOUNT_COMMAND);
 			return;
+		case 'openImport':
+			close();
+			void services.commandService.executeCommand(OPEN_IMPORT_COMMAND);
+			return;
 		case 'showTasks':
 			close();
 			if (picodeLayoutOf(services.configurationService) !== 'agent') {
@@ -287,6 +294,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	job: jobPreview,
 	plans: plansPreview,
 	sync: syncPreview,
+	import: importPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -401,6 +409,51 @@ function syncPreview(parent: HTMLElement, store: DisposableStore): void {
 		}));
 	}
 	count();
+}
+
+function importPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.import.demo', "Tick a few items. Nothing is really imported here."), store);
+	const sources = [
+		{ id: 'pi', label: localize('picodeWhatsNew.import.tabPi', "Your other pi"), items: ['gentle-pi', 'pi-plan-widget', 'pi-tools', 'pi-search'] },
+		{ id: 'code', label: localize('picodeWhatsNew.import.tabCode', "VS Code"), items: ['dracula-theme.theme-dracula', 'esbenp.prettier-vscode', 'editor.fontSize'] },
+	];
+	const ticked = new Map<string, Set<string>>(sources.map(source => [source.id, new Set(source.items.slice(0, 1))]));
+	const tabs = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const draw = (sourceId: string) => {
+		for (const tab of Array.from(tabs.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.source === sourceId);
+		}
+		const source = sources.find(candidate => candidate.id === sourceId)!;
+		const mine = ticked.get(sourceId)!;
+		clearNode(list);
+		const count = () => {
+			result.textContent = localize('picodeWhatsNew.import.result', "{0} of {1} selected.", mine.size, source.items.length);
+		};
+		for (const item of source.items) {
+			const label = append(list, $('label.picode-whatsnew-row.toggle'));
+			const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+			input.checked = mine.has(item);
+			append(label, $('span.picode-whatsnew-row-label')).textContent = item;
+			store.add(addDisposableListener(input, EventType.CHANGE, () => {
+				if (input.checked) {
+					mine.add(item);
+				} else {
+					mine.delete(item);
+				}
+				count();
+			}));
+		}
+		count();
+	};
+	for (const source of sources) {
+		const tab = append(tabs, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.source = source.id;
+		tab.textContent = source.label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => draw(source.id)));
+	}
+	draw('pi');
 }
 
 function issuesPreview(parent: HTMLElement, store: DisposableStore): void {

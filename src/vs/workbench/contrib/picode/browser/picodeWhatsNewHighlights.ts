@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'import',
+			since: '2.0.5',
+			plan: 'free',
+			icon: Codicon.cloudDownload,
+			title: localize('picodeWhatsNew.import.title', "Import from pi or VS Code"),
+			summary: localize('picodeWhatsNew.import.summary', "Bring over exactly what you want from your other pi or your VS Code, one item at a time."),
+			points: [
+				localize('picodeWhatsNew.import.point1', "Packages, themes, extensions, settings and shortcuts: tick only the ones you want."),
+				localize('picodeWhatsNew.import.point2', "What you already have in PiCode is never replaced."),
+				localize('picodeWhatsNew.import.point3', "Open it any time from the Command Palette: Import from Pi or VS Code."),
+			],
+			preview: 'import',
+			action: 'openImport',
+		},
 		{
 			id: 'issues',
 			since: '2.0.0',

@@ -522,10 +522,20 @@ function checkWindowKeys(errors) {
 		}
 	};
 	collect(windowSurface().sourceTable(), '');
-	const page = readFileSync(join(ROOT, 'resources', 'onboarding', 'onboarding.js'), 'utf8');
-	for (const match of page.matchAll(/(?:^|[^\w.$])t\('([\w.]+)'/g)) {
-		if (!present.has(match[1])) {
-			errors.push(`resources/onboarding/onboarding.js asks for "${match[1]}", which en.js does not have`);
+	for (const file of ['onboarding.js', 'import.js']) {
+		const page = readFileSync(join(ROOT, 'resources', 'onboarding', file), 'utf8');
+		for (const match of page.matchAll(/(?:^|[^\w.$])t\('([\w.]+)'/g)) {
+			if (!present.has(match[1])) {
+				errors.push(`resources/onboarding/${file} asks for "${match[1]}", which en.js does not have`);
+			}
+		}
+		// import.js names its category words in a table, as plain strings.
+		if (file === 'import.js') {
+			for (const match of page.matchAll(/(?:title|hint): '(imp\w+)'/g)) {
+				if (!present.has(match[1])) {
+					errors.push(`resources/onboarding/${file} asks for "${match[1]}", which en.js does not have`);
+				}
+			}
 		}
 	}
 }

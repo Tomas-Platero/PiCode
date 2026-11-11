@@ -742,13 +742,13 @@ export class CodeApplication extends Disposable {
 			applicationStorage: accessor.get(IApplicationStorageMainService) as unknown as EditorApplicationStore,
 			encryptionService: accessor.get(IEncryptionMainService),
 		}));
-		registerSetupWindowOpener(() => openSetupWindowFromEditor(picodeSetupDeps));
+		registerSetupWindowOpener(mode => openSetupWindowFromEditor(picodeSetupDeps, mode));
 		// The editor's "PiCode: Setup" reaches the application through the native host service, which
 		// is what every renderer already talks to; the opener above is what it calls.
 		appInstantiationService.invokeFunction(accessor => {
 			const nativeHostMainService = accessor.get(INativeHostMainService);
 			if (nativeHostMainService instanceof NativeHostMainService) {
-				nativeHostMainService.registerPiCodeSetupOpener(() => requestSetupWindow());
+				nativeHostMainService.registerPiCodeSetupOpener(page => requestSetupWindow(page === 'import' ? 'import' : 'setup'));
 			}
 		});
 

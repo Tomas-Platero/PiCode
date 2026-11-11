@@ -150,15 +150,6 @@ const state = {
 	step: 0,
 	/** Which pi the owner is pointing at, as the choice on screen (not yet written). */
 	piChoice: 'internal',
-	/** What the import would bring, once asked for. */
-	preview: undefined,
-	/** The scan in flight, and its failure if it had one. */
-	scanRunning: false,
-	scanError: undefined,
-	/** The items the owner ticked in the import card; credentials are their own flag. */
-	importItems: new Set(['settings', 'models', 'mcp', 'skills']),
-	importCredentials: false,
-	importReport: undefined,
 	/** The provider form's current values. */
 	provider: { id: 'openrouter', endpoint: 'https://openrouter.ai/api/v1', api: 'openai-completions', key: '' },
 	providerResult: undefined,
@@ -670,43 +661,6 @@ function renderPi() {
 	];
 	fill($('pi-cards'), cards);
 	renderImport();
-	// The card is on screen, so the counts have to be asked for — not only when somebody clicks
-	// the other card. Leaving it to that click is what left "Reading your setup…" on screen for
-	// ever: with the built-in pi chosen (the default) nothing ever asked.
-	if (importIsOpen()) {
-		void ensurePreview();
-	}
-}
-
-/** Whether the import card is showing at all. */
-function importIsOpen() {
-	const external = snapshot().externalPi;
-	return state.piChoice === 'internal' && external !== undefined && external.hasProfile;
-}
-
-/**
- * Asks what an import would bring, once.
- *
- * The scan is a child process that reads the other profile's folders and answers counts — around
- * 150 ms on a profile with hundreds of sessions — so it runs when the card appears rather than
- * behind a click, and never twice.
- */
-async function ensurePreview() {
-	if (state.preview !== undefined || state.scanRunning) {
-		return;
-	}
-	state.scanRunning = true;
-	state.scanError = undefined;
-	renderImport();
-	try {
-		const answer = await command('scan', {});
-		state.preview = answer?.data;
-	} catch (error) {
-		state.scanError = error instanceof Error ? error.message : String(error);
-	} finally {
-		state.scanRunning = false;
-		renderImport();
-	}
 }
 
 function card(options) {
@@ -733,10 +687,6 @@ async function choosePi(key) {
 	renderPi();
 	await withBusy('', async () => {
 		await command('setRuntime', { runtime: key });
-		if (key === 'external' && state.preview === undefined) {
-			// The scan answers counts; the payload is what the import card paints.
-			state.preview = (await command('scan', {}))?.data;
-		}
 	});
 	renderPi();
 }
@@ -748,122 +698,22 @@ async function choosePi(key) {
  */
 function renderImport() {
 	const node = $('import-card');
-	const external = snapshot().externalPi;
-	const canImport = state.piChoice === 'internal' && external !== undefined && external.hasProfile;
-	if (!canImport) {
+	if (state.piChoice !== 'internal') {
 		node.hidden = true;
 		return;
 	}
 	node.hidden = false;
-	const preview = state.preview;
-	const categories = preview === undefined ? [] : [
-		['settings', t('settings'), preview.packages],
-		['models', t('models'), preview.providers],
-		['mcp', t('mcp'), preview.mcpServers],
-		['skills', t('skills'), preview.skills],
-	];
-	const why = { mcp: t('mcpWhy'), skills: t('skillsWhy') };
-	const rows = categories.map(([key, label, count]) => el('label', { class: 'check' },
-		el('input', {
-			type: 'checkbox',
-			checked: state.importItems.has(key),
-			onchange: event => {
-				if (event.target.checked) {
-					state.importItems.add(key);
-				} else {
-					state.importItems.delete(key);
-				}
-				renderImport();
-			},
-		}),
-		el('span', { class: 'check-label' },
-			el('span', { text: label }),
-			why[key] === undefined ? undefined : el('span', { class: 'check-why', text: why[key] }),
-		),
-		el('span', { class: 'check-count', text: String(count ?? 0) }),
-	));
-
-	// Credentials get their own block: a title, what they are, and the one switch that brings them.
-	// They start off, and nothing turns them on but this box.
-	const credentials = preview === undefined ? undefined : el('div', { class: 'credentials-block' },
-		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: t('importCredentials') }),
-		),
-		el('p', { class: 'hint', text: t('importCredentialsWhy') }),
-		el('label', { class: 'check' },
-			el('input', {
-				type: 'checkbox',
-				checked: state.importCredentials,
-				disabled: preview.hasCredentials !== true,
-				onchange: event => {
-					state.importCredentials = event.target.checked;
-					renderImport();
-				},
-			}),
-			el('span', { class: 'check-label', text: t('importCredentialsToggle') }),
-			el('span', { class: 'check-count', text: preview.hasCredentials ? '1' : '0' }),
-		),
-	);
-
-	const report = state.importReport === undefined ? undefined : renderImportReport(state.importReport);
-
 	fill(node,
 		el('div', { class: 'panel-head' },
-			el('span', { class: 'panel-title', text: t('importTitle') }),
+			el('span', { class: 'panel-title', text: `📥 ${t('impTitle')}` }),
 		),
-		el('p', { class: 'panel-hint', text: t('importLead') }),
-		preview !== undefined ? el('div', { class: 'checks' }, rows)
-			: state.scanError !== undefined ? el('div', { class: 'panel-actions' },
-				el('span', { class: 'hint error', text: state.scanError }),
-				el('button', { type: 'button', class: 'secondary', onclick: () => { state.preview = undefined; void ensurePreview(); } }, t('search')),
-			)
-				: el('p', { class: 'hint', text: t('loading') }),
-		credentials,
+		el('p', { class: 'panel-hint', text: t('impWizardLead') }),
 		el('div', { class: 'panel-actions' },
-			el('button', {
-				class: 'secondary',
-				type: 'button',
-				disabled: preview === undefined || state.scanRunning || (state.importItems.size === 0 && !state.importCredentials),
-				onclick: runImport,
-			}, t('importRun')),
+			el('button', { class: 'secondary', type: 'button', onclick: () => void openImportView({ embedded: true }) }, t('impOpen')),
 		),
-		report,
 	);
 }
 
-async function runImport() {
-	await withBusy(t('importRunning'), async () => {
-		// The ticks go over as they are: which items, and whether the sign-ins box was ticked.
-		// Turning that into a selection — and keeping credentials off unless the box was
-		// ticked — is the backend's rule, not this page's.
-		const answer = await command('import', {
-			profile: snapshot().externalPi?.profileDir,
-			items: [...state.importItems],
-			credentials: state.importCredentials === true,
-		});
-		state.importReport = answer?.data?.report ?? answer?.report;
-	});
-	renderImport();
-}
-
-const STATUS_WORDS = { copied: 'importDone', overwritten: 'importOverwritten', absent: 'importAbsent', failed: 'importFailed', declined: 'importDeclined' };
-
-/** Items this page never offers (memory stays in engram; conversations have their own import). */
-const NOT_OFFERED = new Set(['memory', 'sessions']);
-
-/** The report, item by item: what was copied, what was replaced, what was not there. */
-function renderImportReport(report) {
-	if (!report || !Array.isArray(report.items)) {
-		return undefined;
-	}
-	return el('div', { class: 'report' },
-		report.items.filter(item => !NOT_OFFERED.has(item.item)).map(item => el('div', { class: `report-row ${item.status}` },
-			el('span', { class: 'report-item', text: item.item }),
-			el('span', { class: 'report-status', text: t(STATUS_WORDS[item.status] ?? 'importFailed') }),
-			item.reason ? el('span', { class: 'report-why', text: item.reason }) : undefined,
-		)),
-	);
-}
 
 /* -- step 3: model ------------------------------------------------- */
 
@@ -1990,6 +1840,7 @@ async function main() {
 			}
 		}
 		state.mode = boot.mode ?? 'first-run';
+		document.body.dataset.mode = state.mode;
 		state.version = boot.version ?? '';
 		if (typeof boot.accountEmail === 'string' && boot.accountEmail.length > 0) {
 			state.account = { state: 'signed-in', email: boot.accountEmail, picture: boot.accountPicture || undefined, error: undefined };
@@ -2031,6 +1882,10 @@ async function main() {
 	// a shortcut to its step. Arriving mid-flow, at step 2, felt like a form that had lost its start.
 	go(0);
 	void prepareLanguage(language);
+	// Opened by the editor's Import command: that view is the whole window.
+	if (state.mode === 'import') {
+		void openImportView({ embedded: false });
+	}
 }
 
 main();

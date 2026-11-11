@@ -7,6 +7,7 @@ import { gentleSettings, setGentleSetting, type GentleSettings } from './gentle-
 import { prepareEditorLanguage, type LanguageOutcome } from './display-language';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { applyPiImport, applyVsCodeImport, scanPiProfile, scanVsCode, type ImportChoice, type ImportOutcome, type SourceCatalog } from './import-catalog';
 import { externalProfileDir, importProfile, scanExternalProfile, type ImportReport, type ImportSelection, type ProfilePreview } from './profile-import';
 import { NO_KEY_PLACEHOLDER, projectDeclaration } from './declarations';
 import { probeEndpoint, type EndpointProbe } from './endpoint';
@@ -435,6 +436,49 @@ export function scan(externalProfile: string | undefined): ScanAnswer {
 	return { ...scanExternalProfile(profile), profile };
 }
 
+/** What the Import window can offer: the external pi profile and every VS Code found. */
+export interface ImportScanAnswer {
+	readonly pi: SourceCatalog;
+	readonly vscode: readonly SourceCatalog[];
+}
+
+export function importScan(paths: SetupPaths, externalProfile: string | undefined): ImportScanAnswer {
+	const profile = typeof externalProfile === 'string' && externalProfile.length > 0 ? externalProfile : externalProfileDir();
+	return { pi: scanPiProfile(profile), vscode: scanVsCode(undefined, paths) };
+}
+
+/** Keeps only the shape a choice can have: ids per category, or `'all'`. Anything else is dropped. */
+export function sanitizeChoice(value: unknown): ImportChoice {
+	const choice: Record<string, readonly string[] | 'all'> = {};
+	if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+		for (const [category, picked] of Object.entries(value as Record<string, unknown>)) {
+			if (picked === 'all') {
+				choice[category] = 'all';
+			} else if (Array.isArray(picked)) {
+				choice[category] = picked.filter((id): id is string => typeof id === 'string');
+			}
+		}
+	}
+	return choice;
+}
+
+/** Brings the ticked items of one source across. Logins only travel when the whole category is ticked. */
+export async function importApply(paths: SetupPaths, request: { source: string; product?: string; profile?: string; choice: ImportChoice }): Promise<ImportOutcome & { packagesSettled: boolean }> {
+	if (request.source === 'vscode') {
+		return { ...applyVsCodeImport({ product: request.product ?? 'code', choice: request.choice, paths }), packagesSettled: false };
+	}
+	if (request.source !== 'pi') {
+		throw new Error('unknown import source');
+	}
+	const from = typeof request.profile === 'string' && request.profile.length > 0 ? request.profile : externalProfileDir();
+	const outcome = applyPiImport({ from, to: paths.profileDir, choice: request.choice });
+	const declaredPackages = (request.choice['packages']?.length ?? 0) > 0;
+	if (declaredPackages) {
+		await settlePackages(paths);
+	}
+	return { ...outcome, packagesSettled: declaredPackages };
+}
+
 /* ------------------------------------------------------------------ *
  * Subscription sign-in, before the editor exists
  * ------------------------------------------------------------------ */
@@ -578,6 +622,8 @@ export type HostCommand =
 	| 'state'
 	| 'scan'
 	| 'import'
+	| 'importScan'
+	| 'importApply'
 	| 'addProvider'
 	| 'setModel'
 	| 'setTheme'
@@ -611,6 +657,8 @@ export type HostCommand =
 export type HostAnswer =
 	| SetupSnapshot
 	| ScanAnswer
+	| ImportScanAnswer
+	| (ImportOutcome & { readonly packagesSettled: boolean })
 	| { readonly report: ImportReport & { packagesSettled?: number }; readonly snapshot: SetupSnapshot }
 	| { readonly providers: readonly ProviderFacts[]; readonly models: readonly string[]; readonly defaultModel?: string; readonly latencyMs: number; readonly snapshot: SetupSnapshot }
 	| { readonly packages: readonly string[]; readonly snapshot: SetupSnapshot }
@@ -633,6 +681,15 @@ export async function runHostCommand(paths: SetupPaths, command: string, payload
 			return setupSnapshot(paths);
 		case 'scan':
 			return scan(stringOf(payload['profile']));
+		case 'importScan':
+			return importScan(paths, stringOf(payload['profile']) || undefined);
+		case 'importApply':
+			return importApply(paths, {
+				source: stringOf(payload['source']),
+				product: stringOf(payload['product']) || undefined,
+				profile: stringOf(payload['profile']) || undefined,
+				choice: sanitizeChoice(payload['choice']),
+			});
 		case 'import':
 			return {
 				report: await runImport(

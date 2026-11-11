@@ -60,6 +60,7 @@ import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
+import { registerPendingExtensions } from './import-extensions';
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
@@ -2693,6 +2694,9 @@ const setupDeps = {
 		npmCli: locateNpmCli(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
+	if (setupDeps.userDataPath !== undefined) {
+		context.subscriptions.push(...registerPendingExtensions(setupDeps.userDataPath));
+	}
 	// The theme step of Set up PiCode lives in the core, so its three questions — list the gallery,
 	// read one theme's colours, install it — travel as commands. Without this registration they do
 	// not exist, and the gallery answers an empty list as if the search had found nothing.

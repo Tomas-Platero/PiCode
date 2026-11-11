@@ -74,3 +74,31 @@ MenuRegistry.appendMenuItem(MenuId.CommandPalette, {
 		category: localize('picode.category', "PiCode"),
 	},
 });
+
+/**
+ * "PiCode: Import" — bring things from another pi or from VS Code, one item at a time.
+ *
+ * The same window as the setup, opened on its Import view, so it can be used on any day and
+ * not only on the first one.
+ */
+export const PICODE_OPEN_IMPORT_COMMAND_ID = 'picode.import.open';
+
+CommandsRegistry.registerCommand({
+	id: PICODE_OPEN_IMPORT_COMMAND_ID,
+	handler: async (accessor: ServicesAccessor): Promise<void> => {
+		const nativeHostService = accessor.get(INativeHostService);
+		const notificationService = accessor.get(INotificationService);
+		const opened = await nativeHostService.openPiCodeSetup('import');
+		if (!opened) {
+			notificationService.info(localize('picode.import.unavailable', "The import window is not available in this build."));
+		}
+	}
+});
+
+MenuRegistry.appendMenuItem(MenuId.CommandPalette, {
+	command: {
+		id: PICODE_OPEN_IMPORT_COMMAND_ID,
+		title: localize('picode.import.title', "Import from Pi or VS Code"),
+		category: localize('picode.category', "PiCode"),
+	},
+});
