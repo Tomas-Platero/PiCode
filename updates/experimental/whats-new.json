@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.0.4-experimental",
+			"notes": "### ✨ New\n\n- **Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently.\n\n### 🐛 Fixes\n\n- **The cost in Status counts the cache warm-ups.** What pi spends between turns to keep the prompt cache warm is now added, so the total is no longer too low.\n\n### 🧩 Under the hood\n\n- PiCode carries pi 1.5.2."
+		},
+		{
 			"version": "2.0.3-experimental",
 			"notes": "### 🐛 Fixed\n\n- **What's New now speaks your language.** The list of fixes is translated into all 13 languages, and the window keeps the news of the 2.0 line together with every fix since, so nothing disappears when you update between fixes."
 		},
