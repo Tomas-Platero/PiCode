@@ -112,8 +112,7 @@ export class MarkerDecorationsService extends Disposable implements IMarkerDecor
 	}
 
 	private _updateDecorations(markerDecorations: MarkerDecorations): void {
-		// Limit to the first 500 errors/warnings
-		let markers = this._markerService.read({ resource: markerDecorations.model.uri, take: 500 });
+		let markers = this._markerService.read({ resource: markerDecorations.model.uri, take: MarkerDecorations.MAX_MARKER_DECORATIONS_LIMIT });
 
 		// filter markers from suppressed ranges
 		const suppressedRanges = this._suppressedRanges.get(markerDecorations.model.uri);
@@ -130,6 +129,9 @@ export class MarkerDecorationsService extends Disposable implements IMarkerDecor
 }
 
 class MarkerDecorations extends Disposable {
+
+	/** Errors and warnings highlighted per file; the rest stay in the Problems view. */
+	public static readonly MAX_MARKER_DECORATIONS_LIMIT = 5000;
 
 	private readonly _map = new BidirectionalMap<IMarker, /*decoration id*/string>();
 
