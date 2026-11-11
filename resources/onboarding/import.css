@@ -1,0 +1,493 @@
+/*
+ * The Import view's look: a layer over the setup window.
+ *
+ * It borrows the window's tokens (canvas, card, line, accent) and adds only layout: a column of
+ * source cards on the left, a list of collapsible categories on the right, and a footer that
+ * stays put with the one action. Selected things glow with the accent so a glance says how much
+ * is about to travel.
+ */
+
+.import-view {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	display: flex;
+	justify-content: center;
+	background: var(--bg);
+	overflow: hidden;
+}
+
+.imp-shell {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 1040px;
+	height: 100%;
+	padding: 24px 28px 20px;
+}
+
+.imp-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 18px;
+}
+
+.imp-heading h2 {
+	margin: 0 0 4px;
+	font-size: 22px;
+	letter-spacing: -0.01em;
+}
+
+.imp-lead {
+	margin: 0;
+	color: var(--comment);
+	font-size: 13.5px;
+	line-height: 1.5;
+}
+
+.imp-close {
+	width: 32px;
+	height: 32px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel);
+	color: var(--comment);
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	transition: color var(--speed), border-color var(--speed);
+}
+
+.imp-close:hover {
+	color: var(--fg);
+	border-color: var(--line-strong);
+}
+
+.imp-body {
+	display: grid;
+	grid-template-columns: 250px minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr) auto;
+	gap: 16px 22px;
+	flex: 1;
+	min-height: 0;
+}
+
+/* -- sources ---------------------------------------------------------- */
+
+.imp-sources {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	grid-row: 1 / span 2;
+	overflow-y: auto;
+}
+
+.imp-source {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--panel);
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color var(--speed), background var(--speed), transform var(--speed);
+}
+
+.imp-source:hover {
+	border-color: var(--line-strong);
+	transform: translateY(-1px);
+}
+
+.imp-source.is-active {
+	border-color: var(--accent);
+	background: linear-gradient(160deg, rgba(37, 99, 235, 0.22), var(--panel) 70%);
+	box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35), 0 8px 24px rgba(37, 99, 235, 0.12);
+}
+
+.imp-source.is-empty:not(.is-active) {
+	opacity: 0.6;
+}
+
+.imp-source-mark,
+.imp-source-emoji {
+	flex: none;
+	width: 36px;
+	height: 36px;
+	display: grid;
+	place-items: center;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.06);
+	font-size: 20px;
+	object-fit: contain;
+	padding: 6px;
+}
+
+.imp-source-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	gap: 2px;
+}
+
+.imp-source-text strong {
+	font-size: 14px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.imp-source-text span {
+	color: var(--comment);
+	font-size: 12px;
+}
+
+/* -- categories ------------------------------------------------------- */
+
+.imp-main {
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 4px;
+}
+
+.imp-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.imp-cat {
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--panel);
+	transition: border-color var(--speed), box-shadow var(--speed);
+}
+
+.imp-cat.is-picked {
+	border-color: rgba(37, 99, 235, 0.65);
+	box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+.imp-cat.is-sensitive.is-picked {
+	border-color: rgba(245, 158, 11, 0.7);
+	box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+.imp-cat-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 14px 4px 14px;
+}
+
+.imp-cat-toggle {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	padding: 10px 0;
+	border: 0;
+	background: none;
+	color: var(--fg);
+	text-align: left;
+	cursor: pointer;
+}
+
+.imp-cat-icon {
+	flex: none;
+	font-size: 20px;
+	width: 28px;
+	text-align: center;
+}
+
+.imp-cat-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	gap: 2px;
+}
+
+.imp-cat-text strong {
+	font-size: 14px;
+}
+
+.imp-cat-text span {
+	color: var(--comment);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.imp-badge {
+	flex: none;
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.07);
+	color: var(--comment);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.imp-badge.is-on {
+	background: rgba(37, 99, 235, 0.25);
+	color: #BFD3FF;
+}
+
+.imp-chevron {
+	flex: none;
+	color: var(--comment);
+	font-size: 20px;
+	transition: transform var(--speed);
+}
+
+.imp-chevron.is-open {
+	transform: rotate(90deg);
+}
+
+.imp-check {
+	flex: none;
+	width: 17px;
+	height: 17px;
+	margin: 0;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+.imp-warning {
+	margin: 0;
+	padding: 0 16px 12px 56px;
+	color: #F5C46B;
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+
+.imp-items {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 280px;
+	overflow-y: auto;
+	margin: 0 6px 8px;
+	padding: 8px 8px 4px;
+	border-top: 1px solid var(--line);
+}
+
+.imp-search {
+	margin: 0 0 6px;
+	padding: 7px 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--bg);
+	color: var(--fg);
+	font: inherit;
+	font-size: 13px;
+}
+
+.imp-search:focus {
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
+}
+
+.imp-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 7px;
+	cursor: pointer;
+}
+
+.imp-row:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.imp-row-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+}
+
+.imp-pill {
+	flex: none;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.07);
+	color: var(--comment);
+	font-size: 11.5px;
+}
+
+.imp-none {
+	margin: 6px 8px;
+	color: var(--comment);
+	font-size: 12.5px;
+}
+
+/* -- footer ----------------------------------------------------------- */
+
+.imp-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 16px;
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--sidebar);
+}
+
+.imp-footer-left {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.imp-count {
+	font-size: 13.5px;
+	font-variant-numeric: tabular-nums;
+}
+
+.imp-link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: #8DB2FF;
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.imp-link:hover {
+	text-decoration: underline;
+}
+
+/* -- empty and result -------------------------------------------------- */
+
+.imp-empty {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	color: var(--comment);
+	text-align: center;
+}
+
+.imp-empty-title {
+	margin: 0;
+	font-size: 15px;
+}
+
+.imp-result {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 14px;
+	max-width: 620px;
+	min-height: 0;
+	margin: 0 auto;
+	width: 100%;
+	overflow-y: auto;
+}
+
+.imp-result-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.imp-result-head h3 {
+	margin: 0;
+	font-size: 19px;
+}
+
+.imp-result-icon {
+	font-size: 28px;
+}
+
+.imp-result-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.imp-result-list li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--panel);
+	font-size: 13.5px;
+}
+
+.imp-result-list li.is-done {
+	border-left: 3px solid var(--ok);
+}
+
+.imp-result-list li.is-failed {
+	border-left: 3px solid #EF4444;
+}
+
+.imp-result-list li.is-partial {
+	border-left: 3px solid #F59E0B;
+}
+
+.imp-result-note {
+	margin-left: auto;
+	color: var(--comment);
+	font-size: 12.5px;
+}
+
+.imp-note {
+	margin: 0;
+	color: var(--comment);
+	font-size: 13px;
+}
+
+.imp-result-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 18px;
+	margin-top: auto;
+	padding-top: 6px;
+}
+
+@media (max-width: 820px) {
+	.imp-body {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr) auto;
+	}
+
+	.imp-sources {
+		flex-direction: row;
+		grid-row: auto;
+		overflow-x: auto;
+	}
+
+	.imp-source {
+		flex: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.imp-source,
+	.imp-chevron,
+	.imp-cat {
+		transition: none;
+	}
+}

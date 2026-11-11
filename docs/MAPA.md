@@ -398,6 +398,7 @@
 │   │   │   ├── picode-status.svg
 │   │   │   └── picode.svg
 │   │   ├── src/
+│   │   │   ├── agent-todo.ts
 │   │   │   ├── agent-transcript-panel.ts
 │   │   │   ├── agent-transcript.ts
 │   │   │   ├── agent.ts
@@ -432,6 +433,7 @@
 │   │   │   ├── import-project.ts
 │   │   │   ├── intercom-config.ts
 │   │   │   ├── l10n.ts
+│   │   │   ├── late-turn.ts
 │   │   │   ├── learned-commands.ts
 │   │   │   ├── left-behind-packages.ts
 │   │   │   ├── login.ts
@@ -477,6 +479,8 @@
 │   │   │   ├── providers.ts
 │   │   │   ├── runtime.ts
 │   │   │   ├── session-cwd.ts
+│   │   │   ├── session-folder.ts
+│   │   │   ├── session-usage.ts
 │   │   │   ├── sessions-backup.ts
 │   │   │   ├── sessions-digest.ts
 │   │   │   ├── sessions-provider.ts
@@ -503,8 +507,9 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 105 files in total
+│   │   │   └── … 109 files in total
 │   │   ├── test/
+│   │   │   ├── agent-todo.test.ts
 │   │   │   ├── agent-transcript.test.ts
 │   │   │   ├── agents.test.ts
 │   │   │   ├── background-cards.test.ts
@@ -530,6 +535,7 @@
 │   │   │   ├── gentle-models.test.ts
 │   │   │   ├── gentle-settings.test.ts
 │   │   │   ├── intercom-config.test.ts
+│   │   │   ├── late-turn.test.ts
 │   │   │   ├── learned-commands.test.ts
 │   │   │   ├── left-behind-packages.test.ts
 │   │   │   ├── mcp-add.test.ts
@@ -568,7 +574,9 @@
 │   │   │   ├── provider-stream.test.ts
 │   │   │   ├── providers-list.test.ts
 │   │   │   ├── session-cwd.test.ts
+│   │   │   ├── session-folder.test.ts
 │   │   │   ├── session-listing.test.ts
+│   │   │   ├── session-usage.test.ts
 │   │   │   ├── sessions-backup.test.ts
 │   │   │   ├── sessions-digest.test.ts
 │   │   │   ├── sessions-listing-cache.test.ts
@@ -579,6 +587,7 @@
 │   │   │   ├── subscription-usage.test.ts
 │   │   │   ├── tasks-rows.test.ts
 │   │   │   ├── theme-catalog.test.ts
+│   │   │   ├── update-memory-engine.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
 │   │   │   ├── voice-controller.test.ts
@@ -586,7 +595,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 81 files in total
+│   │   │   └── … 86 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
@@ -628,6 +637,11 @@
 │   │   │   │   │       └── v1/
 │   │   │   │   └── lib/
 │   │   │   │       ├── auth.ts
+│   │   │   │       ├── connect-attempts.ts
+│   │   │   │       ├── connect-proxy.ts
+│   │   │   │       ├── connect-renewal.ts
+│   │   │   │       ├── connect-seal.ts
+│   │   │   │       ├── connect-store.ts
 │   │   │   │       ├── connect.ts
 │   │   │   │       ├── contract.ts
 │   │   │   │       ├── crypto.ts
@@ -643,6 +657,9 @@
 │   │   │   │       ├── usage-store.ts
 │   │   │   │       └── usage.ts
 │   │   │   ├── test/
+│   │   │   │   ├── connect-attempts.test.ts
+│   │   │   │   ├── connect-proxy.test.ts
+│   │   │   │   ├── connect-renewal.test.ts
 │   │   │   │   ├── connect.test.ts
 │   │   │   │   ├── crypto.test.ts
 │   │   │   │   ├── plans.test.ts

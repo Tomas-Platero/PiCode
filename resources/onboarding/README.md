@@ -10,6 +10,7 @@ instead of asking again:
 | `first-run` | no `onboarding.json` recorded for this installation |
 | `update` | the recorded `onboardingVersion` or the product's major version changed |
 | `setup` | `PiCode: Setup` from the Command Palette, with the editor already open |
+| `import` | `PiCode: Import from Pi or VS Code`: the same window, open only on the Import view |
 
 ## What is in here
 
@@ -17,6 +18,7 @@ instead of asking again:
 | --- | --- |
 | [`index.html`](index.html) | the skeleton: rail, six steps, footer. No content — the steps are painted from data. |
 | [`onboarding.js`](onboarding.js) | everything the page decides: which step, what it shows, and the calls it makes. Two languages (English, Spanish) in one table. |
+| [`import.js`](import.js) · [`import.css`](import.css) | the Import view: source cards (your other pi, each VS Code found), collapsible categories with one checkbox per item, and a footer with the single action. It is a layer over the steps; in `import` mode it is the whole window. |
 | [`flags.js`](flags.js) | the 14 country flags of the language list, as small vector images in the flag's own colours (emoji flags are only letters on Windows, so they are drawn). |
 | [`onboarding.css`](onboarding.css) | the look, and the palette: **fixed**, the product's. Three surfaces (canvas `#0B0F19`, rail `#111625`, card `#182030` with a `#2A364F` border), three text weights (`#F3F4F6` · `#9CA3AF` · `#6B7280`), one blue for the action (`#2563EB`, hover `#1D4ED8`) and one green for "this worked" (`#10B981`). |
 | [`preload.cjs`](preload.cjs) | the only bridge to the main process: five named operations, no generic `invoke`. |
