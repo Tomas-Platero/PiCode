@@ -516,6 +516,25 @@ list (1.143, experimental, `multiDiffEditor.experimental.fileList`), diagnostics
 5,000 per file instead of 500 (1.143), and Windows terminal dialogs opening in front of the editor
 (1.144, `terminal.integrated.windowsReparentConsoleWindow`). Nothing was deprecated in either release.
 
+**Addendum (2026-11-11) — declared 1.146.0, with code this time.** VS Code 1.145.0 (4 Nov) and
+1.146.0 (11 Nov) were out. Unlike the previous jumps, the stable API did change: 1.145 finalized the
+Timeline API (`workspace.registerTimelineProvider`, `registerWorkspaceTimelineProvider`), so raising
+only the number would let an extension that asks for `^1.145.0` call a function this tree did not
+expose. The owner asked to raise the number and bring the useful pieces by hand (*"Sí, hazlo"*,
+*"Esto también"*). Ported from upstream, adapted to this tree (still descending from 1.135, see
+`host/upstream/stable.json`):
+- the Timeline API finalization (upstream f5fbc323ca, 6054195231, a379766474, 9e9e76c4d3), with the
+  local history and git timelines it reshapes; the pane keeps its own rename box and hover;
+- `!` exceptions in `files.exclude` and `search.exclude` (f85fab91bc);
+- the multi-file diff editor's file list behind `multiDiffEditor.experimental.fileList`
+  (1b3cae0f72, a2e3784b9b, 96f78e2ebe);
+- 5,000 highlighted errors and warnings per file instead of 500 (`MAX_MARKER_DECORATIONS_LIMIT`);
+  the language-status warning that upstream added with it (17d26bbf8d) is not ported;
+- the ConPTY console window owned by the editor window (04e0594891, ad5187db8d,
+  `terminal.integrated.windowsReparentConsoleWindow`), which needs node-pty 1.2.0-beta.18.
+The rest of both releases is Copilot, the Agents window or enterprise policy, which PiCode does not
+use. The security fixes of 1.145.3 were not reviewed one by one and stay outside the tree.
+
 ## ADR-017 — Cloud sync is a Pro feature; the free plan is an account, not storage
 
 **Status:** accepted.

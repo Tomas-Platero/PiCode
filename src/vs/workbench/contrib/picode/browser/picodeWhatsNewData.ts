@@ -132,12 +132,3 @@ export function shouldShowWhatsNew(state: { last: string; current: string; edito
 	return !!editorLast && !!editorCurrent && editorLast !== editorCurrent;
 }
 
-/**
- * What to tell about: after an update, what is new to this person (from the version after `last`
- * up to this one), and asked for by hand (`last` empty), everything on record. Newest first.
- */
-export function highlightsSince<T extends { readonly since: string }>(all: readonly T[], last: string, current: string): T[] {
-	return all
-		.filter(highlight => !last || (compareVersions(highlight.since, last) > 0 && compareVersions(highlight.since, current) <= 0))
-		.sort((a, b) => compareVersions(b.since, a.since));
-}

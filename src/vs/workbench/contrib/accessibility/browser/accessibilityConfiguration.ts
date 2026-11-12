@@ -50,6 +50,7 @@ export const enum AccessibilityVerbositySettingId {
 	Terminal = 'accessibility.verbosity.terminal',
 	DiffEditor = 'accessibility.verbosity.diffEditor',
 	MergeEditor = 'accessibility.verbosity.mergeEditor',
+	MultiDiffEditorFileList = 'accessibility.verbosity.multiDiffEditorFileList',
 	Chat = 'accessibility.verbosity.panelChat',
 	InlineChat = 'accessibility.verbosity.inlineChat',
 	TerminalInlineChat = 'accessibility.verbosity.terminalChat',
@@ -141,6 +142,10 @@ const configuration: IConfigurationNode = {
 		},
 		[AccessibilityVerbositySettingId.DiffEditor]: {
 			description: localize('verbosity.diffEditor.description', 'Provide information about how to navigate changes in the diff editor when it is focused.'),
+			...baseVerbosityProperty
+		},
+		[AccessibilityVerbositySettingId.MultiDiffEditorFileList]: {
+			description: localize('verbosity.multiDiffEditorFileList.description', 'Provide information about how to navigate the changed files list in the multi diff editor when it is focused.'),
 			...baseVerbosityProperty
 		},
 		[AccessibilityVerbositySettingId.Chat]: {

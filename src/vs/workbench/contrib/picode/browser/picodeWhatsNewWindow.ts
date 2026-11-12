@@ -10,6 +10,7 @@ import { disposableTimeout } from '../../../../base/common/async.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
+import { language as platformLanguage } from '../../../../base/common/platform.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -56,6 +57,11 @@ const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
 const SWITCH_LAYOUT_COMMAND = 'picode.appearance.switchLayout';
 const EDITOR_TASKS_COMMAND = 'workbench.view.extension.picode-status';
 const OPEN_IMPORT_COMMAND = 'picode.import.open';
+const OPEN_SETTINGS_COMMAND = 'workbench.action.openSettings';
+const NEW_TERMINAL_COMMAND = 'workbench.action.terminal.new';
+const SHOW_EXTENSIONS_COMMAND = 'workbench.view.extensions';
+/** The multi-file diff editor's list of changed files (see `multiDiffEditor.contribution.ts`). */
+const FILE_LIST_SETTING = 'multiDiffEditor.experimental.fileList';
 
 /**
  * What changed, as a window over the editor: one page per novelty, each explained for the person
@@ -245,6 +251,16 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.showTasks', "Show my tasks");
 		case 'openImport':
 			return localize('picodeWhatsNew.openImport', "Open Import");
+		case 'fileList':
+			return services.configurationService.getValue<boolean>(FILE_LIST_SETTING)
+				? localize('picodeWhatsNew.fileListOff', "Turn off the file list")
+				: localize('picodeWhatsNew.fileListOn', "Turn on the file list");
+		case 'excludeSetting':
+			return localize('picodeWhatsNew.excludeSetting', "Open the hidden files setting");
+		case 'newTerminal':
+			return localize('picodeWhatsNew.newTerminal', "Open a terminal");
+		case 'browseExtensions':
+			return localize('picodeWhatsNew.browseExtensions', "Browse extensions");
 	}
 }
 
@@ -274,6 +290,22 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(OPEN_IMPORT_COMMAND);
 			return;
+		case 'fileList':
+			// The window stays and its button says the new state.
+			void services.configurationService.updateValue(FILE_LIST_SETTING, !services.configurationService.getValue<boolean>(FILE_LIST_SETTING)).then(rerender);
+			return;
+		case 'excludeSetting':
+			close();
+			void services.commandService.executeCommand(OPEN_SETTINGS_COMMAND, { query: 'files.exclude' });
+			return;
+		case 'newTerminal':
+			close();
+			void services.commandService.executeCommand(NEW_TERMINAL_COMMAND);
+			return;
+		case 'browseExtensions':
+			close();
+			void services.commandService.executeCommand(SHOW_EXTENSIONS_COMMAND);
+			return;
 		case 'showTasks':
 			close();
 			if (picodeLayoutOf(services.configurationService) !== 'agent') {
@@ -295,6 +327,10 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	plans: plansPreview,
 	sync: syncPreview,
 	import: importPreview,
+	changedFiles: changedFilesPreview,
+	exclude: excludePreview,
+	terminalDialogs: terminalDialogsPreview,
+	problems: problemsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -564,4 +600,179 @@ function jobPreview(parent: HTMLElement, store: DisposableStore): void {
 	demoBar(parent, localize('picodeWhatsNew.job.demo', "A job ends after the agent is done, and you still hear about it."), store, play);
 	stage = append(parent, $('.picode-whatsnew-job'));
 	play();
+}
+
+/** A row of tabs; picking one marks it and calls `draw` with its id. Returns the picker. */
+function demoTabs<T extends string>(parent: HTMLElement, store: DisposableStore, tabs: readonly (readonly [T, string])[], draw: (id: T) => void): (id: T) => void {
+	const bar = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const pick = (id: T) => {
+		for (const tab of Array.from(bar.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.tab === id);
+		}
+		draw(id);
+	};
+	for (const [id, label] of tabs) {
+		const tab = append(bar, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.tab = id;
+		tab.textContent = label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => pick(id)));
+	}
+	return pick;
+}
+
+function changedFilesPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.changedFiles.demo', "Click a file in the list, or hide the list."), store);
+	const files: { path: string; added: number; removed: number; lines: [string, string][] }[] = [
+		{ path: 'src/login.ts', added: 4, removed: 2, lines: [['-', 'if (user) {'], ['+', 'if (user && user.active) {'], [' ', '  signIn(user);'], ['-', '}'], ['+', '} else {'], ['+', '  showError();'], ['+', '}']] },
+		{ path: 'src/session.ts', added: 1, removed: 1, lines: [[' ', 'const timeout ='], ['-', '  30 * 60;'], ['+', '  8 * 60 * 60;']] },
+		{ path: 'README.md', added: 2, removed: 0, lines: [[' ', '## Sign in'], ['+', 'Inactive accounts see'], ['+', 'a clear message.']] },
+	];
+	let selected = 0;
+	let showList = true;
+	const toggle = append(parent, $('label.picode-whatsnew-row.toggle'));
+	const input = append(toggle, $('input', { type: 'checkbox' })) as HTMLInputElement;
+	input.checked = showList;
+	append(toggle, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.changedFiles.toggle', "Show the list of files");
+	const stage = append(parent, $('.picode-whatsnew-diff'));
+	const draw = () => {
+		clearNode(stage);
+		stage.classList.toggle('with-list', showList);
+		if (showList) {
+			const list = append(stage, $('.picode-whatsnew-diff-files'));
+			files.forEach((file, index) => {
+				const row = append(list, $('button.picode-whatsnew-diff-file', { type: 'button' }));
+				row.classList.toggle('active', index === selected);
+				append(row, $(`span${ThemeIcon.asCSSSelector(Codicon.file)}`));
+				append(row, $('span.picode-whatsnew-diff-path')).textContent = file.path;
+				append(row, $('span.picode-whatsnew-diff-added')).textContent = `+${file.added}`;
+				append(row, $('span.picode-whatsnew-diff-removed')).textContent = `-${file.removed}`;
+				store.add(addDisposableListener(row, EventType.CLICK, () => {
+					selected = index;
+					draw();
+				}));
+			});
+		}
+		const view = append(stage, $('.picode-whatsnew-diff-view'));
+		const file = files[selected];
+		append(view, $('.picode-whatsnew-diff-title')).textContent = file.path;
+		for (const [kind, text] of file.lines) {
+			const line = append(view, $('.picode-whatsnew-diff-line'));
+			line.classList.toggle('added', kind === '+');
+			line.classList.toggle('removed', kind === '-');
+			line.textContent = `${kind} ${text}`;
+		}
+	};
+	store.add(addDisposableListener(input, EventType.CHANGE, () => {
+		showList = input.checked;
+		draw();
+	}));
+	draw();
+}
+
+function excludePreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.exclude.demo', "Hide the folder, then keep one part of it."), store);
+	const rules = { hide: true, keep: false };
+	const options = append(parent, $('.picode-whatsnew-list'));
+	const stage = append(parent, $('.picode-whatsnew-exclude'));
+	const tree = append(stage, $('.picode-whatsnew-tree'));
+	const json = append(stage, $('pre.picode-whatsnew-json'));
+	const entries: { name: string; depth: number; folder?: boolean; hidden?: () => boolean }[] = [
+		{ name: 'src', depth: 0, folder: true },
+		{ name: 'index.ts', depth: 1 },
+		{ name: 'node_modules', depth: 0, folder: true, hidden: () => rules.hide && !rules.keep },
+		{ name: '@types', depth: 1, folder: true, hidden: () => rules.hide && !rules.keep },
+		{ name: 'lodash', depth: 1, folder: true, hidden: () => rules.hide },
+		{ name: 'package.json', depth: 0 },
+	];
+	const draw = () => {
+		clearNode(tree);
+		for (const entry of entries) {
+			if (entry.hidden?.()) {
+				continue;
+			}
+			const row = append(tree, $('.picode-whatsnew-tree-row'));
+			row.style.paddingLeft = `${4 + entry.depth * 14}px`;
+			append(row, $(`span${ThemeIcon.asCSSSelector(entry.folder ? Codicon.folder : Codicon.file)}`));
+			append(row, $('span')).textContent = entry.name;
+		}
+		const lines = ['"files.exclude": {'];
+		if (rules.hide) {
+			lines.push(`  "node_modules": true${rules.keep ? ',' : ''}`);
+		}
+		if (rules.keep) {
+			lines.push('  "!node_modules/@types": true');
+		}
+		lines.push('}');
+		json.textContent = lines.join('\n');
+	};
+	const option = (label: string, key: 'hide' | 'keep') => {
+		const row = append(options, $('label.picode-whatsnew-row.toggle'));
+		const input = append(row, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = rules[key];
+		append(row, $('span.picode-whatsnew-row-label')).textContent = label;
+		store.add(addDisposableListener(input, EventType.CHANGE, () => {
+			rules[key] = input.checked;
+			draw();
+		}));
+	};
+	option(localize('picodeWhatsNew.exclude.hide', "Hide node_modules"), 'hide');
+	option(localize('picodeWhatsNew.exclude.keep', "...but keep node_modules/@types"), 'keep');
+	draw();
+}
+
+function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): void {
+	let mode: 'before' | 'now' = 'now';
+	let stage: HTMLElement;
+	const play = playDemo(2, store, step => {
+		clearNode(stage);
+		stage.className = `picode-whatsnew-dialogs ${mode}`;
+		const editor = append(stage, $('.picode-whatsnew-window'));
+		append(editor, $('.picode-whatsnew-window-title')).textContent = 'PiCode';
+		append(editor, $('.picode-whatsnew-window-terminal')).textContent = '> az login';
+		if (step > 0) {
+			const dialog = append(stage, $('.picode-whatsnew-dialog'));
+			append(dialog, $(`span${ThemeIcon.asCSSSelector(Codicon.key)}`));
+			append(dialog, $('span')).textContent = localize('picodeWhatsNew.terminalDialogs.dialog', "Sign in to your account");
+		}
+		result.textContent = step === 0
+			? ''
+			: mode === 'now'
+				? localize('picodeWhatsNew.terminalDialogs.now', "The window opens in front, ready to use.")
+				: localize('picodeWhatsNew.terminalDialogs.before', "The window opened behind the editor, out of sight.");
+	});
+	demoBar(parent, localize('picodeWhatsNew.terminalDialogs.demo', "Run a command that asks you to sign in."), store, play);
+	const pick = demoTabs(parent, store, [['before', localize('picodeWhatsNew.before', "Before")], ['now', localize('picodeWhatsNew.now', "Now")]], picked => {
+		mode = picked;
+		play();
+	});
+	stage = append(parent, $('.picode-whatsnew-dialogs'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	pick('now');
+}
+
+function problemsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.problems.demo', "Compare a big file with many problems."), store);
+	// A file with 1,200 problems: before, only the first 500 were underlined.
+	const total = 1200;
+	const lines = ['const a = undefinedValue;', 'let b: number = "text";', 'callMissing();', 'import { gone } from "./gone";', 'const c = a.missing.deep;', 'return;'];
+	const format = (value: number) => value.toLocaleString(platformLanguage);
+	let stage: HTMLElement;
+	const pick = demoTabs(parent, store, [['before', localize('picodeWhatsNew.before', "Before")], ['now', localize('picodeWhatsNew.now', "Now")]], mode => {
+		clearNode(stage);
+		const code = append(stage, $('.picode-whatsnew-diff-view'));
+		lines.forEach((text, index) => {
+			const line = append(code, $('.picode-whatsnew-diff-line'));
+			const number = index * 240 + 1;
+			append(line, $('span.picode-whatsnew-code-number')).textContent = String(number);
+			const content = append(line, $('span')) as HTMLElement;
+			content.textContent = text;
+			// Lines past the old limit stay plain before; now every problem is underlined.
+			content.classList.toggle('picode-whatsnew-squiggle', mode === 'now' || number <= 500);
+		});
+		const count = append(stage, $('.picode-whatsnew-row'));
+		append(count, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.warning)}`));
+		append(count, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.problems.count', "Underlined in this file: {0} of {1}", format(mode === 'before' ? 500 : total), format(total));
+	});
+	stage = append(parent, $('.picode-whatsnew-extension'));
+	pick('now');
 }

@@ -1470,9 +1470,11 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 				checkProposedApiEnabled(extension, 'tunnelFactory');
 				return extHostTunnelService.registerTunnelProvider(tunnelProvider, information);
 			},
-			registerTimelineProvider: (scheme: string | string[], provider: vscode.TimelineProvider) => {
-				checkProposedApiEnabled(extension, 'timeline');
-				return extHostTimeline.registerTimelineProvider(scheme, provider, extension.identifier, extHostCommands.converter);
+			registerTimelineProvider: (id: string, label: string, scheme: string | readonly string[], provider: vscode.TimelineProvider) => {
+				return extHostTimeline.registerTimelineProvider(id, label, scheme, provider, extension.identifier, extHostCommands.converter);
+			},
+			registerWorkspaceTimelineProvider: (id: string, label: string, provider: vscode.WorkspaceTimelineProvider) => {
+				return extHostTimeline.registerWorkspaceTimelineProvider(id, label, provider, extension.identifier, extHostCommands.converter);
 			},
 			get isTrusted() {
 				return extHostWorkspace.trusted;
@@ -2171,6 +2173,7 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 			SourceControlInputBoxValidationType: extHostTypes.SourceControlInputBoxValidationType,
 			ExtensionRuntime: extHostTypes.ExtensionRuntime,
 			TimelineItem: extHostTypes.TimelineItem,
+			TimelineTriggerKind: extHostTypes.TimelineTriggerKind,
 			NotebookRange: extHostTypes.NotebookRange,
 			NotebookCellKind: extHostTypes.NotebookCellKind,
 			NotebookCellExecutionState: extHostTypes.NotebookCellExecutionState,

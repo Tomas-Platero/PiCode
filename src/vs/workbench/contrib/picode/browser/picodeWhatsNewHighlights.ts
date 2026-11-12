@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,66 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'changedFiles',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.diffMultiple,
+			title: localize('picodeWhatsNew.changedFiles.title', "Every changed file, in one list"),
+			summary: localize('picodeWhatsNew.changedFiles.summary', "When you review all the changes at once, a list of the files sits beside them, so you can jump straight to the one you want."),
+			points: [
+				localize('picodeWhatsNew.changedFiles.point1', "Each file shows how many lines were added and removed."),
+				localize('picodeWhatsNew.changedFiles.point2', "Click a file and its changes come into view."),
+				localize('picodeWhatsNew.changedFiles.point3', "It is new, so it starts off: the button below turns it on."),
+			],
+			preview: 'changedFiles',
+			action: 'fileList',
+		},
+		{
+			id: 'exclude',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.eyeClosed,
+			title: localize('picodeWhatsNew.exclude.title', "Hide a folder, keep what you need"),
+			summary: localize('picodeWhatsNew.exclude.summary', "Hidden files can now have exceptions: hide a whole folder and still see the one part of it you care about."),
+			points: [
+				localize('picodeWhatsNew.exclude.point1', "Put \"!\" in front of a path to keep it visible, like \"!node_modules/@types\"."),
+				localize('picodeWhatsNew.exclude.point2', "Works for the files list and for search."),
+				localize('picodeWhatsNew.exclude.point3', "Exceptions for search only affect search and Go to File."),
+			],
+			preview: 'exclude',
+			action: 'excludeSetting',
+		},
+		{
+			id: 'terminalDialogs',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.terminal,
+			title: localize('picodeWhatsNew.terminalDialogs.title', "Sign-in windows in front"),
+			summary: localize('picodeWhatsNew.terminalDialogs.summary', "When a command in the terminal opens a window, like a sign-in prompt, it now appears in front of PiCode instead of hiding behind it."),
+			points: [
+				localize('picodeWhatsNew.terminalDialogs.point1', "No more hunting for a window that opened somewhere behind the editor."),
+				localize('picodeWhatsNew.terminalDialogs.point2', "It follows the window your terminal is in."),
+				localize('picodeWhatsNew.terminalDialogs.point3', "Nothing to set up: it works on its own."),
+			],
+			preview: 'terminalDialogs',
+			action: 'newTerminal',
+		},
+		{
+			id: 'problems',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.warning,
+			title: localize('picodeWhatsNew.problems.title', "Every problem in sight"),
+			summary: localize('picodeWhatsNew.problems.summary', "Big files now show all their errors and warnings underlined, and more of the newest extensions install."),
+			points: [
+				localize('picodeWhatsNew.problems.point1', "Up to 5,000 errors and warnings are underlined in a file, ten times more than before."),
+				localize('picodeWhatsNew.problems.point2', "More of the newest extensions now install."),
+				localize('picodeWhatsNew.problems.point3', "Extensions can now add their own entries to a file's history."),
+			],
+			preview: 'problems',
+			action: 'browseExtensions',
+		},
 		{
 			id: 'import',
 			since: '2.0.5',
