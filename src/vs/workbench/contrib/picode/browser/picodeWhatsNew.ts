@@ -20,7 +20,7 @@ import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
-import { composeWhatsNew, fixesMarkdown, inVersionLine, sameVersionLine, extractWhatChanged, highlightsSince, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
+import { composeWhatsNew, fixesMarkdown, inVersionLine, sameVersionLine, extractWhatChanged, readHistory, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince, WhatsNewEntry } from './picodeWhatsNewData.js';
 import { whatsNewFixes } from './picodeWhatsNewFixes.js';
 import { whatsNewHighlights } from './picodeWhatsNewHighlights.js';
 import { IPicodeProEntitlement } from './account/picodeProEntitlement.js';
@@ -60,7 +60,9 @@ async function showWhatsNew(version: string, last: string, accessor: { readonly 
 		const current = notes ? { version, notes } : history.find(entry => entry.version === version) ?? (manual ? history[0] : undefined);
 		return current ? composeWhatsNew(whatsNewSince(last, current, history)) : undefined;
 	})();
-	const highlights = fixesOnly ? inVersionLine(whatsNewHighlights(), version) : highlightsSince(whatsNewHighlights(), last, version);
+	// Only the pages of the line being run (2.2.x): moving to a new line (2.1 to 2.2, 1.0 to 2.0)
+	// leaves the previous line's pages behind, whether the window opens after an update or from Help.
+	const highlights = inVersionLine(whatsNewHighlights(), version);
 	// With nothing of our own to tell, the window is only worth opening if the release has something.
 	if (highlights.length === 0 && !(await changes)) {
 		return false;

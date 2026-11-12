@@ -255,6 +255,7 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
 * **Una ventana, no una página:** una entrada por novedad, explicada para quien usa PiCode, con una demo que se puede tocar y un botón que hace lo real. Se pasa a mano: nada avanza solo.
 * **Pro o para todos, siempre dicho** (*"hay que recalcar que son mejoras en las cosas pro y que son mejoras normales o free"*): la lista va en dos grupos y cada página lleva su etiqueta. Una novedad Pro se puede leer y probar en su demo con cualquier cuenta; su botón, sin Pro, lleva a los planes.
 * **Cada release añade las suyas:** van en `picodeWhatsNewHighlights.ts`, con la versión que las trae, y se traducen a los 13 idiomas. La lista cruda de la release sigue debajo, en *All changes*.
+* **Solo las de la versión en curso** (*"Cambia de versiones tanto de la 1.0 a la 2.0 como de la 2.1 a la 2.2"*, *"solo es incremental en la build de patches 2.2.1 a 2.2.2"*, 2026-11-12): la ventana enseña las páginas de su línea (2.2.x) y nada de la anterior, se abra al actualizar o desde *Ayuda*. Dentro de la línea se acumulan: la 2.2.2 enseña las de la 2.2.0, la 2.2.1 y la 2.2.2. La web hace lo mismo.
 
 ### Las actualizaciones llegan pequeñas, y no se rompen
 >
