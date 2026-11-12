@@ -233,6 +233,7 @@
 	"PiCode could not update {0}. The previous versions stay in use.": "PiCodeは{0}を更新できませんでした。以前のバージョンをそのまま使います。",
 	"PiCode has no agent to compare models with yet. Set up PiCode first.": "PiCodeにはまだモデルを比較するエージェントがありません。先にPiCodeのセットアップを済ませてください。",
 	"PiCode is finishing the turn already running in this window…": "PiCodeはこのウィンドウで実行中のターンを終えています…",
+	"PiCode is still answering. Compact the conversation when it has finished.": "PiCode はまだ応答中です。終わってから会話を圧縮してください。",
 	"PiCode is still answering. Try /compact again when it has finished.": "PiCodeはまだ回答中です。終わってからもう一度/compactを試してください。",
 	"PiCode profile": "PiCodeのプロファイル",
 	"PiCode updated.": "PiCodeを更新しました。",

@@ -46,7 +46,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
@@ -1122,6 +1122,15 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
 	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
+	// The Context block of Status: where a chat's context goes, and its Compact button.
+	disposables.push(vscode.commands.registerCommand('picode.context.breakdown', (chat: unknown) => getSessionContext(chat)));
+	disposables.push(vscode.commands.registerCommand('picode.context.compact', async (chat: unknown) => {
+		const result = await compactSession(chat);
+		if (result === 'busy') {
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode is still answering. Compact the conversation when it has finished.'));
+		}
+		return result;
+	}));
 	// Not in the palette: the table a performance change is compared with (docs/RENDIMIENTO.md).
 	disposables.push(vscode.commands.registerCommand('picode.perf.report', async () => {
 		const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: timingReport() });

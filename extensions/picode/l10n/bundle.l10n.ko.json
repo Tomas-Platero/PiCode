@@ -233,6 +233,7 @@
 	"PiCode could not update {0}. The previous versions stay in use.": "PiCode가 {0}을(를) 업데이트하지 못했습니다. 이전 버전을 계속 씁니다.",
 	"PiCode has no agent to compare models with yet. Set up PiCode first.": "PiCode에는 아직 모델을 비교할 에이전트가 없습니다. 먼저 PiCode를 설정하세요.",
 	"PiCode is finishing the turn already running in this window…": "PiCode가 이 창에서 실행 중인 턴을 마무리하는 중…",
+	"PiCode is still answering. Compact the conversation when it has finished.": "PiCode가 아직 응답 중입니다. 끝나면 대화를 압축하세요.",
 	"PiCode is still answering. Try /compact again when it has finished.": "PiCode가 아직 답하는 중입니다. 끝난 뒤에 /compact를 다시 시도하세요.",
 	"PiCode profile": "PiCode 프로필",
 	"PiCode updated.": "PiCode를 업데이트했습니다.",
