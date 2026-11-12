@@ -233,6 +233,7 @@
 	"PiCode could not update {0}. The previous versions stay in use.": "PiCode 無法更新 {0}。仍在使用先前的版本。",
 	"PiCode has no agent to compare models with yet. Set up PiCode first.": "PiCode 還沒有可用於比較模型的代理程式。請先完成 PiCode 的設定。",
 	"PiCode is finishing the turn already running in this window…": "PiCode 正在結束此視窗中已開始的一輪…",
+	"PiCode is still answering. Compact the conversation when it has finished.": "PiCode 仍在回覆。等它完成後再壓縮對話。",
 	"PiCode is still answering. Try /compact again when it has finished.": "PiCode 仍在回答。等它完成後再試一次 /compact。",
 	"PiCode profile": "PiCode 設定檔",
 	"PiCode updated.": "PiCode 已更新。",

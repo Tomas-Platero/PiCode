@@ -130,6 +130,48 @@ const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 /** Whether memory is on (the connector sets it). */
 const MEMORY_ENABLED_CONTEXT = 'picode.memory.enabled';
 
+/** Where a chat's context goes, as the connector estimates it (`context-breakdown.ts`). */
+type ContextPartId = 'messages' | 'project' | 'pi' | 'skills' | 'other' | 'tools' | 'mcp';
+
+interface IContextBreakdown {
+	readonly window: number;
+	readonly used: number;
+	readonly exact: boolean;
+	readonly parts: readonly { readonly id: ContextPartId; readonly tokens: number }[];
+	readonly reserve: number;
+	readonly free: number;
+	readonly untilCompaction: number;
+}
+
+const CONTEXT_BREAKDOWN_COMMAND = 'picode.context.breakdown';
+const CONTEXT_COMPACT_COMMAND = 'picode.context.compact';
+
+/** The focused chat's context as last read, shared like the MCPs. */
+let knownContext: IContextBreakdown | undefined;
+
+function contextPartLabel(id: ContextPartId): string {
+	switch (id) {
+		case 'messages': return localize('picode.overview.contextMessages', "Messages");
+		case 'project': return localize('picode.overview.contextProject', "Project instructions");
+		case 'pi': return localize('picode.overview.contextPi', "pi instructions");
+		case 'skills': return localize('picode.overview.contextSkills', "Skills");
+		case 'other': return localize('picode.overview.contextOther', "Other instructions");
+		case 'tools': return localize('picode.overview.contextTools', "pi tools");
+		case 'mcp': return localize('picode.overview.contextMcp', "MCP tools");
+	}
+}
+
+/** 573,912 as 573.9k, 1,000,000 as 1M. */
+function compactTokens(tokens: number): string {
+	if (tokens >= 1_000_000) {
+		return `${Number((tokens / 1_000_000).toFixed(1))}M`;
+	}
+	if (tokens >= 1_000) {
+		return `${Number((tokens / 1_000).toFixed(1))}k`;
+	}
+	return String(Math.round(tokens));
+}
+
 /** The task board and the memory summary as last read, shared like the MCPs. */
 let knownTasks: ITaskBoard | undefined;
 let knownMemory: IMemorySummary | undefined;
@@ -214,7 +256,11 @@ export class PicodeAgentOverview extends Disposable {
 		this._register(this.hostService.onDidChangeFocus(() => this.setLive(true)));
 		this._register(this.scmService.onDidAddRepository(() => this.paint()));
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
-		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => this.paint()));
+		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => {
+			this.paint();
+			// Another chat in front: its context, not the previous one's.
+			void this.read('context', () => this.readContext());
+		}));
 		// A section hidden, shown, folded or unfolded, here or in the other Status of the window.
 		this._register(onDidChangePicodeStatusSections(() => this.paint()));
 		// What the editor already knows is painted now; pi's MCPs join when it answers.
@@ -248,6 +294,9 @@ export class PicodeAgentOverview extends Disposable {
 		});
 		void this.readTasks();
 		void this.read('memory', () => this.readMemory());
+		if (!isStatusSectionHidden(this.storageService, 'context')) {
+			void this.read('context', () => this.readContext());
+		}
 		// Only counted where it is drawn: with no changed file the column shows no lines at all.
 		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
 			void this.read('diff', async () => {
@@ -308,7 +357,7 @@ export class PicodeAgentOverview extends Disposable {
 	/** Everything `paint` draws from, apart from the folds, which repaint by themselves. */
 	private fingerprint(): string {
 		return JSON.stringify([
-			knownConnectors, knownDiff, knownTasks, knownMemory,
+			knownConnectors, knownDiff, knownTasks, knownMemory, knownContext,
 			this.changedFiles(), this.currentBranch(), this.contextUsage(),
 			this.workspaceService.getWorkspace().folders[0]?.uri.toString(),
 			this.contextKeyService.getContextKeyValue<boolean>(MEMORY_ENABLED_CONTEXT),
@@ -447,6 +496,11 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderContext(parent: HTMLElement): void {
+		const breakdown = knownContext;
+		if (breakdown && breakdown.window > 0) {
+			this.renderContextBreakdown(parent, breakdown);
+			return;
+		}
 		const usage = this.contextUsage();
 		if (usage === undefined) {
 			return;
@@ -461,6 +515,68 @@ export class PicodeAgentOverview extends Disposable {
 		append(row, $('span.picode-overview-value')).textContent = `${usage}%`;
 		const meter = append(section, $('.picode-overview-meter'));
 		append(meter, $('.picode-overview-meter-fill')).style.width = `${Math.min(100, usage)}%`;
+	}
+
+	/**
+	 * Where the focused chat's context goes, as Claude Code shows it: the share used over the window,
+	 * a bar with one colour per part, one row per part, and the room left before pi compacts with a
+	 * button to compact now. The parts are estimates (marked «~»); the total is pi's when it has one.
+	 * Folded, only the share and the bar stay.
+	 */
+	private renderContextBreakdown(parent: HTMLElement, breakdown: IContextBreakdown): void {
+		const titled = this.titledSection(parent, 'context', localize('picode.overview.context', "Context"));
+		if (!titled) {
+			return;
+		}
+		const { section, open } = titled;
+		const percent = (tokens: number) => breakdown.window > 0 ? (tokens / breakdown.window) * 100 : 0;
+		const share = (tokens: number) => `${percent(tokens).toFixed(1)}%`;
+		const head = append(section, $('.picode-overview-row.picode-overview-meter-row'));
+		append(head, $('span.picode-overview-label')).textContent = localize('picode.overview.contextPercent', "{0}% used", Math.round(percent(breakdown.used)));
+		append(head, $('span.picode-overview-value')).textContent = `${breakdown.exact ? '' : '~'}${compactTokens(breakdown.used)} / ${compactTokens(breakdown.window)}`;
+		const bar = append(section, $('.picode-overview-meter.picode-overview-context-bar'));
+		for (const part of breakdown.parts) {
+			const piece = append(bar, $(`.picode-overview-context-piece.${part.id}`));
+			piece.style.width = `${percent(part.tokens)}%`;
+		}
+		const reservePiece = append(bar, $('.picode-overview-context-piece.reserve'));
+		reservePiece.style.width = `${percent(breakdown.reserve)}%`;
+		if (!open) {
+			return;
+		}
+		const line = (css: string, label: string, tokens: number, estimated: boolean) => {
+			const row = append(section, $('.picode-overview-row.picode-overview-context-row'));
+			append(row, $(`span.picode-overview-context-swatch.${css}`));
+			append(row, $('span.picode-overview-label')).textContent = label;
+			append(row, $('span.picode-overview-value')).textContent = `${estimated ? '~' : ''}${compactTokens(tokens)}`;
+			append(row, $('span.picode-overview-context-share')).textContent = share(tokens);
+		};
+		for (const part of breakdown.parts) {
+			// The messages are exact when pi gave the total: they are what the other parts leave.
+			line(part.id, contextPartLabel(part.id), part.tokens, !(part.id === 'messages' && breakdown.exact));
+		}
+		line('reserve', localize('picode.overview.contextReserve', "Kept for compacting"), breakdown.reserve, false);
+		const free = append(section, $('.picode-overview-row.picode-overview-context-row'));
+		append(free, $('span.picode-overview-context-swatch.free'));
+		append(free, $('span.picode-overview-label')).textContent = localize('picode.overview.contextFree', "Room before compacting");
+		append(free, $('span.picode-overview-value')).textContent = compactTokens(breakdown.untilCompaction);
+		append(free, $('span.picode-overview-context-share')).textContent = share(breakdown.untilCompaction);
+		const compact = this.row(section, Codicon.foldDown, localize('picode.overview.contextCompactHint', "Summarise the conversation to free room"));
+		this.action(compact, localize('picode.overview.contextCompact', "Compact session"), () => void this.compactContext());
+	}
+
+	private async compactContext(): Promise<void> {
+		await this.commandService.executeCommand(CONTEXT_COMPACT_COMMAND, this.focusedChatKey());
+		void this.read('context', () => this.readContext());
+	}
+
+	/** The chat the person last looked at, as the connector keys its conversations. */
+	private focusedChatKey(): string | undefined {
+		return this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString();
+	}
+
+	private async readContext(): Promise<void> {
+		knownContext = await this.commandService.executeCommand<IContextBreakdown>(CONTEXT_BREAKDOWN_COMMAND, this.focusedChatKey()) ?? undefined;
 	}
 
 	/** How full the focused chat's context is, from its last answer; undefined when unknown. */

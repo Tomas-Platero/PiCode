@@ -233,6 +233,7 @@
 	"PiCode could not update {0}. The previous versions stay in use.": "PiCode konnte {0} nicht aktualisieren. Die bisherigen Versionen bleiben in Gebrauch.",
 	"PiCode has no agent to compare models with yet. Set up PiCode first.": "PiCode hat noch keinen Agenten, mit dem es Modelle vergleichen könnte. Richte PiCode zuerst ein.",
 	"PiCode is finishing the turn already running in this window…": "PiCode bringt den Durchlauf, der in diesem Fenster schon läuft, zu Ende…",
+	"PiCode is still answering. Compact the conversation when it has finished.": "PiCode antwortet noch. Komprimieren Sie die Unterhaltung, wenn es fertig ist.",
 	"PiCode is still answering. Try /compact again when it has finished.": "PiCode antwortet noch. Versuch es mit /compact noch einmal, wenn es fertig ist.",
 	"PiCode profile": "PiCode-Profil",
 	"PiCode updated.": "PiCode ist aktualisiert.",

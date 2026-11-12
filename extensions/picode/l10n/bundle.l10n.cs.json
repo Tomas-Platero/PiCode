@@ -233,6 +233,7 @@
 	"PiCode could not update {0}. The previous versions stay in use.": "PiCode nedokázal aktualizovat {0}. Používají se dál předchozí verze.",
 	"PiCode has no agent to compare models with yet. Set up PiCode first.": "PiCode zatím nemá agenta, se kterým by modely porovnal. Nejdřív PiCode nastavte.",
 	"PiCode is finishing the turn already running in this window…": "PiCode dokončuje kolo, které v tomto okně už běží…",
+	"PiCode is still answering. Compact the conversation when it has finished.": "PiCode stále odpovídá. Zhustěte konverzaci, až skončí.",
 	"PiCode is still answering. Try /compact again when it has finished.": "PiCode ještě odpovídá. Zkuste /compact znovu, až skončí.",
 	"PiCode profile": "Profil PiCode",
 	"PiCode updated.": "PiCode aktualizováno.",
