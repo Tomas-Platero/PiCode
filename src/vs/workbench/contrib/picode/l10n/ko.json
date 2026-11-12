@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "파일 목록 끄기",
 	"picodeWhatsNew.fileListOn": "파일 목록 켜기",
 	"picodeWhatsNew.fix.cacheCost": "**Status의 비용에 캐시 유지 비용이 포함됩니다.** 턴 사이에 프롬프트 캐시를 따뜻하게 유지하려고 pi가 쓰는 비용이 합산되어, 총액이 더 이상 낮게 나오지 않습니다.",
+	"picodeWhatsNew.fix.contextEditor": "**편집기 레이아웃에도 컨텍스트가 표시됩니다.** 이제 PiCode 패널은 상태와 같은 모양의 컨텍스트로 시작하며, 세션 압축은 마우스를 올리면 설명이 나오는 버튼 하나입니다.",
 	"picodeWhatsNew.fix.jira": "**Jira 연결이 더 이상 브라우저에 좌우되지 않습니다.** 일부 브라우저는 Atlassian 페이지에서 동의한 뒤 PiCode를 다시 열지 않았습니다. 이제 PiCode 페이지가 연결될 계정을 보여 주고, 거기서 확인하면 편집기가 스스로 알아챕니다.",
 	"picodeWhatsNew.fix.language": "**새 소식이 이제 사용자의 언어로 표시됩니다.** 수정 목록이 번역되었고, 창은 이 버전 계열의 새 기능과 그 이후의 모든 수정 사항을 함께 유지합니다.",
 	"picodeWhatsNew.fix.lostFolder": "**폴더가 사라진 대화는 이제 먼저 물어봅니다.** 열 때 지금 열려 있는 폴더에서 계속하거나 대화를 그 폴더로 복사할 수 있으며, 말없이 이어지지 않습니다.",

@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "關閉檔案清單",
 	"picodeWhatsNew.fileListOn": "開啟檔案清單",
 	"picodeWhatsNew.fix.cacheCost": "**「狀態」中的費用現在包含快取保溫。** pi 在兩次回覆之間為保持提示快取而花的費用會被計入，總額不會再偏低。",
+	"picodeWhatsNew.fix.contextEditor": "**編輯器版面配置中也有內容了。** PiCode 面板現在以「內容」開頭，外觀與「狀態」中相同；「壓縮工作階段」是一個按鈕，指標停留時會顯示說明。",
 	"picodeWhatsNew.fix.jira": "**連線 Jira 不再依賴你的瀏覽器。** 有些瀏覽器在你於 Atlassian 頁面同意後，再也不會重新開啟 PiCode。現在 PiCode 頁面會顯示連線到哪個帳戶，你在那裡確認，編輯器會自動察覺。",
 	"picodeWhatsNew.fix.language": "**「新功能」現在使用你的語言。** 修正清單已翻譯，視窗會同時保留這個版本系列的新功能與此後的所有修正。",
 	"picodeWhatsNew.fix.lostFolder": "**資料夾已不存在的對話現在會先詢問。** 開啟時可以在目前開啟的資料夾中繼續，或把對話複製到該資料夾，而不是默默繼續。",

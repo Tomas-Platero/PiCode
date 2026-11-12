@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "Wyłącz listę plików",
 	"picodeWhatsNew.fileListOn": "Włącz listę plików",
 	"picodeWhatsNew.fix.cacheCost": "**Koszt w Status uwzględnia podtrzymywanie pamięci podręcznej.** To, co pi wydaje między turami na utrzymanie ciepłej pamięci podręcznej promptu, jest teraz doliczane, więc suma nie wychodzi już za niska.",
+	"picodeWhatsNew.fix.contextEditor": "**Kontekst jest też w układzie Edytor.** Panel PiCode zaczyna się teraz od sekcji Kontekst, wyglądającej tak samo jak w Stanie, a Kompaktuj sesję to jeden przycisk, który objaśnia się po najechaniu kursorem.",
 	"picodeWhatsNew.fix.jira": "**Łączenie z Jirą nie zależy już od przeglądarki.** Niektóre przeglądarki nigdy nie otwierały ponownie PiCode po wyrażeniu zgody na stronie Atlassian. Teraz strona PiCode pokazuje, z jakim kontem zostanie nawiązane połączenie, potwierdzasz to tam, a edytor sam to zauważa.",
 	"picodeWhatsNew.fix.language": "**Nowości mówią teraz w Twoim języku.** Lista poprawek jest przetłumaczona, a okno zachowuje nowości tej linii wersji razem ze wszystkimi poprawkami od tamtej pory.",
 	"picodeWhatsNew.fix.lostFolder": "**Rozmowy, których folder zniknął, teraz najpierw pytają.** Przy otwarciu możesz kontynuować w otwartym folderze albo skopiować do niego rozmowę, zamiast kontynuować po cichu.",

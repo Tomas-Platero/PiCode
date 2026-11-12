@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "关闭文件列表",
 	"picodeWhatsNew.fileListOn": "打开文件列表",
 	"picodeWhatsNew.fix.cacheCost": "**“状态”中的费用现在包含缓存保温。** pi 在两次回复之间为保持提示缓存而花的费用会被计入，总额不会再偏低。",
+	"picodeWhatsNew.fix.contextEditor": "**编辑器布局中也有上下文了。** PiCode 面板现在以“上下文”开头，外观与“状态”中相同；“压缩会话”是一个按钮，指针悬停时会显示说明。",
 	"picodeWhatsNew.fix.jira": "**连接 Jira 不再依赖你的浏览器。** 有些浏览器在你于 Atlassian 页面同意后，再也不会重新打开 PiCode。现在 PiCode 页面会显示连接到哪个账户，你在那里确认，编辑器会自动发现。",
 	"picodeWhatsNew.fix.language": "**“新功能”现在使用你的语言。** 修复列表已翻译，窗口会同时保留这个版本系列的新功能和此后的所有修复。",
 	"picodeWhatsNew.fix.lostFolder": "**文件夹已不存在的对话现在会先询问。** 打开时可以在当前打开的文件夹中继续，或把对话复制到该文件夹，而不是悄悄继续。",

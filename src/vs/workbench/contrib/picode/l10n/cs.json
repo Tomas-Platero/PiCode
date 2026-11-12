@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "Vypnout seznam souborů",
 	"picodeWhatsNew.fileListOn": "Zapnout seznam souborů",
 	"picodeWhatsNew.fix.cacheCost": "**Cena ve Stavu počítá i udržování mezipaměti.** To, co pi utratí mezi odpověďmi za udržení mezipaměti promptu, se teď přičítá, takže celkem už nevychází příliš nízké.",
+	"picodeWhatsNew.fix.contextEditor": "**Kontext je i v rozvržení Editor.** Panel PiCode teď začíná sekcí Kontext, vykreslenou stejně jako ve Stavu, a Zhustit relaci je jediné tlačítko, které se vysvětlí, když na něj najedete myší.",
 	"picodeWhatsNew.fix.jira": "**Připojení k Jiře už nezávisí na prohlížeči.** Některé prohlížeče po vašem souhlasu na stránce Atlassian PiCode nikdy znovu neotevřely. Nyní stránka PiCode ukáže, ke kterému účtu se připojení provádí, potvrdíte ho tam a editor si toho všimne sám.",
 	"picodeWhatsNew.fix.language": "**Novinky nyní mluví vaším jazykem.** Seznam oprav je přeložen a okno uchovává novinky této řady verzí spolu se všemi opravami od té doby.",
 	"picodeWhatsNew.fix.lostFolder": "**Konverzace, jejichž složka zmizela, se teď nejdřív zeptají.** Při otevření můžete pokračovat v otevřené složce nebo do ní konverzaci zkopírovat, místo aby se tiše pokračovalo.",

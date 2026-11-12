@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "Dosya listesini kapat",
 	"picodeWhatsNew.fileListOn": "Dosya listesini aç",
 	"picodeWhatsNew.fix.cacheCost": "**Status’taki maliyet önbellek bakımını da sayıyor.** pi’nin turlar arasında istem önbelleğini sıcak tutmak için harcadığı tutar artık ekleniyor, toplam artık düşük çıkmıyor.",
+	"picodeWhatsNew.fix.contextEditor": "**Bağlam artık Düzenleyici düzeninde de var.** PiCode paneli artık Durum'dakiyle aynı görünen Bağlam ile başlıyor ve Oturumu sıkıştır, üzerine gelince kendini açıklayan tek bir düğme.",
 	"picodeWhatsNew.fix.jira": "**Jira'ya bağlanmak artık tarayıcınıza bağlı değil.** Bazı tarayıcılar, Atlassian sayfasında onay verdikten sonra PiCode'u bir daha açmıyordu. Artık bir PiCode sayfası bağlantının hangi hesaba yapılacağını gösteriyor, onu orada onaylıyorsunuz ve editör bunu kendisi fark ediyor.",
 	"picodeWhatsNew.fix.language": "**Yenilikler artık sizin dilinizi konuşuyor.** Düzeltme listesi çevrildi ve pencere, bu sürüm hattının yeniliklerini o zamandan beri gelen tüm düzeltmelerle birlikte koruyor.",
 	"picodeWhatsNew.fix.lostFolder": "**Klasörü kaybolan konuşmalar artık önce soruyor.** Açarken, açık olan klasörde devam edebilir ya da konuşmayı oraya kopyalayabilirsiniz; sessizce devam etmez.",

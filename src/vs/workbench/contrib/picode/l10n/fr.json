@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "Désactiver la liste des fichiers",
 	"picodeWhatsNew.fileListOn": "Activer la liste des fichiers",
 	"picodeWhatsNew.fix.cacheCost": "**Le coût dans Status compte l’entretien du cache.** Ce que pi dépense entre deux tours pour garder le cache du prompt au chaud est maintenant ajouté, le total n’est donc plus trop bas.",
+	"picodeWhatsNew.fix.contextEditor": "**Le contexte est aussi dans la disposition Éditeur.** Le panneau PiCode commence maintenant par Contexte, affiché comme dans État, et Compacter la session est un seul bouton qui s'explique quand vous le survolez.",
 	"picodeWhatsNew.fix.jira": "**La connexion à Jira ne dépend plus de votre navigateur.** Certains navigateurs ne rouvraient jamais PiCode après votre accord sur la page d'Atlassian. Désormais, une page PiCode indique à quel compte la connexion est faite, vous la confirmez là, et l'éditeur s'en aperçoit tout seul.",
 	"picodeWhatsNew.fix.language": "**Les nouveautés parlent maintenant votre langue.** La liste des corrections est traduite, et la fenêtre conserve les nouveautés de cette série de versions avec toutes les corrections depuis.",
 	"picodeWhatsNew.fix.lostFolder": "**Les conversations dont le dossier a disparu posent désormais la question.** À l’ouverture, vous pouvez continuer dans le dossier ouvert ou y copier la conversation, au lieu de continuer sans rien dire.",

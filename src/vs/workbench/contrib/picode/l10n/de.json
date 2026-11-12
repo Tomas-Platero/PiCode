@@ -691,6 +691,7 @@
 	"picodeWhatsNew.fileListOff": "Dateiliste ausschalten",
 	"picodeWhatsNew.fileListOn": "Dateiliste einschalten",
 	"picodeWhatsNew.fix.cacheCost": "**Die Kosten in Status zählen auch das Warmhalten des Caches.** Was pi zwischen den Antworten ausgibt, um den Prompt-Cache warmzuhalten, wird jetzt addiert, die Summe fällt also nicht mehr zu niedrig aus.",
+	"picodeWhatsNew.fix.contextEditor": "**Kontext gibt es jetzt auch im Editor-Layout.** Das PiCode-Panel beginnt jetzt mit Kontext, genauso dargestellt wie im Status, und Sitzung komprimieren ist eine einzelne Schaltfläche, die sich beim Darüberfahren erklärt.",
 	"picodeWhatsNew.fix.jira": "**Die Verbindung zu Jira hängt nicht mehr von deinem Browser ab.** Manche Browser haben PiCode nach der Zustimmung auf der Atlassian-Seite nie wieder geöffnet. Jetzt zeigt eine PiCode-Seite, mit welchem Konto die Verbindung entsteht, du bestätigst sie dort, und der Editor bemerkt es selbst.",
 	"picodeWhatsNew.fix.language": "**„Neuigkeiten“ spricht jetzt deine Sprache.** Die Liste der Korrekturen ist übersetzt, und das Fenster behält die Neuigkeiten dieser Versionslinie zusammen mit allen seitherigen Korrekturen.",
 	"picodeWhatsNew.fix.lostFolder": "**Unterhaltungen, deren Ordner fehlt, fragen jetzt zuerst nach.** Beim Öffnen kannst du im geöffneten Ordner weitermachen oder die Unterhaltung hineinkopieren, statt stillschweigend fortzufahren.",
