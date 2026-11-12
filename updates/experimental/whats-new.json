@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.2-experimental",
+			"notes": "### ✨ New\n\n- **See where your context goes.** Context in Status shows the share used over the model's window, a bar with one colour per part, and a row for each: messages, project instructions, pi's own instructions, skills, pi tools, MCP tools and the rest. The parts are estimates, marked with ~; the total is pi's own.\n- **Room before compacting, and a button.** It says how much fits before the conversation is compacted on its own, and \"Compact session\" summarises it now. Folded, Context keeps just the share and the bar.\n- **A new page in What's New** lets you compact a sample conversation and watch the room come back."
+		},
+		{
 			"version": "2.2.1-experimental",
 			"notes": "### ✨ New\n\n- **Fold the sections of Status.** Every section title except Environment has an arrow: one click folds it, another opens it.\n- **Hide the ones you never use.** Right-click any section title to tick the sections you want to see; the Status tab's menu and the Command Palette offer the same list, and \"Show all sections\" brings everything back.\n- **A new page in What's New** lets you try both on a sample Status."
 		},
