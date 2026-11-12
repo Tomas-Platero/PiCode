@@ -60,6 +60,7 @@ const OPEN_IMPORT_COMMAND = 'picode.import.open';
 const OPEN_SETTINGS_COMMAND = 'workbench.action.openSettings';
 const NEW_TERMINAL_COMMAND = 'workbench.action.terminal.new';
 const SHOW_EXTENSIONS_COMMAND = 'workbench.view.extensions';
+const CHOOSE_SECTIONS_COMMAND = 'picode.status.chooseSections';
 /** The multi-file diff editor's list of changed files (see `multiDiffEditor.contribution.ts`). */
 const FILE_LIST_SETTING = 'multiDiffEditor.experimental.fileList';
 
@@ -261,6 +262,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.newTerminal', "Open a terminal");
 		case 'browseExtensions':
 			return localize('picodeWhatsNew.browseExtensions', "Browse extensions");
+		case 'chooseSections':
+			return localize('picodeWhatsNew.chooseSections', "Choose my sections");
 	}
 }
 
@@ -306,6 +309,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(SHOW_EXTENSIONS_COMMAND);
 			return;
+		case 'chooseSections':
+			close();
+			void services.commandService.executeCommand(CHOOSE_SECTIONS_COMMAND);
+			return;
 		case 'showTasks':
 			close();
 			if (picodeLayoutOf(services.configurationService) !== 'agent') {
@@ -331,6 +338,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	exclude: excludePreview,
 	terminalDialogs: terminalDialogsPreview,
 	problems: problemsPreview,
+	statusSections: statusSectionsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -748,6 +756,53 @@ function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): vo
 	stage = append(parent, $('.picode-whatsnew-dialogs'));
 	const result = append(parent, $('.picode-whatsnew-sync-result'));
 	pick('now');
+}
+
+function statusSectionsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.statusSections.demo', "Fold a section with its arrow, or untick it to hide it."), store);
+	// Made-up sections; Environment has no arrow, as in the real column.
+	const sections = [
+		{ id: 'environment', title: localize('picode.overview.environment', "Environment"), rows: [localize('picode.overview.thisComputer', "This computer")], open: true, shown: true, foldable: false },
+		{ id: 'tasks', title: localize('picode.overview.tasks', "Tasks"), rows: [localize('picode.overview.idle', "Nothing running")], open: true, shown: true, foldable: true },
+		{ id: 'jira', title: localize('picodeIssuesJiraTitle', "Jira issues"), rows: [localize('picodeWhatsNew.board.card1', "The sign-in button does nothing"), localize('picodeWhatsNew.board.card2', "Translate the settings page")], open: false, shown: true, foldable: true },
+		{ id: 'memory', title: localize('picode.overview.memory', "Memory"), rows: [localize('picodeWhatsNew.statusSections.memoryRow', "10 memories")], open: true, shown: true, foldable: true },
+	];
+	const stage = append(parent, $('.picode-whatsnew-exclude'));
+	const column = append(stage, $('.picode-whatsnew-tree'));
+	const ticks = append(stage, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(column);
+		for (const section of sections.filter(candidate => candidate.shown)) {
+			const title = append(column, $('.picode-whatsnew-tree-row.picode-whatsnew-section-title'));
+			if (section.foldable) {
+				append(title, $(`span${ThemeIcon.asCSSSelector(section.open ? Codicon.chevronDown : Codicon.chevronRight)}`));
+				title.classList.add('clickable');
+				store.add(addDisposableListener(title, EventType.CLICK, () => {
+					section.open = !section.open;
+					draw();
+				}));
+			}
+			append(title, $('span')).textContent = section.title;
+			if (section.open) {
+				for (const text of section.rows) {
+					const row = append(column, $('.picode-whatsnew-tree-row'));
+					row.style.paddingLeft = '22px';
+					append(row, $('span')).textContent = text;
+				}
+			}
+		}
+	};
+	for (const section of sections) {
+		const label = append(ticks, $('label.picode-whatsnew-row.toggle'));
+		const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = section.shown;
+		append(label, $('span.picode-whatsnew-row-label')).textContent = section.title;
+		store.add(addDisposableListener(input, EventType.CHANGE, () => {
+			section.shown = input.checked;
+			draw();
+		}));
+	}
+	draw();
 }
 
 function problemsPreview(parent: HTMLElement, store: DisposableStore): void {

@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'statusSections',
+			since: '2.2.1',
+			plan: 'free',
+			icon: Codicon.eyeClosed,
+			title: localize('picodeWhatsNew.statusSections.title', "Status, your way"),
+			summary: localize('picodeWhatsNew.statusSections.summary', "Fold the sections of Status you glance at, and hide the ones you never use."),
+			points: [
+				localize('picodeWhatsNew.statusSections.point1', "Click a section title to fold it; click again to open it."),
+				localize('picodeWhatsNew.statusSections.point2', "Right-click any title to tick the sections you want to see."),
+				localize('picodeWhatsNew.statusSections.point3', "Your choice is remembered, and \"Show all sections\" brings everything back."),
+			],
+			preview: 'statusSections',
+			action: 'chooseSections',
+		},
 		{
 			id: 'changedFiles',
 			since: '2.2.0',
