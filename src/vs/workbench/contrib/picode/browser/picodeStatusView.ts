@@ -10,7 +10,7 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
-import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
@@ -22,6 +22,10 @@ import { Extensions as ViewExtensions, IViewContainersRegistry, IViewDescriptorS
 import { PICODE_STATUS_CONTAINER_ID } from '../../../browser/parts/sidebar/sidebarSideColumn.js';
 import { PICODE_LAYOUT_SETTING } from './picodeLayoutStyle.js';
 import { PICODE_STATUS_COLUMN_SHOWN, PicodeAgentOverview } from './picodeAgentOverviewView.js';
+import { pickStatusSections } from './picodeStatusSections.js';
+import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
+import { IStorageService } from '../../../../platform/storage/common/storage.js';
 
 /**
  * The status panel of the Agent layout as a view of the review side bar, so it is one of the bar's
@@ -95,3 +99,20 @@ Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
 	// Agent layout only, and only while the bar is too narrow for the column.
 	when: ContextKeyExpr.and(ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'), PICODE_STATUS_COLUMN_SHOWN.negate()),
 }], container);
+
+registerAction2(class PicodeChooseStatusSectionsAction extends Action2 {
+	constructor() {
+		super({
+			id: 'picode.status.chooseSections',
+			title: localize2('picode.status.chooseSections', "Show or Hide Status Sections"),
+			category: localize2('picode.category', "PiCode"),
+			icon: Codicon.eye,
+			f1: true,
+			menu: { id: MenuId.ViewTitle, when: ContextKeyExpr.equals('view', PICODE_STATUS_VIEW_ID), group: '1_sections' },
+		});
+	}
+
+	run(accessor: ServicesAccessor): Promise<void> {
+		return pickStatusSections(accessor.get(IQuickInputService), accessor.get(IStorageService));
+	}
+});

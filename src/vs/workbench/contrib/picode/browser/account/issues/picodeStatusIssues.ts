@@ -26,6 +26,7 @@ import { PicodeIssueActions, stateMessage } from './picodeIssueActions.js';
 import { projectRefOf } from './picodeIssueBoard.js';
 import { IPicodeIssue, PicodeIssueSource, splitTitleTag } from './picodeIssueSources.js';
 import { PICODE_OPEN_ISSUES_COMMAND } from './picodeIssues.contribution.js';
+import { decorateStatusSectionTitle, isStatusSectionFolded, isStatusSectionHidden, onDidChangePicodeStatusSections } from '../../picodeStatusSections.js';
 
 /** Opens the Account window, where the connections are made (`picode.account.open`). */
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
@@ -73,6 +74,8 @@ export class PicodeStatusIssues extends Disposable {
 
 	constructor(
 		private readonly host: HTMLElement,
+		/** In Status a panel can be hidden; the Editor layout's own Issues view always shows both. */
+		private readonly canHide: boolean,
 		@IPicodeProEntitlement private readonly entitlement: IPicodeProEntitlement,
 		@IPicodeConnectorService private readonly connectors: IPicodeConnectorService,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -86,6 +89,7 @@ export class PicodeStatusIssues extends Disposable {
 		this.render();
 		this._register(this.entitlement.onDidChange(() => this.render('quietly')));
 		this._register(this.connectors.onDidChange(() => this.render('quietly')));
+		this._register(onDidChangePicodeStatusSections(() => this.render('quietly')));
 		const timer = setInterval(() => { if (this.host.isConnected) { this.render(); } }, REFRESH_MS);
 		this._register({ dispose: () => clearInterval(timer) });
 	}
@@ -104,7 +108,7 @@ export class PicodeStatusIssues extends Disposable {
 			return;
 		}
 		for (const text of SOURCES) {
-			if (this.connectors.isAvailable(text.service)) {
+			if (this.connectors.isAvailable(text.service) && !(this.canHide && isStatusSectionHidden(this.storageService, text.source))) {
 				this.renderSource(text, generation, read);
 			}
 		}
@@ -114,7 +118,12 @@ export class PicodeStatusIssues extends Disposable {
 		const section = append(this.host, $('.picode-overview-section'));
 		const head = append(section, $('.picode-issues-title-row'));
 		const heading = append(head, $('.picode-overview-title'));
-		heading.textContent = text.title;
+		append(heading, $('span.picode-overview-title-label')).textContent = text.title;
+		decorateStatusSectionTitle(heading, text.source, this.renderStore, this.contextMenuService, this.storageService, this.canHide);
+		// Folded: only the title, and nothing is read until it opens again.
+		if (isStatusSectionFolded(this.storageService, text.source)) {
+			return;
+		}
 		if (!this.connectors.isConnected(text.service)) {
 			const row = this.row(section, Codicon.plug, localize('picodeConnectorNotConnected', "Not connected"));
 			this.button(row, localize('picodeConnectorConnect', "Connect"), () => void this.commandService.executeCommand(OPEN_ACCOUNT_COMMAND));
