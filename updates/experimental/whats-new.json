@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.1-experimental",
+			"notes": "### ✨ New\n\n- **Fold the sections of Status.** Every section title except Environment has an arrow: one click folds it, another opens it.\n- **Hide the ones you never use.** Right-click any section title to tick the sections you want to see; the Status tab's menu and the Command Palette offer the same list, and \"Show all sections\" brings everything back.\n- **A new page in What's New** lets you try both on a sample Status."
+		},
+		{
 			"version": "2.2.0-experimental",
 			"notes": "### ✨ New\n\n- **Every changed file, in one list.** When you review all the changes at once, a list of the files sits beside them, with the lines added and removed, so you can jump straight to one. Turn it on from What's New or with the `multiDiffEditor.experimental.fileList` setting.\n- **Hide a folder, keep what you need.** Put `!` in front of a path in the hidden files or search settings to keep it visible, like `\"!node_modules/@types\": true`.\n- **Sign-in windows in front.** When a command in the terminal opens a window, like a sign-in prompt, it now appears in front of PiCode instead of hiding behind it.\n- **Every problem in sight.** Up to 5,000 errors and warnings are underlined in a file, ten times more than before, and more of the newest extensions install.\n- **What's New shows only this version.** After an update or from Help, the window shows the pages of the version you run; patches of the same version add up.\n\n### 🧠 Memory\n\n- **The memory engine is up to date.** Older memory stores recover better, Windows says what is holding the port when memory cannot start, project names can have spaces, and private notes stay out of the reasons memory keeps."
 		},
