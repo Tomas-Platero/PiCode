@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**「新功能」現在使用你的語言。** 修正清單已翻譯，視窗會同時保留這個版本系列的新功能與此後的所有修正。",
 	"picodeWhatsNew.fix.lostFolder": "**資料夾已不存在的對話現在會先詢問。** 開啟時可以在目前開啟的資料夾中繼續，或把對話複製到該資料夾，而不是默默繼續。",
 	"picodeWhatsNew.fix.updateAccess": "**更新不再卡在「存取被拒」。** PiCode 內建的記憶引擎會在更新取代其資料夾之前關閉。",
+	"picodeWhatsNew.fix.updateRestart": "**重新啟動 PiCode 時會再次安裝更新。** 新版本已下載，但切換始終沒有發生，因為讓聊天之間互傳訊息的輔助程式一直佔用著你的設定檔。現在 PiCode 會先關閉它，安裝程式也會等待設定檔空出來。",
 	"picodeWhatsNew.fix.whatsNew": "**每次更新後都會開啟「新功能」。** 只修正問題的更新現在也會在這裡顯示修正內容，視窗也不會再以空白狀態開啟。",
 	"picodeWhatsNew.full": "完整版本資訊",
 	"picodeWhatsNew.group.free": "所有人免費",

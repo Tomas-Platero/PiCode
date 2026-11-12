@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**Nowości mówią teraz w Twoim języku.** Lista poprawek jest przetłumaczona, a okno zachowuje nowości tej linii wersji razem ze wszystkimi poprawkami od tamtej pory.",
 	"picodeWhatsNew.fix.lostFolder": "**Rozmowy, których folder zniknął, teraz najpierw pytają.** Przy otwarciu możesz kontynuować w otwartym folderze albo skopiować do niego rozmowę, zamiast kontynuować po cichu.",
 	"picodeWhatsNew.fix.updateAccess": "**Aktualizacja nie zatrzymuje się już na «Odmowa dostępu».** Silnik pamięci dołączony do PiCode zamyka się tuż przed tym, jak aktualizacja zastąpi jego folder.",
+	"picodeWhatsNew.fix.updateRestart": "**Aktualizacje znów instalują się po ponownym uruchomieniu PiCode.** Nowa wersja była pobierana, ale przełączenie nigdy nie następowało, bo pomocnik, przez który czaty wysyłają sobie wiadomości, blokował Twój profil. Teraz PiCode najpierw go zamyka, a instalator czeka, aż profil będzie wolny.",
 	"picodeWhatsNew.fix.whatsNew": "**Nowości otwierają się po każdej aktualizacji.** Aktualizacje, które tylko naprawiają błędy, pokazują teraz tutaj swoje poprawki, a okno nie otwiera się już puste.",
 	"picodeWhatsNew.full": "Pełne informacje o wydaniu",
 	"picodeWhatsNew.group.free": "Za darmo dla wszystkich",

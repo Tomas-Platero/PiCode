@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**Les nouveautés parlent maintenant votre langue.** La liste des corrections est traduite, et la fenêtre conserve les nouveautés de cette série de versions avec toutes les corrections depuis.",
 	"picodeWhatsNew.fix.lostFolder": "**Les conversations dont le dossier a disparu posent désormais la question.** À l’ouverture, vous pouvez continuer dans le dossier ouvert ou y copier la conversation, au lieu de continuer sans rien dire.",
 	"picodeWhatsNew.fix.updateAccess": "**La mise à jour ne s'arrête plus sur « Accès refusé ».** Le moteur de mémoire livré avec PiCode se ferme juste avant que la mise à jour remplace son dossier.",
+	"picodeWhatsNew.fix.updateRestart": "**Les mises à jour s'installent de nouveau au redémarrage de PiCode.** La nouvelle version était téléchargée, mais le basculement n'avait jamais lieu, car l'assistant qui permet aux chats de s'envoyer des messages occupait votre profil. PiCode le ferme désormais d'abord, et le programme d'installation attend que le profil soit libre.",
 	"picodeWhatsNew.fix.whatsNew": "**Les nouveautés s'affichent après chaque mise à jour.** Les mises à jour qui ne font que corriger des erreurs montrent désormais leurs corrections ici, et la fenêtre ne s'ouvre plus vide.",
 	"picodeWhatsNew.full": "Notes de version complètes",
 	"picodeWhatsNew.group.free": "Gratuit pour tous",

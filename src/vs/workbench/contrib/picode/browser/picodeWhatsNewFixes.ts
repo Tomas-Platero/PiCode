@@ -24,6 +24,10 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.2.3',
+			text: localize('picodeWhatsNew.fix.updateRestart', "**Updates install when PiCode restarts again.** The new version was downloaded but the switch never happened, because the helper that lets chats message each other kept your profile busy. PiCode now closes it first, and the installer waits for the profile to be free."),
+		},
+		{
 			since: '2.0.4',
 			text: localize('picodeWhatsNew.fix.lostFolder', "**Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently."),
 		},

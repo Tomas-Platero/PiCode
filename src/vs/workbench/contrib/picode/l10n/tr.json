@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**Yenilikler artık sizin dilinizi konuşuyor.** Düzeltme listesi çevrildi ve pencere, bu sürüm hattının yeniliklerini o zamandan beri gelen tüm düzeltmelerle birlikte koruyor.",
 	"picodeWhatsNew.fix.lostFolder": "**Klasörü kaybolan konuşmalar artık önce soruyor.** Açarken, açık olan klasörde devam edebilir ya da konuşmayı oraya kopyalayabilirsiniz; sessizce devam etmez.",
 	"picodeWhatsNew.fix.updateAccess": "**Güncelleme artık «Erişim reddedildi» hatasında takılmıyor.** PiCode'un içindeki bellek motoru, güncelleme klasörünü değiştirmeden hemen önce kapatılıyor.",
+	"picodeWhatsNew.fix.updateRestart": "**Güncellemeler PiCode yeniden başlatıldığında yine yükleniyor.** Yeni sürüm indiriliyordu ama geçiş hiç gerçekleşmiyordu, çünkü sohbetlerin birbirine mesaj göndermesini sağlayan yardımcı profilinizi meşgul tutuyordu. Artık PiCode önce onu kapatıyor ve yükleyici profilin boşalmasını bekliyor.",
 	"picodeWhatsNew.fix.whatsNew": "**Yenilikler her güncellemeden sonra açılır.** Yalnızca hata düzelten güncellemeler artık düzeltmelerini burada gösteriyor ve pencere artık boş açılmıyor.",
 	"picodeWhatsNew.full": "Sürüm notlarının tamamı",
 	"picodeWhatsNew.group.free": "Herkese ücretsiz",

@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**As novidades agora falam o seu idioma.** A lista de correções está traduzida e a janela mantém as novidades desta linha de versões junto com todas as correções desde então.",
 	"picodeWhatsNew.fix.lostFolder": "**As conversas cuja pasta não existe mais agora perguntam antes.** Ao abrir uma, você pode continuar na pasta aberta ou copiar a conversa para ela, em vez de seguir sem avisar.",
 	"picodeWhatsNew.fix.updateAccess": "**Atualizar não para mais em «Acesso negado».** O mecanismo de memória que o PiCode traz é fechado logo antes de a atualização substituir sua pasta.",
+	"picodeWhatsNew.fix.updateRestart": "**As atualizações voltam a ser instaladas ao reiniciar o PiCode.** A nova versão era baixada, mas a troca nunca acontecia, porque o auxiliar que permite que os chats troquem mensagens mantinha seu perfil ocupado. Agora o PiCode o fecha antes, e o instalador espera o perfil ficar livre.",
 	"picodeWhatsNew.fix.whatsNew": "**As novidades aparecem após cada atualização.** Atualizações que só corrigem erros agora mostram aqui as correções, e a janela não abre mais em branco.",
 	"picodeWhatsNew.full": "Notas de versão completas",
 	"picodeWhatsNew.group.free": "Grátis para todos",

@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**“新功能”现在使用你的语言。** 修复列表已翻译，窗口会同时保留这个版本系列的新功能和此后的所有修复。",
 	"picodeWhatsNew.fix.lostFolder": "**文件夹已不存在的对话现在会先询问。** 打开时可以在当前打开的文件夹中继续，或把对话复制到该文件夹，而不是悄悄继续。",
 	"picodeWhatsNew.fix.updateAccess": "**更新不再卡在“访问被拒绝”。** PiCode 自带的内存引擎会在更新替换其文件夹之前关闭。",
+	"picodeWhatsNew.fix.updateRestart": "**重启 PiCode 时会再次安装更新。** 新版本已下载，但切换始终没有发生，因为让聊天之间互发消息的辅助进程一直占用着你的配置文件。现在 PiCode 会先关闭它，安装程序也会等待配置文件空闲。",
 	"picodeWhatsNew.fix.whatsNew": "**每次更新后都会打开“新功能”。** 只修复问题的更新现在也会在这里显示修复内容，窗口也不会再以空白状态打开。",
 	"picodeWhatsNew.full": "完整发行说明",
 	"picodeWhatsNew.group.free": "所有人免费",

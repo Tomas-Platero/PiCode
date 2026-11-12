@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**„Neuigkeiten“ spricht jetzt deine Sprache.** Die Liste der Korrekturen ist übersetzt, und das Fenster behält die Neuigkeiten dieser Versionslinie zusammen mit allen seitherigen Korrekturen.",
 	"picodeWhatsNew.fix.lostFolder": "**Unterhaltungen, deren Ordner fehlt, fragen jetzt zuerst nach.** Beim Öffnen kannst du im geöffneten Ordner weitermachen oder die Unterhaltung hineinkopieren, statt stillschweigend fortzufahren.",
 	"picodeWhatsNew.fix.updateAccess": "**Das Aktualisieren bleibt nicht mehr bei „Zugriff verweigert“ hängen.** Die Speicher-Engine von PiCode wird jetzt direkt vor dem Austausch ihres Ordners durch das Update beendet.",
+	"picodeWhatsNew.fix.updateRestart": "**Updates werden beim Neustart von PiCode wieder installiert.** Die neue Version wurde heruntergeladen, aber der Wechsel fand nie statt, weil der Helfer, über den sich Chats Nachrichten schicken, dein Profil blockierte. PiCode schließt ihn jetzt zuerst, und das Installationsprogramm wartet, bis das Profil frei ist.",
 	"picodeWhatsNew.fix.whatsNew": "**„Neuigkeiten“ öffnet sich nach jedem Update.** Updates, die nur Fehler beheben, zeigen ihre Korrekturen jetzt hier, und das Fenster erscheint nicht mehr leer.",
 	"picodeWhatsNew.full": "Vollständige Versionshinweise",
 	"picodeWhatsNew.group.free": "Kostenlos für alle",

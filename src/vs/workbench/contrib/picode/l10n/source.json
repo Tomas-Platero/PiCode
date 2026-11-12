@@ -693,6 +693,7 @@
 	"picodeWhatsNew.fix.language": "**What's New now speaks your language.** The list of fixes is translated, and the window keeps the news of this version line together with every fix since.",
 	"picodeWhatsNew.fix.lostFolder": "**Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently.",
 	"picodeWhatsNew.fix.updateAccess": "**Updating no longer stops at \"Access denied\".** The memory engine that PiCode carries now closes right before the update replaces its folder.",
+	"picodeWhatsNew.fix.updateRestart": "**Updates install when PiCode restarts again.** The new version was downloaded but the switch never happened, because the helper that lets chats message each other kept your profile busy. PiCode now closes it first, and the installer waits for the profile to be free.",
 	"picodeWhatsNew.fix.whatsNew": "**What's New opens after every update.** Updates that only fix things now show their fixes here, and the window no longer opens blank.",
 	"picodeWhatsNew.full": "Full release notes",
 	"picodeWhatsNew.group.free": "Free for everyone",
