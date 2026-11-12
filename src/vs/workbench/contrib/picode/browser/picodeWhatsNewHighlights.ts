@@ -26,8 +26,6 @@ export interface IWhatsNewHighlight {
 	readonly since: string;
 	/** Who gets it: the window always says so, and without Pro the button of a Pro novelty leads to the plans. */
 	readonly plan: 'pro' | 'free';
-	/** Which layout it shows in: the window always says so. */
-	readonly layouts: 'agent' | 'editor' | 'both';
 	readonly icon: ThemeIcon;
 	readonly title: string;
 	readonly summary: string;
@@ -42,7 +40,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'changedFiles',
 			since: '2.2.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.diffMultiple,
 			title: localize('picodeWhatsNew.changedFiles.title', "Every changed file, in one list"),
 			summary: localize('picodeWhatsNew.changedFiles.summary', "When you review all the changes at once, a list of the files sits beside them, so you can jump straight to the one you want."),
@@ -58,7 +55,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'exclude',
 			since: '2.2.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.eyeClosed,
 			title: localize('picodeWhatsNew.exclude.title', "Hide a folder, keep what you need"),
 			summary: localize('picodeWhatsNew.exclude.summary', "Hidden files can now have exceptions: hide a whole folder and still see the one part of it you care about."),
@@ -74,7 +70,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'terminalDialogs',
 			since: '2.2.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.terminal,
 			title: localize('picodeWhatsNew.terminalDialogs.title', "Sign-in windows in front"),
 			summary: localize('picodeWhatsNew.terminalDialogs.summary', "When a command in the terminal opens a window, like a sign-in prompt, it now appears in front of PiCode instead of hiding behind it."),
@@ -90,7 +85,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'problems',
 			since: '2.2.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.warning,
 			title: localize('picodeWhatsNew.problems.title', "Every problem in sight"),
 			summary: localize('picodeWhatsNew.problems.summary', "Big files now show all their errors and warnings underlined, and more of the newest extensions install."),
@@ -106,7 +100,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'import',
 			since: '2.0.5',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.cloudDownload,
 			title: localize('picodeWhatsNew.import.title', "Import from pi or VS Code"),
 			summary: localize('picodeWhatsNew.import.summary', "Bring over exactly what you want from your other pi or your VS Code, one item at a time."),
@@ -122,7 +115,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'issues',
 			since: '2.0.0',
 			plan: 'pro',
-			layouts: 'both',
 			icon: Codicon.issues,
 			title: localize('picodeWhatsNew.issues.title', "GitHub and Jira issues"),
 			summary: localize('picodeWhatsNew.issues.summary', "What was reported on your project, right beside your code and ready to hand to the agent."),
@@ -138,7 +130,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'sync',
 			since: '2.0.0',
 			plan: 'pro',
-			layouts: 'both',
 			icon: Codicon.cloud,
 			title: localize('picodeWhatsNew.sync.title', "Pick what syncs"),
 			summary: localize('picodeWhatsNew.sync.summary', "Your setup on every computer, and you choose exactly what travels."),
@@ -154,7 +145,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'account',
 			since: '2.0.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.account,
 			title: localize('picodeWhatsNew.account.title', "Your account, in one place"),
 			summary: localize('picodeWhatsNew.account.summary', "PiCode is free and complete, with or without an account. Pro adds what needs our servers."),
@@ -170,7 +160,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'plan',
 			since: '2.0.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.checklist,
 			title: localize('picodeWhatsNew.plan.title', "See the agent's plan"),
 			summary: localize('picodeWhatsNew.plan.summary', "On longer jobs the agent lists its steps, so you can see how far along it is."),
@@ -186,7 +175,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'job',
 			since: '2.0.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.terminal,
 			title: localize('picodeWhatsNew.job.title', "Background jobs in view"),
 			summary: localize('picodeWhatsNew.job.summary', "Long-running commands now show up in Tasks, and the agent tells you when they finish."),
@@ -202,7 +190,6 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			id: 'layout',
 			since: '1.0.0',
 			plan: 'free',
-			layouts: 'both',
 			icon: Codicon.layout,
 			title: localize('picodeWhatsNew.layout.title', "Agent or Editor"),
 			summary: localize('picodeWhatsNew.layout.summary', "Chat in the centre, or code in the centre. Switch any time and lose nothing."),

@@ -212,22 +212,13 @@ export function showWhatsNewWindow(options: IWhatsNewWindowOptions, services: IW
 }
 
 function renderHighlight(page: HTMLElement, highlight: IWhatsNewHighlight, store: DisposableStore, services: IWhatsNewWindowServices, close: () => void, rerender: () => void): void {
-	const tags = append(page, $('.picode-whatsnew-tags'));
-	const tag = append(tags, $(`.picode-whatsnew-tag.${highlight.plan}`));
+	const tag = append(page, $(`.picode-whatsnew-tag.${highlight.plan}`));
 	append(tag, $(`span${ThemeIcon.asCSSSelector(highlight.plan === 'pro' ? Codicon.star : Codicon.heart)}`));
 	append(tag, $('span')).textContent = highlight.plan === 'free'
 		? localize('picodeWhatsNew.group.free', "Free for everyone")
 		: services.entitlement.plan === 'pro'
 			? localize('picodeWhatsNew.tag.yours', "Included in your plan")
 			: localize('picodeWhatsNew.group.pro', "With PiCode Pro");
-	// Where it shows: the Agent layout, the Editor layout, or both.
-	const where = append(tags, $('.picode-whatsnew-tag.layout'));
-	append(where, $(`span${ThemeIcon.asCSSSelector(highlight.layouts === 'agent' ? Codicon.robot : highlight.layouts === 'editor' ? Codicon.editorLayout : Codicon.layout)}`));
-	append(where, $('span')).textContent = highlight.layouts === 'agent'
-		? localize('picodeWhatsNew.layouts.agent', "Agent layout")
-		: highlight.layouts === 'editor'
-			? localize('picodeWhatsNew.layouts.editor', "Editor layout")
-			: localize('picodeWhatsNew.layouts.both', "Agent and Editor layouts");
 	append(page, $('h2.picode-whatsnew-page-title')).textContent = highlight.title;
 	append(page, $('p.picode-whatsnew-summary')).textContent = highlight.summary;
 	const demo = append(page, $('.picode-whatsnew-demo'));

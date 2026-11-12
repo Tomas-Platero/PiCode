@@ -454,21 +454,6 @@
 	font-weight: 600;
 }
 
-.picode-whatsnew-tags {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin-bottom: 8px;
-}
-
-.picode-whatsnew-tags .picode-whatsnew-tag {
-	margin-bottom: 0;
-}
-
-.picode-whatsnew-tag.layout {
-	color: var(--vscode-textLink-foreground);
-}
-
 .picode-whatsnew-tag .codicon {
 	font-size: 12px;
 }
