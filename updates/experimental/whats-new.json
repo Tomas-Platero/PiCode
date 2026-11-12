@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.3-experimental",
+			"notes": "### 🐛 Fixed\n\n- **Updates install when PiCode restarts again.** The new version was downloaded, but after the restart PiCode kept opening the old one. The helper that lets chats message each other kept your profile busy, so the switch was skipped. PiCode now closes that helper first, and the installer waits up to a minute for your profile to be free.\n\n> If you are on 2.2.0–2.2.2 and stuck, this update installs normally: the fix lives in the new installer."
+		},
+		{
 			"version": "2.2.2-experimental",
 			"notes": "### ✨ New\n\n- **See where your context goes.** Context in Status shows the share used over the model's window, a bar with one colour per part, and a row for each: messages, project instructions, pi's own instructions, skills, pi tools, MCP tools and the rest. The parts are estimates, marked with ~; the total is pi's own.\n- **Room before compacting, and a button.** It says how much fits before the conversation is compacted on its own, and \"Compact session\" summarises it now. Folded, Context keeps just the share and the bar.\n- **A new page in What's New** lets you compact a sample conversation and watch the room come back."
 		},
