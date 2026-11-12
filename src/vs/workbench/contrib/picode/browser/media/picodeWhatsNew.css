@@ -650,33 +650,21 @@
 	opacity: 0.55;
 }
 
+.picode-whatsnew-code-number {
+	display: inline-block;
+	width: 44px;
+	color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+}
+
+.picode-whatsnew-squiggle {
+	text-decoration: underline wavy var(--vscode-editorError-foreground, var(--vscode-charts-red));
+	text-underline-offset: 3px;
+}
+
 .picode-whatsnew-extension {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-}
-
-.picode-whatsnew-extension-card {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 10px;
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
-	animation: picode-whatsnew-appear 0.25s ease-out;
-}
-
-.picode-whatsnew-extension-card .picode-whatsnew-row-text {
-	flex: 1;
-}
-
-.picode-whatsnew-extension-icon.codicon {
-	font-size: 26px;
-}
-
-.picode-whatsnew-button:disabled {
-	opacity: 0.6;
-	cursor: default;
 }
 
 /* -- the version beside the title, and a page that looks like the rest ------------------------------ */

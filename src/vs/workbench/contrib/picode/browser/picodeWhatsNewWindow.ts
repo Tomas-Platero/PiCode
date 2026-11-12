@@ -10,6 +10,7 @@ import { disposableTimeout } from '../../../../base/common/async.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
+import { language as platformLanguage } from '../../../../base/common/platform.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -329,7 +330,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	changedFiles: changedFilesPreview,
 	exclude: excludePreview,
 	terminalDialogs: terminalDialogsPreview,
-	editorBase: editorBasePreview,
+	problems: problemsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -749,31 +750,28 @@ function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): vo
 	pick('now');
 }
 
-function editorBasePreview(parent: HTMLElement, store: DisposableStore): void {
-	demoBar(parent, localize('picodeWhatsNew.editorBase.demo', "Compare an extension that needs VS Code 1.146."), store);
+function problemsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.problems.demo', "Compare a big file with many problems."), store);
+	// A file with 1,200 problems: before, only the first 500 were underlined.
+	const total = 1200;
+	const lines = ['const a = undefinedValue;', 'let b: number = "text";', 'callMissing();', 'import { gone } from "./gone";', 'const c = a.missing.deep;', 'return;'];
+	const format = (value: number) => value.toLocaleString(platformLanguage);
 	let stage: HTMLElement;
 	const pick = demoTabs(parent, store, [['before', localize('picodeWhatsNew.before', "Before")], ['now', localize('picodeWhatsNew.now', "Now")]], mode => {
 		clearNode(stage);
-		const card = append(stage, $('.picode-whatsnew-extension-card'));
-		append(card, $(`span.picode-whatsnew-extension-icon${ThemeIcon.asCSSSelector(Codicon.extensions)}`));
-		const text = append(card, $('.picode-whatsnew-row-text'));
-		append(text, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.editorBase.extension', "Example Linter");
-		append(text, $('span.picode-whatsnew-row-detail')).textContent = localize('picodeWhatsNew.editorBase.needs', "Needs VS Code 1.146 or newer");
-		const button = append(card, $('button.picode-whatsnew-button', { type: 'button' })) as HTMLButtonElement;
-		if (mode === 'before') {
-			button.disabled = true;
-			button.classList.add('secondary');
-			button.textContent = localize('picodeWhatsNew.editorBase.incompatible', "Not compatible");
-		} else {
-			button.textContent = localize('picodeWhatsNew.editorBase.install', "Install");
-			store.add(addDisposableListener(button, EventType.CLICK, () => {
-				button.disabled = true;
-				button.textContent = localize('picodeWhatsNew.editorBase.installed', "Installed");
-			}));
-		}
-		const problems = append(stage, $('.picode-whatsnew-row'));
-		append(problems, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.warning)}`));
-		append(problems, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.editorBase.problems', "Errors and warnings underlined per file: {0}", mode === 'before' ? '500' : '5,000');
+		const code = append(stage, $('.picode-whatsnew-diff-view'));
+		lines.forEach((text, index) => {
+			const line = append(code, $('.picode-whatsnew-diff-line'));
+			const number = index * 240 + 1;
+			append(line, $('span.picode-whatsnew-code-number')).textContent = String(number);
+			const content = append(line, $('span')) as HTMLElement;
+			content.textContent = text;
+			// Lines past the old limit stay plain before; now every problem is underlined.
+			content.classList.toggle('picode-whatsnew-squiggle', mode === 'now' || number <= 500);
+		});
+		const count = append(stage, $('.picode-whatsnew-row'));
+		append(count, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.warning)}`));
+		append(count, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.problems.count', "Underlined in this file: {0} of {1}", format(mode === 'before' ? 500 : total), format(total));
 	});
 	stage = append(parent, $('.picode-whatsnew-extension'));
 	pick('now');

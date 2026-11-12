@@ -8,7 +8,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'editorBase';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
 export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions';
@@ -82,18 +82,18 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			action: 'newTerminal',
 		},
 		{
-			id: 'editorBase',
+			id: 'problems',
 			since: '2.2.0',
 			plan: 'free',
-			icon: Codicon.vscode,
-			title: localize('picodeWhatsNew.editorBase.title', "Up to date with VS Code 1.146"),
-			summary: localize('picodeWhatsNew.editorBase.summary', "PiCode now counts as VS Code 1.146, so the newest extensions install, and it brings the editor improvements that came with it."),
+			icon: Codicon.warning,
+			title: localize('picodeWhatsNew.problems.title', "Every problem in sight"),
+			summary: localize('picodeWhatsNew.problems.summary', "Big files now show all their errors and warnings underlined, and more of the newest extensions install."),
 			points: [
-				localize('picodeWhatsNew.editorBase.point1', "Extensions that need VS Code 1.146 now install."),
-				localize('picodeWhatsNew.editorBase.point2', "Up to 5,000 errors and warnings are underlined in a file, ten times more than before."),
-				localize('picodeWhatsNew.editorBase.point3', "Extensions can now add their own entries to a file's history."),
+				localize('picodeWhatsNew.problems.point1', "Up to 5,000 errors and warnings are underlined in a file, ten times more than before."),
+				localize('picodeWhatsNew.problems.point2', "More of the newest extensions now install."),
+				localize('picodeWhatsNew.problems.point3', "Extensions can now add their own entries to a file's history."),
 			],
-			preview: 'editorBase',
+			preview: 'problems',
 			action: 'browseExtensions',
 		},
 		{
