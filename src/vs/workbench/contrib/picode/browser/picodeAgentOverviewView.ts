@@ -31,6 +31,8 @@ import { ISCMService } from '../../scm/common/scm.js';
 import { onDidChangePicodeAgentStatus } from './picodeAgentStatusPill.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 import { PicodeStatusIssues } from './account/issues/picodeStatusIssues.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { areAllStatusSectionsHidden, decorateStatusSectionTitle, isStatusSectionFolded, isStatusSectionHidden, onDidChangePicodeStatusSections, PicodeStatusSectionId, showAllStatusSections } from './picodeStatusSections.js';
 
 /**
  * The Agent layout's status column, the first half of the review side bar once it is wide enough: where the agent works, how
@@ -154,7 +156,6 @@ export class PicodeAgentOverview extends Disposable {
 	private showFinished = false;
 	/** The task rows opened to their facts: they stay open while the board repaints. */
 	private readonly openTasks = new Set<string>();
-	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	/** The readings still waiting for an answer: a slow one is not asked again on top of itself. */
 	private readonly reading = new Set<string>();
@@ -175,6 +176,7 @@ export class PicodeAgentOverview extends Disposable {
 		@IStorageService private readonly storageService: IStorageService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IHostService private readonly hostService: IHostService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IFileService fileService: IFileService,
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
@@ -192,7 +194,7 @@ export class PicodeAgentOverview extends Disposable {
 		this.root = append(parent, $('.picode-overview'));
 		// The issue panels draw and refresh themselves; the column only puts their host back after each repaint.
 		this.issuesHost = $('.picode-overview-issues');
-		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost));
+		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost, true));
 
 		// What the agent is doing changed: the plan says so without waiting for the next reading.
 		this._register(onDidChangePicodeAgentStatus(() => {
@@ -213,6 +215,8 @@ export class PicodeAgentOverview extends Disposable {
 		this._register(this.scmService.onDidAddRepository(() => this.paint()));
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
 		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => this.paint()));
+		// A section hidden, shown, folded or unfolded, here or in the other Status of the window.
+		this._register(onDidChangePicodeStatusSections(() => this.paint()));
 		// What the editor already knows is painted now; pi's MCPs join when it answers.
 		this.paint();
 		this.setLive(true);
@@ -319,6 +323,11 @@ export class PicodeAgentOverview extends Disposable {
 		this.painted = this.fingerprint();
 		this.renderDisposables.clear();
 		clearNode(this.root);
+		if (areAllStatusSectionsHidden(this.storageService)) {
+			const row = this.row(this.section(this.root, undefined), Codicon.eyeClosed, localize('picode.overview.allHidden', "All sections are hidden"));
+			this.action(row, localize('picode.overview.showSections', "Show"), () => showAllStatusSections(this.storageService));
+			return;
+		}
 		this.renderEnvironment(this.root);
 		this.renderContext(this.root);
 		this.renderConnectors(this.root);
@@ -360,6 +369,21 @@ export class PicodeAgentOverview extends Disposable {
 		return section;
 	}
 
+	/**
+	 * A section with its title, its arrow and its right-click menu, or nothing when the person hid
+	 * it. `open` says whether its content is drawn: folded, only the title shows.
+	 */
+	private titledSection(parent: HTMLElement, id: PicodeStatusSectionId, title: string): { readonly section: HTMLElement; readonly heading: HTMLElement; readonly open: boolean } | undefined {
+		if (isStatusSectionHidden(this.storageService, id)) {
+			return undefined;
+		}
+		const section = append(parent, $('.picode-overview-section'));
+		const heading = append(section, $('.picode-overview-title'));
+		append(heading, $('span.picode-overview-title-label')).textContent = title;
+		decorateStatusSectionTitle(heading, id, this.renderDisposables, this.contextMenuService, this.storageService);
+		return { section, heading, open: !isStatusSectionFolded(this.storageService, id) };
+	}
+
 	private changedFiles(): number {
 		let files = 0;
 		for (const repository of this.scmService.repositories) {
@@ -388,7 +412,11 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderEnvironment(parent: HTMLElement): void {
-		const section = this.section(parent, localize('picode.overview.environment', "Environment"));
+		const titled = this.titledSection(parent, 'environment', localize('picode.overview.environment', "Environment"));
+		if (!titled) {
+			return;
+		}
+		const section = titled.section;
 		const remote = this.environmentService.remoteAuthority;
 		this.row(section, remote ? Codicon.remote : Codicon.vm, remote ? remote : localize('picode.overview.thisComputer', "This computer"));
 
@@ -423,7 +451,11 @@ export class PicodeAgentOverview extends Disposable {
 		if (usage === undefined) {
 			return;
 		}
-		const section = this.section(parent, localize('picode.overview.context', "Context"));
+		const titled = this.titledSection(parent, 'context', localize('picode.overview.context', "Context"));
+		if (!titled?.open) {
+			return;
+		}
+		const section = titled.section;
 		const row = append(section, $('.picode-overview-row.picode-overview-meter-row'));
 		append(row, $('span.picode-overview-label')).textContent = localize('picode.overview.contextUsed', "Used by this conversation");
 		append(row, $('span.picode-overview-value')).textContent = `${usage}%`;
@@ -452,24 +484,23 @@ export class PicodeAgentOverview extends Disposable {
 		if (connectors === undefined) {
 			return;
 		}
+		const titled = this.titledSection(parent, 'connectors', localize('picode.overview.connectors', "MCPs"));
+		if (!titled) {
+			return;
+		}
+		const { section, heading, open } = titled;
 		if (connectors.length === 0) {
-			const empty = this.section(parent, localize('picode.overview.connectors', "MCPs"));
-			const row = this.row(empty, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
-			this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
+			if (open) {
+				const row = this.row(section, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
+				this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
+			}
 			return;
 		}
 		// Folded by default: only the ones that need the user (sign in, off) stay visible.
-		const section = append(parent, $('.picode-overview-section'));
-		const heading = this.row(section, this.showConnectors ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.connectors', "MCPs"));
-		heading.classList.add('picode-overview-title');
 		append(heading, $('span.picode-overview-value')).textContent = String(connectors.length);
-		this.clickable(heading, () => {
-			this.showConnectors = !this.showConnectors;
-			this.paint();
-		});
 		for (const connector of connectors) {
 			const needsYou = connector.signIn === 'needed' || connector.on === false;
-			if (!this.showConnectors && !needsYou) {
+			if (!open && !needsYou) {
 				continue;
 			}
 			// The same mark the chat settings' MCP list shows: the service's own logo, or its initials.
@@ -487,8 +518,20 @@ export class PicodeAgentOverview extends Disposable {
 
 	private renderChanges(parent: HTMLElement): void {
 		const files = this.changedFiles();
+		if (isStatusSectionHidden(this.storageService, 'changes')) {
+			return;
+		}
 		// Nothing changed is one quiet line: a title over it would only repeat the word.
-		const section = this.section(parent, files === 0 ? undefined : localize('picode.overview.changes', "Changes"));
+		let section: HTMLElement;
+		if (files === 0) {
+			section = this.section(parent, undefined);
+		} else {
+			const titled = this.titledSection(parent, 'changes', localize('picode.overview.changes', "Changes"))!;
+			if (!titled.open) {
+				return;
+			}
+			section = titled.section;
+		}
 		const filesLabel = files === 0
 			? localize('picode.overview.noChanges', "Nothing changed")
 			: files === 1 ? localize('picode.overview.oneChange', "1 file changed") : localize('picode.overview.manyChanges', "{0} files changed", files);
@@ -517,8 +560,19 @@ export class PicodeAgentOverview extends Disposable {
 
 	/** The same block as the connector's Tasks view: the plan, what is running, and what finished. */
 	private renderTasks(parent: HTMLElement): void {
-		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
+		const titled = this.titledSection(parent, 'tasks', localize('picode.overview.tasks', "Tasks"));
+		if (!titled) {
+			return;
+		}
+		const section = titled.section;
 		const running = knownTasks?.running ?? [];
+		if (!titled.open) {
+			// Folded, the title still says whether something runs.
+			if (running.length > 0) {
+				append(titled.heading, $('span.picode-overview-value')).textContent = String(running.length);
+			}
+			return;
+		}
 		const finished = knownTasks?.finished ?? [];
 		const todos = knownTasks?.todos;
 		this.row(section, Codicon.dashboard, knownTasks?.summary ?? localize('picode.overview.idle', "Nothing running"));
@@ -608,7 +662,11 @@ export class PicodeAgentOverview extends Disposable {
 			return;
 		}
 		const memory = knownMemory;
-		const section = this.section(parent, localize('picode.overview.memory', "Memory"));
+		const titled = this.titledSection(parent, 'memory', localize('picode.overview.memory', "Memory"));
+		if (!titled?.open) {
+			return;
+		}
+		const section = titled.section;
 		if (memory === undefined || memory.state === 'loading') {
 			this.row(section, Codicon.loading, localize('picode.overview.memoryStarting', "Memory is starting…")).classList.add('running');
 			return;

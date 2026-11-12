@@ -172,6 +172,31 @@
 	font-weight: 600;
 }
 
+/* A section title with its arrow: click folds or unfolds, right-click picks the sections shown. */
+.picode-overview-title.picode-overview-foldable {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.picode-overview-title.picode-overview-foldable[aria-expanded="false"] {
+	margin-bottom: 0;
+}
+
+.picode-overview-title .picode-overview-title-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-overview-title > .picode-overview-value {
+	margin-left: auto;
+	font-weight: normal;
+}
+
 .picode-overview-row {
 	display: flex;
 	align-items: center;
