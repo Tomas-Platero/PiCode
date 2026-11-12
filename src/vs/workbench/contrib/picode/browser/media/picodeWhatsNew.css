@@ -582,6 +582,14 @@
 	animation: picode-whatsnew-appear 0.25s ease-out;
 }
 
+.picode-whatsnew-section-title {
+	font-weight: 600;
+}
+
+.picode-whatsnew-section-title.clickable {
+	cursor: pointer;
+}
+
 .picode-whatsnew-json {
 	margin: 0;
 	padding: 8px 10px;
