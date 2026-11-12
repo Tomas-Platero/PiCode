@@ -17,6 +17,7 @@ import './account/issues/picodeIssues.contribution.js';
 import './account/picodePlanRefresh.js';
 import './picodeChatLateTurn.js';
 import './account/issues/picodeIssuesView.js';
+import './picodeContextView.js';
 import './picodeMcpSection.js';
 import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';

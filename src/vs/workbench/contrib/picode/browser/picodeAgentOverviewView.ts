@@ -207,8 +207,14 @@ export class PicodeAgentOverview extends Disposable {
 	/** What the column last drew, so a reading that changed nothing leaves it (and its hover) alone. */
 	private painted: string | undefined;
 
+	/**
+	 * `only` draws one section on its own, for a view of the Editor layout that shows just that part
+	 * of Status: same drawing, so both layouts look alike. The view brings its own title and fold, so
+	 * the section draws no heading and ignores Status's hide and fold choices.
+	 */
 	constructor(
 		parent: HTMLElement,
+		private readonly only: 'context' | undefined,
 		@ICommandService private readonly commandService: ICommandService,
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
@@ -288,6 +294,10 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private refresh(): void {
+		if (this.only === 'context') {
+			void this.read('context', () => this.readContext());
+			return;
+		}
 		void this.read('connectors', async () => {
 			const servers = await this.commandService.executeCommand<readonly IConnector[]>(MCP_SERVERS_COMMAND);
 			knownConnectors = Array.isArray(servers) ? servers : [];
@@ -311,6 +321,9 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private readTasks(): Promise<void> {
+		if (this.only) {
+			return Promise.resolve();
+		}
 		return this.read('tasks', async () => {
 			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
 		});
@@ -372,6 +385,13 @@ export class PicodeAgentOverview extends Disposable {
 		this.painted = this.fingerprint();
 		this.renderDisposables.clear();
 		clearNode(this.root);
+		if (this.only === 'context') {
+			this.renderContext(this.root);
+			if (!this.root.firstChild) {
+				this.row(this.section(this.root, undefined), Codicon.commentDiscussion, localize('picode.overview.contextEmpty', "Start a chat to see its context"));
+			}
+			return;
+		}
 		if (areAllStatusSectionsHidden(this.storageService)) {
 			const row = this.row(this.section(this.root, undefined), Codicon.eyeClosed, localize('picode.overview.allHidden', "All sections are hidden"));
 			this.action(row, localize('picode.overview.showSections', "Show"), () => showAllStatusSections(this.storageService));
@@ -423,6 +443,10 @@ export class PicodeAgentOverview extends Disposable {
 	 * it. `open` says whether its content is drawn: folded, only the title shows.
 	 */
 	private titledSection(parent: HTMLElement, id: PicodeStatusSectionId, title: string): { readonly section: HTMLElement; readonly heading: HTMLElement; readonly open: boolean } | undefined {
+		if (this.only === id) {
+			// The view around it has the title, the fold and the menu.
+			return { section: append(parent, $('.picode-overview-section')), heading: $('.picode-overview-title'), open: true };
+		}
 		if (isStatusSectionHidden(this.storageService, id)) {
 			return undefined;
 		}
@@ -992,7 +1016,7 @@ class PicodeSidebarStatusContribution extends Disposable implements IWorkbenchCo
 		if (this.shownIn !== element || !this.overview.value) {
 			this.overview.clear();
 			element.textContent = '';
-			this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, element);
+			this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, element, undefined);
 			this.shownIn = element;
 		}
 	}

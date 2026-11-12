@@ -74,7 +74,7 @@ class PicodeStatusView extends ViewPane {
 			return;
 		}
 		this.host.textContent = '';
-		this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, this.host);
+		this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, this.host, undefined);
 	}
 }
 
