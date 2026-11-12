@@ -1700,9 +1700,5 @@
 	"vs/workbench/services/policies/browser/accountPolicyGateContribution#managedSettingsUpdate.notificationWithMinimumVersion": "您的 {0} 版本無法強制執行貴組織的受管理設定。請將 {0} 更新至 {1} 或更新版本以繼續使用 AI 功能。",
 	"vs/workbench/services/policies/common/accountPolicyService#chatAccountPolicyGateActive": "當帳戶或受管理設定相容性原則使此用戶端無法使用 AI 功能時為 True。",
 	"vs/workbench/services/userDataProfile/browser/userDataProfileManagement#reload message": "切換設定檔需要重新載入 PiCode。",
-	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Pi 設定檔",
-	"vs/workbench/contrib/files/browser/files.contribution#exclude": "設定用於排除檔案和資料夾的 [Glob 模式](https://aka.ms/vscode-glob-patterns)。例如，檔案總管會根據此設定決定要顯示或隱藏哪些檔案和資料夾。在模式前加上 `!` 可顯示符合的檔案和資料夾，即使其他模式排除了它們，例如 `\"!node_modules/@types\": true`。請參閱 `#search.exclude#` 設定以定義搜尋專用的排除項目。請參閱 `#explorer.excludeGitIgnore#` 設定，以根據您的 `.gitignore` 忽略檔案。",
-	"vs/workbench/contrib/files/browser/files.contribution#files.exclude.exception": "例外：符合 `!` 之後 Glob 模式的檔案和資料夾及其中的所有內容不會被排除，即使其他模式排除了它們。`.git` 等版本控制資料夾仍會維持排除，除非模式明確指定它們。設為 true 或 false 可啟用或停用該例外。",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude": "設定 [Glob 模式](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options)，以在全文搜尋和快速開啟的檔案搜尋中排除檔案和資料夾。若要從快速開啟的最近開啟清單中排除檔案，模式必須為絕對路徑 (例如 `**/node_modules/**`)。繼承 `#files.exclude#` 設定中的所有 Glob 模式。在模式前加上 `!` 可搜尋符合的檔案和資料夾，即使其他模式 (包括來自 `#files.exclude#` 的模式) 排除了它們。",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude.exception": "例外：符合 `!` 之後 Glob 模式的檔案和資料夾及其中的所有內容會被搜尋，即使其他模式排除了它們。`.git` 等版本控制資料夾仍會維持排除，除非模式明確指定它們。設為 true 或 false 可啟用或停用該例外。"
+	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Pi 設定檔"
 }

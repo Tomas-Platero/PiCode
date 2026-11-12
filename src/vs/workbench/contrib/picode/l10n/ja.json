@@ -1700,9 +1700,5 @@
 	"vs/workbench/services/policies/browser/accountPolicyGateContribution#managedSettingsUpdate.notificationWithMinimumVersion": "お使いの{0}のバージョンでは、組織の管理設定を適用できません。AI機能を使い続けるには{0}をバージョン{1}以降に更新してください。",
 	"vs/workbench/services/policies/common/accountPolicyService#chatAccountPolicyGateActive": "アカウントや管理設定との互換性のポリシーにより、このクライアントがAI機能を使えないとき真になります。",
 	"vs/workbench/services/userDataProfile/browser/userDataProfileManagement#reload message": "プロファイルの切り替えにはPiCodeの再読み込みが必要です。",
-	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Piプロファイル",
-	"vs/workbench/contrib/files/browser/files.contribution#exclude": "ファイルとフォルダーを除外するための [glob パターン](https://aka.ms/vscode-glob-patterns)を構成します。たとえば、エクスプローラーはこの設定に基づいて、表示または非表示にするファイルとフォルダーを決定します。パターンの先頭に `!` を付けると、別のパターンで除外されていても、一致するファイルとフォルダーが表示されます。例: `\"!node_modules/@types\": true`。検索固有の除外を定義するには、`#search.exclude#` 設定を参照してください。`.gitignore` に基づいてファイルを無視するには、`#explorer.excludeGitIgnore#` 設定を参照してください。",
-	"vs/workbench/contrib/files/browser/files.contribution#files.exclude.exception": "例外: `!` の後の glob パターンに一致するファイルとフォルダー、およびその中のすべてのものは、別のパターンで除外されていても除外されません。`.git` などのバージョン管理フォルダーは、パターンで名前を指定しない限り除外されたままです。例外を有効または無効にするには、true または false に設定します。",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude": "フルテキスト検索とクイック オープンのファイル検索でファイルとフォルダーを除外するための [glob パターン](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options)を構成します。クイック オープンの最近開いた項目の一覧からファイルを除外するには、パターンを絶対パスにする必要があります (例: `**/node_modules/**`)。`#files.exclude#` 設定のすべての glob パターンを継承します。パターンの先頭に `!` を付けると、`#files.exclude#` のものを含む別のパターンで除外されていても、一致するファイルとフォルダーが検索されます。",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude.exception": "例外: `!` の後の glob パターンに一致するファイルとフォルダー、およびその中のすべてのものは、別のパターンで除外されていても検索されます。`.git` などのバージョン管理フォルダーは、パターンで名前を指定しない限り除外されたままです。例外を有効または無効にするには、true または false に設定します。"
+	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Piプロファイル"
 }

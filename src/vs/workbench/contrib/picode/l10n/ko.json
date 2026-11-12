@@ -1700,9 +1700,5 @@
 	"vs/workbench/services/policies/browser/accountPolicyGateContribution#managedSettingsUpdate.notificationWithMinimumVersion": "이 {0} 버전으로는 조직의 관리 설정을 적용할 수 없습니다. AI 기능을 계속 쓰려면 {0}을(를) {1} 이상으로 업데이트하세요.",
 	"vs/workbench/services/policies/common/accountPolicyService#chatAccountPolicyGateActive": "계정 정책이나 관리 설정 호환성 정책 때문에 이 클라이언트가 AI 기능을 쓰지 못하면 참입니다.",
 	"vs/workbench/services/userDataProfile/browser/userDataProfileManagement#reload message": "프로필을 바꾸려면 PiCode를 다시 불러와야 합니다.",
-	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Pi 프로필",
-	"vs/workbench/contrib/files/browser/files.contribution#exclude": "파일 및 폴더를 제외하기 위한 [glob 패턴](https://aka.ms/vscode-glob-patterns)을 구성합니다. 예를 들어 파일 탐색기는 이 설정에 따라 표시하거나 숨길 파일과 폴더를 결정합니다. 패턴 앞에 `!`를 붙이면 다른 패턴이 제외하더라도 일치하는 파일과 폴더가 표시됩니다. 예: `\"!node_modules/@types\": true`. 검색 관련 제외를 정의하려면 `#search.exclude#` 설정을 참조하세요. `.gitignore`를 기준으로 파일을 무시하려면 `#explorer.excludeGitIgnore#` 설정을 참조하세요.",
-	"vs/workbench/contrib/files/browser/files.contribution#files.exclude.exception": "예외: `!` 뒤의 glob 패턴과 일치하는 파일과 폴더, 그리고 그 안의 모든 항목은 다른 패턴이 제외하더라도 제외되지 않습니다. `.git` 같은 버전 제어 폴더는 패턴에서 이름을 지정하지 않는 한 계속 제외됩니다. 예외를 사용하거나 사용하지 않으려면 true 또는 false로 설정합니다.",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude": "전체 텍스트 검색 및 Quick Open의 파일 검색에서 파일 및 폴더를 제외하기 위한 [glob 패턴](https://code.visualstudio.com/docs/editor/codebasics#_advanced-search-options)을 구성합니다. Quick Open의 최근에 연 항목 목록에서 파일을 제외하려면 패턴이 절대 경로여야 합니다(예: `**/node_modules/**`). `#files.exclude#` 설정의 모든 glob 패턴을 상속합니다. 패턴 앞에 `!`를 붙이면 `#files.exclude#`의 패턴을 포함한 다른 패턴이 제외하더라도 일치하는 파일과 폴더를 검색합니다.",
-	"vs/workbench/contrib/search/browser/search.contribution#exclude.exception": "예외: `!` 뒤의 glob 패턴과 일치하는 파일과 폴더, 그리고 그 안의 모든 항목은 다른 패턴이 제외하더라도 검색됩니다. `.git` 같은 버전 제어 폴더는 패턴에서 이름을 지정하지 않는 한 계속 제외됩니다. 예외를 사용하거나 사용하지 않으려면 true 또는 false로 설정합니다."
+	"vs/workbench/services/userDataSync/common/userDataSync#pi profile": "Pi 프로필"
 }
