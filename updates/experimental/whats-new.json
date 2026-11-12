@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.0.5-experimental",
+			"notes": "### ✨ New\n- 📥 **Import from pi or VS Code, one item at a time.** Open *Import from Pi or VS Code* from the Command Palette, the setup, or What's New. Pick a source and tick exactly what you want: pi packages, model providers, connections, skills, memory and conversations, or VS Code themes, extensions, settings, keyboard shortcuts and snippets.\n- 🛡️ **Yours always wins.** Anything you already have in PiCode is kept and shown as \"kept as yours\"; logins only travel if you tick them on purpose.\n- 🧩 **VS Code extensions install by themselves** from the open registry as soon as you are back in the editor.\n- 🎬 **A new page in What's New** lets you try the picker with sample items, and its button opens the real window.\n\n**Full Changelog**: https://github.com/Tomas-Platero/PiCode/commits/v2.0.5-experimental\n\n| File | What it is for |\n| --- | --- |\n| `PiCode-win32-x64-2.0.5-experimental-setup.exe` | install it |\n| `PiCode-win32-x64-2.0.5-experimental.zip` | run it in place, without installing |"
+		},
+		{
 			"version": "2.0.4-experimental",
 			"notes": "### ✨ New\n\n- **Conversations whose folder is gone now ask first.** Opening one lets you continue in the folder that is open or copy the conversation into it, instead of carrying on silently.\n\n### 🐛 Fixes\n\n- **The cost in Status counts the cache warm-ups.** What pi spends between turns to keep the prompt cache warm is now added, so the total is no longer too low.\n\n### 🧩 Under the hood\n\n- PiCode carries pi 1.5.2."
 		},
