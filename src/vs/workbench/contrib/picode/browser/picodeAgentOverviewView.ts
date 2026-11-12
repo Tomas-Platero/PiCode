@@ -561,8 +561,10 @@ export class PicodeAgentOverview extends Disposable {
 		append(free, $('span.picode-overview-label')).textContent = localize('picode.overview.contextFree', "Room before compacting");
 		append(free, $('span.picode-overview-value')).textContent = compactTokens(breakdown.untilCompaction);
 		append(free, $('span.picode-overview-context-share')).textContent = share(breakdown.untilCompaction);
-		const compact = this.row(section, Codicon.foldDown, localize('picode.overview.contextCompactHint', "Summarise the conversation to free room"));
+		// Only the button: a sentence beside it said the same thing, got cut off and looked clickable.
+		const compact = append(section, $('.picode-overview-row'));
 		this.action(compact, localize('picode.overview.contextCompact', "Compact session"), () => void this.compactContext());
+		compact.lastElementChild?.setAttribute('title', localize('picode.overview.contextCompactHint', "Summarise the conversation to free room"));
 	}
 
 	private async compactContext(): Promise<void> {
