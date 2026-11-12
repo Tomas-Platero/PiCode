@@ -582,6 +582,41 @@
 	animation: picode-whatsnew-appear 0.25s ease-out;
 }
 
+.picode-whatsnew-context-bar {
+	display: flex;
+	gap: 1px;
+	height: 6px;
+	margin: 4px 0 8px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	overflow: hidden;
+}
+
+.picode-whatsnew-context-piece {
+	height: 100%;
+	transition: width 0.4s ease;
+}
+
+.picode-whatsnew-context-swatch {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+}
+
+.picode-whatsnew-context-piece.messages, .picode-whatsnew-context-swatch.messages { background: var(--vscode-charts-blue); }
+.picode-whatsnew-context-piece.project, .picode-whatsnew-context-swatch.project { background: var(--vscode-charts-orange); }
+.picode-whatsnew-context-piece.pi, .picode-whatsnew-context-swatch.pi { background: var(--vscode-charts-purple); }
+.picode-whatsnew-context-piece.skills, .picode-whatsnew-context-swatch.skills { background: var(--vscode-charts-green); }
+.picode-whatsnew-context-piece.tools, .picode-whatsnew-context-swatch.tools { background: var(--vscode-charts-yellow); }
+.picode-whatsnew-context-piece.mcp, .picode-whatsnew-context-swatch.mcp { background: var(--vscode-charts-red); }
+.picode-whatsnew-context-piece.reserve { background: color-mix(in srgb, var(--vscode-foreground) 25%, transparent); }
+.picode-whatsnew-context-swatch.free { border: 1px solid color-mix(in srgb, var(--vscode-foreground) 25%, transparent); }
+
+.picode-whatsnew-context .picode-whatsnew-row-label {
+	flex: 1;
+}
+
 .picode-whatsnew-section-title {
 	font-weight: 600;
 }

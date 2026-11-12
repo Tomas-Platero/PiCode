@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'context',
+			since: '2.2.2',
+			plan: 'free',
+			icon: Codicon.dashboard,
+			title: localize('picodeWhatsNew.context.title', "See where your context goes"),
+			summary: localize('picodeWhatsNew.context.summary', "Context in Status now shows what fills the conversation, part by part, and lets you compact it with one click."),
+			points: [
+				localize('picodeWhatsNew.context.point1', "One colour per part: messages, project instructions, skills, tools and more."),
+				localize('picodeWhatsNew.context.point2', "How much room is left before the conversation is compacted on its own."),
+				localize('picodeWhatsNew.context.point3', "\"Compact session\" summarises it now, when you choose."),
+			],
+			preview: 'context',
+			action: 'showStatus',
+		},
 		{
 			id: 'statusSections',
 			since: '2.2.1',

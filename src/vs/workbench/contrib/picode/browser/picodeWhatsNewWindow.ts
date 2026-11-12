@@ -264,6 +264,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.browseExtensions', "Browse extensions");
 		case 'chooseSections':
 			return localize('picodeWhatsNew.chooseSections', "Choose my sections");
+		case 'showStatus':
+			return localize('picodeWhatsNew.showStatus', "Open Status");
 	}
 }
 
@@ -314,6 +316,7 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			void services.commandService.executeCommand(CHOOSE_SECTIONS_COMMAND);
 			return;
 		case 'showTasks':
+		case 'showStatus':
 			close();
 			if (picodeLayoutOf(services.configurationService) !== 'agent') {
 				void services.commandService.executeCommand(EDITOR_TASKS_COMMAND);
@@ -339,6 +342,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	terminalDialogs: terminalDialogsPreview,
 	problems: problemsPreview,
 	statusSections: statusSectionsPreview,
+	context: contextPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -756,6 +760,53 @@ function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): vo
 	stage = append(parent, $('.picode-whatsnew-dialogs'));
 	const result = append(parent, $('.picode-whatsnew-sync-result'));
 	pick('now');
+}
+
+function contextPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.context.demo', "Compact the conversation and watch the room come back."), store);
+	// A made-up conversation in a 200k window: compacting shrinks the messages to a summary.
+	const window = 200_000;
+	const reserve = 16_000;
+	const fixed = [
+		{ id: 'project', label: localize('picode.overview.contextProject', "Project instructions"), tokens: 6_000 },
+		{ id: 'pi', label: localize('picode.overview.contextPi', "pi instructions"), tokens: 4_000 },
+		{ id: 'skills', label: localize('picode.overview.contextSkills', "Skills"), tokens: 3_000 },
+		{ id: 'tools', label: localize('picode.overview.contextTools', "pi tools"), tokens: 9_000 },
+		{ id: 'mcp', label: localize('picode.overview.contextMcp', "MCP tools"), tokens: 12_000 },
+	];
+	let messages = 118_000;
+	const stage = append(parent, $('.picode-whatsnew-list.picode-whatsnew-context'));
+	const format = (tokens: number) => `${Number((tokens / 1000).toFixed(1))}k`;
+	const draw = () => {
+		clearNode(stage);
+		const parts = [{ id: 'messages', label: localize('picode.overview.contextMessages', "Messages"), tokens: messages }, ...fixed];
+		const used = parts.reduce((total, part) => total + part.tokens, 0);
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picode.overview.contextPercent', "{0}% used", Math.round((used / window) * 100));
+		append(head, $('span.picode-whatsnew-row-detail')).textContent = `${format(used)} / ${format(window)}`;
+		const bar = append(stage, $('.picode-whatsnew-context-bar'));
+		for (const part of [...parts, { id: 'reserve', tokens: reserve }]) {
+			append(bar, $(`.picode-whatsnew-context-piece.${part.id}`)).style.width = `${(part.tokens / window) * 100}%`;
+		}
+		for (const part of parts) {
+			const row = append(stage, $('.picode-whatsnew-row'));
+			append(row, $(`span.picode-whatsnew-context-swatch.${part.id}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = part.label;
+			append(row, $('span.picode-whatsnew-row-detail')).textContent = format(part.tokens);
+		}
+		const room = append(stage, $('.picode-whatsnew-row'));
+		append(room, $('span.picode-whatsnew-context-swatch.free'));
+		append(room, $('span.picode-whatsnew-row-label')).textContent = localize('picode.overview.contextFree', "Room before compacting");
+		append(room, $('span.picode-whatsnew-row-detail')).textContent = format(Math.max(0, window - reserve - used));
+		const button = append(stage, $('button.picode-whatsnew-button.secondary', { type: 'button' })) as HTMLButtonElement;
+		button.textContent = localize('picode.overview.contextCompact', "Compact session");
+		button.disabled = messages < 20_000;
+		store.add(addDisposableListener(button, EventType.CLICK, () => {
+			messages = 9_000;
+			draw();
+		}));
+	};
+	draw();
 }
 
 function statusSectionsPreview(parent: HTMLElement, store: DisposableStore): void {
