@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'projects',
+			since: '2.2.6',
+			plan: 'free',
+			icon: Codicon.rootFolder,
+			title: localize('picodeWhatsNew.projects.title', "Your projects beside your sessions"),
+			summary: localize('picodeWhatsNew.projects.summary', "In the Agent layout, the sessions column now lists the folders of your workspace, so you always see what the chat is working on."),
+			points: [
+				localize('picodeWhatsNew.projects.point1', "Add a project with the + button, or drop folders on the list."),
+				localize('picodeWhatsNew.projects.point2', "Hover a project to open a terminal in it or take it out of the workspace."),
+				localize('picodeWhatsNew.projects.point3', "Right-click for more: show it in the Explorer or copy its path."),
+			],
+			preview: 'projects',
+			action: 'addProject',
+		},
 		{
 			id: 'providers',
 			since: '2.2.5',

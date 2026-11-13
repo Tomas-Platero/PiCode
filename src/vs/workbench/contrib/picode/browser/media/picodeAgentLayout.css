@@ -720,3 +720,153 @@
 .monaco-workbench.picode-agent .agent-session-section .agent-session-section-count {
 	color: color-mix(in srgb, var(--vscode-foreground) 68%, transparent);
 }
+
+/* -- the workspace's projects, above the conversations (Agent layout) ------------------- */
+
+.picode-projects {
+	display: flex;
+	flex-direction: column;
+	margin: 8px 0 2px;
+	border-radius: 10px;
+	outline: 1px dashed transparent;
+	outline-offset: -1px;
+	transition: background-color 120ms ease, outline-color 120ms ease;
+}
+
+.picode-projects.drop-target {
+	background: color-mix(in srgb, var(--vscode-focusBorder) 10%, transparent);
+	outline-color: var(--vscode-focusBorder);
+}
+
+.picode-projects-header {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 4px 0 0;
+}
+
+.picode-projects-toggle {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 4px 4px 2px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.picode-projects-toggle:hover {
+	color: var(--vscode-foreground);
+}
+
+.picode-projects-chevron {
+	font-size: 12px;
+}
+
+.picode-projects-count {
+	padding: 0 6px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	font-size: 10px;
+	line-height: 16px;
+}
+
+.picode-projects-count:empty {
+	display: none;
+}
+
+.picode-projects-add,
+.picode-projects-row-action {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-projects-add:hover,
+.picode-projects-row-action:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	color: var(--vscode-foreground);
+}
+
+.picode-projects-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	max-height: 180px;
+	overflow-y: auto;
+}
+
+.picode-projects.collapsed .picode-projects-list {
+	display: none;
+}
+
+.picode-projects-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 28px;
+	padding: 0 4px 0 8px;
+	box-sizing: border-box;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-projects-row:hover,
+.picode-projects-row:focus-visible {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	outline: none;
+}
+
+.picode-projects-row.empty {
+	color: var(--vscode-textLink-foreground);
+}
+
+.picode-projects-icon {
+	flex: none;
+	color: var(--vscode-symbolIcon-folderForeground, var(--vscode-descriptionForeground));
+}
+
+.picode-projects-name {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.picode-projects-parent {
+	flex: none;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-projects-row-actions {
+	display: flex;
+	gap: 2px;
+	margin-left: auto;
+	visibility: hidden;
+}
+
+.picode-projects-row:hover .picode-projects-row-actions,
+.picode-projects-row:focus-within .picode-projects-row-actions {
+	visibility: visible;
+}

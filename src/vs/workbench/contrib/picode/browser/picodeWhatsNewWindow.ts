@@ -268,6 +268,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.showStatus', "Open Status");
 		case 'openProviders':
 			return localize('picodeWhatsNew.openProviders', "Open Providers");
+		case 'addProject':
+			return localize('picodeWhatsNew.addProject', "Add a project");
 	}
 }
 
@@ -300,6 +302,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'openProviders':
 			close();
 			void services.commandService.executeCommand('picode.providersModels.open', 'providers');
+			return;
+		case 'addProject':
+			close();
+			void services.commandService.executeCommand('addRootFolder');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -350,6 +356,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	statusSections: statusSectionsPreview,
 	context: contextPreview,
 	providers: providersPreview,
+	projects: projectsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -838,6 +845,51 @@ function providersPreview(parent: HTMLElement, store: DisposableStore): void {
 				}, 2700));
 			}));
 		}
+	};
+	draw();
+}
+
+function projectsPreview(parent: HTMLElement, store: DisposableStore): void {
+	// Made-up folders: the + brings in one more, the cross on a row takes it out again.
+	const spare = ['docs', 'mobile-app'];
+	let projects = ['web', 'api'];
+	const reset = () => {
+		projects = ['web', 'api'];
+		draw();
+	};
+	demoBar(parent, localize('picodeWhatsNew.projects.demo', "Add a project with +, or remove one with its cross."), store, reset);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = `${localize('picode.sessions.projects', "Projects")} · ${projects.length}`;
+		const next = spare.find(name => !projects.includes(name));
+		const add = append(head, $(`button.picode-whatsnew-link${ThemeIcon.asCSSSelector(Codicon.add)}`, { type: 'button' })) as HTMLButtonElement;
+		add.title = localize('picode.sessions.addProject', "Add a project to this workspace");
+		add.disabled = next === undefined;
+		store.add(addDisposableListener(add, EventType.CLICK, () => {
+			if (next !== undefined) {
+				projects = [...projects, next];
+				draw();
+			}
+		}));
+		for (const name of projects) {
+			const row = append(stage, $('.picode-whatsnew-row'));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.folder)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = name;
+			const remove = append(row, $(`button.picode-whatsnew-link${ThemeIcon.asCSSSelector(Codicon.close)}`, { type: 'button' })) as HTMLButtonElement;
+			remove.title = localize('picode.sessions.projectRemove', "Remove from Workspace");
+			remove.disabled = projects.length === 1;
+			store.add(addDisposableListener(remove, EventType.CLICK, () => {
+				projects = projects.filter(candidate => candidate !== name);
+				draw();
+			}));
+		}
+		const chats = append(stage, $('.picode-whatsnew-row.head'));
+		append(chats, $('span.picode-whatsnew-row-label')).textContent = localize('picode.sessions.conversations', "Conversations");
+		const chat = append(stage, $('.picode-whatsnew-row'));
+		append(chat, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.commentDiscussion)}`));
+		append(chat, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.projects.demoChat', "Fix the sign-in button");
 	};
 	draw();
 }
