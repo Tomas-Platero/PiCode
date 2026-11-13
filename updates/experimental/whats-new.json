@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.4-experimental",
+			"notes": "### ✨ New\n\n- 📊 **Context in the Editor layout.** The PiCode panel now opens with Context: how full the chat is and where that room goes, drawn exactly as in the Agent layout's Status. With no chat open it says so.\n\n### 🐛 Fixed\n\n- 🧹 **Compact session is just a button.** The sentence next to it repeated what the button does and looked clickable; it now shows when you point at the button."
+		},
+		{
 			"version": "2.2.3-experimental",
 			"notes": "### 🐛 Fixed\n\n- **Updates install when PiCode restarts again.** The new version was downloaded, but after the restart PiCode kept opening the old one. The helper that lets chats message each other kept your profile busy, so the switch was skipped. PiCode now closes that helper first, and the installer waits up to a minute for your profile to be free.\n\n> If you are on 2.2.0–2.2.2 and stuck, this update installs normally: the fix lives in the new installer."
 		},
