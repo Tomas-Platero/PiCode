@@ -955,6 +955,56 @@ async function loadSubscriptions() {
 	}
 }
 
+/** Where each provider's mark comes from; anything else gets its initials on a colour. */
+const PROVIDER_DOMAINS = {
+	'openai-codex': 'openai.com',
+	openai: 'openai.com',
+	anthropic: 'anthropic.com',
+	'github-copilot': 'github.com',
+	xai: 'x.ai',
+	'kimi-coding': 'moonshot.ai',
+	openrouter: 'openrouter.ai',
+	meta: 'meta.com',
+	radius: 'radius.dev',
+};
+
+/** Marks drawn in dark ink, which disappear on the dark setup unless inverted. */
+const DARK_INK = new Set(['github.com', 'radius.dev']);
+
+/** The provider's mark: initials straight away, the real logo once it has loaded. */
+function providerMark(id) {
+	const mark = el('span', { class: 'sub-mark' });
+	let hash = 0;
+	for (const char of id) {
+		hash = (hash * 31 + char.charCodeAt(0)) % 360;
+	}
+	mark.style.background = `hsl(${hash} 55% 32%)`;
+	mark.textContent = id.split(/[-_]/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+	const domain = PROVIDER_DOMAINS[id];
+	if (domain !== undefined) {
+		const image = new Image();
+		image.alt = '';
+		image.onload = () => {
+			mark.textContent = '';
+			mark.style.background = 'transparent';
+			mark.classList.toggle('dark-ink', DARK_INK.has(domain));
+			mark.appendChild(image);
+		};
+		image.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+	}
+	return mark;
+}
+
+/** A network failure, said for a person rather than as `fetch failed`. */
+function signInFailure(message) {
+	return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|UND_ERR|socket hang up|network/i.test(message ?? '')
+		? t('subNetwork')
+		: (message ?? '');
+}
+
+/** How long the browser gets to come back by itself before pasting is offered. */
+const PASTE_FALLBACK_MS = 30000;
+
 function renderSubscriptions() {
 	const node = $('model-subscriptions');
 	if (state.modelTab !== 'subscription') {
@@ -968,38 +1018,21 @@ function renderSubscriptions() {
 	}
 
 	const running = state.signIn;
-	const list = (state.subscriptions ?? []).map(provider => el('button', {
-		type: 'button',
-		class: 'provider-row',
-		disabled: running !== undefined && running.running === true,
-		onclick: () => startSignIn(provider.id),
-	},
-		el('span', { class: 'provider-text' },
-			el('span', { class: 'provider-name', text: provider.name }),
-			provider.note === undefined ? undefined : el('span', { class: 'provider-note', text: provider.note }),
-		),
-		el('span', { class: provider.signedIn === true ? 'provider-go ok' : 'provider-go', text: provider.signedIn === true ? `✓ ${t('subSignedIn')}` : t('subSignIn') }),
-	));
-
-	const live = running === undefined ? undefined : el('div', { class: 'signin' },
-		el('p', { class: 'signin-state' },
-			running.finished === true
-				? el('span', { class: 'dot ok' })
-				: el('span', { class: 'dot pending' }),
-			running.message ?? t('subWaiting'),
-		),
-		running.url === undefined ? undefined : el('button', {
-			type: 'button', class: 'link small', onclick: () => window.picode.openExternal(running.url),
-		}, t('subOpen')),
-		running.code === undefined ? undefined : el('p', { class: 'signin-code' },
-			el('span', { class: 'field-label', text: t('subCode') }),
-			el('code', { text: running.code }),
-		),
-		running.prompt === undefined ? undefined : renderPrompt(running.prompt),
-		running.running === true ? el('div', { class: 'panel-actions' },
-			el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.signIn.cancel() }, t('subCancel')),
-		) : undefined,
-	);
+	const tiles = (state.subscriptions ?? []).map(provider => running !== undefined && running.providerId === provider.id
+		? signInCard(provider, running)
+		: el('button', {
+			type: 'button',
+			class: 'sub-tile',
+			disabled: running !== undefined && running.running === true,
+			onclick: () => startSignIn(provider.id),
+		},
+			providerMark(provider.id),
+			el('span', { class: 'provider-text' },
+				el('span', { class: 'provider-name', text: provider.name }),
+				el('span', { class: 'provider-note', text: provider.note ?? t('subYourAccount') }),
+			),
+			el('span', { class: provider.signedIn === true ? 'sub-go ok' : 'sub-go', text: provider.signedIn === true ? `✓ ${t('subSignedIn')}` : t('subSignIn') }),
+		));
 
 	fill(node,
 		el('div', { class: 'panel-head' },
@@ -1007,10 +1040,79 @@ function renderSubscriptions() {
 		),
 		el('p', { class: 'panel-hint', text: t('subLead') }),
 		state.subscriptionError === undefined ? undefined : el('p', { class: 'hint error', text: state.subscriptionError }),
-		state.subscriptions === undefined ? el('p', { class: 'hint', text: t('subLoading') })
+		state.subscriptions === undefined
+			? el('div', { class: 'providers' }, [0, 1, 2, 3].map(() => el('span', { class: 'sub-tile skeleton' })))
 			: state.subscriptions.length === 0 ? el('p', { class: 'hint', text: t('subNone') })
-				: el('div', { class: 'providers' }, list),
-		live,
+				: el('div', { class: 'providers' }, tiles),
+	);
+}
+
+/** The tile being signed in: where it stands, and the one thing that can be done next. */
+function signInCard(provider, running) {
+	const failed = running.running !== true && running.finished !== true && running.error !== undefined;
+	const phase = running.finished === true ? 'done' : failed ? 'failed' : running.code !== undefined ? 'code' : 'browser';
+	const note = phase === 'done' ? t('subDone')
+		: phase === 'failed' ? t('subFailed')
+			: phase === 'code' ? t('subEnterCode')
+				: running.url === undefined ? t('subStarting') : t('subWaiting');
+	const head = el('div', { class: 'sub-card-head' },
+		providerMark(provider.id),
+		el('span', { class: 'provider-text' },
+			el('span', { class: 'provider-name', text: provider.name }),
+			el('span', { class: 'provider-note', text: note }),
+		),
+		phase === 'done' ? el('span', { class: 'sub-check', text: '✓' })
+			: phase === 'failed' ? el('span', { class: 'sub-cross', text: '!' })
+				: el('span', { class: 'dot pending' }),
+	);
+
+	const prompt = running.prompt;
+	// pi's "or paste the code here" waits behind the browser: shown only if it has not come back.
+	const pasteReady = prompt?.type === 'manual_code' && running.pasteReady === true;
+	const showPrompt = prompt !== undefined && (prompt.type !== 'manual_code' || pasteReady);
+
+	const body = [];
+	if (phase === 'browser' && running.url !== undefined) {
+		body.push(el('p', { class: 'hint', text: t('subBrowserHint') }));
+	}
+	if (phase === 'code') {
+		const chip = el('button', {
+			type: 'button',
+			class: 'sub-code',
+			title: t('subCopyCode'),
+			onclick: () => {
+				void navigator.clipboard.writeText(running.code);
+				chip.classList.add('copied');
+			},
+		}, el('span', { text: running.code }), el('span', { class: 'sub-copy', text: '⧉' }));
+		body.push(chip, el('p', { class: 'hint', text: t('subCodeHint') }));
+	}
+	if (showPrompt) {
+		body.push(prompt.type === 'manual_code'
+			? el('div', { class: 'sub-paste' }, el('p', { class: 'hint', text: t('subPasteHint') }), renderPrompt(prompt))
+			: renderPrompt(prompt));
+	}
+	if (phase === 'failed') {
+		body.push(el('p', { class: 'hint error', text: signInFailure(running.error) }));
+	}
+
+	const actions = [];
+	if (phase === 'browser' || phase === 'code') {
+		if (running.url !== undefined) {
+			actions.push(el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.openExternal(running.url) }, t('subOpenAgain')));
+		}
+		actions.push(el('button', { type: 'button', class: 'secondary', onclick: () => window.picode.signIn.cancel() }, t('subCancel')));
+	} else if (phase === 'failed') {
+		actions.push(
+			el('button', { type: 'button', class: 'primary', onclick: () => startSignIn(provider.id) }, t('subRetry')),
+			el('button', { type: 'button', class: 'secondary', onclick: () => { state.signIn = undefined; renderSubscriptions(); } }, t('subClose')),
+		);
+	}
+
+	return el('div', { class: `sub-card phase-${phase}` },
+		head,
+		body.length > 0 ? el('div', { class: 'sub-card-body' }, body) : undefined,
+		actions.length > 0 ? el('div', { class: 'panel-actions' }, actions) : undefined,
 	);
 }
 
@@ -1057,7 +1159,8 @@ function renderPrompt(prompt) {
 
 /** Starts pi's own sign-in and follows it, event by event. */
 async function startSignIn(providerId) {
-	state.signIn = { running: true, message: t('subWaiting') };
+	clearTimeout(state.pasteTimer);
+	state.signIn = { running: true, providerId };
 	state.subscriptionError = undefined;
 	renderSubscriptions();
 	let run;
@@ -1069,14 +1172,17 @@ async function startSignIn(providerId) {
 		const current = state.signIn ?? { running: true };
 		if (message.type === 'event') {
 			const event = message.event ?? {};
+			// pi's own wording ("A browser window should open", ports, token exchanges) is its
+			// plumbing: the card says where things stand in the setup's own words.
 			if (event.type === 'auth_url') {
-				state.signIn = { ...current, url: event.url, message: event.instructions ?? t('subWaiting') };
+				state.signIn = { ...current, url: event.url };
 				void window.picode.openExternal(event.url);
 			} else if (event.type === 'device_code') {
-				state.signIn = { ...current, code: event.userCode, url: event.verificationUri, message: event.instructions ?? t('subWaiting') };
+				state.signIn = { ...current, code: event.userCode, url: event.verificationUri };
+				void navigator.clipboard.writeText(event.userCode).catch(() => undefined);
 				void window.picode.openExternal(event.verificationUri);
 			} else {
-				state.signIn = { ...current, message: event.message ?? current.message };
+				return;
 			}
 			renderSubscriptions();
 			return;
@@ -1093,12 +1199,36 @@ async function startSignIn(providerId) {
 				void window.picode.signIn.answer(message.id, preferred.id);
 				return;
 			}
-			state.signIn = { ...current, prompt: { id: message.id, ...message.prompt } };
+			state.signIn = { ...current, prompt: { id: message.id, ...message.prompt }, pasteReady: false };
+			if (message.prompt?.type === 'manual_code') {
+				clearTimeout(state.pasteTimer);
+				state.pasteTimer = setTimeout(() => {
+					if (state.signIn?.prompt?.id === message.id) {
+						state.signIn = { ...state.signIn, pasteReady: true };
+						renderSubscriptions();
+					}
+				}, PASTE_FALLBACK_MS);
+			}
 			renderSubscriptions();
 			return;
 		}
+		if (message.type === 'promptGone') {
+			if (current.prompt?.id === message.id) {
+				state.signIn = { ...current, prompt: undefined, pasteReady: false };
+				renderSubscriptions();
+			}
+			return;
+		}
 		if (message.type === 'done') {
-			state.signIn = { ...current, running: false, finished: true, prompt: undefined, message: t('subDone') };
+			clearTimeout(state.pasteTimer);
+			state.signIn = { ...current, running: false, finished: true, prompt: undefined };
+			// The tick shows for a moment, then the tile goes back to saying it is signed in.
+			setTimeout(() => {
+				if (state.signIn?.finished === true && state.signIn.providerId === current.providerId) {
+					state.signIn = undefined;
+					renderSubscriptions();
+				}
+			}, 1800);
 			subscription();
 			void refreshAfterSignIn();
 			return;
@@ -1106,14 +1236,16 @@ async function startSignIn(providerId) {
 		if (message.type === 'cancelled' || message.type === 'exit') {
 			// `exit` is the safety net: whatever ended the child, the panel must stop saying it
 			// is still waiting.
-			state.signIn = { ...current, running: false, prompt: undefined, message: message.type === 'cancelled' ? t('subCancelled') : (current.message ?? t('subCancelled')) };
+			// A cancelled sign-in simply goes back to its tile; nothing was lost.
+			clearTimeout(state.pasteTimer);
+			state.signIn = undefined;
 			subscription();
 			renderSubscriptions();
 			return;
 		}
 		if (message.type === 'error') {
-			state.signIn = { ...current, running: false, message: undefined };
-			state.subscriptionError = `${t('subFailed')}: ${message.message ?? ''}`;
+			clearTimeout(state.pasteTimer);
+			state.signIn = { ...current, running: false, prompt: undefined, error: message.message ?? '' };
 			subscription();
 			renderSubscriptions();
 		}

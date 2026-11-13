@@ -41,6 +41,22 @@ const KNOWN_DOMAINS: Readonly<Record<string, string>> = {
 	github: 'github.com',
 	'github-copilot': 'github.com',
 	radius: 'radius.dev',
+	'amazon-bedrock': 'aws.amazon.com',
+	azure: 'azure.microsoft.com',
+	baseten: 'baseten.co',
+	cerebras: 'cerebras.ai',
+	fireworks: 'fireworks.ai',
+	'google-vertex': 'cloud.google.com',
+	huggingface: 'huggingface.co',
+	minimax: 'minimax.io',
+	moonshotai: 'moonshot.ai',
+	nvidia: 'nvidia.com',
+	opencode: 'opencode.ai',
+	together: 'together.ai',
+	'vercel-ai-gateway': 'vercel.com',
+	xiaomi: 'mi.com',
+	zai: 'z.ai',
+	qwen: 'qwen.ai',
 	// MCP servers people commonly connect.
 	aikido: 'aikido.dev',
 	atlassian: 'atlassian.com',
@@ -128,6 +144,26 @@ export function hueOf(id: string): number {
 }
 
 /**
+ * The known domain for an id, or for the family it belongs to: `qwen-token-plan-cn` and
+ * `cloudflare-workers-ai` are regional or product variants of a service whose mark is the same.
+ */
+function knownDomainOf(id: string): string | undefined {
+	const lower = id.toLowerCase();
+	const exact = KNOWN_DOMAINS[lower];
+	if (exact !== undefined) {
+		return exact;
+	}
+	const parts = lower.split('-');
+	for (let length = parts.length - 1; length > 0; length -= 1) {
+		const family = KNOWN_DOMAINS[parts.slice(0, length).join('-')] ?? KNOWN_DOMAINS[parts.slice(0, length).join('')];
+		if (family !== undefined) {
+			return family;
+		}
+	}
+	return undefined;
+}
+
+/**
  * The mark for one provider, as an element.
  *
  * Returns a **span** that starts as the initials avatar and upgrades itself to the real favicon if
@@ -142,7 +178,7 @@ export function createServiceLogo(id: string, endpoint?: string): HTMLElement {
 	mark.textContent = initialsOf(id);
 	mark.title = id;
 
-	const domain = KNOWN_DOMAINS[id.toLowerCase()] ?? domainOf(endpoint);
+	const domain = knownDomainOf(id) ?? domainOf(endpoint);
 	if (domain === undefined) {
 		return mark;
 	}

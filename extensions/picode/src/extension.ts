@@ -15,6 +15,7 @@ import { memoryEnabled, restartMemory, startMemory, stopStartedMemory } from './
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
+import { registerProviderAuthCommands } from './provider-auth';
 import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, storedDiscoveryOf, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
@@ -2841,6 +2842,13 @@ const setupDeps = {
 
 	// The wizard's provider/model commands (the welcome page's model step).
 	context.subscriptions.push(...registerWizardModelCommands({
+		distributionRoot: distributionRoot(context.extensionUri),
+		profileDir: profileDirectory(context.extensionUri),
+		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
+	}));
+
+	// The Providers panel's own sign-in: the same login, drawn step by step inside the panel.
+	context.subscriptions.push(...registerProviderAuthCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },

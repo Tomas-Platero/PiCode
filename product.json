@@ -205,7 +205,14 @@
 		"https://github.com",
 		"https://*.github.com",
 		"https://open-vsx.org",
-		"https://vscodethemes.com"
+		"https://vscodethemes.com",
+		"https://auth.openai.com",
+		"https://claude.ai",
+		"https://platform.claude.com",
+		"https://auth.x.ai",
+		"https://auth.kimi.com",
+		"https://auth.meta.com",
+		"https://openrouter.ai"
 	],
 	"releaseNotesUrl": "https://github.com/Tomas-Platero/PiCode/releases",
 	"updateUrl": "https://www.getpicode.app/api/feed/HEAD/updates",
@@ -759,6 +766,6 @@
 		}
 	},
 	"version": "1.146.4",
-	"picodeVersion": "2.2.4-experimental",
+	"picodeVersion": "2.2.5-experimental",
 	"hotfixPublicKey": "MCowBQYDK2VwAyEAZes8irGrgqOvvCEWRBn3rwOG6qxSNp+zxWOX3HqXyjo="
 }

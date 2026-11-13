@@ -8,7 +8,7 @@ import { $, addDisposableListener, append, clearNode } from '../../../../base/br
 import { Button } from '../../../../base/browser/ui/button/button.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
-import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { localize } from '../../../../nls.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -24,7 +24,7 @@ import {
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
 import { ILanguageModelsService } from '../../chat/common/languageModels.js';
 import { PICODE_PROVIDERS_SETTING } from './picodeConfiguration.js';
-import { createServiceLogo } from './picodeServiceLogo.js';
+import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 
 /**
  * Providers & Models, as PiCode's own panel inside Chat Settings.
@@ -60,6 +60,46 @@ interface IProfileProvider {
 	readonly credential: boolean;
 	/** The credential is a subscription sign-in (an account), not a key. */
 	readonly subscription?: boolean;
+}
+
+/** One provider pi can connect, as the connector's catalogue answers (`provider-auth.ts`). */
+interface ICatalogEntry {
+	readonly id: string;
+	readonly name: string;
+	readonly note?: string;
+	readonly oauth: boolean;
+	readonly apiKey: boolean;
+	readonly connected?: 'subscription' | 'key';
+}
+
+type ICatalogAnswer = { readonly entries: readonly ICatalogEntry[] } | { readonly unavailable: string };
+
+/** Where a sign-in stands, as the connector reports it. */
+interface IAuthRunState {
+	readonly run: number;
+	readonly providerId: string;
+	readonly method: 'oauth' | 'api_key';
+	readonly phase: 'starting' | 'browser' | 'code' | 'question' | 'done' | 'cancelled' | 'failed';
+	readonly userCode?: string;
+	readonly canReopen: boolean;
+	readonly canPaste: boolean;
+	readonly question?: {
+		readonly id: number;
+		readonly kind: 'select' | 'secret' | 'text';
+		readonly message: string;
+		readonly placeholder?: string;
+		readonly options?: readonly { readonly id: string; readonly label: string }[];
+	};
+	readonly error?: string;
+}
+
+/** `https://api.example.com/v1` → `api.example.com`; anything unparsable is returned as it came. */
+function hostOf(endpoint: string): string {
+	try {
+		return new URL(endpoint).host;
+	} catch {
+		return endpoint;
+	}
 }
 
 /** The two sub-tabs of this section. */
@@ -122,6 +162,18 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	 * painting right after the click read the **old** value and the badge appeared a beat later.
 	 */
 	private activeRef = '';
+
+	/** Every provider pi can connect; `undefined` until the connector has answered. */
+	private catalog: readonly ICatalogEntry[] | undefined;
+	private catalogLoading = false;
+	private catalogProblem: string | undefined;
+	private providerQuery = '';
+	/** The sign-in running in this panel, as last read from the connector. */
+	private authState: IAuthRunState | undefined;
+	/** The provider that just moved to Connected, highlighted once. */
+	private justConnected: string | undefined;
+	private readonly listStore = this._register(new DisposableStore());
+	private readonly authPoll = this._register(new MutableDisposable());
 
 	constructor(
 		container: HTMLElement,
@@ -205,7 +257,7 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 		} finally {
 			this.profileLoaded = true;
 			if (this.tab === 'providers') {
-				this.render();
+				this.paintProviderList();
 			}
 		}
 	}
@@ -255,122 +307,489 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/* ------------------------------------------------------------------ providers */
 
 	private renderProviders(): void {
-		const declared = this.providers();
-		// One list, two sources: the providers the profile carries (the truth the chat uses) and the
-		// ones the settings declare (the editable rows). A provider in both is one card.
-		const ids = new Set<string>([
-			...this.profileProviders.map(provider => provider.id),
-			...declared.map(row => row.id ?? ''),
-		]);
-		const cards = [...ids].filter(id => id.length > 0).sort((left, right) => left.localeCompare(right));
-
+		// The toolbar is built once per visit and never repainted: typing in the search box repaints
+		// only the list below it, so the box keeps its focus and its caret.
 		const toolbar = append(this.body, $('.picode-pm-toolbar'));
-		const addButton = this.store.add(new Button(toolbar, { ...defaultButtonStyles, supportIcons: true }));
-		addButton.label = `$(${Codicon.add.id}) ${localize('picodePm.addProvider', "Add Provider")}`;
-		addButton.setTitle(localize('picodePm.addProviderTooltip', "Connect a provider: an address, a dialect and, when it needs one, a key"));
-		this.store.add(addButton.onDidClick(() => this.openProviderForm()));
+		const search = this.store.add(new InputBox(toolbar, this.contextViewService, {
+			inputBoxStyles: defaultInputBoxStyles,
+			placeholder: localize('picodePv.search', "Search providers..."),
+		}));
+		search.element.classList.add('picode-pm-search');
+		search.value = this.providerQuery;
+		this.store.add(search.onDidChange(value => {
+			this.providerQuery = value;
+			this.paintProviderList();
+		}));
 
-		// SSO: the providers that sign you in with your own account (ChatGPT, Claude, Copilot…) are
-		// added by the connector's own login flow — a browser round-trip and pi's credential store,
-		// which no form in this panel can stand in for.
-		const ssoButton = this.store.add(new Button(toolbar, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
-		ssoButton.label = `$(${Codicon.account.id}) ${localize('picodePm.signInSubscription', "Sign in with a subscription")}`;
-		ssoButton.setTitle(localize('picodePm.signInSubscriptionTooltip', "Sign in with an account you already pay for — ChatGPT, Claude, Copilot — and its provider is added here"));
-		this.store.add(ssoButton.onDidClick(() => this.signInSubscription()));
+		const custom = this.store.add(new Button(toolbar, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
+		custom.label = `$(${Codicon.server.id}) ${localize('picodePv.customServer', "Custom server")}`;
+		custom.setTitle(localize('picodePv.customServerTooltip', "Connect your own server or any service that speaks the OpenAI dialect"));
+		this.store.add(custom.onDidClick(() => this.openProviderForm()));
 
-		const list = append(this.body, $('.picode-pm-list'));
-		if (!this.profileLoaded) {
-			append(list, $('p.picode-pm-empty')).textContent = localize('picodePm.reading', "Reading the providers this profile carries...");
-			return;
+		append(this.body, $('.picode-pm-list.picode-pv-list'));
+		this.paintProviderList();
+		if (this.catalog === undefined && !this.catalogLoading) {
+			void this.loadCatalog();
 		}
-		if (cards.length === 0) {
-			append(list, $('p.picode-pm-empty')).textContent = localize(
-				'picodePm.noProviders',
-				"No providers yet. Add one with an address that speaks the OpenAI dialect — OpenRouter, DeepSeek, Groq or your own server.",
-			);
-			return;
-		}
+	}
 
-		for (const id of cards) {
-			const row = declared.find(candidate => candidate.id === id);
-			const profile = this.profileProviders.find(candidate => candidate.id === id);
-
-			const card = append(list, $('.picode-pm-card'));
-			const main = append(card, $('.picode-pm-card-main'));
-			// The real mark when it can be fetched, initials otherwise — never a broken image.
-			const logo = append(main, $('.picode-pm-card-mark'));
-			logo.appendChild(createServiceLogo(id, row?.endpoint));
-			const text = append(main, $('.picode-pm-card-text'));
-			append(text, $('span.picode-pm-card-name')).textContent = id;
-
-			// The subtitle says where it comes from, because that is what decides what can be edited:
-			// an address lives here, a provider that only exists in the profile is read-only here.
-			const detail = row?.endpoint !== undefined
-				? [row.endpoint, row.api].filter(part => typeof part === 'string' && part.length > 0).join(' · ')
-				: localize('picodePm.fromProfile', "In the pi profile");
-			const counts: string[] = [];
-			if (profile?.models === true) {
-				counts.push(localize('picodePm.hasModels', "models"));
+	/** Asks the connector for every provider pi can connect, and how each is connected now. */
+	private async loadCatalog(): Promise<void> {
+		this.catalogLoading = true;
+		try {
+			const answer = await this.commandService.executeCommand<ICatalogAnswer>('picode.providers.catalog');
+			if (answer !== undefined && 'entries' in answer && Array.isArray(answer.entries)) {
+				this.catalog = answer.entries;
+				this.catalogProblem = undefined;
+			} else {
+				this.catalog = [];
+				this.catalogProblem = answer !== undefined && 'unavailable' in answer ? answer.unavailable : 'failed';
 			}
-			if (profile?.credential === true) {
-				counts.push(profile.subscription === true
-					? localize('picodePm.hasSubscription', "subscription")
-					: localize('picodePm.hasCredential', "sign-in stored"));
-			}
-			append(text, $('span.picode-pm-card-sub')).textContent = counts.length > 0 ? `${detail} · ${counts.join(' · ')}` : detail;
-
-			// The badge says what is **stored**, not what is required — pi decides that, not us.
-			// A provider with models and no credential is the normal case for a local server: its
-			// address answers without a key, so saying "No key" as if it were a fault was wrong.
-			const badge = append(card, $('span.picode-pm-badge'));
-			const hasKey = (row?.key !== undefined && row.key.length > 0) || profile?.credential === true;
-			const servesModels = profile?.models === true;
-			badge.classList.add(hasKey ? 'ok' : servesModels ? 'info' : 'muted');
-			badge.textContent = profile?.subscription === true
-				? localize('picodePm.signedIn', "Signed in")
-				: hasKey
-				? localize('picodePm.keyStored', "Key saved")
-				: servesModels
-					? localize('picodePm.noKeyNeeded', "No key needed")
-					: localize('picodePm.noKey', "No key");
-			badge.title = hasKey
-				? localize('picodePm.keyStoredTooltip', "A credential is stored in the pi profile. It is never shown here.")
-				: servesModels
-					? localize('picodePm.noKeyNeededTooltip', "No credential is stored, and its models are listed anyway: its address answers without a key — a server on your own machine usually does — or pi reads the key from an environment variable.")
-					: localize('picodePm.noKeyTooltip', "No credential is stored and it has no models yet. Add one here, or give it a key.");
-
-			const actions = append(card, $('.picode-pm-card-actions'));
-			// Only a declared row is editable: what lives only in the profile is pi's file, not ours.
-			if (row !== undefined) {
-				const edit = this.store.add(new Button(actions, { ...defaultButtonStyles, secondary: true }));
-				edit.label = localize('picodePm.edit', "Edit");
-				this.store.add(edit.onDidClick(() => this.openProviderForm(row)));
-
-				const remove = this.store.add(new Button(actions, { ...defaultButtonStyles, secondary: true, supportIcons: true }));
-				remove.label = `$(${Codicon.trash.id})`;
-				remove.setTitle(localize('picodePm.removeTooltip', "Remove this provider from PiCode's settings"));
-				this.store.add(remove.onDidClick(() => {
-					this.setProviders(this.providers().filter(candidate => candidate.id !== id));
-				}));
+		} catch {
+			this.catalog = [];
+			this.catalogProblem = 'failed';
+		} finally {
+			this.catalogLoading = false;
+			if (this.tab === 'providers') {
+				this.paintProviderList();
 			}
 		}
 	}
 
-	/**
-	 * Adds a provider by **signing in**, not by typing a key.
-	 *
-	 * The connector owns this flow: it asks pi which providers take an account, opens the browser,
-	 * and stores the credential in the profile. All this panel does is start it and wait, then read
-	 * the profile again so the new provider appears without a reload.
-	 */
-	private async signInSubscription(): Promise<void> {
-		try {
-			await this.commandService.executeCommand('picode.connectProvider');
-		} catch (error) {
-			this.showPanelNote(localize('picodePm.signInFailed', "The sign-in could not be started: {0}", error instanceof Error ? error.message : String(error)));
+	/** Paints the connected providers and the gallery, filtered by the search box. */
+	private paintProviderList(): void {
+		const list = this.body.querySelector<HTMLElement>('.picode-pv-list');
+		if (list === null) {
 			return;
 		}
-		await this.loadProfileProviders();
+		// An open form is the person's work in progress: a repaint that is not theirs leaves it alone.
+		if (list.querySelector('.picode-pm-form') !== null) {
+			return;
+		}
+		this.listStore.clear();
+		clearNode(list);
+
+		const query = this.providerQuery.trim().toLowerCase();
+		const matches = (...texts: (string | undefined)[]) => query.length === 0 || texts.some(text => text !== undefined && text.toLowerCase().includes(query));
+		const catalog = this.catalog ?? [];
+		const declared = this.providers();
+
+		// Connected: whatever the chat can already use — a sign-in, a key, a local server's models,
+		// or a server declared here. One card each, whichever source knows about it.
+		const connectedIds = new Set<string>([
+			...catalog.filter(entry => entry.connected !== undefined).map(entry => entry.id),
+			...this.profileProviders.filter(provider => provider.credential || provider.models).map(provider => provider.id),
+			...declared.map(row => row.id ?? '').filter(id => id.length > 0),
+		]);
+		const active = this.authState;
+		const activeId = active !== undefined && active.phase !== 'cancelled' ? active.providerId : undefined;
+
+		const connected = [...connectedIds]
+			.filter(id => id !== activeId)
+			.map(id => ({ id, entry: catalog.find(candidate => candidate.id === id) }))
+			.filter(({ id, entry }) => matches(id, entry?.name, entry?.note))
+			.sort((left, right) => (left.entry?.name ?? left.id).localeCompare(right.entry?.name ?? right.id));
+
+		if (!this.profileLoaded && this.catalog === undefined) {
+			this.paintSkeleton(list);
+			return;
+		}
+
+		if (connected.length > 0) {
+			this.paintSectionTitle(list, localize('picodePv.connected', "Connected"), connected.length, Codicon.check);
+			const grid = append(list, $('.picode-pv-grid.connected'));
+			for (const { id, entry } of connected) {
+				this.paintConnectedCard(grid, id, entry, declared.find(row => row.id === id));
+			}
+		}
+
+		if (this.catalog === undefined) {
+			this.paintSkeleton(list);
+			return;
+		}
+		if (this.catalogProblem !== undefined) {
+			this.paintCatalogProblem(list, this.catalogProblem);
+			return;
+		}
+
+		const available = catalog.filter(entry => (!connectedIds.has(entry.id) || entry.id === activeId) && matches(entry.id, entry.name, entry.note));
+		const accounts = available.filter(entry => entry.oauth);
+		const keys = available.filter(entry => !entry.oauth && entry.apiKey);
+
+		if (accounts.length > 0) {
+			this.paintSectionTitle(list, localize('picodePv.withAccount', "Sign in with your account"), accounts.length, Codicon.account);
+			const grid = append(list, $('.picode-pv-grid'));
+			for (const entry of accounts) {
+				this.paintTile(grid, entry, 'oauth');
+			}
+		}
+		if (keys.length > 0) {
+			this.paintSectionTitle(list, localize('picodePv.withKey', "Use an API key"), keys.length, Codicon.key);
+			const grid = append(list, $('.picode-pv-grid'));
+			for (const entry of keys) {
+				this.paintTile(grid, entry, 'api_key');
+			}
+		}
+		if (connected.length === 0 && accounts.length === 0 && keys.length === 0) {
+			append(list, $('p.picode-pm-empty')).textContent = localize('picodePv.noMatch', "No provider matches \"{0}\".", this.providerQuery.trim());
+		}
+
+		// The key field is the one thing on screen waiting for the person: it gets the caret.
+		list.querySelector<HTMLInputElement>('.picode-pv-flow input')?.focus();
+	}
+
+	private paintSectionTitle(list: HTMLElement, title: string, count: number, icon: ThemeIcon): void {
+		const heading = append(list, $('.picode-pv-section'));
+		append(heading, $(`span${ThemeIcon.asCSSSelector(icon)}`));
+		append(heading, $('span.picode-pv-section-title')).textContent = title;
+		append(heading, $('span.picode-pv-count')).textContent = String(count);
+	}
+
+	/** Placeholder tiles while pi is asked for its catalogue, so the page does not jump. */
+	private paintSkeleton(list: HTMLElement): void {
+		const grid = append(list, $('.picode-pv-grid'));
+		for (let index = 0; index < 6; index += 1) {
+			append(grid, $('.picode-pv-tile.skeleton'));
+		}
+	}
+
+	private paintCatalogProblem(list: HTMLElement, problem: string): void {
+		const box = append(list, $('.picode-pv-problem'));
+		append(box, $(`span${ThemeIcon.asCSSSelector(Codicon.info)}`));
+		const text = append(box, $('span'));
+		if (problem === 'external') {
+			text.textContent = localize('picodePv.external', "The external pi keeps its own sign-ins, and PiCode never writes to it. Switch to PiCode's own pi to connect providers here.");
+			const setup = this.listStore.add(new Button(box, { ...defaultButtonStyles, secondary: true }));
+			setup.label = localize('picodePv.setUp', "Set up PiCode");
+			this.listStore.add(setup.onDidClick(() => void this.commandService.executeCommand('picode.setup')));
+			return;
+		}
+		text.textContent = localize('picodePv.catalogFailed', "PiCode could not ask its pi which providers it can connect.");
+		const retry = this.listStore.add(new Button(box, { ...defaultButtonStyles, secondary: true }));
+		retry.label = localize('picodePv.retry', "Try again");
+		this.listStore.add(retry.onDidClick(() => {
+			this.catalog = undefined;
+			this.paintProviderList();
+			void this.loadCatalog();
+		}));
+	}
+
+	/** One provider the chat can already use. */
+	private paintConnectedCard(grid: HTMLElement, id: string, entry: ICatalogEntry | undefined, row: IProviderRow | undefined): void {
+		const profile = this.profileProviders.find(candidate => candidate.id === id);
+		const card = append(grid, $('.picode-pv-card'));
+		if (this.justConnected === id) {
+			card.classList.add('fresh');
+		}
+		const mark = append(card, $('.picode-pv-mark'));
+		mark.appendChild(createServiceLogo(id, row?.endpoint));
+
+		const text = append(card, $('.picode-pv-text'));
+		append(text, $('span.picode-pv-name')).textContent = entry?.name ?? displayNameOf(id);
+
+		const subscription = entry?.connected === 'subscription' || profile?.subscription === true;
+		const keyStored = !subscription && (profile?.credential === true || (row?.key !== undefined && row.key.length > 0) || entry?.connected === 'key');
+		const how = subscription
+			? (entry?.note ?? localize('picodePv.yourAccount', "Your account"))
+			: row?.endpoint !== undefined
+				? hostOf(row.endpoint)
+				: keyStored
+					? localize('picodePv.apiKey', "API key")
+					: localize('picodePv.noKeyNeeded', "No key needed");
+		append(text, $('span.picode-pv-sub')).textContent = how;
+
+		const status = append(card, $('span.picode-pv-status'));
+		status.classList.add(subscription ? 'account' : keyStored ? 'key' : 'local');
+		append(status, $(`span${ThemeIcon.asCSSSelector(subscription ? Codicon.account : keyStored ? Codicon.key : Codicon.server)}`));
+		append(status, $('span')).textContent = subscription
+			? localize('picodePv.signedIn', "Signed in")
+			: keyStored
+				? localize('picodePv.keySaved', "Key saved")
+				: localize('picodePv.ready', "Ready");
+
+		const actions = append(card, $('.picode-pv-actions'));
+		const action = (icon: ThemeIcon, title: string, run: () => void, danger = false): void => {
+			const button = append(actions, $('button.picode-pv-icon-button')) as HTMLButtonElement;
+			button.type = 'button';
+			button.title = title;
+			button.setAttribute('aria-label', title);
+			button.classList.toggle('danger', danger);
+			append(button, $(`span${ThemeIcon.asCSSSelector(icon)}`));
+			this.listStore.add(addDisposableListener(button, 'click', run));
+		};
+		if (row !== undefined) {
+			action(Codicon.edit, localize('picodePv.edit', "Edit"), () => this.openProviderForm(row));
+			action(Codicon.trash, localize('picodePv.remove', "Remove"), () => this.setProviders(this.providers().filter(candidate => candidate.id !== id)), true);
+			return;
+		}
+		if (entry !== undefined && subscription && entry.oauth) {
+			action(Codicon.refresh, localize('picodePv.reconnect', "Sign in again"), () => void this.startAuth(id, 'oauth'));
+		} else if (entry !== undefined && keyStored && entry.apiKey) {
+			action(Codicon.key, localize('picodePv.changeKey', "Change key"), () => void this.startAuth(id, 'api_key'));
+		}
+		if (entry !== undefined && profile?.credential === true) {
+			action(Codicon.signOut, subscription ? localize('picodePv.signOut', "Sign out") : localize('picodePv.removeKey', "Remove key"), () => void this.logout(id), true);
+		}
+	}
+
+	/** One provider that can be connected, or the one being connected right now. */
+	private paintTile(grid: HTMLElement, entry: ICatalogEntry, method: 'oauth' | 'api_key'): void {
+		const state = this.authState;
+		if (state !== undefined && state.providerId === entry.id && state.phase !== 'cancelled') {
+			this.paintFlow(grid, entry, state);
+			return;
+		}
+		const tile = append(grid, $('button.picode-pv-tile')) as HTMLButtonElement;
+		tile.type = 'button';
+		const mark = append(tile, $('.picode-pv-mark'));
+		mark.appendChild(createServiceLogo(entry.id));
+		const text = append(tile, $('.picode-pv-text'));
+		append(text, $('span.picode-pv-name')).textContent = entry.name;
+		append(text, $('span.picode-pv-sub')).textContent = method === 'oauth'
+			? (entry.note ?? localize('picodePv.yourAccount', "Your account"))
+			: localize('picodePv.apiKey', "API key");
+		const go = append(tile, $('span.picode-pv-go'));
+		go.textContent = method === 'oauth' ? localize('picodePv.signIn', "Sign in") : localize('picodePv.addKey', "Add key");
+		tile.title = method === 'oauth'
+			? localize('picodePv.signInTooltip', "Sign in to {0} in your browser", entry.name)
+			: localize('picodePv.addKeyTooltip', "Paste your {0} API key", entry.name);
+		this.listStore.add(addDisposableListener(tile, 'click', () => void this.startAuth(entry.id, method)));
+
+		// A provider that takes both an account and a key offers the key too, without a second tile.
+		if (method === 'oauth' && entry.apiKey) {
+			const alt = append(tile, $('span.picode-pv-alt'));
+			alt.textContent = localize('picodePv.orKey', "or use a key");
+			alt.setAttribute('role', 'button');
+			alt.tabIndex = 0;
+			this.listStore.add(addDisposableListener(alt, 'click', event => {
+				event.stopPropagation();
+				void this.startAuth(entry.id, 'api_key');
+			}));
+		}
+	}
+
+	/** The open tile: where the sign-in stands, and the one thing the person can do next. */
+	private paintFlow(grid: HTMLElement, entry: ICatalogEntry, state: IAuthRunState): void {
+		const tile = append(grid, $('.picode-pv-tile.picode-pv-flow'));
+		tile.classList.add(`phase-${state.phase}`);
+		const head = append(tile, $('.picode-pv-flow-head'));
+		const mark = append(head, $('.picode-pv-mark'));
+		mark.appendChild(createServiceLogo(entry.id));
+		const text = append(head, $('.picode-pv-text'));
+		append(text, $('span.picode-pv-name')).textContent = entry.name;
+		const line = append(text, $('span.picode-pv-sub'));
+
+		const body = append(tile, $('.picode-pv-flow-body'));
+		const buttons = append(tile, $('.picode-pv-flow-actions'));
+		const button = (label: string, run: () => void, primary = false): Button => {
+			const created = this.listStore.add(new Button(buttons, { ...defaultButtonStyles, secondary: !primary }));
+			created.label = label;
+			this.listStore.add(created.onDidClick(run));
+			return created;
+		};
+		const cancel = () => button(localize('picodePv.cancel', "Cancel"), () => void this.cancelAuth());
+
+		switch (state.phase) {
+			case 'starting':
+				append(head, $('span.picode-pv-spinner'));
+				line.textContent = localize('picodePv.starting', "Getting ready...");
+				cancel();
+				return;
+			case 'browser': {
+				append(head, $('span.picode-pv-pulse'));
+				line.textContent = localize('picodePv.waitingBrowser', "Waiting for your browser...");
+				append(body, $('p.picode-pv-hint')).textContent = localize('picodePv.browserHint', "Sign in on the page that just opened. This finishes by itself when you are done.");
+				if (state.canPaste) {
+					this.paintPaste(body);
+				}
+				button(localize('picodePv.openAgain', "Open the page again"), () => void this.commandService.executeCommand('picode.providers.auth.reopen'));
+				cancel();
+				return;
+			}
+			case 'code': {
+				append(head, $('span.picode-pv-pulse'));
+				line.textContent = localize('picodePv.enterCode', "Enter this code on the page that opened");
+				const code = append(body, $('button.picode-pv-code')) as HTMLButtonElement;
+				code.type = 'button';
+				code.title = localize('picodePv.copyCode', "Copy the code");
+				append(code, $('span.picode-pv-code-text')).textContent = state.userCode ?? '';
+				append(code, $(`span${ThemeIcon.asCSSSelector(Codicon.copy)}`));
+				this.listStore.add(addDisposableListener(code, 'click', () => {
+					void navigator.clipboard.writeText(state.userCode ?? '');
+					code.classList.add('copied');
+				}));
+				append(body, $('p.picode-pv-hint')).textContent = localize('picodePv.codeCopied', "It is already copied: paste it there and confirm.");
+				button(localize('picodePv.openAgain', "Open the page again"), () => void this.commandService.executeCommand('picode.providers.auth.reopen'));
+				cancel();
+				return;
+			}
+			case 'question': {
+				const question = state.question;
+				if (question === undefined) {
+					cancel();
+					return;
+				}
+				if (question.kind === 'select') {
+					line.textContent = question.message;
+					const options = append(body, $('.picode-pv-options'));
+					for (const option of question.options ?? []) {
+						const choice = append(options, $('button.picode-pv-option')) as HTMLButtonElement;
+						choice.type = 'button';
+						choice.textContent = option.label;
+						this.listStore.add(addDisposableListener(choice, 'click', () => void this.answer(question.id, option.id)));
+					}
+					cancel();
+					return;
+				}
+				const secret = question.kind === 'secret';
+				line.textContent = secret
+					? localize('picodePv.pasteKey', "Paste your API key")
+					: question.message;
+				const input = append(body, $('input.picode-pv-input')) as HTMLInputElement;
+				input.type = secret ? 'password' : 'text';
+				input.placeholder = question.placeholder ?? (secret ? localize('picodePv.keyPlaceholder', "Your key") : '');
+				input.spellcheck = false;
+				input.autocomplete = 'off';
+				if (secret) {
+					append(body, $('p.picode-pv-hint')).textContent = localize('picodePv.keyHint', "It is stored in PiCode's own profile and never shown again.");
+				}
+				const submit = () => {
+					if (secret && input.value.trim().length === 0) {
+						input.classList.add('invalid');
+						return;
+					}
+					void this.answer(question.id, secret ? input.value.trim() : input.value);
+				};
+				this.listStore.add(addDisposableListener(input, 'keydown', event => {
+					if (event.key === 'Enter') {
+						submit();
+					} else if (event.key === 'Escape') {
+						void this.cancelAuth();
+					}
+				}));
+				button(secret ? localize('picodePv.saveKey', "Save key") : localize('picodePv.continue', "Continue"), submit, true);
+				cancel();
+				return;
+			}
+			case 'done':
+				append(head, $(`span.picode-pv-done${ThemeIcon.asCSSSelector(Codicon.passFilled)}`));
+				line.textContent = localize('picodePv.connectedNow', "Connected. Its models are ready to use.");
+				return;
+			case 'failed':
+				append(head, $(`span.picode-pv-failed${ThemeIcon.asCSSSelector(Codicon.error)}`));
+				line.textContent = localize('picodePv.failed', "It could not be connected.");
+				if (state.error !== undefined && state.error.length > 0) {
+					append(body, $('p.picode-pv-error')).textContent = state.error;
+				}
+				button(localize('picodePv.retry', "Try again"), () => void this.startAuth(state.providerId, state.method), true);
+				button(localize('picodePv.close', "Close"), () => {
+					this.authState = undefined;
+					this.paintProviderList();
+				});
+				return;
+		}
+	}
+
+	/** The way out when the browser does not come back by itself. */
+	private paintPaste(body: HTMLElement): void {
+		const box = append(body, $('.picode-pv-paste'));
+		append(box, $('span.picode-pv-hint')).textContent = localize('picodePv.pasteHint', "The browser did not come back? Paste the address it ended on:");
+		const row = append(box, $('.picode-pv-paste-row'));
+		const input = append(row, $('input.picode-pv-input')) as HTMLInputElement;
+		input.type = 'text';
+		input.placeholder = 'http://localhost/...';
+		input.spellcheck = false;
+		const send = this.listStore.add(new Button(row, { ...defaultButtonStyles }));
+		send.label = localize('picodePv.connect', "Connect");
+		const submit = () => {
+			if (input.value.trim().length > 0) {
+				void this.answer('paste', input.value.trim());
+			}
+		};
+		this.listStore.add(send.onDidClick(submit));
+		this.listStore.add(addDisposableListener(input, 'keydown', event => {
+			if (event.key === 'Enter') {
+				submit();
+			}
+		}));
+	}
+
+	/** Starts a sign-in (or a key) for one provider, and follows it until it ends. */
+	private async startAuth(providerId: string, method: 'oauth' | 'api_key'): Promise<void> {
+		try {
+			this.authState = await this.commandService.executeCommand<IAuthRunState>('picode.providers.auth.start', providerId, method)
+				?? { run: -1, providerId, method, phase: 'failed', canPaste: false, canReopen: false };
+		} catch (error) {
+			this.authState = { run: -1, providerId, method, phase: 'failed', canPaste: false, canReopen: false, error: error instanceof Error ? error.message : String(error) };
+		}
+		this.justConnected = undefined;
+		this.paintProviderList();
+		this.followAuth();
+	}
+
+	/** Polls the connector while a sign-in runs; repaints only when something changed. */
+	private followAuth(): void {
+		this.authPoll.clear();
+		const timer = setInterval(async () => {
+			let next: IAuthRunState | undefined;
+			try {
+				next = await this.commandService.executeCommand<IAuthRunState>('picode.providers.auth.state');
+			} catch {
+				next = undefined;
+			}
+			const current = this.authState;
+			if (current === undefined || next === undefined || next.run !== current.run) {
+				this.authPoll.clear();
+				return;
+			}
+			if (JSON.stringify(next) === JSON.stringify(current)) {
+				return;
+			}
+			this.authState = next;
+			if (next.phase === 'done' || next.phase === 'failed' || next.phase === 'cancelled') {
+				this.authPoll.clear();
+			}
+			if (next.phase === 'cancelled') {
+				this.authState = undefined;
+			}
+			this.paintProviderList();
+			if (next.phase === 'done') {
+				void this.afterConnected(next.providerId);
+			}
+		}, 400);
+		this.authPoll.value = toDisposable(() => clearInterval(timer));
+	}
+
+	/** The tile shows its tick for a moment, then the provider moves up to Connected. */
+	private async afterConnected(providerId: string): Promise<void> {
+		await Promise.all([this.loadCatalog(), this.loadProfileProviders()]);
+		setTimeout(() => {
+			if (this.authState?.providerId === providerId && this.authState.phase === 'done') {
+				this.authState = undefined;
+				this.justConnected = providerId;
+				this.paintProviderList();
+			}
+		}, 1400);
+	}
+
+	private async answer(questionId: number | 'paste', value: string): Promise<void> {
+		await this.commandService.executeCommand('picode.providers.auth.answer', questionId, value);
+	}
+
+	private async cancelAuth(): Promise<void> {
+		this.authPoll.clear();
+		this.authState = undefined;
+		this.paintProviderList();
+		await this.commandService.executeCommand('picode.providers.auth.cancel');
+	}
+
+	private async logout(providerId: string): Promise<void> {
+		try {
+			await this.commandService.executeCommand('picode.providers.logout', providerId);
+		} catch (error) {
+			this.showPanelNote(localize('picodePv.logoutFailed', "It could not be disconnected: {0}", error instanceof Error ? error.message : String(error)));
+		}
+		await Promise.all([this.loadCatalog(), this.loadProfileProviders()]);
 	}
 
 	/** One line of feedback at the top of the list, replaced each time. */

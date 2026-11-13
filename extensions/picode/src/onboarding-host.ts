@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { withFetchRetry } from './fetch-retry';
 import { gentleSettings, setGentleSetting, type GentleSettings } from './gentle-settings';
 import { prepareEditorLanguage, type LanguageOutcome } from './display-language';
 import { existsSync, readFileSync } from 'node:fs';
@@ -610,7 +611,9 @@ export async function loginProvider(paths: SetupPaths, providerId: string, bridg
 	if (typeof runtime.login !== 'function') {
 		throw new Error('this pi cannot sign a provider in; updating pi is what brings that');
 	}
-	await runtime.login(id, 'oauth', { prompt: bridge.prompt, notify: bridge.notify });
+	// A dropped connection after the browser came back used to throw the whole sign-in away.
+	const login = runtime.login.bind(runtime);
+	await withFetchRetry(() => login(id, 'oauth', { prompt: bridge.prompt, notify: bridge.notify }));
 }
 
 /* ------------------------------------------------------------------ *

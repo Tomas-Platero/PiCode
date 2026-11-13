@@ -552,3 +552,482 @@
 .monaco-workbench.hc-black .picode-pm-logo.dark-ink img {
 	filter: invert(1);
 }
+
+/* ------------------------------------------------------- providers: the gallery */
+
+/*
+ * Connected providers on top, then every provider pi can connect as a tile. The tile being
+ * connected opens across the whole row and carries the sign-in itself: the browser wait, a device
+ * code or a key field. Nothing about a sign-in leaves this panel.
+ */
+
+.picode-pv-list {
+	gap: 6px;
+	padding-right: 2px;
+}
+
+.picode-pv-section {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 12px 0 4px;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-label1, 11px);
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.picode-pv-section:first-child {
+	margin-top: 2px;
+}
+
+.picode-pv-count {
+	padding: 0 6px;
+	border-radius: 10px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+	font-size: 10px;
+	line-height: 16px;
+	letter-spacing: 0;
+}
+
+.picode-pv-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+	gap: 8px;
+}
+
+.picode-pv-tile,
+.picode-pv-card {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.22));
+	border-radius: 10px;
+	background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	box-sizing: border-box;
+	transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+button.picode-pv-tile {
+	cursor: pointer;
+}
+
+button.picode-pv-tile:hover,
+button.picode-pv-tile:focus-visible {
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.7));
+	background: var(--vscode-list-hoverBackground);
+	transform: translateY(-1px);
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+	outline: none;
+}
+
+.picode-pv-mark {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 9px;
+	background: rgba(128, 128, 128, 0.12);
+}
+
+.picode-pv-mark .picode-pm-logo {
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	font-size: 10px;
+}
+
+.picode-pv-mark .picode-pm-logo img {
+	width: 20px;
+	height: 20px;
+}
+
+.picode-pv-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.picode-pv-name {
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-pv-sub {
+	overflow: hidden;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-body2, 12px);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The verb on a tile; it lights up on hover. */
+.picode-pv-go {
+	flex-shrink: 0;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: rgba(128, 128, 128, 0.14);
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	font-weight: 600;
+	transition: background-color 120ms ease, color 120ms ease;
+}
+
+button.picode-pv-tile:hover .picode-pv-go,
+button.picode-pv-tile:focus-visible .picode-pv-go {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-pv-alt {
+	position: absolute;
+	right: 12px;
+	bottom: 3px;
+	color: var(--vscode-textLink-foreground);
+	font-size: 10px;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+button.picode-pv-tile:hover .picode-pv-alt,
+button.picode-pv-tile:focus-within .picode-pv-alt {
+	opacity: 1;
+}
+
+.picode-pv-alt:hover {
+	text-decoration: underline;
+}
+
+/* Connected cards: a status pill and quiet icon actions that come forward on hover. */
+.picode-pv-card.fresh {
+	animation: picode-pv-arrive 1.6s ease;
+}
+
+.picode-pv-status {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.picode-pv-status.account {
+	background: rgba(46, 160, 67, 0.16);
+	color: var(--vscode-testing-iconPassed, #3fb950);
+}
+
+.picode-pv-status.key {
+	background: rgba(56, 139, 253, 0.16);
+	color: var(--vscode-textLink-foreground, #58a6ff);
+}
+
+.picode-pv-status.local {
+	background: rgba(128, 128, 128, 0.16);
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-pv-status .codicon {
+	font-size: 12px;
+}
+
+.picode-pv-actions {
+	display: flex;
+	gap: 2px;
+	opacity: 0.55;
+	transition: opacity 120ms ease;
+}
+
+.picode-pv-card:hover .picode-pv-actions,
+.picode-pv-card:focus-within .picode-pv-actions {
+	opacity: 1;
+}
+
+.picode-pv-icon-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-pv-icon-button:hover {
+	background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+}
+
+.picode-pv-icon-button.danger:hover {
+	color: var(--vscode-errorForeground);
+}
+
+/* The tile being connected: the whole row, with the sign-in inside. */
+.picode-pv-flow {
+	grid-column: 1 / -1;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	padding: 14px 16px;
+	border-color: var(--vscode-focusBorder, rgba(59, 155, 255, 0.7));
+	background:
+		linear-gradient(135deg, rgba(59, 155, 255, 0.10), rgba(160, 90, 255, 0.06) 60%, transparent),
+		var(--vscode-editorWidget-background, transparent);
+	box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22);
+	animation: picode-pv-open 180ms ease;
+}
+
+.picode-pv-flow.phase-done {
+	border-color: var(--vscode-testing-iconPassed, #3fb950);
+	background:
+		linear-gradient(135deg, rgba(46, 160, 67, 0.16), transparent 70%),
+		var(--vscode-editorWidget-background, transparent);
+}
+
+.picode-pv-flow.phase-failed {
+	border-color: var(--vscode-errorForeground, #f85149);
+}
+
+.picode-pv-flow-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.picode-pv-flow-head .picode-pv-name {
+	font-size: 14px;
+}
+
+.picode-pv-flow-head .picode-pv-sub {
+	white-space: normal;
+}
+
+.picode-pv-flow-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.picode-pv-flow-body:empty,
+.picode-pv-flow-actions:empty {
+	display: none;
+}
+
+.picode-pv-flow-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.picode-pv-flow-actions .monaco-button,
+.picode-pv-paste-row .monaco-button,
+.picode-pv-problem .monaco-button {
+	width: auto;
+	flex-shrink: 0;
+	padding: 4px 14px;
+}
+
+.picode-pv-hint {
+	margin: 0;
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-agents-fontSize-body2, 12px);
+}
+
+.picode-pv-error {
+	margin: 0;
+	padding: 6px 10px;
+	border-radius: 6px;
+	background: rgba(248, 81, 73, 0.1);
+	color: var(--vscode-errorForeground);
+	font-size: 12px;
+	word-break: break-word;
+}
+
+.picode-pv-input {
+	width: 100%;
+	max-width: 460px;
+	padding: 7px 10px;
+	border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+	border-radius: 7px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	box-sizing: border-box;
+	outline: none;
+}
+
+.picode-pv-input:focus {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-pv-input.invalid {
+	border-color: var(--vscode-inputValidation-errorBorder, #f85149);
+}
+
+.picode-pv-paste {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+}
+
+.picode-pv-paste-row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+/* A device code: big, monospaced, one click to copy again. */
+.picode-pv-code {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 16px;
+	border: 1px dashed var(--vscode-focusBorder, rgba(59, 155, 255, 0.7));
+	border-radius: 10px;
+	background: rgba(59, 155, 255, 0.08);
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-pv-code-text {
+	font-family: var(--monaco-monospace-font, monospace);
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: 0.18em;
+}
+
+.picode-pv-code.copied .codicon {
+	color: var(--vscode-testing-iconPassed, #3fb950);
+}
+
+.picode-pv-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.picode-pv-option {
+	padding: 6px 12px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+	border-radius: 8px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-pv-option:hover {
+	border-color: var(--vscode-focusBorder);
+	background: var(--vscode-list-hoverBackground);
+}
+
+/* Where it stands, at a glance: a pulse while waiting on the browser, a spinner while getting ready. */
+.picode-pv-pulse {
+	flex-shrink: 0;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--vscode-focusBorder, #3b9bff);
+	animation: picode-pv-pulse 1.4s ease-out infinite;
+}
+
+.picode-pv-spinner {
+	flex-shrink: 0;
+	width: 14px;
+	height: 14px;
+	border: 2px solid rgba(128, 128, 128, 0.3);
+	border-top-color: var(--vscode-focusBorder, #3b9bff);
+	border-radius: 50%;
+	animation: picode-pv-spin 0.8s linear infinite;
+}
+
+.picode-pv-done {
+	color: var(--vscode-testing-iconPassed, #3fb950);
+	font-size: 20px;
+	animation: picode-pv-pop 360ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+.picode-pv-failed {
+	color: var(--vscode-errorForeground, #f85149);
+	font-size: 18px;
+}
+
+.picode-pv-problem {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: rgba(128, 128, 128, 0.08);
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Loading: tiles shaped like the real ones, so the page does not jump when they arrive. */
+.picode-pv-tile.skeleton {
+	height: 56px;
+	background: linear-gradient(90deg, rgba(128, 128, 128, 0.06), rgba(128, 128, 128, 0.14), rgba(128, 128, 128, 0.06));
+	background-size: 200% 100%;
+	animation: picode-pv-shimmer 1.2s linear infinite;
+}
+
+@keyframes picode-pv-pulse {
+	0% { box-shadow: 0 0 0 0 rgba(59, 155, 255, 0.55); }
+	70% { box-shadow: 0 0 0 9px rgba(59, 155, 255, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(59, 155, 255, 0); }
+}
+
+@keyframes picode-pv-spin {
+	to { transform: rotate(360deg); }
+}
+
+@keyframes picode-pv-pop {
+	from { transform: scale(0.3); opacity: 0; }
+	to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes picode-pv-open {
+	from { opacity: 0; transform: translateY(4px); }
+	to { opacity: 1; transform: none; }
+}
+
+@keyframes picode-pv-arrive {
+	0% { box-shadow: 0 0 0 2px var(--vscode-testing-iconPassed, #3fb950); }
+	100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes picode-pv-shimmer {
+	from { background-position: 200% 0; }
+	to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-pv-pulse,
+	.picode-pv-spinner,
+	.picode-pv-tile.skeleton,
+	.picode-pv-flow,
+	.picode-pv-card.fresh,
+	.picode-pv-done {
+		animation: none;
+	}
+}

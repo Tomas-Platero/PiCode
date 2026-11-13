@@ -266,6 +266,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.chooseSections', "Choose my sections");
 		case 'showStatus':
 			return localize('picodeWhatsNew.showStatus', "Open Status");
+		case 'openProviders':
+			return localize('picodeWhatsNew.openProviders', "Open Providers");
 	}
 }
 
@@ -294,6 +296,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'openImport':
 			close();
 			void services.commandService.executeCommand(OPEN_IMPORT_COMMAND);
+			return;
+		case 'openProviders':
+			close();
+			void services.commandService.executeCommand('picode.providersModels.open', 'providers');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -343,6 +349,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	problems: problemsPreview,
 	statusSections: statusSectionsPreview,
 	context: contextPreview,
+	providers: providersPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -760,6 +767,79 @@ function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): vo
 	stage = append(parent, $('.picode-whatsnew-dialogs'));
 	const result = append(parent, $('.picode-whatsnew-sync-result'));
 	pick('now');
+}
+
+function providersPreview(parent: HTMLElement, store: DisposableStore): void {
+	const timers = store.add(new DisposableStore());
+	// Made-up accounts; clicking one plays the real flow: the browser wait, then the tick.
+	const all = [
+		{ id: 'chatgpt', name: 'ChatGPT', note: localize('picodeWhatsNew.providers.demoChatgpt', "ChatGPT Plus or Pro"), hue: 160 },
+		{ id: 'claude', name: 'Claude', note: localize('picodeWhatsNew.providers.demoClaude', "Claude Pro or Max"), hue: 20 },
+		{ id: 'copilot', name: 'GitHub Copilot', note: localize('picodeWhatsNew.providers.demoCopilot', "GitHub Copilot"), hue: 260 },
+	];
+	let connected: string[] = [];
+	let busy: { id: string; done: boolean } | undefined;
+	demoBar(parent, localize('picodeWhatsNew.providers.demo', "Pick an account and watch it connect."), store, () => {
+		timers.clear();
+		connected = [];
+		busy = undefined;
+		draw();
+	});
+	const stage = append(parent, $('.picode-whatsnew-list.picode-whatsnew-providers'));
+	const mark = (provider: { name: string; hue: number }) => {
+		const element = $('span.picode-whatsnew-provider-mark');
+		element.textContent = provider.name.slice(0, 1);
+		element.style.background = `hsl(${provider.hue} 55% 34%)`;
+		return element;
+	};
+	const draw = () => {
+		clearNode(stage);
+		if (connected.length > 0) {
+			append(stage, $('.picode-whatsnew-row.head')).textContent = localize('picodePv.connected', "Connected");
+			for (const id of connected) {
+				const provider = all.find(candidate => candidate.id === id)!;
+				const row = append(stage, $('.picode-whatsnew-provider.connected'));
+				row.appendChild(mark(provider));
+				append(row, $('span.picode-whatsnew-row-label')).textContent = provider.name;
+				append(row, $('span.picode-whatsnew-provider-pill')).textContent = localize('picodePv.signedIn', "Signed in");
+			}
+		}
+		const grid = append(stage, $('.picode-whatsnew-provider-grid'));
+		for (const provider of all.filter(candidate => !connected.includes(candidate.id))) {
+			const active = busy?.id === provider.id;
+			const tile = append(grid, $('button.picode-whatsnew-provider', { type: 'button' })) as HTMLButtonElement;
+			tile.classList.toggle('active', active);
+			tile.disabled = busy !== undefined && !active;
+			tile.appendChild(mark(provider));
+			const text = append(tile, $('span.picode-whatsnew-provider-text'));
+			append(text, $('span.picode-whatsnew-provider-name')).textContent = provider.name;
+			append(text, $('span.picode-whatsnew-provider-note')).textContent = active
+				? (busy!.done ? localize('picodePv.connectedNow', "Connected. Its models are ready to use.") : localize('picodePv.waitingBrowser', "Waiting for your browser..."))
+				: provider.note;
+			if (active) {
+				append(tile, $(busy!.done ? `span.picode-whatsnew-provider-done${ThemeIcon.asCSSSelector(Codicon.passFilled)}` : 'span.picode-whatsnew-provider-pulse'));
+			} else {
+				append(tile, $('span.picode-whatsnew-provider-pill')).textContent = localize('picodePv.signIn', "Sign in");
+			}
+			store.add(addDisposableListener(tile, EventType.CLICK, () => {
+				if (busy !== undefined) {
+					return;
+				}
+				busy = { id: provider.id, done: false };
+				draw();
+				timers.add(disposableTimeout(() => {
+					busy = { id: provider.id, done: true };
+					draw();
+				}, 1600));
+				timers.add(disposableTimeout(() => {
+					busy = undefined;
+					connected = [...connected, provider.id];
+					draw();
+				}, 2700));
+			}));
+		}
+	};
+	draw();
 }
 
 function contextPreview(parent: HTMLElement, store: DisposableStore): void {

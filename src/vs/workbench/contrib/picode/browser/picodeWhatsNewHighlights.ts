@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'providers',
+			since: '2.2.5',
+			plan: 'free',
+			icon: Codicon.plug,
+			title: localize('picodeWhatsNew.providers.title', "Connect any provider in one click"),
+			summary: localize('picodeWhatsNew.providers.summary', "Providers is now a gallery: sign in with ChatGPT, Claude or Copilot, or paste a key, without leaving the page."),
+			points: [
+				localize('picodeWhatsNew.providers.point1', "Your browser opens by itself and the sign-in finishes on its own: nothing to copy or paste."),
+				localize('picodeWhatsNew.providers.point2', "More than forty providers, with their logos and a search box."),
+				localize('picodeWhatsNew.providers.point3', "If the connection drops halfway, PiCode tries again on its own."),
+			],
+			preview: 'providers',
+			action: 'openProviders',
+		},
 		{
 			id: 'context',
 			since: '2.2.2',
