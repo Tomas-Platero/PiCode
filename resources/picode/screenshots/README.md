@@ -11,4 +11,6 @@ Product images shown in the root `README.md`, taken from the website (`getpicode
 | `chat-settings.png` | Chat Settings, Status page |
 | `issues.png` | A Jira board (Pro) |
 
+`frame.py` rebuilds them all (crop + framed background): `python frame.py <PiCode-Website>/public`.
+
 Pending: a short GIF of the Agent layout at work for the top of the README.
