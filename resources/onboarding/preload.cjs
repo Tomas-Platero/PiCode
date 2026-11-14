@@ -26,6 +26,7 @@ const CHANNELS = {
 	accountCancel: 'picode-onboarding:account-cancel',
 	accountEvent: 'picode-onboarding:account-event',
 	accountState: 'picode-onboarding:account-state',
+	showImport: 'picode-onboarding:show-import',
 	accountSignOut: 'picode-onboarding:account-sign-out',
 	loginStart: 'picode-onboarding:login-start',
 	loginAnswer: 'picode-onboarding:login-answer',
@@ -66,6 +67,13 @@ contextBridge.exposeInMainWorld('picode', {
 			ipcRenderer.on(CHANNELS.accountEvent, handler);
 			return () => ipcRenderer.removeListener(CHANNELS.accountEvent, handler);
 		},
+	},
+
+	/** Called when the editor asks for the Import view while this window is already open. */
+	onShowImport: listener => {
+		const handler = () => listener();
+		ipcRenderer.on(CHANNELS.showImport, handler);
+		return () => ipcRenderer.removeListener(CHANNELS.showImport, handler);
 	},
 
 	/** Opens a provider's key page in the browser, from a list the main process allows. */

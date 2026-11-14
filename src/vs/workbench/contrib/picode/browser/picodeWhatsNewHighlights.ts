@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,156 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'usage',
+			since: '2.2.7',
+			plan: 'free',
+			icon: Codicon.dashboard,
+			title: localize('picodeWhatsNew.usage.title', "Your plan's limits, beside the chat"),
+			summary: localize('picodeWhatsNew.usage.summary', "A small ring next to the thinking level fills up as you use your ChatGPT, Claude or NaN plan, so you see a limit coming before you hit it."),
+			points: [
+				localize('picodeWhatsNew.usage.point1', "It turns orange at 80% and red at 95% of the tightest window."),
+				localize('picodeWhatsNew.usage.point2', "Point at it to see each limit with its bar and when it resets."),
+				localize('picodeWhatsNew.usage.point3', "Click it to open Usage limits with every plan you have."),
+			],
+			preview: 'usage',
+			action: 'showUsageLimits',
+		},
+		{
+			id: 'projects',
+			since: '2.2.6',
+			plan: 'free',
+			icon: Codicon.rootFolder,
+			title: localize('picodeWhatsNew.projects.title', "Your projects beside your sessions"),
+			summary: localize('picodeWhatsNew.projects.summary', "In the Agent layout, the sessions column now lists the folders of your workspace, so you always see what the chat is working on."),
+			points: [
+				localize('picodeWhatsNew.projects.point1', "Add a project with the + button, or drop folders on the list."),
+				localize('picodeWhatsNew.projects.point2', "Hover a project to open a terminal in it or take it out of the workspace."),
+				localize('picodeWhatsNew.projects.point3', "Right-click for more: show it in the Explorer or copy its path."),
+			],
+			preview: 'projects',
+			action: 'addProject',
+		},
+		{
+			id: 'providers',
+			since: '2.2.5',
+			plan: 'free',
+			icon: Codicon.plug,
+			title: localize('picodeWhatsNew.providers.title', "Connect any provider in one click"),
+			summary: localize('picodeWhatsNew.providers.summary', "Providers is now a gallery: sign in with ChatGPT, Claude or Copilot, or paste a key, without leaving the page."),
+			points: [
+				localize('picodeWhatsNew.providers.point1', "Your browser opens by itself and the sign-in finishes on its own: nothing to copy or paste."),
+				localize('picodeWhatsNew.providers.point2', "More than forty providers, with their logos and a search box."),
+				localize('picodeWhatsNew.providers.point3', "If the connection drops halfway, PiCode tries again on its own."),
+			],
+			preview: 'providers',
+			action: 'openProviders',
+		},
+		{
+			id: 'context',
+			since: '2.2.2',
+			plan: 'free',
+			icon: Codicon.dashboard,
+			title: localize('picodeWhatsNew.context.title', "See where your context goes"),
+			summary: localize('picodeWhatsNew.context.summary', "Context in Status now shows what fills the conversation, part by part, and lets you compact it with one click."),
+			points: [
+				localize('picodeWhatsNew.context.point1', "One colour per part: messages, project instructions, skills, tools and more."),
+				localize('picodeWhatsNew.context.point2', "How much room is left before the conversation is compacted on its own."),
+				localize('picodeWhatsNew.context.point3', "\"Compact session\" summarises it now, when you choose."),
+			],
+			preview: 'context',
+			action: 'showStatus',
+		},
+		{
+			id: 'statusSections',
+			since: '2.2.1',
+			plan: 'free',
+			icon: Codicon.eyeClosed,
+			title: localize('picodeWhatsNew.statusSections.title', "Status, your way"),
+			summary: localize('picodeWhatsNew.statusSections.summary', "Fold the sections of Status you glance at, and hide the ones you never use."),
+			points: [
+				localize('picodeWhatsNew.statusSections.point1', "Click a section title to fold it; click again to open it."),
+				localize('picodeWhatsNew.statusSections.point2', "Right-click any title to tick the sections you want to see."),
+				localize('picodeWhatsNew.statusSections.point3', "Your choice is remembered, and \"Show all sections\" brings everything back."),
+			],
+			preview: 'statusSections',
+			action: 'chooseSections',
+		},
+		{
+			id: 'changedFiles',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.diffMultiple,
+			title: localize('picodeWhatsNew.changedFiles.title', "Every changed file, in one list"),
+			summary: localize('picodeWhatsNew.changedFiles.summary', "When you review all the changes at once, a list of the files sits beside them, so you can jump straight to the one you want."),
+			points: [
+				localize('picodeWhatsNew.changedFiles.point1', "Each file shows how many lines were added and removed."),
+				localize('picodeWhatsNew.changedFiles.point2', "Click a file and its changes come into view."),
+				localize('picodeWhatsNew.changedFiles.point3', "It is new, so it starts off: the button below turns it on."),
+			],
+			preview: 'changedFiles',
+			action: 'fileList',
+		},
+		{
+			id: 'exclude',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.eyeClosed,
+			title: localize('picodeWhatsNew.exclude.title', "Hide a folder, keep what you need"),
+			summary: localize('picodeWhatsNew.exclude.summary', "Hidden files can now have exceptions: hide a whole folder and still see the one part of it you care about."),
+			points: [
+				localize('picodeWhatsNew.exclude.point1', "Put \"!\" in front of a path to keep it visible, like \"!node_modules/@types\"."),
+				localize('picodeWhatsNew.exclude.point2', "Works for the files list and for search."),
+				localize('picodeWhatsNew.exclude.point3', "Exceptions for search only affect search and Go to File."),
+			],
+			preview: 'exclude',
+			action: 'excludeSetting',
+		},
+		{
+			id: 'terminalDialogs',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.terminal,
+			title: localize('picodeWhatsNew.terminalDialogs.title', "Sign-in windows in front"),
+			summary: localize('picodeWhatsNew.terminalDialogs.summary', "When a command in the terminal opens a window, like a sign-in prompt, it now appears in front of PiCode instead of hiding behind it."),
+			points: [
+				localize('picodeWhatsNew.terminalDialogs.point1', "No more hunting for a window that opened somewhere behind the editor."),
+				localize('picodeWhatsNew.terminalDialogs.point2', "It follows the window your terminal is in."),
+				localize('picodeWhatsNew.terminalDialogs.point3', "Nothing to set up: it works on its own."),
+			],
+			preview: 'terminalDialogs',
+			action: 'newTerminal',
+		},
+		{
+			id: 'problems',
+			since: '2.2.0',
+			plan: 'free',
+			icon: Codicon.warning,
+			title: localize('picodeWhatsNew.problems.title', "Every problem in sight"),
+			summary: localize('picodeWhatsNew.problems.summary', "Big files now show all their errors and warnings underlined, and more of the newest extensions install."),
+			points: [
+				localize('picodeWhatsNew.problems.point1', "Up to 5,000 errors and warnings are underlined in a file, ten times more than before."),
+				localize('picodeWhatsNew.problems.point2', "More of the newest extensions now install."),
+				localize('picodeWhatsNew.problems.point3', "Extensions can now add their own entries to a file's history."),
+			],
+			preview: 'problems',
+			action: 'browseExtensions',
+		},
+		{
+			id: 'import',
+			since: '2.0.5',
+			plan: 'free',
+			icon: Codicon.cloudDownload,
+			title: localize('picodeWhatsNew.import.title', "Import from pi or VS Code"),
+			summary: localize('picodeWhatsNew.import.summary', "Bring over exactly what you want from your other pi or your VS Code, one item at a time."),
+			points: [
+				localize('picodeWhatsNew.import.point1', "Packages, themes, extensions, settings and shortcuts: tick only the ones you want."),
+				localize('picodeWhatsNew.import.point2', "What you already have in PiCode is never replaced."),
+				localize('picodeWhatsNew.import.point3', "Open it any time from the Command Palette: Import from Pi or VS Code."),
+			],
+			preview: 'import',
+			action: 'openImport',
+		},
 		{
 			id: 'issues',
 			since: '2.0.0',

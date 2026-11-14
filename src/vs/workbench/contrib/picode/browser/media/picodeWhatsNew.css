@@ -478,6 +478,238 @@
 	font-size: 12px;
 }
 
+/* -- 2.2: changed files, hidden files, terminal dialogs, the editor base ---------------------------- */
+
+.picode-whatsnew-diff {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 8px;
+	margin-top: 8px;
+	min-height: 150px;
+}
+
+.picode-whatsnew-diff.with-list {
+	grid-template-columns: minmax(150px, 1fr) 2fr;
+}
+
+.picode-whatsnew-diff-files {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 4px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-diff-file {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	border: none;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.picode-whatsnew-diff-file:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.picode-whatsnew-diff-file.active {
+	background: color-mix(in srgb, var(--vscode-focusBorder) 26%, transparent);
+}
+
+.picode-whatsnew-diff-path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-whatsnew-diff-added { color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green)); }
+.picode-whatsnew-diff-removed { color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red)); }
+
+.picode-whatsnew-diff-view {
+	padding: 6px 0;
+	border-radius: 6px;
+	background: var(--vscode-editor-background);
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-diff-title {
+	padding: 0 10px 6px;
+	color: var(--vscode-descriptionForeground);
+	font-family: var(--vscode-font-family);
+	font-weight: 600;
+}
+
+.picode-whatsnew-diff-line {
+	padding: 1px 10px;
+	white-space: pre;
+}
+
+.picode-whatsnew-diff-line.added { background: var(--vscode-diffEditor-insertedLineBackground, color-mix(in srgb, var(--vscode-charts-green) 18%, transparent)); }
+.picode-whatsnew-diff-line.removed { background: var(--vscode-diffEditor-removedLineBackground, color-mix(in srgb, var(--vscode-charts-red) 18%, transparent)); }
+
+.picode-whatsnew-exclude {
+	display: grid;
+	grid-template-columns: 1fr 1.3fr;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.picode-whatsnew-tree {
+	padding: 6px 4px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+	font-size: 12px;
+}
+
+.picode-whatsnew-tree-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-context-bar {
+	display: flex;
+	gap: 1px;
+	height: 6px;
+	margin: 4px 0 8px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+	overflow: hidden;
+}
+
+.picode-whatsnew-context-piece {
+	height: 100%;
+	transition: width 0.4s ease;
+}
+
+.picode-whatsnew-context-swatch {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+}
+
+.picode-whatsnew-context-piece.messages, .picode-whatsnew-context-swatch.messages { background: var(--vscode-charts-blue); }
+.picode-whatsnew-context-piece.project, .picode-whatsnew-context-swatch.project { background: var(--vscode-charts-orange); }
+.picode-whatsnew-context-piece.pi, .picode-whatsnew-context-swatch.pi { background: var(--vscode-charts-purple); }
+.picode-whatsnew-context-piece.skills, .picode-whatsnew-context-swatch.skills { background: var(--vscode-charts-green); }
+.picode-whatsnew-context-piece.tools, .picode-whatsnew-context-swatch.tools { background: var(--vscode-charts-yellow); }
+.picode-whatsnew-context-piece.mcp, .picode-whatsnew-context-swatch.mcp { background: var(--vscode-charts-red); }
+.picode-whatsnew-context-piece.reserve { background: color-mix(in srgb, var(--vscode-foreground) 25%, transparent); }
+.picode-whatsnew-context-swatch.free { border: 1px solid color-mix(in srgb, var(--vscode-foreground) 25%, transparent); }
+
+.picode-whatsnew-context .picode-whatsnew-row-label {
+	flex: 1;
+}
+
+.picode-whatsnew-section-title {
+	font-weight: 600;
+}
+
+.picode-whatsnew-section-title.clickable {
+	cursor: pointer;
+}
+
+.picode-whatsnew-json {
+	margin: 0;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: var(--vscode-editor-background);
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+	white-space: pre;
+}
+
+.picode-whatsnew-dialogs {
+	position: relative;
+	height: 150px;
+}
+
+.picode-whatsnew-window {
+	position: absolute;
+	inset: 0 60px 0 0;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 8px;
+	background: var(--vscode-editor-background);
+	overflow: hidden;
+	z-index: 2;
+}
+
+.picode-whatsnew-window-title {
+	padding: 4px 10px;
+	background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.picode-whatsnew-window-terminal {
+	position: absolute;
+	inset: auto 0 0 0;
+	padding: 6px 10px;
+	border-top: 1px solid color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	font-family: var(--monaco-monospace-font);
+	font-size: 12px;
+}
+
+.picode-whatsnew-dialog {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 16px;
+	border: 1px solid var(--vscode-focusBorder);
+	border-radius: 8px;
+	background: var(--vscode-editorWidget-background);
+	box-shadow: 0 6px 20px var(--vscode-widget-shadow);
+	font-size: 12px;
+	animation: picode-whatsnew-appear 0.3s ease-out;
+}
+
+.picode-whatsnew-dialogs.now .picode-whatsnew-dialog {
+	top: 34px;
+	left: 30%;
+	z-index: 3;
+}
+
+.picode-whatsnew-dialogs.before .picode-whatsnew-dialog {
+	top: 44px;
+	right: 0;
+	z-index: 1;
+	opacity: 0.55;
+}
+
+.picode-whatsnew-code-number {
+	display: inline-block;
+	width: 44px;
+	color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+}
+
+.picode-whatsnew-squiggle {
+	text-decoration: underline wavy var(--vscode-editorError-foreground, var(--vscode-charts-red));
+	text-underline-offset: 3px;
+}
+
+.picode-whatsnew-extension {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
 /* -- the version beside the title, and a page that looks like the rest ------------------------------ */
 
 .picode-whatsnew-title {
@@ -520,4 +752,116 @@
 .picode-whatsnew-page::-webkit-scrollbar-thumb:hover,
 .picode-whatsnew-nav::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in srgb, var(--vscode-foreground) 32%, transparent);
+}
+
+.picode-whatsnew-provider-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 6px;
+}
+
+.picode-whatsnew-provider {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+	border-radius: 9px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.picode-whatsnew-provider:hover:enabled {
+	border-color: var(--vscode-focusBorder);
+	transform: translateY(-1px);
+}
+
+.picode-whatsnew-provider:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.picode-whatsnew-provider.active {
+	border-color: var(--vscode-focusBorder);
+	background: color-mix(in srgb, var(--vscode-focusBorder) 10%, transparent);
+	opacity: 1;
+}
+
+.picode-whatsnew-provider.connected {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 30px;
+	animation: picode-whatsnew-appear 0.25s ease-out;
+}
+
+.picode-whatsnew-provider.connected .picode-whatsnew-row-label {
+	flex: 1;
+}
+
+.picode-whatsnew-provider-mark {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 7px;
+	color: #fff;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.picode-whatsnew-provider-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.picode-whatsnew-provider-name {
+	font-weight: 600;
+}
+
+.picode-whatsnew-provider-note {
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+.picode-whatsnew-provider-pill {
+	flex: none;
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.picode-whatsnew-provider.connected .picode-whatsnew-provider-pill {
+	background: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 18%, transparent);
+	color: var(--vscode-testing-iconPassed, #3fb950);
+}
+
+.picode-whatsnew-provider-pulse {
+	flex: none;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--vscode-focusBorder);
+	animation: picode-whatsnew-provider-pulse 1.4s ease-out infinite;
+}
+
+.picode-whatsnew-provider-done {
+	color: var(--vscode-testing-iconPassed, #3fb950);
+	font-size: 18px;
+}
+
+@keyframes picode-whatsnew-provider-pulse {
+	0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--vscode-focusBorder) 55%, transparent); }
+	70% { box-shadow: 0 0 0 8px transparent; }
+	100% { box-shadow: 0 0 0 0 transparent; }
 }

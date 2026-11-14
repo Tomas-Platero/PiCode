@@ -6,7 +6,7 @@
 import { app, BrowserWindow, desktopCapturer, Details, globalShortcut, GPUFeatureStatus, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
 import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
 import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
-import { hostname, release } from 'os';
+import { homedir, hostname, release } from 'os';
 import { initWindowsVersionInfo } from '../../base/node/windowsVersion.js';
 import { VSBuffer } from '../../base/common/buffer.js';
 import { toErrorMessage } from '../../base/common/errorMessage.js';
@@ -148,6 +148,8 @@ import { NativeWebContentExtractorService } from '../../platform/webContentExtra
 import { AgentNetworkFilterService, IAgentNetworkFilterService } from '../../platform/networkFilter/common/networkFilterService.js';
 import { ITerminalSandboxService, NullTerminalSandboxService } from '../../platform/sandbox/common/terminalSandboxService.js';
 import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetry.js';
+import { stopPicodeEngineOnQuit } from '../../platform/update/electron-main/picodeMemoryEngine.js';
+import { dataFolderOf, stopIntercomBrokers, systemBrokerProcesses } from '../../platform/update/electron-main/picodeIntercomBroker.js';
 
 type OSProxyConfigEvent = {
 	readonly success: boolean;
@@ -716,6 +718,26 @@ export class CodeApplication extends Disposable {
 			}
 		});
 
+		// PiCode: the memory engine a window started is never left running after the editor quits,
+		// even when that window went down too fast to stop it itself.
+		Event.once(this.lifecycleMainService.onWillShutdown)(e => {
+			// pi-intercom's broker serves only this installation's chats: with every window gone it has
+			// nobody left, yet it can linger for up to a day.
+			try {
+				const exe = process.execPath;
+				const brokers = stopIntercomBrokers(exe, dataFolderOf(this.environmentMainService.appRoot), systemBrokerProcesses(exe));
+				if (brokers.length > 0) {
+					this.logService.info(`picode: stopped the pi-intercom broker left running (${brokers.join(', ')})`);
+				}
+			} catch (error) {
+				this.logService.error(error);
+			}
+			e.join('picode.memoryEngine', stopPicodeEngineOnQuit(this.environmentMainService.appRoot, homedir()).then(
+				stopped => { if (stopped.length > 0) { this.logService.info(`picode: stopped the memory engine left running (${stopped.join(', ')})`); } },
+				error => this.logService.error(error)
+			));
+		});
+
 		// Resolve unique machine ID
 		const [machineId, sqmId, devDeviceId] = await Promise.all([
 			resolveMachineId(this.stateService, this.logService),
@@ -742,13 +764,13 @@ export class CodeApplication extends Disposable {
 			applicationStorage: accessor.get(IApplicationStorageMainService) as unknown as EditorApplicationStore,
 			encryptionService: accessor.get(IEncryptionMainService),
 		}));
-		registerSetupWindowOpener(() => openSetupWindowFromEditor(picodeSetupDeps));
+		registerSetupWindowOpener(mode => openSetupWindowFromEditor(picodeSetupDeps, mode));
 		// The editor's "PiCode: Setup" reaches the application through the native host service, which
 		// is what every renderer already talks to; the opener above is what it calls.
 		appInstantiationService.invokeFunction(accessor => {
 			const nativeHostMainService = accessor.get(INativeHostMainService);
 			if (nativeHostMainService instanceof NativeHostMainService) {
-				nativeHostMainService.registerPiCodeSetupOpener(() => requestSetupWindow());
+				nativeHostMainService.registerPiCodeSetupOpener(page => requestSetupWindow(page === 'import' ? 'import' : 'setup'));
 			}
 		});
 

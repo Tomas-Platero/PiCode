@@ -61,6 +61,23 @@ export function startedEngine(dir: string): number | undefined {
 	}
 }
 
+/**
+ * A start that did not last: the engine exited soon after (usually the port was already taken
+ * because another window's engine was serving but slow to answer). The marker goes back to what it
+ * named before, so it never points at a dead process while PiCode's real engine keeps running —
+ * that left the engine orphaned when the last window closed. A later start that did last is kept.
+ */
+export function undoEngineStart(dir: string, failedPid: number, previous: number | undefined, isAlive: IsAlive = processIsAlive): void {
+	if (startedEngine(dir) !== failedPid) {
+		return;
+	}
+	if (previous !== undefined && previous !== failedPid && isAlive(previous)) {
+		markEngineStarted(dir, previous);
+	} else {
+		forgetStartedEngine(dir);
+	}
+}
+
 /** Forgets the engine PiCode started in this folder (it was stopped on purpose). */
 export function forgetStartedEngine(dir: string): void {
 	try {

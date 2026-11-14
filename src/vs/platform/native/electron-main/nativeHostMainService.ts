@@ -648,14 +648,14 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	 * service only carries the call across. Until it is registered — an embedding that never ran
 	 * the application start — the answer is `false` and nothing happens.
 	 */
-	private piCodeSetupOpener: (() => boolean) | undefined;
+	private piCodeSetupOpener: ((page?: 'import') => boolean) | undefined;
 
-	registerPiCodeSetupOpener(opener: () => boolean): void {
+	registerPiCodeSetupOpener(opener: (page?: 'import') => boolean): void {
 		this.piCodeSetupOpener = opener;
 	}
 
-	async openPiCodeSetup(): Promise<boolean> {
-		return this.piCodeSetupOpener?.() ?? false;
+	async openPiCodeSetup(_windowId: number | undefined, page?: 'import'): Promise<boolean> {
+		return this.piCodeSetupOpener?.(page) ?? false;
 	}
 
 	//#endregion

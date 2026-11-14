@@ -1829,9 +1829,12 @@ end;
 // `unins*`, `appx` and `bootstrap` (it opens each file first, so a path past MAX_PATH aborts it),
 // then moving the contents of `_` up. PiCode keeps pi's profile in {app}\data, so the folder is
 // parked inside `_` for the swap and rides back to {app}\data with the new version.
+// A helper that outlives the editor (pi-intercom's broker keeps its working folder inside the profile
+// for a few seconds after the last session leaves) blocks the rename, so it is retried for a while.
 function StashDataFolder(): Boolean;
 var
   DataDir, StashDir: String;
+  Attempt: Integer;
 begin
   DataDir := ExpandConstant('{app}\data');
   StashDir := ExpandConstant('{app}\_\data');
@@ -1846,8 +1849,17 @@ begin
     exit;
   end;
   Result := RenameFile(DataDir, StashDir);
+  Attempt := 1;
+  while not Result and (Attempt < 60) and not CancelFileExists() do
+  begin
+    if Attempt = 1 then
+      Log('Data folder is in use, waiting for it to be released...');
+    Sleep(1000);
+    Attempt := Attempt + 1;
+    Result := RenameFile(DataDir, StashDir);
+  end;
   if Result then
-    Log('Data folder parked in the update folder')
+    Log('Data folder parked in the update folder after ' + IntToStr(Attempt) + ' attempt(s)')
   else
     Log('Could not park the data folder in the update folder');
 end;

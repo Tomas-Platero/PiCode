@@ -31,6 +31,8 @@ import { ISCMService } from '../../scm/common/scm.js';
 import { onDidChangePicodeAgentStatus } from './picodeAgentStatusPill.js';
 import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 import { PicodeStatusIssues } from './account/issues/picodeStatusIssues.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { areAllStatusSectionsHidden, decorateStatusSectionTitle, isStatusSectionFolded, isStatusSectionHidden, onDidChangePicodeStatusSections, PicodeStatusSectionId, showAllStatusSections } from './picodeStatusSections.js';
 
 /**
  * The Agent layout's status column, the first half of the review side bar once it is wide enough: where the agent works, how
@@ -128,6 +130,48 @@ const MEMORY_UPDATE_COMMAND = 'picode.memory.updateEngine';
 /** Whether memory is on (the connector sets it). */
 const MEMORY_ENABLED_CONTEXT = 'picode.memory.enabled';
 
+/** Where a chat's context goes, as the connector estimates it (`context-breakdown.ts`). */
+type ContextPartId = 'messages' | 'project' | 'pi' | 'skills' | 'other' | 'tools' | 'mcp';
+
+interface IContextBreakdown {
+	readonly window: number;
+	readonly used: number;
+	readonly exact: boolean;
+	readonly parts: readonly { readonly id: ContextPartId; readonly tokens: number }[];
+	readonly reserve: number;
+	readonly free: number;
+	readonly untilCompaction: number;
+}
+
+const CONTEXT_BREAKDOWN_COMMAND = 'picode.context.breakdown';
+const CONTEXT_COMPACT_COMMAND = 'picode.context.compact';
+
+/** The focused chat's context as last read, shared like the MCPs. */
+let knownContext: IContextBreakdown | undefined;
+
+function contextPartLabel(id: ContextPartId): string {
+	switch (id) {
+		case 'messages': return localize('picode.overview.contextMessages', "Messages");
+		case 'project': return localize('picode.overview.contextProject', "Project instructions");
+		case 'pi': return localize('picode.overview.contextPi', "pi instructions");
+		case 'skills': return localize('picode.overview.contextSkills', "Skills");
+		case 'other': return localize('picode.overview.contextOther', "Other instructions");
+		case 'tools': return localize('picode.overview.contextTools', "pi tools");
+		case 'mcp': return localize('picode.overview.contextMcp', "MCP tools");
+	}
+}
+
+/** 573,912 as 573.9k, 1,000,000 as 1M. */
+function compactTokens(tokens: number): string {
+	if (tokens >= 1_000_000) {
+		return `${Number((tokens / 1_000_000).toFixed(1))}M`;
+	}
+	if (tokens >= 1_000) {
+		return `${Number((tokens / 1_000).toFixed(1))}k`;
+	}
+	return String(Math.round(tokens));
+}
+
 /** The task board and the memory summary as last read, shared like the MCPs. */
 let knownTasks: ITaskBoard | undefined;
 let knownMemory: IMemorySummary | undefined;
@@ -154,7 +198,6 @@ export class PicodeAgentOverview extends Disposable {
 	private showFinished = false;
 	/** The task rows opened to their facts: they stay open while the board repaints. */
 	private readonly openTasks = new Set<string>();
-	private showConnectors = false;
 	private timer: ReturnType<typeof setInterval> | undefined;
 	/** The readings still waiting for an answer: a slow one is not asked again on top of itself. */
 	private readonly reading = new Set<string>();
@@ -164,8 +207,14 @@ export class PicodeAgentOverview extends Disposable {
 	/** What the column last drew, so a reading that changed nothing leaves it (and its hover) alone. */
 	private painted: string | undefined;
 
+	/**
+	 * `only` draws one section on its own, for a view of the Editor layout that shows just that part
+	 * of Status: same drawing, so both layouts look alike. The view brings its own title and fold, so
+	 * the section draws no heading and ignores Status's hide and fold choices.
+	 */
 	constructor(
 		parent: HTMLElement,
+		private readonly only: 'context' | undefined,
 		@ICommandService private readonly commandService: ICommandService,
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
@@ -175,6 +224,7 @@ export class PicodeAgentOverview extends Disposable {
 		@IStorageService private readonly storageService: IStorageService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IHostService private readonly hostService: IHostService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IFileService fileService: IFileService,
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
@@ -192,7 +242,7 @@ export class PicodeAgentOverview extends Disposable {
 		this.root = append(parent, $('.picode-overview'));
 		// The issue panels draw and refresh themselves; the column only puts their host back after each repaint.
 		this.issuesHost = $('.picode-overview-issues');
-		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost));
+		this._register(instantiationService.createInstance(PicodeStatusIssues, this.issuesHost, true));
 
 		// What the agent is doing changed: the plan says so without waiting for the next reading.
 		this._register(onDidChangePicodeAgentStatus(() => {
@@ -212,7 +262,13 @@ export class PicodeAgentOverview extends Disposable {
 		this._register(this.hostService.onDidChangeFocus(() => this.setLive(true)));
 		this._register(this.scmService.onDidAddRepository(() => this.paint()));
 		this._register(this.scmService.onDidRemoveRepository(() => this.paint()));
-		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => this.paint()));
+		this._register(this.chatWidgetService.onDidChangeFocusedSession(() => {
+			this.paint();
+			// Another chat in front: its context, not the previous one's.
+			void this.read('context', () => this.readContext());
+		}));
+		// A section hidden, shown, folded or unfolded, here or in the other Status of the window.
+		this._register(onDidChangePicodeStatusSections(() => this.paint()));
 		// What the editor already knows is painted now; pi's MCPs join when it answers.
 		this.paint();
 		this.setLive(true);
@@ -238,12 +294,19 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private refresh(): void {
+		if (this.only === 'context') {
+			void this.read('context', () => this.readContext());
+			return;
+		}
 		void this.read('connectors', async () => {
 			const servers = await this.commandService.executeCommand<readonly IConnector[]>(MCP_SERVERS_COMMAND);
 			knownConnectors = Array.isArray(servers) ? servers : [];
 		});
 		void this.readTasks();
 		void this.read('memory', () => this.readMemory());
+		if (!isStatusSectionHidden(this.storageService, 'context')) {
+			void this.read('context', () => this.readContext());
+		}
 		// Only counted where it is drawn: with no changed file the column shows no lines at all.
 		if (this.changedFiles() > 0 && (this.diffStale || Date.now() - this.diffReadAt > DIFF_SAFETY_MS)) {
 			void this.read('diff', async () => {
@@ -258,6 +321,9 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private readTasks(): Promise<void> {
+		if (this.only) {
+			return Promise.resolve();
+		}
 		return this.read('tasks', async () => {
 			knownTasks = await this.commandService.executeCommand<ITaskBoard>(TASKS_DATA_COMMAND) ?? knownTasks;
 		});
@@ -304,7 +370,7 @@ export class PicodeAgentOverview extends Disposable {
 	/** Everything `paint` draws from, apart from the folds, which repaint by themselves. */
 	private fingerprint(): string {
 		return JSON.stringify([
-			knownConnectors, knownDiff, knownTasks, knownMemory,
+			knownConnectors, knownDiff, knownTasks, knownMemory, knownContext,
 			this.changedFiles(), this.currentBranch(), this.contextUsage(),
 			this.workspaceService.getWorkspace().folders[0]?.uri.toString(),
 			this.contextKeyService.getContextKeyValue<boolean>(MEMORY_ENABLED_CONTEXT),
@@ -319,6 +385,18 @@ export class PicodeAgentOverview extends Disposable {
 		this.painted = this.fingerprint();
 		this.renderDisposables.clear();
 		clearNode(this.root);
+		if (this.only === 'context') {
+			this.renderContext(this.root);
+			if (!this.root.firstChild) {
+				this.row(this.section(this.root, undefined), Codicon.commentDiscussion, localize('picode.overview.contextEmpty', "Start a chat to see its context"));
+			}
+			return;
+		}
+		if (areAllStatusSectionsHidden(this.storageService)) {
+			const row = this.row(this.section(this.root, undefined), Codicon.eyeClosed, localize('picode.overview.allHidden', "All sections are hidden"));
+			this.action(row, localize('picode.overview.showSections', "Show"), () => showAllStatusSections(this.storageService));
+			return;
+		}
 		this.renderEnvironment(this.root);
 		this.renderContext(this.root);
 		this.renderConnectors(this.root);
@@ -360,6 +438,25 @@ export class PicodeAgentOverview extends Disposable {
 		return section;
 	}
 
+	/**
+	 * A section with its title, its arrow and its right-click menu, or nothing when the person hid
+	 * it. `open` says whether its content is drawn: folded, only the title shows.
+	 */
+	private titledSection(parent: HTMLElement, id: PicodeStatusSectionId, title: string): { readonly section: HTMLElement; readonly heading: HTMLElement; readonly open: boolean } | undefined {
+		if (this.only === id) {
+			// The view around it has the title, the fold and the menu.
+			return { section: append(parent, $('.picode-overview-section')), heading: $('.picode-overview-title'), open: true };
+		}
+		if (isStatusSectionHidden(this.storageService, id)) {
+			return undefined;
+		}
+		const section = append(parent, $('.picode-overview-section'));
+		const heading = append(section, $('.picode-overview-title'));
+		append(heading, $('span.picode-overview-title-label')).textContent = title;
+		decorateStatusSectionTitle(heading, id, this.renderDisposables, this.contextMenuService, this.storageService);
+		return { section, heading, open: !isStatusSectionFolded(this.storageService, id) };
+	}
+
 	private changedFiles(): number {
 		let files = 0;
 		for (const repository of this.scmService.repositories) {
@@ -388,7 +485,11 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderEnvironment(parent: HTMLElement): void {
-		const section = this.section(parent, localize('picode.overview.environment', "Environment"));
+		const titled = this.titledSection(parent, 'environment', localize('picode.overview.environment', "Environment"));
+		if (!titled) {
+			return;
+		}
+		const section = titled.section;
 		const remote = this.environmentService.remoteAuthority;
 		this.row(section, remote ? Codicon.remote : Codicon.vm, remote ? remote : localize('picode.overview.thisComputer', "This computer"));
 
@@ -419,16 +520,89 @@ export class PicodeAgentOverview extends Disposable {
 	}
 
 	private renderContext(parent: HTMLElement): void {
+		const breakdown = knownContext;
+		if (breakdown && breakdown.window > 0) {
+			this.renderContextBreakdown(parent, breakdown);
+			return;
+		}
 		const usage = this.contextUsage();
 		if (usage === undefined) {
 			return;
 		}
-		const section = this.section(parent, localize('picode.overview.context', "Context"));
+		const titled = this.titledSection(parent, 'context', localize('picode.overview.context', "Context"));
+		if (!titled?.open) {
+			return;
+		}
+		const section = titled.section;
 		const row = append(section, $('.picode-overview-row.picode-overview-meter-row'));
 		append(row, $('span.picode-overview-label')).textContent = localize('picode.overview.contextUsed', "Used by this conversation");
 		append(row, $('span.picode-overview-value')).textContent = `${usage}%`;
 		const meter = append(section, $('.picode-overview-meter'));
 		append(meter, $('.picode-overview-meter-fill')).style.width = `${Math.min(100, usage)}%`;
+	}
+
+	/**
+	 * Where the focused chat's context goes, as Claude Code shows it: the share used over the window,
+	 * a bar with one colour per part, one row per part, and the room left before pi compacts with a
+	 * button to compact now. The parts are estimates (marked «~»); the total is pi's when it has one.
+	 * Folded, only the share and the bar stay.
+	 */
+	private renderContextBreakdown(parent: HTMLElement, breakdown: IContextBreakdown): void {
+		const titled = this.titledSection(parent, 'context', localize('picode.overview.context', "Context"));
+		if (!titled) {
+			return;
+		}
+		const { section, open } = titled;
+		const percent = (tokens: number) => breakdown.window > 0 ? (tokens / breakdown.window) * 100 : 0;
+		const share = (tokens: number) => `${percent(tokens).toFixed(1)}%`;
+		const head = append(section, $('.picode-overview-row.picode-overview-meter-row'));
+		append(head, $('span.picode-overview-label')).textContent = localize('picode.overview.contextPercent', "{0}% used", Math.round(percent(breakdown.used)));
+		append(head, $('span.picode-overview-value')).textContent = `${breakdown.exact ? '' : '~'}${compactTokens(breakdown.used)} / ${compactTokens(breakdown.window)}`;
+		const bar = append(section, $('.picode-overview-meter.picode-overview-context-bar'));
+		for (const part of breakdown.parts) {
+			const piece = append(bar, $(`.picode-overview-context-piece.${part.id}`));
+			piece.style.width = `${percent(part.tokens)}%`;
+		}
+		const reservePiece = append(bar, $('.picode-overview-context-piece.reserve'));
+		reservePiece.style.width = `${percent(breakdown.reserve)}%`;
+		if (!open) {
+			return;
+		}
+		const line = (css: string, label: string, tokens: number, estimated: boolean) => {
+			const row = append(section, $('.picode-overview-row.picode-overview-context-row'));
+			append(row, $(`span.picode-overview-context-swatch.${css}`));
+			append(row, $('span.picode-overview-label')).textContent = label;
+			append(row, $('span.picode-overview-value')).textContent = `${estimated ? '~' : ''}${compactTokens(tokens)}`;
+			append(row, $('span.picode-overview-context-share')).textContent = share(tokens);
+		};
+		for (const part of breakdown.parts) {
+			// The messages are exact when pi gave the total: they are what the other parts leave.
+			line(part.id, contextPartLabel(part.id), part.tokens, !(part.id === 'messages' && breakdown.exact));
+		}
+		line('reserve', localize('picode.overview.contextReserve', "Kept for compacting"), breakdown.reserve, false);
+		const free = append(section, $('.picode-overview-row.picode-overview-context-row'));
+		append(free, $('span.picode-overview-context-swatch.free'));
+		append(free, $('span.picode-overview-label')).textContent = localize('picode.overview.contextFree', "Room before compacting");
+		append(free, $('span.picode-overview-value')).textContent = compactTokens(breakdown.untilCompaction);
+		append(free, $('span.picode-overview-context-share')).textContent = share(breakdown.untilCompaction);
+		// Only the button: a sentence beside it said the same thing, got cut off and looked clickable.
+		const compact = append(section, $('.picode-overview-row'));
+		this.action(compact, localize('picode.overview.contextCompact', "Compact session"), () => void this.compactContext());
+		compact.lastElementChild?.setAttribute('title', localize('picode.overview.contextCompactHint', "Summarise the conversation to free room"));
+	}
+
+	private async compactContext(): Promise<void> {
+		await this.commandService.executeCommand(CONTEXT_COMPACT_COMMAND, this.focusedChatKey());
+		void this.read('context', () => this.readContext());
+	}
+
+	/** The chat the person last looked at, as the connector keys its conversations. */
+	private focusedChatKey(): string | undefined {
+		return this.chatWidgetService.lastFocusedWidget?.viewModel?.model.sessionResource.toString();
+	}
+
+	private async readContext(): Promise<void> {
+		knownContext = await this.commandService.executeCommand<IContextBreakdown>(CONTEXT_BREAKDOWN_COMMAND, this.focusedChatKey()) ?? undefined;
 	}
 
 	/** How full the focused chat's context is, from its last answer; undefined when unknown. */
@@ -452,24 +626,23 @@ export class PicodeAgentOverview extends Disposable {
 		if (connectors === undefined) {
 			return;
 		}
+		const titled = this.titledSection(parent, 'connectors', localize('picode.overview.connectors', "MCPs"));
+		if (!titled) {
+			return;
+		}
+		const { section, heading, open } = titled;
 		if (connectors.length === 0) {
-			const empty = this.section(parent, localize('picode.overview.connectors', "MCPs"));
-			const row = this.row(empty, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
-			this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
+			if (open) {
+				const row = this.row(section, Codicon.plug, localize('picode.overview.noConnectors', "No MCPs yet"));
+				this.action(row, localize('picode.overview.addConnector', "Add"), () => void this.commandService.executeCommand('picode.mcp.addServer'));
+			}
 			return;
 		}
 		// Folded by default: only the ones that need the user (sign in, off) stay visible.
-		const section = append(parent, $('.picode-overview-section'));
-		const heading = this.row(section, this.showConnectors ? Codicon.chevronDown : Codicon.chevronRight, localize('picode.overview.connectors', "MCPs"));
-		heading.classList.add('picode-overview-title');
 		append(heading, $('span.picode-overview-value')).textContent = String(connectors.length);
-		this.clickable(heading, () => {
-			this.showConnectors = !this.showConnectors;
-			this.paint();
-		});
 		for (const connector of connectors) {
 			const needsYou = connector.signIn === 'needed' || connector.on === false;
-			if (!this.showConnectors && !needsYou) {
+			if (!open && !needsYou) {
 				continue;
 			}
 			// The same mark the chat settings' MCP list shows: the service's own logo, or its initials.
@@ -487,8 +660,20 @@ export class PicodeAgentOverview extends Disposable {
 
 	private renderChanges(parent: HTMLElement): void {
 		const files = this.changedFiles();
+		if (isStatusSectionHidden(this.storageService, 'changes')) {
+			return;
+		}
 		// Nothing changed is one quiet line: a title over it would only repeat the word.
-		const section = this.section(parent, files === 0 ? undefined : localize('picode.overview.changes', "Changes"));
+		let section: HTMLElement;
+		if (files === 0) {
+			section = this.section(parent, undefined);
+		} else {
+			const titled = this.titledSection(parent, 'changes', localize('picode.overview.changes', "Changes"))!;
+			if (!titled.open) {
+				return;
+			}
+			section = titled.section;
+		}
 		const filesLabel = files === 0
 			? localize('picode.overview.noChanges', "Nothing changed")
 			: files === 1 ? localize('picode.overview.oneChange', "1 file changed") : localize('picode.overview.manyChanges', "{0} files changed", files);
@@ -517,8 +702,19 @@ export class PicodeAgentOverview extends Disposable {
 
 	/** The same block as the connector's Tasks view: the plan, what is running, and what finished. */
 	private renderTasks(parent: HTMLElement): void {
-		const section = this.section(parent, localize('picode.overview.tasks', "Tasks"));
+		const titled = this.titledSection(parent, 'tasks', localize('picode.overview.tasks', "Tasks"));
+		if (!titled) {
+			return;
+		}
+		const section = titled.section;
 		const running = knownTasks?.running ?? [];
+		if (!titled.open) {
+			// Folded, the title still says whether something runs.
+			if (running.length > 0) {
+				append(titled.heading, $('span.picode-overview-value')).textContent = String(running.length);
+			}
+			return;
+		}
 		const finished = knownTasks?.finished ?? [];
 		const todos = knownTasks?.todos;
 		this.row(section, Codicon.dashboard, knownTasks?.summary ?? localize('picode.overview.idle', "Nothing running"));
@@ -608,7 +804,11 @@ export class PicodeAgentOverview extends Disposable {
 			return;
 		}
 		const memory = knownMemory;
-		const section = this.section(parent, localize('picode.overview.memory', "Memory"));
+		const titled = this.titledSection(parent, 'memory', localize('picode.overview.memory', "Memory"));
+		if (!titled?.open) {
+			return;
+		}
+		const section = titled.section;
 		if (memory === undefined || memory.state === 'loading') {
 			this.row(section, Codicon.loading, localize('picode.overview.memoryStarting', "Memory is starting…")).classList.add('running');
 			return;
@@ -816,7 +1016,7 @@ class PicodeSidebarStatusContribution extends Disposable implements IWorkbenchCo
 		if (this.shownIn !== element || !this.overview.value) {
 			this.overview.clear();
 			element.textContent = '';
-			this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, element);
+			this.overview.value = this.instantiationService.createInstance(PicodeAgentOverview, element, undefined);
 			this.shownIn = element;
 		}
 	}

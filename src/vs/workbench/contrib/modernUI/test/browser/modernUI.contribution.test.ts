@@ -187,6 +187,40 @@ suite('ModernUIContribution', () => {
 		});
 	});
 
+	test('insets multi diff file rows like Explorer rows', () => {
+		const root = document.createElement('div');
+		root.className = 'monaco-workbench';
+		root.style.setProperty('--vscode-spacing-size40', '4px');
+		document.body.appendChild(root);
+		store.add(toDisposable(() => root.remove()));
+		const panes = appendElement(root, 'monaco-pane-view');
+		const pane = appendElement(panes, 'pane-body explorer-folders-view');
+		const explorerRow = appendElement(pane, 'monaco-list-row');
+		const files = appendElement(root, 'multi-diff-editor-with-file-list-files');
+		const fileRow = appendElement(files, 'monaco-list-row');
+		const read = (row: HTMLElement) => {
+			const style = getWindow(row).getComputedStyle(row);
+			return { left: style.left, right: style.right };
+		};
+		const state = (classes: string) => {
+			root.className = `monaco-workbench ${classes}`;
+			return { explorer: read(explorerRow), files: read(fileRow) };
+		};
+		assert.deepStrictEqual({
+			standard: state(''),
+			modern: state('modern-ui'),
+		}, {
+			standard: {
+				explorer: { left: '0px', right: '0px' },
+				files: { left: '0px', right: '0px' },
+			},
+			modern: {
+				explorer: { left: '4px', right: '4px' },
+				files: { left: '4px', right: '4px' },
+			},
+		});
+	});
+
 	test('supports isolated notification and dialog presentation', () => {
 		const root = document.createElement('div');
 		root.className = 'monaco-workbench modern-ui modern-ui-notifications-dialogs nostatusbar';
