@@ -23,6 +23,9 @@ import { withContext } from './context';
 import { readPiChatSettings } from './piConfig';
 import { chatAgentDir, internalProfileDir, piRuntimeRoot, resolveProjectScope } from './runtime';
 import { resolveSessionCwd } from './session-cwd';
+import { lostFolderOf } from './session-folder';
+import { piProjectSlug } from './sessions-provider';
+import * as path from 'node:path';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
@@ -232,4 +235,58 @@ export function disposeResumedSessions(): void {
 		entry.session.dispose();
 	}
 	resumed.clear();
+}
+
+/** Transcripts whose lost folder the owner already answered for in this window. */
+const lostFolderAnswered = new Map<string, string | undefined>();
+
+/**
+ * The transcript to open, after asking about a folder that is gone.
+ *
+ * Carrying on here keeps the file as it is. Copying writes a new conversation in the open
+ * folder, so the next time it opens without asking. `undefined` means the owner backed out.
+ * The answer is remembered for this window, so reopening the same row does not ask again.
+ */
+export async function transcriptAfterLostFolderQuestion(file: string, headerCwd: unknown, deps: AgentDeps): Promise<string | undefined> {
+	if (lostFolderAnswered.has(file)) {
+		return lostFolderAnswered.get(file);
+	}
+	const scope = resolveProjectScope();
+	const picked = resolveSessionCwd(scope.folders, os.homedir());
+	const lost = lostFolderOf(headerCwd, picked.cwd);
+	if (lost === undefined) {
+		return file;
+	}
+	const keep = vscode.l10n.t('Continue here');
+	const copy = vscode.l10n.t('Copy to this folder');
+	const answer = await vscode.window.showWarningMessage(
+		vscode.l10n.t('The folder of this conversation is no longer there.'),
+		{ modal: true, detail: vscode.l10n.t('Continue here to keep going in the folder that is open now, or copy the conversation into it so it opens without asking next time.') },
+		keep,
+		copy,
+	);
+	let result: string | undefined;
+	if (answer === keep) {
+		result = file;
+	} else if (answer === copy) {
+		try {
+			const loaded = await loadSdk(deps.distributionRoot, deps.log);
+			const agentDir = chatAgentDir(deps.distributionRoot);
+			if (loaded === undefined || agentDir === undefined) {
+				throw new Error('this editor has no pi to copy with');
+			}
+			const sessionDir = path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(picked.cwd));
+			const forked = loaded.sdk.SessionManager.forkFrom(file, picked.cwd, sessionDir);
+			result = forked.getSessionFile() ?? file;
+		} catch (error) {
+			deps.log(`copying a conversation to this folder failed: ${error instanceof Error ? error.message : String(error)}`);
+			void vscode.window.showWarningMessage(vscode.l10n.t('The conversation could not be copied. It keeps going in its own place.'));
+			result = file;
+		}
+	}
+	// Backing out is not remembered: opening the row again asks again.
+	if (result !== undefined) {
+		lostFolderAnswered.set(file, result);
+	}
+	return result;
 }

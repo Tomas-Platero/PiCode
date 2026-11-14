@@ -13,7 +13,7 @@
 
 import assert from 'assert';
 import { test } from 'node:test';
-import { composeWhatsNew, extractWhatChanged, fixesMarkdown, highlightsSince, inVersionLine, readHistory, sameVersionLine, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
+import { composeWhatsNew, extractWhatChanged, fixesMarkdown, inVersionLine, readHistory, sameVersionLine, shouldShowWhatsNew, whatsNewHistoryUrl, whatsNewSince } from '../picodeWhatsNewData.js';
 
 test('returns the grouped summary without its heading or the sections after it', () => {
 	const body = ['Channel text', '', '## What changed', '', '### ✨ New', '', '- A thing', '', '## What\'s Changed', '', '* raw changelog'].join('\n');
@@ -101,16 +101,11 @@ test('reads each channel\'s history from the branch its update feed is served fr
 	assert.strictEqual(whatsNewHistoryUrl(undefined), undefined);
 });
 
-test('an update tells only what is new to that person', () => {
-	const all = [{ id: 'old', since: '1.0.0' }, { id: 'mid', since: '1.0.5' }, { id: 'new', since: '1.0.9' }, { id: 'future', since: '1.1.0' }];
-	assert.deepStrictEqual(highlightsSince(all, '1.0.5-experimental', '1.0.9-experimental').map(h => h.id), ['new']);
-	assert.deepStrictEqual(highlightsSince(all, '1.0.1', '1.0.9').map(h => h.id), ['new', 'mid']);
-	assert.deepStrictEqual(highlightsSince(all, '1.0.9', '1.0.9'), []);
-});
-
-test('asked for by hand, everything on record, newest first', () => {
-	const all = [{ id: 'old', since: '1.0.0' }, { id: 'new', since: '1.0.9' }];
-	assert.deepStrictEqual(highlightsSince(all, '', '1.0.8').map(h => h.id), ['new', 'old']);
+test('a new line shows only its own pages, never those of the line before', () => {
+	const all = [{ id: 'one', since: '1.0.0' }, { id: 'import', since: '2.0.5' }, { id: 'issues', since: '2.0.0' }, { id: 'files', since: '2.2.0' }, { id: 'future', since: '2.2.1' }];
+	assert.deepStrictEqual(inVersionLine(all, '2.2.0-experimental').map(h => h.id), ['files']);
+	assert.deepStrictEqual(inVersionLine(all, '2.0.0').map(h => h.id), ['issues']);
+	assert.deepStrictEqual(inVersionLine(all, '2.2.1').map(h => h.id), ['future', 'files']);
 });
 
 test('a fix release keeps the pages of its line and drops those of other lines', () => {

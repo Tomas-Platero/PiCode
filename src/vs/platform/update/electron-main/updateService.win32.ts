@@ -25,6 +25,7 @@ import { getWindowsRelease } from '../../../base/node/windowsVersion.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { memoryFolderOf, stopEnginesInside, systemMemoryEngines } from './picodeMemoryEngine.js';
+import { dataFolderOf, stopIntercomBrokers, systemBrokerProcesses } from './picodeIntercomBroker.js';
 import { IFileService } from '../../files/common/files.js';
 import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions, LifecycleMainPhase } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
@@ -862,6 +863,23 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		}
 	}
 
+	/**
+	 * PiCode: pi-intercom's broker runs detached on this binary with its working folder inside the
+	 * profile, and outlives the editor. The installer must rename that profile folder to keep it across
+	 * the swap, and Windows refuses while the broker sits in it, so the swap would be skipped.
+	 */
+	private stopIntercomBroker(): void {
+		try {
+			const exe = process.execPath;
+			const stopped = stopIntercomBrokers(exe, dataFolderOf(this.environmentMainService.appRoot), systemBrokerProcesses(exe));
+			if (stopped.length > 0) {
+				this.logService.info(`update#quitAndInstall(): stopped the pi-intercom broker still running from this installation (${stopped.join(', ')})`);
+			}
+		} catch (error) {
+			this.logService.warn('update#quitAndInstall(): could not check for a pi-intercom broker still running', error);
+		}
+	}
+
 	protected override doQuitAndInstall(): void {
 		if ((this.state.type !== StateType.Ready && this.state.type !== StateType.Restarting) || !this.availableUpdate) {
 			return;
@@ -869,6 +887,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 		this.logService.trace('update#quitAndInstall(): running raw#quitAndInstall()');
 		this.stopMemoryEngine();
+		this.stopIntercomBroker();
 
 		// The portable build has no installer to run: the staged copy is swapped in
 		// by its script once this process quits, and the new build starts itself.

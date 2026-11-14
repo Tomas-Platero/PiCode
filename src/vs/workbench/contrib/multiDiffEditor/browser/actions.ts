@@ -7,8 +7,8 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { URI } from '../../../../base/common/uri.js';
 import { Selection } from '../../../../editor/common/core/selection.js';
-import { localize2 } from '../../../../nls.js';
-import { Action2, MenuId } from '../../../../platform/actions/common/actions.js';
+import { ILocalizedString, localize, localize2 } from '../../../../nls.js';
+import { Action2, MenuId, MenuRegistry } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ITextEditorOptions, TextEditorSelectionRevealType } from '../../../../platform/editor/common/editor.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
@@ -20,6 +20,18 @@ import { MultiDiffEditorInput } from './multiDiffEditorInput.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ActiveEditorContext, IsSessionsWindowContext } from '../../../common/contextkeys.js';
+import { IStorageService } from '../../../../platform/storage/common/storage.js';
+import { ActiveMultiDiffEditorHasFileListContext, isMultiDiffEditorFileListHost, MultiDiffEditorFileListAvailableContext, TOGGLE_MULTI_DIFF_EDITOR_FILE_LIST_COMMAND_ID, MultiDiffEditorFileListEnabledContext, MultiDiffEditorFileListPosition, MultiDiffEditorFileListPositionContext, MultiDiffEditorFileListViewMode, MultiDiffEditorFileListViewModeContext, MultiDiffEditorFilesViewAndPositionMenu, setMultiDiffEditorFileListPosition, setMultiDiffEditorFileListViewMode, toggleMultiDiffEditorFileList } from '../common/multiDiffEditor.js';
+
+// The Agents window does not show the workbench's file list actions in its editor title.
+const filesViewWhen = ContextKeyExpr.and(ActiveMultiDiffEditorHasFileListContext, IsSessionsWindowContext.toNegated());
+
+MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+	submenu: MultiDiffEditorFilesViewAndPositionMenu,
+	title: localize('filesViewAndPosition', "Files View & Position"),
+	group: 'z_files',
+	when: filesViewWhen,
+});
 
 export class GoToFileAction extends Action2 {
 	constructor() {
@@ -133,6 +145,114 @@ export class GoToPreviousChangeAction extends Action2 {
 		}
 
 		activeEditorPane.goToPreviousChange();
+	}
+}
+
+export class FocusFileListAction extends Action2 {
+	constructor() {
+		super({
+			id: 'multiDiffEditor.focusFileList',
+			title: localize2('focusFileList', 'Focus File List'),
+			// In any editor that supports the changed files list, also while the user has hidden it, as focusing the list shows it.
+			precondition: MultiDiffEditorFileListAvailableContext,
+			f1: true,
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const activeEditorPane = accessor.get(IEditorService).activeEditorPane;
+		if (isMultiDiffEditorFileListHost(activeEditorPane)) {
+			activeEditorPane.focusFileList();
+		}
+	}
+}
+
+export class ToggleFileListAction extends Action2 {
+	constructor() {
+		super({
+			id: TOGGLE_MULTI_DIFF_EDITOR_FILE_LIST_COMMAND_ID,
+			title: localize2('toggleFileList', 'Toggle Files'),
+			icon: Codicon.listFlat,
+			toggled: MultiDiffEditorFileListEnabledContext,
+			precondition: filesViewWhen,
+			menu: {
+				id: MenuId.EditorTitle,
+				when: filesViewWhen,
+				group: 'navigation',
+				order: 100001,
+			},
+			f1: true,
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		toggleMultiDiffEditorFileList(accessor.get(IStorageService));
+	}
+}
+
+abstract class SetFileListViewModeAction extends Action2 {
+	constructor(id: string, title: ILocalizedString, private readonly _viewMode: MultiDiffEditorFileListViewMode) {
+		super({
+			id,
+			title,
+			toggled: MultiDiffEditorFileListViewModeContext.isEqualTo(_viewMode),
+			precondition: ActiveMultiDiffEditorHasFileListContext,
+			menu: {
+				id: MultiDiffEditorFilesViewAndPositionMenu,
+				group: '1_view',
+				order: _viewMode === 'list' ? 1 : 2,
+				when: ActiveMultiDiffEditorHasFileListContext,
+			},
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		setMultiDiffEditorFileListViewMode(accessor.get(IStorageService), this._viewMode);
+	}
+}
+
+export class ViewFileListAsTreeAction extends SetFileListViewModeAction {
+	constructor() {
+		super('multiDiffEditor.viewFileListAsTree', localize2('viewFileListAsTree', 'View as Tree'), 'tree');
+	}
+}
+
+export class ViewFileListAsListAction extends SetFileListViewModeAction {
+	constructor() {
+		super('multiDiffEditor.viewFileListAsList', localize2('viewFileListAsList', 'View as List'), 'list');
+	}
+}
+
+abstract class SetFileListPositionAction extends Action2 {
+	constructor(id: string, title: ILocalizedString, private readonly _position: MultiDiffEditorFileListPosition) {
+		super({
+			id,
+			title,
+			toggled: MultiDiffEditorFileListPositionContext.isEqualTo(_position),
+			precondition: ActiveMultiDiffEditorHasFileListContext,
+			menu: {
+				id: MultiDiffEditorFilesViewAndPositionMenu,
+				group: '2_position',
+				order: _position === 'left' ? 1 : 2,
+				when: ActiveMultiDiffEditorHasFileListContext,
+			},
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		setMultiDiffEditorFileListPosition(accessor.get(IStorageService), this._position);
+	}
+}
+
+export class PositionFileListLeftAction extends SetFileListPositionAction {
+	constructor() {
+		super('multiDiffEditor.positionFileListLeft', localize2('positionFileListLeft', 'On the Left'), 'left');
+	}
+}
+
+export class PositionFileListRightAction extends SetFileListPositionAction {
+	constructor() {
+		super('multiDiffEditor.positionFileListRight', localize2('positionFileListRight', 'On the Right'), 'right');
 	}
 }
 

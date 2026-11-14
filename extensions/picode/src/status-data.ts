@@ -16,7 +16,7 @@ import { discoveredMcpServers, mergeMcpServers, mcpServerStates, type McpAuthFil
 import { externalProfileDir } from './profile-import';
 import { internalProfileDir, readRuntimeMode, resolveProjectScope } from './runtime';
 import { timed } from './perf-timings';
-import { MCP_SERVERS_COMMAND, STATUS_DATA_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
+import { MCP_SERVERS_COMMAND, STATUS_DATA_COMMAND, SUBSCRIPTIONS_COMMAND, USAGE_PANEL_COMMAND, type UsagePanelData, type UsagePanelModel, type BackgroundJobStatus, type McpServerSwitch, type StatusData, type SubscriptionStatus } from './status-contract';
 import { isOurEngramDeclaration } from './engram';
 import { parseSnapshot, UPDATES_STATE_KEY } from './updates-check';
 import type { VoiceStatus } from './voice-controller';
@@ -552,6 +552,17 @@ export async function buildStatusData(deps: StatusDeps): Promise<StatusData> {
 export function registerStatusDataCommand(deps: StatusDeps): vscode.Disposable {
 	return vscode.Disposable.from(
 		vscode.commands.registerCommand(STATUS_DATA_COMMAND, (): Promise<StatusData> => timed('status: full reading', () => buildStatusData(deps))),
+		// Only the plan meters, for the ring in the chat input: no git, pi version or MCP reads, so its
+		// first figures do not wait for the whole status page.
+		vscode.commands.registerCommand(SUBSCRIPTIONS_COMMAND, () => timed('status: subscriptions', async () => {
+			const runtime = readRuntimeMode();
+			const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
+			const sources = providerSources(profileDir);
+			return {
+				providers: providerInventory(sources.declared, sources.models, sources.credentials, sources.subscriptions),
+				subscriptions: await readAccountSubscriptions(profileDir, getSessionUsage()?.model ?? readDefaultModel(profileDir)),
+			};
+		})),
 		vscode.commands.registerCommand(MCP_SERVERS_COMMAND, () => timed('status: MCPs', () => {
 			const runtime = readRuntimeMode();
 			return readAllMcpServers(runtime, runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot));

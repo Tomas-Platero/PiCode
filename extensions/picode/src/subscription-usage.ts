@@ -36,8 +36,11 @@ export const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
 /** How long a Codex read is reused: the Status view refreshes every five seconds. */
 export const CODEX_CACHE_TTL_MS = 60_000;
 
-/** A read slower than this gives up; the next tick tries again. */
+/** How long a caller waits for a read; a slower one still lands in the cache when it answers. */
 const CODEX_FETCH_TIMEOUT_MS = 4_000;
+
+/** A failed read is asked again after this, so a slow start does not blank the meter for a minute. */
+const CODEX_RETRY_MS = 5_000;
 
 const CODEX_ACCOUNT_CLAIM = 'https://api.openai.com/auth';
 const CODEX_HEADER_PREFIX = 'x-codex-';
@@ -302,17 +305,19 @@ export async function fetchCodexUsage(signIn: CodexSignIn, fetchFn: UsageFetch =
 	}
 }
 
-/** The last read per token digest, and whether it answered; set on every attempt so a dead endpoint is asked once a minute. */
+/** The last read per token digest, and whether it answered. */
 const codexCache = new Map<string, { value: ProviderUsage | undefined; at: number; ok: boolean }>();
+/** A read still on its way, kept until it settles even when a caller stopped waiting for it. */
 const codexInFlight = new Map<string, Promise<ProviderUsage | undefined>>();
 
-async function readCodexBounded(signIn: CodexSignIn, fetchFn: UsageFetch, now: number): Promise<ProviderUsage | undefined> {
+/** The promise's value if it settles within `ms`, `undefined` otherwise; the work itself goes on. */
+async function waitAtMost<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
 		return await Promise.race([
-			fetchCodexUsage(signIn, fetchFn, now),
+			promise,
 			new Promise<undefined>(resolve => {
-				timer = setTimeout(() => resolve(undefined), CODEX_FETCH_TIMEOUT_MS);
+				timer = setTimeout(() => resolve(undefined), ms);
 			}),
 		]);
 	} finally {
@@ -322,26 +327,30 @@ async function readCodexBounded(signIn: CodexSignIn, fetchFn: UsageFetch, now: n
 	}
 }
 
-/** Codex's usage, from the cache while it is good and from the endpoint when it is not; a failed read keeps the last good one. */
-export async function getCachedCodexUsage(signIn: CodexSignIn, now: number, fetchFn: UsageFetch = globalThis.fetch): Promise<{ readonly value: ProviderUsage | undefined; readonly fresh: boolean }> {
+/**
+ * Codex's usage, from the cache while it is good and from the endpoint when it is not; a failed read
+ * keeps the last good one. A read slower than the wait is not thrown away: it lands in the cache when
+ * it answers, so the next ask has it (right after the window opens the connector is busy and the
+ * first read is often slow). A failure is asked again after a few seconds, not a minute.
+ */
+export async function getCachedCodexUsage(signIn: CodexSignIn, now: number, fetchFn: UsageFetch = globalThis.fetch, timeoutMs: number = CODEX_FETCH_TIMEOUT_MS): Promise<{ readonly value: ProviderUsage | undefined; readonly fresh: boolean }> {
 	const key = createHash('sha256').update(signIn.token).digest('hex');
 	const cached = codexCache.get(key);
-	if (cached !== undefined && now - cached.at < CODEX_CACHE_TTL_MS) {
+	if (cached !== undefined && now - cached.at < (cached.ok ? CODEX_CACHE_TTL_MS : CODEX_RETRY_MS)) {
 		return { value: cached.value, fresh: cached.ok };
 	}
 	let pending = codexInFlight.get(key);
 	if (pending === undefined) {
-		pending = readCodexBounded(signIn, fetchFn, now);
-		codexInFlight.set(key, pending);
-		const settled = () => {
+		const started = fetchCodexUsage(signIn, fetchFn, now);
+		pending = started;
+		codexInFlight.set(key, started);
+		void started.then(value => {
 			codexInFlight.delete(key);
-		};
-		pending.then(settled, settled);
+			codexCache.set(key, { value: value ?? codexCache.get(key)?.value, at: now, ok: value !== undefined });
+		});
 	}
-	const read = await pending;
-	const value = read ?? cached?.value;
-	codexCache.set(key, { value, at: now, ok: read !== undefined });
-	return { value, fresh: read !== undefined };
+	const read = await waitAtMost(pending, timeoutMs);
+	return read !== undefined ? { value: read, fresh: true } : { value: cached?.value, fresh: false };
 }
 
 /**

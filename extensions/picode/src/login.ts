@@ -5,12 +5,14 @@
 
 import * as vscode from 'vscode';
 import { loadPiSdk } from './piSdk';
+import { withFetchRetry } from './fetch-retry';
 import { settingsForFolder } from './folder-trust';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
 import { piRuntimeRoot, readRuntimeMode, sdkEntryCandidates } from './runtime';
 import {
 	LoginCancelled,
+	defaultOptionOf,
 	noticeOf,
 	subscriptionRows,
 	type PiAuthEvent,
@@ -36,17 +38,33 @@ import {
  * asked the owner for data PiCode could have asked the endpoint for.
  */
 
+/** How long the browser gets to come back by itself before pasting is offered as a way out. */
+const PASTE_FALLBACK_DELAY_MS = 30_000;
+
 /**
  * pi's prompts and notices, answered by the editor.
+ *
+ * A browser sign-in works like Claude Code's or Codex's: the browser opens by itself, pi's own
+ * loopback server catches the answer, and the only thing on screen is one progress notification
+ * with Cancel. pi also asks, in parallel, for the code or redirect address "in case the browser
+ * cannot come back" — that question is **not** shown up front; it is offered only if the browser
+ * has not come back after a while, and disappears when it does.
  *
  * A cancelled prompt **throws** rather than answering: an empty string would be submitted to pi as
  * if the owner had typed it. A `select` answers with the option's id, never its label, because
  * the id is what pi asked about.
  */
-export function createAuthInteraction(): PiAuthInteraction {
+export function createAuthInteraction(progress: vscode.Progress<{ message?: string }>, signal: AbortSignal): PiAuthInteraction {
+	let browserUrl: string | undefined;
 	return {
+		signal,
+
 		async prompt(prompt: PiAuthPrompt): Promise<string> {
 			if (prompt.type === 'select') {
+				const preferred = defaultOptionOf(prompt.options ?? []);
+				if (preferred !== undefined) {
+					return preferred;
+				}
 				const picked = await vscode.window.showQuickPick(
 					(prompt.options ?? []).map(option => ({
 						label: option.label,
@@ -61,42 +79,108 @@ export function createAuthInteraction(): PiAuthInteraction {
 				return picked.id;
 			}
 
-			const answer = await vscode.window.showInputBox({
-				title: prompt.message,
-				prompt: prompt.message,
-				ignoreFocusOut: true,
-				...(prompt.placeholder === undefined ? {} : { placeHolder: prompt.placeholder }),
-				...(prompt.type === 'secret' ? { password: true } : {}),
-			});
-			if (answer === undefined) {
-				throw new LoginCancelled(prompt.message);
+			if (prompt.type === 'manual_code') {
+				return waitForBrowser(prompt, signal, () => browserUrl);
 			}
-			return answer;
+
+			return askText(prompt);
 		},
 
 		notify(event: PiAuthEvent): void {
-			const notice = noticeOf(event);
-			if (event.type === 'device_code') {
-				// The code is only useful on the page that asks for it: copy it and open the page, so
-				// signing in is a paste rather than two things typed by hand.
-				void vscode.env.clipboard.writeText(event.userCode);
-				void vscode.env.openExternal(vscode.Uri.parse(event.verificationUri));
-				void vscode.window.showInformationMessage(notice.message);
-				return;
+			switch (event.type) {
+				case 'auth_url':
+					browserUrl = event.url;
+					void vscode.env.openExternal(vscode.Uri.parse(event.url));
+					progress.report({ message: vscode.l10n.t('Finish signing in in your browser.') });
+					return;
+				case 'device_code':
+					// The code is only useful on the page that asks for it: copy it and open the page, so
+					// signing in is a paste rather than two things typed by hand.
+					browserUrl = event.verificationUri;
+					void vscode.env.clipboard.writeText(event.userCode);
+					void vscode.env.openExternal(vscode.Uri.parse(event.verificationUri));
+					progress.report({ message: vscode.l10n.t('Enter the code {0} on the page that opened. It is already copied.', event.userCode) });
+					return;
+				case 'progress':
+					// pi's progress lines describe its plumbing (ports, token exchange); the
+					// notification already says what is happening.
+					return;
+				case 'info':
+					void vscode.window.showInformationMessage(noticeOf(event).message);
+					return;
 			}
-			if (notice.url === undefined) {
-				void vscode.window.showInformationMessage(notice.message);
-				return;
-			}
-			// `ignoreFocusOut` above is what lets the owner go to the browser mid-login; this is the
-			// button that takes them there, so the address never has to be copied by hand.
-			void vscode.window.showInformationMessage(notice.message, vscode.l10n.t('Open in browser')).then(choice => {
-				if (choice !== undefined && notice.url !== undefined) {
-					void vscode.env.openExternal(vscode.Uri.parse(notice.url));
-				}
-			});
 		},
 	};
+}
+
+/** A typed answer pi needs (a domain, a key): the editor's input box. */
+async function askText(prompt: Exclude<PiAuthPrompt, { type: 'select' }>): Promise<string> {
+	const answer = await vscode.window.showInputBox({
+		title: prompt.message,
+		prompt: prompt.message,
+		ignoreFocusOut: true,
+		...(prompt.placeholder === undefined ? {} : { placeHolder: prompt.placeholder }),
+		...(prompt.type === 'secret' ? { password: true } : {}),
+	});
+	if (answer === undefined) {
+		throw new LoginCancelled(prompt.message);
+	}
+	return answer;
+}
+
+/**
+ * pi's "or paste the code here", answered by waiting for the browser instead.
+ *
+ * When the browser comes back, pi aborts the prompt's signal and this promise is simply left
+ * unanswered (pi no longer listens). Only if nothing has happened after a while is the way out
+ * offered: open the page again, or paste the address the browser ended on.
+ */
+function waitForBrowser(prompt: Exclude<PiAuthPrompt, { type: 'select' | 'secret' }>, loginSignal: AbortSignal, urlOf: () => string | undefined): Promise<string> {
+	return new Promise<string>((resolve, reject) => {
+		const finished = () => prompt.signal?.aborted === true || loginSignal.aborted;
+		const onLoginAbort = () => reject(new LoginCancelled(prompt.message));
+		loginSignal.addEventListener('abort', onLoginAbort, { once: true });
+		const timer = setTimeout(() => void offerPaste(), PASTE_FALLBACK_DELAY_MS);
+		prompt.signal?.addEventListener('abort', () => {
+			clearTimeout(timer);
+			loginSignal.removeEventListener('abort', onLoginAbort);
+		}, { once: true });
+
+		const offerPaste = async (): Promise<void> => {
+			if (finished()) {
+				return;
+			}
+			const openAgain = vscode.l10n.t('Open browser again');
+			const paste = vscode.l10n.t('Paste address');
+			const choice = await vscode.window.showInformationMessage(
+				vscode.l10n.t('Still waiting for the browser. If it did not come back to PiCode, paste the address it ended on.'),
+				...(urlOf() === undefined ? [] : [openAgain]),
+				paste,
+			);
+			if (finished()) {
+				return;
+			}
+			if (choice === openAgain) {
+				const url = urlOf();
+				if (url !== undefined) {
+					void vscode.env.openExternal(vscode.Uri.parse(url));
+				}
+				setTimeout(() => void offerPaste(), PASTE_FALLBACK_DELAY_MS);
+				return;
+			}
+			if (choice !== paste) {
+				return;
+			}
+			const answer = await vscode.window.showInputBox({
+				title: vscode.l10n.t('Paste the address the browser ended on'),
+				ignoreFocusOut: true,
+				...(prompt.placeholder === undefined ? {} : { placeHolder: prompt.placeholder }),
+			});
+			if (answer !== undefined && answer.trim() !== '' && !finished()) {
+				resolve(answer.trim());
+			}
+		};
+	});
 }
 
 export interface ConnectSubscriptionDeps {
@@ -115,6 +199,37 @@ export interface ConnectSubscriptionDeps {
  * logged in, and a login pi refused. The one ending that is not a failure is the owner dismissing
  * the list or one of pi's prompts.
  */
+/** Why no login runtime could be built, in the terms the caller needs to answer it. */
+export type LoginRuntimeProblem = 'external' | 'noPi' | 'noLogin' | { readonly failed: string };
+
+/**
+ * pi's model runtime over PiCode's own profile, ready to log a provider in — or the reason it is
+ * not. Shared by the palette command and the Providers panel, so both see the same catalogue.
+ */
+export async function openLoginRuntime(deps: Pick<ConnectSubscriptionDeps, 'distributionRoot' | 'profileDir'>): Promise<PiModelRuntime | LoginRuntimeProblem> {
+	if (readRuntimeMode() === 'external') {
+		return 'external';
+	}
+	const loaded = await loadPiSdk<PiLoginSdk>(sdkEntryCandidates(deps.distributionRoot));
+	if ('problem' in loaded || typeof loaded.sdk.createAgentSessionServices !== 'function') {
+		return 'noPi';
+	}
+	const sdk = loaded.sdk;
+	try {
+		await ensureProfilePackages({ profileDir: deps.profileDir, runtimeRoot: piRuntimeRoot(deps.distributionRoot), npmCli: locateNpmCli() });
+		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+		const services = await sdk.createAgentSessionServices({
+			cwd,
+			agentDir: deps.profileDir,
+			...settingsForFolder(sdk, cwd, deps.profileDir),
+		});
+		const runtime = services.modelRuntime as PiModelRuntime;
+		return typeof runtime.login === 'function' ? runtime : 'noLogin';
+	} catch (error) {
+		return { failed: messageOf(error) };
+	}
+}
+
 export async function connectSubscription(deps: ConnectSubscriptionDeps): Promise<void> {
 	// The subscription login writes the credential into pi's own profile through pi's login
 	// machinery. With the external pi that profile is the machine's, which PiCode never writes
@@ -191,10 +306,20 @@ export async function connectSubscription(deps: ConnectSubscriptionDeps): Promis
 		return;
 	}
 
+	const login = runtime.login.bind(runtime);
+	const abort = new AbortController();
 	try {
-		await runtime.login(chosen.providerId, 'oauth', createAuthInteraction());
+		// One notification for the whole sign-in, with Cancel: it says where to go and goes away
+		// on its own when the browser comes back.
+		await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Connecting {0}', chosen.label), cancellable: true },
+			async (progress, token) => {
+				token.onCancellationRequested(() => abort.abort());
+				await withFetchRetry(() => login(chosen.providerId, 'oauth', createAuthInteraction(progress, abort.signal)));
+			},
+		);
 	} catch (error) {
-		if (error instanceof LoginCancelled) {
+		if (error instanceof LoginCancelled || abort.signal.aborted) {
 			return;
 		}
 		void vscode.window.showErrorMessage(vscode.l10n.t('PiCode: {0} could not be connected: {1}', chosen.label, messageOf(error)));
