@@ -554,13 +554,15 @@ export function registerStatusDataCommand(deps: StatusDeps): vscode.Disposable {
 		vscode.commands.registerCommand(STATUS_DATA_COMMAND, (): Promise<StatusData> => timed('status: full reading', () => buildStatusData(deps))),
 		// Only the plan meters, for the ring in the chat input: no git, pi version or MCP reads, so its
 		// first figures do not wait for the whole status page.
-		vscode.commands.registerCommand(SUBSCRIPTIONS_COMMAND, () => timed('status: subscriptions', async () => {
+		// The ring passes the model picked in the chat input (`provider/model`), which leads over the
+		// one that last answered: picking another model must move the ring before any message.
+		vscode.commands.registerCommand(SUBSCRIPTIONS_COMMAND, (picked?: unknown) => timed('status: subscriptions', async () => {
 			const runtime = readRuntimeMode();
 			const profileDir = runtime === 'external' ? externalProfileDir() : internalProfileDir(deps.distributionRoot);
 			const sources = providerSources(profileDir);
 			return {
 				providers: providerInventory(sources.declared, sources.models, sources.credentials, sources.subscriptions),
-				subscriptions: await readAccountSubscriptions(profileDir, getSessionUsage()?.model ?? readDefaultModel(profileDir)),
+				subscriptions: await readAccountSubscriptions(profileDir, (typeof picked === 'string' && currentModelRef(picked) !== undefined ? picked : undefined) ?? getSessionUsage()?.model ?? readDefaultModel(profileDir)),
 			};
 		})),
 		vscode.commands.registerCommand(MCP_SERVERS_COMMAND, () => timed('status: MCPs', () => {

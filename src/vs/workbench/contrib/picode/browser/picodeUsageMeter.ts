@@ -11,7 +11,7 @@ import { BaseActionViewItem } from '../../../../base/browser/ui/actionbar/action
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { IAction } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableMap, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -24,6 +24,8 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
 import { Emitter } from '../../../../base/common/event.js';
+import { autorun } from '../../../../base/common/observable.js';
+import { IChatWidget, IChatWidgetService } from '../../chat/browser/chat.js';
 
 /**
  * The plan's limits beside the thinking level in the chat input: a small ring that fills with how
@@ -134,6 +136,9 @@ class UsageMeterModel extends Disposable {
 	private _answered = false;
 	get answered(): boolean { return this._answered; }
 
+	/** The model picked in the chat input (`provider/model`), once a chat input has one. */
+	private modelId: string | undefined;
+
 	constructor(
 		private readonly commandService: ICommandService,
 		private readonly hostService: IHostService,
@@ -163,6 +168,26 @@ class UsageMeterModel extends Disposable {
 		}, this._answered ? REFRESH_MS : RETRY_MS);
 	}
 
+	/**
+	 * The chat's model picker changed: the ring follows it at once. The figures of the previous model
+	 * say nothing about the new one, so the ring empties ("reading") until the new read answers.
+	 */
+	setModel(modelId: string | undefined): void {
+		if (modelId === undefined || modelId === this.modelId) {
+			return;
+		}
+		const first = this.modelId === undefined;
+		this.modelId = modelId;
+		// The first model known is the one the restored figures were most likely read for: keep them
+		// on screen while the read confirms them.
+		if (!first) {
+			this._snapshot = undefined;
+			this._answered = false;
+			this._onDidChange.fire();
+		}
+		void this.refresh();
+	}
+
 	async refresh(): Promise<void> {
 		try {
 			await this.read();
@@ -172,11 +197,16 @@ class UsageMeterModel extends Disposable {
 	}
 
 	private async read(): Promise<void> {
+		const modelId = this.modelId;
 		let data: IStatusSlice | undefined;
 		try {
-			data = await this.commandService.executeCommand<IStatusSlice>(SUBSCRIPTIONS_COMMAND);
+			data = await this.commandService.executeCommand<IStatusSlice>(SUBSCRIPTIONS_COMMAND, modelId);
 		} catch {
 			data = undefined;
+		}
+		// The picker moved on while this read was out: its answer is for a model no longer in use.
+		if (modelId !== this.modelId) {
+			return;
 		}
 		// A failed read (the connector still starting, a busy moment) changes nothing: the ring keeps
 		// what it last showed and the next read tries again.
@@ -185,9 +215,10 @@ class UsageMeterModel extends Disposable {
 		}
 		const metered = (data.subscriptions ?? []).filter(meter => meter.windows.length > 0);
 		let current = metered.filter(meter => meter.current === true);
-		// Before the first message no model is answering yet: the plan listed first (the one the chat
-		// is set to, when it has one) stands in, so the ring is there from the start.
-		if (current.length === 0 && metered.length > 0) {
+		// Before any chat input has told which model is picked, the plan listed first (the one the chat
+		// is set to, when it has one) stands in, so the ring is there from the start. Once the model is
+		// known, a model without a plan shows no plan, never another provider's.
+		if (current.length === 0 && metered.length > 0 && modelId === undefined) {
 			current = metered.filter(meter => meter.provider === metered[0].provider);
 		}
 		let next: IUsageSnapshot | undefined = current.length === 0 ? undefined : {
@@ -202,7 +233,9 @@ class UsageMeterModel extends Disposable {
 		}
 		// Signed in to a plan but no figures yet (its usage page has not answered): still reading, so the
 		// ring keeps asking every few seconds instead of saying there is no plan.
-		const awaitingPlan = next === undefined && (data.providers ?? []).some(provider => provider.subscription === true && METERED_SIGN_INS.has(provider.id));
+		const pickedProvider = modelId === undefined ? undefined : modelId.slice(0, Math.max(0, modelId.indexOf('/')));
+		const awaitingPlan = next === undefined && (data.providers ?? []).some(provider => provider.subscription === true && METERED_SIGN_INS.has(provider.id)
+			&& (pickedProvider === undefined || provider.id === pickedProvider));
 		const firstAnswer = !this._answered;
 		this._answered = !awaitingPlan;
 		if (awaitingPlan) {
@@ -378,9 +411,31 @@ class PicodeUsageMeterContribution extends Disposable implements IWorkbenchContr
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IHostService hostService: IHostService,
 		@IStorageService storageService: IStorageService,
+		@IChatWidgetService chatWidgetService: IChatWidgetService,
 	) {
 		super();
 		const meter = this._register(new UsageMeterModel(commandService, hostService, storageService));
+		// The ring follows the model picked in the chat input: a change in any chat's picker, and
+		// moving to another chat, both point it at that chat's model.
+		const pickedModel = (widget: IChatWidget | undefined) => widget?.input.selectedLanguageModel.get()?.metadata.id;
+		const watched = this._register(new DisposableMap<IChatWidget, DisposableStore>());
+		const watch = (widget: IChatWidget) => {
+			if (watched.has(widget)) {
+				return;
+			}
+			const store = new DisposableStore();
+			store.add(autorun(reader => {
+				const id = widget.input.selectedLanguageModel.read(reader)?.metadata.id;
+				if (widget === (chatWidgetService.lastFocusedWidget ?? widget)) {
+					meter.setModel(id);
+				}
+			}));
+			watched.set(widget, store);
+		};
+		chatWidgetService.getAllWidgets().forEach(watch);
+		this._register(chatWidgetService.onDidAddWidget(watch));
+		this._register(chatWidgetService.onDidRemoveWidget(widget => watched.deleteAndDispose(widget)));
+		this._register(chatWidgetService.onDidChangeFocusedWidget(widget => meter.setModel(pickedModel(widget))));
 		this._register(actionViewItemService.register(MenuId.ChatInput, USAGE_METER_COMMAND, action => instantiationService.createInstance(UsageMeterActionViewItem, action, meter)));
 	}
 }
