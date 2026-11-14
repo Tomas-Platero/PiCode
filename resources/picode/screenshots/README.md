@@ -7,7 +7,7 @@ Product images shown in the root `README.md`, taken from the website (`getpicode
 | `layout-agent.png` | The Agent layout |
 | `layout-editor.png` | The Editor layout with the chat open |
 | `chat.png` | A chat running a subagent, with Tasks and Memory |
-| `status.png` | The Status column, cropped from `layout-agent.png` |
+| `status.png` | The Status column, cropped from `layout-agent.png` and split in two columns |
 | `chat-settings.png` | Chat Settings, Status page |
 | `issues.png` | A Jira board (Pro) |
 

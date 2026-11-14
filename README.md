@@ -49,38 +49,23 @@ Pick one in the setup, switch any time with the robot button at the top right. N
 
 ## ✨ What you get
 
-<table>
-<tr>
-<td width="60%"><img src="./resources/picode/screenshots/chat.png" alt="The chat running a code-review subagent, with its tasks and memory" /></td>
-<td valign="middle">
-
 ### 💬 AI chat with subagents
 
 It reads your code, edits files and runs commands. Hand a job to a subagent and follow every step it takes, while your memory keeps what matters between conversations.
 
-</td>
-</tr>
-<tr>
-<td valign="middle">
+<img src="./resources/picode/screenshots/chat.png" alt="The chat running a code-review subagent, with its tasks and memory" width="100%" />
 
 ### 🧭 Status, always at hand
 
 Where the agent works, your MCP servers, what changed, the tasks it has running, your issues and what your memory holds — in one column.
 
-</td>
-<td width="30%" align="center"><img src="./resources/picode/screenshots/status.png" alt="The Status column" width="260" /></td>
-</tr>
-<tr>
-<td width="60%"><img src="./resources/picode/screenshots/chat-settings.png" alt="Chat Settings with the state of pi, providers and the session" /></td>
-<td valign="middle">
+<p align="center"><img src="./resources/picode/screenshots/status.png" alt="The Status column" width="560" /></p>
 
 ### ⚙️ Everything about your agent, in one window
 
 Agents, skills, providers and models, MCP servers and packages. See which pi answers, update it, and pick the model each agent uses.
 
-</td>
-</tr>
-</table>
+<img src="./resources/picode/screenshots/chat-settings.png" alt="Chat Settings with the state of pi, providers and the session" width="100%" />
 
 ### And also
 
@@ -114,7 +99,7 @@ Agents, skills, providers and models, MCP servers and packages. See which pi ans
 | Last week of conversations on any machine | — | ✅ |
 | GitHub and Jira issues in the editor, with *Fix with pi* | — | ✅ |
 
-<img src="./resources/picode/screenshots/issues.png" alt="GitHub and Jira issues in PiCode" width="100%" />
+<p align="center"><img src="./resources/picode/screenshots/issues.png" alt="A Jira board in PiCode" width="560" /></p>
 
 See the [plans](https://www.getpicode.app/pricing).
 
