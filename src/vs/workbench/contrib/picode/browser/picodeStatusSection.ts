@@ -16,6 +16,7 @@ import { defaultButtonStyles } from '../../../../platform/theme/browser/defaultS
 import { renderIcon } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { aiCustomizationManagementSectionRegistry, IAICustomizationManagementSectionContribution, IAICustomizationManagementSectionWidget } from '../../chat/browser/aiCustomization/aiCustomizationManagementSectionRegistry.js';
 import { AICustomizationManagementSection } from '../../chat/common/aiCustomizationWorkspaceService.js';
+import { createServiceLogo, displayNameOf } from './picodeServiceLogo.js';
 
 /**
  * The Status section of the Agent Customizations page, as PiCode owns it.
@@ -45,6 +46,9 @@ const THINKING_TOGGLE_COMMAND = 'picode.pi.toggleThinking';
 const REFRESH_MS = 5_000;
 
 /** The state pastille in a card's header: a word, and the tone that colours it. */
+/** The colour a card wears, so the page reads as groups at a glance. */
+type Accent = 'blue' | 'green' | 'purple' | 'orange' | 'teal' | 'red';
+
 interface IPill {
 	readonly text: string;
 	readonly tone: 'ok' | 'warn' | 'off';
@@ -127,11 +131,23 @@ function fingerprintOf(data: IStatusData): string {
 	return JSON.stringify({ runtime, piVersion, providers, defaultModel, model, thinkingLevel, reasoning, gitBranch, gitChanges, gitInsertions, gitDeletions, projects, ctxTokens, ctxWindow, cost, costEstimated, inputTokens, outputTokens, cacheRead, cacheWrite, jobs, updates, voice, error });
 }
 
+/** A count in the fewest characters that still read right: 950, 12.4k, 1.2M. */
+function compact(value: number): string {
+	if (value < 1000) {
+		return String(value);
+	}
+	if (value < 1_000_000) {
+		return `${Number((value / 1000).toFixed(value < 10_000 ? 1 : 0))}k`;
+	}
+	return `${Number((value / 1_000_000).toFixed(1))}M`;
+}
+
 export class PicodeStatusSection extends Disposable implements IAICustomizationManagementSectionWidget {
 
 	private readonly root: HTMLElement;
 	private readonly filterInput: HTMLInputElement;
 	private readonly noMatch: HTMLElement;
+	private readonly hero: HTMLElement;
 	private readonly cardsContainer: HTMLElement;
 	private readonly emptyContainer: HTMLElement;
 	/**
@@ -179,6 +195,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		settings.element.classList.add('picode-status-btn');
 		this._register(settings.onDidClick(() => void this.commandService.executeCommand('workbench.action.openSettings', 'picode')));
 
+		this.hero = DOM.append(this.root, $('.picode-status-hero'));
 		this.cardsContainer = DOM.append(this.root, $('.picode-status-cards'));
 		this.emptyContainer = DOM.append(this.root, $('.picode-status-empty'));
 		this.emptyContainer.textContent = localize('picodeStatusSectionEmpty', "The status is not available yet — it will appear in a moment.");
@@ -265,6 +282,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 
 	private render(data: IStatusData | undefined): void {
 		this.rowDisposables.clear();
+		DOM.clearNode(this.hero);
 		DOM.clearNode(this.cardsContainer);
 		DOM.clearNode(this.emptyContainer);
 		this.cards = [];
@@ -275,9 +293,16 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			return;
 		}
 
-		// Host: the three facts of the pi in force, as one strip. As a vertical list it spent a
-		// screen's height on three words, and the panel is mostly width, not height.
 		const external = data.runtime === 'external';
+		const targets = data.updates?.targets ?? [];
+		const updatesPill: IPill = data.updates === undefined
+			? { text: localize('picodeStatusUpdatesPillNever', "Never checked"), tone: 'off' }
+			: targets.length === 0
+				? { text: localize('picodeStatusUpdatesPillCurrent', "Up to date"), tone: 'ok' }
+				: { text: localize('picodeStatusUpdatesPillBehind', "{0} to update", targets.length), tone: 'warn' };
+		this.renderHero(data, updatesPill);
+
+		// pi: where it runs and the profile it reads; its version is in the figures above.
 		this.renderCard(localize('picodeStatusCardHost', "Host"), Codicon.server, card => {
 			this.addFacts(card, [
 				{
@@ -286,11 +311,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 					title: external
 						? localize('picodeStatusRuntimeExternalTitle', "pi runs from the machine's PATH, not from the copy PiCode ships.")
 						: localize('picodeStatusRuntimeInternalTitle', "pi runs from the copy that ships inside PiCode."),
-				},
-				{
-					label: localize('picodeStatusPiVersion', "pi version"),
-					value: data.piVersion ?? '—',
-					title: data.piVersion ?? localize('picodeStatusPiVersionUnknown', "pi did not report a version."),
 				},
 				{
 					label: localize('picodeStatusProfile', "Profile"),
@@ -303,38 +323,94 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				},
 			]);
 		}, {
+			accent: 'blue',
 			actions: [
 				{ label: localize('picodeStatusOpenProfileShort', "Open profile"), icon: Codicon.folderOpened, title: localize('picodeStatusOpenProfileDescription', "Reveal the profile in force in the file explorer."), command: OPEN_PROFILE_COMMAND },
 				{ label: localize('picodeStatusRestartShort', "Restart pi"), icon: Codicon.debugRestart, title: localize('picodeStatusRestartDescription', "Reset the chat session and reload the window."), command: RESTART_COMMAND },
 			],
 		});
 
-		// Updates: the state in the header pill, what is behind as rows, the two things to do as buttons.
-		const targets = data.updates?.targets ?? [];
-		const checked = data.updates?.checkedAt;
-		const pill: IPill = data.updates === undefined
-			? { text: localize('picodeStatusUpdatesPillNever', "Never checked"), tone: 'off' }
-			: targets.length === 0
-				? { text: localize('picodeStatusUpdatesPillCurrent', "Up to date"), tone: 'ok' }
-				: { text: localize('picodeStatusUpdatesPillBehind', "{0} to update", targets.length), tone: 'warn' };
-		this.renderCard(localize('picodeStatusCardUpdates', "Updates"), Codicon.cloudDownload, card => {
-			this.addRow(card, Codicon.history, localize('picodeStatusUpdatesChecked', "Last check"), checked === undefined
-				? localize('picodeStatusUpdatesNever', "never")
-				: this.relativeTime(checked));
-			for (const target of targets) {
+		// Updates: only what is behind. The state, when it was looked at and "check again" are in the figures above.
+		if (targets.length > 0) {
+			this.renderCard(localize('picodeStatusCardUpdates', "Updates"), Codicon.cloudDownload, card => {
+				for (const target of targets) {
 				const kind = target.kind === 'package'
 					? localize('picodeStatusUpdatesPackage', "Package")
 					: target.kind === 'engine'
 						? localize('picodeStatusUpdatesEngine', "Memory")
 						: localize('picodeStatusUpdatesRuntime', "pi");
-				const icon = target.kind === 'engine' ? Codicon.database : target.kind === 'package' ? Codicon.package : Codicon.terminal;
-				this.addRow(card, icon, `${kind} · ${target.name}`, `${target.installed} → ${target.latest}`);
+					const icon = target.kind === 'engine' ? Codicon.database : target.kind === 'package' ? Codicon.package : Codicon.terminal;
+					this.addRow(card, icon, `${kind} · ${target.name}`, `${target.installed} → ${target.latest}`);
+				}
+			}, {
+				accent: 'orange',
+				actions: [
+					{ label: localize('picodeStatusUpdateAll', "Update all"), icon: Codicon.cloudDownload, title: localize('picodeStatusUpdateDescription', "Update pi, its packages and the memory engine."), command: UPDATE_COMMAND, primary: true },
+				],
+			});
+		}
+
+		if (data.providers !== undefined && data.providers.length > 0) {
+			this.renderCard(localize('picodeStatusCardProviders', "Providers"), Codicon.account, card => {
+				const chips = DOM.append(card, $('.picode-status-chips'));
+				for (const provider of data.providers!) {
+					const state = provider.subscription
+						? localize('picodeStatusProviderSignedIn', "Signed in")
+						: provider.credential
+							? localize('picodeStatusProviderKey', "Key saved")
+							: localize('picodeStatusProviderReady', "Set up");
+					const chip = DOM.append(chips, $('.picode-status-chip'));
+					chip.classList.add(provider.subscription ? 'account' : provider.credential ? 'key' : 'local');
+					DOM.append(chip, $('.picode-status-chip-logo')).appendChild(createServiceLogo(provider.id));
+					const text = DOM.append(chip, $('.picode-status-chip-text'));
+					DOM.append(text, $('span.picode-status-chip-name')).textContent = provider.id === 'openai-codex' ? 'ChatGPT' : provider.id === 'anthropic' ? 'Claude' : displayNameOf(provider.id);
+					DOM.append(text, $('span.picode-status-chip-state')).textContent = state;
+				}
+				// The figures above already show the default model when no session has picked one.
+				if (data.defaultModel !== undefined && data.model !== undefined && data.model !== data.defaultModel) {
+					this.addRow(card, Codicon.star, localize('picodeStatusDefaultModel', "Default model"), data.defaultModel);
+				}
+			}, {
+				accent: 'purple',
+				actions: [
+					{ label: localize('picodeStatusAgentModelsShort', "Agent models"), icon: Codicon.hubot, title: localize('picodeStatusAgentModelsDescription', "The model each agent answers with."), command: OPEN_PROVIDERS_COMMAND, args: ['agents'] },
+					{ label: localize('picodeStatusManageProviders', "Manage"), icon: Codicon.gear, title: localize('picodeStatusManageProvidersTitle', "Add, sign in to or remove providers."), command: OPEN_PROVIDERS_COMMAND, args: ['providers'] },
+				],
+			});
+		}
+
+		// Session: the model, context and cost are in the figures above; here, the rest of its numbers.
+		this.renderCard(localize('picodeStatusCardSession', "Session"), Codicon.pulse, card => {
+			const stats: { label: string; value: string }[] = [];
+			if (data.inputTokens !== undefined || data.outputTokens !== undefined) {
+				stats.push({ label: localize('picodeStatusTokensIn', "Tokens in"), value: compact(data.inputTokens ?? 0) });
+				stats.push({ label: localize('picodeStatusTokensOut', "Tokens out"), value: compact(data.outputTokens ?? 0) });
+			}
+			if (data.cacheRead !== undefined && data.cacheWrite !== undefined) {
+				stats.push({ label: localize('picodeStatusCacheRead', "Cache read"), value: compact(data.cacheRead) });
+				stats.push({ label: localize('picodeStatusCacheWrite', "Cache write"), value: compact(data.cacheWrite) });
+			}
+			if (stats.length > 0) {
+				this.addStats(card, stats);
+			}
+			if (data.thinkingLevel !== undefined) {
+				this.addRow(card, Codicon.lightbulb, localize('picodeStatusThinking', "Thinking"), data.thinkingLevel);
+			}
+			if (data.reasoning !== undefined) {
+				const hidden = data.reasoning === 'hidden';
+				this.addRowButton(card, hidden ? Codicon.eyeClosed : Codicon.eye, localize('picodeStatusReasoning', "Reasoning in chat"), hidden
+					? localize('picodeStatusReasoningHidden', "Hidden")
+					: localize('picodeStatusReasoningShown', "Shown"), {
+					label: hidden ? localize('picodeStatusShow', "Show") : localize('picodeStatusHide', "Hide"),
+					icon: hidden ? Codicon.eye : Codicon.eyeClosed,
+					title: localize('picodeStatusThinkingDescription', "Whether the model's reasoning is shown in the chat."),
+					command: THINKING_TOGGLE_COMMAND,
+				});
 			}
 		}, {
-			pill,
+			accent: 'teal',
 			actions: [
-				{ label: localize('picodeStatusCheckUpdates', "Check again"), icon: Codicon.refresh, title: localize('picodeStatusCheckUpdatesTitle', "Look for new versions of pi, its packages and the memory engine."), command: CHECK_UPDATES_COMMAND },
-				...(targets.length === 0 ? [] : [{ label: localize('picodeStatusUpdateAll', "Update all"), icon: Codicon.cloudDownload, title: localize('picodeStatusUpdateDescription', "Update pi, its packages and the memory engine."), command: UPDATE_COMMAND, primary: true }]),
+				{ label: localize('picodeStatusCleanCacheShort', "Clean model cache"), icon: Codicon.trash, title: localize('picodeStatusCleanCacheDescription', "Drop the model cache so pi rebuilds its list."), command: CLEAN_CACHE_COMMAND, danger: true },
 			],
 		});
 
@@ -357,6 +433,7 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 				}
 			}, {
 				pill,
+				accent: 'orange',
 				actions: voice.state === 'ready'
 					? [{ label: localize('picodeStatusVoiceRemove', "Remove"), icon: Codicon.trash, title: localize('picodeStatusVoiceRemoveTitle', "Take dictation off this computer."), command: VOICE_REMOVE_COMMAND }]
 					: voice.state === 'downloading'
@@ -365,99 +442,144 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 			});
 		}
 
-		if (data.providers !== undefined && data.providers.length > 0) {
-			this.renderCard(localize('picodeStatusCardProviders', "Providers"), Codicon.account, card => {
-				for (const provider of data.providers!) {
-					const state = provider.subscription
-						? localize('picodeStatusProviderSignedIn', "Signed in")
-						: provider.credential
-							? localize('picodeStatusProviderKey', "Key saved")
-							: localize('picodeStatusProviderReady', "Set up");
-					this.addRow(card, Codicon.plug, provider.id, state);
+		// Several folders: one line each. A single folder's branch and changes are in the figures above.
+		if (data.projects !== undefined && data.projects.length > 0) {
+			this.renderCard(localize('picodeStatusCardProject', "Project"), Codicon.gitBranch, card => {
+				for (const project of data.projects!) {
+					const row = DOM.append(card, $('.row'));
+					this.addRowTitle(row, Codicon.repo, project.name);
+					const value = DOM.append(row, $('.value.picode-status-diff'));
+					DOM.append(value, $('span.picode-status-branch')).textContent = project.branch !== undefined && project.branch.length > 0 ? project.branch : localize('picodeStatusNoBranch', "no branch");
+					if (project.changes !== undefined && project.changes > 0) {
+						if (project.insertions !== undefined) {
+							DOM.append(value, $('span.added')).textContent = `+${project.insertions.toLocaleString()}`;
+						}
+						if (project.deletions !== undefined) {
+							DOM.append(value, $('span.removed')).textContent = `−${project.deletions.toLocaleString()}`;
+						}
+					} else {
+						DOM.append(value, $('span')).textContent = localize('picodeStatusClean', "clean");
+					}
 				}
-				if (data.defaultModel !== undefined) {
-					this.addRow(card, Codicon.star, localize('picodeStatusDefaultModel', "Default model"), data.defaultModel);
-				}
-			}, {
-				actions: [
-					{ label: localize('picodeStatusAgentModelsShort', "Agent models"), icon: Codicon.hubot, title: localize('picodeStatusAgentModelsDescription', "The model each agent answers with."), command: OPEN_PROVIDERS_COMMAND, args: ['agents'] },
-					{ label: localize('picodeStatusManageProviders', "Manage"), icon: Codicon.gear, title: localize('picodeStatusManageProvidersTitle', "Add, sign in to or remove providers."), command: OPEN_PROVIDERS_COMMAND, args: ['providers'] },
-				],
-			});
+			}, { accent: 'green', wide: true });
 		}
-
-		this.renderCard(localize('picodeStatusCardSession', "Session"), Codicon.pulse, card => {
-			if (data.model !== undefined) {
-				this.addRow(card, Codicon.hubot, localize('picodeStatusModel', "Model"), data.model);
-			}
-			if (data.thinkingLevel !== undefined) {
-				this.addRow(card, Codicon.lightbulb, localize('picodeStatusThinking', "Thinking"), data.thinkingLevel);
-			}
-			if (data.reasoning !== undefined) {
-				const hidden = data.reasoning === 'hidden';
-				this.addRowButton(card, hidden ? Codicon.eyeClosed : Codicon.eye, localize('picodeStatusReasoning', "Reasoning in chat"), hidden
-					? localize('picodeStatusReasoningHidden', "Hidden")
-					: localize('picodeStatusReasoningShown', "Shown"), {
-					label: hidden ? localize('picodeStatusShow', "Show") : localize('picodeStatusHide', "Hide"),
-					icon: hidden ? Codicon.eye : Codicon.eyeClosed,
-					title: localize('picodeStatusThinkingDescription', "Whether the model's reasoning is shown in the chat."),
-					command: THINKING_TOGGLE_COMMAND,
-				});
-			}
-			if (data.ctxTokens !== undefined && data.ctxWindow !== undefined && data.ctxWindow > 0) {
-				this.addMeterRow(card, Codicon.window, localize('picodeStatusContext', "Context"), data.ctxTokens / data.ctxWindow * 100, `${data.ctxTokens.toLocaleString()} / ${data.ctxWindow.toLocaleString()}`);
-			}
-			if (data.inputTokens !== undefined || data.outputTokens !== undefined) {
-				this.addRow(card, Codicon.symbolNumber, localize('picodeStatusTokens', "Tokens"), `${(data.inputTokens ?? 0).toLocaleString()} in · ${(data.outputTokens ?? 0).toLocaleString()} out`);
-			}
-			if (data.cacheRead !== undefined && data.cacheWrite !== undefined) {
-				this.addRow(card, Codicon.archive, localize('picodeStatusCache', "Cache read / write"), `${data.cacheRead.toLocaleString()} / ${data.cacheWrite.toLocaleString()}`);
-			}
-			if (data.cost !== undefined) {
-				// A leading "~" marks a cost worked out from the model catalogue rather than billed.
-				this.addRow(card, Codicon.creditCard, localize('picodeStatusCost', "Cost"), `${data.costEstimated ? '~' : ''}$${data.cost.toFixed(4)}`);
-			}
-		}, {
-			actions: [
-				{ label: localize('picodeStatusCleanCacheShort', "Clean model cache"), icon: Codicon.trash, title: localize('picodeStatusCleanCacheDescription', "Drop the model cache so pi rebuilds its list."), command: CLEAN_CACHE_COMMAND, danger: true },
-			],
-		});
-
-		this.renderCard(localize('picodeStatusCardProject', "Project"), Codicon.gitBranch, card => {
-			if (data.projects !== undefined) {
-				for (const project of data.projects) {
-					const branch = project.branch !== undefined && project.branch.length > 0 ? project.branch : localize('picodeStatusNoBranch', "no branch");
-					const changes = project.changes !== undefined ? `${project.changes} ${project.changes === 1 ? localize('picodeStatusFile', "file") : localize('picodeStatusFiles', "files")}` : localize('picodeStatusClean', "clean");
-					this.addRow(card, Codicon.repo, project.name, `${branch} · ${changes}`);
-				}
-				return;
-			}
-			this.addRow(card, Codicon.gitBranch, localize('picodeStatusBranch', "Branch"), data.gitBranch || '—');
-			if (data.gitChanges !== undefined) {
-				this.addDiffRow(card, data.gitChanges, data.gitInsertions, data.gitDeletions);
-			}
-		});
 
 		if (data.jobs !== undefined && data.jobs.length > 0) {
 			this.renderCard(localize('picodeStatusCardJobs', "Background jobs"), Codicon.tasklist, card => {
 				for (const job of data.jobs!) {
 					this.addRow(card, Codicon.terminal, job.label ?? localize('picodeStatusJob', "job"), job.command ?? '');
 				}
-			});
+			}, { accent: 'purple', wide: true });
 		}
 
 		if (data.error !== undefined) {
 			this.renderCard(localize('picodeStatusCardError', "Error"), Codicon.warning, card => {
 				this.addRow(card, Codicon.error, localize('picodeStatusError', "Error"), data.error!);
-			}, { alwaysVisible: true });
+			}, { alwaysVisible: true, accent: 'red', wide: true });
 		}
 
 		this.applyFilter();
 	}
 
+	/** The page at a glance: the figures someone opens it for, each in its own tile. */
+	private renderHero(data: IStatusData, updates: IPill): void {
+		const tile = (icon: ThemeIcon, accent: Accent, label: string, value: string, sub?: string, extra?: (tile: HTMLElement) => void) => {
+			const element = DOM.append(this.hero, $(`.picode-status-tile.accent-${accent}`));
+			DOM.append(element, $('.picode-status-tile-icon')).appendChild(renderIcon(icon));
+			const body = DOM.append(element, $('.picode-status-tile-body'));
+			DOM.append(body, $('.picode-status-tile-label')).textContent = label;
+			const valueEl = DOM.append(body, $('.picode-status-tile-value'));
+			valueEl.textContent = value;
+			valueEl.title = value;
+			if (sub !== undefined && sub.length > 0) {
+				const subEl = DOM.append(body, $('.picode-status-tile-sub'));
+				subEl.textContent = sub;
+				subEl.title = sub;
+			}
+			extra?.(element);
+			return element;
+		};
+
+		tile(Codicon.terminal, 'blue', localize('picodeStatusPiVersion', "pi version"), data.piVersion ?? '—',
+			data.runtime === 'external' ? localize('picodeStatusExternalShort', "On the PATH") : localize('picodeStatusInternalShort', "Bundled"));
+
+		const updatesTile = tile(updates.tone === 'warn' ? Codicon.cloudDownload : updates.tone === 'ok' ? Codicon.passFilled : Codicon.circleSlash,
+			updates.tone === 'warn' ? 'orange' : updates.tone === 'ok' ? 'green' : 'blue',
+			localize('picodeStatusCardUpdates', "Updates"), updates.text,
+			data.updates?.checkedAt !== undefined ? this.relativeTime(data.updates.checkedAt) : undefined);
+		updatesTile.classList.add(`tone-${updates.tone}`);
+		const check = this.addButton(updatesTile, { label: '', icon: Codicon.refresh, title: localize('picodeStatusCheckUpdatesTitle', "Look for new versions of pi, its packages and the memory engine."), command: CHECK_UPDATES_COMMAND });
+		check.element.classList.add('picode-status-tile-action');
+		check.element.setAttribute('aria-label', localize('picodeStatusCheckUpdates', "Check again"));
+
+		const model = data.model ?? data.defaultModel;
+		if (model !== undefined) {
+			tile(Codicon.hubot, 'purple', localize('picodeStatusModel', "Model"), model, data.thinkingLevel);
+		}
+
+		if (data.ctxTokens !== undefined && data.ctxWindow !== undefined && data.ctxWindow > 0) {
+			const percent = Math.max(0, Math.min(100, data.ctxTokens / data.ctxWindow * 100));
+			const level = percent >= 95 ? 'danger' : percent >= 80 ? 'warn' : 'ok';
+			const contextTile = tile(Codicon.window, 'teal', localize('picodeStatusContext', "Context"), `${Math.round(percent)}%`, `${compact(data.ctxTokens)} / ${compact(data.ctxWindow)}`, element => {
+				const ring = DOM.append(element, $(`.picode-status-ring.${level}`));
+				ring.style.setProperty('--picode-ring', `${percent}%`);
+				ring.setAttribute('role', 'progressbar');
+				ring.setAttribute('aria-valuemin', '0');
+				ring.setAttribute('aria-valuemax', '100');
+				ring.setAttribute('aria-valuenow', String(Math.round(percent)));
+				ring.setAttribute('aria-label', localize('picodeStatusContext', "Context"));
+			});
+			contextTile.classList.add('with-ring');
+		}
+
+		if (data.cost !== undefined) {
+			// A leading "~" marks a cost worked out from the model catalogue rather than billed.
+			tile(Codicon.creditCard, 'orange', localize('picodeStatusCost', "Cost"), `${data.costEstimated ? '~' : ''}$${data.cost.toFixed(data.cost >= 1 ? 2 : 4)}`, localize('picodeStatusThisSession', "This session"));
+		}
+
+		if (data.projects === undefined || data.projects.length === 0) {
+			tile(Codicon.gitBranch, 'green', localize('picodeStatusBranch', "Branch"), data.gitBranch || '—', undefined, element => {
+				if (data.gitChanges === undefined || data.gitChanges === 0) {
+					DOM.append(element.querySelector('.picode-status-tile-body')!, $('.picode-status-tile-sub')).textContent = localize('picodeStatusClean', "clean");
+					return;
+				}
+				const sub = DOM.append(element.querySelector('.picode-status-tile-body')!, $('.picode-status-tile-sub.picode-status-diff'));
+				DOM.append(sub, $('span')).textContent = data.gitChanges === 1
+					? localize('picodeStatusOneFile', "1 file")
+					: localize('picodeStatusNFiles', "{0} files", data.gitChanges);
+				if (data.gitInsertions !== undefined) {
+					DOM.append(sub, $('span.added')).textContent = `+${data.gitInsertions.toLocaleString()}`;
+				}
+				if (data.gitDeletions !== undefined) {
+					DOM.append(sub, $('span.removed')).textContent = `−${data.gitDeletions.toLocaleString()}`;
+				}
+				// The share of lines added against removed, as a two-colour bar.
+				const added = data.gitInsertions ?? 0;
+				const removed = data.gitDeletions ?? 0;
+				if (added + removed > 0) {
+					const bar = DOM.append(element, $('.picode-status-diffbar'));
+					DOM.append(bar, $('span.added')).style.width = `${added / (added + removed) * 100}%`;
+					DOM.append(bar, $('span.removed')).style.width = `${removed / (added + removed) * 100}%`;
+				}
+			});
+		}
+	}
+
+	/** Small figures side by side inside a card: a label above, the number below. */
+	private addStats(card: HTMLElement, stats: readonly { label: string; value: string }[]): void {
+		const grid = DOM.append(card, $('.picode-status-stats'));
+		for (const stat of stats) {
+			const cell = DOM.append(grid, $('.picode-status-stat'));
+			DOM.append(cell, $('.picode-status-stat-value')).textContent = stat.value;
+			DOM.append(cell, $('.picode-status-stat-label')).textContent = stat.label;
+		}
+	}
+
 	/** Builds one card and hands its body to `build`; the card's buttons sit in its header. */
-	private renderCard(title: string, icon: ThemeIcon, build: (card: HTMLElement) => void, options: { alwaysVisible?: boolean; pill?: IPill; actions?: readonly IAction[] } = {}): void {
+	private renderCard(title: string, icon: ThemeIcon, build: (card: HTMLElement) => void, options: { alwaysVisible?: boolean; pill?: IPill; actions?: readonly IAction[]; accent?: Accent; wide?: boolean } = {}): void {
 		const card = DOM.append(this.cardsContainer, $('.picode-status-card'));
+		card.classList.add(`accent-${options.accent ?? 'blue'}`);
+		card.classList.toggle('wide', options.wide === true);
 		const header = DOM.append(card, $('.card-head'));
 		const iconSpan = DOM.append(header, $('span.picode-status-card-icon'));
 		iconSpan.appendChild(renderIcon(icon));
@@ -505,37 +627,6 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 		return row;
 	}
 
-	/** A fact with a bar under its name: how full something is, the numbers on the right. */
-	private addMeterRow(card: HTMLElement, icon: ThemeIcon, label: string, percent: number, value: string): void {
-		const clamped = Math.max(0, Math.min(100, percent));
-		const row = this.addRow(card, icon, label, value);
-		const text = row.querySelector<HTMLElement>('.text')!;
-		const bar = DOM.append(text, $('.picode-status-meter'));
-		bar.classList.add(clamped >= 95 ? 'danger' : clamped >= 80 ? 'warn' : 'ok');
-		bar.setAttribute('role', 'progressbar');
-		bar.setAttribute('aria-valuemin', '0');
-		bar.setAttribute('aria-valuemax', '100');
-		bar.setAttribute('aria-valuenow', String(Math.round(clamped)));
-		bar.setAttribute('aria-label', label);
-		DOM.append(bar, $('.picode-status-meter-fill')).style.width = `${clamped}%`;
-	}
-
-	/** The project's changes: files, then the added and removed lines in their own colours. */
-	private addDiffRow(card: HTMLElement, files: number, insertions: number | undefined, deletions: number | undefined): void {
-		const row = DOM.append(card, $('.row'));
-		this.addRowTitle(row, Codicon.diff, localize('picodeStatusChanges', "Changes"));
-		const value = DOM.append(row, $('.value.picode-status-diff'));
-		DOM.append(value, $('span')).textContent = files === 1
-			? localize('picodeStatusOneFile', "1 file")
-			: localize('picodeStatusNFiles', "{0} files", files);
-		if (insertions !== undefined) {
-			DOM.append(value, $('span.added')).textContent = `+${insertions.toLocaleString()}`;
-		}
-		if (deletions !== undefined) {
-			DOM.append(value, $('span.removed')).textContent = `−${deletions.toLocaleString()}`;
-		}
-	}
-
 	/** A fact whose right-hand side is its own switch: the value, then the button that changes it. */
 	private addRowButton(card: HTMLElement, icon: ThemeIcon, label: string, value: string, action: IAction): void {
 		const row = DOM.append(card, $('.row.with-button'));
@@ -563,6 +654,8 @@ export class PicodeStatusSection extends Disposable implements IAICustomizationM
 	 */
 	private applyFilter(): void {
 		const term = this.filterInput.value.trim().toLowerCase();
+		// The headline figures are the page at a glance; while searching, only the cards answer.
+		this.hero.classList.toggle('picode-status-filtered-out', term.length > 0);
 		let visible = 0;
 		for (const card of this.cards) {
 			const match = card.alwaysVisible || term.length === 0 || card.text.includes(term);

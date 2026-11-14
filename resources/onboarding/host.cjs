@@ -171,7 +171,15 @@ async function loginStreaming(host, paths, providerId) {
 		},
 		prompt(prompt) {
 			const id = String(++nextId);
-			send({ type: 'prompt', id, prompt });
+			const { signal, ...shown } = prompt;
+			send({ type: 'prompt', id, prompt: shown });
+			// pi withdraws a question it no longer needs (the browser came back before anything was
+			// pasted): the window is told, so the field does not linger.
+			signal?.addEventListener?.('abort', () => {
+				if (pending.delete(id)) {
+					send({ type: 'promptGone', id });
+				}
+			}, { once: true });
 			return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 		},
 	};

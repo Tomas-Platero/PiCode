@@ -297,7 +297,7 @@ export interface ICommonNativeHostService {
 
 	// PiCode
 	/** Opens PiCode's setup window again; resolves `false` when it is not available here. */
-	openPiCodeSetup(): Promise<boolean>;
+	openPiCodeSetup(page?: 'import'): Promise<boolean>;
 
 	// OS
 	showItemInFolder(path: string): Promise<void>;

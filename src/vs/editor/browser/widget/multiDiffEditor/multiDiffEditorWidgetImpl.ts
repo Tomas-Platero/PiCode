@@ -7,9 +7,10 @@ import { Dimension, getWindow, h, scheduleAtNextAnimationFrame } from '../../../
 import { SmoothScrollableElement } from '../../../../base/browser/ui/scrollbar/scrollableElement.js';
 import { compareBy, numberComparator } from '../../../../base/common/arrays.js';
 import { findFirstMax } from '../../../../base/common/arraysFind.js';
+import { arrayEqualsC } from '../../../../base/common/equals.js';
 import { BugIndicatingError } from '../../../../base/common/errors.js';
 import { Disposable, IReference, toDisposable } from '../../../../base/common/lifecycle.js';
-import { IObservable, IReader, ITransaction, autorun, autorunWithStore, derived, disposableObservableValue, globalTransaction, observableFromEvent, observableValue, transaction } from '../../../../base/common/observable.js';
+import { IObservable, IReader, ITransaction, autorun, autorunWithStore, derived, derivedOpts, disposableObservableValue, globalTransaction, observableFromEvent, observableValue, transaction } from '../../../../base/common/observable.js';
 import { Scrollable, ScrollbarVisibility } from '../../../../base/common/scrollable.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
@@ -61,6 +62,8 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 
 	private readonly _totalHeight;
 	public readonly activeControl;
+	/** Diff items whose content intersects the viewport, in document order. */
+	public readonly visibleDiffItems: IObservable<readonly DocumentDiffItemViewModel[]>;
 
 	private readonly _contextKeyService;
 	private readonly _instantiationService;
@@ -173,6 +176,22 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 			if (!activeDiffItem) { return undefined; }
 			const viewItem = this._viewItemsInfo.read(reader).getItem(activeDiffItem);
 			return viewItem.template.read(reader)?.editor;
+		});
+		this.visibleDiffItems = derivedOpts<readonly DocumentDiffItemViewModel[]>({ owner: this, equalsFn: arrayEqualsC() }, reader => {
+			// Mirrors the visibility computation of `render`: an item is visible when its content intersects the viewport.
+			const scrollTop = this.scrollTop.read(reader);
+			const viewPort = OffsetRange.ofStartAndLength(scrollTop, this._sizeObserver.height.read(reader));
+			const result: DocumentDiffItemViewModel[] = [];
+			let itemContentHeightSumBefore = 0;
+			for (const item of this._viewItems.read(reader)) {
+				const itemContentHeight = item.contentHeight.read(reader);
+				const itemContentRange = OffsetRange.ofStartAndLength(itemContentHeightSumBefore, itemContentHeight);
+				if (!itemContentRange.isBefore(viewPort) && !itemContentRange.isAfter(viewPort)) {
+					result.push(item.viewModel);
+				}
+				itemContentHeightSumBefore += itemContentHeight + this._spaceBetweenPx;
+			}
+			return result;
 		});
 		this._contextKeyService = this._register(this._parentContextKeyService.createScoped(this._element));
 		this._instantiationService = this._register(this._parentInstantiationService.createChild(
@@ -539,6 +558,17 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 			|| v.viewModel.diffEditorViewModel.model.original.uri.toString() === resource.toString()
 		);
 		return item?.viewModel.documentDiffItem;
+	}
+
+	/** Focuses the editor of the active diff item. Returns whether there was one to focus. */
+	public focus(): boolean {
+		const activeDiffItem = this._viewModel.get()?.activeDiffItem.get();
+		if (!activeDiffItem) {
+			return false;
+		}
+		const editor = this._viewItemsInfo.get().getItem(activeDiffItem).template.get()?.editor;
+		editor?.focus();
+		return editor !== undefined;
 	}
 
 	public tryGetCodeEditor(resource: URI): { diffEditor: IDiffEditor; editor: ICodeEditor } | undefined {

@@ -29,7 +29,7 @@ import { AgentSessionsControl } from '../../chat/browser/agentSessions/agentSess
 import { AgentSessionsFilter, AgentSessionsGrouping } from '../../chat/browser/agentSessions/agentSessionsFilter.js';
 import { PICODE_LAYOUT_SETTING } from './picodeLayoutStyle.js';
 import { PICODE_AGENT_SEARCH_COMMAND_ID, PICODE_AGENT_SEARCH_ICON, PICODE_CUSTOMIZATION_COMMAND_ID, PICODE_CUSTOMIZATION_ICON } from './picodeAgentSearch.js';
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { PicodeAgentProjects } from './picodeAgentProjects.js';
 import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { PICODE_AUTH_PROVIDER_ID, PICODE_EMAIL_STORAGE_KEY, PICODE_PLAN_STORAGE_KEY } from './picodeAccountProvider.js';
 import { GlobalCompositeBar } from '../../../browser/parts/globalCompositeBar.js';
@@ -38,7 +38,8 @@ import { badgeBackground, badgeForeground, foreground } from '../../../../platfo
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 
 /**
- * The Agent layout's left column: new session, search, and every session by date.
+ * The Agent layout's left column: new session, search, the workspace's projects, and every
+ * session by date.
  *
  * The same list the chat shows beside itself in the Editor layout (`AgentSessionsControl`), given a
  * column of its own so the chat can take the centre. It only exists in the Agent layout; in the
@@ -64,7 +65,6 @@ class PicodeAgentSessionsView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@ICommandService private readonly commandService: ICommandService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
-		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
 		@IStorageService private readonly storageService: IStorageService,
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
@@ -88,14 +88,12 @@ class PicodeAgentSessionsView extends ViewPane {
 		row(PICODE_AGENT_SEARCH_ICON, localize('picode.sessions.search', "Search"), () => this.commandService.executeCommand(PICODE_AGENT_SEARCH_COMMAND_ID));
 		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID));
 
+		// The workspace's projects, then the conversations: the column says what the chat works on.
+		const projects = this._register(this.instantiationService.createInstance(PicodeAgentProjects, actions));
+		this._register(projects.onDidChangeHeight(() => this.relayout()));
+
 		const toolbarRow = append(actions, $('.picode-sessions-toolbar-row'));
-		// The open project's name, rather than a second "Sessions" under the column's own title.
-		const heading = append(toolbarRow, $('span.picode-sessions-heading'));
-		const showProject = () => {
-			heading.textContent = this.workspaceService.getWorkspace().folders[0]?.name ?? localize('picode.sessions.noProject', "No project open");
-		};
-		showProject();
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(showProject));
+		append(toolbarRow, $('span.picode-sessions-heading')).textContent = localize('picode.sessions.conversations', "Conversations");
 		const toolbarContainer = append(toolbarRow, $('.picode-sessions-toolbar'));
 		const toolbar = this._register(this.instantiationService.createInstance(MenuWorkbenchToolBar, toolbarContainer, MenuId.AgentSessionsToolbar, {
 			menuOptions: { shouldForwardArgs: true }
@@ -183,8 +181,17 @@ class PicodeAgentSessionsView extends ViewPane {
 		void showAccount();
 	}
 
+	private lastSize: { height: number; width: number } | undefined;
+
+	private relayout(): void {
+		if (this.lastSize) {
+			this.layoutBody(this.lastSize.height, this.lastSize.width);
+		}
+	}
+
 	protected override layoutBody(height: number, width: number): void {
 		super.layoutBody(height, width);
+		this.lastSize = { height, width };
 		const actionsHeight = this.element.querySelector('.picode-sessions-actions')?.getBoundingClientRect().height ?? 0;
 		const footerHeight = this.element.querySelector('.picode-sessions-footer')?.getBoundingClientRect().height ?? 0;
 		this.control?.layout(Math.max(0, height - actionsHeight - footerHeight), width);

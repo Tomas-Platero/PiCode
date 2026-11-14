@@ -15,6 +15,7 @@ import { memoryEnabled, restartMemory, startMemory, stopStartedMemory } from './
 import { fetchModelIds } from './endpoint';
 import { splitModelId } from './providerIds';
 import { connectSubscription } from './login';
+import { registerProviderAuthCommands } from './provider-auth';
 import { mcpServersFrom, mcpCliEntryOf, mcpLoginArgs, mcpLoginEnv, storedDiscoveryOf, type McpConfigFile, type PiMcpServer } from './mcp-provider';
 import { mcpServersText, mcpServersTextWithOAuthScope, normalizedServersFile, splitArguments, type McpServerSetting } from './mcpServers';
 import { mcpServersTextWithAdded, mcpServersTextWithEdited, mcpServersTextWithRemoved, mcpServersTextWithToggled, parseKeyValueLines, serverEntry, serverFileEntry, serverNames, validateDraft, validateServerName, type AddServerDraft, type McpServerFileEntry } from './mcp-add';
@@ -46,7 +47,7 @@ import {
 	readConfiguration,
 	type ProviderConfiguration,
 } from './providers';
-import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
+import { BACKGROUND_JOBS_COMMAND, cancelQueuedTurns, isLearnedTerminalOnly, liveSessionCommands, onPiSessionChanged, registerPiAgent, resetChatSession, finishedBackgroundJobs, runningBackgroundJobs, currentTodos, onDidChangeAgentWork, getSessionContext, compactSession, UNDO_TURN_EDITS_COMMAND_ID, undoTurnEditsCommand } from './agent';
 import { absolutePathOfBeforeUriPath, beforeContentFor, PICODE_BEFORE_SCHEME } from './chat-edits';
 import { registerPiCommandPromptFiles } from './commands';
 import { listModels, registerWizardModelCommands } from './wizard-models';
@@ -60,6 +61,7 @@ import { distributionRootOf } from './distribution-root';
 import { gentleAgents } from './gentle-agents-store';
 import { disposeResumedSessions } from './sessions-resume';
 import { probeExternalPi, readInternalPiVersion, registerSetupCommands } from './onboarding';
+import { registerPendingExtensions } from './import-extensions';
 import { ensureProfilePackages } from './packages-install';
 import { LEFT_BEHIND_PACKAGE_NAMES } from './left-behind-packages';
 import { isProductPackage, PRODUCT_PACKAGES, withProductPackageVersion } from './product-packages';
@@ -1121,6 +1123,15 @@ function registerCustomizations(globalState: vscode.Memento): vscode.Disposable[
 
 	// The `+N −M` under Changes in the Agent layout's status column, for the folder the editor asks about.
 	disposables.push(vscode.commands.registerCommand(DIFF_STAT_COMMAND, (folder: unknown) => typeof folder === 'string' ? timed('status: lines changed', () => diffStat(folder)) : undefined));
+	// The Context block of Status: where a chat's context goes, and its Compact button.
+	disposables.push(vscode.commands.registerCommand('picode.context.breakdown', (chat: unknown) => getSessionContext(chat)));
+	disposables.push(vscode.commands.registerCommand('picode.context.compact', async (chat: unknown) => {
+		const result = await compactSession(chat);
+		if (result === 'busy') {
+			void vscode.window.showInformationMessage(vscode.l10n.t('PiCode is still answering. Compact the conversation when it has finished.'));
+		}
+		return result;
+	}));
 	// Not in the palette: the table a performance change is compared with (docs/RENDIMIENTO.md).
 	disposables.push(vscode.commands.registerCommand('picode.perf.report', async () => {
 		const document = await vscode.workspace.openTextDocument({ language: 'markdown', content: timingReport() });
@@ -2693,6 +2704,9 @@ const setupDeps = {
 		npmCli: locateNpmCli(),
 	};
 	context.subscriptions.push(...registerSetupCommands(setupDeps));
+	if (setupDeps.userDataPath !== undefined) {
+		context.subscriptions.push(...registerPendingExtensions(setupDeps.userDataPath));
+	}
 	// The theme step of Set up PiCode lives in the core, so its three questions — list the gallery,
 	// read one theme's colours, install it — travel as commands. Without this registration they do
 	// not exist, and the gallery answers an empty list as if the search had found nothing.
@@ -2828,6 +2842,13 @@ const setupDeps = {
 
 	// The wizard's provider/model commands (the welcome page's model step).
 	context.subscriptions.push(...registerWizardModelCommands({
+		distributionRoot: distributionRoot(context.extensionUri),
+		profileDir: profileDirectory(context.extensionUri),
+		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },
+	}));
+
+	// The Providers panel's own sign-in: the same login, drawn step by step inside the panel.
+	context.subscriptions.push(...registerProviderAuthCommands({
 		distributionRoot: distributionRoot(context.extensionUri),
 		profileDir: profileDirectory(context.extensionUri),
 		refreshModels: () => { forgetPiRuntime(); onDidChangeModels.fire(); },

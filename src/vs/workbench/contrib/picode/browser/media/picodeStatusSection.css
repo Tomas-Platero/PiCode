@@ -407,3 +407,361 @@
 .picode-status-meter.danger .picode-status-meter-fill {
 	background: var(--vscode-errorForeground);
 }
+
+/* ===================================================== the page at a glance, and its card grid */
+
+.picode-status-section {
+	--picode-accent-blue: var(--vscode-charts-blue);
+	--picode-accent-green: var(--vscode-charts-green);
+	--picode-accent-purple: var(--vscode-charts-purple);
+	--picode-accent-orange: var(--vscode-charts-orange);
+	--picode-accent-teal: var(--vscode-terminal-ansiCyan);
+	--picode-accent-red: var(--vscode-charts-red);
+	gap: 14px;
+	padding: 18px 20px;
+}
+
+.picode-status-section .accent-blue { --picode-accent: var(--picode-accent-blue); }
+.picode-status-section .accent-green { --picode-accent: var(--picode-accent-green); }
+.picode-status-section .accent-purple { --picode-accent: var(--picode-accent-purple); }
+.picode-status-section .accent-orange { --picode-accent: var(--picode-accent-orange); }
+.picode-status-section .accent-teal { --picode-accent: var(--picode-accent-teal); }
+.picode-status-section .accent-red { --picode-accent: var(--picode-accent-red); }
+
+.picode-status-filter {
+	height: 32px;
+	border-radius: 8px;
+}
+
+.picode-status-toolbar .picode-status-btn.monaco-button {
+	height: 32px;
+	border-radius: 8px;
+}
+
+/* -- headline tiles */
+
+.picode-status-hero {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 10px;
+}
+
+.picode-status-tile {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	min-width: 0;
+	padding: 12px 14px;
+	overflow: hidden;
+	border: 1px solid var(--vscode-widget-border, color-mix(in srgb, var(--vscode-foreground) 20%, transparent));
+	border-radius: 12px;
+	background:
+		radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--picode-accent) 16%, transparent), transparent 60%),
+		var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.picode-status-tile:hover {
+	border-color: color-mix(in srgb, var(--picode-accent) 55%, transparent);
+	transform: translateY(-1px);
+}
+
+.picode-status-tile-icon {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--picode-accent) 20%, transparent);
+	color: var(--picode-accent);
+}
+
+.picode-status-tile-icon .codicon {
+	font-size: 16px;
+}
+
+.picode-status-tile-body {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.picode-status-tile-label {
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.picode-status-tile-value {
+	overflow: hidden;
+	color: var(--vscode-foreground);
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 1.25;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-status-tile-sub {
+	overflow: hidden;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-status-tile-sub.picode-status-diff {
+	display: flex;
+	gap: 6px;
+}
+
+.picode-status-tile.tone-ok .picode-status-tile-value {
+	color: var(--picode-accent-green);
+}
+
+.picode-status-tile.tone-warn .picode-status-tile-value {
+	color: var(--picode-accent-orange);
+}
+
+/* The context tile: a ring that fills as the conversation grows. */
+.picode-status-tile.with-ring {
+	padding-right: 64px;
+}
+
+.picode-status-ring {
+	position: absolute;
+	top: 50%;
+	right: 14px;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	transform: translateY(-50%);
+	background: conic-gradient(var(--picode-ring-color) var(--picode-ring), color-mix(in srgb, var(--vscode-foreground) 12%, transparent) 0);
+	-webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), black calc(100% - 4px));
+	mask: radial-gradient(farthest-side, transparent calc(100% - 5px), black calc(100% - 4px));
+}
+
+.picode-status-ring.ok { --picode-ring-color: var(--picode-accent-teal); }
+.picode-status-ring.warn { --picode-ring-color: var(--vscode-editorWarning-foreground); }
+.picode-status-ring.danger { --picode-ring-color: var(--vscode-errorForeground); }
+
+/* The changes tile: lines added against removed, as a thin two-colour bar along its foot. */
+.picode-status-diffbar {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	display: flex;
+	height: 3px;
+}
+
+.picode-status-diffbar .added {
+	background: var(--vscode-gitDecoration-addedResourceForeground, var(--picode-accent-green));
+}
+
+.picode-status-diffbar .removed {
+	background: var(--vscode-gitDecoration-deletedResourceForeground, var(--picode-accent-red));
+}
+
+/* -- cards: a grid read left to right, every card in a row as tall as the tallest */
+
+.picode-status-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+	align-items: stretch;
+	gap: 12px;
+}
+
+.picode-status-card {
+	min-width: 0;
+	box-sizing: border-box;
+	border-radius: 12px;
+	border-top: 2px solid color-mix(in srgb, var(--picode-accent, var(--vscode-focusBorder)) 70%, transparent);
+}
+
+.picode-status-card.wide {
+	grid-column: 1 / -1;
+}
+
+/* The "check again" button in the updates tile: icon only, top right. */
+.picode-status-tile .picode-status-tile-action.monaco-button {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border-radius: 8px;
+}
+
+.picode-status-card .card-head {
+	padding: 10px 12px;
+	border-bottom: 0;
+}
+
+.picode-status-card-icon {
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--picode-accent, var(--vscode-focusBorder)) 18%, transparent);
+	color: var(--picode-accent, var(--vscode-foreground));
+}
+
+.picode-status-card .picode-status-btn.monaco-button {
+	border-radius: 999px;
+}
+
+/* Rows inside a card: lighter, no rules between them, the label quiet and the value bright. */
+.picode-status-card .row {
+	gap: 12px;
+	margin: 0 8px;
+	padding: 7px 6px;
+	border-top: 0;
+	border-radius: 8px;
+}
+
+.picode-status-card .row:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}
+
+.picode-status-card .row:last-child {
+	margin-bottom: 8px;
+}
+
+.picode-status-card .row .text b {
+	color: var(--vscode-descriptionForeground);
+	font-weight: 400;
+}
+
+.picode-status-card .row .value {
+	font-weight: 600;
+}
+
+/* Facts of the Host card as small blocks. */
+.picode-status-card .kv {
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 8px;
+	padding: 0 12px 12px;
+}
+
+.picode-status-card .kv > div {
+	padding: 8px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}
+
+/* The session's numbers: label under a big figure, four to a line. */
+.picode-status-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+	gap: 8px;
+	padding: 0 12px 8px;
+}
+
+.picode-status-stat {
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+}
+
+.picode-status-stat-value {
+	font-size: 15px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-status-stat-label {
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+/* Providers as chips, each with its logo and how it is connected. */
+.picode-status-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 0 12px 10px;
+}
+
+.picode-status-chip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 6px 12px 6px 6px;
+	border: 1px solid var(--vscode-widget-border, color-mix(in srgb, var(--vscode-foreground) 20%, transparent));
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+}
+
+.picode-status-chip-logo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+}
+
+.picode-status-chip-logo .picode-pm-logo {
+	width: 18px;
+	height: 18px;
+	border-radius: 5px;
+	font-size: 9px;
+}
+
+.picode-status-chip-logo .picode-pm-logo img {
+	width: 16px;
+	height: 16px;
+}
+
+.picode-status-chip-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.2;
+}
+
+.picode-status-chip-name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.picode-status-chip-state {
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.picode-status-chip.account .picode-status-chip-state { color: var(--vscode-testing-iconPassed); }
+.picode-status-chip.key .picode-status-chip-state { color: var(--vscode-textLink-foreground); }
+.picode-status-chip.local .picode-status-chip-state { color: var(--vscode-descriptionForeground); }
+
+.picode-status-branch {
+	padding: 0 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--picode-accent-green) 16%, transparent);
+	color: var(--picode-accent-green);
+	font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-status-tile,
+	.picode-status-tile:hover {
+		transition: none;
+		transform: none;
+	}
+}
+
+.picode-status-tile:has(> .picode-status-tile-action) {
+	padding-right: 44px;
+}
