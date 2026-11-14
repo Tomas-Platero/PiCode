@@ -66,7 +66,7 @@ export type PiAuthType = 'api_key' | 'oauth';
 export type PiAuthPrompt =
 	| { readonly type: 'select'; readonly message: string; readonly options: readonly { readonly id: string; readonly label: string; readonly description?: string }[] }
 	| { readonly type: 'secret'; readonly message: string; readonly placeholder?: string }
-	| { readonly type: 'text' | 'manual_code'; readonly message: string; readonly placeholder?: string };
+	| { readonly type: 'text' | 'manual_code'; readonly message: string; readonly placeholder?: string; readonly signal?: AbortSignal };
 
 /** One thing pi says during a login. */
 export type PiAuthEvent =
@@ -77,6 +77,8 @@ export type PiAuthEvent =
 
 /** What pi calls while a login runs. The editor's dialogs are the whole interface. */
 export interface PiAuthInteraction {
+	/** Aborting it cancels the login inside pi (its callback server included). */
+	readonly signal?: AbortSignal;
 	prompt(prompt: PiAuthPrompt): Promise<string>;
 	notify(event: PiAuthEvent): void;
 }
@@ -88,6 +90,8 @@ export interface PiModelRuntime {
 	isUsingSubscription(providerId: string): boolean;
 	hasConfiguredAuth(providerId: string): boolean;
 	login?(providerId: string, type: PiAuthType, interaction: PiAuthInteraction): Promise<unknown>;
+	/** Removes the stored credential (a sign-in or a key) for a provider. */
+	logout?(providerId: string): Promise<void>;
 	/** The models that can run right now: their provider has a credential or needs none. */
 	getAvailable?(providerId?: string): Promise<readonly { readonly id: string; readonly provider: string }[]>;
 }
@@ -171,6 +175,14 @@ export class LoginCancelled extends Error {
 		super(`Login cancelled: ${title}`);
 		this.name = 'LoginCancelled';
 	}
+}
+
+/**
+ * The option pi marks as its default ("Browser login (default)"), which is answered without
+ * asking: nobody should have to pick the way that just works. `undefined` when none is marked.
+ */
+export function defaultOptionOf(options: readonly { readonly id: string; readonly label: string }[]): string | undefined {
+	return options.find(option => /\(default\)/i.test(option.label))?.id;
 }
 
 /** One notice, with the address to open when the event carries one. Pure, so it can be checked. */

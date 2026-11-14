@@ -10,6 +10,7 @@ import { disposableTimeout } from '../../../../base/common/async.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
+import { language as platformLanguage } from '../../../../base/common/platform.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -55,6 +56,13 @@ const DEMO_STEP_MS = 1600;
 const OPEN_ACCOUNT_COMMAND = 'picode.account.open';
 const SWITCH_LAYOUT_COMMAND = 'picode.appearance.switchLayout';
 const EDITOR_TASKS_COMMAND = 'workbench.view.extension.picode-status';
+const OPEN_IMPORT_COMMAND = 'picode.import.open';
+const OPEN_SETTINGS_COMMAND = 'workbench.action.openSettings';
+const NEW_TERMINAL_COMMAND = 'workbench.action.terminal.new';
+const SHOW_EXTENSIONS_COMMAND = 'workbench.view.extensions';
+const CHOOSE_SECTIONS_COMMAND = 'picode.status.chooseSections';
+/** The multi-file diff editor's list of changed files (see `multiDiffEditor.contribution.ts`). */
+const FILE_LIST_SETTING = 'multiDiffEditor.experimental.fileList';
 
 /**
  * What changed, as a window over the editor: one page per novelty, each explained for the person
@@ -242,6 +250,28 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openAccount', "Open my account");
 		case 'showTasks':
 			return localize('picodeWhatsNew.showTasks', "Show my tasks");
+		case 'openImport':
+			return localize('picodeWhatsNew.openImport', "Open Import");
+		case 'fileList':
+			return services.configurationService.getValue<boolean>(FILE_LIST_SETTING)
+				? localize('picodeWhatsNew.fileListOff', "Turn off the file list")
+				: localize('picodeWhatsNew.fileListOn', "Turn on the file list");
+		case 'excludeSetting':
+			return localize('picodeWhatsNew.excludeSetting', "Open the hidden files setting");
+		case 'newTerminal':
+			return localize('picodeWhatsNew.newTerminal', "Open a terminal");
+		case 'browseExtensions':
+			return localize('picodeWhatsNew.browseExtensions', "Browse extensions");
+		case 'chooseSections':
+			return localize('picodeWhatsNew.chooseSections', "Choose my sections");
+		case 'showStatus':
+			return localize('picodeWhatsNew.showStatus', "Open Status");
+		case 'openProviders':
+			return localize('picodeWhatsNew.openProviders', "Open Providers");
+		case 'addProject':
+			return localize('picodeWhatsNew.addProject', "Add a project");
+		case 'showUsageLimits':
+			return localize('picodeWhatsNew.showUsageLimits', "See my plan's limits");
 	}
 }
 
@@ -267,7 +297,44 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand(OPEN_ACCOUNT_COMMAND);
 			return;
+		case 'openImport':
+			close();
+			void services.commandService.executeCommand(OPEN_IMPORT_COMMAND);
+			return;
+		case 'openProviders':
+			close();
+			void services.commandService.executeCommand('picode.providersModels.open', 'providers');
+			return;
+		case 'addProject':
+			close();
+			void services.commandService.executeCommand('addRootFolder');
+			return;
+		case 'showUsageLimits':
+			close();
+			void services.commandService.executeCommand('picode.chat.usageMeter');
+			return;
+		case 'fileList':
+			// The window stays and its button says the new state.
+			void services.configurationService.updateValue(FILE_LIST_SETTING, !services.configurationService.getValue<boolean>(FILE_LIST_SETTING)).then(rerender);
+			return;
+		case 'excludeSetting':
+			close();
+			void services.commandService.executeCommand(OPEN_SETTINGS_COMMAND, { query: 'files.exclude' });
+			return;
+		case 'newTerminal':
+			close();
+			void services.commandService.executeCommand(NEW_TERMINAL_COMMAND);
+			return;
+		case 'browseExtensions':
+			close();
+			void services.commandService.executeCommand(SHOW_EXTENSIONS_COMMAND);
+			return;
+		case 'chooseSections':
+			close();
+			void services.commandService.executeCommand(CHOOSE_SECTIONS_COMMAND);
+			return;
 		case 'showTasks':
+		case 'showStatus':
 			close();
 			if (picodeLayoutOf(services.configurationService) !== 'agent') {
 				void services.commandService.executeCommand(EDITOR_TASKS_COMMAND);
@@ -287,6 +354,16 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	job: jobPreview,
 	plans: plansPreview,
 	sync: syncPreview,
+	import: importPreview,
+	changedFiles: changedFilesPreview,
+	exclude: excludePreview,
+	terminalDialogs: terminalDialogsPreview,
+	problems: problemsPreview,
+	statusSections: statusSectionsPreview,
+	context: contextPreview,
+	providers: providersPreview,
+	projects: projectsPreview,
+	usage: usagePreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -403,6 +480,51 @@ function syncPreview(parent: HTMLElement, store: DisposableStore): void {
 	count();
 }
 
+function importPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.import.demo', "Tick a few items. Nothing is really imported here."), store);
+	const sources = [
+		{ id: 'pi', label: localize('picodeWhatsNew.import.tabPi', "Your other pi"), items: ['gentle-pi', 'pi-plan-widget', 'pi-tools', 'pi-search'] },
+		{ id: 'code', label: localize('picodeWhatsNew.import.tabCode', "VS Code"), items: ['dracula-theme.theme-dracula', 'esbenp.prettier-vscode', 'editor.fontSize'] },
+	];
+	const ticked = new Map<string, Set<string>>(sources.map(source => [source.id, new Set(source.items.slice(0, 1))]));
+	const tabs = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const list = append(parent, $('.picode-whatsnew-list'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	const draw = (sourceId: string) => {
+		for (const tab of Array.from(tabs.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.source === sourceId);
+		}
+		const source = sources.find(candidate => candidate.id === sourceId)!;
+		const mine = ticked.get(sourceId)!;
+		clearNode(list);
+		const count = () => {
+			result.textContent = localize('picodeWhatsNew.import.result', "{0} of {1} selected.", mine.size, source.items.length);
+		};
+		for (const item of source.items) {
+			const label = append(list, $('label.picode-whatsnew-row.toggle'));
+			const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+			input.checked = mine.has(item);
+			append(label, $('span.picode-whatsnew-row-label')).textContent = item;
+			store.add(addDisposableListener(input, EventType.CHANGE, () => {
+				if (input.checked) {
+					mine.add(item);
+				} else {
+					mine.delete(item);
+				}
+				count();
+			}));
+		}
+		count();
+	};
+	for (const source of sources) {
+		const tab = append(tabs, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.source = source.id;
+		tab.textContent = source.label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => draw(source.id)));
+	}
+	draw('pi');
+}
+
 function issuesPreview(parent: HTMLElement, store: DisposableStore): void {
 	demoBar(parent, localize('picodeWhatsNew.issues.demo', "Drag a card to another column."), store);
 	const board = append(parent, $('.picode-whatsnew-board'));
@@ -511,4 +633,450 @@ function jobPreview(parent: HTMLElement, store: DisposableStore): void {
 	demoBar(parent, localize('picodeWhatsNew.job.demo', "A job ends after the agent is done, and you still hear about it."), store, play);
 	stage = append(parent, $('.picode-whatsnew-job'));
 	play();
+}
+
+/** A row of tabs; picking one marks it and calls `draw` with its id. Returns the picker. */
+function demoTabs<T extends string>(parent: HTMLElement, store: DisposableStore, tabs: readonly (readonly [T, string])[], draw: (id: T) => void): (id: T) => void {
+	const bar = append(parent, $('.picode-whatsnew-tabs', { role: 'tablist' }));
+	const pick = (id: T) => {
+		for (const tab of Array.from(bar.children)) {
+			tab.classList.toggle('active', (tab as HTMLElement).dataset.tab === id);
+		}
+		draw(id);
+	};
+	for (const [id, label] of tabs) {
+		const tab = append(bar, $('button.picode-whatsnew-tab', { type: 'button', role: 'tab' }));
+		tab.dataset.tab = id;
+		tab.textContent = label;
+		store.add(addDisposableListener(tab, EventType.CLICK, () => pick(id)));
+	}
+	return pick;
+}
+
+function changedFilesPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.changedFiles.demo', "Click a file in the list, or hide the list."), store);
+	const files: { path: string; added: number; removed: number; lines: [string, string][] }[] = [
+		{ path: 'src/login.ts', added: 4, removed: 2, lines: [['-', 'if (user) {'], ['+', 'if (user && user.active) {'], [' ', '  signIn(user);'], ['-', '}'], ['+', '} else {'], ['+', '  showError();'], ['+', '}']] },
+		{ path: 'src/session.ts', added: 1, removed: 1, lines: [[' ', 'const timeout ='], ['-', '  30 * 60;'], ['+', '  8 * 60 * 60;']] },
+		{ path: 'README.md', added: 2, removed: 0, lines: [[' ', '## Sign in'], ['+', 'Inactive accounts see'], ['+', 'a clear message.']] },
+	];
+	let selected = 0;
+	let showList = true;
+	const toggle = append(parent, $('label.picode-whatsnew-row.toggle'));
+	const input = append(toggle, $('input', { type: 'checkbox' })) as HTMLInputElement;
+	input.checked = showList;
+	append(toggle, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.changedFiles.toggle', "Show the list of files");
+	const stage = append(parent, $('.picode-whatsnew-diff'));
+	const draw = () => {
+		clearNode(stage);
+		stage.classList.toggle('with-list', showList);
+		if (showList) {
+			const list = append(stage, $('.picode-whatsnew-diff-files'));
+			files.forEach((file, index) => {
+				const row = append(list, $('button.picode-whatsnew-diff-file', { type: 'button' }));
+				row.classList.toggle('active', index === selected);
+				append(row, $(`span${ThemeIcon.asCSSSelector(Codicon.file)}`));
+				append(row, $('span.picode-whatsnew-diff-path')).textContent = file.path;
+				append(row, $('span.picode-whatsnew-diff-added')).textContent = `+${file.added}`;
+				append(row, $('span.picode-whatsnew-diff-removed')).textContent = `-${file.removed}`;
+				store.add(addDisposableListener(row, EventType.CLICK, () => {
+					selected = index;
+					draw();
+				}));
+			});
+		}
+		const view = append(stage, $('.picode-whatsnew-diff-view'));
+		const file = files[selected];
+		append(view, $('.picode-whatsnew-diff-title')).textContent = file.path;
+		for (const [kind, text] of file.lines) {
+			const line = append(view, $('.picode-whatsnew-diff-line'));
+			line.classList.toggle('added', kind === '+');
+			line.classList.toggle('removed', kind === '-');
+			line.textContent = `${kind} ${text}`;
+		}
+	};
+	store.add(addDisposableListener(input, EventType.CHANGE, () => {
+		showList = input.checked;
+		draw();
+	}));
+	draw();
+}
+
+function excludePreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.exclude.demo', "Hide the folder, then keep one part of it."), store);
+	const rules = { hide: true, keep: false };
+	const options = append(parent, $('.picode-whatsnew-list'));
+	const stage = append(parent, $('.picode-whatsnew-exclude'));
+	const tree = append(stage, $('.picode-whatsnew-tree'));
+	const json = append(stage, $('pre.picode-whatsnew-json'));
+	const entries: { name: string; depth: number; folder?: boolean; hidden?: () => boolean }[] = [
+		{ name: 'src', depth: 0, folder: true },
+		{ name: 'index.ts', depth: 1 },
+		{ name: 'node_modules', depth: 0, folder: true, hidden: () => rules.hide && !rules.keep },
+		{ name: '@types', depth: 1, folder: true, hidden: () => rules.hide && !rules.keep },
+		{ name: 'lodash', depth: 1, folder: true, hidden: () => rules.hide },
+		{ name: 'package.json', depth: 0 },
+	];
+	const draw = () => {
+		clearNode(tree);
+		for (const entry of entries) {
+			if (entry.hidden?.()) {
+				continue;
+			}
+			const row = append(tree, $('.picode-whatsnew-tree-row'));
+			row.style.paddingLeft = `${4 + entry.depth * 14}px`;
+			append(row, $(`span${ThemeIcon.asCSSSelector(entry.folder ? Codicon.folder : Codicon.file)}`));
+			append(row, $('span')).textContent = entry.name;
+		}
+		const lines = ['"files.exclude": {'];
+		if (rules.hide) {
+			lines.push(`  "node_modules": true${rules.keep ? ',' : ''}`);
+		}
+		if (rules.keep) {
+			lines.push('  "!node_modules/@types": true');
+		}
+		lines.push('}');
+		json.textContent = lines.join('\n');
+	};
+	const option = (label: string, key: 'hide' | 'keep') => {
+		const row = append(options, $('label.picode-whatsnew-row.toggle'));
+		const input = append(row, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = rules[key];
+		append(row, $('span.picode-whatsnew-row-label')).textContent = label;
+		store.add(addDisposableListener(input, EventType.CHANGE, () => {
+			rules[key] = input.checked;
+			draw();
+		}));
+	};
+	option(localize('picodeWhatsNew.exclude.hide', "Hide node_modules"), 'hide');
+	option(localize('picodeWhatsNew.exclude.keep', "...but keep node_modules/@types"), 'keep');
+	draw();
+}
+
+function terminalDialogsPreview(parent: HTMLElement, store: DisposableStore): void {
+	let mode: 'before' | 'now' = 'now';
+	let stage: HTMLElement;
+	const play = playDemo(2, store, step => {
+		clearNode(stage);
+		stage.className = `picode-whatsnew-dialogs ${mode}`;
+		const editor = append(stage, $('.picode-whatsnew-window'));
+		append(editor, $('.picode-whatsnew-window-title')).textContent = 'PiCode';
+		append(editor, $('.picode-whatsnew-window-terminal')).textContent = '> az login';
+		if (step > 0) {
+			const dialog = append(stage, $('.picode-whatsnew-dialog'));
+			append(dialog, $(`span${ThemeIcon.asCSSSelector(Codicon.key)}`));
+			append(dialog, $('span')).textContent = localize('picodeWhatsNew.terminalDialogs.dialog', "Sign in to your account");
+		}
+		result.textContent = step === 0
+			? ''
+			: mode === 'now'
+				? localize('picodeWhatsNew.terminalDialogs.now', "The window opens in front, ready to use.")
+				: localize('picodeWhatsNew.terminalDialogs.before', "The window opened behind the editor, out of sight.");
+	});
+	demoBar(parent, localize('picodeWhatsNew.terminalDialogs.demo', "Run a command that asks you to sign in."), store, play);
+	const pick = demoTabs(parent, store, [['before', localize('picodeWhatsNew.before', "Before")], ['now', localize('picodeWhatsNew.now', "Now")]], picked => {
+		mode = picked;
+		play();
+	});
+	stage = append(parent, $('.picode-whatsnew-dialogs'));
+	const result = append(parent, $('.picode-whatsnew-sync-result'));
+	pick('now');
+}
+
+function providersPreview(parent: HTMLElement, store: DisposableStore): void {
+	const timers = store.add(new DisposableStore());
+	// Made-up accounts; clicking one plays the real flow: the browser wait, then the tick.
+	const all = [
+		{ id: 'chatgpt', name: 'ChatGPT', note: localize('picodeWhatsNew.providers.demoChatgpt', "ChatGPT Plus or Pro"), hue: 160 },
+		{ id: 'claude', name: 'Claude', note: localize('picodeWhatsNew.providers.demoClaude', "Claude Pro or Max"), hue: 20 },
+		{ id: 'copilot', name: 'GitHub Copilot', note: localize('picodeWhatsNew.providers.demoCopilot', "GitHub Copilot"), hue: 260 },
+	];
+	let connected: string[] = [];
+	let busy: { id: string; done: boolean } | undefined;
+	demoBar(parent, localize('picodeWhatsNew.providers.demo', "Pick an account and watch it connect."), store, () => {
+		timers.clear();
+		connected = [];
+		busy = undefined;
+		draw();
+	});
+	const stage = append(parent, $('.picode-whatsnew-list.picode-whatsnew-providers'));
+	const mark = (provider: { name: string; hue: number }) => {
+		const element = $('span.picode-whatsnew-provider-mark');
+		element.textContent = provider.name.slice(0, 1);
+		element.style.background = `hsl(${provider.hue} 55% 34%)`;
+		return element;
+	};
+	const draw = () => {
+		clearNode(stage);
+		if (connected.length > 0) {
+			append(stage, $('.picode-whatsnew-row.head')).textContent = localize('picodePv.connected', "Connected");
+			for (const id of connected) {
+				const provider = all.find(candidate => candidate.id === id)!;
+				const row = append(stage, $('.picode-whatsnew-provider.connected'));
+				row.appendChild(mark(provider));
+				append(row, $('span.picode-whatsnew-row-label')).textContent = provider.name;
+				append(row, $('span.picode-whatsnew-provider-pill')).textContent = localize('picodePv.signedIn', "Signed in");
+			}
+		}
+		const grid = append(stage, $('.picode-whatsnew-provider-grid'));
+		for (const provider of all.filter(candidate => !connected.includes(candidate.id))) {
+			const active = busy?.id === provider.id;
+			const tile = append(grid, $('button.picode-whatsnew-provider', { type: 'button' })) as HTMLButtonElement;
+			tile.classList.toggle('active', active);
+			tile.disabled = busy !== undefined && !active;
+			tile.appendChild(mark(provider));
+			const text = append(tile, $('span.picode-whatsnew-provider-text'));
+			append(text, $('span.picode-whatsnew-provider-name')).textContent = provider.name;
+			append(text, $('span.picode-whatsnew-provider-note')).textContent = active
+				? (busy!.done ? localize('picodePv.connectedNow', "Connected. Its models are ready to use.") : localize('picodePv.waitingBrowser', "Waiting for your browser..."))
+				: provider.note;
+			if (active) {
+				append(tile, $(busy!.done ? `span.picode-whatsnew-provider-done${ThemeIcon.asCSSSelector(Codicon.passFilled)}` : 'span.picode-whatsnew-provider-pulse'));
+			} else {
+				append(tile, $('span.picode-whatsnew-provider-pill')).textContent = localize('picodePv.signIn', "Sign in");
+			}
+			store.add(addDisposableListener(tile, EventType.CLICK, () => {
+				if (busy !== undefined) {
+					return;
+				}
+				busy = { id: provider.id, done: false };
+				draw();
+				timers.add(disposableTimeout(() => {
+					busy = { id: provider.id, done: true };
+					draw();
+				}, 1600));
+				timers.add(disposableTimeout(() => {
+					busy = undefined;
+					connected = [...connected, provider.id];
+					draw();
+				}, 2700));
+			}));
+		}
+	};
+	draw();
+}
+
+function projectsPreview(parent: HTMLElement, store: DisposableStore): void {
+	// Made-up folders: the + brings in one more, the cross on a row takes it out again.
+	const spare = ['docs', 'mobile-app'];
+	let projects = ['web', 'api'];
+	const reset = () => {
+		projects = ['web', 'api'];
+		draw();
+	};
+	demoBar(parent, localize('picodeWhatsNew.projects.demo', "Add a project with +, or remove one with its cross."), store, reset);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = `${localize('picode.sessions.projects', "Projects")} · ${projects.length}`;
+		const next = spare.find(name => !projects.includes(name));
+		const add = append(head, $(`button.picode-whatsnew-link${ThemeIcon.asCSSSelector(Codicon.add)}`, { type: 'button' })) as HTMLButtonElement;
+		add.title = localize('picode.sessions.addProject', "Add a project to this workspace");
+		add.disabled = next === undefined;
+		store.add(addDisposableListener(add, EventType.CLICK, () => {
+			if (next !== undefined) {
+				projects = [...projects, next];
+				draw();
+			}
+		}));
+		for (const name of projects) {
+			const row = append(stage, $('.picode-whatsnew-row'));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.folder)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = name;
+			const remove = append(row, $(`button.picode-whatsnew-link${ThemeIcon.asCSSSelector(Codicon.close)}`, { type: 'button' })) as HTMLButtonElement;
+			remove.title = localize('picode.sessions.projectRemove', "Remove from Workspace");
+			remove.disabled = projects.length === 1;
+			store.add(addDisposableListener(remove, EventType.CLICK, () => {
+				projects = projects.filter(candidate => candidate !== name);
+				draw();
+			}));
+		}
+		const chats = append(stage, $('.picode-whatsnew-row.head'));
+		append(chats, $('span.picode-whatsnew-row-label')).textContent = localize('picode.sessions.conversations', "Conversations");
+		const chat = append(stage, $('.picode-whatsnew-row'));
+		append(chat, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.commentDiscussion)}`));
+		append(chat, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.projects.demoChat', "Fix the sign-in button");
+	};
+	draw();
+}
+
+function usagePreview(parent: HTMLElement, store: DisposableStore): void {
+	// A made-up ChatGPT plan: each message spends a little of the five-hour window and less of the week.
+	let shortWindow = 62;
+	let week = 31;
+	const reset = () => {
+		shortWindow = 62;
+		week = 31;
+		draw();
+	};
+	demoBar(parent, localize('picodeWhatsNew.usage.demo', "Send messages and watch the ring fill up and change colour."), store, reset);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		const worst = Math.max(shortWindow, week);
+		const tone = worst >= 95 ? 'danger' : worst >= 80 ? 'warn' : 'ok';
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		const meter = append(head, $(`span.picode-usage-meter.${tone}`));
+		const svg = meter.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', '0 0 16 16');
+		svg.setAttribute('width', '18');
+		svg.setAttribute('height', '18');
+		for (const css of ['track', 'fill']) {
+			const circle = meter.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'circle');
+			circle.setAttribute('cx', '8');
+			circle.setAttribute('cy', '8');
+			circle.setAttribute('r', '6');
+			circle.setAttribute('fill', 'none');
+			circle.setAttribute('stroke-width', '2.4');
+			circle.classList.add(css);
+			if (css === 'fill') {
+				circle.setAttribute('pathLength', '100');
+				circle.setAttribute('transform', 'rotate(-90 8 8)');
+				circle.setAttribute('stroke-linecap', 'round');
+				circle.setAttribute('stroke-dasharray', `${worst} 100`);
+			}
+			svg.appendChild(circle);
+		}
+		meter.appendChild(svg);
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.usage.demoHead', "ChatGPT plan · {0}% used", worst);
+		const send = append(head, $('button.picode-whatsnew-link', { type: 'button' })) as HTMLButtonElement;
+		send.textContent = localize('picodeWhatsNew.usage.demoSend', "Send a message");
+		send.disabled = worst >= 100;
+		store.add(addDisposableListener(send, EventType.CLICK, () => {
+			shortWindow = Math.min(100, shortWindow + 9);
+			week = Math.min(100, week + 3);
+			draw();
+		}));
+		for (const [label, percent] of [[localize('picodeWhatsNew.usage.demoShort', "5 h window"), shortWindow], [localize('picodeWhatsNew.usage.demoWeek', "Week window"), week]] as const) {
+			const row = append(stage, $('.picode-usage-meter-hover-row'));
+			const line = append(row, $('.line'));
+			append(line, $('span.name')).textContent = label;
+			append(append(line, $('span.detail')), $('span.percent')).textContent = `${percent}%`;
+			const bar = append(row, $(`.bar.${percent >= 95 ? 'danger' : percent >= 80 ? 'warn' : 'ok'}`));
+			append(bar, $('span')).style.width = `${percent}%`;
+		}
+	};
+	draw();
+}
+
+function contextPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.context.demo', "Compact the conversation and watch the room come back."), store);
+	// A made-up conversation in a 200k window: compacting shrinks the messages to a summary.
+	const window = 200_000;
+	const reserve = 16_000;
+	const fixed = [
+		{ id: 'project', label: localize('picode.overview.contextProject', "Project instructions"), tokens: 6_000 },
+		{ id: 'pi', label: localize('picode.overview.contextPi', "pi instructions"), tokens: 4_000 },
+		{ id: 'skills', label: localize('picode.overview.contextSkills', "Skills"), tokens: 3_000 },
+		{ id: 'tools', label: localize('picode.overview.contextTools', "pi tools"), tokens: 9_000 },
+		{ id: 'mcp', label: localize('picode.overview.contextMcp', "MCP tools"), tokens: 12_000 },
+	];
+	let messages = 118_000;
+	const stage = append(parent, $('.picode-whatsnew-list.picode-whatsnew-context'));
+	const format = (tokens: number) => `${Number((tokens / 1000).toFixed(1))}k`;
+	const draw = () => {
+		clearNode(stage);
+		const parts = [{ id: 'messages', label: localize('picode.overview.contextMessages', "Messages"), tokens: messages }, ...fixed];
+		const used = parts.reduce((total, part) => total + part.tokens, 0);
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picode.overview.contextPercent', "{0}% used", Math.round((used / window) * 100));
+		append(head, $('span.picode-whatsnew-row-detail')).textContent = `${format(used)} / ${format(window)}`;
+		const bar = append(stage, $('.picode-whatsnew-context-bar'));
+		for (const part of [...parts, { id: 'reserve', tokens: reserve }]) {
+			append(bar, $(`.picode-whatsnew-context-piece.${part.id}`)).style.width = `${(part.tokens / window) * 100}%`;
+		}
+		for (const part of parts) {
+			const row = append(stage, $('.picode-whatsnew-row'));
+			append(row, $(`span.picode-whatsnew-context-swatch.${part.id}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = part.label;
+			append(row, $('span.picode-whatsnew-row-detail')).textContent = format(part.tokens);
+		}
+		const room = append(stage, $('.picode-whatsnew-row'));
+		append(room, $('span.picode-whatsnew-context-swatch.free'));
+		append(room, $('span.picode-whatsnew-row-label')).textContent = localize('picode.overview.contextFree', "Room before compacting");
+		append(room, $('span.picode-whatsnew-row-detail')).textContent = format(Math.max(0, window - reserve - used));
+		const button = append(stage, $('button.picode-whatsnew-button.secondary', { type: 'button' })) as HTMLButtonElement;
+		button.textContent = localize('picode.overview.contextCompact', "Compact session");
+		button.disabled = messages < 20_000;
+		store.add(addDisposableListener(button, EventType.CLICK, () => {
+			messages = 9_000;
+			draw();
+		}));
+	};
+	draw();
+}
+
+function statusSectionsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.statusSections.demo', "Fold a section with its arrow, or untick it to hide it."), store);
+	// Made-up sections; Environment has no arrow, as in the real column.
+	const sections = [
+		{ id: 'environment', title: localize('picode.overview.environment', "Environment"), rows: [localize('picode.overview.thisComputer', "This computer")], open: true, shown: true, foldable: false },
+		{ id: 'tasks', title: localize('picode.overview.tasks', "Tasks"), rows: [localize('picode.overview.idle', "Nothing running")], open: true, shown: true, foldable: true },
+		{ id: 'jira', title: localize('picodeIssuesJiraTitle', "Jira issues"), rows: [localize('picodeWhatsNew.board.card1', "The sign-in button does nothing"), localize('picodeWhatsNew.board.card2', "Translate the settings page")], open: false, shown: true, foldable: true },
+		{ id: 'memory', title: localize('picode.overview.memory', "Memory"), rows: [localize('picodeWhatsNew.statusSections.memoryRow', "10 memories")], open: true, shown: true, foldable: true },
+	];
+	const stage = append(parent, $('.picode-whatsnew-exclude'));
+	const column = append(stage, $('.picode-whatsnew-tree'));
+	const ticks = append(stage, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(column);
+		for (const section of sections.filter(candidate => candidate.shown)) {
+			const title = append(column, $('.picode-whatsnew-tree-row.picode-whatsnew-section-title'));
+			if (section.foldable) {
+				append(title, $(`span${ThemeIcon.asCSSSelector(section.open ? Codicon.chevronDown : Codicon.chevronRight)}`));
+				title.classList.add('clickable');
+				store.add(addDisposableListener(title, EventType.CLICK, () => {
+					section.open = !section.open;
+					draw();
+				}));
+			}
+			append(title, $('span')).textContent = section.title;
+			if (section.open) {
+				for (const text of section.rows) {
+					const row = append(column, $('.picode-whatsnew-tree-row'));
+					row.style.paddingLeft = '22px';
+					append(row, $('span')).textContent = text;
+				}
+			}
+		}
+	};
+	for (const section of sections) {
+		const label = append(ticks, $('label.picode-whatsnew-row.toggle'));
+		const input = append(label, $('input', { type: 'checkbox' })) as HTMLInputElement;
+		input.checked = section.shown;
+		append(label, $('span.picode-whatsnew-row-label')).textContent = section.title;
+		store.add(addDisposableListener(input, EventType.CHANGE, () => {
+			section.shown = input.checked;
+			draw();
+		}));
+	}
+	draw();
+}
+
+function problemsPreview(parent: HTMLElement, store: DisposableStore): void {
+	demoBar(parent, localize('picodeWhatsNew.problems.demo', "Compare a big file with many problems."), store);
+	// A file with 1,200 problems: before, only the first 500 were underlined.
+	const total = 1200;
+	const lines = ['const a = undefinedValue;', 'let b: number = "text";', 'callMissing();', 'import { gone } from "./gone";', 'const c = a.missing.deep;', 'return;'];
+	const format = (value: number) => value.toLocaleString(platformLanguage);
+	let stage: HTMLElement;
+	const pick = demoTabs(parent, store, [['before', localize('picodeWhatsNew.before', "Before")], ['now', localize('picodeWhatsNew.now', "Now")]], mode => {
+		clearNode(stage);
+		const code = append(stage, $('.picode-whatsnew-diff-view'));
+		lines.forEach((text, index) => {
+			const line = append(code, $('.picode-whatsnew-diff-line'));
+			const number = index * 240 + 1;
+			append(line, $('span.picode-whatsnew-code-number')).textContent = String(number);
+			const content = append(line, $('span')) as HTMLElement;
+			content.textContent = text;
+			// Lines past the old limit stay plain before; now every problem is underlined.
+			content.classList.toggle('picode-whatsnew-squiggle', mode === 'now' || number <= 500);
+		});
+		const count = append(stage, $('.picode-whatsnew-row'));
+		append(count, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.warning)}`));
+		append(count, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.problems.count', "Underlined in this file: {0} of {1}", format(mode === 'before' ? 500 : total), format(total));
+	});
+	stage = append(parent, $('.picode-whatsnew-extension'));
+	pick('now');
 }

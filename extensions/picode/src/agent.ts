@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as fs from 'node:fs';
 import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
+import { contextBreakdown, type IContextBreakdown } from './context-breakdown';
 import { resolveSessionCwd } from './session-cwd';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
@@ -78,6 +79,8 @@ import { recordUsageHeaders } from './subscription-usage';
 import { CHAT_MODEL_ENV } from './subagent-model-fallback';
 import { displayedCustomText, EDITOR_COMMANDS, isListedCommand, LEARNED_TERMINAL_ONLY, panelText, parseSlash, routeSlash, sessionStatsMarkdown, type SlashContext, type UnavailableCommand } from './chat-commands';
 import { LearnedCommands, terminalOnlyVerdict } from './learned-commands';
+import { summariseSessionUsage, type SessionUsage } from './session-usage';
+export type { SessionUsage };
 
 /**
  * `@pi` inside the editor's own chat.
@@ -235,7 +238,14 @@ export interface PiSession {
 	 * `mcp__<server>__<tool>` names are how the session's **connected** MCP servers are
 	 * discovered — servers no file declares, brought in by pi extensions and plugins.
 	 */
-	getAllTools?(): ReadonlyArray<{ readonly name: string }>;
+	getAllTools?(): ReadonlyArray<{ readonly name: string; readonly description?: string; readonly parameters?: unknown }>;
+	/** The tools declared to the model, a subset of {@link getAllTools}. */
+	getActiveToolNames?(): string[];
+	/** The system text as the model gets it; what the Context block of Status splits into parts. */
+	readonly systemPrompt?: string;
+	readonly messages?: readonly unknown[];
+	getContextUsage?(): { readonly tokens: number | null; readonly contextWindow: number; readonly percent: number | null } | undefined;
+	readonly settingsManager?: { getCompactionSettings?(model?: PiModel): { readonly reserveTokens: number } | undefined };
 	/** Names the conversation: what pi-intercom calls the session, and what its transcript records. */
 	setSessionName?(name: string): void;
 	/** The members the editor's answers to pi's terminal commands use (`chat-commands.ts`); optional, read defensively. */
@@ -1599,27 +1609,9 @@ export interface AgentDeps {
  * scope changes — a different folder, or a different project mode — because a session that
  * outlived its directory is a session pi cannot use.
  */
-/** The live session's usage totals and current selection, as the status view shows them. */
-export interface SessionUsage {
-	readonly ctxTokens?: number;
-	readonly cost?: number;
-	readonly costEstimated?: boolean;
-	readonly input?: number;
-	readonly output?: number;
-	readonly cacheRead?: number;
-	readonly cacheWrite?: number;
-	readonly model?: string;
-	readonly thinkingLevel?: string;
-}
-
 /** A JSON object from an unknown value, or `undefined` when it is not one. */
 function recordOf(value: unknown): Record<string, unknown> | undefined {
 	return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined;
-}
-
-/** A finite number from an unknown value, or `undefined` when it is not one. */
-function numberOf(value: unknown): number | undefined {
-	return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /** The context key the chat's footer `when` clauses read to leave pi's responses alone. */
@@ -1635,6 +1627,14 @@ const sessionChangedEmitter = new vscode.EventEmitter<void>();
 
 /** The live session's MCP server names, set by registerPiAgent; read by the status answer. */
 let sessionMcpProvider: (() => readonly string[] | undefined) | undefined;
+
+/** Where a chat's context goes, set by registerPiAgent; read by the Context block of Status. */
+let sessionContextProvider: ((key: unknown) => IContextBreakdown | undefined) | undefined;
+/** Compacts a chat's conversation, set by registerPiAgent; the Context block's button. */
+let sessionCompactor: ((key: unknown) => Promise<'done' | 'busy' | 'unavailable'>) | undefined;
+
+/** pi's own default margin before it compacts, when its settings cannot be read. */
+const DEFAULT_COMPACTION_RESERVE = 16_384;
 
 /** The background jobs this window's agent left running, as the pill above the chat input reads them. */
 const backgroundJobs = new BackgroundJobTracker();
@@ -1894,68 +1894,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			const entries = (sessionManager as unknown as {
 				getEntries?: () => ReadonlyArray<Record<string, unknown>>;
 			}).getEntries?.() ?? [];
-			let input = 0;
-			let output = 0;
-			let cacheRead = 0;
-			let cacheWrite = 0;
-			let cost = 0;
-			let costEstimated = false;
-			let hasUsage = false;
-			let ctxTokens: number | undefined;
-			let model: string | undefined;
-			let thinkingLevel: string | undefined;
-			for (const entry of entries) {
-				if (entry['type'] === 'message') {
-					// Usage lives nested under `message`, and only assistant messages carry it.
-					const message = recordOf(entry['message']);
-					if (message?.['role'] !== 'assistant') {
-						continue;
-					}
-					const usage = recordOf(message['usage']);
-					if (usage === undefined) {
-						continue;
-					}
-					hasUsage = true;
-					const turnInput = numberOf(usage['input']) ?? 0;
-					const turnCacheRead = numberOf(usage['cacheRead']) ?? 0;
-					const turnCacheWrite = numberOf(usage['cacheWrite']) ?? 0;
-					input += turnInput;
-					output += numberOf(usage['output']) ?? 0;
-					cacheRead += turnCacheRead;
-					cacheWrite += turnCacheWrite;
-					// Occupancy is what the last prompt actually cost: fresh input plus everything
-					// read from or written to the cache. The last answer's output is not in yet.
-					ctxTokens = turnInput + turnCacheRead + turnCacheWrite;
-					const turnCost = recordOf(usage['cost']);
-					const turnTotal = numberOf(turnCost?.['total']) ?? 0;
-					cost += turnTotal;
-					// pi 1.5 marks the cost the provider itself billed; a priced turn without that mark
-					// was worked out from the model catalogue, so the total is an estimate.
-					if (turnTotal > 0 && numberOf(turnCost?.['totalFromProvider']) === undefined) {
-						costEstimated = true;
-					}
-					continue;
-				}
-				if (entry['type'] === 'model_change') {
-					const providerId = entry['provider'];
-					const modelId = entry['modelId'];
-					if (typeof providerId === 'string' && typeof modelId === 'string') {
-						model = `${providerId}/${modelId}`;
-					}
-					continue;
-				}
-				if (entry['type'] === 'thinking_level_change') {
-					const level = entry['thinkingLevel'];
-					if (typeof level === 'string') {
-						thinkingLevel = level;
-					}
-				}
-			}
-			return {
-				...(model === undefined ? {} : { model }),
-				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-				...(hasUsage ? { ctxTokens, input, output, cacheRead, cacheWrite, cost, costEstimated } : {}),
-			};
+			return summariseSessionUsage(entries);
 		} catch {
 			return undefined;
 		}
@@ -2030,6 +1969,54 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		chat.lastUsed = Date.now();
 		active = chat;
 		return chat;
+	};
+	/** The chat the person is looking at (its resource, from the core), or the one that spoke last. */
+	const chatOf = (key: unknown): ChatPi | undefined => (typeof key === 'string' ? chats.get(key) : undefined) ?? active;
+	let lastContext: { readonly signature: string; readonly breakdown: IContextBreakdown } | undefined;
+	sessionContextProvider = key => {
+		const session = chatOf(key)?.session;
+		if (session === undefined) {
+			return undefined;
+		}
+		try {
+			const usage = session.getContextUsage?.();
+			if (usage === undefined || usage.contextWindow <= 0) {
+				return undefined;
+			}
+			const tools = session.getAllTools?.() ?? [];
+			const systemPrompt = session.systemPrompt ?? '';
+			// Status asks every few seconds: nothing that counts moved, the last answer stands.
+			const signature = `${session.sessionId}|${usage.tokens}|${usage.contextWindow}|${systemPrompt.length}|${tools.length}|${session.messages?.length ?? 0}`;
+			if (lastContext?.signature === signature) {
+				return lastContext.breakdown;
+			}
+			const breakdown = contextBreakdown({
+				systemPrompt,
+				messages: session.messages ?? [],
+				tools: tools.map(tool => ({ name: String(tool.name), description: tool.description, parameters: tool.parameters })),
+				...(typeof session.getActiveToolNames === 'function' ? { activeToolNames: session.getActiveToolNames() } : {}),
+				contextWindow: usage.contextWindow,
+				usedTokens: usage.tokens,
+				reserveTokens: session.settingsManager?.getCompactionSettings?.(session.model)?.reserveTokens ?? DEFAULT_COMPACTION_RESERVE,
+			});
+			lastContext = { signature, breakdown };
+			return breakdown;
+		} catch {
+			// A session that cannot answer leaves the block with its plain meter.
+			return undefined;
+		}
+	};
+	sessionCompactor = async key => {
+		const session = chatOf(key)?.session;
+		if (session === undefined || typeof session.compact !== 'function') {
+			return 'unavailable';
+		}
+		if (session.isStreaming) {
+			return 'busy';
+		}
+		await session.compact();
+		sessionChangedEmitter.fire();
+		return 'done';
 	};
 	/** Drops the live sessions of the chats unused longest, keeping their transcripts for later. */
 	const trimLiveChats = (keep: ChatPi): void => {
@@ -2457,4 +2444,14 @@ export const onPiSessionChanged = sessionChangedEmitter.event;
 /** The live session's usage totals and current selection, as the status view shows them. */
 export function getSessionUsage(): SessionUsage | undefined {
 	return sessionUsageProvider?.();
+}
+
+/** Where the context of a chat goes (`key`: the chat's resource; the last chat otherwise). */
+export function getSessionContext(key?: unknown): IContextBreakdown | undefined {
+	return sessionContextProvider?.(key);
+}
+
+/** Compacts a chat's conversation now; `busy` while it is answering. */
+export function compactSession(key?: unknown): Promise<'done' | 'busy' | 'unavailable'> {
+	return sessionCompactor?.(key) ?? Promise.resolve('unavailable');
 }

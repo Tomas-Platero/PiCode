@@ -18,6 +18,7 @@ import { IMenu, IMenuService } from '../../../../platform/actions/common/actions
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { IEditorProgressService } from '../../../../platform/progress/common/progress.js';
 import { InMemoryStorageService, IStorageService } from '../../../../platform/storage/common/storage.js';
+import { IUserInteractionService, MockUserInteractionService } from '../../../../platform/userInteraction/browser/userInteractionService.js';
 import { IDiffProviderFactoryService } from '../../../browser/widget/diffEditor/diffProviderFactoryService.js';
 import { DiffEditorWidget } from '../../../browser/widget/diffEditor/diffEditorWidget.js';
 import { RefCounted } from '../../../browser/widget/diffEditor/utils.js';
@@ -112,5 +113,61 @@ suite('MultiDiffEditorWidget', () => {
 			widget.dispose();
 			documentItem.dispose();
 		}
+	});
+
+	test('exposes the host view model and the diff items visible in the viewport', async () => {
+		const services = new ServiceCollection();
+		// Real (not simulated) editor focus, so scrolled-away items release their templates.
+		services.set(IUserInteractionService, new MockUserInteractionService(false));
+		services.set(IAccessibilitySignalService, new class extends mock<IAccessibilitySignalService>() { }());
+		services.set(IActionViewItemService, new NullActionViewItemService());
+		services.set(IEditorProgressService, new class extends mock<IEditorProgressService>() { }());
+		services.set(IDiffProviderFactoryService, new TestDiffProviderFactoryService());
+		services.set(IStorageService, disposables.add(new InMemoryStorageService()));
+		services.set(IMenuService, new class extends mock<IMenuService>() {
+			override createMenu(): IMenu {
+				return new class extends mock<IMenu>() {
+					override readonly onDidChange = Event.None;
+					override getActions() { return []; }
+					override dispose(): void { }
+				}();
+			}
+		}());
+		const instantiationService = createCodeEditorServices(disposables, services);
+		const names = ['first', 'second', 'third'];
+		const documentItems = names.map(name => disposables.add(RefCounted.createOfNonDisposable<IDocumentDiffItem>({
+			original: disposables.add(instantiateTextModel(instantiationService, `${name} original`, undefined, undefined, URI.parse(`inmemory://original/${name}.js`))),
+			modified: disposables.add(instantiateTextModel(instantiationService, `${name} modified`, undefined, undefined, URI.parse(`inmemory://modified/${name}.js`))),
+		}, { dispose() { } })));
+		const container = document.createElement('div');
+		const widget = disposables.add(instantiationService.createInstance(
+			MultiDiffEditorWidget,
+			container,
+			{} satisfies IWorkbenchUIElementFactory,
+			undefined,
+		));
+		// A viewport lower than any item, so that exactly the item at the top of the viewport is visible.
+		widget.layout(new Dimension(800, 10));
+		const viewModel = disposables.add(widget.createViewModel({ documents: ValueWithChangeEvent.const(documentItems) }));
+		await waitForState(viewModel.items, items => items.length === names.length);
+		const visibleNames = () => widget.visibleDiffItems.get().map(item => item.modifiedUri?.path);
+
+		const beforeViewModel = { viewModel: widget.viewModel.get(), visible: visibleNames() };
+		widget.setViewModel(viewModel);
+		await waitForState(viewModel.isLoading, isLoading => !isLoading);
+		const initial = { isHostViewModel: widget.viewModel.get() === viewModel, visible: visibleNames() };
+		widget.reveal({ original: documentItems[1].object.original!.uri, modified: documentItems[1].object.modified!.uri }, { highlight: false });
+		const afterReveal = visibleNames();
+		const focusedRevealedItem = widget.focus() && widget.getActiveControl()?.getModifiedEditor().getModel()?.uri.path;
+		widget.setViewModel(undefined);
+		const afterClear = { viewModel: widget.viewModel.get(), visible: visibleNames() };
+
+		assert.deepStrictEqual({ beforeViewModel, initial, afterReveal, focusedRevealedItem, afterClear }, {
+			beforeViewModel: { viewModel: undefined, visible: [] },
+			initial: { isHostViewModel: true, visible: ['/first.js'] },
+			afterReveal: ['/second.js'],
+			focusedRevealedItem: '/second.js',
+			afterClear: { viewModel: undefined, visible: [] },
+		});
 	});
 });

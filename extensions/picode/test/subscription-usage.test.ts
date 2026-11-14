@@ -146,6 +146,46 @@ test('getCachedCodexUsage asks once a minute and keeps the last good read on fai
 	assert.strictEqual(stale.value?.limits[0].name, 'ChatGPT Plus');
 });
 
+test('getCachedCodexUsage asks again a few seconds after a failure, not a minute later', async () => {
+	const signIn = { token: tokenFor('acct-retry'), accountId: 'acct-retry' };
+	let calls = 0;
+	let answer = false;
+	const fetchFn: UsageFetch = async () => {
+		calls++;
+		return { ok: answer, json: async () => codexPayload() };
+	};
+	const failed = await getCachedCodexUsage(signIn, NOW, fetchFn);
+	assert.strictEqual(failed.value, undefined);
+	assert.strictEqual(calls, 1);
+	answer = true;
+	const retried = await getCachedCodexUsage(signIn, NOW + 6_000, fetchFn);
+	assert.strictEqual(calls, 2);
+	assert.strictEqual(retried.fresh, true);
+	assert.strictEqual(retried.value?.limits[0].name, 'ChatGPT Plus');
+});
+
+test('getCachedCodexUsage keeps a read that answered after the wait gave up', async () => {
+	const signIn = { token: tokenFor('acct-slow'), accountId: 'acct-slow' };
+	let calls = 0;
+	let release: () => void = () => { };
+	const fetchFn: UsageFetch = () => {
+		calls++;
+		return new Promise(resolve => {
+			release = () => resolve({ ok: true, json: async () => codexPayload() });
+		});
+	};
+	// The wait gives up first: nothing to show yet.
+	const early = await getCachedCodexUsage(signIn, NOW, fetchFn, 10);
+	assert.strictEqual(early.value, undefined);
+	// The same read answers later and is kept, so the next ask needs no new request.
+	release();
+	await new Promise(resolve => setTimeout(resolve, 20));
+	const later = await getCachedCodexUsage(signIn, NOW + 1_000, fetchFn, 10);
+	assert.strictEqual(calls, 1);
+	assert.strictEqual(later.fresh, true);
+	assert.strictEqual(later.value?.limits[0].name, 'ChatGPT Plus');
+});
+
 test('newestUsage keeps the endpoint extras when a response is newer', () => {
 	const endpoint = parseCodexUsage(codexPayload(), NOW);
 	const response = parseUsageHeaders({ 'x-codex-primary-used-percent': '80', 'x-codex-primary-window-minutes': '300' }, NOW + 5_000);

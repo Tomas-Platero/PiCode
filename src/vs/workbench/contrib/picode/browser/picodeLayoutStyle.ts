@@ -43,6 +43,7 @@ export const PICODE_LAYOUT_SETTING = 'picode.appearance.layout';
 export type PicodeLayout = 'agent' | 'editor';
 
 const PICODE_AGENT_LAYOUT_CLASS = 'picode-agent';
+const PICODE_LAYOUT_BLINK_CLASS = 'picode-layout-blink';
 
 /** The workbench settings the Agent layout sets, and the value each takes there. */
 const AGENT_SETTINGS: ReadonlyArray<readonly [string, unknown]> = [
@@ -158,6 +159,7 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 			if (e.affectsConfiguration(PICODE_LAYOUT_SETTING)) {
 				const next = picodeLayoutOf(this.configurationService);
 				this.applyClass(next);
+				this.blink();
 				void (next === 'agent' ? this.enterAgent() : this.leaveAgent());
 			}
 		}));
@@ -177,6 +179,35 @@ class PicodeLayoutContribution extends Disposable implements IWorkbenchContribut
 				void timeout(0).then(() => this.sizeColumns());
 			}
 		}));
+	}
+
+	private blinkTimer: ReturnType<typeof setTimeout> | undefined;
+
+	/** The robot on the layout button blinks while the columns move. */
+	private blink(): void {
+		const containers = [...this.layoutService.containers];
+		for (const container of containers) {
+			container.classList.remove(PICODE_LAYOUT_BLINK_CLASS);
+			// Read layout so a second switch in a row restarts the animation.
+			void container.offsetWidth;
+			container.classList.add(PICODE_LAYOUT_BLINK_CLASS);
+		}
+		if (this.blinkTimer !== undefined) {
+			clearTimeout(this.blinkTimer);
+		}
+		this.blinkTimer = setTimeout(() => {
+			this.blinkTimer = undefined;
+			for (const container of containers) {
+				container.classList.remove(PICODE_LAYOUT_BLINK_CLASS);
+			}
+		}, 900);
+	}
+
+	override dispose(): void {
+		if (this.blinkTimer !== undefined) {
+			clearTimeout(this.blinkTimer);
+		}
+		super.dispose();
 	}
 
 	private applyClass(layout: PicodeLayout): void {

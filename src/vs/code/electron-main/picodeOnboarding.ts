@@ -86,7 +86,7 @@ async function storeEditorSession(deps: OnboardingDeps, session: { refreshToken:
 }
 
 /** How the page tells the three situations apart. */
-export type OnboardingMode = 'first-run' | 'update' | 'setup';
+export type OnboardingMode = 'first-run' | 'update' | 'setup' | 'import';
 
 export { ONBOARDING_VERSION, majorVersion, onboardingReason, readOnboardingFlag, writeOnboardingFlag, type OnboardingFlag } from './picodeOnboardingFlag.js';
 
@@ -267,23 +267,29 @@ async function runHostCommand(deps: OnboardingDeps, resources: string, connector
 /** The one setup window, if one is open. */
 let currentWindow: BrowserWindow | undefined;
 /** The opener the workbench command uses, registered by `CodeApplication`. */
-let setupWindowOpener: (() => void) | undefined;
+let setupWindowOpener: ((mode: OnboardingMode) => void) | undefined;
+/** The mode the open window was started in, so a second request can tell if it is already there. */
+let currentMode: OnboardingMode | undefined;
 
 /** Registers how the editor asks for the setup again. */
-export function registerSetupWindowOpener(opener: () => void): void {
+export function registerSetupWindowOpener(opener: (mode: OnboardingMode) => void): void {
 	setupWindowOpener = opener;
 }
 
 /** Called by the in-editor command: opens the same window, without blocking anything. */
-export function requestSetupWindow(): boolean {
+export function requestSetupWindow(mode: OnboardingMode = 'setup'): boolean {
 	if (currentWindow !== undefined && !currentWindow.isDestroyed()) {
 		currentWindow.focus();
+		// The Import view is a page of the same window: switch it instead of opening a second one.
+		if (mode === 'import' && currentMode !== 'import') {
+			currentWindow.webContents.send(CHANNELS.showImport);
+		}
 		return true;
 	}
 	if (setupWindowOpener === undefined) {
 		return false;
 	}
-	setupWindowOpener();
+	setupWindowOpener(mode);
 	return true;
 }
 
@@ -419,6 +425,7 @@ export async function showOnboardingWindow(deps: OnboardingDeps, mode: Onboardin
 		},
 	});
 	currentWindow = window;
+	currentMode = mode;
 
 	// One promise, and every way out of it goes through `finish()`.
 	//
@@ -504,6 +511,7 @@ export async function showOnboardingWindow(deps: OnboardingDeps, mode: Onboardin
 		if (currentWindow === window) {
 			unregisterIpc();
 			currentWindow = undefined;
+			currentMode = undefined;
 		}
 		settle(finishResult ?? {});
 	});
@@ -612,6 +620,7 @@ const CHANNELS = {
 	accountCancel: 'picode-onboarding:account-cancel',
 	accountEvent: 'picode-onboarding:account-event',
 	accountState: 'picode-onboarding:account-state',
+	showImport: 'picode-onboarding:show-import',
 	accountSignOut: 'picode-onboarding:account-sign-out',
 	openExternal: 'picode-onboarding:open-external',
 	copyText: 'picode-onboarding:copy-text',
@@ -1016,12 +1025,12 @@ export async function runOnboardingGate(deps: OnboardingDeps): Promise<Onboardin
 }
 
 /** The setup window as the in-editor command opens it: same page, `setup` mode. */
-export function openSetupWindowFromEditor(deps: OnboardingDeps): void {
+export function openSetupWindowFromEditor(deps: OnboardingDeps, mode: OnboardingMode = 'setup'): void {
 	if (currentWindow !== undefined && !currentWindow.isDestroyed()) {
 		currentWindow.focus();
 		return;
 	}
-	void showOnboardingWindow(deps, 'setup').catch(error => {
+	void showOnboardingWindow(deps, mode).catch(error => {
 		deps.logService.warn('[picode-onboarding] the setup window could not be opened', error);
 	});
 }

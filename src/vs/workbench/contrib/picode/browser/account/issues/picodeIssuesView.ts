@@ -67,7 +67,7 @@ class PicodeIssuesView extends ViewPane {
 			if (!visible) {
 				this.panel.clear();
 			} else if (!this.panel.value) {
-				this.panel.value = this.instantiationService.createInstance(PicodeStatusIssues, host);
+				this.panel.value = this.instantiationService.createInstance(PicodeStatusIssues, host, false);
 			}
 		};
 		this._register(this.onDidChangeBodyVisibility(show));
