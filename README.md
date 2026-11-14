@@ -3,9 +3,9 @@
 
 <img src="./resources/picode/picode-banner.png" alt="PiCode — Agentic Code Editor" width="100%" />
 
-<h3>The code editor with its own AI inside.</h3>
+<h3>Your code editor, with an AI partner already inside.</h3>
 
-<p>Not an assistant you install afterwards — open it, connect a provider,<br />and the agent already has its tools, its skills and its memory.</p>
+<p>No plugins to hunt for, no setup ceremony. Open PiCode, connect the AI you already use,<br />and start building together.</p>
 
 <p>
 <a href="https://github.com/Tomas-Platero/PiCode/releases"><img src="https://img.shields.io/badge/Download_for_Windows-3B9BFF?style=for-the-badge&logo=github&logoColor=white" alt="Download for Windows" /></a>
@@ -15,14 +15,14 @@
 
 <p>
 <a href="https://github.com/Tomas-Platero/PiCode/releases"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomas-Platero%2FPiCode%2Fexperimental%2Fproduct.json&query=%24.picodeVersion&label=PiCode&color=3B9BFF&style=flat-square" alt="PiCode version" /></a>
-<a href="#-get-started"><img src="https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square" alt="Platform: Windows" /></a>
+<a href="#-up-and-running-in-three-steps"><img src="https://img.shields.io/badge/Platform-Windows-1E1E1E?style=flat-square" alt="Platform: Windows" /></a>
 <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-3B9BFF?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License: MIT" /></a>
 <a href="https://github.com/Tomas-Platero/PiCode/wiki"><img src="https://img.shields.io/badge/docs-wiki-3B9BFF?style=flat-square&logo=readthedocs&logoColor=white" alt="Wiki" /></a>
 </p>
 
 <br />
 
-<img src="./resources/picode/screenshots/layout-agent.png" alt="PiCode in the Agent layout: sessions on the left, the chat in the middle, Status on the right" width="100%" />
+<img src="./resources/picode/screenshots/layout-agent.png" alt="PiCode with the chat in the center and the work it is doing beside it" width="100%" />
 
 </div>
 
@@ -33,22 +33,22 @@
 <td align="center" width="33%">
 
 ### 🆓
-**Free and open source**<br />
-<sub>The whole editor, no account needed</sub>
+**Free, for real**<br />
+<sub>Every feature, no account, no trial. And open source.</sub>
 
 </td>
 <td align="center" width="33%">
 
 ### 🔌
-**Your own AI**<br />
-<sub>API keys or your ChatGPT, Claude or Copilot plan</sub>
+**Bring your own AI**<br />
+<sub>Use the ChatGPT, Claude or Copilot plan you already pay for — or any API key.</sub>
 
 </td>
 <td align="center" width="33%">
 
 ### 🧠
-**Memory that stays**<br />
-<sub>Your agent remembers between conversations</sub>
+**It gets to know your project**<br />
+<sub>Decisions and conventions carry over, so you never explain things twice.</sub>
 
 </td>
 </tr>
@@ -56,44 +56,46 @@
 
 <img src="./resources/picode/divider.svg" width="100%" alt="" />
 
-## 🤖 Agent or Editor — you choose
+## 🤖 Work your way
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
 #### 🤖 Agent
-The conversation in the middle. Sessions and projects on the left; Status, files, changes and the terminal on the right. *(Above.)*
+**When the AI does the heavy lifting.** You describe what you want, it builds it, and you review what changed. The conversation is at the heart of everything — like the picture above.
 
 </td>
 <td width="50%" valign="top">
 
 #### 🧑‍💻 Editor
-The VS Code you already know, with the chat one click away. Switch any time with the robot button — no restart.
+**When you're the one typing.** The VS Code you already know and love, with your AI one click away whenever you want a hand.
 
 </td>
 </tr>
 </table>
 
-<img src="./resources/picode/screenshots/layout-editor.png" alt="PiCode in the Editor layout" width="100%" />
+<p align="center"><sub>Switch whenever you like — one click, no restart.</sub></p>
+
+<img src="./resources/picode/screenshots/layout-editor.png" alt="PiCode in the Editor layout, with the chat beside the code" width="100%" />
 
 <img src="./resources/picode/divider.svg" width="100%" alt="" />
 
-## ✨ Built for working with an agent
+## ✨ Made for working side by side with AI
 
-### 💬 Subagents you can follow
+### 💬 Delegate, and watch it happen
 
-Hand a job to a subagent and watch every step it takes, while the chat carries on. Reasoning, commands and results stay in view.
+Ask for a review or a refactor and PiCode can hand it to a specialist agent. You see every step it takes — and you can keep chatting in the meantime.
 
-<img src="./resources/picode/screenshots/chat.png" alt="The chat running a code-review subagent, with its steps, tasks and memory" width="100%" />
+<img src="./resources/picode/screenshots/chat.png" alt="A specialist agent reviewing code while the chat carries on" width="100%" />
 
 <table>
 <tr>
 <td width="55%" valign="middle">
 
-### 🧭 Status, always at hand
+### 🧭 Know what's going on, at a glance
 
-Where the agent works, your MCP servers, what changed, the tasks it has running, your issues and what your memory holds — one column, one glance.
+What changed, what's still running, which tools are connected and which issues are waiting for you — in one quiet column beside your chat.
 
 </td>
 <td width="45%" align="center">
@@ -102,47 +104,47 @@ Where the agent works, your MCP servers, what changed, the tasks it has running,
 </tr>
 </table>
 
-### ⚙️ Everything about your agent, in one window
+### ⚙️ Your AI, your rules
 
-Agents, skills, providers and models, MCP servers and packages. See which pi answers, update it, and pick the model each agent uses.
+Choose which model answers, give each agent its own, add tools and skills, and keep it all up to date — from one window.
 
-<img src="./resources/picode/screenshots/chat-settings.png" alt="Chat Settings with the state of pi, providers and the session" width="100%" />
+<img src="./resources/picode/screenshots/chat-settings.png" alt="The window where you set up your AI" width="100%" />
 
-### 🎯 And also
+### 🎯 The little things
 
 <table>
 <tr>
-<td width="33%" valign="top"><b>🧩 MCP servers</b><br /><sub>Add, edit or switch off your agent's external tools from one screen.</sub></td>
-<td width="33%" valign="top"><b>🗂️ Sessions</b><br /><sub>Every conversation is kept. Search it, reopen it, continue it.</sub></td>
-<td width="33%" valign="top"><b>🔄 One-click updates</b><br /><sub>The editor, pi, its packages, Gentle AI and Engram — each with its own button.</sub></td>
+<td width="33%" valign="top"><b>🧩 Plug in more tools</b><br /><sub>Connect your docs, databases or favourite services, and your agent can use them too.</sub></td>
+<td width="33%" valign="top"><b>🗂️ Pick up where you left off</b><br /><sub>Every conversation is saved. Find it, reopen it, keep going.</sub></td>
+<td width="33%" valign="top"><b>🔄 Always up to date</b><br /><sub>Update the editor and its AI with one click, right from the app.</sub></td>
 </tr>
 <tr>
-<td width="33%" valign="top"><b>🚀 Guided setup</b><br /><sub>Layout, provider and theme in one window, in your computer's language.</sub></td>
-<td width="33%" valign="top"><b>🎁 What's new, to try</b><br /><sub>Each update explains itself with demos you can touch.</sub></td>
-<td width="33%" valign="top"><b>🌍 13 languages</b><br /><sub>From Spanish and Japanese to Polish and Chinese.</sub></td>
+<td width="33%" valign="top"><b>🚀 Ready in minutes</b><br /><sub>A short guided setup that greets you in your own language.</sub></td>
+<td width="33%" valign="top"><b>🎁 See what's new</b><br /><sub>Every update shows you what changed, with demos you can try right there.</sub></td>
+<td width="33%" valign="top"><b>🌍 Speaks your language</b><br /><sub>Available in 13 languages, from Spanish to Japanese.</sub></td>
 </tr>
 </table>
 
 <img src="./resources/picode/divider.svg" width="100%" alt="" />
 
-## ⚡ Get started
+## ⚡ Up and running in three steps
 
 <table>
 <tr>
-<td align="center" width="33%"><h3>1️⃣</h3><b>Download</b><br /><sub>The latest <a href="https://github.com/Tomas-Platero/PiCode/releases">release</a>: installer or portable zip.</sub></td>
-<td align="center" width="33%"><h3>2️⃣</h3><b>Open</b><br /><sub>Run <code>PiCode.exe</code> and go through the setup.</sub></td>
-<td align="center" width="33%"><h3>3️⃣</h3><b>Chat</b><br /><sub>Connect a provider and ask for your first change.</sub></td>
+<td align="center" width="33%"><h3>1️⃣</h3><b>Download</b><br /><sub>Grab the latest <a href="https://github.com/Tomas-Platero/PiCode/releases">release</a> — installer or portable.</sub></td>
+<td align="center" width="33%"><h3>2️⃣</h3><b>Open</b><br /><sub>Run PiCode and follow the short setup.</sub></td>
+<td align="center" width="33%"><h3>3️⃣</h3><b>Ask</b><br /><sub>Connect your AI and ask for your first change.</sub></td>
 </tr>
 </table>
 
 > [!NOTE]
-> Windows only for now.
+> PiCode runs on Windows for now.
 
 <img src="./resources/picode/divider.svg" width="100%" alt="" />
 
-## ☁️ Free and Pro
+## ☁️ Free to use, Pro when you want more
 
-**The editor is free, complete and open source.** Pro adds what lives in the cloud.
+**Everything that runs on your computer is free — no trial, no catch.** Pro is for what lives in the cloud.
 
 <table>
 <tr>
@@ -150,18 +152,18 @@ Agents, skills, providers and models, MCP servers and packages. See which pi ans
 
 | | Free | Pro |
 | --- | :---: | :---: |
-| Editor, chat and agent | ✅ | ✅ |
-| PiCode account | ✅ | ✅ |
-| Cloud sync, encrypted | — | ✅ |
-| Last week of chats, anywhere | — | ✅ |
-| GitHub and Jira issues | — | ✅ |
+| The editor, the chat and the agent | ✅ | ✅ |
+| A PiCode account | ✅ | ✅ |
+| Your setup on every computer, encrypted | — | ✅ |
+| Last week's chats, wherever you are | — | ✅ |
+| Your GitHub and Jira issues in the editor | — | ✅ |
 
 <sub>See the [plans](https://www.getpicode.app/pricing).</sub>
 
 </td>
 <td width="50%" valign="top">
 
-**🐞 Issues → fixes.** Your GitHub and Jira issues inside the editor, a board you can drag, and *Fix with pi* to hand one to the agent.
+**🐞 From issue to fix.** See what people report on GitHub or Jira without leaving the editor, move cards across your board, and hand one to the agent with *Fix with pi*.
 
 <img src="./resources/picode/screenshots/issues.png" alt="A Jira board in PiCode" width="100%" />
 
@@ -174,11 +176,11 @@ Agents, skills, providers and models, MCP servers and packages. See which pi ans
 ## 📦 More
 
 <details>
-<summary><b>📡 Release channels</b></summary>
+<summary><b>📡 Stable, beta or experimental</b></summary>
 
 <br />
 
-Three channels share the same code, each on its own branch: **stable** (recommended), **beta** (`-beta`, early access) and **experimental** (`-experimental`, the freshest work). Each has its own update feed — [choose a channel](https://www.getpicode.app/#download).
+Pick how early you want new things. **Stable** is the one we recommend, **beta** gets features a little sooner, and **experimental** has the very latest work. Each one updates itself — [choose yours](https://www.getpicode.app/#download).
 
 </details>
 
@@ -221,10 +223,10 @@ Prefer buttons? [`build/build-window.cmd`](build/build-window.cmd) opens a small
 
 <p><a href="https://github.com/VSCodium/vscodium"><img src="https://img.shields.io/badge/VSCodium-2F80ED?style=for-the-badge&logo=vscodium&logoColor=white" alt="VSCodium" /></a> <a href="https://pi.dev"><img src="https://img.shields.io/badge/Pi_coding_agent-1E1E1E?style=for-the-badge" alt="Pi" /></a> <a href="https://github.com/Gentleman-Programming/gentle-ai"><img src="https://img.shields.io/badge/Gentle_AI-1E1E1E?style=for-the-badge&logo=github&logoColor=white" alt="Gentle AI" /></a> <a href="https://github.com/Gentleman-Programming/engram"><img src="https://img.shields.io/badge/Engram-1E1E1E?style=for-the-badge&logo=github&logoColor=white" alt="Engram" /></a> <a href="https://www.electronjs.org"><img src="https://img.shields.io/badge/Electron-1E1E1E?style=for-the-badge&logo=electron&logoColor=9FEAF9" alt="Electron" /></a></p>
 
-<sub>The editor comes from [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code](https://github.com/microsoft/vscode), the agentic loop from [Pi](https://pi.dev), and the method, subagents and memory from [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) and [Engram](https://github.com/Gentleman-Programming/engram) by [Gentleman Programming](https://github.com/Gentleman-Programming). Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.</sub>
+<sub>PiCode wouldn't exist without them. The editor comes from [VSCodium](https://github.com/VSCodium/vscodium) / [VS Code](https://github.com/microsoft/vscode), the agent from [Pi](https://pi.dev), and the way it works and remembers from [Gentle AI](https://github.com/Gentleman-Programming/gentle-ai) and [Engram](https://github.com/Gentleman-Programming/engram) by [Gentleman Programming](https://github.com/Gentleman-Programming). Thank you. Full attribution in [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md). PiCode is an independent project.</sub>
 
 <br /><br />
 
-Made by [Tomás Platero](https://tomasplatero.com)
+Made with ❤️ by [Tomás Platero](https://tomasplatero.com)
 
 </div>
