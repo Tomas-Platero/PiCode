@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.6-experimental",
+			"notes": "### ✨ New\n\n- 📁 **Your projects beside your sessions.** In the Agent layout, the sessions column now lists the folders of your workspace. Add one with **+** or by dropping folders on the list, hover a project to open a terminal in it or take it out of the workspace, and right-click to show it in the Explorer or copy its path.\n- 🔌 **Connect any provider in one click.** Providers is now a gallery of more than forty services with their logos and a search box. Sign in with ChatGPT, Claude or Copilot and your browser finishes the sign-in on its own, or paste a key. If the connection drops halfway, PiCode tries again by itself."
+		},
+		{
 			"version": "2.2.4-experimental",
 			"notes": "### ✨ New\n\n- 📊 **Context in the Editor layout.** The PiCode panel now opens with Context: how full the chat is and where that room goes, drawn exactly as in the Agent layout's Status. With no chat open it says so.\n\n### 🐛 Fixed\n\n- 🧹 **Compact session is just a button.** The sentence next to it repeated what the button does and looked clickable; it now shows when you point at the button."
 		},
