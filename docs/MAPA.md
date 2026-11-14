@@ -412,6 +412,7 @@
 │   │   │   ├── command-registry.ts
 │   │   │   ├── commands.ts
 │   │   │   ├── compare-models.ts
+│   │   │   ├── context-breakdown.ts
 │   │   │   ├── context.ts
 │   │   │   ├── customizations.ts
 │   │   │   ├── declarations.ts
@@ -425,11 +426,14 @@
 │   │   │   ├── engram.ts
 │   │   │   ├── extension-notices.ts
 │   │   │   ├── extension.ts
+│   │   │   ├── fetch-retry.ts
 │   │   │   ├── folder-trust.ts
 │   │   │   ├── gentle-agents-store.ts
 │   │   │   ├── gentle-models-ui.ts
 │   │   │   ├── gentle-models.ts
 │   │   │   ├── gentle-settings.ts
+│   │   │   ├── import-catalog.ts
+│   │   │   ├── import-extensions.ts
 │   │   │   ├── import-project.ts
 │   │   │   ├── intercom-config.ts
 │   │   │   ├── l10n.ts
@@ -473,6 +477,7 @@
 │   │   │   ├── profile-import.ts
 │   │   │   ├── progress.ts
 │   │   │   ├── project-trust.ts
+│   │   │   ├── provider-auth.ts
 │   │   │   ├── provider-stream.ts
 │   │   │   ├── providerIds.ts
 │   │   │   ├── providers-list.ts
@@ -507,7 +512,7 @@
 │   │   │   ├── voice-worker.ts
 │   │   │   ├── wizard-models.ts
 │   │   │   └── workspace-area.ts
-│   │   │   └── … 109 files in total
+│   │   │   └── … 114 files in total
 │   │   ├── test/
 │   │   │   ├── agent-todo.test.ts
 │   │   │   ├── agent-transcript.test.ts
@@ -520,6 +525,7 @@
 │   │   │   ├── child-trace.test.ts
 │   │   │   ├── command-registry.test.ts
 │   │   │   ├── compare-models.test.ts
+│   │   │   ├── context-breakdown.test.ts
 │   │   │   ├── context.test.ts
 │   │   │   ├── customizations.test.ts
 │   │   │   ├── declarations.test.ts
@@ -534,6 +540,7 @@
 │   │   │   ├── gentle-agents-store.test.ts
 │   │   │   ├── gentle-models.test.ts
 │   │   │   ├── gentle-settings.test.ts
+│   │   │   ├── import-catalog.test.ts
 │   │   │   ├── intercom-config.test.ts
 │   │   │   ├── late-turn.test.ts
 │   │   │   ├── learned-commands.test.ts
@@ -587,6 +594,7 @@
 │   │   │   ├── subscription-usage.test.ts
 │   │   │   ├── tasks-rows.test.ts
 │   │   │   ├── theme-catalog.test.ts
+│   │   │   ├── update-intercom-broker.test.ts
 │   │   │   ├── update-memory-engine.test.ts
 │   │   │   ├── updates-check.test.ts
 │   │   │   ├── usage-data.test.ts
@@ -595,7 +603,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 86 files in total
+│   │   │   └── … 89 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
