@@ -24,6 +24,9 @@ export const STATUS_DATA_COMMAND = 'picode.setup.status';
 /** Only the MCP rows of the status, for a panel that re-reads often: no git, no network. */
 export const MCP_SERVERS_COMMAND = 'picode.setup.mcpServers';
 
+/** Only the plan meters and the provider list, for the usage ring in the chat input: no git, no pi version. */
+export const SUBSCRIPTIONS_COMMAND = 'picode.setup.subscriptions';
+
 /**
  * One allowance window of the model's subscription, as the provider reported it.
  */

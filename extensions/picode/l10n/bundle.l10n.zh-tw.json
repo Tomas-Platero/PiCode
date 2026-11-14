@@ -590,5 +590,6 @@
 	"🤖 Answers": "🤖 回答",
 	"🧠 Model": "🧠 模型",
 	"🧠 Thinking set to **{0}**.": "🧠 思考強度已設為 **{0}**。",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考強度: **{0}**。可使用 `/thinking <level>` 選擇: {1}。"
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 思考強度: **{0}**。可使用 `/thinking <level>` 選擇: {1}。",
+	"Memory engine": "記憶引擎"
 }

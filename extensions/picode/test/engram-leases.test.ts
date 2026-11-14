@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, startedEngine, takeLease } from '../src/engram-leases.ts';
+import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, startedEngine, takeLease, undoEngineStart } from '../src/engram-leases.ts';
 
 function withDir(body: (dir: string) => void): void {
 	const dir = mkdtempSync(join(tmpdir(), 'picode-leases-'));
@@ -75,4 +75,34 @@ test('windows still open follow the engine to its new folder, closed ones do not
 		markEngineStarted(to, 999);
 		assert.equal(leaveEngine(to, 100, pid => pid === 100), 999);
 	}));
+});
+
+test('a second start that dies (the port was taken) leaves the running engine as the one to stop', () => {
+	withDir(dir => {
+		takeLease(dir, 100);
+		markEngineStarted(dir, 999);
+		// Another window thought nobody was serving and started a second engine, which could not
+		// take the port and exited.
+		const previous = startedEngine(dir);
+		markEngineStarted(dir, 555);
+		undoEngineStart(dir, 555, previous, pid => pid === 999);
+		assert.equal(startedEngine(dir), 999);
+		assert.equal(leaveEngine(dir, 100, () => false), 999);
+	});
+});
+
+test('a failed start with nothing running before forgets the marker', () => {
+	withDir(dir => {
+		markEngineStarted(dir, 555);
+		undoEngineStart(dir, 555, undefined, () => false);
+		assert.equal(startedEngine(dir), undefined);
+	});
+});
+
+test('a start that lasted is not undone by a late exit of another one', () => {
+	withDir(dir => {
+		markEngineStarted(dir, 777);
+		undoEngineStart(dir, 555, undefined, () => false);
+		assert.equal(startedEngine(dir), 777);
+	});
 });

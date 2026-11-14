@@ -35,7 +35,7 @@ import {
 	SHIPPED_ENGRAM_FOLDER,
 	type EngramProbeIo
 } from './engram';
-import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, processIsAlive, startedEngine, takeLease } from './engram-leases';
+import { forgetStartedEngine, leaveEngine, markEngineStarted, moveLeases, processIsAlive, startedEngine, takeLease, undoEngineStart } from './engram-leases';
 import { mcpServersTextWithRemoved, serverEntry } from './mcp-add';
 
 /** The setting that turns memory on and off, and the context key the Memory block hangs on. */
@@ -80,7 +80,13 @@ function spawnDetached(binary: string, args: readonly string[], env: Readonly<Re
 	});
 	child.unref();
 	if (child.pid !== undefined) {
-		markEngineStarted(path.dirname(binary), child.pid);
+		const dir = path.dirname(binary);
+		const pid = child.pid;
+		const previous = startedEngine(dir);
+		markEngineStarted(dir, pid);
+		// A second engine that could not take the port exits at once: hand the marker back to the one
+		// still serving, or the last window out would try to stop a process that is gone.
+		child.once('exit', () => undoEngineStart(dir, pid, previous));
 	}
 }
 

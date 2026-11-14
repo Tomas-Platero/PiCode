@@ -590,5 +590,6 @@
 	"🤖 Answers": "🤖 답변",
 	"🧠 Model": "🧠 모델",
 	"🧠 Thinking set to **{0}**.": "🧠 생각 수준을 **{0}**(으)로 설정했습니다.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 생각: **{0}**. `/thinking <level>`로 고를 수 있습니다: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 생각: **{0}**. `/thinking <level>`로 고를 수 있습니다: {1}.",
+	"Memory engine": "메모리 엔진"
 }

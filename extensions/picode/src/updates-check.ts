@@ -206,7 +206,9 @@ export function describeTargets(targets: readonly UpdateTarget[]): string {
 	const packages = targets.filter(target => target.kind === 'package');
 	for (const target of targets) {
 		if (target.kind !== 'package') {
-			parts.push(l10n.t('{0}: update to {1} available (now {2})', target.name, target.latest, target.installed));
+			// The engine's name is internal ("memory engine"): the sentence says it in the reader's language.
+			const name = target.kind === 'engine' ? l10n.t('Memory engine') : target.name;
+			parts.push(l10n.t('{0}: update to {1} available (now {2})', name, target.latest, target.installed));
 		}
 	}
 	if (packages.length === 1) {

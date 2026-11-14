@@ -870,3 +870,178 @@
 .picode-projects-row:focus-within .picode-projects-row-actions {
 	visibility: visible;
 }
+
+/* -- the layout button's robot blinks while the layout changes ----------------------------- */
+
+.monaco-workbench.picode-layout-blink .part.titlebar .codicon-robot::before {
+	content: '';
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	background-color: currentColor;
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5ZM5.75 5C5.75 4.586 6.086 4.25 6.5 4.25C6.914 4.25 7.25 4.586 7.25 5C7.25 5.414 6.914 5.75 6.5 5.75C6.086 5.75 5.75 5.414 5.75 5ZM8.75 5C8.75 4.586 9.086 4.25 9.5 4.25C9.914 4.25 10.25 4.586 10.25 5C10.25 5.414 9.914 5.75 9.5 5.75C9.086 5.75 8.75 5.414 8.75 5Z'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5ZM5.75 5C5.75 4.586 6.086 4.25 6.5 4.25C6.914 4.25 7.25 4.586 7.25 5C7.25 5.414 6.914 5.75 6.5 5.75C6.086 5.75 5.75 5.414 5.75 5ZM8.75 5C8.75 4.586 9.086 4.25 9.5 4.25C9.914 4.25 10.25 4.586 10.25 5C10.25 5.414 9.914 5.75 9.5 5.75C9.086 5.75 8.75 5.414 8.75 5Z'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+	animation: picode-robot-blink 0.9s steps(1, end);
+}
+
+@keyframes picode-robot-blink {
+	0%, 30%, 56%, 100% {
+		-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5ZM5.75 5C5.75 4.586 6.086 4.25 6.5 4.25C6.914 4.25 7.25 4.586 7.25 5C7.25 5.414 6.914 5.75 6.5 5.75C6.086 5.75 5.75 5.414 5.75 5ZM8.75 5C8.75 4.586 9.086 4.25 9.5 4.25C9.914 4.25 10.25 4.586 10.25 5C10.25 5.414 9.914 5.75 9.5 5.75C9.086 5.75 8.75 5.414 8.75 5Z'/%3E%3C/svg%3E");
+		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5ZM5.75 5C5.75 4.586 6.086 4.25 6.5 4.25C6.914 4.25 7.25 4.586 7.25 5C7.25 5.414 6.914 5.75 6.5 5.75C6.086 5.75 5.75 5.414 5.75 5ZM8.75 5C8.75 4.586 9.086 4.25 9.5 4.25C9.914 4.25 10.25 4.586 10.25 5C10.25 5.414 9.914 5.75 9.5 5.75C9.086 5.75 8.75 5.414 8.75 5Z'/%3E%3C/svg%3E");
+	}
+	12%, 42% {
+		-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5Z'/%3E%3Cpath d='M5.6 4.7H7.4V5.4H5.6ZM8.6 4.7H10.4V5.4H8.6Z'/%3E%3C/svg%3E");
+		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 9H4C3.173 9 2.5 9.673 2.5 10.5V11C2.5 11.123 2.562 14 8 14C13.438 14 13.5 11.123 13.5 11V10.5C13.5 9.673 12.827 9 12 9ZM12.5 10.991C12.497 11.073 12.372 13 8 13C3.628 13 3.503 11.073 3.5 11V10.5C3.5 10.224 3.724 10 4 10H12C12.276 10 12.5 10.224 12.5 10.5V10.991ZM5.5 8H10.5C11.327 8 12 7.327 12 6.5V3.5C12 2.673 11.327 2 10.5 2H8.5V1.5C8.5 1.224 8.276 1 8 1C7.724 1 7.5 1.224 7.5 1.5V2H5.5C4.673 2 4 2.673 4 3.5V6.5C4 7.327 4.673 8 5.5 8ZM5 3.5C5 3.224 5.224 3 5.5 3H10.5C10.776 3 11 3.224 11 3.5V6.5C11 6.776 10.776 7 10.5 7H5.5C5.224 7 5 6.776 5 6.5V3.5Z'/%3E%3Cpath d='M5.6 4.7H7.4V5.4H5.6ZM8.6 4.7H10.4V5.4H8.6Z'/%3E%3C/svg%3E");
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench.picode-layout-blink .part.titlebar .codicon-robot::before {
+		animation: none;
+	}
+}
+
+/* -- a project's own colour and icon, and the window that picks them ----------------------- */
+
+.picode-projects-row.colored .picode-projects-icon {
+	color: var(--picode-project-color);
+}
+
+.picode-projects-row.colored {
+	box-shadow: inset 3px 0 0 var(--picode-project-color);
+}
+
+.picode-projects-customizer {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 264px;
+	padding: 12px;
+	box-sizing: border-box;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.25));
+	border-radius: 12px;
+	background: var(--vscode-editorWidget-background);
+	color: var(--vscode-foreground);
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.picode-projects-customizer-title {
+	font-weight: 600;
+}
+
+.picode-projects-customizer-preview {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+}
+
+.picode-projects-customizer-label {
+	margin-top: 4px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+}
+
+.picode-projects-customizer-input {
+	height: 26px;
+	padding: 0 8px;
+	border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.3));
+	border-radius: 6px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font: inherit;
+	outline: none;
+}
+
+.picode-projects-customizer-input:focus {
+	border-color: var(--vscode-focusBorder);
+}
+
+.picode-projects-customizer-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.picode-projects-swatch {
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: 50%;
+	cursor: pointer;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.picode-projects-swatch.none {
+	background: linear-gradient(135deg, transparent 45%, var(--vscode-errorForeground) 45%, var(--vscode-errorForeground) 55%, transparent 55%);
+	box-shadow: inset 0 0 0 1px var(--vscode-descriptionForeground);
+}
+
+.picode-projects-swatch.selected {
+	border-color: var(--vscode-foreground);
+}
+
+.picode-projects-customizer-icons {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 4px;
+}
+
+.picode-projects-icon-choice {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 28px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+}
+
+.picode-projects-icon-choice:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.picode-projects-icon-choice.selected {
+	border-color: var(--vscode-focusBorder);
+	background: color-mix(in srgb, var(--vscode-focusBorder) 18%, transparent);
+}
+
+.picode-projects-customizer-footer {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 6px;
+}
+
+.picode-projects-customizer-reset,
+.picode-projects-customizer-done {
+	height: 26px;
+	padding: 0 12px;
+	border: none;
+	border-radius: 6px;
+	font: inherit;
+	cursor: pointer;
+}
+
+.picode-projects-customizer-reset {
+	background: transparent;
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-projects-customizer-reset:hover {
+	color: var(--vscode-foreground);
+}
+
+.picode-projects-customizer-done {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.picode-projects-customizer-done:hover {
+	background: var(--vscode-button-hoverBackground);
+}

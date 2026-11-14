@@ -1,0 +1,124 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) PiCode. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* The plan's limits as a ring beside the thinking level in the chat input (picodeUsageMeter.ts). */
+
+.picode-usage-meter-item .picode-usage-meter {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.picode-usage-meter-item .picode-usage-meter:hover,
+.picode-usage-meter-item .picode-usage-meter:focus-visible {
+	background: var(--vscode-toolbar-hoverBackground);
+	outline: none;
+}
+
+.picode-usage-meter circle.track {
+	stroke: color-mix(in srgb, var(--vscode-foreground) 22%, transparent);
+}
+
+.picode-usage-meter circle.fill {
+	transition: stroke-dasharray 300ms ease;
+}
+
+.picode-usage-meter.ok circle.fill { stroke: var(--vscode-charts-blue, #539bf5); }
+.picode-usage-meter.warn circle.fill { stroke: var(--vscode-charts-yellow, #d29922); }
+.picode-usage-meter.danger circle.fill { stroke: var(--vscode-errorForeground, #e5534b); }
+
+/* -- the detail on hover */
+
+.picode-usage-meter-hover {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 280px;
+	padding: 4px 2px;
+}
+
+.picode-usage-meter-hover-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.picode-usage-meter-hover-head .title {
+	color: var(--vscode-descriptionForeground);
+}
+
+.picode-usage-meter-hover-head .hint {
+	color: var(--vscode-textLink-foreground);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.picode-usage-meter-hover-row .line {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 5px;
+}
+
+.picode-usage-meter-hover-row .name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.picode-usage-meter-hover-row .detail {
+	display: flex;
+	gap: 8px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.picode-usage-meter-hover-row .percent {
+	font-variant-numeric: tabular-nums;
+}
+
+.picode-usage-meter-hover-row .bar {
+	height: 4px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+}
+
+.picode-usage-meter-hover-row .bar > span {
+	display: block;
+	height: 100%;
+	border-radius: 999px;
+}
+
+.picode-usage-meter-hover-row .bar.ok > span { background: var(--vscode-charts-blue, #539bf5); }
+.picode-usage-meter-hover-row .bar.warn > span { background: var(--vscode-charts-yellow, #d29922); }
+.picode-usage-meter-hover-row .bar.danger > span { background: var(--vscode-errorForeground, #e5534b); }
+
+@media (prefers-reduced-motion: reduce) {
+	.picode-usage-meter circle.fill {
+		transition: none;
+	}
+}
+
+/* No figures yet, or a model without a plan: the ring stays, quieter. */
+.picode-usage-meter.empty {
+	opacity: 0.55;
+}
+
+.picode-usage-meter-hover-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+/* The same rows inside the What's New demo. */
+.picode-whatsnew-list .picode-usage-meter-hover-row {
+	padding: 6px 10px;
+}

@@ -169,6 +169,13 @@ test('one package reads as a singular package with its versions', () => {
 	assert.strictEqual(sentence, '1 package: pi-pretty, update to 0.2.0 available (now 0.1.0)');
 });
 
+test('the memory engine is named in words the person reads, not by its internal name', () => {
+	const sentence = describeTargets([
+		{ kind: 'engine', name: 'memory engine', installed: '3.7.1', latest: '3.7.2' },
+	]);
+	assert.strictEqual(sentence, 'Memory engine: update to 3.7.2 available (now 3.7.1)');
+});
+
 /* ------------------------------------------------------------------ *
  * The snapshot
  * ------------------------------------------------------------------ */

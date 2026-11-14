@@ -477,14 +477,17 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 	/** One provider the chat can already use. */
 	private paintConnectedCard(grid: HTMLElement, id: string, entry: ICatalogEntry | undefined, row: IProviderRow | undefined): void {
 		const profile = this.profileProviders.find(candidate => candidate.id === id);
-		const card = append(grid, $('.picode-pv-card'));
+		const card = append(grid, $('.picode-pv-card.connected'));
 		if (this.justConnected === id) {
 			card.classList.add('fresh');
 		}
-		const mark = append(card, $('.picode-pv-mark'));
+		// Two rows: who it is on top, its state and what can be done with it below, so the name
+		// never has to share its line with the buttons.
+		const head = append(card, $('.picode-pv-card-head'));
+		const mark = append(head, $('.picode-pv-mark'));
 		mark.appendChild(createServiceLogo(id, row?.endpoint));
 
-		const text = append(card, $('.picode-pv-text'));
+		const text = append(head, $('.picode-pv-text'));
 		append(text, $('span.picode-pv-name')).textContent = entry?.name ?? displayNameOf(id);
 
 		const subscription = entry?.connected === 'subscription' || profile?.subscription === true;
@@ -498,7 +501,8 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 					: localize('picodePv.noKeyNeeded', "No key needed");
 		append(text, $('span.picode-pv-sub')).textContent = how;
 
-		const status = append(card, $('span.picode-pv-status'));
+		const foot = append(card, $('.picode-pv-card-foot'));
+		const status = append(foot, $('span.picode-pv-status'));
 		status.classList.add(subscription ? 'account' : keyStored ? 'key' : 'local');
 		append(status, $(`span${ThemeIcon.asCSSSelector(subscription ? Codicon.account : keyStored ? Codicon.key : Codicon.server)}`));
 		append(status, $('span')).textContent = subscription
@@ -507,14 +511,14 @@ export class PiCodeProvidersModelsSection extends Disposable implements IAICusto
 				? localize('picodePv.keySaved', "Key saved")
 				: localize('picodePv.ready', "Ready");
 
-		const actions = append(card, $('.picode-pv-actions'));
+		const actions = append(foot, $('.picode-pv-actions'));
 		const action = (icon: ThemeIcon, title: string, run: () => void, danger = false): void => {
-			const button = append(actions, $('button.picode-pv-icon-button')) as HTMLButtonElement;
+			const button = append(actions, $('button.picode-pv-card-action')) as HTMLButtonElement;
 			button.type = 'button';
 			button.title = title;
-			button.setAttribute('aria-label', title);
 			button.classList.toggle('danger', danger);
 			append(button, $(`span${ThemeIcon.asCSSSelector(icon)}`));
+			append(button, $('span.picode-pv-card-action-label')).textContent = title;
 			this.listStore.add(addDisposableListener(button, 'click', run));
 		};
 		if (row !== undefined) {

@@ -8,14 +8,14 @@ import { StandardMouseEvent } from '../../../../base/browser/mouseEvent.js';
 import { Action, Separator } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { basename, dirname } from '../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { IContextMenuService, IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
 import { containsDragType, extractEditorsAndFilesDropData } from '../../../../platform/dnd/browser/dnd.js';
 import { DataTransfers } from '../../../../base/browser/dnd.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
@@ -25,6 +25,24 @@ import { IWorkspaceContextService, IWorkspaceFolder } from '../../../../platform
 import { IWorkspaceEditingService } from '../../../services/workspaces/common/workspaceEditing.js';
 
 const COLLAPSED_STORAGE_KEY = 'picode.sessions.projectsCollapsed';
+const LOOKS_STORAGE_KEY = 'picode.sessions.projectLooks';
+
+/** How a project is shown in the column; nothing here changes the folder or the workspace file. */
+interface IProjectLook {
+	readonly name?: string;
+	readonly color?: string;
+	readonly icon?: string;
+}
+
+/** Colours that read on dark and light themes alike. */
+const PROJECT_COLORS: readonly string[] = ['#e5534b', '#e0823d', '#c69026', '#57ab5a', '#39c5cf', '#539bf5', '#986ee2', '#e275ad'];
+
+/** Icons a project can wear. */
+const PROJECT_ICONS: readonly ThemeIcon[] = [
+	Codicon.folder, Codicon.globe, Codicon.server, Codicon.deviceMobile, Codicon.browser, Codicon.database, Codicon.package,
+	Codicon.library, Codicon.book, Codicon.beaker, Codicon.rocket, Codicon.tools, Codicon.gear, Codicon.terminal,
+	Codicon.code, Codicon.heart, Codicon.star, Codicon.flame, Codicon.cloud, Codicon.shield, Codicon.robot,
+];
 
 /**
  * The open projects, on top of the Agent layout's sessions column.
@@ -56,6 +74,7 @@ export class PicodeAgentProjects extends Disposable {
 		@IFileService private readonly fileService: IFileService,
 		@IClipboardService private readonly clipboardService: IClipboardService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IContextViewService private readonly contextViewService: IContextViewService,
 	) {
 		super();
 		this.collapsed = this.storageService.getBoolean(COLLAPSED_STORAGE_KEY, StorageScope.PROFILE, false);
@@ -89,6 +108,36 @@ export class PicodeAgentProjects extends Disposable {
 		this.render();
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this.render()));
 		this._register(this.workspaceService.onDidChangeWorkbenchState(() => this.render()));
+		this._register(this.storageService.onDidChangeValue(StorageScope.PROFILE, LOOKS_STORAGE_KEY, this._store)(() => this.render()));
+	}
+
+	private looks(): Record<string, IProjectLook> {
+		try {
+			const parsed = JSON.parse(this.storageService.get(LOOKS_STORAGE_KEY, StorageScope.PROFILE, '{}'));
+			return parsed && typeof parsed === 'object' ? parsed : {};
+		} catch {
+			return {};
+		}
+	}
+
+	private lookOf(uri: URI): IProjectLook {
+		return this.looks()[uri.toString()] ?? {};
+	}
+
+	private setLook(uri: URI, change: IProjectLook): void {
+		const all = this.looks();
+		const next: Record<string, string | undefined> = { ...all[uri.toString()], ...change };
+		for (const key of Object.keys(next)) {
+			if (!next[key]) {
+				delete next[key];
+			}
+		}
+		if (Object.keys(next).length === 0) {
+			delete all[uri.toString()];
+		} else {
+			all[uri.toString()] = next;
+		}
+		this.storageService.store(LOOKS_STORAGE_KEY, JSON.stringify(all), StorageScope.PROFILE, StorageTarget.USER);
 	}
 
 	private render(): void {
@@ -109,17 +158,25 @@ export class PicodeAgentProjects extends Disposable {
 		for (const folder of folders) {
 			names.set(folder.name, (names.get(folder.name) ?? 0) + 1);
 		}
-		for (const folder of folders) {
-			this.renderRow(folder, (names.get(folder.name) ?? 0) > 1);
-		}
+		folders.forEach((folder, index) => this.renderRow(folder, index, folders.length, (names.get(folder.name) ?? 0) > 1));
 		this._onDidChangeHeight.fire();
 	}
 
-	private renderRow(folder: IWorkspaceFolder, showParent: boolean): void {
+	private renderRow(folder: IWorkspaceFolder, index: number, count: number, showParent: boolean): void {
+		const look = this.lookOf(folder.uri);
+		const label = look.name || folder.name;
 		const row = append(this.list, $('.picode-projects-row', { role: 'button', tabIndex: 0 }));
-		row.setAttribute('aria-label', folder.name);
-		append(row, $(`span.picode-projects-icon${ThemeIcon.asCSSSelector(Codicon.folder)}`));
-		append(row, $('span.picode-projects-name')).textContent = folder.name;
+		row.setAttribute('aria-label', label);
+		if (look.color) {
+			row.style.setProperty('--picode-project-color', look.color);
+			row.classList.add('colored');
+		}
+		const icon = PROJECT_ICONS.find(candidate => candidate.id === look.icon) ?? Codicon.folder;
+		append(row, $(`span.picode-projects-icon${ThemeIcon.asCSSSelector(icon)}`));
+		append(row, $('span.picode-projects-name')).textContent = label;
+		if (look.name && look.name !== folder.name) {
+			row.title = folder.name;
+		}
 		if (showParent) {
 			append(row, $('span.picode-projects-parent')).textContent = basename(dirname(folder.uri));
 		}
@@ -138,10 +195,17 @@ export class PicodeAgentProjects extends Disposable {
 		rowAction(Codicon.close, localize('picode.sessions.projectRemove', "Remove from Workspace"), () => this.remove(folder.uri));
 
 		this.rowDisposables.add(addDisposableListener(row, EventType.CLICK, () => void this.reveal(folder.uri)));
+		this.rowDisposables.add(addDisposableListener(row, EventType.DBLCLICK, e => {
+			e.preventDefault();
+			this.customize(folder, row);
+		}));
 		this.rowDisposables.add(addDisposableListener(row, EventType.KEY_DOWN, (e: KeyboardEvent) => {
 			if (e.key === 'Enter' || e.key === ' ') {
 				e.preventDefault();
 				void this.reveal(folder.uri);
+			} else if (e.key === 'F2') {
+				e.preventDefault();
+				this.customize(folder, row);
 			} else if (e.key === 'Delete') {
 				e.preventDefault();
 				void this.remove(folder.uri);
@@ -156,6 +220,10 @@ export class PicodeAgentProjects extends Disposable {
 					new Action('picode.projects.reveal', localize('picode.sessions.projectReveal', "Show in Explorer"), undefined, true, () => this.reveal(folder.uri)),
 					new Action('picode.projects.terminal', localize('picode.sessions.projectTerminal', "Open in Terminal"), undefined, true, () => this.openTerminal(folder.uri)),
 					new Action('picode.projects.copy', localize('picode.sessions.projectCopyPath', "Copy Path"), undefined, true, () => this.clipboardService.writeText(folder.uri.fsPath)),
+					new Separator(),
+					new Action('picode.projects.customize', localize('picode.sessions.projectCustomize', "Customize…"), undefined, true, async () => this.customize(folder, row)),
+					new Action('picode.projects.up', localize('picode.sessions.projectMoveUp', "Move Up"), undefined, index > 0, () => this.move(index, -1)),
+					new Action('picode.projects.down', localize('picode.sessions.projectMoveDown', "Move Down"), undefined, index < count - 1, () => this.move(index, 1)),
 					new Separator(),
 					new Action('picode.projects.add', localize('picode.sessions.addProjectShort', "Add Project…"), undefined, true, () => this.addProject()),
 					new Action('picode.projects.remove', localize('picode.sessions.projectRemove', "Remove from Workspace"), undefined, true, () => this.remove(folder.uri)),
@@ -217,6 +285,144 @@ export class PicodeAgentProjects extends Disposable {
 			}
 		}));
 	}
+
+	/** Swaps a project with its neighbour; the first one is where the chat starts. */
+	private async move(index: number, step: -1 | 1): Promise<void> {
+		const folders = this.workspaceService.getWorkspace().folders.map(folder => ({ uri: folder.uri, name: folder.name }));
+		const target = index + step;
+		if (target < 0 || target >= folders.length) {
+			return;
+		}
+		[folders[index], folders[target]] = [folders[target], folders[index]];
+		await this.workspaceEditingService.updateFolders(0, folders.length, folders);
+	}
+
+	/** A small window beside the row: the name shown here, a colour and an icon. */
+	private customize(folder: IWorkspaceFolder, anchor: HTMLElement): void {
+		this.contextViewService.showContextView({
+			getAnchor: () => anchor,
+			render: container => this.renderCustomizer(container, folder),
+		});
+	}
+
+	private renderCustomizer(container: HTMLElement, folder: IWorkspaceFolder): IDisposable {
+		const store = new DisposableStore();
+		const look = this.lookOf(folder.uri);
+		const panel = append(container, $('.picode-projects-customizer'));
+		const close = () => this.contextViewService.hideContextView();
+
+		append(panel, $('.picode-projects-customizer-title')).textContent = localize('picode.sessions.projectCustomizeTitle', "Customize project");
+
+		const preview = append(panel, $('.picode-projects-customizer-preview'));
+		const previewIcon = append(preview, $('span'));
+		const previewName = append(preview, $('span.picode-projects-name'));
+		let color = look.color;
+		let icon = PROJECT_ICONS.find(candidate => candidate.id === look.icon) ?? Codicon.folder;
+
+		append(panel, $('label.picode-projects-customizer-label')).textContent = localize('picode.sessions.projectName', "Name");
+		const input = append(panel, $('input.picode-projects-customizer-input', { type: 'text', spellcheck: 'false' })) as HTMLInputElement;
+		input.value = look.name ?? folder.name;
+		input.placeholder = folder.name;
+
+		const paintPreview = () => {
+			previewIcon.className = ThemeIcon.asClassName(icon);
+			previewIcon.style.color = color ?? '';
+			previewName.textContent = input.value.trim() || folder.name;
+		};
+		const commitName = () => {
+			const name = input.value.trim();
+			this.setLook(folder.uri, { name: name && name !== folder.name ? name : undefined });
+		};
+		store.add(addDisposableListener(input, EventType.INPUT, paintPreview));
+		store.add(addDisposableListener(input, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				commitName();
+				close();
+			}
+		}));
+
+		append(panel, $('label.picode-projects-customizer-label')).textContent = localize('picode.sessions.projectColor', "Colour");
+		const swatches = append(panel, $('.picode-projects-customizer-swatches'));
+		const swatchButtons: HTMLElement[] = [];
+		const paintSwatches = () => swatchButtons.forEach(button => button.classList.toggle('selected', (button.dataset.color || undefined) === color));
+		for (const value of [undefined, ...PROJECT_COLORS]) {
+			const button = append(swatches, $('button.picode-projects-swatch', { type: 'button' }));
+			button.dataset.color = value ?? '';
+			if (value) {
+				button.style.background = value;
+			} else {
+				button.classList.add('none');
+				button.title = localize('picode.sessions.projectNoColor', "No colour");
+			}
+			swatchButtons.push(button);
+			store.add(addDisposableListener(button, EventType.CLICK, () => {
+				color = value;
+				this.setLook(folder.uri, { color: value });
+				paintSwatches();
+				paintPreview();
+			}));
+		}
+
+		append(panel, $('label.picode-projects-customizer-label')).textContent = localize('picode.sessions.projectIcon', "Icon");
+		const icons = append(panel, $('.picode-projects-customizer-icons'));
+		const iconButtons: HTMLElement[] = [];
+		const paintIcons = () => iconButtons.forEach(button => button.classList.toggle('selected', button.dataset.icon === icon.id));
+		for (const candidate of PROJECT_ICONS) {
+			const button = append(icons, $(`button.picode-projects-icon-choice${ThemeIcon.asCSSSelector(candidate)}`, { type: 'button' }));
+			button.dataset.icon = candidate.id;
+			iconButtons.push(button);
+			store.add(addDisposableListener(button, EventType.CLICK, () => {
+				icon = candidate;
+				this.setLook(folder.uri, { icon: candidate.id === Codicon.folder.id ? undefined : candidate.id });
+				paintIcons();
+				paintPreview();
+			}));
+		}
+
+		const footer = append(panel, $('.picode-projects-customizer-footer'));
+		const reset = append(footer, $('button.picode-projects-customizer-reset', { type: 'button' }));
+		reset.textContent = localize('picode.sessions.projectReset', "Reset");
+		store.add(addDisposableListener(reset, EventType.CLICK, () => {
+			const all = this.looks();
+			delete all[folder.uri.toString()];
+			this.storageService.store(LOOKS_STORAGE_KEY, JSON.stringify(all), StorageScope.PROFILE, StorageTarget.USER);
+			close();
+		}));
+		const done = append(footer, $('button.picode-projects-customizer-done', { type: 'button' }));
+		done.textContent = localize('picode.sessions.projectDone', "Done");
+		store.add(addDisposableListener(done, EventType.CLICK, () => {
+			commitName();
+			close();
+		}));
+
+		// A click outside, or Escape, closes it; the name typed so far is kept.
+		const targetWindow = container.ownerDocument.defaultView!;
+		store.add(addDisposableListener(targetWindow, EventType.MOUSE_DOWN, (e: MouseEvent) => {
+			if (!panel.contains(e.target as Node)) {
+				commitName();
+				close();
+			}
+		}, true));
+		store.add(addDisposableListener(panel, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				close();
+			}
+		}));
+
+		paintSwatches();
+		paintIcons();
+		paintPreview();
+		store.add(toDisposable(() => panel.remove()));
+		const focus = setTimeout(() => {
+			input.focus();
+			input.select();
+		}, 0);
+		store.add(toDisposable(() => clearTimeout(focus)));
+		return store;
+	}
+
 
 	private addProject(): Promise<unknown> {
 		return this.commandService.executeCommand('addRootFolder');

@@ -24,6 +24,18 @@ export interface IWhatsNewFix {
 export function whatsNewFixes(): readonly IWhatsNewFix[] {
 	return [
 		{
+			since: '2.2.7',
+			text: localize('picodeWhatsNew.fix.engineOrphan', "**The memory engine closes with PiCode.** When PiCode was opened and closed quickly, the memory engine could stay running on its own and keep files busy. Now the last window to close always stops the engine PiCode started, and so does PiCode itself when it quits."),
+		},
+		{
+			since: '2.2.7',
+			text: localize('picodeWhatsNew.fix.statusTidy', "**Status is tidier.** The cards line up in rows, an Updates card no longer shows up empty, and every colour follows your theme."),
+		},
+		{
+			since: '2.2.7',
+			text: localize('picodeWhatsNew.fix.updateNotice', "**The update notice speaks your language.** It said \"memory engine\" in English; it now uses your language."),
+		},
+		{
 			since: '2.2.4',
 			text: localize('picodeWhatsNew.fix.contextEditor', "**Context is also in the Editor layout.** The PiCode panel now opens with Context, drawn the same as in Status, and Compact session is a single button that explains itself when you point at it."),
 		},

@@ -590,5 +590,6 @@
 	"🤖 Answers": "🤖 Odpovědi",
 	"🧠 Model": "🧠 Model",
 	"🧠 Thinking set to **{0}**.": "🧠 Úroveň uvažování: **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Úroveň uvažování: **{0}**. Vyberte ji přes `/thinking <level>`: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Úroveň uvažování: **{0}**. Vyberte ji přes `/thinking <level>`: {1}.",
+	"Memory engine": "Paměťový stroj"
 }

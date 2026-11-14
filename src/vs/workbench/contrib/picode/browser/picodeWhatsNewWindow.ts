@@ -270,6 +270,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.openProviders', "Open Providers");
 		case 'addProject':
 			return localize('picodeWhatsNew.addProject', "Add a project");
+		case 'showUsageLimits':
+			return localize('picodeWhatsNew.showUsageLimits', "See my plan's limits");
 	}
 }
 
@@ -306,6 +308,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'addProject':
 			close();
 			void services.commandService.executeCommand('addRootFolder');
+			return;
+		case 'showUsageLimits':
+			close();
+			void services.commandService.executeCommand('picode.chat.usageMeter');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -357,6 +363,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	context: contextPreview,
 	providers: providersPreview,
 	projects: projectsPreview,
+	usage: usagePreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -890,6 +897,65 @@ function projectsPreview(parent: HTMLElement, store: DisposableStore): void {
 		const chat = append(stage, $('.picode-whatsnew-row'));
 		append(chat, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.commentDiscussion)}`));
 		append(chat, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.projects.demoChat', "Fix the sign-in button");
+	};
+	draw();
+}
+
+function usagePreview(parent: HTMLElement, store: DisposableStore): void {
+	// A made-up ChatGPT plan: each message spends a little of the five-hour window and less of the week.
+	let shortWindow = 62;
+	let week = 31;
+	const reset = () => {
+		shortWindow = 62;
+		week = 31;
+		draw();
+	};
+	demoBar(parent, localize('picodeWhatsNew.usage.demo', "Send messages and watch the ring fill up and change colour."), store, reset);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		const worst = Math.max(shortWindow, week);
+		const tone = worst >= 95 ? 'danger' : worst >= 80 ? 'warn' : 'ok';
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		const meter = append(head, $(`span.picode-usage-meter.${tone}`));
+		const svg = meter.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', '0 0 16 16');
+		svg.setAttribute('width', '18');
+		svg.setAttribute('height', '18');
+		for (const css of ['track', 'fill']) {
+			const circle = meter.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'circle');
+			circle.setAttribute('cx', '8');
+			circle.setAttribute('cy', '8');
+			circle.setAttribute('r', '6');
+			circle.setAttribute('fill', 'none');
+			circle.setAttribute('stroke-width', '2.4');
+			circle.classList.add(css);
+			if (css === 'fill') {
+				circle.setAttribute('pathLength', '100');
+				circle.setAttribute('transform', 'rotate(-90 8 8)');
+				circle.setAttribute('stroke-linecap', 'round');
+				circle.setAttribute('stroke-dasharray', `${worst} 100`);
+			}
+			svg.appendChild(circle);
+		}
+		meter.appendChild(svg);
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.usage.demoHead', "ChatGPT plan · {0}% used", worst);
+		const send = append(head, $('button.picode-whatsnew-link', { type: 'button' })) as HTMLButtonElement;
+		send.textContent = localize('picodeWhatsNew.usage.demoSend', "Send a message");
+		send.disabled = worst >= 100;
+		store.add(addDisposableListener(send, EventType.CLICK, () => {
+			shortWindow = Math.min(100, shortWindow + 9);
+			week = Math.min(100, week + 3);
+			draw();
+		}));
+		for (const [label, percent] of [[localize('picodeWhatsNew.usage.demoShort', "5 h window"), shortWindow], [localize('picodeWhatsNew.usage.demoWeek', "Week window"), week]] as const) {
+			const row = append(stage, $('.picode-usage-meter-hover-row'));
+			const line = append(row, $('.line'));
+			append(line, $('span.name')).textContent = label;
+			append(append(line, $('span.detail')), $('span.percent')).textContent = `${percent}%`;
+			const bar = append(row, $(`.bar.${percent >= 95 ? 'danger' : percent >= 80 ? 'warn' : 'ok'}`));
+			append(bar, $('span')).style.width = `${percent}%`;
+		}
 	};
 	draw();
 }

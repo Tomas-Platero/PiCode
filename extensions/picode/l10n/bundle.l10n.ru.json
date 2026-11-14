@@ -590,5 +590,6 @@
 	"🤖 Answers": "🤖 Ответы",
 	"🧠 Model": "🧠 Модель",
 	"🧠 Thinking set to **{0}**.": "🧠 Уровень рассуждений: **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Уровень рассуждений: **{0}**. Выберите командой `/thinking <level>`: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Уровень рассуждений: **{0}**. Выберите командой `/thinking <level>`: {1}.",
+	"Memory engine": "Движок памяти"
 }

@@ -18,6 +18,7 @@
  */
 
 import { execFileSync } from 'child_process';
+import { readdirSync, readFileSync, rmSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 
 /** A process running the engine, with the program it was started from. */
@@ -94,3 +95,111 @@ export const systemMemoryEngines: IMemoryEngineProcesses = {
 	},
 	kill: pid => process.kill(pid)
 };
+
+/** What the quit-time stop reads and does, injectable so a test needs no real files or processes. */
+export interface IEngineMarkerIo {
+	read(file: string): string | undefined;
+	list(dir: string): readonly string[];
+	remove(file: string): void;
+	isAlive(pid: number): boolean;
+	isEngine(pid: number): boolean;
+	kill(pid: number): void;
+}
+
+/** The folders where PiCode's engine can run from: the owner's updated copy and the installation's own. */
+export function picodeEngineFolders(appRoot: string, home: string): string[] {
+	return [join(home, '.picode', 'memory'), memoryFolderOf(appRoot)];
+}
+
+/** The windows still using the engine of `folder` (each keeps a lease named by its process id). */
+export function liveEngineLeases(folder: string, io: Pick<IEngineMarkerIo, 'list' | 'isAlive'>): number[] {
+	return io.list(join(folder, 'leases')).map(Number).filter(pid => Number.isInteger(pid) && pid > 0 && io.isAlive(pid));
+}
+
+/**
+ * The editor is quitting: stops the engine PiCode started, in each folder, when no window uses it.
+ *
+ * Each window stops it itself when it is the last to close, but a window that goes down abruptly (a
+ * crash, a forced close, a quit that does not wait for it) never gets to, and the engine is left
+ * running on its own with files of the editor open. The main process outlives every window, so it
+ * looks once more: only an engine named by PiCode's marker (one somebody else started has none),
+ * only when no window of any PiCode still holds a lease, and only if that process is still the engine.
+ */
+export function stopEngineLeftByPicode(folders: readonly string[], io: IEngineMarkerIo): number[] {
+	const stopped: number[] = [];
+	for (const folder of new Set(folders.map(folder => resolve(folder)))) {
+		if (liveEngineLeases(folder, io).length > 0) {
+			continue;
+		}
+		const marker = join(folder, 'engine-started-by-picode');
+		const pid = Number(io.read(marker)?.trim());
+		if (!Number.isInteger(pid) || pid <= 0) {
+			continue;
+		}
+		try {
+			io.remove(marker);
+		} catch {
+			// A marker that stays names a process that is gone: the next look finds nothing to stop.
+		}
+		if (!io.isAlive(pid) || !io.isEngine(pid)) {
+			continue;
+		}
+		try {
+			io.kill(pid);
+			stopped.push(pid);
+		} catch {
+			// Already gone.
+		}
+	}
+	return stopped;
+}
+
+/** The real world for {@link stopEngineLeftByPicode}. */
+export const systemEngineMarkerIo: IEngineMarkerIo = {
+	read: file => {
+		try {
+			return readFileSync(file, 'utf8');
+		} catch {
+			return undefined;
+		}
+	},
+	list: dir => {
+		try {
+			return readdirSync(dir);
+		} catch {
+			return [];
+		}
+	},
+	remove: file => rmSync(file, { force: true }),
+	isAlive: pid => {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch (error) {
+			return (error as NodeJS.ErrnoException).code === 'EPERM';
+		}
+	},
+	isEngine: pid => {
+		try {
+			const answer = process.platform === 'win32'
+				? execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 5000 })
+				: execFileSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8', timeout: 5000 });
+			return answer.toLowerCase().includes('engram');
+		} catch {
+			return false;
+		}
+	},
+	kill: pid => process.kill(pid)
+};
+
+/**
+ * When the editor quits: waits a moment for the closing windows to let go of the engine (each drops
+ * its lease as it goes), then stops the one PiCode started if nobody uses it any more.
+ */
+export async function stopPicodeEngineOnQuit(appRoot: string, home: string, io: IEngineMarkerIo = systemEngineMarkerIo, waitMs = 3000): Promise<number[]> {
+	const folders = picodeEngineFolders(appRoot, home);
+	for (let waited = 0; waited < waitMs && folders.some(folder => liveEngineLeases(folder, io).length > 0); waited += 200) {
+		await new Promise<void>(done => setTimeout(done, 200));
+	}
+	return stopEngineLeftByPicode(folders, io);
+}

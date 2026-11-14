@@ -41,7 +41,7 @@ function read(file: string): any {
 
 function piProfile(root: string): string {
 	const dir = join(root, 'pi');
-	write(join(dir, 'settings.json'), { theme: 'dark', packages: ['npm:gentle-pi@4.7.0', { source: 'npm:pi-tools@1.0.0' }, 'npm:pi-memory'] });
+	write(join(dir, 'settings.json'), { theme: 'dark', packages: ['npm:gentle-pi@4.8.0', { source: 'npm:pi-tools@1.0.0' }, 'npm:pi-memory'] });
 	write(join(dir, 'models.json'), { providers: { openai: { key: 'a' }, local: { url: 'http://x' } } });
 	write(join(dir, 'mcp.json'), { mcpServers: { git: { command: 'git' }, web: { command: 'web' } } });
 	write(join(dir, 'skills', 'review', 'SKILL.md'), '# review');
@@ -54,9 +54,9 @@ function piProfile(root: string): string {
 test('the pi scan lists packages one by one and hides the ones the product leaves behind', () => {
 	const catalog = scanPiProfile(piProfile(scratch()));
 	const packages = catalog.categories.find(category => category.id === 'packages');
-	assert.deepStrictEqual(packages?.items.map(item => item.id), ['npm:gentle-pi@4.7.0', 'npm:pi-tools@1.0.0']);
+	assert.deepStrictEqual(packages?.items.map(item => item.id), ['npm:gentle-pi@4.8.0', 'npm:pi-tools@1.0.0']);
 	assert.strictEqual(packages?.items[0].label, 'gentle-pi');
-	assert.strictEqual(packages?.items[0].detail, '4.7.0');
+	assert.strictEqual(packages?.items[0].detail, '4.8.0');
 	assert.strictEqual(catalog.categories.find(category => category.id === 'providers')?.count, 2);
 	assert.strictEqual(catalog.categories.find(category => category.id === 'logins')?.sensitive, true);
 });
@@ -77,11 +77,11 @@ test('only the ticked pi items arrive, and what PiCode has stays', () => {
 	const result = applyPiImport({
 		from,
 		to,
-		choice: { packages: ['npm:gentle-pi@4.7.0', 'npm:pi-tools@1.0.0'], preferences: 'all', mcp: ['git', 'web'], skills: ['review'], providers: ['local'] },
+		choice: { packages: ['npm:gentle-pi@4.8.0', 'npm:pi-tools@1.0.0'], preferences: 'all', mcp: ['git', 'web'], skills: ['review'], providers: ['local'] },
 	});
 
 	const settings = read(join(to, 'settings.json'));
-	assert.deepStrictEqual(settings.packages, ['npm:pi-tools@2.0.0', 'npm:gentle-pi@4.7.0']);
+	assert.deepStrictEqual(settings.packages, ['npm:pi-tools@2.0.0', 'npm:gentle-pi@4.8.0']);
 	assert.strictEqual(settings.theme, 'light');
 	assert.deepStrictEqual(Object.keys(read(join(to, 'mcp.json')).mcpServers), ['git', 'web']);
 	assert.strictEqual(read(join(to, 'mcp.json')).mcpServers.git.command, 'mine');

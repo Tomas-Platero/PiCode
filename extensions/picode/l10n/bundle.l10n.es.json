@@ -590,5 +590,6 @@
 	"🤖 Answers": "🤖 Respuestas",
 	"🧠 Model": "🧠 Modelo",
 	"🧠 Thinking set to **{0}**.": "🧠 Razonamiento ajustado a **{0}**.",
-	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Razonamiento: **{0}**. Elige uno con `/thinking <nivel>`: {1}."
+	"🧠 Thinking: **{0}**. Choose one with `/thinking <level>`: {1}.": "🧠 Razonamiento: **{0}**. Elige uno con `/thinking <nivel>`: {1}.",
+	"Memory engine": "Motor de memoria"
 }

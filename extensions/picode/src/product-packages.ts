@@ -69,6 +69,11 @@ export const GENTLE_PI_TERMINAL_EXTENSIONS: readonly string[] = [
 	// tokens-per-second notice after every turn, which would be noise in the editor chat.
 	'!extensions/gentle-agent-status.ts',
 	'!extensions/gentle-tps.ts',
+	// New in 4.8.0: the control channel for Gentle Desktop. It turns on in any interactive RPC host,
+	// PiCode included, and then pushes every job, subagent and usage change as a widget line the
+	// editor does not read, plus a `/gentle:desktop` command nobody should type. The editor already
+	// reads those from gentle-pi's own events.
+	'!extensions/gentle-desktop-rpc.ts',
 ];
 
 /**
@@ -99,8 +104,8 @@ export const REMOVED_PACKAGE_NAMES: readonly string[] = [
 
 /** What the product pins, in the order it declares them. */
 export const PRODUCT_PACKAGES: readonly ProductPackage[] = [
-	{ name: 'gentle-pi', version: '4.7.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
-	{ name: 'gentle-engram', version: '0.7.1' },
+	{ name: 'gentle-pi', version: '4.8.0', extensions: GENTLE_PI_TERMINAL_EXTENSIONS, themes: [] },
+	{ name: 'gentle-engram', version: '0.8.0' },
 	{ name: 'pi-intercom', version: '0.18.1' },
 ];
 

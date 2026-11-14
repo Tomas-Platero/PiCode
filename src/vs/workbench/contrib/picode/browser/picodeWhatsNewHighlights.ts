@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'usage',
+			since: '2.2.7',
+			plan: 'free',
+			icon: Codicon.dashboard,
+			title: localize('picodeWhatsNew.usage.title', "Your plan's limits, beside the chat"),
+			summary: localize('picodeWhatsNew.usage.summary', "A small ring next to the thinking level fills up as you use your ChatGPT, Claude or NaN plan, so you see a limit coming before you hit it."),
+			points: [
+				localize('picodeWhatsNew.usage.point1', "It turns orange at 80% and red at 95% of the tightest window."),
+				localize('picodeWhatsNew.usage.point2', "Point at it to see each limit with its bar and when it resets."),
+				localize('picodeWhatsNew.usage.point3', "Click it to open Usage limits with every plan you have."),
+			],
+			preview: 'usage',
+			action: 'showUsageLimits',
+		},
 		{
 			id: 'projects',
 			since: '2.2.6',

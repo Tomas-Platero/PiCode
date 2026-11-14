@@ -1031,3 +1031,85 @@ button.picode-pv-tile:focus-within .picode-pv-alt {
 		animation: none;
 	}
 }
+
+/* -- a connected provider: name on top, its state and actions underneath ------------------ */
+
+.picode-pv-grid.connected {
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.picode-pv-card.connected {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	padding: 12px;
+	border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 35%, transparent);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 8%, transparent), transparent 60%),
+		var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
+}
+
+.picode-pv-card.connected:hover {
+	border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 60%, transparent);
+}
+
+.picode-pv-card-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.picode-pv-card-head .picode-pv-name,
+.picode-pv-card-head .picode-pv-sub {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.picode-pv-card-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	padding-top: 10px;
+	border-top: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.18));
+}
+
+.picode-pv-card.connected .picode-pv-actions {
+	flex-wrap: wrap;
+	gap: 4px;
+	opacity: 1;
+}
+
+.picode-pv-card-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 9px;
+	border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.25));
+	border-radius: 999px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.picode-pv-card-action .codicon {
+	font-size: 12px;
+}
+
+.picode-pv-card-action:hover,
+.picode-pv-card-action:focus-visible {
+	background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+	outline: none;
+}
+
+.picode-pv-card-action.danger:hover,
+.picode-pv-card-action.danger:focus-visible {
+	border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
+	color: var(--vscode-errorForeground);
+}
