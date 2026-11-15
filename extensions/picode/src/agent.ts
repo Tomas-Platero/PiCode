@@ -18,6 +18,7 @@ import { mcpBuiltinWithExistingCwd } from './mcp-cwd';
 import { mcpServerNameOfTool } from './mcp-provider';
 import { contextBreakdown, type IContextBreakdown } from './context-breakdown';
 import { resolveSessionCwd } from './session-cwd';
+import { bundledSkillPaths } from './bundled-skills';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
 import { mcpNotice, mcpNoticeLine } from './mcp-notice';
@@ -2134,6 +2135,8 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					...settingsForFolder(loaded.sdk, cwd, agentDir),
 					resourceLoaderOptions: {
 						extensionFactories: [...loaded.builtins, permissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
+						// PiCode's own skills (`skills/`), next to the profile's; `out/` is one level down.
+						additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 					},
 				});
 				// pi collects load problems instead of failing the session; one that could not be
