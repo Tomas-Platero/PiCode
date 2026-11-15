@@ -6,7 +6,7 @@
 
 ## 📊 Status
 
-- **17** folders documented · **21** without a README.
+- **18** folders documented · **21** without a README.
 - Root files described: 13.
 
 ## 🌳 Tree
@@ -533,6 +533,7 @@
 │   │   │   ├── disabled-tools.test.ts
 │   │   │   ├── display-language.test.ts
 │   │   │   ├── distribution-root.test.ts
+│   │   │   ├── editor-tools.test.ts
 │   │   │   ├── engram-leases.test.ts
 │   │   │   ├── engram-runtime.test.ts
 │   │   │   ├── engram.test.ts
@@ -603,7 +604,7 @@
 │   │   │   ├── voice-install.test.ts
 │   │   │   ├── voice-session.test.ts
 │   │   │   └── workspace-area.test.ts
-│   │   │   └── … 89 files in total
+│   │   │   └── … 90 files in total
 │   │   ├── package.json
 │   │   ├── package.nls.cs.json
 │   │   ├── package.nls.de.json
@@ -690,7 +691,17 @@
 ├── remote/ · ⬆️ upstream, no breakdown
 ├── resources/
 │   ├── picode/ — Las imágenes del propio repositorio (no las del producto): lo que se ve en el README público y en la cabecera de GitHub.
+│   │   ├── screenshots/ — Product images shown in the root README.md, taken from the website (getpicode.app). Demo data only: the northwind-shop project and a fictional…
+│   │   │   ├── chat-settings.png
+│   │   │   ├── chat.png
+│   │   │   ├── frame.py
+│   │   │   ├── issues.png
+│   │   │   ├── layout-agent.png
+│   │   │   ├── layout-editor.png
+│   │   │   ├── README.md
+│   │   │   └── status.png
 │   │   ├── banner.py
+│   │   ├── divider.svg
 │   │   ├── pi.svg
 │   │   ├── picode-banner.png
 │   │   ├── README.md

@@ -89,6 +89,10 @@ Ask for a review or a refactor and PiCode can hand it to a specialist agent. You
 
 <img src="./resources/picode/screenshots/chat.png" alt="A specialist agent reviewing code while the chat carries on" width="100%" />
 
+### 🌐 It checks its own work
+
+Change a web page and the agent opens it in the editor's built-in browser, looks at it, tries what it changed and fixes what's off — before it tells you it's done. Ask it to look at or debug any page, `localhost` included.
+
 <table>
 <tr>
 <td width="55%" valign="middle">

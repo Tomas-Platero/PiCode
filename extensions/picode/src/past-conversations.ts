@@ -16,6 +16,7 @@
  */
 
 import type { PiToolDefinition, PiToolResult } from './mcp';
+import type { PiTextPart } from './mcpTools';
 import type { PiSessionFile, PiSessionTurn } from './sessions-provider';
 
 /** Where the conversations come from, injectable so a test needs no disk. */
@@ -115,12 +116,12 @@ export async function readConversation(source: ConversationSource, id: string, o
 	return `${header}\n\n${page.length === 0 ? '(nothing to read here)' : page}${more}`;
 }
 
-function result(text: string): PiToolResult {
+function result(text: string): PiToolResult<PiTextPart> {
 	return { content: [{ type: 'text', text }], details: undefined };
 }
 
 /** The two tools, as pi's `customTools` read them. */
-export function pastConversationTools(source: ConversationSource): PiToolDefinition[] {
+export function pastConversationTools(source: ConversationSource): PiToolDefinition<PiTextPart>[] {
 	const listDescription = 'List the user\'s earlier conversations in this workspace (also ones from before the editor was closed), or search their text. Use it when the user refers to something said in another or an earlier conversation.';
 	const readDescription = `Read the messages of one earlier conversation, by the id ${LIST_TOOL} shows.`;
 	return [

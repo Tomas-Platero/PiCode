@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { mcpTools, toolResultText, type EditorToolInfo, type McpTool } from './mcpTools';
+import { editorTools, toolResultParts, type EditorToolInfo, type McpTool, type PiResultPart } from './mcpTools';
 import type { OfficialSdk } from './piSdk';
 
 /**
@@ -54,34 +54,34 @@ type PiCustomTools = NonNullable<Parameters<OfficialSdk['createAgentSessionFromS
  * is all pi reads at runtime. The SDK's own members are typed from pi's declarations; this is the
  * value side (the editor's own tools), where pi's runtime contract is looser than its types.
  */
-export function piToolsFromEditor(token: ToolTokenHolder): PiCustomTools {
+export function piToolsFromEditor(token: ToolTokenHolder, options: { readonly mcp: boolean }): PiCustomTools {
 	// SAFETY: pi's runtime reads `content` from a tool result and nothing else; its published
 	// `ToolDefinition` requires `details` on every result, which these editor tools do not set.
 	// The mismatch is pi's types being stricter than the contract its own runner honours.
-	return mcpTools(vscode.lm.tools as readonly EditorToolInfo[]).map(tool => editorTool(tool, token)) as unknown as PiCustomTools;
+	return editorTools(vscode.lm.tools as readonly EditorToolInfo[], options).map(tool => editorTool(tool, token)) as unknown as PiCustomTools;
 }
 
 /** The editor's own pi tools as `customTools`; the same `details` gap as `piToolsFromEditor`. */
-export function asPiCustomTools(tools: readonly PiToolDefinition[]): PiCustomTools {
+export function asPiCustomTools(tools: readonly PiToolDefinition<PiResultPart>[]): PiCustomTools {
 	// SAFETY: see `piToolsFromEditor` — pi reads `content` only.
 	return tools as unknown as PiCustomTools;
 }
 
-/** What a pi tool answers with: the text the model reads, and nothing else. The array is mutable because pi's own result type declares it mutable — the element shape is pi's `TextContent`. */
-export interface PiToolResult {
-	content: { readonly type: 'text'; readonly text: string }[];
+/** What a pi tool answers with: text, and images for the model to look at (a browser screenshot). The array is mutable because pi's own result type declares it mutable — the element shapes are pi's `TextContent` and `ImageContent`. */
+export interface PiToolResult<Part extends PiResultPart = PiResultPart> {
+	content: Part[];
 	readonly details?: undefined;
 }
 
 /** One pi tool definition, as the `customTools` of a session reads it. */
-export interface PiToolDefinition {
+export interface PiToolDefinition<Part extends PiResultPart = PiResultPart> {
 	readonly name: string;
 	readonly label: string;
 	readonly description: string;
 	/** The one line pi lists with the tool in its system prompt. */
 	readonly promptSnippet: string;
 	readonly parameters: Record<string, unknown>;
-	readonly execute: (toolCallId: string, params: unknown, signal?: AbortSignal) => Promise<PiToolResult>;
+	readonly execute: (toolCallId: string, params: unknown, signal?: AbortSignal) => Promise<PiToolResult<Part>>;
 }
 
 /**
@@ -107,7 +107,7 @@ function editorTool(tool: McpTool, token: ToolTokenHolder): PiToolDefinition {
 				{ input: (params ?? {}) as object, toolInvocationToken: token.current },
 				abortSignalFor(signal),
 			);
-			return { content: [{ type: 'text', text: toolResultText(result.content) }], details: undefined };
+			return { content: toolResultParts(result.content), details: undefined };
 		},
 	};
 }
