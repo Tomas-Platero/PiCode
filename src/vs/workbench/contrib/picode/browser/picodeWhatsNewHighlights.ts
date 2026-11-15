@@ -8,10 +8,10 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
 
 /** The little working demo beside a highlight's explanation. */
-export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage';
+export type WhatsNewPreview = 'layout' | 'issues' | 'plan' | 'job' | 'plans' | 'sync' | 'import' | 'changedFiles' | 'exclude' | 'terminalDialogs' | 'problems' | 'statusSections' | 'context' | 'providers' | 'projects' | 'usage' | 'browser';
 
 /** What a highlight's button does for real in the editor (see `picodeWhatsNewWindow.ts`). */
-export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits';
+export type WhatsNewAction = 'switchLayout' | 'connect' | 'openAccount' | 'showTasks' | 'openImport' | 'fileList' | 'excludeSetting' | 'newTerminal' | 'browseExtensions' | 'chooseSections' | 'showStatus' | 'openProviders' | 'addProject' | 'showUsageLimits' | 'openBrowser';
 
 /**
  * One thing worth telling about a version, written for the person using PiCode: what it is, why it
@@ -36,6 +36,21 @@ export interface IWhatsNewHighlight {
 
 export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 	return [
+		{
+			id: 'browser',
+			since: '2.2.8',
+			plan: 'free',
+			icon: Codicon.globe,
+			title: localize('picodeWhatsNew.browser.title', "pi checks your pages on its own"),
+			summary: localize('picodeWhatsNew.browser.summary', "pi can now use the editor's built-in browser: after changing a web page, it opens it, looks at it and fixes what is off before telling you it is done."),
+			points: [
+				localize('picodeWhatsNew.browser.point1', "It starts your project if it is not running, opens the page and tries what it changed."),
+				localize('picodeWhatsNew.browser.point2', "It reads the page and takes screenshots, so it sees what you would see."),
+				localize('picodeWhatsNew.browser.point3', "Ask it to look at or debug any page, including a localhost address."),
+			],
+			preview: 'browser',
+			action: 'openBrowser',
+		},
 		{
 			id: 'usage',
 			since: '2.2.7',
