@@ -28,6 +28,7 @@ import { piProjectSlug } from './sessions-provider';
 import * as path from 'node:path';
 import { ensureProfilePackages } from './packages-install';
 import { locateNpmCli } from './npm-run';
+import { bundledSkillPaths } from './bundled-skills';
 import { asPiCustomTools, piToolsFromEditor, type ToolTokenHolder } from './mcp';
 import { windowPastConversationTools } from './past-conversations-window';
 import {
@@ -143,6 +144,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		...settingsForFolder(loaded.sdk, picked.cwd, agentDir),
 		resourceLoaderOptions: {
 			extensionFactories: [...loaded.builtins, resumePermissionExtension(deps.log), usageHeadersExtension(), chatModelExtension()],
+			additionalSkillPaths: bundledSkillPaths(path.join(__dirname, '..')),
 		},
 	});
 	// The transcript carries its own model and thinking level in its header; pi restores them
@@ -154,7 +156,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		services,
 		sessionManager,
 		customTools: [
-			...(settings.mcpEnabled ? piToolsFromEditor(toolToken) : []),
+			...piToolsFromEditor(toolToken, { mcp: settings.mcpEnabled }),
 			...asPiCustomTools(windowPastConversationTools(agentDir, () => file)),
 		],
 		...(settings.disabledTools.length === 0 ? {} : { excludeTools: [...settings.disabledTools] }),
