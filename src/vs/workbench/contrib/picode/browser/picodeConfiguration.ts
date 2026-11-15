@@ -23,6 +23,7 @@ import './picodeProvidersModelsSection.js';
 import './picodeStatusSection.js';
 import './picodeUsageLimitsSection.js';
 import './picodeUsageMeter.js';
+import './picodeUsageAlerts.js';
 import './picodeAgentStatusPill.js';
 import './picodeUsageStatus.js';
 import './picodeSetupCommands.js';
