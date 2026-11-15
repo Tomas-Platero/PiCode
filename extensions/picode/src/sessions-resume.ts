@@ -154,7 +154,7 @@ async function resumedSessionOf(file: string, deps: AgentDeps): Promise<ResumedS
 		services,
 		sessionManager,
 		customTools: [
-			...(settings.mcpEnabled ? piToolsFromEditor(toolToken) : []),
+			...piToolsFromEditor(toolToken, { mcp: settings.mcpEnabled }),
 			...asPiCustomTools(windowPastConversationTools(agentDir, () => file)),
 		],
 		...(settings.disabledTools.length === 0 ? {} : { excludeTools: [...settings.disabledTools] }),

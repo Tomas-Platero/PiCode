@@ -29,7 +29,7 @@ import {
 	PERMISSION_QUESTION_ID,
 	shouldAsk,
 } from './permissions';
-import { mcpTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
+import { editorTools, toolSetSignature, type EditorToolInfo } from './mcpTools';
 import { toolInputText, toolOutputText, toolProgress } from './progress';
 import { isMemoryWriteCall, memoryCard, type MemoryCard } from './memory-cards';
 import { LateTurnCollector, type LateTurnEvent } from './late-turn';
@@ -2045,8 +2045,8 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 	let turnChain: Promise<void> = Promise.resolve();
 	let turnsWaiting = 0;
 
-	/** What the editor's MCP servers offer right now, as a signature to compare. */
-	const currentMcpSignature = () => toolSetSignature(mcpTools(vscode.lm.tools as readonly EditorToolInfo[]));
+	/** What the editor offers pi right now (its MCP servers' tools and the browser's), as a signature to compare. */
+	const currentEditorToolsSignature = () => toolSetSignature(editorTools(vscode.lm.tools as readonly EditorToolInfo[], { mcp: mcpEnabled() }));
 	/** Whether the owner wants pi to have the editor's MCP tools at all (`picode.mcp.enabled`). */
 	const mcpEnabled = () => readPiChatSettings(key => vscode.workspace.getConfiguration('picode').get(key)).mcpEnabled;
 	/** The chat request in flight, which is where an MCP call gets its invocation token. */
@@ -2089,7 +2089,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 
 		try {
 			const selected = modelRefOf(request.model, VENDOR);
-			const signature = mcpEnabled() ? currentMcpSignature() : '';
+			const signature = currentEditorToolsSignature();
 			// The profile is resolved PER REQUEST, not once at activation: the runtime can be
 			// switched while the window is open, and a session built against the previous
 			// profile would answer from credentials it does not have ("No API key found").
@@ -2189,7 +2189,7 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 					// because a server added a minute ago has to be there on the next message.
 					// The owner's earlier conversations ride along, read only (see `past-conversations.ts`).
 					customTools: [
-						...(mcpEnabled() ? piToolsFromEditor(toolToken) : []),
+						...piToolsFromEditor(toolToken, { mcp: mcpEnabled() }),
 						...asPiCustomTools(windowPastConversationTools(agentDir, () => chat.sessionManager?.getSessionFile())),
 					],
 					...(disabledTools.length === 0 ? {} : { excludeTools: [...disabledTools] }),
