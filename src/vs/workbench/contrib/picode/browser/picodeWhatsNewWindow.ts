@@ -272,6 +272,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.addProject', "Add a project");
 		case 'showUsageLimits':
 			return localize('picodeWhatsNew.showUsageLimits', "See my plan's limits");
+		case 'openBrowser':
+			return localize('picodeWhatsNew.openBrowser', "Open the browser");
 	}
 }
 
@@ -312,6 +314,10 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 		case 'showUsageLimits':
 			close();
 			void services.commandService.executeCommand('picode.chat.usageMeter');
+			return;
+		case 'openBrowser':
+			close();
+			void services.commandService.executeCommand('workbench.action.browser.open');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
@@ -364,6 +370,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	providers: providersPreview,
 	projects: projectsPreview,
 	usage: usagePreview,
+	browser: browserPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -1079,4 +1086,35 @@ function problemsPreview(parent: HTMLElement, store: DisposableStore): void {
 	});
 	stage = append(parent, $('.picode-whatsnew-extension'));
 	pick('now');
+}
+
+function browserPreview(parent: HTMLElement, store: DisposableStore): void {
+	// A made-up web change: pi runs the project, opens it, looks at it, finds the button still blue,
+	// fixes it and looks again.
+	const steps: readonly { icon: ThemeIcon; label: string; detail: string }[] = [
+		{ icon: Codicon.terminal, label: localize('picodeWhatsNew.browser.step1', "Start the project"), detail: 'npm run dev' },
+		{ icon: Codicon.globe, label: localize('picodeWhatsNew.browser.step2', "Open the page"), detail: 'localhost:5173' },
+		{ icon: Codicon.deviceCamera, label: localize('picodeWhatsNew.browser.step3', "Take a screenshot"), detail: localize('picodeWhatsNew.browser.step3Detail', "The button is still blue") },
+		{ icon: Codicon.edit, label: localize('picodeWhatsNew.browser.step4', "Fix the style"), detail: 'button.css' },
+		{ icon: Codicon.eye, label: localize('picodeWhatsNew.browser.step5', "Look again"), detail: localize('picodeWhatsNew.browser.step5Detail', "Green, as asked") },
+	];
+	let list: HTMLElement;
+	const play = playDemo(steps.length + 1, store, current => {
+		clearNode(list);
+		const head = append(list, $('.picode-whatsnew-row.head'));
+		append(head, $(`span${ThemeIcon.asCSSSelector(Codicon.commentDiscussion)}`));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.browser.ask', "\"Make the main button green\"");
+		steps.forEach((step, index) => {
+			const state = index < current ? 'done' : index === current ? 'doing' : 'pending';
+			const row = append(list, $(`.picode-whatsnew-row.step.${state}`));
+			append(row, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(state === 'doing' ? Codicon.loading : state === 'done' ? step.icon : Codicon.circleOutline)}`));
+			append(row, $('span.picode-whatsnew-row-label')).textContent = step.label;
+			if (state !== 'pending') {
+				append(row, $('span.picode-whatsnew-row-detail')).textContent = step.detail;
+			}
+		});
+	});
+	demoBar(parent, localize('picodeWhatsNew.browser.demo', "Watch pi check its own change."), store, play);
+	list = append(parent, $('.picode-whatsnew-list'));
+	play();
 }
