@@ -1,6 +1,10 @@
 {
 	"versions": [
 		{
+			"version": "2.2.7-experimental",
+			"notes": "### ✨ New\n\n- **Your plan's limits, beside the chat.** A small ring next to the thinking level fills up as you use your ChatGPT, Claude or NaN plan. It turns orange at 80% and red at 95%; point at it to see each limit and when it resets, click it to open Usage limits. It shows up a couple of seconds after PiCode opens.\n- **Provider cards read in full.** Once a provider is connected, its card shows the logo, the full name, its state and buttons with words.\n\n### 🐛 Fixed\n\n- **The memory engine closes with PiCode.** Opening and closing PiCode quickly could leave the memory engine running on its own, keeping files busy and blocking updates. The last window now always stops it, and PiCode does too when it quits; the chats' message helper closes as well.\n- **Status is tidier.** The cards line up in rows, the Updates card no longer shows up empty (checking again is a button on its tile), and every colour follows your theme.\n- **The update notice speaks your language.** It said \"memory engine\" in English.\n\n### 🧩 Under the hood\n\n- Gentle AI pieces updated: gentle-pi 4.8.0, gentle-engram 0.8.0 and the memory engine 3.7.2. Your memory is not migrated."
+		},
+		{
 			"version": "2.2.6-experimental",
 			"notes": "### ✨ New\n\n- 📁 **Your projects beside your sessions.** In the Agent layout, the sessions column now lists the folders of your workspace. Add one with **+** or by dropping folders on the list, hover a project to open a terminal in it or take it out of the workspace, and right-click to show it in the Explorer or copy its path.\n- 🔌 **Connect any provider in one click.** Providers is now a gallery of more than forty services with their logos and a search box. Sign in with ChatGPT, Claude or Copilot and your browser finishes the sign-in on its own, or paste a key. If the connection drops halfway, PiCode tries again by itself."
 		},
