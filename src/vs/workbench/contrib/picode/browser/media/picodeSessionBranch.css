@@ -105,3 +105,29 @@
 .picode-sessions-toggle.on .codicon {
 	color: var(--vscode-textLink-foreground);
 }
+
+/* The branch of the chat in front, in the chat input. */
+.picode-branch-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 220px;
+	padding: 0 4px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	cursor: pointer;
+}
+
+.picode-branch-chip-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.picode-branch-chip-added {
+	color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+}
+
+.picode-branch-chip-removed {
+	color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+}

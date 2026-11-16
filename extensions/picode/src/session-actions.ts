@@ -18,6 +18,7 @@ import { resolveSessionCwd } from './session-cwd';
 import { githubRepoOf, titleOfSession, updateSessionGitStore, withTitle, worktreeOfSession } from './session-git';
 import { changedFiles, defaultBaseOf, fileAtRef, mergeIntoBase, openWorktree, placeholderBranch, pushBranch, removeWorktree, repoRootOf } from './session-worktree';
 import * as fs from 'node:fs';
+import { worktreeOfChatKey } from './session-branch-commands';
 
 export const NEW_ISOLATED_SESSION_COMMAND = 'picode.session.newIsolated';
 const OPEN_CHAT_ON_WORKTREE_COMMAND = 'picode.agent.newChatOnWorktree';
@@ -32,14 +33,15 @@ function sessionIdOf(item: unknown): string | undefined {
 }
 
 /** The copy a session works in, when it still exists; says so when it does not. */
-function copyOf(item: unknown): { readonly id: string; readonly folder: string } | undefined {
-	const id = sessionIdOf(item);
-	const folder = id === undefined ? undefined : worktreeOfSession(id);
-	if (id === undefined || folder === undefined || !fs.existsSync(folder)) {
+function copyOf(item: unknown): { readonly folder: string } | undefined {
+	const resource = (item as { resource?: unknown } | undefined)?.resource ?? item;
+	const key = resource instanceof vscode.Uri ? resource.toString() : typeof resource === 'string' ? resource : undefined;
+	const folder = key === undefined ? undefined : worktreeOfChatKey(key);
+	if (folder === undefined) {
 		void vscode.window.showInformationMessage(vscode.l10n.t('This session works in the project folder, not in a copy of its own.'));
 		return undefined;
 	}
-	return { id, folder };
+	return { folder };
 }
 
 async function newIsolatedSession(): Promise<void> {
