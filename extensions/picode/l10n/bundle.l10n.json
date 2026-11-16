@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "The speech engine stopped unexpectedly.",
 	"The steps the agent plans for what you asked, and how far it got.": "The steps the agent plans for what you asked, and how far it got.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "The work the chat has out: the background jobs it launched and the agents it started.",
+	"The worktree could not be made, so this session works in the project folder.": "The worktree could not be made, so this session works in the project folder.",
 	"Themes are managed by the editor.": "Themes are managed by the editor.",
 	"There are no MCP servers to edit.": "There are no MCP servers to edit.",
 	"There is no answer to copy yet.": "There is no answer to copy yet.",

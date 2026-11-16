@@ -42,11 +42,11 @@ export function whatsNewHighlights(): readonly IWhatsNewHighlight[] {
 			plan: 'free',
 			icon: Codicon.gitBranch,
 			title: localize('picodeWhatsNew.parallelSessions.title', "Several sessions at once, each on its own branch"),
-			summary: localize('picodeWhatsNew.parallelSessions.summaryCopy', "Turn on \"In a separate copy\" under New session and each new session gets its own copy of the project and its own branch, so several can work at the same time without touching each other's files."),
+			summary: localize('picodeWhatsNew.parallelSessions.summaryWorktree', "Tick \"Worktree\" under a new chat and the session works in its own copy of the project, on its own branch, so several can work at the same time without touching each other's files."),
 			points: [
 				localize('picodeWhatsNew.parallelSessions.pointName', "The branch is named after your first message, and you can rename the session from its row."),
 				localize('picodeWhatsNew.parallelSessions.point2', "Two chats answer at the same time, each with its own questions and its own changed files."),
-				localize('picodeWhatsNew.parallelSessions.pointFinish', "From the session's row: review its changes, create a pull request or merge it. Archiving it offers to remove the copy."),
+				localize('picodeWhatsNew.parallelSessions.pointFinishWorktree', "From the session's row: review its changes, create a pull request or merge it. Archiving it offers to remove the worktree."),
 			],
 			preview: 'parallelSessions',
 			action: 'newIsolatedSession',

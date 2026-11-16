@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "Речевой механизм неожиданно остановился.",
 	"The steps the agent plans for what you asked, and how far it got.": "Шаги, которые агент запланировал для вашего запроса, и как далеко он продвинулся.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "Что сейчас у чата в работе: запущенные им фоновые задания и агенты.",
+	"The worktree could not be made, so this session works in the project folder.": "Не удалось создать worktree, поэтому этот сеанс работает в папке проекта.",
 	"Themes are managed by the editor.": "Темы настраиваются в редакторе.",
 	"There are no MCP servers to edit.": "Нет серверов MCP, которые можно изменить.",
 	"There is no answer to copy yet.": "Пока нечего копировать — ответа нет.",

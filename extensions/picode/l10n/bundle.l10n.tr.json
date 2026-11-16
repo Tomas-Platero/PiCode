@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "Konuşma motoru beklenmedik biçimde durdu.",
 	"The steps the agent plans for what you asked, and how far it got.": "Ajanın isteğiniz için planladığı adımlar ve ne kadar ilerlediği.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "Sohbetin elindeki iş: başlattığı arka plan görevleri ve çalıştırdığı ajanlar.",
+	"The worktree could not be made, so this session works in the project folder.": "Worktree oluşturulamadı, bu nedenle bu oturum proje klasöründe çalışıyor.",
 	"Themes are managed by the editor.": "Temaları düzenleyici yönetir.",
 	"There are no MCP servers to edit.": "Düzenlenecek MCP sunucusu yok.",
 	"There is no answer to copy yet.": "Henüz kopyalanacak bir yanıt yok.",

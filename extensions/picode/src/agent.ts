@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { withContext } from './context';
 import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore } from './session-git';
 import { writeNamedTranscript } from './session-transcript';
-import { branchSlugOf, isPlaceholderBranch, renameBranch, setActiveChatFolder } from './session-worktree';
+import { branchSlugOf, isPlaceholderBranch, openWorktree, placeholderBranch, renameBranch, repoRootOf, setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
@@ -1918,6 +1918,23 @@ export function worktreeOfChat(key: string): string | undefined {
 	return chatWorktrees?.of(key);
 }
 
+/** The chats whose "Worktree" box is ticked: their first message makes the worktree they work in. */
+const chatsWantingWorktree = new Set<string>();
+
+/** Ticks or clears a new chat's "Worktree" box. */
+export function setChatWantsWorktree(key: string, on: boolean): void {
+	if (on) {
+		chatsWantingWorktree.add(key);
+	} else {
+		chatsWantingWorktree.delete(key);
+	}
+}
+
+/** Whether a new chat's "Worktree" box is ticked. */
+export function chatWantsWorktree(key: string): boolean {
+	return chatsWantingWorktree.has(key);
+}
+
 
 export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDeps): vscode.ChatParticipant {
 	learnedCommands = new LearnedCommands(context.globalState, commandFingerprint);
@@ -2170,6 +2187,18 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 		const picked = resolveSessionCwd(scope.folders, os.homedir());
 		for (const missing of picked.missing) {
 			deps.log(`the workspace folder "${missing}" does not exist on disk — pi runs in "${picked.cwd}" instead`);
+		}
+		// A chat whose "Worktree" box was ticked gets its worktree with its first message, on a placeholder
+		// branch that the message then names (below).
+		if (chatsWantingWorktree.delete(chat.key) && chat.worktree === undefined) {
+			const repo = await repoRootOf(picked.cwd);
+			const branch = placeholderBranch();
+			const opened = repo === undefined ? undefined : await openWorktree(repo, branch, { create: true });
+			if (opened?.ok) {
+				chatWorktrees?.bind(chat.key, opened.path, branch, vscode.l10n.t('New session'));
+			} else {
+				stream.markdown(`${vscode.l10n.t('The worktree could not be made, so this session works in the project folder.')}\n\n`);
+			}
 		}
 		// A chat on its own branch works in its worktree, while that worktree is there.
 		const cwd = chat.worktree !== undefined && fs.existsSync(chat.worktree) ? chat.worktree : picked.cwd;

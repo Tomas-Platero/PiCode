@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "音声エンジンが予期せず停止しました。",
 	"The steps the agent plans for what you asked, and how far it got.": "ご依頼に対してエージェントが立てた手順と、その進み具合です。",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "チャットが抱えている作業です: 起動したバックグラウンドタスクとエージェント。",
+	"The worktree could not be made, so this session works in the project folder.": "worktree を作成できなかったため、このセッションはプロジェクト フォルダーで作業します。",
 	"Themes are managed by the editor.": "テーマはエディターで管理します。",
 	"There are no MCP servers to edit.": "編集できるMCPサーバーはありません。",
 	"There is no answer to copy yet.": "コピーできる回答はまだありません。",

@@ -12,7 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
-import { bindChatToWorktree, worktreeOfChat } from './agent';
+import { bindChatToWorktree, chatWantsWorktree, setChatWantsWorktree, worktreeOfChat } from './agent';
 import { worktreeOfSession } from './session-git';
 import { resolveProjectScope } from './runtime';
 import { resolveSessionCwd } from './session-cwd';
@@ -24,6 +24,8 @@ export const REMOVE_BRANCH_COPY_COMMAND = 'picode.session.removeBranchCopy';
 const OPEN_CHAT_ON_WORKTREE_COMMAND = 'picode.agent.newChatOnWorktree';
 /** Called back by the editor with the new chat's id. */
 const BIND_WORKTREE_COMMAND = 'picode.session.bindWorktree';
+const WORKTREE_OPTION_COMMAND = 'picode.session.worktreeOption';
+const SET_WORKTREE_COMMAND = 'picode.session.setWorktree';
 
 async function windowRepoRoot(): Promise<string | undefined> {
 	const scope = resolveProjectScope();
@@ -163,6 +165,18 @@ export function registerSessionBranchCommands(): vscode.Disposable {
 	return vscode.Disposable.from(
 		vscode.commands.registerCommand(NEW_SESSION_ON_BRANCH_COMMAND, newSessionOnBranch),
 		vscode.commands.registerCommand(REMOVE_BRANCH_COPY_COMMAND, removeBranchCopy),
+		// The "Worktree" box under a new chat: whether it can be ticked here, and ticking it.
+		vscode.commands.registerCommand(WORKTREE_OPTION_COMMAND, async (key: unknown) => {
+			if (typeof key !== 'string' || worktreeOfChatKey(key) !== undefined) {
+				return { available: false, on: false };
+			}
+			return { available: await repoRootOf(resolveSessionCwd(resolveProjectScope().folders, os.homedir()).cwd) !== undefined, on: chatWantsWorktree(key) };
+		}),
+		vscode.commands.registerCommand(SET_WORKTREE_COMMAND, (key: unknown, on: unknown) => {
+			if (typeof key === 'string') {
+				setChatWantsWorktree(key, on === true);
+			}
+		}),
 		vscode.commands.registerCommand(BIND_WORKTREE_COMMAND, (key: unknown, folder: unknown, branch: unknown, name: unknown) =>
 			typeof key === 'string' && typeof folder === 'string' && typeof branch === 'string' && isPicodeWorktree(folder)
 			&& bindChatToWorktree(key, folder, branch, typeof name === 'string' ? name : undefined)),

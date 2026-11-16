@@ -1915,3 +1915,9 @@ usuario; la App da lectura de issues y solo en los repos que el usuario elija al
   - *Entorno* lee la rama del chat que tienes delante, no la del último en el que escribiste.
   - La barra del chat enseña la rama y sus +/- junto al anillo de consumo. Pulsarla abre la revisión de los cambios.
 - **Fuera la fila *Sesión en una rama*.**
+
+**Adenda 2 (2026-11-16) — la casilla *Worktree* va debajo del chat, como en Codex y Claude.** *"No entiendo lo de \"en una copia aparte\""*, *"revisa eso como lo hace codex o otros programas pq asi no me suena"*.
+- **Lo que hacen los demás:** Codex elige *Local*, *Worktree* o *Cloud* debajo del cuadro de escritura al empezar el chat; Claude lleva una casilla *Worktree* en el mismo sitio; Conductor y parecidos dan siempre un worktree por sesión. Todos usan la palabra *worktree*.
+- **Fuera el interruptor *In a separate copy* de la columna de sesiones.** *New session* abre siempre un chat normal.
+- **La casilla *Worktree*** sale en la barra del chat mientras el chat no tiene mensajes y la carpeta es un repositorio git. Marcada, el primer mensaje crea el worktree en una rama provisional, la nombra por sus primeras palabras y la sesión sigue ahí (`picode.session.worktreeOption` / `picode.session.setWorktree`). Con el primer mensaje la casilla deja su sitio a la rama del chat.
+- **Consecuencia:** una sesión con worktree aparece en la lista al enviar el primer mensaje, no antes. *New Session in a Separate Copy* de la paleta sigue creando la copia al momento.

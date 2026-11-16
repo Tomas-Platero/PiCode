@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * The branch of the chat in front, beside the usage ring in the chat input: `⑂ picode/fix-login +12 −3`.
- * It only shows for a session that works in its own copy of the project (`session-actions.ts` in the
- * connector), so the person sees where the next message will act. Clicking it reviews the changes.
+ * Where the chat in front works, beside the usage ring in the chat input. Before the first message, a
+ * "Worktree" box: ticked, the first message makes a worktree on its own branch for the session. After,
+ * for a session in a worktree, its branch: `⑂ picode/fix-login +12 −3`; clicking it reviews the changes.
  */
 
 import './media/picodeSessionBranch.css';
@@ -15,7 +15,7 @@ import { BaseActionViewItem } from '../../../../base/browser/ui/actionbar/action
 import { IAction } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
@@ -30,6 +30,7 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { ChatAgentLocation } from '../../chat/common/constants.js';
 
 const BRANCH_CHIP_COMMAND = 'picode.chat.branchChip';
+const WORKTREE_BOX_COMMAND = 'picode.chat.worktreeBox';
 /** How often the chip re-reads its copy while the window has focus: the agent changes files as it works. */
 const REFRESH_MS = 10_000;
 
@@ -40,12 +41,21 @@ interface IChatCopy {
 	readonly removed: number;
 }
 
+/** The "Worktree" box of a chat that has not started yet. */
+interface IWorktreeOption {
+	readonly available: boolean;
+	readonly on: boolean;
+}
+
 /** The copy of the chat in front, read from the connector; undefined when the chat works in the project folder. */
 class BranchChipModel extends Disposable {
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 	copy: IChatCopy | undefined;
+	/** The box of the chat in front, while it has no message; undefined once it has. */
+	option: IWorktreeOption | undefined;
 	private last = '';
+	private readonly chatListener = this._register(new MutableDisposable());
 
 	constructor(
 		private readonly commandService: ICommandService,
@@ -53,14 +63,25 @@ class BranchChipModel extends Disposable {
 		hostService: IHostService,
 	) {
 		super();
-		this._register(chatWidgetService.onDidChangeFocusedWidget(() => void this.read()));
-		this._register(chatWidgetService.onDidChangeFocusedSession(() => void this.read()));
+		this._register(chatWidgetService.onDidChangeFocusedWidget(() => this.follow()));
+		this._register(chatWidgetService.onDidChangeFocusedSession(() => this.follow()));
 		const timer = setInterval(() => {
 			if (hostService.hasFocus) {
 				void this.read();
 			}
 		}, REFRESH_MS);
 		this._register({ dispose: () => clearInterval(timer) });
+		this.follow();
+	}
+
+	/** Reads the chat in front, and again when its first message goes out (the box gives way to the branch). */
+	private follow(): void {
+		const model = this.chatWidgetService.lastFocusedWidget?.viewModel?.model;
+		this.chatListener.value = model?.onDidChange(() => {
+			if ((this.option !== undefined) !== (model.getRequests().length === 0)) {
+				void this.read();
+			}
+		});
 		void this.read();
 	}
 
@@ -72,10 +93,15 @@ class BranchChipModel extends Disposable {
 	async read(): Promise<void> {
 		const key = this.focusedChatKey();
 		const copy = key === undefined ? undefined : await this.commandService.executeCommand<IChatCopy>('picode.git.activeWorktree', key).catch(() => undefined);
-		const next = JSON.stringify(copy ?? null);
+		const fresh = this.chatWidgetService.lastFocusedWidget?.viewModel?.model.getRequests().length === 0;
+		const option = key !== undefined && fresh && !copy
+			? await this.commandService.executeCommand<IWorktreeOption>('picode.session.worktreeOption', key).catch(() => undefined)
+			: undefined;
+		const next = JSON.stringify({ copy: copy ?? null, option: option ?? null });
 		if (next !== this.last) {
 			this.last = next;
 			this.copy = copy ?? undefined;
+			this.option = option ?? undefined;
 			this._onDidChange.fire();
 		}
 	}
@@ -129,10 +155,92 @@ class BranchChipActionViewItem extends BaseActionViewItem {
 			append(chip, $('span.picode-branch-chip-removed')).textContent = `−${copy.removed}`;
 		}
 		chip.title = copy.files === 0
-			? localize('picode.branchChip.clean', "This session works on {0}, in its own copy of the project. Nothing changed yet.", copy.branch)
-			: localize('picode.branchChip.changed', "This session works on {0}, in its own copy of the project. Click to review its changes.", copy.branch);
+			? localize('picode.branchChip.cleanWorktree', "This session works on {0}, in its own worktree. Nothing changed yet.", copy.branch)
+			: localize('picode.branchChip.changedWorktree', "This session works on {0}, in its own worktree. Click to review its changes.", copy.branch);
 	}
 }
+
+/** The "Worktree" box: a checkbox and its word, like the other editors' option under a new chat. */
+class WorktreeBoxActionViewItem extends BaseActionViewItem {
+	private box: HTMLElement | undefined;
+	private host: HTMLElement | undefined;
+
+	constructor(action: IAction, private readonly model: BranchChipModel) {
+		super(undefined, action);
+		this._register(model.onDidChange(() => this.paint()));
+	}
+
+	override render(container: HTMLElement): void {
+		super.render(container);
+		this.host = container;
+		this.box = append(container, $('a.action-label.picode-worktree-box', { role: 'checkbox', tabIndex: 0 }));
+		this._register(addDisposableListener(this.box, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				this.onClick();
+			}
+		}));
+		this.paint();
+	}
+
+	override onClick(): void {
+		const key = this.model.focusedChatKey();
+		const option = this.model.option;
+		if (key !== undefined && option?.available) {
+			const run = async () => {
+				await this.actionRunner.run(this.action, { key, on: !option.on });
+				await this.model.read();
+			};
+			void run();
+		}
+	}
+
+	private paint(): void {
+		const box = this.box;
+		const option = this.model.option;
+		if (!box || !this.host) {
+			return;
+		}
+		this.host.style.display = option?.available ? '' : 'none';
+		const on = option?.on === true;
+		box.classList.toggle('on', on);
+		box.setAttribute('aria-checked', String(on));
+		box.replaceChildren();
+		const check = append(box, $('span.picode-worktree-check'));
+		if (on) {
+			append(check, $(`span${ThemeIcon.asCSSSelector(Codicon.check)}`));
+		}
+		append(box, $('span')).textContent = localize('picode.worktreeBox.label', "Worktree");
+		box.title = localize('picode.worktreeBox.hint', "Work in a worktree: a copy of the project on its own branch, so this session's changes do not mix with yours or with other sessions'.");
+	}
+}
+
+registerAction2(class WorktreeBoxAction extends Action2 {
+	constructor() {
+		super({
+			id: WORKTREE_BOX_COMMAND,
+			title: localize2('picode.worktreeBox.title', "Work in a Worktree"),
+			icon: Codicon.gitBranch,
+			f1: false,
+			menu: {
+				id: MenuId.ChatInput,
+				// Where the branch chip shows once the session has started.
+				order: 3.65,
+				group: 'navigation',
+				when: ContextKeyExpr.and(
+					ChatContextKeys.enabled,
+					ChatContextKeys.location.isEqualTo(ChatAgentLocation.Chat),
+					ChatContextKeys.inQuickChat.negate()),
+			},
+		});
+	}
+
+	async run(accessor: ServicesAccessor, choice?: { key?: unknown; on?: unknown }): Promise<void> {
+		if (typeof choice?.key === 'string') {
+			await accessor.get(ICommandService).executeCommand('picode.session.setWorktree', choice.key, choice.on === true);
+		}
+	}
+});
 
 registerAction2(class ReviewSessionChangesAction extends Action2 {
 	constructor() {
@@ -174,6 +282,7 @@ class PicodeBranchChipContribution extends Disposable implements IWorkbenchContr
 		super();
 		const model = this._register(new BranchChipModel(commandService, chatWidgetService, hostService));
 		this._register(actionViewItemService.register(MenuId.ChatInput, BRANCH_CHIP_COMMAND, action => instantiationService.createInstance(BranchChipActionViewItem, action, model)));
+		this._register(actionViewItemService.register(MenuId.ChatInput, WORKTREE_BOX_COMMAND, action => instantiationService.createInstance(WorktreeBoxActionViewItem, action, model)));
 	}
 }
 

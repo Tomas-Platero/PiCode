@@ -528,3 +528,4 @@ Si algo cambia en el proyecto, se actualiza la frase o se añade una nueva, pero
   * El clic derecho en la sesión permite renombrarla, revisar sus cambios, crear el PR, fusionarla en la rama principal o abrir la copia en otra ventana. Archivarla ofrece quitar la copia.
   * La rama y sus cambios se ven en la barra del chat, y *Entorno* sigue a la sesión que tienes delante.
   * Detalle: ADR-043, adenda 1.
+* **2026-11-16** · La copia se elige como en Codex y Claude («No entiendo lo de "en una copia aparte"», «revisa eso como lo hace codex o otros programas»): fuera el interruptor de la columna; debajo del chat nuevo hay una casilla *Worktree*, y al enviar el primer mensaje la sesión pasa a trabajar en su propio worktree, con su rama. Detalle: ADR-043, adenda 2.

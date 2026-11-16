@@ -275,7 +275,7 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 		case 'openBrowser':
 			return localize('picodeWhatsNew.openBrowser', "Open the browser");
 		case 'newIsolatedSession':
-			return localize('picodeWhatsNew.newIsolatedSession', "Start a session in a separate copy");
+			return localize('picodeWhatsNew.newWorktreeSession', "Start a session in a worktree");
 	}
 }
 

@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "음성 엔진이 예기치 않게 멈췄습니다.",
 	"The steps the agent plans for what you asked, and how far it got.": "요청하신 작업을 위해 에이전트가 세운 단계와 진행 상황입니다.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "채팅이 맡고 있는 일입니다: 실행한 백그라운드 작업과 에이전트.",
+	"The worktree could not be made, so this session works in the project folder.": "worktree를 만들 수 없어 이 세션은 프로젝트 폴더에서 작업합니다.",
 	"Themes are managed by the editor.": "테마는 편집기에서 관리합니다.",
 	"There are no MCP servers to edit.": "편집할 MCP 서버가 없습니다.",
 	"There is no answer to copy yet.": "복사할 답변이 아직 없습니다.",

@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "语音引擎意外停止。",
 	"The steps the agent plans for what you asked, and how far it got.": "代理为你的请求规划的步骤以及完成进度。",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "对话正在进行的工作: 它启动的后台任务和 Agent。",
+	"The worktree could not be made, so this session works in the project folder.": "无法创建 worktree，因此此会话在项目文件夹中工作。",
 	"Themes are managed by the editor.": "主题由编辑器管理。",
 	"There are no MCP servers to edit.": "没有可编辑的 MCP 服务器。",
 	"There is no answer to copy yet.": "还没有可复制的回答。",

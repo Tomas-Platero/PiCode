@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "El motor de voz se detuvo de forma inesperada.",
 	"The steps the agent plans for what you asked, and how far it got.": "Los pasos que el agente planea para lo que pediste y hasta dónde llegó.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "Lo que el chat tiene en marcha: las tareas en segundo plano que lanzó y los agentes que arrancó.",
+	"The worktree could not be made, so this session works in the project folder.": "No se pudo crear el worktree, así que esta sesión trabaja en la carpeta del proyecto.",
 	"Themes are managed by the editor.": "Los temas los gestiona el editor.",
 	"There are no MCP servers to edit.": "No hay servidores MCP que editar.",
 	"There is no answer to copy yet.": "Aún no hay ninguna respuesta que copiar.",

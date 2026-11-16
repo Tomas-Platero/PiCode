@@ -439,6 +439,7 @@
 	"The speech engine stopped unexpectedly.": "Řečové jádro se nečekaně zastavilo.",
 	"The steps the agent plans for what you asked, and how far it got.": "Kroky, které agent plánuje pro vaše zadání, a jak daleko došel.",
 	"The work the chat has out: the background jobs it launched and the agents it started.": "Co má chat právě rozdělané: úlohy na pozadí, které spustil, a agenty, které nastartoval.",
+	"The worktree could not be made, so this session works in the project folder.": "Worktree se nepodařilo vytvořit, takže tato relace pracuje ve složce projektu.",
 	"Themes are managed by the editor.": "Motivy spravuje editor.",
 	"There are no MCP servers to edit.": "Nejsou tu žádné servery MCP k úpravě.",
 	"There is no answer to copy yet.": "Zatím není žádná odpověď ke zkopírování.",
