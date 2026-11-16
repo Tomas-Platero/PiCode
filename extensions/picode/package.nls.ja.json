@@ -21,6 +21,8 @@
 	"command.pi.restart": "pi を再起動します",
 	"command.pi.toggleThinking": "チャットの思考表示を切り替えます",
 	"command.restoreSessions": "クラウドから pi のセッションを復元します",
+	"command.session.newOnBranch": "ブランチで新しいセッション…",
+	"command.session.removeBranchCopy": "ブランチのコピーを削除…",
 	"command.setup": "PiCode をセットアップします",
 	"command.setup.galleryInstall": "ギャラリーからテーマをインストールします",
 	"command.setup.gallerySearch": "ギャラリーのテーマを一覧表示します",

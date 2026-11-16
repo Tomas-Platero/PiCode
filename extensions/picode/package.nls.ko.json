@@ -21,6 +21,8 @@
 	"command.pi.restart": "pi를 다시 시작합니다",
 	"command.pi.toggleThinking": "채팅의 사고 과정 표시를 전환합니다",
 	"command.restoreSessions": "클라우드에서 pi 세션을 복원합니다",
+	"command.session.newOnBranch": "브랜치에서 새 세션…",
+	"command.session.removeBranchCopy": "브랜치 복사본 제거…",
 	"command.setup": "PiCode를 설정합니다",
 	"command.setup.galleryInstall": "갤러리에서 테마를 설치합니다",
 	"command.setup.gallerySearch": "갤러리의 테마를 나열합니다",

@@ -21,6 +21,8 @@
 	"command.pi.restart": "Restartovat pi",
 	"command.pi.toggleThinking": "Přepnout zobrazení uvažování v chatu",
 	"command.restoreSessions": "Obnovit relace pi z cloudu",
+	"command.session.newOnBranch": "Nová relace ve větvi…",
+	"command.session.removeBranchCopy": "Odebrat kopii větve…",
 	"command.setup": "Nastavit PiCode",
 	"command.setup.galleryInstall": "Nainstalovat motiv z galerie",
 	"command.setup.gallerySearch": "Vypsat motivy z galerie",

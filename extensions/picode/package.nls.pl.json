@@ -21,6 +21,8 @@
 	"command.pi.restart": "Uruchom ponownie pi",
 	"command.pi.toggleThinking": "Pokaż lub ukryj rozumowanie w czacie",
 	"command.restoreSessions": "Przywróć sesje pi z chmury",
+	"command.session.newOnBranch": "Nowa sesja na gałęzi…",
+	"command.session.removeBranchCopy": "Usuń kopię gałęzi…",
 	"command.setup": "Skonfiguruj PiCode",
 	"command.setup.galleryInstall": "Zainstaluj motyw z galerii",
 	"command.setup.gallerySearch": "Wyświetl motywy z galerii",

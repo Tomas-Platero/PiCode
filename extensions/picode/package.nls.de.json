@@ -21,6 +21,8 @@
 	"command.pi.restart": "pi neu starten",
 	"command.pi.toggleThinking": "Denkprozess im Chat ein- und ausblenden",
 	"command.restoreSessions": "pi-Sitzungen aus der Cloud wiederherstellen",
+	"command.session.newOnBranch": "Neue Sitzung auf einem Branch…",
+	"command.session.removeBranchCopy": "Kopie eines Branches entfernen…",
 	"command.setup": "PiCode einrichten",
 	"command.setup.galleryInstall": "Design aus der Galerie installieren",
 	"command.setup.gallerySearch": "Designs aus der Galerie auflisten",

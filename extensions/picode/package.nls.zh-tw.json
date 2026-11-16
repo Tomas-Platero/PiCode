@@ -21,6 +21,8 @@
 	"command.pi.restart": "重新啟動 pi",
 	"command.pi.toggleThinking": "顯示或隱藏聊天中的思考過程",
 	"command.restoreSessions": "從雲端還原 pi 工作階段",
+	"command.session.newOnBranch": "在分支上新增工作階段…",
+	"command.session.removeBranchCopy": "移除分支複本…",
 	"command.setup": "設定 PiCode",
 	"command.setup.galleryInstall": "從圖庫安裝主題",
 	"command.setup.gallerySearch": "列出圖庫中的主題",

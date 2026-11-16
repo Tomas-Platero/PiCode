@@ -21,6 +21,8 @@
 	"command.pi.restart": "Перезапустить pi",
 	"command.pi.toggleThinking": "Показать или скрыть размышления в чате",
 	"command.restoreSessions": "Восстановить сеансы pi из облака",
+	"command.session.newOnBranch": "Новый сеанс в ветви…",
+	"command.session.removeBranchCopy": "Удалить копию ветви…",
 	"command.setup": "Настроить PiCode",
 	"command.setup.galleryInstall": "Установить тему из галереи",
 	"command.setup.gallerySearch": "Показать темы из галереи",

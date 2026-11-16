@@ -21,6 +21,8 @@
 	"command.pi.restart": "Reiniciar o pi",
 	"command.pi.toggleThinking": "Mostrar ou ocultar o raciocínio no chat",
 	"command.restoreSessions": "Restaurar sessões do pi da nuvem",
+	"command.session.newOnBranch": "Nova sessão em um branch…",
+	"command.session.removeBranchCopy": "Remover a cópia de um branch…",
 	"command.setup": "Configurar o PiCode",
 	"command.setup.galleryInstall": "Instalar um tema da galeria",
 	"command.setup.gallerySearch": "Listar temas da galeria",
