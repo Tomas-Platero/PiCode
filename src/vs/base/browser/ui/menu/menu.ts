@@ -458,6 +458,8 @@ class BaseMenuActionViewItem extends BaseActionViewItem {
 	private runOnceToEnableMouseUp: RunOnceScheduler;
 	private label: HTMLElement | undefined;
 	private check: HTMLElement | undefined;
+	/** PiCode: the item's own icon, when its menu shows icons. */
+	private iconSlot: HTMLElement | undefined;
 	private mnemonic: string | undefined;
 	private cssClass: string;
 
@@ -557,6 +559,9 @@ class BaseMenuActionViewItem extends BaseActionViewItem {
 		this.check = append(this.item, $('span.menu-item-check' + ThemeIcon.asCSSSelector(Codicon.menuSelection)));
 		this.check.setAttribute('role', 'none');
 
+		if (this.options.icon) {
+			this.iconSlot = append(this.item, $('span.menu-item-icon'));
+		}
 		this.label = append(this.item, $('span.action-label'));
 
 		if (this.options.label && this.options.keybinding) {
@@ -654,7 +659,10 @@ class BaseMenuActionViewItem extends BaseActionViewItem {
 		if (this.cssClass && this.item) {
 			this.item.classList.remove(...this.cssClass.split(' '));
 		}
-		if (this.options.icon && this.label) {
+		if (this.options.icon && this.iconSlot) {
+			this.iconSlot.className = `menu-item-icon ${this.action.class || ''}`.trim();
+			this.updateEnabled();
+		} else if (this.options.icon && this.label) {
 			this.cssClass = this.action.class || '';
 			this.label.classList.add('icon');
 			if (this.cssClass) {

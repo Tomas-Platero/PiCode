@@ -431,15 +431,22 @@
 	}
 }
 
-/* PiCode: icons in a session's context menu, drawn before the label in the menu's own font. */
-.picode-session-menu .monaco-menu .monaco-action-bar.vertical .action-label.codicon {
-	font: inherit;
+/* PiCode: icons in a session's context menu, in their own column before the label. */
+.picode-session-menu .monaco-menu .monaco-action-bar.vertical .menu-item-icon {
+	flex: none;
+	width: 16px;
+	margin-left: 6px;
 	display: flex;
 	align-items: center;
+	justify-content: center;
+	font-size: 14px;
+	color: var(--vscode-menu-foreground);
 }
 
-.picode-session-menu .monaco-menu .monaco-action-bar.vertical .action-label.codicon::before {
-	font: normal normal normal 14px/1 codicon;
-	margin-right: 8px;
-	opacity: 0.85;
+.picode-session-menu .monaco-menu .monaco-action-bar.vertical .action-item.disabled .menu-item-icon {
+	opacity: 0.4;
+}
+
+.picode-session-menu .monaco-menu .monaco-action-bar.vertical .menu-item-icon ~ .action-label:not(.separator) {
+	padding-left: 8px;
 }
