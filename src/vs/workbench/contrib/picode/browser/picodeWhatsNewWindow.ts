@@ -371,6 +371,7 @@ const PREVIEWS: Record<WhatsNewPreview, (parent: HTMLElement, store: DisposableS
 	projects: projectsPreview,
 	usage: usagePreview,
 	browser: browserPreview,
+	usageAlerts: usageAlertsPreview,
 };
 
 /** A caption for the demo, and a button that plays it again. */
@@ -1117,4 +1118,58 @@ function browserPreview(parent: HTMLElement, store: DisposableStore): void {
 	demoBar(parent, localize('picodeWhatsNew.browser.demo', "Watch pi check its own change."), store, play);
 	list = append(parent, $('.picode-whatsnew-list'));
 	play();
+}
+
+function usageAlertsPreview(parent: HTMLElement, store: DisposableStore): void {
+	// A made-up ChatGPT plan with alerts at 50% and 75%: each message spends some of the 5 h window,
+	// and an alert goes off once when the window reaches it.
+	const alerts = [50, 75];
+	let used = 38;
+	let rang: number | undefined;
+	const reset = () => {
+		used = 38;
+		rang = undefined;
+		draw();
+	};
+	demoBar(parent, localize('picodeWhatsNew.usageAlerts.demo', "Send messages and watch your alerts go off."), store, reset);
+	const stage = append(parent, $('.picode-whatsnew-list'));
+	const draw = () => {
+		clearNode(stage);
+		const head = append(stage, $('.picode-whatsnew-row.head'));
+		append(head, $(`span${ThemeIcon.asCSSSelector(Codicon.bell)}`));
+		append(head, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.usageAlerts.demoHead', "ChatGPT Plus · 5 h window");
+		const send = append(head, $('button.picode-whatsnew-link', { type: 'button' })) as HTMLButtonElement;
+		send.textContent = localize('picodeWhatsNew.usage.demoSend', "Send a message");
+		send.disabled = used >= 100;
+		store.add(addDisposableListener(send, EventType.CLICK, () => {
+			const before = used;
+			used = Math.min(100, used + 7);
+			const crossed = alerts.filter(percent => before < percent && used >= percent);
+			if (crossed.length) {
+				rang = crossed[crossed.length - 1];
+			}
+			draw();
+		}));
+		const row = append(stage, $('.picode-usage-meter-hover-row'));
+		const line = append(row, $('.line'));
+		append(line, $('span.name')).textContent = localize('picodeWhatsNew.usage.demoShort', "5 h window");
+		append(append(line, $('span.detail')), $('span.percent')).textContent = `${used}%`;
+		const bar = append(row, $(`.bar.${used >= 95 ? 'danger' : used >= 80 ? 'warn' : 'ok'}`));
+		append(bar, $('span')).style.width = `${used}%`;
+		for (const percent of alerts) {
+			const state = used >= percent ? 'done' : 'pending';
+			const alertRow = append(stage, $(`.picode-whatsnew-row.step.${state}`));
+			append(alertRow, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(state === 'done' ? Codicon.bellDot : Codicon.bell)}`));
+			append(alertRow, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.usageAlerts.demoAlert', "Alert at {0}%", percent);
+			append(alertRow, $('span.picode-whatsnew-row-detail')).textContent = state === 'done'
+				? localize('picodeWhatsNew.usageAlerts.demoRang', "Went off")
+				: localize('picodeWhatsNew.usageAlerts.demoWaiting', "Waiting");
+		}
+		if (rang !== undefined) {
+			const notice = append(stage, $('.picode-whatsnew-row.head'));
+			append(notice, $(`span.picode-whatsnew-row-icon${ThemeIcon.asCSSSelector(Codicon.info)}`));
+			append(notice, $('span.picode-whatsnew-row-label')).textContent = localize('picodeWhatsNew.usageAlerts.demoNotice', "ChatGPT Plus · 5 h window: {0}% used. Your alert was set at {1}%.", used, rang);
+		}
+	};
+	draw();
 }

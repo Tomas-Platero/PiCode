@@ -765,7 +765,7 @@
 			"default": false
 		}
 	},
-	"version": "1.146.8",
-	"picodeVersion": "2.2.8-experimental",
+	"version": "1.146.9",
+	"picodeVersion": "2.2.9-experimental",
 	"hotfixPublicKey": "MCowBQYDK2VwAyEAZes8irGrgqOvvCEWRBn3rwOG6qxSNp+zxWOX3HqXyjo="
 }
