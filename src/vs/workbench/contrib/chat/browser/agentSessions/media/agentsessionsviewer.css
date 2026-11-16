@@ -430,3 +430,16 @@
 		}
 	}
 }
+
+/* PiCode: icons in a session's context menu, drawn before the label in the menu's own font. */
+.picode-session-menu .monaco-menu .monaco-action-bar.vertical .action-label.codicon {
+	font: inherit;
+	display: flex;
+	align-items: center;
+}
+
+.picode-session-menu .monaco-menu .monaco-action-bar.vertical .action-label.codicon::before {
+	font: normal normal normal 14px/1 codicon;
+	margin-right: 8px;
+	opacity: 0.85;
+}
