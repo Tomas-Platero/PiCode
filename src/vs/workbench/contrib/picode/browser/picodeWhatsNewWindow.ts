@@ -274,8 +274,8 @@ function actionLabel(action: WhatsNewAction, services: IWhatsNewWindowServices):
 			return localize('picodeWhatsNew.showUsageLimits', "See my plan's limits");
 		case 'openBrowser':
 			return localize('picodeWhatsNew.openBrowser', "Open the browser");
-		case 'newSessionOnBranch':
-			return localize('picodeWhatsNew.newSessionOnBranch', "Start a session on a branch");
+		case 'newIsolatedSession':
+			return localize('picodeWhatsNew.newIsolatedSession', "Start a session in a separate copy");
 	}
 }
 
@@ -321,9 +321,9 @@ function runAction(action: WhatsNewAction, services: IWhatsNewWindowServices, cl
 			close();
 			void services.commandService.executeCommand('workbench.action.browser.open');
 			return;
-		case 'newSessionOnBranch':
+		case 'newIsolatedSession':
 			close();
-			void services.commandService.executeCommand('picode.session.newOnBranch');
+			void services.commandService.executeCommand('picode.session.newIsolated');
 			return;
 		case 'fileList':
 			// The window stays and its button says the new state.
