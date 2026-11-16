@@ -25,6 +25,10 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IAgentSession } from '../../chat/browser/agentSessions/agentSessionsModel.js';
 import { IPicodePull } from './account/issues/picodeIssueBoard.js';
 import { IPicodeConnectorService } from './account/issues/picodeConnectorService.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IAgentSessionsService } from '../../chat/browser/agentSessions/agentSessionsService.js';
 
 interface ISessionGit {
 	readonly branches: readonly string[];
@@ -125,3 +129,27 @@ export function setupSessionBranchHover(
 		};
 	}, { groupId: 'picode.session.branch' });
 }
+
+/**
+ * Archiving a session that works in its own copy of the project offers to remove the copy (the
+ * connector asks, and keeps a copy with uncommitted work). In both layouts: archiving is the list's.
+ */
+class PicodeArchivedCopyContribution extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.picodeArchivedCopy';
+
+	constructor(
+		@IAgentSessionsService agentSessionsService: IAgentSessionsService,
+		@ICommandService commandService: ICommandService,
+	) {
+		super();
+		this._register(agentSessionsService.model.onDidChangeSessionArchivedState(session => {
+			const picodeGit = session.metadata?.picodeGit;
+			const hasCopy = typeof picodeGit === 'object' && picodeGit !== null && (picodeGit as { worktree?: unknown }).worktree === true;
+			if (session.isArchived() && hasCopy) {
+				void commandService.executeCommand('picode.session.offerRemoveCopy', session.resource.toString());
+			}
+		}));
+	}
+}
+
+registerWorkbenchContribution2(PicodeArchivedCopyContribution.ID, PicodeArchivedCopyContribution, WorkbenchPhase.AfterRestored);

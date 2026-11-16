@@ -21,7 +21,7 @@ registerHooks({
 	},
 });
 
-const { noteBranch, parseSessionGitStore, rowGitFor, parseDefaultBranch } = await import('../src/session-git');
+const { noteBranch, parseSessionGitStore, rowGitFor, parseDefaultBranch, withTitle, renameRecordedBranch } = await import('../src/session-git');
 
 test('a first branch is recorded for the session', () => {
 	const next = noteBranch({}, 'abc', '/repo', 'feat/x');
@@ -69,4 +69,21 @@ test('the default branch comes from origin/HEAD', () => {
 	assert.strictEqual(parseDefaultBranch('refs/remotes/origin/master\n'), 'master');
 	assert.strictEqual(parseDefaultBranch('refs/remotes/upstream/dev/main'), 'dev/main');
 	assert.strictEqual(parseDefaultBranch(''), undefined);
+});
+
+test('a session can be given its own title, and an empty one clears it', () => {
+	const store = { abc: { cwd: '/repo', branches: ['feat/x'] } };
+	assert.deepStrictEqual(withTitle(store, 'abc', '  Login form  ').abc, { cwd: '/repo', branches: ['feat/x'], title: 'Login form' });
+	assert.deepStrictEqual(withTitle(withTitle(store, 'abc', 'x'), 'abc', '').abc, { cwd: '/repo', branches: ['feat/x'] });
+	assert.deepStrictEqual(withTitle({}, 'new', 'Only a title').new, { cwd: '', branches: [], title: 'Only a title' });
+});
+
+test('a title survives reading the store back', () => {
+	assert.deepStrictEqual(parseSessionGitStore('{"a":{"cwd":"/r","branches":["x"],"title":"T"}}'), { a: { cwd: '/r', branches: ['x'], title: 'T' } });
+});
+
+test('a renamed branch replaces its old name in the record', () => {
+	const store = { abc: { cwd: '/w', branches: ['picode/new-1'], worktree: true } };
+	assert.deepStrictEqual(renameRecordedBranch(store, 'abc', 'picode/new-1', 'picode/fix-login').abc.branches, ['picode/fix-login']);
+	assert.strictEqual(renameRecordedBranch(store, 'zzz', 'a', 'b'), store);
 });

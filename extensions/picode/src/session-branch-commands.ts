@@ -163,7 +163,8 @@ export function registerSessionBranchCommands(): vscode.Disposable {
 	return vscode.Disposable.from(
 		vscode.commands.registerCommand(NEW_SESSION_ON_BRANCH_COMMAND, newSessionOnBranch),
 		vscode.commands.registerCommand(REMOVE_BRANCH_COPY_COMMAND, removeBranchCopy),
-		vscode.commands.registerCommand(BIND_WORKTREE_COMMAND, (key: unknown, folder: unknown, branch: unknown) =>
-			typeof key === 'string' && typeof folder === 'string' && typeof branch === 'string' && isPicodeWorktree(folder) && bindChatToWorktree(key, folder, branch)),
+		vscode.commands.registerCommand(BIND_WORKTREE_COMMAND, (key: unknown, folder: unknown, branch: unknown, name: unknown) =>
+			typeof key === 'string' && typeof folder === 'string' && typeof branch === 'string' && isPicodeWorktree(folder)
+			&& bindChatToWorktree(key, folder, branch, typeof name === 'string' ? name : undefined)),
 	);
 }

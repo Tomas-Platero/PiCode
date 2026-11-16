@@ -91,14 +91,15 @@ export function registerPiSessionsProvider(options: PiSessionsOptions): { fireCh
 				const git = record === undefined ? undefined : rowGitFor(record, defaultBranchNow(record.cwd, () => changed.fire()));
 				return {
 					resource: vscode.Uri.from({ scheme: PI_SESSION_SCHEME, path: `/${file.id}` }),
-					label: file.label,
+					// The name the owner gave it, else its first prompt.
+					label: record?.title ?? file.label,
 					iconPath: vscode.ThemeIcon.File,
 					// A transcript is only ever appended to, so its mtime is both the created and the
 					// last-activity marker; without one the panel dates every row 1970. Rounded to the
 					// minute, the grain the panel shows, so a row that only grew is the same row to it.
 					timing: { created: coarseMinute(file.mtime), lastRequestEnded: coarseMinute(file.mtime) },
 					// The branch the conversation worked on, when it is not the default one (`session-git.ts`).
-					...(git === undefined ? {} : { badge: git.badge, metadata: { picodeGit: { branches: git.branches, repo: githubRepoNow(record!.cwd, () => changed.fire()) } } }),
+					...(git === undefined ? {} : { badge: git.badge, metadata: { picodeGit: { branches: git.branches, repo: githubRepoNow(record!.cwd, () => changed.fire()), ...(record!.worktree ? { worktree: true } : {}) } } }),
 				};
 			});
 			// Rows nobody touched come back as the objects the panel already has, so the list does

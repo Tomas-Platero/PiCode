@@ -117,3 +117,66 @@ test('a worktree with uncommitted work is kept; a clean one is removed', async (
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });
+
+const { branchSlugOf, renameBranch, changedFiles, mergeIntoBase, defaultBaseOf } = await import('../src/session-worktree');
+
+test('the branch name comes from the first message, short and git-safe', () => {
+	assert.strictEqual(branchSlugOf('Arregla el formulario de login en móvil, por favor!'), 'picode/arregla-el-formulario-de-login-en-movil');
+	assert.strictEqual(branchSlugOf('   '), undefined);
+	assert.strictEqual(branchSlugOf('¿¿??'), undefined);
+	assert.ok((branchSlugOf('a'.repeat(200)) ?? '').length <= 'picode/'.length + 40);
+});
+
+test('a session branch is renamed in place, and a taken name gets a number', async () => {
+	const { repo, root } = scratchRepo();
+	try {
+		const opened = await openWorktree(repo, 'picode/new-1', { create: true });
+		assert.ok(opened.ok);
+		git(repo, 'branch', 'picode/fix-login');
+		assert.strictEqual(await renameBranch(opened.path, 'picode/new-1', 'picode/fix-login'), 'picode/fix-login-2');
+		assert.strictEqual(git(opened.path, 'rev-parse', '--abbrev-ref', 'HEAD'), 'picode/fix-login-2');
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test('the changes of a copy are its commits and its uncommitted files against the base', async () => {
+	const { repo, root } = scratchRepo();
+	try {
+		const opened = await openWorktree(repo, 'feat/z', { create: true });
+		assert.ok(opened.ok);
+		assert.strictEqual(await defaultBaseOf(opened.path), 'master');
+		fs.writeFileSync(path.join(opened.path, 'b.txt'), 'new\n');
+		git(opened.path, 'add', 'b.txt');
+		git(opened.path, 'commit', '-q', '-m', 'add b');
+		fs.writeFileSync(path.join(opened.path, 'a.txt'), 'changed\n');
+		const files = await changedFiles(opened.path, 'master');
+		assert.deepStrictEqual(files.map(f => [f.path, f.status]).sort(), [['a.txt', 'modified'], ['b.txt', 'added']]);
+		assert.ok(files.every(f => typeof f.baseRef === 'string' && f.baseRef.length >= 7));
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test('merging a copy into the base needs the project on that branch and clean', async () => {
+	const { repo, root } = scratchRepo();
+	try {
+		const opened = await openWorktree(repo, 'feat/m', { create: true });
+		assert.ok(opened.ok);
+		fs.writeFileSync(path.join(opened.path, 'm.txt'), 'm\n');
+		git(opened.path, 'add', '.');
+		git(opened.path, 'commit', '-q', '-m', 'm');
+		fs.writeFileSync(path.join(repo, 'dirty.txt'), 'x\n');
+		assert.strictEqual(await mergeIntoBase(opened.path, 'master'), 'projectDirty');
+		fs.rmSync(path.join(repo, 'dirty.txt'));
+		fs.writeFileSync(path.join(opened.path, 'pending.txt'), 'x\n');
+		assert.strictEqual(await mergeIntoBase(opened.path, 'master'), 'copyDirty');
+		fs.rmSync(path.join(opened.path, 'pending.txt'));
+		assert.strictEqual(await mergeIntoBase(opened.path, 'master'), 'merged');
+		assert.ok(fs.existsSync(path.join(repo, 'm.txt')));
+		git(repo, 'checkout', '-q', '-b', 'other');
+		assert.strictEqual(await mergeIntoBase(opened.path, 'master'), 'projectOnOtherBranch');
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});

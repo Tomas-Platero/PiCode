@@ -148,6 +148,32 @@
 				"icon": "$(git-branch)"
 			},
 			{
+				"command": "picode.session.newIsolated",
+				"title": "%command.session.newIsolated%",
+				"category": "PiCode",
+				"icon": "$(repo-forked)"
+			},
+			{
+				"command": "picode.session.rename",
+				"title": "%command.session.rename%"
+			},
+			{
+				"command": "picode.session.reviewChanges",
+				"title": "%command.session.reviewChanges%"
+			},
+			{
+				"command": "picode.session.createPullRequest",
+				"title": "%command.session.createPullRequest%"
+			},
+			{
+				"command": "picode.session.merge",
+				"title": "%command.session.merge%"
+			},
+			{
+				"command": "picode.session.openCopy",
+				"title": "%command.session.openCopy%"
+			},
+			{
 				"command": "picode.session.removeBranchCopy",
 				"title": "%command.session.removeBranchCopy%",
 				"category": "PiCode"
@@ -294,6 +320,33 @@
 			}
 		],
 		"menus": {
+			"chat/chatSessions": [
+				{
+					"command": "picode.session.rename",
+					"when": "chatSessionType == pi",
+					"group": "1_edit@1"
+				},
+				{
+					"command": "picode.session.reviewChanges",
+					"when": "chatSessionType == pi && picodeSessionHasCopy",
+					"group": "2_branch@1"
+				},
+				{
+					"command": "picode.session.createPullRequest",
+					"when": "chatSessionType == pi && picodeSessionHasCopy",
+					"group": "2_branch@2"
+				},
+				{
+					"command": "picode.session.merge",
+					"when": "chatSessionType == pi && picodeSessionHasCopy",
+					"group": "2_branch@3"
+				},
+				{
+					"command": "picode.session.openCopy",
+					"when": "chatSessionType == pi && picodeSessionHasCopy",
+					"group": "2_branch@4"
+				}
+			],
 			"view/title": [
 				{
 					"command": "picode.tasks.refresh",
@@ -344,6 +397,11 @@
 				}
 			],
 			"commandPalette": [
+				{ "command": "picode.session.rename", "when": "false" },
+				{ "command": "picode.session.reviewChanges", "when": "false" },
+				{ "command": "picode.session.createPullRequest", "when": "false" },
+				{ "command": "picode.session.merge", "when": "false" },
+				{ "command": "picode.session.openCopy", "when": "false" },
 				{
 					"command": "picode.tasks.openTranscript",
 					"when": "false"

@@ -715,6 +715,9 @@ export class AgentSessionsControl extends Disposable implements IAgentSessionsCo
 		contextOverlay.push([ChatContextKeys.isReadAgentSession.key, session.isRead()]);
 		contextOverlay.push([ChatContextKeys.agentSessionType.key, session.providerType]);
 		contextOverlay.push([ChatContextKeys.agentSessionPullRequest.key, getAgentSessionPullRequestContextValue(session)]);
+		// PiCode: a session that works in its own copy of the project gets the branch actions in this menu.
+		const picodeGit = session.metadata?.picodeGit;
+		contextOverlay.push(['picodeSessionHasCopy', typeof picodeGit === 'object' && picodeGit !== null && (picodeGit as { worktree?: unknown }).worktree === true]);
 
 		const menu = this.menuService.createMenu(MenuId.AgentSessionsContext, this.contextKeyService.createOverlay(contextOverlay));
 

@@ -5,9 +5,9 @@
 
 import * as vscode from 'vscode';
 import { withContext } from './context';
-import { currentBranch, noteTurnBranch } from './session-git';
+import { currentBranch, noteTurnBranch, renameRecordedBranch, updateSessionGitStore } from './session-git';
 import { writeNamedTranscript } from './session-transcript';
-import { setActiveChatFolder } from './session-worktree';
+import { branchSlugOf, isPlaceholderBranch, renameBranch, setActiveChatFolder } from './session-worktree';
 import { contextBlockFor } from './editor-context';
 import { imagesOf, type PiImage } from './chat-images';
 import { readPiChatSettings, THINKING_LEVELS } from './piConfig';
@@ -1898,18 +1898,18 @@ interface ChatPi {
 }
 
 /** Set by the participant: binds a chat to a worktree, and reads a chat's worktree. */
-let chatWorktrees: { bind(key: string, folder: string, branch: string): void; of(key: string): string | undefined } | undefined;
+let chatWorktrees: { bind(key: string, folder: string, branch: string, name?: string): void; of(key: string): string | undefined } | undefined;
 
 /**
  * The chat `key` (a new one, just opened by "New Session on a Branch…") works in `folder` on
  * `branch`. Its transcript is written at once, named after the branch, so the session is in the list
  * before its first message.
  */
-export function bindChatToWorktree(key: string, folder: string, branch: string): boolean {
+export function bindChatToWorktree(key: string, folder: string, branch: string, name?: string): boolean {
 	if (chatWorktrees === undefined) {
 		return false;
 	}
-	chatWorktrees.bind(key, folder, branch);
+	chatWorktrees.bind(key, folder, branch, name);
 	return true;
 }
 
@@ -2013,7 +2013,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 		}
 	};
 	chatWorktrees = {
-		bind: (key, folder, branch) => {
+		bind: (key, folder, branch, name) => {
 			let chat = chats.get(key);
 			if (chat === undefined) {
 				chat = { key, mcpSignature: '', disabledToolsKey: '', lastUsed: Date.now(), turn: {}, toolToken: {}, turnChain: Promise.resolve(), turnsWaiting: 0 };
@@ -2031,7 +2031,7 @@ export function registerPiAgent(context: vscode.ExtensionContext, deps: AgentDep
 			const scope = resolveProjectScope();
 			const picked = resolveSessionCwd(scope.folders, os.homedir());
 			try {
-				const written = writeNamedTranscript(path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(picked.cwd)), folder, branch);
+				const written = writeNamedTranscript(path.join(agentDir, 'sessions', scope.area?.slug ?? piProjectSlug(picked.cwd)), folder, name ?? branch);
 				rememberTranscript(key, written.file);
 				noteTurnBranch(written.id, folder);
 			} catch (error) {
@@ -2396,7 +2396,18 @@ const handler: vscode.ChatRequestHandler = async (request, _context, stream, tok
 				}
 				if (chat.worktree === cwd && !chat.worktreeAnnounced) {
 					chat.worktreeAnnounced = true;
-					const branch = await currentBranch(cwd);
+					let branch = await currentBranch(cwd);
+					// A new session's copy starts on a placeholder branch; the first message names it.
+					const named = branch !== undefined && isPlaceholderBranch(branch) ? branchSlugOf(request.prompt) : undefined;
+					if (branch !== undefined && named !== undefined) {
+						const renamed = await renameBranch(cwd, branch, named);
+						if (renamed !== undefined) {
+							const from = branch;
+							const sessionId = chat.session.sessionId;
+							await updateSessionGitStore(store => renameRecordedBranch(store, sessionId, from, renamed));
+							branch = renamed;
+						}
+					}
 					if (branch !== undefined) {
 						stream.markdown(`${vscode.l10n.t('🌿 This session works on branch **{0}**, in its own copy of the project.', branch)}
 

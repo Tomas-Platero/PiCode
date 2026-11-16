@@ -304,3 +304,4 @@ test('a conversation with no message yet is listed by its session name, until it
 	assert.strictEqual(labels.get('2026_c'), 'feat/login');
 	assert.strictEqual(labels.get('2026_d'), 'fix the form');
 });
+

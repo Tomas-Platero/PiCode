@@ -23,6 +23,12 @@ export interface SessionGitRecord {
 	readonly branches: readonly string[];
 	/** The conversation runs in a worktree PiCode made for it. */
 	readonly worktree?: boolean;
+	/** The name the owner gave the session; the row shows it instead of the first prompt. */
+	readonly title?: string;
+}
+
+function makeRecord(cwd: string, branches: readonly string[], worktree: boolean | undefined, title: string | undefined): SessionGitRecord {
+	return { cwd, branches, ...(worktree ? { worktree: true } : {}), ...(title ? { title } : {}) };
 }
 
 export type SessionGitStore = Readonly<Record<string, SessionGitRecord>>;
@@ -51,9 +57,7 @@ export function noteBranch(store: SessionGitStore, sessionId: string, cwd: strin
 		return undefined;
 	}
 	const next = [...branches.filter(b => b !== branch), branch].slice(-MAX_BRANCHES);
-	const isWorktree = worktree ?? before?.worktree;
-	const record: SessionGitRecord = isWorktree ? { cwd, branches: next, worktree: true } : { cwd, branches: next };
-	return { ...store, [sessionId]: record };
+	return { ...store, [sessionId]: makeRecord(cwd, next, worktree ?? before?.worktree, before?.title) };
 }
 
 /** The store as read from disk; anything that is not one reads as empty. */
@@ -72,14 +76,30 @@ export function parseSessionGitStore(text: string): SessionGitStore {
 		if (typeof value !== 'object' || value === null) {
 			continue;
 		}
-		const { cwd, branches, worktree } = value as Record<string, unknown>;
+		const { cwd, branches, worktree, title } = value as Record<string, unknown>;
 		if (typeof cwd !== 'string' || !Array.isArray(branches)) {
 			continue;
 		}
 		const names = branches.filter((b): b is string => typeof b === 'string' && b !== '');
-		out[id] = worktree === true ? { cwd, branches: names, worktree: true } : { cwd, branches: names };
+		out[id] = makeRecord(cwd, names, worktree === true, typeof title === 'string' && title.trim() !== '' ? title.trim() : undefined);
 	}
 	return out;
+}
+
+/** The store with `title` as the session's name; an empty title gives the name back to the first prompt. */
+export function withTitle(store: SessionGitStore, sessionId: string, title: string): SessionGitStore {
+	const before = store[sessionId];
+	const clean = title.replace(/[\r\n]+/g, ' ').trim();
+	return { ...store, [sessionId]: makeRecord(before?.cwd ?? '', before?.branches ?? [], before?.worktree, clean || undefined) };
+}
+
+/** The store after a session's branch was renamed in git; unchanged when the session has no record. */
+export function renameRecordedBranch(store: SessionGitStore, sessionId: string, from: string, to: string): SessionGitStore {
+	const before = store[sessionId];
+	if (before === undefined) {
+		return store;
+	}
+	return { ...store, [sessionId]: makeRecord(before.cwd, before.branches.map(b => b === from ? to : b), before.worktree, before.title) };
 }
 
 function isDefault(branch: string, defaultBranch: string | undefined): boolean {
@@ -247,6 +267,11 @@ export async function recordSessionBranch(profileDir: string, sessionId: string,
 	if (next === undefined) {
 		return false;
 	}
+	return writeStore(profileDir, next);
+}
+
+/** Saves the store and tells the listeners; false when it could not be written. */
+async function writeStore(profileDir: string, next: SessionGitStore): Promise<boolean> {
 	const file = path.join(profileDir, STORE_FILE);
 	const aside = `${file}.${process.pid}`;
 	try {
@@ -258,4 +283,25 @@ export async function recordSessionBranch(profileDir: string, sessionId: string,
 		await fs.promises.rm(aside, { force: true }).catch(() => undefined);
 		return false;
 	}
+}
+
+/** Changes the store with `change` and saves it; false when there is no profile or it could not be saved. */
+export async function updateSessionGitStore(change: (store: SessionGitStore) => SessionGitStore): Promise<boolean> {
+	const profileDir = profileOfRecords?.();
+	if (profileDir === undefined) {
+		return false;
+	}
+	const saved = await writeStore(profileDir, change(readSessionGitStore(profileDir)));
+	if (saved) {
+		for (const listener of listeners) {
+			listener();
+		}
+	}
+	return saved;
+}
+
+/** The name the owner gave a session, if any. */
+export function titleOfSession(sessionId: string): string | undefined {
+	const profileDir = profileOfRecords?.();
+	return profileDir === undefined ? undefined : readSessionGitStore(profileDir)[sessionId]?.title;
 }

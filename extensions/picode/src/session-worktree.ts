@@ -178,3 +178,140 @@ export async function removeWorktree(folder: string): Promise<RemoveWorktreeResu
 	const removed = await git(repoRoot ?? folder, ['worktree', 'remove', folder]);
 	return removed.ok ? 'removed' : 'failed';
 }
+
+/** The prefix of the branch a new session's copy starts on, before its first message names it. */
+const PLACEHOLDER_PREFIX = 'picode/new-';
+
+/** A placeholder branch name for a new session's copy (`picode/new-1a2b`). */
+export function placeholderBranch(): string {
+	return `${PLACEHOLDER_PREFIX}${Math.random().toString(16).slice(2, 6)}`;
+}
+
+/** Whether a branch is still a new session's placeholder. */
+export function isPlaceholderBranch(branch: string): boolean {
+	return branch.startsWith(PLACEHOLDER_PREFIX);
+}
+
+/** How long a branch name taken from a message may be, after the `picode/` prefix. */
+const SLUG_MAX = 40;
+
+/** A branch name from a message: `picode/` and its first words, lower case, without accents or symbols. */
+export function branchSlugOf(text: string): string | undefined {
+	const words = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(word => word !== '');
+	let slug = '';
+	for (const word of words) {
+		const next = slug === '' ? word : `${slug}-${word}`;
+		if (next.length > SLUG_MAX) {
+			break;
+		}
+		slug = next;
+	}
+	if (slug === '' && words.length > 0) {
+		slug = words[0].slice(0, SLUG_MAX);
+	}
+	return slug === '' ? undefined : `picode/${slug}`;
+}
+
+/** Renames the branch a worktree is on; a name already taken gets `-2`, `-3`… Returns the name it got, or undefined. */
+export async function renameBranch(worktree: string, from: string, to: string): Promise<string | undefined> {
+	const taken = new Set(await listBranches(worktree));
+	let name = to;
+	for (let index = 2; taken.has(name) && index < 100; index++) {
+		name = `${to}-${index}`;
+	}
+	const renamed = await git(worktree, ['branch', '-m', from, name]);
+	return renamed.ok ? name : undefined;
+}
+
+/** The branch a copy was made from: the repository's default branch (`origin/HEAD`), else `main` or `master`. */
+export async function defaultBaseOf(cwd: string): Promise<string | undefined> {
+	const head = await git(cwd, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD']);
+	const remote = head.ok ? head.stdout.match(/^refs\/remotes\/[^/]+\/(.+)$/)?.[1] : undefined;
+	if (remote !== undefined) {
+		return remote;
+	}
+	const branches = await listBranches(cwd);
+	return ['main', 'master'].find(name => branches.includes(name));
+}
+
+export interface CopyChange {
+	/** Relative to the copy, with forward slashes. */
+	readonly path: string;
+	readonly status: 'added' | 'modified' | 'deleted';
+	/** The commit the base side is read from: where the copy left the base. */
+	readonly baseRef: string;
+}
+
+/** What a copy changed against `base`: its commits since it left it, and what is not committed yet. */
+export async function changedFiles(worktree: string, base: string): Promise<CopyChange[]> {
+	const mergeBase = await git(worktree, ['merge-base', base, 'HEAD']);
+	if (!mergeBase.ok || mergeBase.stdout === '') {
+		return [];
+	}
+	const baseRef = mergeBase.stdout;
+	// Against the working tree, so commits and uncommitted edits both count; new untracked files too.
+	const diff = await git(worktree, ['diff', '--name-status', '--no-renames', baseRef]);
+	const untracked = await git(worktree, ['ls-files', '--others', '--exclude-standard']);
+	const changes = new Map<string, CopyChange>();
+	for (const line of diff.ok ? diff.stdout.split(/\r?\n/) : []) {
+		const [code, file] = line.split('\t');
+		if (file === undefined) {
+			continue;
+		}
+		const status = code.startsWith('A') ? 'added' : code.startsWith('D') ? 'deleted' : 'modified';
+		changes.set(file, { path: file, status, baseRef });
+	}
+	for (const file of untracked.ok ? untracked.stdout.split(/\r?\n/) : []) {
+		if (file !== '' && !changes.has(file)) {
+			changes.set(file, { path: file, status: 'added', baseRef });
+		}
+	}
+	return [...changes.values()];
+}
+
+/** A file's content at `ref` in the repository of `cwd`; undefined when it did not exist there. */
+export async function fileAtRef(cwd: string, ref: string, file: string): Promise<string | undefined> {
+	const shown = await git(cwd, ['show', `${ref}:${file}`]);
+	return shown.ok ? shown.stdout : undefined;
+}
+
+export type MergeResult = 'merged' | 'copyDirty' | 'projectDirty' | 'projectOnOtherBranch' | 'conflict' | 'failed';
+
+/**
+ * Merges the copy's branch into `base` in the project folder. Only when the copy has nothing
+ * uncommitted, and the project folder is on `base` with nothing uncommitted: a merge never mixes
+ * with work in progress. A conflict is undone, so the project is left as it was.
+ */
+export async function mergeIntoBase(worktree: string, base: string): Promise<MergeResult> {
+	const root = await repoRootOf(worktree);
+	const branch = await git(worktree, ['rev-parse', '--abbrev-ref', 'HEAD']);
+	if (root === undefined || !branch.ok) {
+		return 'failed';
+	}
+	if ((await git(worktree, ['status', '--porcelain'])).stdout !== '') {
+		return 'copyDirty';
+	}
+	const rootBranch = await git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+	if (rootBranch.stdout !== base) {
+		return 'projectOnOtherBranch';
+	}
+	if ((await git(root, ['status', '--porcelain'])).stdout !== '') {
+		return 'projectDirty';
+	}
+	const merged = await git(root, ['merge', '--no-ff', '--no-edit', branch.stdout]);
+	if (merged.ok) {
+		return 'merged';
+	}
+	await git(root, ['merge', '--abort']);
+	return 'conflict';
+}
+
+/** Pushes the copy's branch to `origin`, setting it as upstream. */
+export async function pushBranch(worktree: string): Promise<{ readonly ok: boolean; readonly branch: string | undefined; readonly detail: string }> {
+	const branch = await git(worktree, ['rev-parse', '--abbrev-ref', 'HEAD']);
+	if (!branch.ok) {
+		return { ok: false, branch: undefined, detail: branch.stderr };
+	}
+	const pushed = await git(worktree, ['push', '-u', 'origin', branch.stdout]);
+	return { ok: pushed.ok, branch: branch.stdout, detail: pushed.stderr };
+}

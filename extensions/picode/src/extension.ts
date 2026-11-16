@@ -55,6 +55,7 @@ import { AGENT_MODELS_COMMAND, chooseAgentModels, registerAgentModelsStateComman
 import { registerPiSessionsProvider } from './sessions-register';
 import { setSessionGitProfile } from './session-git';
 import { registerSessionBranchCommands } from './session-branch-commands';
+import { registerSessionActions } from './session-actions';
 import { applyProductEnv, pointChildPiAtThisPi, subagentInjectionEnv } from './product-env';
 import { explainTaskFailure } from './subagent-failure';
 import { applyIntercomBroker } from './intercom-config';
@@ -2682,7 +2683,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// writes under the profile's `sessions/` folder are listed here, opened as history, and
 	// continued in place; the import fires it when a tree of transcripts lands.
 	setSessionGitProfile(profileInForce);
-	context.subscriptions.push(registerSessionBranchCommands());
+	context.subscriptions.push(registerSessionBranchCommands(), registerSessionActions());
 	const piSessions = registerPiSessionsProvider({
 		participant: piParticipant,
 		deps: { distributionRoot: distributionRoot(context.extensionUri), log: (line: string) => console.error(`[pi] ${line}`) },

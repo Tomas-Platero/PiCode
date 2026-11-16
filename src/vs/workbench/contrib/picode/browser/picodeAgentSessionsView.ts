@@ -38,7 +38,7 @@ import { PICODE_AUTH_PROVIDER_ID, PICODE_EMAIL_STORAGE_KEY, PICODE_PLAN_STORAGE_
 import { GlobalCompositeBar } from '../../../browser/parts/globalCompositeBar.js';
 import { IColorTheme } from '../../../../platform/theme/common/themeService.js';
 import { badgeBackground, badgeForeground, foreground } from '../../../../platform/theme/common/colorRegistry.js';
-import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 
 /**
  * The Agent layout's left column: new session, search, the workspace's projects, and every
@@ -88,9 +88,25 @@ class PicodeAgentSessionsView extends ViewPane {
 			append(button, $('span.label')).textContent = label;
 			this._register(addDisposableListener(button, EventType.CLICK, () => void run()));
 		};
-		row(Codicon.add, localize('picode.sessions.new', "New session"), createNewChat);
-		// A session that works on its own branch, in its own copy of the project (the connector's `session-branch-commands.ts`).
-		row(Codicon.gitBranch, localize('picode.sessions.newOnBranch', "Session on a branch"), () => this.commandService.executeCommand('picode.session.newOnBranch'));
+		// A new session works in the project folder, or, with the switch below on, in a separate copy of
+		// the project on its own branch (the connector's `session-actions.ts`).
+		const separateCopy = () => this.storageService.getBoolean(SEPARATE_COPY_KEY, StorageScope.PROFILE, false);
+		row(Codicon.add, localize('picode.sessions.new', "New session"), () => separateCopy() ? this.commandService.executeCommand('picode.session.newIsolated') : createNewChat());
+		const toggle = append(actions, $('button.picode-sessions-row.picode-sessions-toggle', { type: 'button', role: 'switch' }));
+		const toggleIcon = append(toggle, $('span'));
+		append(toggle, $('span.label')).textContent = localize('picode.sessions.separateCopy', "In a separate copy");
+		toggle.title = localize('picode.sessions.separateCopyHint', "New sessions get their own copy of the project and their own branch, so several can work at once");
+		const paintToggle = () => {
+			const on = separateCopy();
+			toggle.setAttribute('aria-checked', String(on));
+			toggle.classList.toggle('on', on);
+			toggleIcon.className = ThemeIcon.asClassName(on ? Codicon.passFilled : Codicon.circleLarge);
+		};
+		paintToggle();
+		this._register(addDisposableListener(toggle, EventType.CLICK, () => {
+			this.storageService.store(SEPARATE_COPY_KEY, !separateCopy(), StorageScope.PROFILE, StorageTarget.USER);
+			paintToggle();
+		}));
 		row(PICODE_AGENT_SEARCH_ICON, localize('picode.sessions.search', "Search"), () => this.commandService.executeCommand(PICODE_AGENT_SEARCH_COMMAND_ID));
 		row(PICODE_CUSTOMIZATION_ICON, localize('picode.sessions.customization', "Customization"), () => this.commandService.executeCommand(PICODE_CUSTOMIZATION_COMMAND_ID));
 
@@ -232,11 +248,14 @@ Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
 	when: ContextKeyExpr.equals(`config.${PICODE_LAYOUT_SETTING}`, 'agent'),
 }], container);
 
+/** Whether "New session" makes a separate copy of the project (the switch under it). */
+const SEPARATE_COPY_KEY = 'picode.sessions.separateCopy';
+
 /**
  * "New Session on a Branch…", the editor's half: open a new chat and tell the connector which chat it
  * is, so that chat (and only it) works in the branch's worktree and is listed under the branch at once.
  */
-CommandsRegistry.registerCommand('picode.agent.newChatOnWorktree', async (accessor, folder: unknown, branch: unknown) => {
+CommandsRegistry.registerCommand('picode.agent.newChatOnWorktree', async (accessor, folder: unknown, branch: unknown, name: unknown) => {
 	const commandService = accessor.get(ICommandService);
 	const chatWidgetService = accessor.get(IChatWidgetService);
 	if (typeof folder !== 'string' || typeof branch !== 'string') {
@@ -245,6 +264,6 @@ CommandsRegistry.registerCommand('picode.agent.newChatOnWorktree', async (access
 	await commandService.executeCommand(ACTION_ID_NEW_CHAT);
 	const resource = chatWidgetService.lastFocusedWidget?.viewModel?.sessionResource;
 	if (resource) {
-		await commandService.executeCommand('picode.session.bindWorktree', resource.toString(), folder, branch);
+		await commandService.executeCommand('picode.session.bindWorktree', resource.toString(), folder, branch, typeof name === 'string' ? name : undefined);
 	}
 });
